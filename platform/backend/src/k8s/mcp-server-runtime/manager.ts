@@ -28,19 +28,21 @@ import {
   OrganizationModel,
 } from "@/models";
 import { secretManager } from "@/secrets-manager";
-import { resolveMcpCredentialValues } from "@/services/credentials";
+import { resolveMcpCredentials } from "@/services/credentials";
 import { resolveEffectiveNetworkPolicy } from "@/services/environments/network-policy";
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 // biome-ignore lint/style/noRestrictedImports: runtime-gated EE model import
 import { mcpActiveUseTracker } from "@/services/mcp-active-use.ee";
-// SPDX-SnippetEnd
 import type {
   EffectiveNetworkPolicy,
   K8sNetworkPolicyCapabilities,
   McpServer,
 } from "@/types";
+// SPDX-SnippetEnd
+import { ApiError } from "@/types";
+import { trackBackgroundWork } from "@/utils/background-work";
 import { mapWithConcurrency } from "@/utils/concurrency";
 import {
   MCP_DEPLOYMENT_TRANSITION_DEADLINE_MS,
@@ -219,6 +221,8 @@ export class McpServerHardResetHeldElsewhereError extends Error {
  * @public — exported for testability
  */
 export class McpServerRuntimeManager {
+  private credentialRefreshTimer?: NodeJS.Timeout;
+  private credentialRefreshInFlight = false;
   private k8sApi?: k8s.CoreV1Api;
   private k8sAppsApi?: k8s.AppsV1Api;
   private k8sAuthApi?: k8s.AuthorizationV1Api;
@@ -535,6 +539,7 @@ export class McpServerRuntimeManager {
       });
 
       this.startFailedPodReaper();
+      this.startCredentialRefresh();
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
       // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -942,6 +947,7 @@ export class McpServerRuntimeManager {
       const credentialBindings = (
         catalogItem?.localConfig?.environment ?? []
       ).filter((entry) => entry.credentialId);
+      let credentialExpiresAt: number | null = null;
       if (credentialBindings.length) {
         // Bound values come only from the selected credential owner, including
         // when an optional connection is missing. Discard inline/stale values.
@@ -956,12 +962,14 @@ export class McpServerRuntimeManager {
           (await OrganizationModel.getFirst())?.id;
         if (!organizationId)
           throw new Error("Credential organization is unavailable");
-        const credentials = await resolveMcpCredentialValues({
+        const resolvedCredentials = await resolveMcpCredentials({
           organizationId,
           userId: mcpServer.ownerId,
           installationScope: mcpServer.scope,
           environment: credentialBindings,
         });
+        const credentials = resolvedCredentials.values;
+        credentialExpiresAt = resolvedCredentials.expiresAt;
         secretData = { ...secretData, ...credentials };
         effectiveEnvironmentValues = {
           ...effectiveEnvironmentValues,
@@ -998,6 +1006,7 @@ export class McpServerRuntimeManager {
         catalogItem,
         userConfigValues,
         environmentValues: effectiveEnvironmentValues,
+        credentialExpiresAt,
         effectiveNetworkPolicy: null,
         networkPolicyCapabilities,
         k8sExec: this.k8sExec,
@@ -1408,6 +1417,7 @@ export class McpServerRuntimeManager {
     catalogId: string,
     options?: {
       freshImagePull?: boolean;
+      awaitDeletion?: boolean;
       /**
        * Wait for the recreated deployment to actually serve before returning.
        * On by default. A caller that confirms readiness itself turns it off, so
@@ -1457,9 +1467,12 @@ export class McpServerRuntimeManager {
       // Unconditional teardown — explicitly bypasses the per-install sibling
       // guard. Declarative Service/Secret/policy objects remain and are
       // reconciled by startServer; only the Deployment needs replacement.
-      await lease.runFencedMutation(() =>
-        k8sDeployment.stopDeployment({ uidPrecondition: true }),
-      );
+      await k8sDeployment.stopDeployment({
+        uidPrecondition: true,
+        awaitDeletion: options?.awaitDeletion,
+        assertOwned: () => lease.assertOwned(),
+        runFencedMutation: (mutation) => lease.runFencedMutation(mutation),
+      });
 
       // Clear every sibling's in-memory entry — the K8s objects are gone.
       for (const install of installs) {
@@ -1502,6 +1515,37 @@ export class McpServerRuntimeManager {
       reinstall,
     );
   }
+
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  /** Stop admitting new demand while a renewable process is draining. */
+  async withFreshCredentials<T>(
+    mcpServerId: string,
+    run: () => Promise<T>,
+  ): Promise<T> {
+    const deployment = await this.getOrLoadDeployment(mcpServerId);
+    if (
+      !deployment?.hasCredentialBindings ||
+      !(await deployment.usesRenewableCredentials())
+    ) {
+      return mcpActiveUseTracker.trackActiveUse(mcpServerId, async () => {
+        await this.ensureAwake(mcpServerId);
+        return run();
+      });
+    }
+    // Renew sleeping processes before wake-demand stamping grants fresh idle credit.
+    await this.refreshServerCredentials(mcpServerId, true);
+    await this.ensureAwake(mcpServerId);
+    // A sleeping deployment may have resumed with its old startup environment.
+    await this.refreshServerCredentials(mcpServerId);
+    return mcpActiveUseTracker.trackCredentialUse(mcpServerId, async () => {
+      await this.ensureAwake(mcpServerId);
+      return run();
+    });
+  }
+
+  // SPDX-SnippetEnd
 
   /**
    * Restart a single MCP server deployment
@@ -1934,11 +1978,15 @@ export class McpServerRuntimeManager {
     // Unknown is therefore conservative: the sync accessor starts hydration,
     // and only a known-false org toggle plus local-off config restores the
     // zero-cost cache fast path.
-    const hibernationMayExist =
+    const loaded = this.mcpServerIdToDeploymentMap.get(mcpServerId);
+    let hibernationMayExist =
       isIdleHibernationOffered() ||
+      Boolean(
+        loaded?.hasCredentialBindings &&
+          (await loaded.usesRenewableCredentials()),
+      ) ||
       OrganizationModel.getMcpIdleHibernationEnabledSync() !== false;
 
-    const loaded = this.mcpServerIdToDeploymentMap.get(mcpServerId);
     if (loaded) {
       this.assertNotHardResetting(loaded);
       // A wake already in flight for this physical deployment: join it even
@@ -1978,6 +2026,9 @@ export class McpServerRuntimeManager {
     // and share one wake per physical deployment.
     const deployment = loaded ?? (await this.getOrLoadDeployment(mcpServerId));
     if (!deployment) return; // remote/unknown server, or runtime can't load it
+    hibernationMayExist ||=
+      deployment.hasCredentialBindings &&
+      (await deployment.usesRenewableCredentials());
 
     // Re-checked on the alias we just resolved: a reset may have started while
     // the lookup above ran, and a cache-cold caller reaches this line without
@@ -2094,6 +2145,8 @@ export class McpServerRuntimeManager {
 
     const hibernationMayExist =
       isIdleHibernationOffered() ||
+      (deployment.hasCredentialBindings &&
+        (await deployment.usesRenewableCredentials())) ||
       OrganizationModel.getMcpIdleHibernationEnabledSync() !== false;
     if (!hibernationMayExist) {
       return { ran: true, value: await operation() };
@@ -2104,6 +2157,11 @@ export class McpServerRuntimeManager {
       return await McpDeploymentLeaseModel.withLease(
         { scope: MCP_DEPLOYMENT_TRANSITION_LEASE_SCOPE, key },
         async (lease) => {
+          const renewal = deployment.hasCredentialBindings
+            ? await deployment.getCredentialRenewal()
+            : null;
+          if (renewal && renewal.refreshAt <= Date.now())
+            return { ran: false } as const;
           await deployment.refreshState({
             runFencedMutation: lease.runFencedMutation,
           });
@@ -2483,6 +2541,8 @@ export class McpServerRuntimeManager {
     this.status = "stopped";
 
     this.stopDeploymentStateWatchers();
+    if (this.credentialRefreshTimer) clearInterval(this.credentialRefreshTimer);
+    this.credentialRefreshTimer = undefined;
 
     if (this.failedPodReapTimer) {
       clearInterval(this.failedPodReapTimer);
@@ -2931,6 +2991,129 @@ export class McpServerRuntimeManager {
       logger.warn({ err: error }, "Failed to sweep orphaned MCP deployments");
     }
   }
+
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  private startCredentialRefresh(): void {
+    if (this.credentialRefreshTimer) clearInterval(this.credentialRefreshTimer);
+    this.credentialRefreshTimer = setInterval(() => {
+      if (this.credentialRefreshInFlight) return;
+      this.credentialRefreshInFlight = true;
+      const refresh = async () => {
+        const seen = new Set<string>();
+        for (const [id, deployment] of this.mcpServerIdToDeploymentMap) {
+          if (
+            !deployment.hasCredentialBindings ||
+            !(await deployment.usesRenewableCredentials())
+          )
+            continue;
+          const key = McpServerRuntimeManager.physicalDeploymentKey(deployment);
+          if (seen.has(key)) continue;
+          seen.add(key);
+          try {
+            await this.refreshServerCredentials(id);
+          } catch {
+            logger.debug(
+              { mcpServerId: id },
+              "MCP credential renewal will retry after draining or provider recovery",
+            );
+          }
+        }
+      };
+      trackBackgroundWork(
+        refresh().finally(() => {
+          this.credentialRefreshInFlight = false;
+        }),
+      );
+    }, 30_000);
+    this.credentialRefreshTimer.unref?.();
+  }
+
+  private async refreshServerCredentials(
+    mcpServerId: string,
+    includeSleeping = false,
+  ): Promise<void> {
+    if (!this.isEnabled) return;
+    const deployment = await this.getOrLoadDeployment(mcpServerId);
+    if (!deployment?.hasCredentialBindings) return;
+    const renewal = await deployment.getCredentialRenewal({ includeSleeping });
+    if (!renewal || renewal.refreshAt > Date.now()) return;
+    await McpDeploymentLeaseModel.withLeaseWhenAvailable(
+      {
+        scope: MCP_DEPLOYMENT_TRANSITION_LEASE_SCOPE,
+        key: McpServerRuntimeManager.physicalDeploymentKey(deployment),
+        timeoutMs: MCP_DEPLOYMENT_TRANSITION_DEADLINE_MS,
+      },
+      async (lease) => {
+        const current = await deployment.getCredentialRenewal({
+          includeSleeping,
+        });
+        if (!current || current.refreshAt > Date.now()) return;
+        const siblings = await this.resolveSiblingServerIds(mcpServerId);
+        const usedAt = await McpServerModel.getLatestUsageAt(siblings);
+        if (
+          siblings.some(
+            (id) => mcpActiveUseTracker.getActiveUseCount(id) > 0,
+          ) ||
+          (usedAt && Date.now() - usedAt.getTime() < 120_000)
+        ) {
+          throw new ApiError(
+            503,
+            "MCP credential renewal is draining active calls. Retry shortly.",
+          );
+        }
+        const server = await McpServerModel.findById(mcpServerId);
+        const catalog = server?.catalogId
+          ? await InternalMcpCatalogModel.findById(server.catalogId)
+          : null;
+        if (!server || !catalog) return;
+        const organizationId =
+          catalog.organizationId ?? (await OrganizationModel.getFirst())?.id;
+        if (!organizationId)
+          throw new Error("Credential organization is unavailable");
+        // Resolve before stopping the old process. A provider outage must not destroy it.
+        await resolveMcpCredentials({
+          organizationId,
+          userId: server.ownerId,
+          installationScope: server.scope,
+          environment: catalog.localConfig?.environment ?? [],
+        });
+        await lease.assertOwned();
+        if (
+          await McpServerRuntimeManager.isSharedMultitenantDeployment(
+            mcpServerId,
+          )
+        ) {
+          await this.reinstallSharedDeployment(catalog.id, {
+            awaitDeletion: true,
+            transitionLease: lease,
+          });
+        } else {
+          await McpHttpSessionModel.deleteByMcpServerId(mcpServerId);
+          await this.notifyHibernationListeners([mcpServerId]);
+          await deployment.stopDeployment({
+            uidPrecondition: true,
+            awaitDeletion: true,
+            assertOwned: () => lease.assertOwned(),
+            runFencedMutation: (mutation) => lease.runFencedMutation(mutation),
+          });
+          this.mcpServerIdToDeploymentMap.delete(mcpServerId);
+          await this.startServer(server, undefined, undefined, {
+            transitionLease: lease,
+          });
+          const replacement = await this.getOrLoadDeployment(mcpServerId);
+          await replacement?.waitForDeploymentReady(60, 2000);
+        }
+        await lease.assertOwned();
+        logger.info(
+          { mcpServerId },
+          "Renewed MCP workload credentials and replaced its process",
+        );
+      },
+    );
+  }
+  // SPDX-SnippetEnd
 
   /**
    * Start the periodic sweep of Failed/Evicted MCP server pods.

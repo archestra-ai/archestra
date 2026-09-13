@@ -1,4 +1,4 @@
-import { resolveInstallationToken } from "@/integrations/github/app-auth";
+import { resolveInstallationCredential } from "@/integrations/github/app-auth";
 import {
   RuntimeCredentialConnectionModel,
   RuntimeCredentialDefinitionModel,
@@ -13,6 +13,17 @@ export async function resolveCredentialValue(params: {
   userId?: string | null;
   minimumValidityMs?: number;
 }): Promise<string | null> {
+  return (await resolveCredential(params))?.value ?? null;
+}
+
+/** The provider's expiry accompanies every renewable workload value. */
+export async function resolveCredential(params: {
+  organizationId: string;
+  credentialId: string;
+  scope: RuntimeCredentialConnectionScope;
+  userId?: string | null;
+  minimumValidityMs?: number;
+}): Promise<{ value: string; expiresAt: number | null } | null> {
   const definition = await RuntimeCredentialDefinitionModel.find({
     organizationId: params.organizationId,
     key: params.credentialId,
@@ -26,7 +37,8 @@ export async function resolveCredentialValue(params: {
     throw new ApiError(400, "Credential ownership does not match this binding");
   }
   const value = await RuntimeCredentialConnectionModel.resolveValue(params);
-  if (!value || definition.kind !== "github_app") return value;
+  if (!value) return null;
+  if (definition.kind !== "github_app") return { value, expiresAt: null };
   if (
     !definition.githubUrl ||
     !definition.appId ||
@@ -37,13 +49,14 @@ export async function resolveCredentialValue(params: {
       "GitHub App credential is missing its app or installation configuration",
     );
   }
-  return resolveInstallationToken({
+  const token = await resolveInstallationCredential({
     githubUrl: definition.githubUrl,
     appId: definition.appId,
     installationId: definition.installationId,
     privateKey: value,
     minimumValidityMs: params.minimumValidityMs,
   });
+  return { value: token.token, expiresAt: token.expiresAt };
 }
 
 /** Personal secrets may only enter a personally owned MCP process. */
@@ -60,7 +73,14 @@ export async function resolveMcpCredentialValues(params: {
     required?: boolean;
   }[];
 }): Promise<Record<string, string>> {
+  return (await resolveMcpCredentials(params)).values;
+}
+
+export async function resolveMcpCredentials(
+  params: Parameters<typeof resolveMcpCredentialValues>[0],
+): Promise<{ values: Record<string, string>; expiresAt: number | null }> {
   const values: Record<string, string> = {};
+  let expiresAt: number | null = null;
   for (const binding of params.environment) {
     if (!binding.credentialId) continue;
     if (binding.type !== "secret")
@@ -83,13 +103,16 @@ export async function resolveMcpCredentialValues(params: {
         "A personal credential requires a personal MCP installation",
       );
     }
-    const value = await resolveCredentialValue({
+    const credential = await resolveCredential({
       organizationId: params.organizationId,
       userId: params.userId,
       scope,
       credentialId: binding.credentialId,
       minimumValidityMs: 50 * 60_000,
     });
+    const value = credential?.value;
+    if (credential?.expiresAt)
+      expiresAt = Math.min(expiresAt ?? Infinity, credential.expiresAt);
     if (value) values[binding.key] = value;
     else if (binding.required)
       throw new ApiError(
@@ -97,5 +120,5 @@ export async function resolveMcpCredentialValues(params: {
         `Connect the credential for ${binding.key} in Settings → Credentials before installing this server`,
       );
   }
-  return values;
+  return { values, expiresAt };
 }

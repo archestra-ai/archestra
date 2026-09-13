@@ -21,6 +21,14 @@ export async function resolveInstallationToken(
   credentials: GithubAppCredentials,
   fetchImpl: typeof fetch = globalThis.fetch,
 ): Promise<string> {
+  return (await resolveInstallationCredential(credentials, fetchImpl)).token;
+}
+
+/** Retain the upstream expiry so workload refresh never guesses token age. */
+export async function resolveInstallationCredential(
+  credentials: GithubAppCredentials,
+  fetchImpl: typeof fetch = globalThis.fetch,
+): Promise<{ token: string; expiresAt: number }> {
   const { githubUrl, appId, installationId, privateKey } = credentials;
   if (!appId || !installationId || !privateKey) {
     throw new Error(
@@ -40,7 +48,7 @@ export async function resolveInstallationToken(
     cachedToken.expiresAt - Date.now() >
       (credentials.minimumValidityMs ?? 60_000)
   ) {
-    return cachedToken.token;
+    return cachedToken;
   }
 
   const jwt = await signAppJwt({ appId, privateKey });
@@ -79,17 +87,17 @@ export async function resolveInstallationToken(
     );
   }
 
-  const expiresAt = body.expires_at
-    ? Date.parse(body.expires_at)
-    : Date.now() + 60 * TimeInMs.Minute;
+  const expiresAt = body.expires_at ? Date.parse(body.expires_at) : NaN;
   if (!Number.isFinite(expiresAt) || expiresAt <= Date.now())
-    throw new Error("GitHub App installation token has expired");
+    throw new Error(
+      "GitHub App installation token has an invalid or expired lifetime",
+    );
   installationTokenCache.set(
     cacheKey,
     { token: body.token, expiresAt },
     Math.min(GITHUB_APP_INSTALLATION_TOKEN_TTL_MS, expiresAt - Date.now()),
   );
-  return body.token;
+  return { token: body.token, expiresAt };
 }
 
 // ===== Internal helpers =====

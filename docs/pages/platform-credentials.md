@@ -18,7 +18,7 @@ A **Custom secret** holds one value, such as a GitHub personal access token. The
 
 A **GitHub App** always belongs to the organization. It holds an API URL, app ID, installation ID, and private key. Archestra uses the private key to request an installation token. Agent and MCP environments receive the token, never the private key.
 
-[Installation tokens expire after one hour](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-an-installation-access-token-for-a-github-app). Running processes do not refresh their environment automatically. Use a custom secret for processes that need longer uninterrupted access.
+[Installation tokens expire after one hour](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-an-installation-access-token-for-a-github-app). Archestra renews them for managed runtimes. See [Token Refresh](#token-refresh) for process behavior.
 
 Install the GitHub App on the repositories it needs. Its installation permissions determine the token's access. Individual integrations describe their required permissions.
 
@@ -52,11 +52,23 @@ GitHub skill and plugin imports accept saved secrets as tokens or saved GitHub A
 
 ## Rotation And Disconnection
 
-Replacing a value updates future resolutions wherever the credential is referenced. Restart existing MCP processes or start a new Agent Runtime run to update environment variables.
+Replacing a value updates future resolutions wherever the credential is referenced. For static secrets, restart MCP processes or start a new Agent Runtime run.
 
-GitHub App installation tokens expire after one hour. An environment variable contains the token resolved when its process starts. Long-running processes need a new execution before that token expires. Skill and Knowledge operations resolve tokens when they authenticate.
+Skill and Knowledge operations resolve GitHub App tokens when they authenticate. Managed runtime tokens also renew during execution.
 
 Disconnecting removes a saved value without removing its definition. Required bindings need a connected value before execution. Deleting a definition is blocked while a resource references it.
+
+## Token Refresh
+
+MCP servers receive renewed tokens through a managed process restart. Existing calls finish before renewal. New calls receive a retry response while the server drains and reconnects. Shared installations renew their common process together. Failed tool calls are never replayed automatically.
+
+Agent Runtime keeps its running process and workspace. The built-in Agent reads renewed values before each shell command. Maintained images refresh GitHub authentication for each `gh` invocation, including Git credential-helper requests.
+
+Custom runtime code reads the file named by `ARCHESTRA_AGENT_RUNTIME_CREDENTIALS_FILE`. It contains a `taskId` and a `credentials` object keyed by environment-variable name. Each entry has a `value` and `expiresAt`, expressed in Unix milliseconds. Read the file again before authenticating, and reject expired values. Kubernetes updates this file without restarting the process.
+
+Environment variables remain startup snapshots. A custom process that caches one token still loses access when it expires. This also applies to commands that outlive a token and keep reusing it. Start a new command or make the client reread the managed file.
+
+Provider failures delay renewal. Tokens keep their original expiry. MCP calls fail until renewal succeeds. Managed Agent commands refuse expired or unavailable credentials. Retained interactive sessions keep renewing until workspace cleanup. Disconnecting the credential or canceling the run prevents further renewal.
 
 ## Use Case: One GitHub Credential Across Integrations
 

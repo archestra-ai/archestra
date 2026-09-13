@@ -26,6 +26,7 @@ import {
   MCP_HIBERNATED_ANNOTATION,
   MCP_PRE_HIBERNATION_REPLICAS_ANNOTATION,
 } from "@/k8s/shared";
+import { RuntimeCredentialDefinitionModel } from "@/models";
 import { MCP_SERVER_LAST_USED_REFRESH_INTERVAL_MS } from "@/models/mcp-server";
 // biome-ignore lint/style/noRestrictedImports: runtime-gated EE service import
 import { mcpActiveUseTracker } from "@/services/mcp-active-use.ee";
@@ -1135,4 +1136,137 @@ describe("McpServerRuntimeManager ↔ K8sDeployment hibernation seam", () => {
       });
     });
   });
+});
+
+test.for([
+  false,
+  true,
+])("credential renewal drains shared aliases without extending the drain on retries (hibernation=%s)", async (hibernationEnabled, {
+  makeOrganization,
+  makeUser,
+  makeInternalMcpCatalog,
+  makeMcpServer,
+}) => {
+  const organization = await makeOrganization({
+    mcpIdleHibernationEnabled: hibernationEnabled,
+  });
+  config.orchestrator.mcpIdleHibernation.betaEnabled = hibernationEnabled;
+  const owner = await makeUser();
+  await RuntimeCredentialDefinitionModel.create({
+    organizationId: organization.id,
+    createdBy: owner.id,
+    definition: {
+      key: "repository-app",
+      name: "Repository App",
+      kind: "github_app",
+      description: "",
+      icon: null,
+      allowPersonal: false,
+      allowOrganization: true,
+    },
+  });
+  const catalog = await makeInternalMcpCatalog({
+    organizationId: organization.id,
+    name: "Renewable shared server",
+    serverType: "local",
+    multitenant: true,
+    localConfig: {
+      command: "node",
+      arguments: ["server.js"],
+      environment: [
+        {
+          key: "GITHUB_TOKEN",
+          type: "secret",
+          credentialId: "repository-app",
+          credentialScope: "organization",
+          promptOnInstallation: false,
+          required: true,
+        },
+      ],
+    },
+  });
+  const first = await makeMcpServer({
+    catalogId: catalog.id,
+    name: "renewable-first",
+    deploymentName: DEPLOYMENT_NAME,
+  });
+  const second = await makeMcpServer({
+    catalogId: catalog.id,
+    name: "renewable-second",
+    deploymentName: DEPLOYMENT_NAME,
+  });
+  const cluster = new FakeK8sCluster({
+    replicas: 1,
+    annotations: {
+      "archestra.ai/credential-expires-at": String(Date.now() + 60_000),
+      "archestra.ai/credential-refresh-at": String(Date.now() - 1),
+    },
+  });
+  const { manager } = makeManager(cluster);
+  config.orchestrator.mcpIdleHibernation.betaEnabled = hibernationEnabled;
+  let finish: (() => void) | undefined;
+  let started: (() => void) | undefined;
+  const active = new Promise<void>((resolve) => {
+    started = resolve;
+  });
+  const completed = new Promise<void>((resolve) => {
+    finish = resolve;
+  });
+  const operation = mcpActiveUseTracker.trackCredentialUse(
+    first.id,
+    async () => {
+      started?.();
+      await completed;
+    },
+  );
+  await active;
+  let dispatched = false;
+  try {
+    await expect(
+      manager.withFreshCredentials(second.id, async () => {
+        dispatched = true;
+      }),
+    ).rejects.toThrow("draining active calls");
+    expect(dispatched).toBe(false);
+    await expect(
+      manager.withFreshCredentials(second.id, async () => {
+        dispatched = true;
+      }),
+    ).rejects.toThrow("draining active calls");
+    expect(
+      (
+        await db
+          .select()
+          .from(schema.mcpServersTable)
+          .where(eq(schema.mcpServersTable.id, second.id))
+      )[0]?.lastUsedAt,
+    ).toEqual(second.lastUsedAt);
+    expect(cluster.replicas).toBe(1);
+    // Another replica has completed renewal. Both aliases may now dispatch.
+    cluster.annotations["archestra.ai/credential-refresh-at"] = String(
+      Date.now() + 45 * 60_000,
+    );
+    cluster.annotations["archestra.ai/credential-expires-at"] = String(
+      Date.now() + 60 * 60_000,
+    );
+    expect(
+      await manager.withFreshCredentials(second.id, async () => "new-process"),
+    ).toBe("new-process");
+    // A resolved optional App with no connected value must not restart forever.
+    delete cluster.annotations["archestra.ai/credential-refresh-at"];
+    delete cluster.annotations["archestra.ai/credential-expires-at"];
+    cluster.annotations["archestra.ai/credentials-resolved"] = "true";
+    expect(
+      await manager.withFreshCredentials(
+        second.id,
+        async () => "optional-unconnected",
+      ),
+    ).toBe("optional-unconnected");
+  } finally {
+    finish?.();
+    await operation;
+    mcpActiveUseTracker.remove(first.id);
+    mcpActiveUseTracker.remove(second.id);
+    await manager.shutdown();
+  }
 });

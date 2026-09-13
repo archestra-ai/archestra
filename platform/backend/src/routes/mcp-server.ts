@@ -2155,6 +2155,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         return reply.send(result as Record<string, unknown>);
       } catch (error) {
+        if (error instanceof ApiError) throw error;
         if (
           error instanceof McpServerNotReadyError ||
           error instanceof McpServerConnectionTimeoutError

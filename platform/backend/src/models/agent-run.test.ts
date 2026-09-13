@@ -290,6 +290,11 @@ test("continuations keep one owner session and ordered history without exposing 
     lastTaskId: first.id,
     expiresAt: new Date(Date.now() + 3600_000),
   });
+  expect(
+    (await AgentRunModel.listRetainedForCredentialRefresh()).map(
+      (run) => run.id,
+    ),
+  ).toEqual([firstRun.id]);
   const second = await A2ATaskModel.createForRun({
     contextId: context.id,
     agentId: agent.id,
@@ -308,6 +313,7 @@ test("continuations keep one owner session and ordered history without exposing 
       taskId: second.id,
     }),
   ).not.toBeNull();
+  expect(await AgentRunModel.listRetainedForCredentialRefresh()).toEqual([]);
   const lookup = { actorUserId: owner.id, organizationId: org.id };
   for (const taskId of [first.id, second.id, workspace.id]) {
     expect(

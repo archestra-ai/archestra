@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { type ReactNode, useEffect } from "react";
+import { type ReactNode, useEffect, useId } from "react";
 import type { UseFormReturn } from "react-hook-form";
 import {
   FormControl,
@@ -47,6 +47,7 @@ export function GithubConfigFields({
   hideRepositoryOptions = false,
   appConfigDescription,
 }: GithubConfigFieldsProps) {
+  const credentialSelectId = useId();
   const githubAppConfigId = form.watch(`${prefix}.githubAppConfigId`) as
     | string
     | undefined;
@@ -122,7 +123,7 @@ export function GithubConfigFields({
 
       {!hideAuth && (
         <FormItem>
-          <FormLabel>Credential</FormLabel>
+          <FormLabel htmlFor={credentialSelectId}>Credential</FormLabel>
           <Select
             value={
               credentialId ??
@@ -148,7 +149,7 @@ export function GithubConfigFields({
               });
             }}
           >
-            <SelectTrigger className="w-full">
+            <SelectTrigger id={credentialSelectId} className="w-full">
               <SelectValue placeholder="Select a credential" />
             </SelectTrigger>
             <SelectContent>

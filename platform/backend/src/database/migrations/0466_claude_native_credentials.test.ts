@@ -65,8 +65,24 @@ describe("native Claude credential migration", () => {
       runtime: { ...runtime, command: ["custom-harness"] },
     });
     for (let attempt = 0; attempt < 2; attempt++) {
-      for (const statement of migration.split("--> statement-breakpoint"))
-        await db.execute(sql.raw(statement));
+      // Reconstruct pre-consolidation names inside this test database only.
+      // Execute the original migration verbatim, then let current models verify it.
+      await db.transaction(async (tx) => {
+        await tx.execute(
+          sql`ALTER TABLE credential_definitions RENAME TO runtime_credential_definitions`,
+        );
+        await tx.execute(
+          sql`ALTER TABLE credential_connections RENAME TO runtime_credential_connections`,
+        );
+        for (const statement of migration.split("--> statement-breakpoint"))
+          await tx.execute(sql.raw(statement));
+        await tx.execute(
+          sql`ALTER TABLE runtime_credential_definitions RENAME TO credential_definitions`,
+        );
+        await tx.execute(
+          sql`ALTER TABLE runtime_credential_connections RENAME TO credential_connections`,
+        );
+      });
       expect(
         await RuntimeCredentialDefinitionModel.list(organization.id),
       ).toMatchObject([

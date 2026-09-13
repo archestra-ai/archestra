@@ -71,7 +71,16 @@ test("upgrades personal Claude accounts without reconnecting or tying them to an
   );
   const statements = migration.split("--> statement-breakpoint").slice(1);
   for (let pass = 0; pass < 2; pass++) {
-    for (const statement of statements) await db.execute(sql.raw(statement));
+    // The later consolidation renames this table; replay against its original name.
+    await db.transaction(async (tx) => {
+      await tx.execute(
+        sql`ALTER TABLE credential_connections RENAME TO runtime_credential_connections`,
+      );
+      for (const statement of statements) await tx.execute(sql.raw(statement));
+      await tx.execute(
+        sql`ALTER TABLE runtime_credential_connections RENAME TO credential_connections`,
+      );
+    });
     expect((await ClaudeCodeAccountModel.find(owner))?.secretId).toBe(
       valid.secretId,
     );

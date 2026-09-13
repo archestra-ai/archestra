@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import db, { schema, withDbTransaction } from "@/database";
@@ -129,9 +128,8 @@ const FlowSchema = z.object({
   vaultReference: z.string().optional(),
 });
 function flowKey(owner: Owner) {
-  return `claude-code-sign-in:${createHash("sha256")
-    .update(JSON.stringify([owner.organizationId, owner.userId]))
-    .digest("hex")}`;
+  // This is a database lookup key made from IDs, not a credential or token.
+  return `claude-code-sign-in:${JSON.stringify([owner.organizationId, owner.userId])}`;
 }
 function ownerWhere(owner: Owner) {
   const table = schema.runtimeCredentialConnectionsTable;

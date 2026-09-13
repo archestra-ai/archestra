@@ -55,7 +55,7 @@ export async function preflightAgentRuntimeLaunch(params: {
           key: "CLAUDE_CODE_ACCOUNT",
           label: "Claude Code account",
           description:
-            "Sign in with your own Claude account for this runtime image.",
+            "Connect your personal Claude account in Account connections.",
         },
       ]);
     }

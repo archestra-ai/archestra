@@ -86,8 +86,9 @@ beforeEach(
 test.for([
   "initial",
   "continuation",
-] as const)("%s reports an image-bound credential refusal before creating detached work", async (mode) => {
+] as const)("%s reports a disconnected personal account before creating detached work", async (mode) => {
   await connect({ ...runtime, image: "example.test/claude-code:previous" });
+  await claudeCodeAccountManager.disconnect({ runtime, userId });
   const previous = mode === "continuation" ? await retainedRun() : null;
   const result = await executeArchestraTool(
     mode === "initial" ? TOOL_START_RUN_FULL_NAME : TOOL_STEER_RUN_FULL_NAME,
@@ -110,8 +111,8 @@ test.for([
   expect(tasks.tasks).toHaveLength(previous ? 1 : 0);
 });
 
-test("an accepted continuation exposes its new task ID and reports a later startup failure to the original thread", async () => {
-  await connect(runtime);
+test("a continuation reuses the account after an image change and reports a later startup failure to the original thread", async () => {
+  await connect({ ...runtime, image: "example.test/claude-code:previous" });
   const previous = await retainedRun();
   const notify = vi
     .spyOn(chatOpsManager, "notifyBindingThread")

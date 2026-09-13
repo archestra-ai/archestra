@@ -15,6 +15,7 @@ import { WebSocket as WS } from "ws";
 import { betterAuth } from "@/auth";
 import db, { schema } from "@/database";
 import { browserStreamFeature } from "@/features/browser-stream/services/browser-stream.feature";
+import { agentRuntimeManager } from "@/k8s/agent-runtime";
 import McpServerRuntimeManager from "@/k8s/mcp-server-runtime/manager";
 import {
   A2AContextModel,
@@ -929,6 +930,172 @@ describe("websocket Agent run authorization and cleanup", () => {
       }),
     );
     expect(service.agentRunAttachSubscriptions.has(ws)).toBe(false);
+  });
+
+  test("attaches only the Project run starter from the stable session URL to the current turn", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const organization = await makeOrganization();
+    const owner = await makeUser();
+    await makeMember(owner.id, organization.id, { role: "member" });
+    const project = await projectService.create({
+      organizationId: organization.id,
+      userId: owner.id,
+      name: "Project run",
+      description: null,
+    });
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      authorId: owner.id,
+      agentType: "agent",
+      scope: "org",
+    });
+    const context = await A2AContextModel.create({
+      actorKind: "user",
+      actorId: owner.id,
+    });
+    const firstTask = await A2ATaskModel.create({
+      contextId: context.id,
+      agentId: agent.id,
+      state: "TASK_STATE_COMPLETED",
+    });
+    const currentTask = await A2ATaskModel.create({
+      contextId: context.id,
+      agentId: agent.id,
+      state: "TASK_STATE_WORKING",
+    });
+    const workloadName = `project-run-${crypto.randomUUID()}`;
+    await AgentRunModel.create({
+      organizationId: organization.id,
+      taskId: firstTask.id,
+      agentId: agent.id,
+      actorKind: "user",
+      actorId: owner.id,
+      actorUserId: owner.id,
+      projectId: project.id,
+      workloadName,
+      backend: "kubernetes",
+      runtimeScope: "archestra-dev",
+      virtualApiKeyId: null,
+    });
+    const currentRun = await AgentRunModel.create({
+      organizationId: organization.id,
+      taskId: currentTask.id,
+      agentId: agent.id,
+      actorKind: "user",
+      actorId: owner.id,
+      actorUserId: owner.id,
+      projectId: project.id,
+      workloadName,
+      backend: "kubernetes",
+      runtimeScope: "archestra-dev",
+      virtualApiKeyId: null,
+    });
+    await AgentWorkspaceModel.create({
+      id: firstTask.id,
+      organizationId: organization.id,
+      agentId: agent.id,
+      actorKind: "user",
+      actorId: owner.id,
+      workloadName,
+      backend: "kubernetes",
+      runtimeScope: "archestra-dev",
+      state: "active",
+      lastTaskId: currentTask.id,
+      expiresAt: new Date(Date.now() + 3600_000),
+    });
+    const socket = {
+      readyState: WS.OPEN,
+      close: vi.fn(),
+      on: vi.fn(),
+      send: vi.fn(),
+    };
+    vi.spyOn(agentRuntimeManager, "isEnabled", "get").mockReturnValue(true);
+    const attach = vi.spyOn(agentRuntimeManager, "attach").mockResolvedValue({
+      podName: "project-run-pod",
+      command: "tmux attach",
+      socket: socket as never,
+    });
+    const ws = {
+      readyState: WS.OPEN,
+      send: vi.fn(),
+      close: vi.fn(),
+    } as unknown as WS;
+    service.clientContexts.set(ws, {
+      userId: owner.id,
+      organizationId: organization.id,
+      userIsMcpServerAdmin: false,
+    });
+
+    await service.handleMessage(
+      {
+        type: "subscribe_agent_run_attach",
+        payload: { runId: firstTask.id },
+      },
+      ws,
+    );
+
+    expect(attach).toHaveBeenCalledWith(
+      expect.objectContaining({
+        session: expect.objectContaining({ id: currentRun.id }),
+      }),
+    );
+    expect(ws.send).toHaveBeenCalledWith(
+      JSON.stringify({
+        type: "agent_run_attach_started",
+        payload: {
+          runId: firstTask.id,
+          command: "tmux attach",
+          resourceName: "project-run-pod",
+        },
+      }),
+    );
+
+    const viewer = await makeUser();
+    await makeMember(viewer.id, organization.id, { role: "admin" });
+    await projectService.setShare({
+      id: project.id,
+      organizationId: organization.id,
+      userId: owner.id,
+      visibility: "organization",
+      teamIds: [],
+    });
+    const viewerWs = {
+      readyState: WS.OPEN,
+      send: vi.fn(),
+      close: vi.fn(),
+    } as unknown as WS;
+    service.clientContexts.set(viewerWs, {
+      userId: viewer.id,
+      organizationId: organization.id,
+      userIsMcpServerAdmin: true,
+    });
+    attach.mockClear();
+
+    for (const taskId of [firstTask.id, currentTask.id]) {
+      await service.handleMessage(
+        {
+          type: "subscribe_agent_run_attach",
+          payload: { runId: taskId },
+        },
+        viewerWs,
+      );
+
+      expect(viewerWs.send).toHaveBeenCalledWith(
+        JSON.stringify({
+          type: "agent_run_attach_error",
+          payload: {
+            runId: taskId,
+            error: "Only the person who started this run can attach to it",
+          },
+        }),
+      );
+    }
+    expect(attach).not.toHaveBeenCalled();
+    expect(service.agentRunAttachSubscriptions.has(viewerWs)).toBe(false);
   });
 
   test("destroys Agent run streams and detaches the exec socket on disconnect", () => {

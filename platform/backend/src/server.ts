@@ -78,6 +78,12 @@ import {
 import { getTransientDbErrorCode } from "@/database/retry";
 import { seedRequiredStartingData } from "@/database/seed";
 import { enterpriseTier } from "@/enterprise-tier";
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+// biome-ignore lint/style/noRestrictedImports: runtime-gated image prefetch
+import { agentImagePrefetcher } from "@/k8s/agent-runtime/image-prefetch.ee";
+// SPDX-SnippetEnd
 import { daggerEnvironmentRuntimeManager } from "@/k8s/dagger-environment-runtime/manager";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import logger from "@/logging";
@@ -1569,6 +1575,11 @@ const startWebServer = async () => {
     // orphaned tasks get settled even on pods that never start a run.
     a2aTaskRunService.startMaintenance();
     agentRunReconciler.start();
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    agentImagePrefetcher.start();
+    // SPDX-SnippetEnd
 
     /**
      * Here we don't expose the metrics endpoint on the main API port, but we do collect metrics
@@ -1741,6 +1752,11 @@ function registerWebServerShutdown(
     // point escapes the cleanup below.
     activeChatRunService.beginShutdown();
     agentRunReconciler.stop();
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    agentImagePrefetcher.stop();
+    // SPDX-SnippetEnd
 
     // Fail this pod's in-flight chat runs first: a long SSE stream keeps Fastify
     // connections open, so waiting for fastify.close() risks SIGKILL before the

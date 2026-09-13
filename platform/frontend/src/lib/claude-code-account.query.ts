@@ -8,7 +8,12 @@ export function useClaudeCodeAccount(agentId: string, polling = false) {
   return useQuery({
     queryKey: accountKey(agentId),
     enabled: Boolean(agentId),
-    refetchInterval: polling ? 2000 : false,
+    refetchInterval: polling
+      ? (query) => {
+          const state = query.state.data?.state;
+          return state === "starting" || state === "connecting" ? 1000 : 2000;
+        }
+      : false,
     queryFn: async () => {
       const { data, error } = await archestraApiSdk.getClaudeCodeAccount({
         path: { id: agentId },
@@ -66,9 +71,11 @@ export function useClaudeCodeSignIn(agentId: string) {
     onSuccess: async (data) => {
       await client.cancelQueries({ queryKey: accountKey(agentId) });
       client.setQueryData(accountKey(agentId), data);
-      void client.invalidateQueries({
-        queryKey: ["agents", agentId, "runtime", "preflight"],
-      });
+      if (data?.state === "connected") {
+        void client.invalidateQueries({ queryKey: ["claude-code-account"] });
+        void client.invalidateQueries({ queryKey: ["claude-code-models"] });
+        void client.invalidateQueries({ queryKey: ["agents"] });
+      }
     },
   });
 }
@@ -86,10 +93,9 @@ export function useDisconnectClaudeCodeAccount(agentId: string) {
     onSuccess: async (data) => {
       await client.cancelQueries({ queryKey: accountKey(agentId) });
       client.setQueryData(accountKey(agentId), data);
-      client.removeQueries({ queryKey: modelsKey(agentId) });
-      void client.invalidateQueries({
-        queryKey: ["agents", agentId, "runtime", "preflight"],
-      });
+      client.removeQueries({ queryKey: ["claude-code-models"] });
+      void client.invalidateQueries({ queryKey: ["claude-code-account"] });
+      void client.invalidateQueries({ queryKey: ["agents"] });
       toast.success("Claude Code disconnected");
     },
   });

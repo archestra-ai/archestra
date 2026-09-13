@@ -10,6 +10,7 @@ import {
   loadKubeConfig,
 } from "@/k8s/shared";
 import type { AgentRunLaunchSpec } from "@/services/agent-runtime/backends";
+import type { ClaudeCodeAccountStatus } from "@/types/claude-code-account";
 import { execAgentRuntimeCommand } from "./exec";
 import { AGENT_RUNTIME_TASK_LABEL } from "./naming";
 import {
@@ -161,14 +162,39 @@ class ClaudeCodeAccountRuntime {
 
   async status(params: Flow): Promise<unknown> {
     const pod = await this.pod(params);
-    if (!pod || pod.status?.phase === "Pending")
-      return { state: "starting", flowId: params.flowId };
-    if (pod.status?.phase !== "Running") return { state: "failed" };
-    return this.command({
+    const waiting = pod?.status?.containerStatuses?.find(
+      ({ name }) => name === "claude-code",
+    )?.state?.waiting;
+    if (waiting && IMAGE_PULL_ERRORS.has(waiting.reason ?? ""))
+      return { state: "failed", startupIssue: "image_pull" };
+    if (!pod || pod.status?.phase === "Pending") {
+      const scheduled = pod?.status?.conditions?.some(
+        ({ type, status }) => type === "PodScheduled" && status === "True",
+      );
+      const capacity = pod?.status?.conditions?.some(
+        ({ type, reason }) =>
+          type === "PodScheduled" && reason === "Unschedulable",
+      );
+      return {
+        state: "starting",
+        flowId: params.flowId,
+        startupPhase: scheduled ? "pulling" : "scheduling",
+        ...(capacity ? { startupIssue: "capacity" } : {}),
+      } satisfies ClaudeCodeAccountStatus;
+    }
+    if (pod.status?.phase !== "Running" || waiting)
+      return { state: "failed", startupIssue: "container" };
+    const result = await this.command({
       ...params,
       podName: pod.metadata?.name ?? "",
       operation: "status",
     });
+    return typeof result === "object" &&
+      result !== null &&
+      "state" in result &&
+      result.state === "starting"
+      ? { ...result, startupPhase: "starting" }
+      : result;
   }
 
   async complete(
@@ -246,3 +272,9 @@ type Flow = { namespace: string; flowId: string };
 function jobName(flowId: string) {
   return `claude-sign-in-${flowId}`;
 }
+
+const IMAGE_PULL_ERRORS = new Set([
+  "ErrImagePull",
+  "ImagePullBackOff",
+  "InvalidImageName",
+]);

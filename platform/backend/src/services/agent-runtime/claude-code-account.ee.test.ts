@@ -4,7 +4,7 @@ import { vi } from "vitest";
 import config from "@/config";
 import { agentRuntimeManager } from "@/k8s/agent-runtime";
 import { claudeCodeAccountRuntime } from "@/k8s/agent-runtime/claude-code-account";
-import { UserCredentialModel } from "@/models";
+import ClaudeCodeAccountModel from "@/models/claude-code-account";
 import SecretModel from "@/models/secret";
 import { secretManagerCoordinator } from "@/secrets-manager";
 import { afterEach, beforeEach, expect, test } from "@/test";
@@ -78,11 +78,11 @@ test("read-only Vault keeps only a reference, reads rotated tokens, and never wr
     vaultReference: "secret/data/personal#token",
   });
   await manager.complete({ ...owner, flowId: pending.flowId as string });
-  const [credential] = await UserCredentialModel.listForAgentUser({
+  const credential = await ClaudeCodeAccountModel.find({
     organizationId: organization.id,
-    agentId: agent.id,
     userId: user.id,
   });
+  if (!credential) throw new Error("Expected a personal Claude account");
   const secret = await SecretModel.findById(credential.secretId);
   expect(secret).toMatchObject({
     isByosVault: true,
@@ -168,11 +168,11 @@ test("managed Vault stores the token remotely and deletes it on disconnect", asy
   const pending = await manager.start(owner);
   await manager.complete({ ...owner, flowId: pending.flowId as string });
   expect(stored).toEqual({ data: { value: JSON.stringify({ value: token }) } });
-  const [credential] = await UserCredentialModel.listForAgentUser({
+  const credential = await ClaudeCodeAccountModel.find({
     organizationId: organization.id,
-    agentId: agent.id,
     userId: user.id,
   });
+  if (!credential) throw new Error("Expected a personal Claude account");
   expect(await SecretModel.findById(credential.secretId)).toMatchObject({
     isVault: true,
     secret: {},

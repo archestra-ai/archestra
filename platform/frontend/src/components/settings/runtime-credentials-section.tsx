@@ -18,12 +18,15 @@ import { QueryLoadError } from "@/components/query-load-error";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import { RuntimeCredentialConnectionDialog } from "@/components/runtime-credential-connection-dialog";
 import { RuntimeCredentialDisconnectDialog } from "@/components/runtime-credential-disconnect-dialog";
+import { RuntimeCredentialIcon } from "@/components/runtime-credential-icon";
 import { RuntimeCredentialRowContent } from "@/components/runtime-credential-row-content";
 import { RuntimeCredentialDefinitionDialog } from "@/components/settings/runtime-credential-definition-dialog";
 import { SettingsBlock } from "@/components/settings/settings-block";
 import { TableRowActions } from "@/components/table-row-actions";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useFeature } from "@/lib/config/config.query";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import {
   type RuntimeCredentialDefinition,
   useDeleteRuntimeCredential,
@@ -37,6 +40,7 @@ const MANAGE_CREDENTIALS_PERMISSION: Permissions = {
 };
 
 export function RuntimeCredentialsSection() {
+  const appName = useAppName();
   const definitions = useRuntimeCredentials();
   const byosEnabled = useFeature("byosEnabled");
   const [definitionDialog, setDefinitionDialog] = useState<
@@ -95,6 +99,44 @@ export function RuntimeCredentialsSection() {
           />
         ) : (
           <div className="divide-y overflow-hidden rounded-lg border">
+            <div className="flex items-start gap-3 p-3">
+              <div className="flex size-9 shrink-0 items-center justify-center rounded-md border bg-background">
+                <RuntimeCredentialIcon icon="logo:anthropic" />
+              </div>
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="text-sm font-medium">Claude Code</h3>
+                  <Badge variant="outline" className="font-normal">
+                    Personal account
+                  </Badge>
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Used by Claude Code Agents with personal Claude Pro or Max
+                  subscriptions.{" "}
+                  <a
+                    href="https://code.claude.com/docs/en/legal-and-compliance#authentication-and-credential-use"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline underline-offset-4 hover:text-foreground"
+                  >
+                    Anthropic’s terms
+                  </a>{" "}
+                  restrict subscription credentials to native Anthropic apps;
+                  this connection is only for Claude Code in Agent Runtime, not
+                  as a model provider for {appName} chat.
+                </p>
+                <p className="mt-3 text-xs text-muted-foreground">
+                  Each person connects their own account once in{" "}
+                  <Link
+                    href="/account/connections"
+                    className="underline underline-offset-4 hover:text-foreground"
+                  >
+                    Account connections
+                  </Link>
+                  .
+                </p>
+              </div>
+            </div>
             {(definitions.data ?? []).map((definition) => (
               <div
                 key={definition.key}
@@ -118,11 +160,6 @@ export function RuntimeCredentialsSection() {
                 />
               </div>
             ))}
-            {!definitions.isPending && definitions.data?.length === 0 && (
-              <p className="p-5 text-sm text-muted-foreground">
-                No runtime credentials are available.
-              </p>
-            )}
           </div>
         )}
       </SettingsBlock>

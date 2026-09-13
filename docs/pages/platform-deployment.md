@@ -961,6 +961,20 @@ For zonal disks, use `WaitForFirstConsumer` binding and compatible node zones. N
 
 Check **Settings → Agents → Runtime Backend** if the runtime is unavailable. Confirm the controller is installed and healthy. For runs waiting on storage, check the storage class and available capacity. For image-pull failures, check the image name, registry access, and pull credentials. Chat shows the reported startup failure.
 
+<!-- SPDX-SnippetBegin -->
+<!-- SPDX-SnippetCopyrightText: 2026 Archestra Inc. -->
+<!-- SPDX-License-Identifier: LicenseRef-Archestra-Enterprise -->
+#### Runtime Image Cache
+
+Archestra automatically prefetches the six popular catalog images when Agent Runtime starts. Downloads run in the background without delaying API readiness. Kubernetes skips images already cached on the node.
+
+Each image has a DaemonSet covering the runtime node pool, including newly added nodes. Placement follows `ARCHESTRA_AGENT_RUNTIME_NODE_SELECTOR`. Catalog image versions follow `ARCHESTRA_AGENT_RUNTIME_BASE_IMAGE`. Changes replace the previous prefetch DaemonSets. Custom Agent images are downloaded when their runtimes start.
+
+The prefetch uses the runtime namespace's default ServiceAccount image pull secrets. Bootstrap image, registry secrets, resources, and priority reuse the MCP image pre-pull settings below. Each image consumes disk on every matching node.
+
+Fresh nodes still need their first download. An unavailable image does not block other images or Agent launches.
+<!-- SPDX-SnippetEnd -->
+
 #### Privileged Containers
 
 Ordinary coding clients do not require privilege. Docker-in-Docker and nested Kubernetes development environments may require it. Privileged containers have broad access to the node, so use a dedicated namespace and node pool.

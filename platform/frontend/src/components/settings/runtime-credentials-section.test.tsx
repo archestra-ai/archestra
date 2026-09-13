@@ -1,6 +1,7 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import { RuntimeCredentialsSection } from "./runtime-credentials-section";
 
 global.ResizeObserver = class {
@@ -41,6 +42,7 @@ vi.mock("@/components/roles/with-permissions", () => ({
   WithPermissions: ({ children }: { children: (value: unknown) => unknown }) =>
     children({ hasPermission: true }),
 }));
+vi.mock("@/lib/hooks/use-app-name");
 vi.mock("@/lib/auth/auth.query", () => ({
   useHasPermissions: () => ({ data: true }),
 }));
@@ -72,6 +74,7 @@ vi.mock("@/lib/runtime-credentials.query", () => ({
 
 describe("RuntimeCredentialsSection", () => {
   beforeEach(() => {
+    vi.mocked(useAppName).mockReturnValue("Example Platform");
     vi.clearAllMocks();
     mocks.definitions = [
       {

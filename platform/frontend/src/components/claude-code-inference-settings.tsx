@@ -76,7 +76,7 @@ export function ClaudeCodeInferenceSettings({
       </RadioGroup>
       <p className="text-xs text-muted-foreground">
         {authentication === "subscription"
-          ? "Each person using this agent must sign in to their own Claude Code account before they can run it. Your subscription is never shared."
+          ? "Connect your Claude account once to use it across your Claude Code agents. Each person uses their own subscription."
           : provider === "bedrock"
             ? "Uses Amazon Bedrock billing."
             : provider === "anthropic" && vertexEnabled

@@ -22,8 +22,10 @@ export function ClaudeCodeAccount({
   agentId,
   model,
   onModelChange,
+  variant = "card",
 }: {
   agentId: string;
+  variant?: "card" | "row";
   model?: string;
   onModelChange?: (model: string) => void;
 }) {
@@ -84,7 +86,13 @@ export function ClaudeCodeAccount({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-3 rounded-lg border px-3 py-2.5">
+      <div
+        className={
+          variant === "row"
+            ? "flex flex-wrap items-center gap-3 p-3"
+            : "flex flex-wrap items-center gap-3 rounded-lg border px-3 py-2.5"
+        }
+      >
         <div className="flex size-8 shrink-0 items-center justify-center rounded-md border bg-background">
           <RuntimeCredentialIcon icon="logo:anthropic" className="size-4" />
         </div>
@@ -101,7 +109,9 @@ export function ClaudeCodeAccount({
                     ? "Signed in for you"
                     : account.data?.state === "expired"
                       ? "Connection expired. Sign in again."
-                      : "Sign in to use this agent."}
+                      : variant === "row"
+                        ? "Sign in once for all your Claude Code agents."
+                        : "Sign in to use this agent."}
             </span>
           </p>
         </div>

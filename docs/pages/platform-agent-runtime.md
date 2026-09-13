@@ -218,6 +218,10 @@ Run ownership follows the user who started it, not the Agent creator. Sharing gr
 
 Recordings preserve earlier terminal output, including screens replaced by redraws. Run history remains available after workspace removal and follows the configured retention period. See [Deployment](/docs/platform-deployment#agent-runtime) for retention and transcript limits.
 
+## Monitor Runtime Health
+
+Agent Runtime exports startup timing, lifecycle counters, and per-agent health metrics. Monitor queued work, stale heartbeats, authentication waits, and undelivered completion replies. See [Agent Runtime Observability](/docs/platform-observability#agent-runtime-health) for metrics and alerting guidance.
+
 ## Example Architecture
 
 A coordinator Agent answers questions in a messaging channel. It delegates coding tasks to a specialist with repository access and a dedicated runtime. Only the specialist needs Agent Runtime.

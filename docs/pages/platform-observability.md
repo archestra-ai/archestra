@@ -348,6 +348,39 @@ kept out of Prometheus labels.
 
 External LLM proxy calls produce independent root traces.
 
+### Agent Runtime Health
+
+Runtime metrics cover every Agent Runtime client and backend. Existing `/metrics` scraping collects them; runtime containers need no additional environment variables.
+
+| Metric | Meaning |
+| --- | --- |
+| `agent_runtime_runs_started_total` | Runs that reached a running backend. |
+| `agent_runtime_runs_terminated_total` | Observed run outcomes, labeled by `outcome`. |
+| `agent_runtime_provision_duration_seconds` | Startup duration, including scheduling and image pulls. |
+| `agent_runtime_steers_total` | Delivered steering messages, labeled by `steer_mode`. |
+| `agent_runtime_completion_deliveries_total` | Completion delivery attempts, labeled by `interface` and `outcome`. |
+| `agent_runtime_health_tasks` | Current health counts, labeled by `agent_id`, `backend`, and `condition`. |
+| `agent_runtime_health_age_seconds` | Oldest relevant task age, with the same labels. |
+| `agent_runtime_health_collection_timestamp_seconds` | Last successful health snapshot, even when no tasks exist. |
+
+Health counts include `working`, `submitted`, `input_required`, `auth_required`, `failed_recent`, and `completion_pending`. Conditions overlap: an authentication wait also counts as working. `failed_recent` covers the last 15 minutes. A completion remains pending until its external delivery succeeds.
+
+Age conditions are `heartbeat`, `submitted`, and `completion_pending`. Heartbeat age measures orchestration liveness, not model progress. An active heartbeat alone does not prove that an agent is making progress. Input requests can require legitimate human action.
+
+Health gauges read shared database state at scrape time. Use `max`, not `sum`, across platform replicas. They survive process restarts and remove settled conditions on the next scrape. Scrape failures must also alert; missing samples do not prove healthy operation. Lifecycle counters are process-local observations and can include recovery attempts.
+
+For example, detect runs whose orchestration heartbeat is over two minutes old:
+
+```promql
+max by (agent_id, backend) (
+  agent_runtime_health_age_seconds{condition="heartbeat"}
+) > 120
+```
+
+Filter `agent_id` to monitor selected agents. Apply a pending period to avoid transient alerts. Other useful alerts include sustained submitted tasks, authentication waits, recent failures, and aging completion replies. Link notifications to the agent's Runs tab for investigation. Keep task IDs, prompts, credentials, and raw error messages out of metric labels.
+
+Container CPU, memory, scheduling failures, and restarts come from Kubernetes monitoring. Client-specific traces require that client's OpenTelemetry configuration. These signals complement platform health metrics.
+
 ### Custom Agent Labels
 
 Labels are key-value pairs that can be configured when creating or updating agents through the Archestra UI. Use them, for example, to logically group agents by environment or application type. Once added, labels automatically appear in:

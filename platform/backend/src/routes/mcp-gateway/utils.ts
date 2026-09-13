@@ -54,6 +54,7 @@ import {
 import { structuredToolErrorResult } from "@/archestra-mcp-server/helpers";
 import { userHasPermission } from "@/auth/utils";
 import { LRUCacheManager } from "@/cache-manager";
+import { AppaRuntimeClient } from "@/clients/appa-runtime";
 import mcpClient, { type TokenAuthContext } from "@/clients/mcp-client";
 import { isToolRejectedForMcpHeaders } from "@/clients/mcp-param-headers";
 import config from "@/config";
@@ -111,6 +112,7 @@ import {
   type ToolExposureMode,
 } from "@/types";
 import { APP_LAUNCH_TOOL_NAME } from "@/types/app";
+import { AppaControlFramePayloadSchema } from "@/types/appa-proxy-wire";
 import { deriveAuthMethod } from "@/utils/auth-method";
 import { estimateToolResultContentLength } from "@/utils/tool-result-preview";
 import {
@@ -610,11 +612,12 @@ export async function createAgentServer(params: {
                 properties: {
                   call_id: { type: "string" },
                   thread_id: { type: "string" },
+                  item_id: { type: "string" },
                 },
-                required: ["call_id"],
+                required: ["call_id", "thread_id", "item_id"],
               },
             },
-            required: ["intent_id", "wire_context"],
+            required: ["intent_id", "remedy_id", "wire_context"],
           },
         },
         {
@@ -2707,7 +2710,11 @@ async function executeAppaControlTool(
   const shortName = toolName.replace(/^.*__(archestra__appa_[a-z_]+)$/, "$1");
   const wireContext =
     args && typeof args.wire_context === "object" && args.wire_context !== null
-      ? (args.wire_context as { call_id?: string; thread_id?: string })
+      ? (args.wire_context as {
+          call_id?: string;
+          thread_id?: string;
+          item_id?: string;
+        })
       : undefined;
   const callId = wireContext?.call_id;
   if (!callId || typeof callId !== "string") {
@@ -2733,6 +2740,9 @@ async function executeAppaControlTool(
       ],
     };
   }
+  if (!context.userId) {
+    return appaControlError("APPA control execution requires a personal token");
+  }
   const metadata = await AppaProxyWireModel.findControlMetadataForOrganization({
     controlCallId: callId,
     organizationId,
@@ -2749,42 +2759,147 @@ async function executeAppaControlTool(
     };
   }
   if (shortName === "archestra__appa_execute_remedy") {
+    const payload = AppaControlFramePayloadSchema.safeParse(
+      (
+        await AppaProxyWireModel.findOwned({
+          sessionId: metadata.session.id,
+          ownerScopeHash: metadata.session.ownerScopeHash,
+          frameId: metadata.frame.id,
+        })
+      )?.payload,
+    );
+    if (!payload.success) {
+      return appaControlError("APPA control payload is unavailable");
+    }
+    if (
+      payload.data.owner.id !== context.userId ||
+      payload.data.vouch.operation !== "execute" ||
+      args?.intent_id !== payload.data.heldParentFrameId ||
+      args?.remedy_id !== payload.data.vouch.chosenRemedyId ||
+      wireContext?.thread_id !== payload.data.boundThreadId ||
+      wireContext?.item_id !== payload.data.boundItemId
+    ) {
+      return appaControlError("APPA control does not match its issued binding");
+    }
+    const remedy = payload.data.offers.find(
+      (offer) => offer.id === payload.data.vouch.chosenRemedyId,
+    );
+    if (!remedy || remedy.kind !== "sanitizer") {
+      return appaControlError(
+        "APPA control has no executable sanitizer remedy",
+      );
+    }
+    const hookConfig = config.llmProxy?.appaHook;
+    if (!hookConfig?.runtimeToken) {
+      return appaControlError("APPA runtime is unavailable");
+    }
     const scope = {
       sessionId: metadata.session.id,
       ownerScopeHash: metadata.session.ownerScopeHash,
       frameId: metadata.frame.id,
     };
-    await AppaProxyWireModel.beginControlExecution({
+    const selection = {
+      source: "gateway",
+      intent_id: payload.data.heldParentFrameId,
+      remedy_id: remedy.id,
+      wire_context: {
+        call_id: callId,
+        thread_id: payload.data.boundThreadId,
+        item_id: payload.data.boundItemId,
+      },
+    };
+    const execution = await AppaProxyWireModel.beginControlExecution({
       ...scope,
-      selection: {
-        source: "gateway",
-        intent_id: args?.intent_id,
-        remedy_id: args?.remedy_id,
+      selection,
+    });
+    if (!execution.acquired) {
+      const completed = await AppaProxyWireModel.findOwned({
+        ...scope,
+        frameId: metadata.frame.id,
+      });
+      if (
+        completed?.frame.state !== "completed" ||
+        !hasRuntimeVouchedSanitizerControlReceipt({
+          payload: payload.data,
+          receipt: completed?.receipt,
+        })
+      ) {
+        return appaControlError("APPA control execution is pending");
+      }
+      return appaControlSuccess({
+        intentId: payload.data.heldParentFrameId,
+        remedyId: remedy.id,
+      });
+    }
+    if (!execution.frame.executionEventId) {
+      return appaControlError("APPA control execution has no event identity");
+    }
+    const runtime = new AppaRuntimeClient({
+      url: hookConfig.url,
+      runtimeToken: hookConfig.runtimeToken,
+      timeoutMs: hookConfig.timeoutMs,
+    });
+    const prepared = runtime.prepareEvent({
+      eventId: execution.frame.executionEventId,
+      event: {
+        event: "resolve_batch_offer",
+        root_id: payload.data.rootId,
+        ...(payload.data.childId ? { child_id: payload.data.childId } : {}),
+        batch_id: remedy.batchId,
+        position: remedy.position,
+        offer_id: remedy.id,
+        tool: remedy.tool,
+        arguments_sha256: remedy.argumentsSha256,
+        resolution: "apply_sanitizer",
       },
     });
-    const receipt = {
-      status: "remedied",
-      intent_id: args?.intent_id,
-      remedy_id: args?.remedy_id,
-      timestamp: Date.now(),
-    };
+    await AppaProxyWireModel.createControlRemoteEventIntent({
+      ...scope,
+      turnId: metadata.frame.turnId,
+      eventId: prepared.eventId,
+      event: "resolve_batch_offer",
+      requestBody: prepared.body,
+      requestSha256: prepared.requestSha256,
+    });
+    let runtimeReceipt: Record<string, unknown>;
+    try {
+      runtimeReceipt = await runtime.postPreparedEvent(
+        prepared,
+        AbortSignal.timeout(hookConfig.timeoutMs),
+      );
+    } catch {
+      return appaControlError("APPA runtime remedy execution is unavailable");
+    }
+    if (
+      !isSanitizerRemedyReceipt({
+        receipt: runtimeReceipt,
+        batchId: remedy.batchId,
+        position: remedy.position,
+        remedy,
+      })
+    ) {
+      return appaControlError("APPA runtime rejected the sanitizer remedy");
+    }
+    await AppaProxyWireModel.settleControlRemoteEvent({
+      ...scope,
+      turnId: metadata.frame.turnId,
+      eventId: prepared.eventId,
+      response: runtimeReceipt,
+    });
     await AppaProxyWireModel.completeControl({
       ...scope,
-      receipt,
+      receipt: {
+        status: "remedied",
+        intent_id: payload.data.heldParentFrameId,
+        remedy_id: remedy.id,
+        runtime_event_id: prepared.eventId,
+        runtime_receipt: runtimeReceipt,
+      },
     });
-    return {
-      isError: false,
-      content: [
-        {
-          type: "text",
-          text: JSON.stringify({
-            status: "remedied",
-            intent_id: args?.intent_id,
-            remedy_id: args?.remedy_id,
-          }),
-        },
-      ],
-    };
+    return appaControlSuccess({
+      intentId: payload.data.heldParentFrameId,
+      remedyId: remedy.id,
+    });
   }
   if (shortName === "archestra__appa_inspect_plan") {
     return {
@@ -2812,4 +2927,90 @@ async function executeAppaControlTool(
       },
     ],
   };
+}
+
+function appaControlError(message: string): CallToolResult {
+  return { isError: true, content: [{ type: "text", text: message }] };
+}
+
+function appaControlSuccess(params: {
+  intentId: string;
+  remedyId: string;
+}): CallToolResult {
+  return {
+    isError: false,
+    content: [
+      {
+        type: "text",
+        text: JSON.stringify({
+          status: "remedied",
+          intent_id: params.intentId,
+          remedy_id: params.remedyId,
+        }),
+      },
+    ],
+  };
+}
+
+function isSanitizerRemedyReceipt(params: {
+  receipt: Record<string, unknown>;
+  batchId: string;
+  position: number;
+  remedy: {
+    id: string;
+    tool: string;
+    argumentsSha256: string;
+  };
+}): boolean {
+  const decision = params.receipt.decision;
+  return (
+    isRecord(decision) &&
+    decision.decision === "batch_offer_resolved" &&
+    decision.batch_id === params.batchId &&
+    decision.position === params.position &&
+    decision.offer_id === params.remedy.id &&
+    decision.tool === params.remedy.tool &&
+    decision.arguments_sha256 === params.remedy.argumentsSha256 &&
+    decision.resolution === "bound" &&
+    decision.kind === "sanitizer"
+  );
+}
+
+function hasRuntimeVouchedSanitizerControlReceipt(params: {
+  payload: {
+    heldParentFrameId: string;
+    vouch: {
+      operation: "inspect" | "execute" | "status";
+      chosenRemedyId?: string;
+    };
+    offers: Array<{
+      id: string;
+      batchId: string;
+      position: number;
+      kind: string;
+      tool: string;
+      argumentsSha256: string;
+    }>;
+  };
+  receipt: unknown;
+}): boolean {
+  if (params.payload.vouch.operation !== "execute") return false;
+  const remedy = params.payload.offers.find(
+    (offer) => offer.id === params.payload.vouch.chosenRemedyId,
+  );
+  return (
+    remedy?.kind === "sanitizer" &&
+    isRecord(params.receipt) &&
+    params.receipt.status === "remedied" &&
+    params.receipt.intent_id === params.payload.heldParentFrameId &&
+    params.receipt.remedy_id === remedy.id &&
+    typeof params.receipt.runtime_event_id === "string" &&
+    isRecord(params.receipt.runtime_receipt) &&
+    isSanitizerRemedyReceipt({
+      receipt: params.receipt.runtime_receipt,
+      batchId: remedy.batchId,
+      position: remedy.position,
+      remedy,
+    })
+  );
 }

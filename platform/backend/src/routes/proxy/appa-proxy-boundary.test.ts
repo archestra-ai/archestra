@@ -11,6 +11,7 @@ import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import config, { parseAppaProxyHookConfig } from "@/config";
 import db, { schema } from "@/database";
 import { ModelModel, VirtualApiKeyModel } from "@/models";
+import { AppaProxySessionProtocolError } from "@/models/appa-proxy-session";
 import { AppaHeldResponseController } from "@/services/appa-held-response-controller";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { createOpenAiTestClient } from "@/test/llm-provider-stubs";
@@ -1482,7 +1483,8 @@ describe("OpenAPPA proxy boundary", () => {
       },
     });
 
-    expect(response.body).toContain("16 MiB prototype limit");
+    expect(response.statusCode, response.body).toBe(503);
+    expect(response.body).toContain("16 MiB limit");
     expect(response.body).not.toContain("x".repeat(100));
   });
 
@@ -1657,7 +1659,7 @@ describe("OpenAPPA proxy boundary", () => {
       AppaProxyHookSession.prototype,
       "getSpawnBindingsHeaderValue",
     ).mockImplementation(() => {
-      throw new Error(
+      throw new AppaProxySessionProtocolError(
         "authorized spawn bindings exceed the response header limit",
       );
     });
@@ -1675,7 +1677,8 @@ describe("OpenAPPA proxy boundary", () => {
       },
     });
 
-    expect(response.statusCode).toBe(503);
+    expect(response.statusCode, response.body).toBe(409);
+    expect(response.body).not.toContain('"tool_calls"');
     const [session] = await db
       .select()
       .from(schema.appaProxySessionsTable)

@@ -128,13 +128,6 @@ export interface AppaClientAdapter {
 }
 
 /**
- * Checks whether a tool name matches the standard agent/sub-agent spawn convention.
- */
-export function isAppaSpawnTool(toolName: string): boolean {
-  return /(^|__|\.)(spawn_agent|Agent|Task|task)$/.test(toolName);
-}
-
-/**
  * Pluggable lifecycle hook callbacks interface implemented by the foundational
  * appa-plugin-archestra meta-plugin.
  */

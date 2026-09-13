@@ -78,6 +78,12 @@ export interface CodexV1SpawnResult {
   clientAgentId: string;
 }
 
+/** A stock Codex spawn result identifies the child thread for one call. */
+export interface CodexSpawnResult {
+  callId: string;
+  childThreadId: string;
+}
+
 export interface CodexChildThreadBinding {
   clientParentThreadId: string;
   clientThreadId: string;
@@ -293,6 +299,49 @@ export function rewriteCodexClientRequestToProxy(params: {
   };
 }
 
+/**
+ * Extracts only stock Codex `function_call_output` spawn envelopes. It does
+ * not treat arbitrary JSON-valued tool output as child-correlation evidence.
+ */
+export function collectCodexSpawnResults(params: {
+  request: unknown;
+  isIssuedSpawnCall: (callId: string) => boolean;
+}): CodexSpawnResult[] {
+  if (!isObject(params.request) || !Array.isArray(params.request.input)) {
+    return [];
+  }
+  const results: CodexSpawnResult[] = [];
+  for (const candidate of params.request.input) {
+    if (!isObject(candidate) || candidate.type !== "function_call_output") {
+      continue;
+    }
+    const callId = candidate.call_id;
+    if (
+      typeof callId !== "string" ||
+      callId.length === 0 ||
+      typeof candidate.output !== "string"
+    ) {
+      continue;
+    }
+    if (!params.isIssuedSpawnCall(callId)) continue;
+    const output = tryParseSpawnResult(candidate.output);
+    if (output) results.push({ callId, childThreadId: output.agent_id });
+  }
+  return results;
+}
+
+export function collectCodexFunctionOutputCallIds(request: unknown): string[] {
+  if (!isObject(request) || !Array.isArray(request.input)) return [];
+  return request.input.flatMap((candidate) =>
+    isObject(candidate) &&
+    candidate.type === "function_call_output" &&
+    typeof candidate.call_id === "string" &&
+    candidate.call_id.length > 0
+      ? [candidate.call_id]
+      : [],
+  );
+}
+
 /** Context eligibility only; callers still own policy and permission decisions. */
 export function isCodexRequestUserInputEligible(params: {
   isRootRegisteredHandler: boolean;
@@ -469,9 +518,13 @@ function rewriteCollaborationArguments(params: {
   aliases: CodexWireAliases;
   direction: RewriteDirection;
 }): void {
-  if (params.item.namespace !== "collaboration") return;
   const name = optionalString(params.item, "name", "tool call");
-  if (!name || !COLLABORATION_TASK_ARGUMENTS.has(name)) return;
+  if (
+    !name ||
+    (!COLLABORATION_TASK_ARGUMENTS.has(name) && !isCodexSpawnItem(params.item))
+  ) {
+    return;
+  }
   const argumentsObject = parseToolArguments(params.item);
   for (const field of ["task_name", "agent_name", "recipient"] as const) {
     rewriteTaskField({
@@ -488,12 +541,7 @@ function rewriteSpawnTaskName(params: {
   item: CodexWireObject;
   taskAlias: CodexTaskAlias;
 }): void {
-  if (
-    params.item.namespace !== "collaboration" ||
-    params.item.name !== "spawn_agent"
-  ) {
-    return;
-  }
+  if (!isCodexSpawnItem(params.item)) return;
   if (!params.taskAlias.wireTaskName) {
     throw new Error(
       "Codex spawn allocation requires a proxy-generated wireTaskName",
@@ -518,10 +566,7 @@ function collectV1SpawnResults(params: {
     const callAlias = params.aliases.callIds.find(
       (alias) => alias.proxyId === proxyCallId,
     );
-    if (
-      callAlias?.namespace !== "collaboration" ||
-      callAlias.name !== "spawn_agent"
-    ) {
+    if (!callAlias || !isCodexSpawnCallAlias(callAlias)) {
       continue;
     }
     const output = parseJsonObject(item.output);
@@ -745,6 +790,36 @@ function parseJsonObject(value: unknown): CodexWireObject {
   return parsed;
 }
 
+function tryParseSpawnResult(value: string): { agent_id: string } | null {
+  try {
+    const parsed: unknown = JSON.parse(value);
+    if (
+      !isObject(parsed) ||
+      typeof parsed.agent_id !== "string" ||
+      parsed.agent_id.length === 0
+    ) {
+      return null;
+    }
+    return { agent_id: parsed.agent_id };
+  } catch {
+    return null;
+  }
+}
+
+function isCodexSpawnItem(item: CodexWireObject): boolean {
+  return CODEX_SPAWN_TOOL_NAMES.has(
+    typeof item.namespace === "string" && typeof item.name === "string"
+      ? `${item.namespace}.${item.name}`
+      : "",
+  );
+}
+
+function isCodexSpawnCallAlias(alias: CodexCallAlias): boolean {
+  return CODEX_SPAWN_TOOL_NAMES.has(
+    alias.namespace && alias.name ? `${alias.namespace}.${alias.name}` : "",
+  );
+}
+
 function requiredString(
   value: CodexWireObject,
   field: string,
@@ -852,4 +927,10 @@ const COLLABORATION_TASK_ARGUMENTS = new Set([
   "send_message",
   "spawn_agent",
   "wait_agent",
+]);
+
+const CODEX_SPAWN_TOOL_NAMES = new Set([
+  "multi_agent_v1.spawn_agent",
+  "agents.spawn_agent",
+  "collaboration.spawn_agent",
 ]);

@@ -354,6 +354,29 @@ describe("AppaHeldResponseController", () => {
         controlCallId: "unknown-control-call",
       }),
     ).rejects.toThrow("durable trusted receipt");
+    const scope = session.getNativeWireScope();
+    const control = await AppaProxyWireModel.findByControlCall({
+      ...scope,
+      controlCallId: held.control.id,
+    });
+    if (!control) throw new Error("expected held control");
+    await AppaProxyWireModel.beginControlExecution({
+      ...scope,
+      frameId: control.frame.id,
+      selection: { source: "legacy-synthetic-gateway" },
+    });
+    await AppaProxyWireModel.completeControl({
+      ...scope,
+      frameId: control.frame.id,
+      receipt: { source: "legacy-synthetic-gateway" },
+    });
+    await expect(
+      controller.continueFromControlResult({
+        session,
+        heldFrameId,
+        controlCallId: held.control.id,
+      }),
+    ).rejects.toThrow("durable trusted receipt");
   });
 
   test("binds a human remedy voucher to the pre-created exact call approval", async ({
@@ -1099,10 +1122,32 @@ async function completeTrustedControl(params: {
     selection: { trusted: true },
   });
   if (!begun.acquired) throw new Error("control execution not acquired");
+  const payload = AppaControlFramePayloadSchema.parse(found.payload);
+  const remedy = payload.offers.find(
+    (offer) => offer.id === payload.vouch.chosenRemedyId,
+  );
+  if (!remedy) throw new Error("control sanitizer remedy not found");
   await AppaProxyWireModel.completeControl({
     ...scope,
     frameId: found.frame.id,
-    receipt: { source: "trusted-gateway", call: params.controlCallId },
+    receipt: {
+      status: "remedied",
+      intent_id: payload.heldParentFrameId,
+      remedy_id: remedy.id,
+      runtime_event_id: randomUUID(),
+      runtime_receipt: {
+        decision: {
+          decision: "batch_offer_resolved",
+          batch_id: remedy.batchId,
+          position: remedy.position,
+          offer_id: remedy.id,
+          tool: remedy.tool,
+          arguments_sha256: remedy.argumentsSha256,
+          resolution: "bound",
+          kind: "sanitizer",
+        },
+      },
+    },
   });
 }
 

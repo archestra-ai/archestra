@@ -9,6 +9,7 @@ import argparse
 from hashlib import sha256
 from http.server import ThreadingHTTPServer
 from pathlib import Path
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -79,6 +80,10 @@ class NativeLiveHarnessTests(unittest.TestCase):
             RUNNER_MODULE.sanitize(source, "SYNTHETIC_PRIVATE_NOTE"),
             "<redacted-fixture-source>",
         )
+        self.assertEqual(
+            RUNNER_MODULE.sanitize("synthetic.person@example.test", "SYNTHETIC_PRIVATE_NOTE"),
+            "<redacted-email>",
+        )
 
     def test_allows_only_explicit_dev_loopback_runtime_transport(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -101,6 +106,8 @@ class NativeLiveHarnessTests(unittest.TestCase):
             "changed-argument-digest": lambda value: value["fixture_evidence"]["call_bindings"][0].update({"arguments_sha256": "b" * 64}),
             "cross-root": lambda value: value["runtime_evidence"]["archestra"].update({"root_count": 2}),
             "missing-receipt": lambda value: value["runtime_evidence"]["call_bindings"][0].pop("result_admission_receipt"),
+            "unadmitted-open-call": lambda value: value["runtime_evidence"]["call_bindings"][0].update({"state": "open"}),
+            "unadmitted-result-intent": lambda value: value["runtime_evidence"]["call_bindings"][0].update({"state": "result_intent"}),
             "missing-proposal-write": lambda value: value["runtime_evidence"]["phase_traces"].update({"proposal_deliveries": []}),
         }
         with tempfile.TemporaryDirectory() as directory:
@@ -131,6 +138,7 @@ class NativeLiveHarnessTests(unittest.TestCase):
             identity = RUNNER_MODULE.verify_client_identity(diagnostic)
             self.assertFalse(identity["provenance_verified"])
             self.assertEqual(identity["observed_version"], "9.9.9")
+            self.assertEqual(identity["version"], identity["observed_version"])
 
     def test_qualifying_fixture_observer_requires_full_preflight_contract(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -436,13 +444,27 @@ class NativeLiveHarnessTests(unittest.TestCase):
         arguments = {"run_id": "run-20260101t000000z-abc12345", "request_key": "synthetic-join", "value": "SYNTHETIC_SERVICE_OK"}
         binding = COLLECTOR_MODULE.project_call_binding({"call_id_sha256": "a" * 64, "dispatch_id_sha256": "b" * 64, "emitted_name": "mcp__appa_fixture__publish", "emitted_arguments_sha256": "c" * 64, "target_name": "mcp__appa_fixture__publish", "target_arguments": arguments, "state": "result_admitted", "runtime_event_id_sha256": "d" * 64, "receipt_sha256": "e" * 64, "authorization_at": "2026-01-01T00:00:01Z", "receipt_at": "2026-01-01T00:00:03Z", "event_settled_at": "2026-01-01T00:00:04Z"})
         self.assertIsNotNone(binding)
-        expected_digest = sha256(COLLECTOR_MODULE.canonical_json(arguments).encode()).hexdigest()
+        expected_digest = sha256(json.dumps(arguments, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
         self.assertEqual(binding["target_name"], "publish")
         self.assertEqual(binding["arguments_sha256"], expected_digest)
         observer = {"source": "trusted-fixture-audit/v1", "run_id": arguments["run_id"], "call_bindings": [{"tool_name": "publish", "arguments_sha256": expected_digest}]}
         self.assertTrue(COLLECTOR_MODULE.exact_fixture_join(arguments["run_id"], [binding], observer)["matched"])
         observer["call_bindings"][0]["arguments_sha256"] = "f" * 64
         self.assertFalse(COLLECTOR_MODULE.exact_fixture_join(arguments["run_id"], [binding], observer)["matched"])
+
+        observer["call_bindings"] = [
+            {"tool_name": "publish", "arguments_sha256": expected_digest},
+            {"tool_name": "publish", "arguments_sha256": expected_digest},
+        ]
+        self.assertTrue(COLLECTOR_MODULE.exact_fixture_join(arguments["run_id"], [binding, binding], observer)["matched"])
+        self.assertFalse(COLLECTOR_MODULE.exact_fixture_join(arguments["run_id"], [binding], observer)["matched"])
+        gateway = {
+            "bindings": [
+                {"receipt_id_sha256": "1" * 64, "target_name": "publish", "arguments_sha256": expected_digest, "created_at": "2026-01-01T00:00:01Z"},
+                {"receipt_id_sha256": "2" * 64, "target_name": "publish", "arguments_sha256": expected_digest, "created_at": "2026-01-01T00:00:02Z"},
+            ]
+        }
+        self.assertTrue(COLLECTOR_MODULE.exact_gateway_join([binding, binding], gateway)["matched"])
 
     def test_receipt_digest_matches_node_canonicalization_vectors(self) -> None:
         vectors = [
@@ -491,6 +513,7 @@ process.stdout.write(createHash('sha256').update(stable(value)).digest('hex'));
                 "target_name": "mcp__appa_fixture__publish",
                 "target_arguments": arguments,
                 "state": "denied",
+                "root_id": "root-1",
             }
 
         def event(call_id: str, event_id: str, *, tool: str = "mcp__appa_fixture__publish", call_arguments: object = arguments) -> dict[str, object]:
@@ -703,13 +726,36 @@ process.stdout.write(createHash('sha256').update(stable(value)).digest('hex'));
             self.assertNotIn("Bash", command)
             self.assertNotIn("Read", command)
 
-    def test_native_child_scenarios_are_claude_only(self) -> None:
-        scenario = {"id": "child-public", "clients": ["claude"]}
+    def test_native_child_scenarios_cover_all_stock_clients(self) -> None:
+        scenario = {
+            "id": "child-public",
+            "clients": ["claude", "codex", "opencode"],
+            "client_prompts": {
+                "claude": "Use Agent.",
+                "codex": "Use spawn_agent.",
+                "opencode": "Use task.",
+            },
+        }
         RUNNER_MODULE.validate_scenario_contract(scenario)
         with self.assertRaises(SystemExit):
             RUNNER_MODULE.validate_scenario_contract(
-                {"id": "child-public", "clients": ["claude", "codex"]},
+                {"id": "child-public", "clients": ["claude", "codex"], "client_prompts": scenario["client_prompts"]},
             )
+
+    def test_private_child_scenario_requires_parent_publication_denial(self) -> None:
+        scenarios = json.loads((ROOT / "native-live-scenarios.json").read_text())
+        scenario = next(item for item in scenarios["scenarios"] if item["id"] == "child-private-denied")
+        prompt = scenario["prompt"]
+        self.assertLess(
+            prompt.index("parent must call appa_fixture.read_source"),
+            prompt.index("Then use exactly one native subagent"),
+        )
+        self.assertIn("child must call appa_fixture.read_source", prompt)
+        self.assertIn("return its policy result without attempting publication", prompt)
+        self.assertIn("parent must attempt appa_fixture.publish exactly once", prompt)
+        self.assertEqual(scenario["expect"]["runtime"]["child"], "private")
+        self.assertTrue(scenario["expect"]["runtime"]["parent_publication_denied"])
+        self.assertEqual(scenario["client_exit_contract"], "policy-decision")
 
     def test_vm_launcher_uses_the_runtime_health_probe(self) -> None:
         launcher = (ROOT / "native-live-vm-launch.sh").read_text()
@@ -787,7 +833,6 @@ process.stdout.write(createHash('sha256').update(stable(value)).digest('hex'));
                 config["permission"],
                 {
                     "*": "deny",
-                    "task": "allow",
                     "my_gateway_archestra__appa_execute_remedy": "allow",
                     "my_gateway_archestra__appa_inspect_plan": "allow",
                     "my_gateway_archestra__appa_status": "allow",
@@ -838,8 +883,485 @@ process.stdout.write(createHash('sha256').update(stable(value)).digest('hex'));
             'mcp_servers.my_gateway.tools.archestra__search_tools.approval_mode="approve"',
             command,
         )
+        self.assertNotIn("multi_agent", command)
         self.assertNotIn("--approve-for-me", command)
         self.assertNotIn("--dangerously-bypass-approvals-and-sandbox", command)
+
+    def test_stock_child_clients_enable_only_native_subagent_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            codex_dir = Path(directory) / "codex"
+            opencode_dir = Path(directory) / "opencode"
+            codex_dir.mkdir()
+            opencode_dir.mkdir()
+            gateway = {
+                "url": "http://127.0.0.1:9002/v1/mcp/test",
+                "token_env": "TEST_GATEWAY_TOKEN",
+                "client_server_key": "my_gateway",
+            }
+            with mock.patch.dict(
+                RUNNER_MODULE.os.environ,
+                {
+                    "APPA_NATIVE_LIVE_OPENAI_API_KEY": "provider-key",
+                    "APPA_NATIVE_LIVE_KIMI_API_KEY": "provider-key",
+                    "TEST_GATEWAY_TOKEN": "gateway-token",
+                },
+                clear=False,
+            ):
+                codex, _env, _transient = RUNNER_MODULE.client_command(
+                    argparse.Namespace(client="codex", scenario="child-public", resume_session=None),
+                    "http://127.0.0.1:9002/v1/openai/agent",
+                    "fixture prompt",
+                    codex_dir,
+                    sys.executable,
+                    gateway,
+                )
+                _command, _env, transient = RUNNER_MODULE.client_command(
+                    argparse.Namespace(client="opencode", scenario="child-public", resume_session=None),
+                    "http://127.0.0.1:9002/v1/kimi/agent",
+                    "fixture prompt",
+                    opencode_dir,
+                    sys.executable,
+                    gateway,
+                )
+            self.assertEqual(codex[codex.index("--enable") + 1], "multi_agent")
+            config = json.loads(transient[0].read_text())
+            self.assertEqual(config["permission"]["task"], "allow")
+
+    def test_child_attachment_uses_each_stock_client_producer_contract(self) -> None:
+        binding = {
+            "parent_proxy_session_id_sha256": "a" * 64,
+            "child_proxy_session_id_sha256": "b" * 64,
+            "parent_client_session_id_sha256": "c" * 64,
+            "child_client_session_id_sha256": "d" * 64,
+            "parent_call_id_sha256": "e" * 64,
+            "same_owner_scope": True,
+            "same_profile": True,
+            "same_root": True,
+            "spawn_binding_consumed": True,
+        }
+        codex = binding | {
+            "parent_emitted_name": "multi_agent_v1.spawn_agent",
+            "parent_target_name": "agent/fixture/lifecycle_child",
+            "task_alias_count": 1,
+            "task_alias_matches_child": True,
+            "task_alias_consumed": False,
+            "signed_carrier_present": False,
+        }
+        claude = binding | {
+            "parent_emitted_name": "Agent",
+            "parent_target_name": "agent/claude-code/Agent",
+            "signed_carrier_present": True,
+            "task_alias_count": 0,
+        }
+        opencode = binding | {
+            "parent_emitted_name": "task",
+            "parent_target_name": "agent/fixture/lifecycle_child",
+            "signed_carrier_present": True,
+            "task_alias_count": 0,
+        }
+        for client, evidence in (("codex", codex), ("claude", claude), ("opencode", opencode)):
+            self.assertTrue(ASSERT_MODULE.valid_child_attachment(client, evidence), client)
+            self.assertTrue(COLLECTOR_MODULE.valid_child_attachment(client, evidence), client)
+        self.assertTrue(ASSERT_MODULE.valid_child_attachment("codex", codex | {"task_alias_consumed": True}))
+        self.assertTrue(COLLECTOR_MODULE.valid_child_attachment("codex", codex | {"task_alias_consumed": True}))
+        codex_alternate = codex | {"parent_emitted_name": "agents.spawn_agent"}
+        self.assertTrue(ASSERT_MODULE.valid_child_attachment("codex", codex_alternate))
+        self.assertTrue(COLLECTOR_MODULE.valid_child_attachment("codex", codex_alternate))
+        codex_collaboration = codex | {
+            "parent_emitted_name": "collaboration.spawn_agent"
+        }
+        self.assertTrue(ASSERT_MODULE.valid_child_attachment("codex", codex_collaboration))
+        self.assertTrue(COLLECTOR_MODULE.valid_child_attachment("codex", codex_collaboration))
+        for field, invalid in (
+            ("same_owner_scope", False),
+            ("spawn_binding_consumed", False),
+        ):
+            changed = {**codex, field: invalid}
+            self.assertFalse(ASSERT_MODULE.valid_child_binding(changed), field)
+            self.assertFalse(COLLECTOR_MODULE.valid_child_binding(changed), field)
+        for client, evidence, field, invalid in (
+            ("codex", codex, "parent_emitted_name", "spawn_agent"),
+            ("codex", codex, "parent_target_name", "agent:fixture/lifecycle_child"),
+            ("codex", codex, "task_alias_matches_child", False),
+            ("claude", claude, "signed_carrier_present", False),
+            ("opencode", opencode, "parent_target_name", "agent:fixture/lifecycle_child"),
+            ("opencode", opencode, "task_alias_count", 1),
+        ):
+            changed = {**evidence, field: invalid}
+            self.assertFalse(ASSERT_MODULE.valid_child_attachment(client, changed), f"{client}:{field}")
+            self.assertFalse(COLLECTOR_MODULE.valid_child_attachment(client, changed), f"{client}:{field}")
+
+    def test_child_runtime_facts_require_exact_open_and_return_identities(self) -> None:
+        child = "a" * 64
+        facts = {
+            "expected_child_ids_sha256": [child],
+            "fork_opened_child_ids_sha256": [child],
+            "child_returned_ids_sha256": [child],
+        }
+        self.assertTrue(COLLECTOR_MODULE.exact_child_runtime_fact(facts, [child], "fork_opened_child_ids_sha256"))
+        self.assertTrue(COLLECTOR_MODULE.exact_child_runtime_fact(facts, [child], "child_returned_ids_sha256"))
+        self.assertFalse(COLLECTOR_MODULE.exact_child_runtime_fact({**facts, "child_returned_ids_sha256": []}, [child], "child_returned_ids_sha256"))
+
+    def test_child_lifecycle_receipts_require_one_ordered_acknowledged_pair(self) -> None:
+        child_session = "child-proxy-session"
+        binding = {
+            "child_session_id": child_session,
+            "child_client_session_id": "child-client-session",
+            "root_id": "root-session",
+            "spawn_binding": "bound-spawn",
+            "parent_proxy_session_id_sha256": "a" * 64,
+            "child_proxy_session_id_sha256": "b" * 64,
+            "parent_client_session_id_sha256": "c" * 64,
+            "child_client_session_id_sha256": "d" * 64,
+            "parent_call_id_sha256": "e" * 64,
+            "same_owner_scope": True,
+            "same_profile": True,
+            "same_root": True,
+            "spawn_binding_consumed": True,
+            "parent_emitted_name": "task",
+            "parent_target_name": "agent/fixture/lifecycle_child",
+            "signed_carrier_present": True,
+            "task_alias_count": 0,
+            "task_alias_matches_child": False,
+        }
+        events = [
+            {
+                "session_id": child_session,
+                "event": "child_start",
+                "decision": "ack",
+                "event_id_sha256": "f" * 64,
+                "request_sha256": "1" * 64,
+                "request_body": json.dumps(
+                    {
+                        "event": {
+                            "event": "child_start",
+                            "child_id": "child-client-session",
+                            "root_id": "root-session",
+                            "spawn_binding": "bound-spawn",
+                        }
+                    }
+                ),
+                "response": {"decision": {"decision": "ack"}},
+                "settled_at": "2026-01-01T00:00:01Z",
+            },
+            {
+                "session_id": child_session,
+                "event": "child_end",
+                "decision": "ack",
+                "event_id_sha256": "2" * 64,
+                "request_sha256": "3" * 64,
+                "request_body": json.dumps(
+                    {
+                        "event": {
+                            "event": "child_end",
+                            "child_id": "child-client-session",
+                            "root_id": "root-session",
+                        }
+                    }
+                ),
+                "response": {"decision": {"decision": "ack"}},
+                "settled_at": "2026-01-01T00:00:02Z",
+            },
+        ]
+        events = [settled_runtime_event(
+            json.loads(event["request_body"])["event"],
+            event["response"]["decision"],
+            session=child_session,
+            event_id=f"lifecycle-{index}",
+            settled_at=event["settled_at"],
+        ) for index, event in enumerate(events)]
+        lifecycle = COLLECTOR_MODULE.project_child_lifecycle("opencode", events, [binding])
+        self.assertEqual(
+            {key: lifecycle[key] for key in ("started", "completed", "ordered")},
+            {"started": True, "completed": True, "ordered": True},
+        )
+        self.assertFalse(
+            COLLECTOR_MODULE.project_child_lifecycle("opencode", events[:1], [binding])["completed"]
+        )
+        for position, field, invalid in (
+            (0, "child_id", "other-child"),
+            (0, "root_id", "other-root"),
+            (0, "spawn_binding", "other-binding"),
+            (1, "child_id", "other-child"),
+            (1, "root_id", "other-root"),
+        ):
+            mutated = [dict(event) for event in events]
+            request = json.loads(mutated[position]["request_body"])
+            request["event"][field] = invalid
+            mutated[position] = settled_runtime_event(request["event"], {"decision": "ack"}, session=child_session, event_id=mutated[position]["event_id"], settled_at=mutated[position]["settled_at"])
+            lifecycle = COLLECTOR_MODULE.project_child_lifecycle("opencode", mutated, [binding])
+            self.assertFalse(lifecycle["ordered"], (position, field))
+        duplicate = events + [{**events[0], "event_id_sha256": "4" * 64}]
+        self.assertFalse(
+            COLLECTOR_MODULE.project_child_lifecycle("opencode", duplicate, [binding])["started"]
+        )
+
+    def test_child_runtime_assertion_uses_result_client_contract(self) -> None:
+        binding = {
+            "parent_proxy_session_id_sha256": "a" * 64,
+            "child_proxy_session_id_sha256": "b" * 64,
+            "parent_client_session_id_sha256": "c" * 64,
+            "child_client_session_id_sha256": "d" * 64,
+            "parent_call_id_sha256": "e" * 64,
+            "same_owner_scope": True,
+            "same_profile": True,
+            "same_root": True,
+            "spawn_binding_consumed": True,
+            "parent_emitted_name": "multi_agent_v1.spawn_agent",
+            "parent_target_name": "agent/fixture/lifecycle_child",
+            "task_alias_count": 1,
+            "task_alias_matches_child": True,
+        }
+        checks: dict[str, bool] = {}
+        ASSERT_MODULE.assert_runtime(
+            checks,
+            {"child": "public", "signed_child": True, "child_completion": True},
+            {
+                "child": {
+                    "bindings": [binding],
+                    "exact_attachment": True,
+                    "classification": "public",
+                    "runtime_opened": True,
+                    "scope_preserved": True,
+                    "completion_admitted": True,
+                    "lifecycle_order": True,
+                    "source_read_count": 1,
+                    "source_admission_order": True,
+                },
+            },
+            "codex",
+        )
+        self.assertTrue(all(checks.values()), checks)
+
+    def test_parent_publication_denial_requires_the_parent_receipt(self) -> None:
+        parent_id = "a" * 64
+        child_id = "b" * 64
+        parent = {
+            "call_row_id_sha256": "c" * 64,
+            "call_id_sha256": "d" * 64,
+            "proxy_session_id_sha256": parent_id,
+            "bound_auth_scope_hash": "e" * 64,
+            "target_name": "publish",
+            "arguments_sha256": "f" * 64,
+            "authorization_at": "2026-01-01T00:00:03Z",
+        }
+        child = parent | {
+            "call_row_id_sha256": "1" * 64,
+            "call_id_sha256": "2" * 64,
+            "proxy_session_id_sha256": child_id,
+        }
+        receipt = parent | {"settled_at": "2026-01-01T00:00:04Z", "basis": "readers_not_public"}
+        child_end = "2026-01-01T00:00:02Z"
+        self.assertTrue(
+            COLLECTOR_MODULE.parent_publication_denied([parent, child], [receipt], parent_id, child_end)
+        )
+        self.assertFalse(
+            COLLECTOR_MODULE.parent_publication_denied([child], [child], parent_id, child_end)
+        )
+        sibling_id = "9" * 64
+        self.assertFalse(COLLECTOR_MODULE.parent_publication_denied([parent | {"proxy_session_id_sha256": sibling_id}], [receipt | {"proxy_session_id_sha256": sibling_id}], parent_id, child_end))
+        self.assertFalse(COLLECTOR_MODULE.parent_publication_denied([parent], [receipt], parent_id, "2026-01-01T00:00:05Z"))
+        self.assertFalse(COLLECTOR_MODULE.parent_publication_denied([parent | {"authorization_at": "2026-01-01T00:00:01Z"}], [receipt], parent_id, child_end))
+
+        checks: dict[str, bool] = {}
+        ASSERT_MODULE.assert_runtime(
+            checks,
+            {"child": "private", "child_completion": True, "parent_publication_denied": True},
+            {
+                "child": {
+                    "classification": "private",
+                    "source_read_count": 1,
+                    "completion_admitted": True,
+                },
+                "parent_publication_denied": True,
+            },
+            "opencode",
+        )
+        self.assertTrue(all(checks.values()), checks)
+
+    def test_phase_traces_pair_duplicate_fixture_arguments_by_time_window(self) -> None:
+        calls = [
+            {"call_id_sha256": "a" * 64, "target_name": "read_source", "arguments_sha256": "b" * 64, "state": "result_admitted"},
+            {"call_id_sha256": "c" * 64, "target_name": "read_source", "arguments_sha256": "b" * 64, "state": "result_admitted"},
+        ]
+        phase_specs = (
+            ("authorization_receipts", "backend-runtime-receipt/v1", "persisted_at", "authorization_receipt", ("00", "10")),
+            ("proposal_deliveries", "backend-socket-write/v1", "write_finished_at", "proposal_socket_write_finish", ("01", "11")),
+            ("result_admissions", "backend-runtime-receipt/v1", "persisted_at", "result_admission_receipt", ("03", "13")),
+            ("result_releases", "backend-socket-write/v1", "write_finished_at", "continuation_socket_write_finish", ("04", "14")),
+        )
+        traces = {
+            group: [
+                {
+                    "call_id_sha256": call_id,
+                    "source": source,
+                    "phase": phase,
+                    "trace_id_sha256": "d" * 64,
+                    timestamp_key: f"2026-01-01T00:00:{second}Z",
+                }
+                for call_id, second in zip(("a" * 64, "c" * 64), seconds, strict=True)
+            ]
+            for group, source, timestamp_key, phase, seconds in phase_specs
+        }
+        fixtures = [
+            {"tool_name": "read_source", "arguments_sha256": "b" * 64, "invoked_at": "2026-01-01T00:00:02Z"},
+            {"tool_name": "read_source", "arguments_sha256": "b" * 64, "invoked_at": "2026-01-01T00:00:12Z"},
+        ]
+        checks: dict[str, bool] = {}
+        ASSERT_MODULE.assert_phase_trace_contract(checks, calls, fixtures, {"phase_traces": traces})
+        self.assertTrue(checks["per_call_phase_trace"])
+
+        fixtures.append({"tool_name": "read_source", "arguments_sha256": "b" * 64, "invoked_at": "2026-01-01T00:00:02.500Z"})
+        ASSERT_MODULE.assert_phase_trace_contract(checks, calls, fixtures, {"phase_traces": traces})
+        self.assertFalse(checks["per_call_phase_trace"])
+
+    def test_argument_and_floor_hashes_match_node_unicode_and_number_serialization(self) -> None:
+        arguments = {"value": "caf\u00e9", "amount": 1.0}
+        projected = COLLECTOR_MODULE.project_call_binding({"target_name": "mcp__appa_fixture__publish", "target_arguments": arguments, "state": "result_admitted"})
+        expected = sha256('{"amount":1,"value":"caf\u00e9"}'.encode()).hexdigest()
+        self.assertEqual(projected["arguments_sha256"], expected)
+        label = {"audience": ["ops-\u00e9quipe"]}
+        parent, call = "a" * 64, "b" * 64
+        checks: dict[str, bool] = {}
+        ASSERT_MODULE.assert_runtime(checks, {"child_return_floor": label}, {"child": {
+            "parent_has_no_source": True, "non_void_return": True,
+            "bindings": [{"parent_proxy_session_id_sha256": parent, "parent_call_id_sha256": call}],
+            "return_floor_receipts": [{"parent_proxy_session_id_sha256": parent, "parent_call_id_sha256": call, "label_sha256": COLLECTOR_MODULE.receipt_sha256(label)}],
+        }}, "opencode")
+        self.assertTrue(all(checks.values()))
+
+    def test_child_only_return_requires_declared_floor_and_actual_ordered_acquisition(self) -> None:
+        parent, child, root = "parent-session", "child-session", "root-session"
+        parent_hash, child_hash = (sha256(value.encode()).hexdigest() for value in (parent, child))
+        arguments = {"prompt": "read the private fixture"}
+        arguments_hash = sha256(json.dumps(arguments, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
+        target = "agent/fixture/lifecycle_child"
+        binding = {
+            "parent_proxy_session_id_sha256": parent_hash,
+            "child_proxy_session_id_sha256": child_hash,
+            "parent_client_session_id_sha256": "c" * 64,
+            "child_client_session_id_sha256": "d" * 64,
+            "parent_call_id_sha256": sha256(b"spawn").hexdigest(),
+            "same_owner_scope": True, "same_profile": True, "same_root": True,
+            "spawn_binding_consumed": True, "parent_emitted_name": "task",
+            "parent_target_name": target, "parent_target_arguments": arguments,
+            "parent_source_count": 0,
+            "signed_carrier_present": True, "task_alias_count": 0,
+            "child_session_id": child, "child_client_session_id": "child-thread",
+            "root_id": root, "spawn_binding": "spawn-capability",
+        }
+        offer = {"offer_id": "floor-offer", "kind": "acceptance", "tool": target, "arguments_sha256": arguments_hash}
+        declarations = [
+            settled_runtime_event(
+                {"event": "tool_calls", "root_id": root, "calls": [{"call_id": "spawn", "tool": target, "arguments": arguments, "spawn": True}]},
+                {"decision": "deny_calls", "calls": [{"call_id": "spawn", "offers": [offer]}]},
+                session=parent, event_id="offer", settled_at="2026-01-01T00:00:00Z",
+            ),
+            settled_runtime_event(
+                {"event": "resolve_offer", "root_id": root, "offer_id": "floor-offer", "tool": target, "arguments_sha256": arguments_hash, "resolution": "accept_restriction", "label": {"audience": ["ops"]}},
+                {"decision": "offer_resolved", "offer_id": "floor-offer", "kind": "acceptance", "resolution": "accepted", "tool": target, "arguments_sha256": arguments_hash},
+                session=parent, event_id="declaration", settled_at="2026-01-01T00:00:01Z",
+            ),
+            settled_runtime_event(
+                {"event": "child_start", "root_id": root, "child_id": "child-thread", "spawn_binding": "spawn-capability"},
+                {"decision": "ack"}, session=child, event_id="start", settled_at="2026-01-01T00:00:02Z",
+            ),
+            settled_runtime_event(
+                {"event": "child_end", "root_id": root, "child_id": "child-thread", "value": "synthetic private return"},
+                {"decision": "ack"}, session=child, event_id="end", settled_at="2026-01-01T00:00:04Z",
+            ),
+        ]
+        source = {
+            "id": "source-row", "call_id": "source-call", "proxy_session_id": child,
+            "target_name": "mcp__appa_fixture__read_source", "target_arguments": {"kind": "private"},
+            "state": "result_admitted", "updated_at": "2026-01-01T00:00:03Z",
+        }
+        args = argparse.Namespace(client="opencode", scenario="child-private-return-denied", run_id="run", runtime_namespace="test", runtime_selector="test", pg_namespace="test", pg_selector="test")
+        postgres = {"call_bindings": [source], "child_bindings": [binding], "event_receipts": declarations}
+        expected = {"child": "private", "signed_child": True, "child_completion": True, "child_return_floor": {"audience": ["ops"]}}
+
+        def check_projection(data: dict) -> dict[str, bool]:
+            projected = COLLECTOR_MODULE.project(args, "runtime", "postgres", data, {}, None, [root], None, {})
+            checks: dict[str, bool] = {}
+            ASSERT_MODULE.assert_runtime(checks, expected, projected, "opencode")
+            sanitizer_checks: dict[str, bool] = {}
+            ASSERT_MODULE.assert_runtime(sanitizer_checks, {"sanitized": True}, projected, "opencode")
+            self.assertFalse(sanitizer_checks["runtime_sanitized"])
+            self.assertNotIn("spawn-capability", json.dumps(projected))
+            self.assertNotIn("read the private fixture", json.dumps(projected))
+            return checks
+
+        self.assertTrue(all(check_projection(postgres).values()))
+        mutations = [
+            ("denied child read", {"call_bindings": [source | {"state": "denied"}]}),
+            ("read before child start", {"call_bindings": [source | {"updated_at": "2026-01-01T00:00:01Z"}]}),
+            ("read after child return", {"call_bindings": [source | {"updated_at": "2026-01-01T00:00:05Z"}]}),
+            ("parent read any source", {"child_bindings": [binding | {"parent_source_count": 1}]}),
+            ("missing declaration", {"event_receipts": declarations[2:]}),
+        ]
+        for position, field, value in (
+            (1, "label", {"audience": ["public"]}),
+            (1, "root_id", "wrong-root"),
+            (1, "offer_id", "wrong-offer"),
+            (1, "tool", "agent/other"),
+            (3, "value", None),
+        ):
+            changed = [dict(event) for event in declarations]
+            event = changed[position]
+            request = json.loads(event["request_body"])["event"] | {field: value}
+            changed[position] = settled_runtime_event(request, event["response"]["decision"], session=event["session_id"], event_id=event["event_id"], settled_at=event["settled_at"])
+            mutations.append((field, {"event_receipts": changed}))
+        for name, mutation in mutations:
+            with self.subTest(name=name):
+                self.assertFalse(all(check_projection(postgres | mutation).values()))
+
+    def test_runtime_child_facts_parse_openappa_log_batches(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            database = Path(directory) / "runtime.sqlite"
+            child_id = "stock-child-session"
+            root = "root-1"
+            with sqlite3.connect(database) as connection:
+                connection.execute("CREATE TABLE logs (root TEXT, seq INTEGER, facts TEXT)")
+                connection.execute("CREATE TABLE checkpoints (source_root TEXT)")
+                connection.executemany(
+                    "INSERT INTO logs VALUES (?, ?, ?)",
+                    [
+                        (root, 1, json.dumps([{"ForkOpened": {"trajectory": child_id, "fork": "fork-1"}}])),
+                        (root, 2, json.dumps([{"ChildReturn": {"trajectory": child_id, "id": {"child": child_id, "occurrence": 0}}}])),
+                        (root, 3, json.dumps([{"event": "wait_result", "child_id": child_id}, {"note": "spm_marker_is_not_child_proof"}])),
+                    ],
+                )
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    "-c",
+                    COLLECTOR_MODULE.RUNTIME_SQLITE_PROGRAM,
+                    str(database),
+                    "synthetic-runtime-key",
+                    json.dumps([child_id]),
+                    root,
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            facts = json.loads(completed.stdout)["child_runtime_facts"]
+            expected = sha256(child_id.encode()).hexdigest()
+            self.assertEqual(facts["fork_opened_child_ids_sha256"], [expected])
+            self.assertEqual(facts["child_returned_ids_sha256"], [expected])
+
+def settled_runtime_event(request: dict, decision: dict, *, session: str, event_id: str, settled_at: str) -> dict:
+    body = json.dumps({"event_id": event_id, "event": request}, sort_keys=True, separators=(",", ":"))
+    digest = sha256(body.encode()).hexdigest()
+    return {
+        "session_id": session, "event_id": event_id,
+        "event_id_sha256": sha256(event_id.encode()).hexdigest(),
+        "event": request["event"], "decision": decision["decision"],
+        "request_body": body, "request_sha256": digest,
+        "response": {"protocol_version": 1, "event_id": event_id, "request_sha256": digest, "decision": decision},
+        "settled_at": settled_at,
+    }
+
 
 def phase_records(digest: str, scope: str, session: str) -> list[dict[str, str]]:
     base = {

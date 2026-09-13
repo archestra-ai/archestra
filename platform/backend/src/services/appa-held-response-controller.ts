@@ -520,7 +520,11 @@ export class AppaHeldResponseController {
       !payload?.success ||
       payload.data.heldParentFrameId !== params.heldFrameId ||
       result.frame.state !== "completed" ||
-      !result.receipt
+      !result.receipt ||
+      !hasRuntimeVouchedSanitizerReceipt({
+        payload: payload.data,
+        receipt: result.receipt,
+      })
     ) {
       throw new Error("control result has no durable trusted receipt");
     }
@@ -534,7 +538,11 @@ export class AppaHeldResponseController {
         control && AppaControlFramePayloadSchema.safeParse(control.payload);
       return control?.frame.state === "completed" &&
         control.receipt &&
-        parsed?.success
+        parsed?.success &&
+        hasRuntimeVouchedSanitizerReceipt({
+          payload: parsed.data,
+          receipt: control.receipt,
+        })
         ? [{ payload: parsed.data, receipt: control.receipt }]
         : [];
     });
@@ -956,6 +964,42 @@ function selectSafeOffer(
     );
   }
   return undefined;
+}
+
+function hasRuntimeVouchedSanitizerReceipt(params: {
+  payload: {
+    heldParentFrameId: string;
+    vouch: {
+      operation: "inspect" | "execute" | "status";
+      chosenRemedyId?: string;
+    };
+    offers: HeldOffer[];
+  };
+  receipt: unknown;
+}): boolean {
+  if (params.payload.vouch.operation !== "execute") return true;
+  const remedy = params.payload.offers.find(
+    (offer) => offer.id === params.payload.vouch.chosenRemedyId,
+  );
+  if (!remedy || remedy.kind !== "sanitizer") return true;
+  if (!isRecord(params.receipt) || !isRecord(params.receipt.runtime_receipt))
+    return false;
+  const decision = params.receipt.runtime_receipt.decision;
+  return (
+    params.receipt.status === "remedied" &&
+    params.receipt.intent_id === params.payload.heldParentFrameId &&
+    params.receipt.remedy_id === remedy.id &&
+    typeof params.receipt.runtime_event_id === "string" &&
+    isRecord(decision) &&
+    decision.decision === "batch_offer_resolved" &&
+    decision.batch_id === remedy.batchId &&
+    decision.position === remedy.position &&
+    decision.offer_id === remedy.id &&
+    decision.tool === remedy.tool &&
+    decision.arguments_sha256 === remedy.argumentsSha256 &&
+    decision.resolution === "bound" &&
+    decision.kind === "sanitizer"
+  );
 }
 
 function assertUserAndNamespace(params: {

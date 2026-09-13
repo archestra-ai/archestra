@@ -6,21 +6,20 @@ import {
   canonicalJsonObject,
 } from "@/routes/proxy/appa-proxy-hook";
 import type { AppaHistoryProtocol } from "@/services/appa-history-codec";
-import {
-  type AppaChildContext,
-  type AppaClientAdapter,
-  type AppaLifecycleHookCallbacks,
-  type AppaPromptContext,
-  type AppaSessionHookInstance,
-  type AppaSessionInitContext,
-  type AppaToolCall,
-  type AppaToolCallsContext,
-  type AppaToolCallsDecision,
-  type AppaToolResult,
-  type AppaToolResultContext,
-  type AppaToolResultOutcome,
-  type AppaTurnEndContext,
-  isAppaSpawnTool,
+import type {
+  AppaChildContext,
+  AppaClientAdapter,
+  AppaLifecycleHookCallbacks,
+  AppaPromptContext,
+  AppaSessionHookInstance,
+  AppaSessionInitContext,
+  AppaToolCall,
+  AppaToolCallsContext,
+  AppaToolCallsDecision,
+  AppaToolResult,
+  AppaToolResultContext,
+  AppaToolResultOutcome,
+  AppaTurnEndContext,
 } from "./types";
 
 /**
@@ -176,7 +175,7 @@ class AppaSessionHookWrapper implements AppaSessionHookInstance {
             emittedArgumentsCanonical: canonicalJsonObject(rawArgs),
             targetName,
             targetArguments: tc.arguments,
-            spawn: tc.spawn ?? isAppaSpawnTool(tc.name),
+            spawn: tc.spawn === true,
           };
         },
       );

@@ -10,6 +10,8 @@ joins are failures, never substituted evidence.
 from __future__ import annotations
 
 import argparse
+from collections import Counter
+import datetime as dt
 from hashlib import sha256
 import json
 import os
@@ -22,7 +24,14 @@ from uuid import UUID
 
 RUNTIME_SQLITE_PROGRAM = r'''
 import json, sqlite3, sys
-db_path, request_key, *roots = sys.argv[1:]
+import hashlib
+db_path, request_key, child_ids_json, *roots = sys.argv[1:]
+try:
+    child_ids = set(json.loads(child_ids_json))
+except (TypeError, json.JSONDecodeError):
+    raise SystemExit("child runtime identities are invalid")
+if not all(isinstance(child_id, str) for child_id in child_ids):
+    raise SystemExit("child runtime identities are invalid")
 connection = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
 tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
 if not {"logs", "checkpoints"}.issubset(tables):
@@ -32,8 +41,44 @@ rows = connection.execute(
 ).fetchall()
 facts = [str(row[2]).lower() for row in rows]
 joined = "\n".join(facts)
-return_positions = [index for index, fact in enumerate(facts) if "child_return" in fact]
-wait_positions = [index for index, fact in enumerate(facts) if "wait_result" in fact]
+structured = []
+for row in rows:
+    try:
+        batch = json.loads(row[2])
+    except (TypeError, json.JSONDecodeError):
+        continue
+    if isinstance(batch, list):
+        structured.extend(fact for fact in batch if isinstance(fact, dict))
+
+def fact_payload(fact, variant):
+    payload = fact.get(variant)
+    return payload if isinstance(payload, dict) else None
+
+def matching_child_ids(variant):
+    matched = []
+    for fact in structured:
+        payload = fact_payload(fact, variant)
+        if not payload:
+            continue
+        trajectory = payload.get("trajectory")
+        if trajectory not in child_ids:
+            continue
+        if variant == "ChildReturn":
+            return_id = payload.get("id")
+            if not isinstance(return_id, dict) or return_id.get("child") != trajectory:
+                continue
+        matched.append(trajectory)
+    return matched
+
+def ids_with_exactly_one(identities):
+    return sorted(
+        hashlib.sha256(child_id.encode()).hexdigest()
+        for child_id in child_ids
+        if identities.count(child_id) == 1
+    )
+
+fork_opened = matching_child_ids("ForkOpened")
+child_returned = matching_child_ids("ChildReturn")
 checkpoint_count = connection.execute(
     "SELECT COUNT(*) FROM checkpoints WHERE source_root IN (%s)" % ",".join("?" for _ in roots), roots
 ).fetchone()[0]
@@ -44,11 +89,12 @@ print(json.dumps({
     "checkpoint_count": checkpoint_count,
     "gate_denied": "deny_call" in joined or "denied" in joined,
     "gate_allowed": "allow_call" in joined or "admitted" in joined,
-    "child_start": "child_start" in joined,
-    "child_return": "child_return" in joined,
-    "wait_result": "wait_result" in joined,
-    "child_return_before_wait": bool(return_positions and wait_positions and min(return_positions) < min(wait_positions)),
-    "signed_marker": "spm_" in joined,
+    "child_runtime_facts": {
+        "expected_child_ids_sha256": sorted(hashlib.sha256(child_id.encode()).hexdigest() for child_id in child_ids),
+        "fork_opened_child_ids_sha256": ids_with_exactly_one(fork_opened),
+        "child_returned_ids_sha256": ids_with_exactly_one(child_returned),
+        "fact_count": len(structured),
+    },
     "compaction": "compact" in joined,
     "fork": "fork" in joined,
     "approval": "approval" in joined or "review" in joined,
@@ -80,7 +126,7 @@ process.stdout.write(
 
 POSTGRES_SQL = r'''
 WITH relevant_sessions AS (
-  SELECT s.id, s.root_id, s.client_session_id, s.state, s.parent_session_id,
+  SELECT s.id, s.profile_id, s.root_id, s.client_session_id, s.state, s.parent_session_id, s.parent_call_id,
           s.provider, s.protocol, s.model, s.owner_scope_hash
   FROM appa_proxy_sessions s
   WHERE s.profile_id = :'agent_id'::uuid
@@ -104,8 +150,10 @@ WITH relevant_sessions AS (
          c.call_id,
           c.session_id AS proxy_session_id,
          c.emitted_name,
-         c.appa_target_name,
-         c.state,
+          c.appa_target_name,
+          c.state,
+          c.root_id,
+          c.updated_at,
           c.dispatch_id,
           encode(sha256(convert_to(c.client_session_id::text, 'UTF8')), 'hex') AS session_id_sha256,
           c.owner_scope_hash AS bound_auth_scope_hash,
@@ -130,15 +178,83 @@ WITH relevant_sessions AS (
   SELECT i.id
   FROM interactions i
   JOIN relevant_sessions s ON s.client_session_id = i.session_id
-  WHERE i.profile_id = :'agent_id'::uuid
-    AND i.type = :'interaction_type'
-    AND i.model = :'model'
+ WHERE i.profile_id = :'agent_id'::uuid
+     AND i.type = :'interaction_type'
+     AND i.model = :'model'
+), child_bindings AS (
+  SELECT child.id AS child_session_id,
+         parent.id AS parent_session_id,
+         child.root_id,
+         child.client_session_id AS child_client_session_id,
+         parent.client_session_id AS parent_client_session_id,
+         child.parent_call_id,
+         child.owner_scope_hash = parent.owner_scope_hash AS same_owner_scope,
+         child.profile_id = parent.profile_id AS same_profile,
+         child.root_id = parent.root_id AS same_root,
+         parent_call.spawn_binding IS NOT NULL
+           AND parent_call.spawn_binding_consumed_at IS NOT NULL AS spawn_binding_consumed,
+         parent_call.emitted_name AS parent_emitted_name,
+          parent_call.appa_target_name AS parent_target_name,
+          parent_call.appa_target_arguments AS parent_target_arguments,
+          (SELECT count(*) FROM appa_proxy_calls pc
+           WHERE pc.session_id = parent.id AND pc.state = 'result_admitted'
+             AND pc.appa_target_arguments ->> 'kind' IN ('public', 'private')) AS parent_source_count,
+         parent_call.spawn_binding,
+         position(
+           'apc1.' || parent_call.call_id || '.'
+           IN COALESCE(parent_call.emitted_arguments_canonical, '')
+         ) > 0
+           AND parent_call.emitted_arguments_canonical
+              ~ 'apc1\.[^.[:space:]]+\.[a-f0-9]{64}\.[a-f0-9]{64}'
+           AS signed_carrier_present,
+         COALESCE(alias.alias_count, 0) AS alias_count,
+         COALESCE(alias.matches_child, false) AS alias_matches_child,
+         COALESCE(alias.consumed, false) AS alias_consumed
+  FROM relevant_sessions child
+  JOIN appa_proxy_sessions parent ON parent.id = child.parent_session_id
+  LEFT JOIN appa_proxy_calls parent_call
+    ON parent_call.session_id = parent.id
+   AND parent_call.call_id = child.parent_call_id
+  LEFT JOIN LATERAL (
+    SELECT count(*) AS alias_count,
+           bool_and(a.child_thread_id = child.client_session_id) AS matches_child,
+           bool_and(a.consumed_at IS NOT NULL) AS consumed
+    FROM appa_proxy_wire_aliases a
+    WHERE a.session_id = parent.id
+      AND a.kind = 'task'
+      AND a.source_call_id = child.parent_call_id
+  ) alias ON true
+  WHERE child.parent_session_id IS NOT NULL
 )
+-- Date-mode timestamp columns store UTC; export an explicit offset for ordering.
 SELECT json_build_object(
   'roots', COALESCE((SELECT json_agg(root_id ORDER BY root_id) FROM relevant_sessions), '[]'::json),
   'session_count', (SELECT count(*) FROM relevant_sessions),
   'root_count', (SELECT count(DISTINCT root_id) FROM relevant_sessions),
   'child_session_count', (SELECT count(*) FROM relevant_sessions WHERE parent_session_id IS NOT NULL),
+  'child_bindings', COALESCE((SELECT json_agg(json_build_object(
+    'parent_proxy_session_id_sha256', encode(sha256(convert_to(parent_session_id::text, 'UTF8')), 'hex'),
+    'child_proxy_session_id_sha256', encode(sha256(convert_to(child_session_id::text, 'UTF8')), 'hex'),
+    'child_session_id', child_session_id,
+    'root_id', root_id,
+    'parent_client_session_id_sha256', encode(sha256(convert_to(parent_client_session_id::text, 'UTF8')), 'hex'),
+    'child_client_session_id_sha256', encode(sha256(convert_to(child_client_session_id::text, 'UTF8')), 'hex'),
+    'child_client_session_id', child_client_session_id,
+    'parent_call_id_sha256', encode(sha256(convert_to(parent_call_id::text, 'UTF8')), 'hex'),
+    'same_owner_scope', same_owner_scope,
+    'same_profile', same_profile,
+    'same_root', same_root,
+    'spawn_binding_consumed', spawn_binding_consumed,
+    'parent_emitted_name', parent_emitted_name,
+    'parent_target_name', parent_target_name,
+    'parent_target_arguments', parent_target_arguments,
+    'parent_source_count', parent_source_count,
+    'spawn_binding', spawn_binding,
+    'signed_carrier_present', signed_carrier_present,
+    'task_alias_count', alias_count,
+    'task_alias_matches_child', alias_matches_child,
+    'task_alias_consumed', alias_consumed
+  ) ORDER BY child_session_id) FROM child_bindings), '[]'::json),
   'call_count', (SELECT count(*) FROM relevant_calls),
   'interaction_count', (SELECT count(*) FROM interaction_bindings),
   'provider_hosted_mcp_declaration_count', (
@@ -161,13 +277,14 @@ SELECT json_build_object(
     'response', e.response,
     'event', e.event,
     'decision', e.response -> 'decision' ->> 'decision',
-    'settled_at', e.settled_at
+    'settled_at', e.settled_at AT TIME ZONE 'UTC'
   ) ORDER BY e.created_at) FROM appa_proxy_events e JOIN relevant_sessions s ON s.id = e.session_id), '[]'::json),
    'call_bindings', COALESCE((SELECT json_agg(json_build_object(
      'id', id,
      'call_id', call_id,
      'call_id_sha256', encode(sha256(convert_to(call_id::text, 'UTF8')), 'hex'),
      'proxy_session_id', proxy_session_id,
+     'root_id', root_id,
     'dispatch_id_sha256', CASE WHEN dispatch_id IS NULL THEN NULL ELSE encode(sha256(convert_to(dispatch_id::text, 'UTF8')), 'hex') END,
     'session_id_sha256', session_id_sha256,
     'bound_auth_scope_hash', bound_auth_scope_hash,
@@ -175,12 +292,13 @@ SELECT json_build_object(
     'target_name', appa_target_name,
     'emitted_arguments_sha256', emitted_arguments_sha256,
     'target_arguments', target_arguments,
-    'state', state,
+     'state', state,
+     'updated_at', updated_at AT TIME ZONE 'UTC',
     'runtime_event_id_sha256', CASE WHEN execution_event_id IS NULL THEN NULL ELSE encode(sha256(convert_to(execution_event_id::text, 'UTF8')), 'hex') END,
     'receipt_sha256', receipt_hash,
-    'authorization_at', authorization_at,
-    'receipt_at', receipt_at,
-    'event_settled_at', event_settled_at
+    'authorization_at', authorization_at AT TIME ZONE 'UTC',
+    'receipt_at', receipt_at AT TIME ZONE 'UTC',
+    'event_settled_at', event_settled_at AT TIME ZONE 'UTC'
   ) ORDER BY authorization_at, call_id) FROM call_bindings), '[]'::json)
 );
 '''
@@ -191,6 +309,32 @@ EXPECTED_BACKEND_IDENTITIES = {
     "opencode": {"provider": "kimi", "protocol": "openai-chat-completions", "model": "kimi-for-coding", "interaction_type": "kimi:chatCompletions"},
 }
 FIXTURE_TOOL_NAMES = {"read_source", "publish", "protected_publish"}
+# These are the exact NATIVE_SPAWN_TOOL_MAP contracts pinned for qualifying
+# runs. Never suffix-match client wire names or weaken their target binding.
+NATIVE_CHILD_CONTRACTS = {
+    "codex": {
+        "emitted_names": {
+            "multi_agent_v1.spawn_agent",
+            "agents.spawn_agent",
+            "collaboration.spawn_agent",
+        },
+        "target_name": "agent/fixture/lifecycle_child",
+        "requires_signed_carrier": False,
+        "task_alias_count": 1,
+    },
+    "claude": {
+        "emitted_names": {"Agent"},
+        "target_name": "agent/claude-code/Agent",
+        "requires_signed_carrier": True,
+        "task_alias_count": 0,
+    },
+    "opencode": {
+        "emitted_names": {"task"},
+        "target_name": "agent/fixture/lifecycle_child",
+        "requires_signed_carrier": True,
+        "task_alias_count": 0,
+    },
+}
 
 REVIEW_AUDIT_PROGRAM = r'''
 import hashlib, json, sys
@@ -221,7 +365,7 @@ def main() -> int:
     if not roots:
         raise SystemExit("backend collector found no owner-bound APPA root for this run")
     candidates = sorted({*roots, *(f"kagent:{root}" for root in roots)})
-    runtime = runtime_evidence(args, runtime_pod, candidates)
+    runtime = runtime_evidence(args, runtime_pod, candidates, postgres.get("child_bindings"))
     review = review_evidence(args, runtime_pod)
     fixture = read_fixture_evidence(args.fixture_evidence) if args.fixture_evidence else None
     evidence = project(args, runtime_pod, postgres_pod, postgres, runtime, review, roots, fixture, gateway)
@@ -291,8 +435,13 @@ def postgres_evidence(args: argparse.Namespace, pod: str) -> dict[str, Any]:
     return value
 
 
-def runtime_evidence(args: argparse.Namespace, pod: str, roots: list[str]) -> dict[str, Any]:
-    command = kubectl_prefix(args.kubectl, args.kubectl_context, args.runtime_namespace) + ["exec", pod, "-c", args.runtime_container, "--", "python3", "-c", RUNTIME_SQLITE_PROGRAM, args.runtime_db_path, args.request_key, *roots]
+def runtime_evidence(args: argparse.Namespace, pod: str, roots: list[str], child_bindings: object) -> dict[str, Any]:
+    child_ids = [
+        binding.get("child_client_session_id")
+        for binding in child_bindings
+        if isinstance(binding, dict) and isinstance(binding.get("child_client_session_id"), str)
+    ] if isinstance(child_bindings, list) else []
+    command = kubectl_prefix(args.kubectl, args.kubectl_context, args.runtime_namespace) + ["exec", pod, "-c", args.runtime_container, "--", "python3", "-c", RUNTIME_SQLITE_PROGRAM, args.runtime_db_path, args.request_key, json.dumps(child_ids), *roots]
     output = run(command)
     try:
         value = json.loads(output)
@@ -329,7 +478,7 @@ def project(args: argparse.Namespace, runtime_pod: str, postgres_pod: str, postg
     accepted_bindings = [
         binding
         for binding in exact_bindings
-        if binding.get("state") != "denied"
+        if binding.get("state") == "result_admitted"
         and isinstance(binding.get("dispatch_id_sha256"), str)
         and isinstance(binding.get("runtime_event_id_sha256"), str)
         and isinstance(binding.get("receipt_sha256"), str)
@@ -338,7 +487,7 @@ def project(args: argparse.Namespace, runtime_pod: str, postgres_pod: str, postg
     dispatched_bindings = [
         binding
         for binding in exact_bindings
-        if binding.get("state") != "denied" and isinstance(binding.get("dispatch_id_sha256"), str)
+        if binding.get("state") == "result_admitted" and isinstance(binding.get("dispatch_id_sha256"), str)
     ]
     linked = (
         postgres.get("root_count") == 1
@@ -350,12 +499,93 @@ def project(args: argparse.Namespace, runtime_pod: str, postgres_pod: str, postg
     )
     fixture_join = exact_fixture_join(args.run_id, dispatched_bindings, fixture)
     gateway_join = exact_gateway_join(dispatched_bindings, gateway)
+    raw_child_bindings = postgres.get("child_bindings") if isinstance(postgres.get("child_bindings"), list) else []
+    child_bindings = [
+        {
+            key: value
+            for key, value in binding.items()
+            if key
+            not in {
+                "child_client_session_id",
+                "child_session_id",
+                "root_id",
+                "spawn_binding",
+                "parent_target_arguments",
+            }
+        }
+        for binding in raw_child_bindings
+        if isinstance(binding, dict)
+    ]
+    exact_child_bindings = [
+        binding
+        for binding in child_bindings
+        if valid_child_attachment(args.client, binding)
+    ]
+    child_proxy_ids = {
+        binding["child_proxy_session_id_sha256"] for binding in exact_child_bindings
+    }
+    child_source_reads = [
+        binding
+        for binding in exact_bindings
+        if binding.get("proxy_session_id_sha256") in child_proxy_ids
+        and binding.get("target_name") == "read_source"
+        and binding.get("source_kind") in {"public", "private"}
+        and binding.get("state") == "result_admitted"
+    ]
+    source_kinds = [binding["source_kind"] for binding in child_source_reads]
+    child_denied_bindings = [
+        binding
+        for binding in denied_bindings
+        if binding.get("proxy_session_id_sha256") in child_proxy_ids
+    ]
+    child_denial_receipts = [
+        receipt
+        for receipt in denial_receipts
+        if receipt.get("proxy_session_id_sha256") in child_proxy_ids
+    ]
+    child_lifecycle = project_child_lifecycle(
+        args.client, postgres.get("event_receipts"), raw_child_bindings
+    )
+    child_end = next((receipt for receipt in child_lifecycle["receipts"] if receipt["event"] == "child_end"), None)
+    child_start = next((receipt for receipt in child_lifecycle["receipts"] if receipt["event"] == "child_start"), None)
+    parent_id = exact_child_bindings[0]["parent_proxy_session_id_sha256"] if len(exact_child_bindings) == 1 else None
+    parent_publication_is_denied = parent_publication_denied(
+        denied_bindings,
+        denial_receipts,
+        parent_id,
+        child_end.get("settled_at") if child_end and child_lifecycle["ordered"] else None,
+    )
+    source_admission_order = (
+        child_lifecycle["ordered"]
+        and len(child_source_reads) == 1
+        and child_start is not None
+        and child_end is not None
+        and ordered_timestamps(
+            child_start["settled_at"],
+            child_source_reads[0].get("result_admitted_at"),
+            child_end["settled_at"],
+        )
+    )
     child = {
-        "classification": "private" if "private" in args.scenario else "public",
-        "signed_id": bool(runtime.get("signed_marker")),
-        "marker_sha256": sha256(f"{args.run_id}:{args.client}".encode()).hexdigest() if runtime.get("signed_marker") else None,
-        "scope_preserved": postgres.get("child_session_count", 0) > 0,
-        "return_before_wait": bool(runtime.get("child_return_before_wait")),
+        "classification": source_kinds[0] if len(source_kinds) == 1 else None,
+        "source_read_count": len(source_kinds),
+        "bindings": child_bindings,
+        "exact_attachment": len(child_bindings) == 1 and len(exact_child_bindings) == 1,
+        "scope_preserved": len(exact_child_bindings) == 1,
+        # Current runtime journals do not emit ForkOpened/ChildReturn facts.
+        # Acknowledged child lifecycle receipts are durable owner-bound proof.
+        "runtime_opened": child_lifecycle["started"],
+        "completion_admitted": child_lifecycle["completed"],
+        "lifecycle_order": child_lifecycle["ordered"],
+        "lifecycle_receipts": child_lifecycle["receipts"],
+        "source_admission_order": source_admission_order,
+        "non_void_return": child_end is not None and child_end.get("non_void_return") is True,
+        "parent_has_no_source": len(exact_child_bindings) == 1 and exact_child_bindings[0].get("parent_source_count") == 0,
+        "return_floor_receipts": project_child_return_floor(
+            args.client, postgres.get("event_receipts"), raw_child_bindings,
+            child_start.get("settled_at") if child_start and child_lifecycle["ordered"] else None,
+        ),
+        "denied": exact_denial_receipts_match(child_denied_bindings, child_denial_receipts),
     }
     return {
         "collector": "native-live-collector/v2",
@@ -374,6 +604,7 @@ def project(args: argparse.Namespace, runtime_pod: str, postgres_pod: str, postg
             "provider_hosted_mcp_rejected": postgres.get("provider_hosted_mcp_declaration_count", 0) == 0,
             "runtime_journal": runtime.get("journal_record_count", 0) > 0,
             "runtime_request_key": runtime.get("request_key_hits", 0) > 0,
+            "native_child_attachment": child["exact_attachment"],
             "fixture_exact_call_join": fixture_join["matched"] and gateway_join["matched"],
             "gateway_tool_receipt": gateway_join["matched"],
             "linked": linked,
@@ -388,7 +619,9 @@ def project(args: argparse.Namespace, runtime_pod: str, postgres_pod: str, postg
         "archestra": {key: postgres.get(key, 0) for key in ("session_count", "root_count", "call_count", "checkpoint_binding_count", "interaction_count", "provider_hosted_mcp_declaration_count", "denied_call_count", "unsanitized_result_count")},
         "runtime": {key: runtime.get(key, False) for key in ("journal_root_count", "journal_record_count", "request_key_hits", "checkpoint_count", "gate_denied", "gate_allowed")},
         "denied": exact_denial_receipts_match(denied_bindings, denial_receipts),
-        "sanitized": postgres.get("unsanitized_result_count", 0) == 0 and bool(exact_bindings),
+        "parent_publication_denied": parent_publication_is_denied,
+        # Marker absence cannot prove that a sanitizer was offered or executed.
+        "sanitizer_proof_gap": "held-control execution and transformed-argument receipts are not projected by this collector",
         "root_kind": "fork" if bool(runtime.get("fork")) else "root",
         "source_scope_preserved": bool(runtime.get("fork")) and postgres.get("checkpoint_binding_count", 0) > 0,
         "compacted_same_root": bool(runtime.get("compaction")) and runtime.get("journal_root_count", 0) == 1,
@@ -485,7 +718,7 @@ SELECT COALESCE(json_agg(json_build_object(
   'receipt_id_sha256', encode(sha256(convert_to(id::text, 'UTF8')), 'hex'),
   'tool_name', tool_call ->> 'name',
   'arguments', tool_call -> 'arguments',
-  'created_at', created_at,
+  'created_at', created_at AT TIME ZONE 'UTC',
   'auth_method', auth_method
 ) ORDER BY created_at), '[]'::json)
 FROM mcp_tool_calls
@@ -505,7 +738,7 @@ WHERE agent_id = '{profile['profile_id']}'::uuid
     for row in rows if isinstance(rows, list) else []:
         if not isinstance(row, dict) or row.get("tool_name") not in inverse or not isinstance(row.get("arguments"), dict):
             continue
-        bindings.append({"receipt_id_sha256": row.get("receipt_id_sha256"), "target_name": inverse[row["tool_name"]], "arguments_sha256": sha256(canonical_json(row["arguments"]).encode()).hexdigest(), "created_at": row.get("created_at"), "auth_method": row.get("auth_method")})
+        bindings.append({"receipt_id_sha256": row.get("receipt_id_sha256"), "target_name": inverse[row["tool_name"]], "arguments_sha256": receipt_sha256(row["arguments"]), "created_at": row.get("created_at"), "auth_method": row.get("auth_method")})
     return {"mcp_server_name": profile["mcp_server_name"], "tool_names": profile["tool_names"], "bindings": bindings}
 
 
@@ -513,9 +746,13 @@ def exact_fixture_join(run_id: str, calls: list[dict[str, Any]], fixture: dict[s
     bindings = fixture.get("call_bindings") if isinstance(fixture, dict) else None
     if not isinstance(fixture, dict) or fixture.get("source") != "trusted-fixture-audit/v1" or fixture.get("run_id") != run_id or not isinstance(bindings, list):
         return {"matched": False, "reason": "missing-or-wrong-fixture-scope"}
-    backend = {(call.get("target_name"), call.get("arguments_sha256")) for call in calls}
-    observed = {(binding.get("tool_name"), binding.get("arguments_sha256")) for binding in bindings if isinstance(binding, dict)}
-    if not backend or len(backend) != len(calls) or len(observed) != len(bindings) or backend != observed:
+    backend = Counter((call.get("target_name"), call.get("arguments_sha256")) for call in calls)
+    observed = Counter(
+        (binding.get("tool_name"), binding.get("arguments_sha256"))
+        for binding in bindings
+        if isinstance(binding, dict)
+    )
+    if not backend or sum(observed.values()) != len(bindings) or backend != observed:
         return {"matched": False, "reason": "tool-or-canonical-argument-mismatch"}
     return {"matched": True, "binding_count": len(bindings)}
 
@@ -524,9 +761,15 @@ def exact_gateway_join(calls: list[dict[str, Any]], gateway: dict[str, Any]) -> 
     bindings = gateway.get("bindings") if isinstance(gateway, dict) else None
     if not isinstance(bindings, list):
         return {"matched": False, "reason": "missing-gateway-receipts"}
-    backend = {(call.get("target_name"), call.get("arguments_sha256")) for call in calls}
-    observed = {(binding.get("target_name"), binding.get("arguments_sha256")) for binding in bindings if isinstance(binding, dict) and isinstance(binding.get("receipt_id_sha256"), str) and isinstance(binding.get("created_at"), str)}
-    if not backend or len(backend) != len(calls) or len(observed) != len(bindings) or backend != observed:
+    backend = Counter((call.get("target_name"), call.get("arguments_sha256")) for call in calls)
+    observed = Counter(
+        (binding.get("target_name"), binding.get("arguments_sha256"))
+        for binding in bindings
+        if isinstance(binding, dict)
+        and isinstance(binding.get("receipt_id_sha256"), str)
+        and isinstance(binding.get("created_at"), str)
+    )
+    if not backend or sum(observed.values()) != len(bindings) or backend != observed:
         return {"matched": False, "reason": "gateway-tool-or-argument-mismatch"}
     return {"matched": True, "receipt_count": len(bindings)}
 
@@ -536,7 +779,12 @@ def project_call_binding(value: dict[str, Any], gateway_tool_names: object = Non
     arguments = value.get("target_arguments")
     if target_name is None or not isinstance(arguments, dict):
         return None
-    arguments_sha256 = sha256(canonical_json(arguments).encode()).hexdigest()
+    arguments_sha256 = receipt_sha256(arguments)
+    source_kind = (
+        arguments.get("kind")
+        if target_name == "read_source" and arguments.get("kind") in {"public", "private"}
+        else None
+    )
     return {
         key: value.get(key)
         for key in (
@@ -558,12 +806,187 @@ def project_call_binding(value: dict[str, Any], gateway_tool_names: object = Non
         "proxy_session_id_sha256": hash_identifier(value.get("proxy_session_id")),
         "target_name": target_name,
         "arguments_sha256": arguments_sha256,
+        "source_kind": source_kind,
+        "result_admitted_at": value.get("updated_at") if value.get("state") == "result_admitted" else None,
     }
 
 
 def project_event_receipt(value: dict[str, Any]) -> dict[str, Any]:
     response = value.get("response")
     return {key: value.get(key) for key in ("event_id_sha256", "request_sha256", "event", "decision", "settled_at")} | {"response_sha256": receipt_sha256(response) if isinstance(response, dict) else None}
+
+
+def project_child_lifecycle(
+    client: str, events: object, child_bindings: object
+) -> dict[str, Any]:
+    if not isinstance(events, list) or not isinstance(child_bindings, list):
+        return {"started": False, "completed": False, "ordered": False, "receipts": []}
+    exact_bindings = [
+        binding
+        for binding in child_bindings
+        if isinstance(binding, dict)
+        and valid_child_attachment(client, binding)
+        and all(
+            isinstance(binding.get(field), str)
+            for field in ("child_session_id", "child_client_session_id", "root_id", "spawn_binding")
+        )
+    ]
+    if len(exact_bindings) != 1:
+        return {"started": False, "completed": False, "ordered": False, "receipts": []}
+    binding = exact_bindings[0]
+    child_session_id = binding["child_session_id"]
+    receipts = [
+        event
+        for event in events
+        if isinstance(event, dict)
+        and event.get("session_id") == child_session_id
+        and event.get("event") in {"child_start", "child_end"}
+        and event.get("decision") == "ack"
+        and isinstance(event.get("event_id_sha256"), str)
+        and isinstance(event.get("request_sha256"), str)
+        and isinstance(event.get("settled_at"), str)
+        and parse_event_timestamp(event["settled_at"]) is not None
+        and child_lifecycle_event_matches(event, binding)
+    ]
+    starts = [event for event in receipts if event["event"] == "child_start"]
+    ends = [event for event in receipts if event["event"] == "child_end"]
+    started = len(starts) == 1
+    completed = len(ends) == 1
+    ordered = (
+        started
+        and completed
+        and ordered_timestamps(starts[0]["settled_at"], ends[0]["settled_at"])
+    )
+    return {
+        "started": started,
+        "completed": completed,
+        "ordered": ordered,
+        "receipts": [
+            project_event_receipt(event)
+            | {
+                "proxy_session_id_sha256": hash_identifier(child_session_id),
+                "child_id_matches": True,
+                "root_id_matches": True,
+                "spawn_binding_matches": event["event"] == "child_start",
+                "non_void_return": event["event"] == "child_end" and bool((settled_event_request(event) or {}).get("value")),
+            }
+            for event in receipts
+        ],
+    }
+
+
+def child_lifecycle_event_matches(event: dict[str, Any], binding: dict[str, Any]) -> bool:
+    payload = settled_event_request(event)
+    if not isinstance(payload, dict):
+        return False
+    if (
+        payload.get("event") != event.get("event")
+        or payload.get("child_id") != binding.get("child_client_session_id")
+        or payload.get("root_id") != binding.get("root_id")
+    ):
+        return False
+    return event["event"] != "child_start" or payload.get("spawn_binding") == binding.get("spawn_binding")
+
+
+def project_child_return_floor(client: str, events: object, bindings: object, child_start_at: str | None) -> list[dict[str, Any]]:
+    if not isinstance(events, list) or not isinstance(bindings, list) or len(bindings) != 1 or child_start_at is None:
+        return []
+    binding = bindings[0]
+    if not isinstance(binding, dict) or not valid_child_attachment(client, binding) or not isinstance(binding.get("parent_target_arguments"), dict):
+        return []
+    parent_id = binding["parent_proxy_session_id_sha256"]
+    arguments_sha256 = receipt_sha256(binding["parent_target_arguments"])
+    offers: dict[str, str] = {}
+    parent_events = [event for event in events if isinstance(event, dict) and hash_identifier(event.get("session_id")) == parent_id]
+    for event in parent_events:
+        request = settled_event_request(event)
+        if not request or request.get("event") != "tool_calls" or request.get("root_id") != binding.get("root_id") or request.get("child_id") is not None:
+            continue
+        decision = event["response"].get("decision", {})
+        calls = request.get("calls")
+        if not isinstance(calls, list) or not any(
+            isinstance(call, dict) and hash_identifier(call.get("call_id")) == binding["parent_call_id_sha256"]
+            and call.get("tool") == binding["parent_target_name"] and call.get("arguments") == binding["parent_target_arguments"]
+            and call.get("spawn") is True for call in calls
+        ) or not isinstance(decision, dict) or decision.get("decision") != "deny_calls":
+            continue
+        denied_calls = decision.get("calls")
+        if not isinstance(denied_calls, list):
+            continue
+        for call in denied_calls:
+            if not isinstance(call, dict) or hash_identifier(call.get("call_id")) != binding["parent_call_id_sha256"]:
+                continue
+            call_offers = call.get("offers")
+            if not isinstance(call_offers, list):
+                continue
+            for offer in call_offers:
+                if isinstance(offer, dict) and isinstance(offer.get("offer_id"), str) and offer.get("kind") == "acceptance" and offer.get("tool") == binding["parent_target_name"] and offer.get("arguments_sha256") == arguments_sha256:
+                    offers[offer["offer_id"]] = event["settled_at"]
+    receipts = []
+    for event in parent_events:
+        request = settled_event_request(event)
+        if not request or request.get("event") != "resolve_offer":
+            continue
+        decision = event["response"].get("decision", {})
+        if not isinstance(decision, dict):
+            continue
+        offer_id = request.get("offer_id")
+        if (
+            not isinstance(offer_id, str) or offer_id not in offers
+            or request.get("root_id") != binding.get("root_id") or request.get("child_id") is not None
+            or request.get("resolution") != "accept_restriction"
+            or not isinstance(request.get("label"), dict) or not request["label"]
+            or request.get("tool") != binding["parent_target_name"] or request.get("arguments_sha256") != arguments_sha256
+            or decision.get("decision") != "offer_resolved" or decision.get("offer_id") != offer_id
+            or decision.get("kind") != "acceptance" or decision.get("resolution") != "accepted"
+            or decision.get("tool") != request["tool"] or decision.get("arguments_sha256") != arguments_sha256
+            or not ordered_timestamps(offers[offer_id], event.get("settled_at"), child_start_at)
+        ):
+            continue
+        receipts.append(project_event_receipt(event) | {
+            "parent_proxy_session_id_sha256": parent_id,
+            "parent_call_id_sha256": binding["parent_call_id_sha256"],
+            "offer_id_sha256": hash_identifier(offer_id),
+            "label_sha256": receipt_sha256(request["label"]),
+        })
+    return receipts if len(receipts) == 1 else []
+
+
+def parse_event_timestamp(value: str) -> dt.datetime | None:
+    try:
+        return dt.datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except (ValueError, AttributeError):
+        return None
+
+
+def ordered_timestamps(*values: object) -> bool:
+    parsed = [parse_event_timestamp(value) if isinstance(value, str) else None for value in values]
+    if any(value is None or value.tzinfo is None for value in parsed):
+        return False
+    return all(left <= right for left, right in zip(parsed, parsed[1:]))
+
+
+def settled_event_request(event: dict[str, Any]) -> dict[str, Any] | None:
+    body, response = event.get("request_body"), event.get("response")
+    if not isinstance(body, str) or not isinstance(response, dict) or not isinstance(event.get("event_id"), str):
+        return None
+    digest = sha256(body.encode()).hexdigest()
+    if (
+        event.get("request_sha256") != digest
+        or response.get("protocol_version") != 1
+        or response.get("event_id") != event["event_id"]
+        or response.get("request_sha256") != digest
+        or not ordered_timestamps(event.get("settled_at"))
+    ):
+        return None
+    try:
+        envelope = json.loads(body)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(envelope, dict) or set(envelope) != {"event_id", "event"} or envelope["event_id"] != event["event_id"]:
+        return None
+    request = envelope["event"]
+    return request if isinstance(request, dict) and request.get("event") == event.get("event") else None
 
 
 def project_denial_receipts(bindings: object, events: object, gateway_tool_names: object = None) -> list[dict[str, Any]]:
@@ -633,6 +1056,7 @@ def project_denial_receipt(binding: dict[str, Any], event: dict[str, Any], gatew
     if (
         set(proposal) != {"event", "root_id", "calls"}
         or proposal.get("event") != "tool_calls"
+        or proposal.get("root_id") != binding.get("root_id")
         or not isinstance(calls, list)
         or len(calls) != 1
         or not isinstance(calls[0], dict)
@@ -677,7 +1101,7 @@ def project_denial_receipt(binding: dict[str, Any], event: dict[str, Any], gatew
         "proxy_session_id_sha256": hash_identifier(session_id),
         "bound_auth_scope_hash": bound_auth_scope_hash,
         "target_name": target_name,
-        "arguments_sha256": sha256(canonical_json(target_arguments).encode()).hexdigest(),
+        "arguments_sha256": receipt_sha256(target_arguments),
         "event_id_sha256": hash_identifier(event["event_id"]),
         "request_sha256": event["request_sha256"],
         "response_sha256": receipt_sha256(response),
@@ -717,6 +1141,83 @@ def exact_denial_receipts_match(bindings: list[dict[str, Any]], receipts: list[d
     return len(expected) == len(bindings) and len(observed) == len(receipts) and expected == observed
 
 
+def parent_publication_denied(
+    bindings: list[dict[str, Any]],
+    receipts: list[dict[str, Any]],
+    parent_proxy_id: str | None,
+    child_end_at: str | None,
+) -> bool:
+    if not is_sha256(parent_proxy_id) or child_end_at is None:
+        return False
+    parent_bindings = [
+        binding
+        for binding in bindings
+        if binding.get("proxy_session_id_sha256") == parent_proxy_id
+        and binding.get("target_name") == "publish"
+    ]
+    parent_receipts = [
+        receipt
+        for receipt in receipts
+        if receipt.get("proxy_session_id_sha256") == parent_proxy_id
+        and receipt.get("target_name") == "publish"
+    ]
+    return (
+        len(parent_bindings) == len(parent_receipts) == 1
+        and exact_denial_receipts_match(parent_bindings, parent_receipts)
+        and parent_receipts[0].get("basis") == "readers_not_public"
+        and ordered_timestamps(child_end_at, parent_bindings[0].get("authorization_at"), parent_receipts[0].get("settled_at"))
+    )
+
+
+def valid_child_binding(value: dict[str, Any]) -> bool:
+    required_hashes = (
+        "parent_proxy_session_id_sha256",
+        "child_proxy_session_id_sha256",
+        "parent_client_session_id_sha256",
+        "child_client_session_id_sha256",
+        "parent_call_id_sha256",
+    )
+    return (
+        all(is_sha256(value.get(name)) for name in required_hashes)
+        and value.get("same_owner_scope") is True
+        and value.get("same_profile") is True
+        and value.get("same_root") is True
+        and value.get("spawn_binding_consumed") is True
+    )
+
+
+def valid_child_attachment(client: str, value: dict[str, Any]) -> bool:
+    if not valid_child_binding(value):
+        return False
+    contract = NATIVE_CHILD_CONTRACTS.get(client)
+    if contract is None:
+        return False
+    return (
+        value.get("parent_emitted_name") in contract["emitted_names"]
+        and value.get("parent_target_name") == contract["target_name"]
+        and (
+            not contract["requires_signed_carrier"]
+            or value.get("signed_carrier_present") is True
+        )
+        and value.get("task_alias_count") == contract["task_alias_count"]
+        and (client != "codex" or value.get("task_alias_matches_child") is True)
+    )
+
+
+def exact_child_runtime_fact(value: object, child_ids: list[str], fact_key: str) -> bool:
+    if not child_ids or not isinstance(value, dict):
+        return False
+    expected = sorted(child_ids)
+    return (
+        value.get("expected_child_ids_sha256") == expected
+        and value.get(fact_key) == expected
+    )
+
+
+def is_sha256(value: object) -> bool:
+    return isinstance(value, str) and bool(re.fullmatch(r"[0-9a-f]{64}", value))
+
+
 def hash_identifier(value: object) -> str | None:
     return sha256(value.encode()).hexdigest() if isinstance(value, str) else None
 
@@ -742,14 +1243,6 @@ def fixture_tool_name(value: object, gateway_tool_names: object = None) -> str |
         return value
     match = re.fullmatch(r"(?:mcp__)?appa_fixture(?:__|\.)(read_source|publish|protected_publish)", value)
     return match.group(1) if match else None
-
-
-def canonical_json(value: Any) -> str:
-    if isinstance(value, dict):
-        return "{" + ",".join(f"{json.dumps(str(key), ensure_ascii=True)}:{canonical_json(item)}" for key, item in sorted(value.items())) + "}"
-    if isinstance(value, list):
-        return "[" + ",".join(canonical_json(item) for item in value) + "]"
-    return json.dumps(value, ensure_ascii=True, separators=(",", ":"))
 
 
 def receipt_sha256(value: dict[str, Any]) -> str:

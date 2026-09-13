@@ -622,6 +622,7 @@ describe("OpenAPPA v1 transport", () => {
 
   test("starts and ends a child only through its bound parent spawn", async () => {
     const events: Array<Record<string, unknown>> = [];
+    let checkpointRequests = 0;
     server.use(
       http.get(`${url}/proxy/v1/capabilities`, () =>
         HttpResponse.json({
@@ -644,6 +645,15 @@ describe("OpenAPPA v1 transport", () => {
           }),
         ),
       ),
+      http.post(`${url}/proxy/v1/checkpoints`, () => {
+        checkpointRequests++;
+        return HttpResponse.json({
+          checkpoint_id: "unexpected-child-checkpoint",
+          source_scope: { root_id: "unexpected-child-checkpoint" },
+          position: 1,
+          digest: "unexpected-child-checkpoint",
+        });
+      }),
     );
     const parent = await open("parent-thread");
     await parent.authorizeOutboundToolCalls([
@@ -666,6 +676,30 @@ describe("OpenAPPA v1 transport", () => {
       modelInput: "child prompt",
       toolResults: [],
     });
+    await child.checkpointCompletedResponse({
+      profileId: "00000000-0000-4000-8000-000000000071",
+      provider: "openai",
+      protocol: "openai-chat-completions",
+      model: "model",
+      request: {
+        model: "model",
+        messages: [{ role: "user", content: "child prompt" }],
+      },
+      response: {
+        id: "chatcmpl-child",
+        object: "chat.completion",
+        created: 1,
+        model: "model",
+        choices: [
+          {
+            index: 0,
+            finish_reason: "stop",
+            message: { role: "assistant", content: "child answer" },
+          },
+        ],
+      },
+    });
+    expect(checkpointRequests).toBe(0);
     await child.finish({ childReturn: "child answer" });
     expect(events.filter((event) => event.event === "child_start")).toEqual([
       expect.objectContaining({
@@ -679,6 +713,125 @@ describe("OpenAPPA v1 transport", () => {
         value: "child answer",
       }),
     ]);
+  });
+
+  test("declares an operator return floor only for its configured native spawn contract", async () => {
+    const events: Array<Record<string, unknown>> = [];
+    const deniedCalls = new Set<string>();
+    const nativeSpawnConfig: AppaProxyHookConfig = {
+      ...config,
+      nativeSpawnToolMap: {
+        "multi_agent_v1.spawn_agent": "agent:fixture/lifecycle_child",
+      },
+      nativeSpawnReturnFloorMap: {
+        "agent/fixture/lifecycle_child": { audience: ["ops"] },
+      },
+    };
+    server.use(
+      http.post(`${url}/proxy/v1/events`, async ({ request }) =>
+        HttpResponse.json(
+          await receipt(request, (event) => {
+            events.push(event);
+            if (event.event === "tool_calls" && Array.isArray(event.calls)) {
+              const [call] = event.calls as Array<{
+                call_id: string;
+                tool: string;
+                arguments: unknown;
+              }>;
+              if (call && !deniedCalls.has(call.call_id)) {
+                deniedCalls.add(call.call_id);
+                return {
+                  decision: "deny_calls",
+                  calls: [
+                    {
+                      call_id: call.call_id,
+                      decision: "deny_call",
+                      feedback: "declare a return floor",
+                      offers: [
+                        {
+                          offer_id: `offer_${call.call_id}`,
+                          kind: "acceptance",
+                          root_id: event.root_id,
+                          tool: call.tool,
+                          arguments_sha256: createHash("sha256")
+                            .update(JSON.stringify(call.arguments))
+                            .digest("hex"),
+                        },
+                      ],
+                      review: [],
+                    },
+                  ],
+                };
+              }
+            }
+            if (event.event === "resolve_offer") {
+              return {
+                decision: "offer_resolved",
+                offer_id: event.offer_id,
+                tool: event.tool,
+                arguments_sha256: event.arguments_sha256,
+                kind: "acceptance",
+                resolution: "accepted",
+              };
+            }
+            return allowDecision(event);
+          }),
+        ),
+      ),
+    );
+
+    const nativeSpawn = await AppaProxyHookSession.open({
+      config: nativeSpawnConfig,
+      profileId: "00000000-0000-4000-8000-000000000071",
+      ownerScopeHash: "v1-owner",
+      clientSessionId: "return-floor-native-spawn",
+      modelInput: "synthetic",
+      toolResults: [],
+    });
+    await nativeSpawn.authorizeOutboundToolCalls([
+      {
+        ...call,
+        id: "native-spawn",
+        emittedName: "multi_agent_v1.spawn_agent",
+        targetName: "agent/fixture/lifecycle_child",
+        spawn: true,
+      },
+    ]);
+    await nativeSpawn.finish();
+
+    const ordinaryTool = await AppaProxyHookSession.open({
+      config: nativeSpawnConfig,
+      profileId: "00000000-0000-4000-8000-000000000071",
+      ownerScopeHash: "v1-owner",
+      clientSessionId: "return-floor-ordinary-tool",
+      modelInput: "synthetic",
+      toolResults: [],
+    });
+    await ordinaryTool.authorizeOutboundToolCalls([
+      {
+        ...call,
+        id: "ordinary-tool",
+        targetName: "agent/fixture/lifecycle_child",
+        spawn: false,
+      },
+    ]);
+    await ordinaryTool.finish();
+
+    const resolutions = events.filter(
+      (event) => event.event === "resolve_offer",
+    );
+    expect(resolutions).toEqual([
+      expect.objectContaining({
+        tool: "agent/fixture/lifecycle_child",
+        resolution: "accept_restriction",
+        label: { audience: ["ops"] },
+      }),
+      expect.objectContaining({
+        tool: "agent/fixture/lifecycle_child",
+        resolution: "accept_restriction",
+      }),
+    ]);
+    expect(resolutions[1]).not.toHaveProperty("label");
   });
 
   test("requires and atomically consumes the spawn capability for child attach", async () => {

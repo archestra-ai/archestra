@@ -4,7 +4,9 @@
 from __future__ import annotations
 
 import argparse
+from collections import Counter
 import datetime as dt
+from hashlib import sha256
 import json
 from pathlib import Path
 import sys
@@ -16,6 +18,30 @@ EXPECTED_BACKEND_IDENTITIES = {
     "claude": {"provider": "anthropic", "protocol": "anthropic-messages", "model": "claude-haiku-4-5"},
     "codex": {"provider": "openai", "protocol": "openai-responses", "model": "gpt-5.4"},
     "opencode": {"provider": "kimi", "protocol": "openai-chat-completions", "model": "kimi-for-coding"},
+}
+NATIVE_CHILD_CONTRACTS = {
+    "codex": {
+        "emitted_names": {
+            "multi_agent_v1.spawn_agent",
+            "agents.spawn_agent",
+            "collaboration.spawn_agent",
+        },
+        "target_name": "agent/fixture/lifecycle_child",
+        "requires_signed_carrier": False,
+        "task_alias_count": 1,
+    },
+    "claude": {
+        "emitted_names": {"Agent"},
+        "target_name": "agent/claude-code/Agent",
+        "requires_signed_carrier": True,
+        "task_alias_count": 0,
+    },
+    "opencode": {
+        "emitted_names": {"task"},
+        "target_name": "agent/fixture/lifecycle_child",
+        "requires_signed_carrier": True,
+        "task_alias_count": 0,
+    },
 }
 
 
@@ -81,11 +107,16 @@ def main() -> int:
         runtime_expected = expected.get("runtime")
         if runtime_expected:
             if isinstance(runtime_evidence, dict):
-                assert_runtime(checks, runtime_expected, runtime_evidence)
+                assert_runtime(
+                    checks,
+                    runtime_expected,
+                    runtime_evidence,
+                    str(result.get("client", "")),
+                )
     return report(checks)
 
 
-def assert_runtime(checks: dict[str, bool], expected: dict[str, Any], runtime: dict[str, Any]) -> None:
+def assert_runtime(checks: dict[str, bool], expected: dict[str, Any], runtime: dict[str, Any], client: str) -> None:
     if expected.get("denied"):
         check(checks, "runtime_denied", runtime.get("denied") is True)
         assert_denial_receipts(checks, runtime, runtime.get("call_bindings"))
@@ -99,11 +130,28 @@ def assert_runtime(checks: dict[str, bool], expected: dict[str, Any], runtime: d
         check(checks, "compaction_same_root", runtime.get("compacted_same_root") is True)
     if expected.get("signed_child"):
         child = runtime.get("child", {})
-        check(checks, "signed_child_id", isinstance(child, dict) and child.get("signed_id") is True and isinstance(child.get("marker_sha256"), str) and len(child["marker_sha256"]) == 64)
+        bindings = child.get("bindings") if isinstance(child, dict) else None
+        check(checks, "exact_parent_child_attachment", isinstance(child, dict) and child.get("exact_attachment") is True and isinstance(bindings, list) and len(bindings) == 1 and valid_child_attachment(client, bindings[0]))
         check(checks, "child_data_classification", isinstance(child, dict) and child.get("classification") == expected.get("child"))
-    if expected.get("child_return_before_wait"):
+        check(checks, "runtime_child_opened", isinstance(child, dict) and child.get("runtime_opened") is True and child.get("scope_preserved") is True)
+        check(checks, "child_lifecycle_order", isinstance(child, dict) and child.get("lifecycle_order") is True)
+        check(checks, "child_source_admission_order", isinstance(child, dict) and child.get("source_read_count") == 1 and child.get("source_admission_order") is True)
+    if expected.get("child_completion"):
         child = runtime.get("child", {})
-        check(checks, "child_lifecycle_order", isinstance(child, dict) and child.get("return_before_wait") is True and child.get("scope_preserved") is True)
+        check(checks, "runtime_child_completion", isinstance(child, dict) and child.get("completion_admitted") is True)
+    if expected.get("parent_publication_denied"):
+        child = runtime.get("child", {})
+        check(checks, "child_private_source_admitted", isinstance(child, dict) and child.get("classification") == "private" and child.get("source_read_count") == 1)
+        check(checks, "parent_publication_denied", runtime.get("parent_publication_denied") is True)
+    if expected.get("child_return_floor"):
+        child = runtime.get("child", {})
+        receipts = child.get("return_floor_receipts") if isinstance(child, dict) else None
+        bindings = child.get("bindings") if isinstance(child, dict) else None
+        check(checks, "child_only_private_acquisition", isinstance(child, dict) and child.get("parent_has_no_source") is True and child.get("non_void_return") is True)
+        check(checks, "declared_child_return_floor", isinstance(receipts, list) and len(receipts) == 1 and isinstance(bindings, list) and len(bindings) == 1 and isinstance(receipts[0], dict) and isinstance(bindings[0], dict)
+            and receipts[0].get("parent_proxy_session_id_sha256") == bindings[0].get("parent_proxy_session_id_sha256")
+            and receipts[0].get("parent_call_id_sha256") == bindings[0].get("parent_call_id_sha256")
+            and receipts[0].get("label_sha256") == sha256(json.dumps(expected["child_return_floor"], sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest())
     if expected.get("approval"):
         approval = runtime.get("approval", {})
         check(checks, "only_automated_test_reviewer", isinstance(approval, dict) and approval.get("actor_kind") == expected["approval"])
@@ -181,16 +229,16 @@ def assert_fixture_evidence(checks: dict[str, bool], result: dict[str, Any], run
     check(checks, "fixture_bindings_share_service_instance", isinstance(fixture_bindings, list) and isinstance(evidence.get("service_instance_id"), str) and all(isinstance(item, dict) and item.get("service_instance_id") == evidence["service_instance_id"] for item in fixture_bindings))
     if not isinstance(fixture_bindings, list):
         return
-    expected = {
+    expected = Counter(
         (item.get("target_name"), item.get("arguments_sha256"))
         for item in bindings
-        if isinstance(item, dict) and item.get("state") != "denied"
-    }
-    observed = {
+        if isinstance(item, dict) and item.get("state") == "result_admitted"
+    )
+    observed = Counter(
         (item.get("tool_name"), item.get("arguments_sha256"))
         for item in fixture_bindings
         if isinstance(item, dict)
-    }
+    )
     check(checks, "fixture_calls_match_authorized_backend_receipts", bool(expected) and observed == expected)
     assert_phase_trace_contract(checks, bindings, fixture_bindings, runtime)
 
@@ -211,7 +259,6 @@ def assert_phase_trace_contract(checks: dict[str, bool], bindings: list[Any], fi
         if not isinstance(call, dict) or call.get("state") == "denied":
             continue
         call_id = call.get("call_id_sha256")
-        matching_fixture = [item for item in fixture_bindings if isinstance(item, dict) and item.get("tool_name") == call.get("target_name") and item.get("arguments_sha256") == call.get("arguments_sha256")]
         timestamps: list[dt.datetime] = []
         for group, (source, timestamp_key, phase) in groups.items():
             records = traces.get(group)
@@ -220,11 +267,19 @@ def assert_phase_trace_contract(checks: dict[str, bool], bindings: list[Any], fi
                 valid = False
                 continue
             timestamps.append(parse_timestamp(matches[0][timestamp_key]))
-        if len(matching_fixture) != 1 or not timestamps:
+        if len(timestamps) != 4 or not timestamps[0] <= timestamps[1] <= timestamps[2] <= timestamps[3]:
             valid = False
             continue
-        fixture_at = parse_timestamp(matching_fixture[0].get("invoked_at"))
-        valid = valid and fixture_at is not None and len(timestamps) == 4 and timestamps[0] <= timestamps[1] <= fixture_at <= timestamps[2] <= timestamps[3]
+        matching_fixture = [
+            item
+            for item in fixture_bindings
+            if isinstance(item, dict)
+            and item.get("tool_name") == call.get("target_name")
+            and item.get("arguments_sha256") == call.get("arguments_sha256")
+            and (fixture_at := parse_timestamp(item.get("invoked_at"))) is not None
+            and timestamps[1] <= fixture_at <= timestamps[2]
+        ]
+        valid = valid and len(matching_fixture) == 1
     check(checks, "per_call_phase_trace", valid)
 
 
@@ -233,7 +288,46 @@ def valid_call_binding(value: Any) -> bool:
         return False
     if value.get("state") == "denied":
         return all(is_hash(value.get(name)) for name in ("call_row_id_sha256", "call_id_sha256", "proxy_session_id_sha256", "bound_auth_scope_hash", "arguments_sha256")) and isinstance(value.get("target_name"), str)
+    if value.get("state") != "result_admitted":
+        return False
     return isinstance(value.get("emitted_name"), str) and all(is_hash(value.get(name)) for name in ("call_id_sha256", "dispatch_id_sha256", "emitted_arguments_sha256", "arguments_sha256")) and all(valid_phase_receipt(value.get(name), event, decision) for name, event, decision in (("authorization_receipt", "tool_calls", "allow_calls"), ("result_admission_receipt", "tool_result", "result_admitted"))) and parse_persisted_timestamp(value.get("authorization_at"))
+
+
+def valid_child_binding(value: Any) -> bool:
+    if not isinstance(value, dict):
+        return False
+    hashes = (
+        "parent_proxy_session_id_sha256",
+        "child_proxy_session_id_sha256",
+        "parent_client_session_id_sha256",
+        "child_client_session_id_sha256",
+        "parent_call_id_sha256",
+    )
+    return (
+        all(is_hash(value.get(name)) for name in hashes)
+        and value.get("same_owner_scope") is True
+        and value.get("same_profile") is True
+        and value.get("same_root") is True
+        and value.get("spawn_binding_consumed") is True
+    )
+
+
+def valid_child_attachment(client: str, value: Any) -> bool:
+    if not valid_child_binding(value):
+        return False
+    contract = NATIVE_CHILD_CONTRACTS.get(client)
+    if contract is None:
+        return False
+    return (
+        value.get("parent_emitted_name") in contract["emitted_names"]
+        and value.get("parent_target_name") == contract["target_name"]
+        and (
+            not contract["requires_signed_carrier"]
+            or value.get("signed_carrier_present") is True
+        )
+        and value.get("task_alias_count") == contract["task_alias_count"]
+        and (client != "codex" or value.get("task_alias_matches_child") is True)
+    )
 
 
 def valid_phase_receipt(value: Any, event: str, decision: str) -> bool:

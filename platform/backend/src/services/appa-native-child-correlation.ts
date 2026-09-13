@@ -69,34 +69,63 @@ export function prepareNativeChildSpawnPublication(params: {
 
 /**
  * Exact pending handler integration before `AppaProxyHookSession.acquire`:
- * pass the returned `spawnBinding` with the extracted stock request metadata.
- * This lookup does not consume or attach; `acquire` atomically consumes it.
+ * A parent result must have bound the exact child thread before this lookup.
+ * The lookup does not consume or attach; `acquire` atomically consumes it.
  */
-export async function resolveNativeChildSpawnBinding(params: {
+export async function resolveNativeChildBinding(params: {
   ownerScopeHash: string;
   profileId: string;
   parentClientSessionId: string;
+  childClientSessionId: string;
   childTaskPath: string;
-}): Promise<{ spawnBinding: string; logicalTaskPath: string }> {
+}): Promise<
+  | { spawnBinding: string; logicalTaskPath: string; needsAttachment: true }
+  | { logicalTaskPath: string; needsAttachment: false }
+> {
   const parent =
     await AppaNativeChildCorrelationModel.findOwnedParentByClient(params);
-  const alias = await findIssuedNativeChildAlias({
+  const alias = await findBoundIssuedNativeChildAlias({
     scope: { sessionId: parent.id, ownerScopeHash: params.ownerScopeHash },
+    childClientSessionId: params.childClientSessionId,
     clientTaskPath: params.childTaskPath,
   });
+  const logicalTaskPath = alias.logicalId;
+  if (!logicalTaskPath || !isTaskPath(logicalTaskPath)) {
+    throw new AppaProxySessionProtocolError(
+      "native child task alias has no logical task path",
+    );
+  }
+  const sourceCallId = alias.sourceCallId;
+  if (!sourceCallId) {
+    throw new AppaProxySessionProtocolError(
+      "native child thread has no bound issued spawn source call",
+    );
+  }
+  const existingChild = await AppaNativeChildCorrelationModel.findAttachedChild(
+    {
+      parentSessionId: parent.id,
+      ownerScopeHash: params.ownerScopeHash,
+      profileId: params.profileId,
+      childClientSessionId: params.childClientSessionId,
+      sourceCallId,
+    },
+  );
+  if (existingChild) {
+    return { logicalTaskPath, needsAttachment: false };
+  }
   const binding = await AppaNativeChildCorrelationModel.resolvePendingSpawn({
     parentSessionId: parent.id,
     ownerScopeHash: params.ownerScopeHash,
     profileId: params.profileId,
     taskAliasId: alias.id,
-    sourceCallId: alias.sourceCallId,
+    sourceCallId,
+    childClientSessionId: params.childClientSessionId,
   });
-  if (!alias.logicalId || !isTaskPath(alias.logicalId)) {
-    throw new AppaProxySessionProtocolError(
-      "native child task alias has no logical task path",
-    );
-  }
-  return { ...binding, logicalTaskPath: alias.logicalId };
+  return {
+    ...binding,
+    logicalTaskPath,
+    needsAttachment: true,
+  };
 }
 
 /**
@@ -116,17 +145,24 @@ export async function attachNativeChild(params: {
     profileId: params.profileId,
     parentClientSessionId: params.parentClientSessionId,
   });
-  const alias = await findIssuedNativeChildAlias({
+  const alias = await findBoundIssuedNativeChildAlias({
     scope: { sessionId: parent.id, ownerScopeHash: params.ownerScopeHash },
+    childClientSessionId: params.childClientSessionId,
     clientTaskPath: params.childTaskPath,
   });
+  const sourceCallId = alias.sourceCallId;
+  if (!sourceCallId) {
+    throw new AppaProxySessionProtocolError(
+      "native child task has no issued spawn source call",
+    );
+  }
   await AppaNativeChildCorrelationModel.attach({
     parentSessionId: parent.id,
     ownerScopeHash: params.ownerScopeHash,
     profileId: params.profileId,
     childClientSessionId: params.childClientSessionId,
     taskAliasId: alias.id,
-    sourceCallId: alias.sourceCallId,
+    sourceCallId,
     spawnBinding: params.spawnBinding,
   });
 }
@@ -241,13 +277,19 @@ export async function admitNativeChildCompletion(
       "native child completion has no attached task alias",
     );
   }
+  const sourceCallId = alias.sourceCallId;
+  if (!sourceCallId) {
+    throw new AppaProxySessionProtocolError(
+      "native child completion has no issued spawn source call",
+    );
+  }
   await AppaNativeChildCorrelationModel.admitCompletion({
     parentSessionId: params.sessionId,
     ownerScopeHash: params.ownerScopeHash,
     profileId: params.profileId,
     childClientSessionId: alias.childThreadId,
     taskAliasId: alias.id,
-    sourceCallId: alias.sourceCallId,
+    sourceCallId,
   });
 }
 
@@ -265,9 +307,8 @@ async function findIssuedNativeChildAlias(params: {
       "native child task path is invalid",
     );
   }
-  const matches = (
-    await AppaProxyWireModel.listIssuedAliases(params.scope)
-  ).filter((alias) => {
+  const aliases = await AppaProxyWireModel.listIssuedAliases(params.scope);
+  const matches = aliases.filter((alias) => {
     if (alias.kind !== "task" || !isNativeChildMetadata(alias.metadata)) {
       return false;
     }
@@ -277,18 +318,48 @@ async function findIssuedNativeChildAlias(params: {
         alias.metadata.clientParentTaskPath === params.clientParentTaskPath)
     );
   });
-  const [match] = matches;
-  if (!match?.sourceCallId) {
+  if (matches.length !== 1 || !matches[0]?.sourceCallId) {
     throw new AppaProxySessionProtocolError(
       "native child task has no unique issued spawn alias",
     );
   }
+  const match = matches[0];
   return {
     id: match.id,
     sourceCallId: match.sourceCallId,
     childThreadId: match.childThreadId,
     logicalId: match.logicalId,
   };
+}
+
+async function findBoundIssuedNativeChildAlias(params: {
+  scope: Pick<NativeChildScope, "sessionId" | "ownerScopeHash">;
+  childClientSessionId: string;
+  clientTaskPath: string;
+}) {
+  if (
+    !isIdentifier(params.childClientSessionId) ||
+    !isTaskPath(params.clientTaskPath)
+  ) {
+    throw new AppaProxySessionProtocolError(
+      "native child task correlation is invalid",
+    );
+  }
+  const aliases = await AppaProxyWireModel.listIssuedAliases(params.scope);
+  const matches = aliases.filter(
+    (alias) =>
+      alias.kind === "task" &&
+      alias.childThreadId === params.childClientSessionId &&
+      isNativeChildMetadata(alias.metadata) &&
+      (alias.metadata.clientTaskPath === params.clientTaskPath ||
+        alias.metadata.clientParentTaskPath === params.clientTaskPath),
+  );
+  if (matches.length !== 1 || !matches[0]?.sourceCallId) {
+    throw new AppaProxySessionProtocolError(
+      "native child thread has no unique bound issued spawn alias",
+    );
+  }
+  return matches[0];
 }
 
 function isNativeChildMetadata(

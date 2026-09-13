@@ -3,6 +3,7 @@ import {
   buildCodexRequestUserInputTool,
   type CodexToolReference,
   type CodexWireAliases,
+  collectCodexSpawnResults,
   isCodexRequestUserInputEligible,
   normalizeCodexRequestToNativeTools,
   rewriteCodexClientRequestToProxy,
@@ -493,6 +494,44 @@ describe("Codex request aliases", () => {
         proxyCallId: "call-proxy-spawn",
         clientAgentId: "agent-client-v1",
       },
+    ]);
+  });
+});
+
+describe("collectCodexSpawnResults", () => {
+  it("accepts only the stock function-call spawn result envelope", () => {
+    expect(
+      collectCodexSpawnResults({
+        request: {
+          input: [
+            {
+              type: "function_call_output",
+              call_id: "call-spawn",
+              output: JSON.stringify({ agent_id: "thread-child" }),
+            },
+            {
+              type: "custom_tool_call_output",
+              call_id: "call-custom",
+              output: JSON.stringify({ agent_id: "thread-ignored" }),
+            },
+            {
+              type: "function_call_output",
+              call_id: "call-extra",
+              output: JSON.stringify({ agent_id: "thread-ignored", value: 1 }),
+            },
+            {
+              type: "function_call_output",
+              call_id: "call-plain-result",
+              output: JSON.stringify({ value: "not a spawn" }),
+            },
+          ],
+        },
+        isIssuedSpawnCall: (callId) =>
+          callId === "call-spawn" || callId === "call-extra",
+      }),
+    ).toEqual([
+      { callId: "call-spawn", childThreadId: "thread-child" },
+      { callId: "call-extra", childThreadId: "thread-ignored" },
     ]);
   });
 });

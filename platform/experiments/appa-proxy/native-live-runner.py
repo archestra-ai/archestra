@@ -137,6 +137,8 @@ def main() -> int:
     client_identity = verify_client_identity(args)
     gateway = read_gateway_profile(args.gateway_profile) if args.evidence_mode == "qualifying" else None
     gateway_control_inventory = verify_gateway_control_inventory(gateway, args.gateway_token_file) if gateway else None
+    if gateway and gateway_control_inventory:
+        gateway["control_methods"] = gateway_control_inventory["methods"]
     runtime_trace_observer = verify_runtime_trace_observer(args)
     plan["client_provenance"] = client_identity
     plan["runtime_trace_observer"] = runtime_trace_observer
@@ -158,7 +160,7 @@ def main() -> int:
     write_json(run_dir / "plan.json", plan)
     fixture_before = fixture_summary(args.fixture_url, required_env("APPA_NATIVE_FIXTURE_ADMIN_TOKEN"), run_id)
     write_json(run_dir / "fixture-before.json", fixture_before)
-    prompt = scenario_prompt(scenario["prompt"], request_key, run_id, gateway)
+    prompt = scenario_prompt(scenario, args.client, request_key, run_id, gateway)
     command, env, transient_paths = client_command(args, provider_base, prompt, run_dir, client_identity["resolved_path"], gateway)
     # The launch record is finalized before the process starts. It retains an
     # exact argv fingerprint, not prompts, secret values, or private config.
@@ -272,13 +274,21 @@ def load_scenarios(path: Path) -> dict[str, Any]:
 
 
 def validate_scenario_contract(scenario: dict[str, Any]) -> None:
-    """Keep the native Agent exercise narrow instead of widening all runs."""
+    """Require every native child client to use an explicit stock-tool prompt."""
     scenario_id = scenario.get("id")
     clients = scenario.get("clients")
     if not isinstance(scenario_id, str) or not isinstance(clients, list):
         raise SystemExit("invalid native live scenario contract")
-    if scenario_id.startswith("child-") and clients != ["claude"]:
-        raise SystemExit("native child scenarios are Claude-only")
+    if scenario_id.startswith("child-"):
+        client_prompts = scenario.get("client_prompts")
+        if set(clients) != set(STOCK_CLIENT_VERSIONS) or len(clients) != len(STOCK_CLIENT_VERSIONS):
+            raise SystemExit("native child scenarios must cover every stock client exactly once")
+        if (
+            not isinstance(client_prompts, dict)
+            or set(client_prompts) != set(STOCK_CLIENT_VERSIONS)
+            or not all(isinstance(prompt, str) and prompt for prompt in client_prompts.values())
+        ):
+            raise SystemExit("native child scenarios require one explicit stock-tool prompt per client")
 
 
 def require_live_inputs(args: argparse.Namespace) -> None:
@@ -430,15 +440,18 @@ def client_command(args: argparse.Namespace, base_url: str, prompt: str, run_dir
         codex_home.mkdir(mode=0o700, exist_ok=True)
         os.chmod(codex_home, 0o700)
         env.update({"OPENAI_API_KEY": required_env("APPA_NATIVE_LIVE_OPENAI_API_KEY"), "CODEX_HOME": str(codex_home)})
-        command = [str(executable), "--ask-for-approval", "never", "exec", "--ignore-user-config", "--ignore-rules", "--skip-git-repo-check", "--json", "--sandbox", "read-only", "-m", "gpt-5.4", "-c", 'model_provider="archestra"', "-c", 'model_providers.archestra.name="Archestra native"', "-c", f'model_providers.archestra.base_url="{base_url}"', "-c", 'model_providers.archestra.env_key="OPENAI_API_KEY"', "-c", 'model_providers.archestra.wire_api="responses"', "-c", 'model_providers.archestra.supports_websockets=false', "-c", 'model_reasoning_effort="low"', "-c", "features.multi_agent=true", "-c", "features.multi_agent_v2=false", "-c", f'mcp_servers.{mcp_key}.url="{mcp_url}"', "-c", f'mcp_servers.{mcp_key}.bearer_token_env_var="{mcp_token_env}"']
+        command = [str(executable), "--ask-for-approval", "never", "exec", "--ignore-user-config", "--ignore-rules", "--skip-git-repo-check", "--json", "--sandbox", "read-only", "-m", "gpt-5.4", "-c", 'model_provider="archestra"', "-c", 'model_providers.archestra.name="Archestra native"', "-c", f'model_providers.archestra.base_url="{base_url}"', "-c", 'model_providers.archestra.env_key="OPENAI_API_KEY"', "-c", 'model_providers.archestra.wire_api="responses"', "-c", 'model_providers.archestra.supports_websockets=false', "-c", 'model_reasoning_effort="low"', "-c", "features.multi_agent_v2=false", "-c", f'mcp_servers.{mcp_key}.url="{mcp_url}"', "-c", f'mcp_servers.{mcp_key}.bearer_token_env_var="{mcp_token_env}"']
+        if args.scenario.startswith("child-"):
+            command.extend(["--enable", "multi_agent"])
         if gateway:
+            enabled_tools = gateway.get("control_methods", GATEWAY_CONTROL_METHODS)
             command.extend(
                 [
                     "-c",
-                    f"mcp_servers.{mcp_key}.enabled_tools={json.dumps(GATEWAY_CONTROL_METHODS)}",
+                    f"mcp_servers.{mcp_key}.enabled_tools={json.dumps(enabled_tools)}",
                 ]
             )
-            for tool in GATEWAY_CONTROL_METHODS:
+            for tool in enabled_tools:
                 command.extend(
                     [
                         "-c",
@@ -454,14 +467,10 @@ def client_command(args: argparse.Namespace, base_url: str, prompt: str, run_dir
         config_path = run_dir / "opencode.json"
         # OpenCode derives native IDs as <registration_key>_<tool_name>, not
         # Claude Code's mcp__<registration_key>__<tool_name> wire spelling.
-        allowed_mcp_tools = (
-            GATEWAY_CONTROL_METHODS
-            if gateway
-            else ("read_source", "publish", "protected_publish")
-        )
+        allowed_mcp_tools = tuple(gateway.get("control_methods", GATEWAY_CONTROL_METHODS)) if gateway else ("read_source", "publish", "protected_publish")
         permission = {
             "*": "deny",
-            "task": "allow",
+            **({"task": "allow"} if args.scenario.startswith("child-") else {}),
             **{f"{mcp_key}_{tool}": "allow" for tool in allowed_mcp_tools},
         }
         write_private_json(config_path, {"$schema": "https://opencode.ai/config.json", "share": "disabled", "enabled_providers": ["archestra-native"], "model": "archestra-native/kimi-for-coding", "provider": {"archestra-native": {"npm": "@ai-sdk/openai-compatible", "name": "Archestra native", "models": {"kimi-for-coding": {"name": "Kimi for Coding", "tool_call": True, "limit": {"context": 262144, "output": 16384}}}, "options": {"baseURL": base_url, "apiKey": required_env("APPA_NATIVE_LIVE_KIMI_API_KEY")}}}, "mcp": {mcp_key: {"type": "remote", "url": mcp_url, "headers": {"Authorization": f"Bearer {mcp_token}"}, "enabled": True}}, "permission": permission})
@@ -801,6 +810,7 @@ def verify_client_identity(args: argparse.Namespace) -> dict[str, Any]:
     expected_version = STOCK_CLIENT_VERSIONS[args.client]
     identity = {
         "client": args.client,
+        "version": version,
         "expected_version": expected_version,
         "observed_version": version,
         "launcher_path": str(launcher),
@@ -1038,10 +1048,10 @@ def project_gateway_control_inventory(profile: dict[str, Any], tools: Any) -> di
         if isinstance(tool, dict) and isinstance(tool.get("name"), str)
     )
     allowed_control_sets = (
-        sorted(GATEWAY_CONTROL_METHODS),
-        sorted((*GATEWAY_CONTROL_METHODS, "archestra__list_skills", "archestra__load_skill")),
         ["archestra__run_tool", "archestra__search_tools"],
         sorted(["archestra__list_skills", "archestra__load_skill", "archestra__run_tool", "archestra__search_tools"]),
+        sorted(GATEWAY_CONTROL_METHODS),
+        sorted((*GATEWAY_CONTROL_METHODS, "archestra__list_skills", "archestra__load_skill")),
     )
     if methods not in allowed_control_sets or len(methods) != len(tools):
         raise SystemExit("gateway control inventory must expose exactly the reviewed methods")
@@ -1087,8 +1097,17 @@ def parse_env_reference(lines: list[str], name: str) -> str:
     return values[0]
 
 
-def scenario_prompt(template: str, request_key: str, run_id: str, gateway: dict[str, Any] | None) -> str:
+def scenario_prompt(scenario: dict[str, Any], client: str, request_key: str, run_id: str, gateway: dict[str, Any] | None) -> str:
+    template = scenario.get("prompt")
+    if not isinstance(template, str):
+        raise SystemExit("scenario prompt is invalid")
     prompt = template.format(request_key=request_key, run_id=run_id)
+    if str(scenario.get("id", "")).startswith("child-"):
+        client_prompts = scenario.get("client_prompts")
+        client_prompt = client_prompts.get(client) if isinstance(client_prompts, dict) else None
+        if not isinstance(client_prompt, str) or not client_prompt:
+            raise SystemExit("native child scenario has no stock-client prompt")
+        prompt = f"{prompt}\n\n{client_prompt}"
     if gateway is None:
         return prompt
     for fixture_name, gateway_name in gateway["tool_names"].items():
@@ -1297,6 +1316,7 @@ def sanitize(value: str, private_marker: str) -> str:
         "<redacted-fixture-source>",
         value,
     ).replace(private_marker, "<redacted-fixture-source>")
+    redacted = re.sub(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+", "<redacted-email>", redacted)
     for name, candidate in os.environ.items():
         if candidate and re.search(r"(?:KEY|TOKEN|SECRET|COOKIE|PASSWORD)", name, re.I):
             redacted = redacted.replace(candidate, f"<redacted:{name.lower()}>")

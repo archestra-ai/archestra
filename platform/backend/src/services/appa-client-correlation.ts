@@ -59,6 +59,30 @@ export function classifyAppaNativeClient(params: {
 }
 
 /**
+ * Native delegation is client-specific. Gateway/MCP tools are ordinary
+ * dispatches even when their names end in a delegation-looking suffix.
+ */
+export function isAppaNativeSpawnTool(params: {
+  client: AppaNativeClient;
+  toolName: string;
+}): boolean {
+  switch (params.client) {
+    case "claude-code":
+      return params.toolName === "Agent";
+    case "codex-responses-v1":
+      return [
+        "multi_agent_v1.spawn_agent",
+        "agents.spawn_agent",
+        "collaboration.spawn_agent",
+      ].includes(params.toolName);
+    case "opencode-kimi":
+      return params.toolName === "task";
+    case "unknown":
+      return false;
+  }
+}
+
+/**
  * Native child/fork assertions cannot become a new APPA root. Codex code-mode
  * has a separate durable signed-spawn implementation; other lifecycle shapes
  * stay rejected until they have equivalent provider-wire proof.

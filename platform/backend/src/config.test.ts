@@ -83,17 +83,9 @@ import config, {
   resolveRenderBaseUrl,
 } from "./config";
 
-// Mock the logger
-vi.mock("./logging", () => ({
-  __esModule: true,
-  default: {
-    warn: vi.fn(),
-    info: vi.fn(),
-    error: vi.fn(),
-  },
-}));
+vi.mock("@/logging");
 
-import logger from "./logging";
+import logger from "@/logging";
 
 describe("getAnalyticsConfig", () => {
   const originalEnv = process.env;
@@ -623,6 +615,111 @@ describe("parseAppaProxyHookConfig", () => {
         nativeCodexEnabled: "true",
       }),
     ).toMatchObject({ nativeCodexEnabled: true });
+  });
+
+  test("parses only stock native spawn names as raw kagent agent contracts", () => {
+    expect(
+      parseAppaProxyHookConfig({
+        url: "http://appa.openappa.svc.cluster.local",
+        timeoutMs: undefined,
+        sessionHmacSecret: "s".repeat(32),
+        runtimeToken: "t".repeat(32),
+        nativeSpawnToolMap: JSON.stringify({
+          "multi_agent_v1.spawn_agent": "agent:fixture/lifecycle_child",
+          "agents.spawn_agent": "agent:fixture/lifecycle_child",
+          "collaboration.spawn_agent": "agent:fixture/lifecycle_child",
+          task: "agent:fixture/lifecycle_child",
+        }),
+        nativeSpawnReturnFloorMap: JSON.stringify({
+          "agent/fixture/lifecycle_child": {
+            trust: "restricted",
+            audience: ["ops"],
+          },
+        }),
+      }),
+    ).toMatchObject({
+      nativeSpawnToolMap: {
+        "multi_agent_v1.spawn_agent": "agent:fixture/lifecycle_child",
+        "agents.spawn_agent": "agent:fixture/lifecycle_child",
+        "collaboration.spawn_agent": "agent:fixture/lifecycle_child",
+        task: "agent:fixture/lifecycle_child",
+      },
+      nativeSpawnReturnFloorMap: {
+        "agent/fixture/lifecycle_child": {
+          trust: "restricted",
+          audience: ["ops"],
+        },
+      },
+    });
+  });
+
+  test.each([
+    "not json",
+    "[]",
+    '{"spawn_agent":"agent:fixture/lifecycle_child"}',
+    '{"multi_agent_v1.spawn_agent":"agent/fixture/lifecycle_child"}',
+  ])("rejects an unsafe native spawn mapping: %s", (nativeSpawnToolMap) => {
+    expect(() =>
+      parseAppaProxyHookConfig({
+        url: "http://appa.openappa.svc.cluster.local",
+        timeoutMs: undefined,
+        sessionHmacSecret: "s".repeat(32),
+        nativeSpawnToolMap,
+      }),
+    ).toThrow("APPA_NATIVE_SPAWN_TOOL_MAP");
+  });
+
+  test("requires an authenticated v1 runtime for native spawn mapping", () => {
+    expect(() =>
+      parseAppaProxyHookConfig({
+        url: "http://appa.openappa.svc.cluster.local",
+        timeoutMs: undefined,
+        sessionHmacSecret: "s".repeat(32),
+        nativeSpawnToolMap:
+          '{"multi_agent_v1.spawn_agent":"agent:fixture/lifecycle_child"}',
+      }),
+    ).toThrow(
+      "NATIVE_SPAWN_TOOL_MAP requires an authenticated APPA v1 runtime token",
+    );
+  });
+
+  test("requires an authenticated v1 runtime for native spawn return floors", () => {
+    expect(() =>
+      parseAppaProxyHookConfig({
+        url: "http://appa.openappa.svc.cluster.local",
+        timeoutMs: undefined,
+        sessionHmacSecret: "s".repeat(32),
+        nativeSpawnReturnFloorMap:
+          '{"agent/fixture/lifecycle_child":{"audience":["ops"]}}',
+      }),
+    ).toThrow(
+      "NATIVE_SPAWN_RETURN_FLOOR_MAP requires an authenticated APPA v1 runtime token",
+    );
+  });
+
+  test.each([
+    "not json",
+    "[]",
+    "{}",
+    '{"agent/fixture/lifecycle_child":{}}',
+    '{"agent/fixture/lifecycle_child":{"classification":"private"}}',
+    '{"agent/fixture/lifecycle_child":{"audience":[]}}',
+    '{"agent/fixture/lifecycle_child":{"audience":["ops","ops"]}}',
+    '{"agent/fixture/other":{"audience":["ops"]}}',
+    '{"__proto__":{"audience":["ops"]}}',
+    '{"agent/fixture/lifecycle_child":{"constructor":"ops"}}',
+  ])("rejects unsafe native spawn return floor mapping: %s", (nativeSpawnReturnFloorMap) => {
+    expect(() =>
+      parseAppaProxyHookConfig({
+        url: "http://appa.openappa.svc.cluster.local",
+        timeoutMs: undefined,
+        sessionHmacSecret: "s".repeat(32),
+        runtimeToken: "t".repeat(32),
+        nativeSpawnToolMap:
+          '{"multi_agent_v1.spawn_agent":"agent:fixture/lifecycle_child"}',
+        nativeSpawnReturnFloorMap,
+      }),
+    ).toThrow("APPA_NATIVE_SPAWN_RETURN_FLOOR_MAP");
   });
 
   test("rejects invalid ledger budgets instead of silently weakening limits", () => {

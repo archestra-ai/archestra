@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import {
   classifyAppaNativeClient,
   collectAppaProtocolToolResults,
+  isAppaNativeSpawnTool,
   unsupportedNativeLifecycleReason,
 } from "./appa-client-correlation";
 
@@ -35,6 +36,28 @@ describe("APPA native client correlation", () => {
         request: {},
       }),
     ).toBe("opencode-kimi");
+  });
+
+  test("marks only verified client-native delegation tools as spawns", () => {
+    for (const [client, toolName] of [
+      ["claude-code", "Agent"],
+      ["codex-responses-v1", "multi_agent_v1.spawn_agent"],
+      ["codex-responses-v1", "agents.spawn_agent"],
+      ["codex-responses-v1", "collaboration.spawn_agent"],
+      ["opencode-kimi", "task"],
+    ] as const) {
+      expect(isAppaNativeSpawnTool({ client, toolName })).toBe(true);
+    }
+
+    for (const [client, toolName] of [
+      ["claude-code", "mcp__gateway__Agent"],
+      ["codex-responses-v1", "mcp__server__task"],
+      ["opencode-kimi", "mcp__server__task"],
+      ["opencode-kimi", "Task"],
+      ["unknown", "multi_agent_v1.spawn_agent"],
+    ] as const) {
+      expect(isAppaNativeSpawnTool({ client, toolName })).toBe(false);
+    }
   });
 
   test("uses only native Anthropic tool positions and preserves a reported failure", () => {

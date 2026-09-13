@@ -266,11 +266,13 @@ describe("AppaPluginArchestra", () => {
           },
         ],
       });
-      expect(calls[0].spawn).toBe(true);
-      expect(calls[1].spawn).toBe(false);
+      expect(calls.map(({ name, spawn }) => ({ name, spawn }))).toEqual([
+        { name: "Agent", spawn: true },
+        { name: "Bash", spawn: false },
+      ]);
     });
 
-    test("codex projects function names and detects subagent spawns", () => {
+    test("adapters distinguish native spawns from gateway task lookalikes", () => {
       const codex = new AppaCodexAdapter();
       expect(codex.canonicalizeLocalToolName("functions.exec_command")).toBe(
         "builtin:exec_command",
@@ -287,19 +289,43 @@ describe("AppaPluginArchestra", () => {
           {
             type: "function_call",
             call_id: "c1",
+            namespace: "multi_agent_v1",
             name: "spawn_agent",
             arguments: "{}",
           },
           {
             type: "function_call",
             call_id: "c2",
-            name: "exec_command",
+            name: "mcp__server__task",
             arguments: "{}",
           },
         ],
       });
-      expect(calls[0].spawn).toBe(true);
-      expect(calls[1].spawn).toBe(false);
+      expect(calls.map(({ name, spawn }) => ({ name, spawn }))).toEqual([
+        { name: "multi_agent_v1.spawn_agent", spawn: true },
+        { name: "mcp__server__task", spawn: false },
+      ]);
+
+      const opencode = new AppaOpenCodeAdapter();
+      const opencodeCalls = opencode.extractToolCalls({
+        choices: [
+          {
+            message: {
+              tool_calls: [
+                {
+                  id: "oc1",
+                  function: { name: "task", arguments: "{}" },
+                },
+                {
+                  id: "oc2",
+                  function: { name: "mcp__server__task", arguments: "{}" },
+                },
+              ],
+            },
+          },
+        ],
+      });
+      expect(opencodeCalls.map((call) => call.spawn)).toEqual([true, false]);
     });
   });
 });

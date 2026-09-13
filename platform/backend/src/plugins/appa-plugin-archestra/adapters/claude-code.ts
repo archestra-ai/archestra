@@ -1,10 +1,10 @@
-import {
-  type AppaClientAdapter,
-  type AppaProtocol,
-  type AppaSessionIdentity,
-  type AppaToolCall,
-  type AppaToolResult,
-  isAppaSpawnTool,
+import { isAppaNativeSpawnTool } from "@/services/appa-client-correlation";
+import type {
+  AppaClientAdapter,
+  AppaProtocol,
+  AppaSessionIdentity,
+  AppaToolCall,
+  AppaToolResult,
 } from "../types";
 import { isRecord, readHeader } from "../utils";
 
@@ -75,7 +75,10 @@ export class AppaClaudeCodeAdapter implements AppaClientAdapter {
           name,
           arguments: isRecord(block.input) ? block.input : {},
           raw: block,
-          spawn: isAppaSpawnTool(name),
+          spawn: isAppaNativeSpawnTool({
+            client: "claude-code",
+            toolName: name,
+          }),
         });
       }
     }

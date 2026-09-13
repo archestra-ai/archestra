@@ -16,6 +16,7 @@ import { canonicalJsonObject } from "@/routes/proxy/appa-proxy-hook";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { useMswServer } from "@/test/msw";
 import { ApiError } from "@/types";
+import { AppaControlFramePayloadSchema } from "@/types/appa-proxy-wire";
 import { openAiResponsesAdapterFactory } from "./adapters";
 import type { AppaProxyHookConfig } from "./appa-proxy-hook";
 import openAiProxyRoutes from "./routes/openai";
@@ -151,15 +152,27 @@ describe("held native opaque history route regression", () => {
         ownerScopeHash: metadata.session.ownerScopeHash,
         frameId: metadata.frame.id,
       };
-      // Simulate the trusted gateway receipt, not a client approval string.
+      const persisted = await AppaProxyWireModel.findOwned(scope);
+      const controlPayload = AppaControlFramePayloadSchema.safeParse(
+        persisted?.payload,
+      );
+      if (!controlPayload.success)
+        throw new Error("held control has no valid payload");
+      const remedy = controlPayload.data.offers.find(
+        (offer) => offer.id === controlPayload.data.vouch.chosenRemedyId,
+      );
+      if (!remedy) throw new Error("held control has no selected sanitizer");
       const execution = await AppaProxyWireModel.beginControlExecution({
         ...scope,
-        selection: { source: "synthetic-gateway" },
+        selection: { source: "boundary-test-runtime", remedyId: remedy.id },
       });
       expect(execution.acquired).toBe(true);
       await AppaProxyWireModel.completeControl({
         ...scope,
-        receipt: { source: "synthetic-gateway", call: control.call_id },
+        receipt: runtimeVouchedSanitizerReceipt({
+          controlPayload: controlPayload.data,
+          remedy,
+        }),
       });
       const continued = await app.inject({
         method: "POST",
@@ -289,6 +302,38 @@ describe("held native opaque history route regression", () => {
     expect(response.body).toContain("tool_search_call");
   });
 });
+
+function runtimeVouchedSanitizerReceipt(params: {
+  controlPayload: {
+    heldParentFrameId: string;
+  };
+  remedy: {
+    id: string;
+    batchId: string;
+    position: number;
+    tool: string;
+    argumentsSha256: string;
+  };
+}) {
+  return {
+    status: "remedied",
+    intent_id: params.controlPayload.heldParentFrameId,
+    remedy_id: params.remedy.id,
+    runtime_event_id: randomUUID(),
+    runtime_receipt: {
+      decision: {
+        decision: "batch_offer_resolved",
+        batch_id: params.remedy.batchId,
+        position: params.remedy.position,
+        offer_id: params.remedy.id,
+        tool: params.remedy.tool,
+        arguments_sha256: params.remedy.argumentsSha256,
+        resolution: "bound",
+        kind: "sanitizer",
+      },
+    },
+  };
+}
 
 function createRouteApp(): FastifyInstance {
   const app = Fastify().withTypeProvider<ZodTypeProvider>();

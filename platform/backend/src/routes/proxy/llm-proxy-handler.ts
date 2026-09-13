@@ -62,6 +62,7 @@ import {
   TeamModel,
   UserModel,
 } from "@/models";
+import AppaNativeChildCorrelationModel from "@/models/appa-native-child-correlation";
 import AppaProxyWireModel from "@/models/appa-proxy-wire";
 import { metrics } from "@/observability";
 import {
@@ -86,6 +87,7 @@ import {
   type AppaNativeClient,
   classifyAppaNativeClient,
   collectAppaProtocolToolResults,
+  isAppaNativeSpawnTool,
   resolveAppaCarrierChild,
   unsupportedNativeLifecycleReason,
 } from "@/services/appa-client-correlation";
@@ -132,7 +134,7 @@ import {
   extractNativeChildRequest,
   extractNativeTaskPath,
   prepareNativeChildSpawnPublication,
-  resolveNativeChildSpawnBinding,
+  resolveNativeChildBinding,
 } from "@/services/appa-native-child-correlation";
 import { AppaProxyLedger } from "@/services/appa-proxy/ledger";
 import { enrichDiscoveredModel } from "@/services/discovered-model-enrichment";
@@ -159,7 +161,11 @@ import { repairLoneSurrogates } from "@/utils/lone-surrogates";
 import { isLoopbackRequest } from "@/utils/network";
 import { isUuid } from "@/utils/uuid";
 import { codexToolName } from "./adapters/openai-responses";
-import { isCodexToolSearchCall } from "./appa-codex-wire";
+import {
+  collectCodexFunctionOutputCallIds,
+  collectCodexSpawnResults,
+  isCodexToolSearchCall,
+} from "./appa-codex-wire";
 import {
   type AppaInboundToolResult,
   type AppaOutboundToolCall,
@@ -167,6 +173,7 @@ import {
   AppaProxyHookSession,
   canonicalJsonObject,
   deriveAppaOwnerScope,
+  resolveConfiguredNativeSpawnContract,
 } from "./appa-proxy-hook";
 
 import {
@@ -995,6 +1002,7 @@ export async function handleLLMProxy<
         );
       }
       try {
+        let nativeChildNeedsAttachment = false;
         if (nativeChildRequest) {
           if (
             appaThread.threadId !== nativeChildRequest.childClientSessionId ||
@@ -1007,19 +1015,23 @@ export async function handleLLMProxy<
               "Native Codex child thread metadata does not match the request thread.",
             );
           }
-          const resolvedSpawn = await resolveNativeChildSpawnBinding({
+          const resolvedSpawn = await resolveNativeChildBinding({
             ownerScopeHash,
             profileId: resolvedAgent.id,
             parentClientSessionId: nativeChildRequest.parentClientSessionId,
+            childClientSessionId: nativeChildRequest.childClientSessionId,
             childTaskPath: nativeChildRequest.childTaskPath,
           });
           appaThread = {
             threadId: nativeChildRequest.childClientSessionId,
             parentThreadId: nativeChildRequest.parentClientSessionId,
-            spawnBinding: resolvedSpawn.spawnBinding,
+            ...(resolvedSpawn.needsAttachment
+              ? { spawnBinding: resolvedSpawn.spawnBinding }
+              : {}),
           };
           nativeClientTaskPath = nativeChildRequest.childTaskPath;
           nativeLogicalTaskPath = resolvedSpawn.logicalTaskPath;
+          nativeChildNeedsAttachment = resolvedSpawn.needsAttachment;
         }
         const disconnect = new AbortController();
         reply.raw.once("finish", () => {
@@ -1082,6 +1094,39 @@ export async function handleLLMProxy<
           !carrierChild
         ) {
           throw new ApiError(400, unsupportedNativeLifecycle);
+        }
+        if (nativeCodexRequested && !nativeChildRequest) {
+          const nativeRequest = requestAdapter.getOriginalRequest();
+          const functionOutputCallIds =
+            collectCodexFunctionOutputCallIds(nativeRequest);
+          if (functionOutputCallIds.length > 0) {
+            const parent =
+              await AppaNativeChildCorrelationModel.findOwnedParentByClient({
+                ownerScopeHash,
+                profileId: resolvedAgent.id,
+                parentClientSessionId: appaThread.threadId,
+              });
+            const issuedSpawnCallIds =
+              await AppaNativeChildCorrelationModel.listIssuedSpawnSourceCallIds(
+                {
+                  parentSessionId: parent.id,
+                  ownerScopeHash,
+                  profileId: resolvedAgent.id,
+                },
+              );
+            for (const spawn of collectCodexSpawnResults({
+              request: nativeRequest,
+              isIssuedSpawnCall: (callId) => issuedSpawnCallIds.has(callId),
+            })) {
+              await AppaNativeChildCorrelationModel.bindIssuedSpawnResult({
+                parentSessionId: parent.id,
+                ownerScopeHash,
+                profileId: resolvedAgent.id,
+                sourceCallId: spawn.callId,
+                childClientSessionId: spawn.childThreadId,
+              });
+            }
+          }
         }
         let inboundToolResults = collectAppaInboundToolResults({
           request: nativeCodexRequested
@@ -1260,7 +1305,7 @@ export async function handleLLMProxy<
             : undefined,
           toolResults: inboundToolResults,
         });
-        if (nativeChildRequest) {
+        if (nativeChildRequest && nativeChildNeedsAttachment) {
           await attachNativeChild({
             ownerScopeHash,
             profileId: resolvedAgent.id,
@@ -2485,6 +2530,11 @@ async function handleStreaming<
         enabledToolNames,
         canonicalizeToolName,
         providerName,
+        preserveDirectToolCall: (toolName) =>
+          isAppaNativeCodexLifecycleTool({
+            client: appaNativeClient,
+            toolName,
+          }),
       });
 
       logger.info(
@@ -2593,6 +2643,8 @@ async function handleStreaming<
         rewrittenToolCalls ?? toolCalls,
         canonicalizeToolName,
         declaredMcpToolTargets,
+        appaNativeClient,
+        appaHook.getNativeSpawnToolMap(),
       );
       let heldBatchCommitted = false;
       const isNativeStock =
@@ -2680,6 +2732,7 @@ async function handleStreaming<
               session: appaHook,
               frameId: nativeFrameId,
               calls: rewrittenToolCalls ?? toolCalls,
+              client: appaNativeClient,
               clientParentTaskPath: nativeClientTaskPath,
               logicalParentTaskPath: nativeLogicalTaskPath,
             });
@@ -3323,6 +3376,11 @@ async function handleNonStreaming<
         enabledToolNames,
         canonicalizeToolName,
         providerName,
+        preserveDirectToolCall: (toolName) =>
+          isAppaNativeCodexLifecycleTool({
+            client: appaNativeClient,
+            toolName,
+          }),
       });
 
       toolInvocationRefusal = await utils.toolInvocation.evaluatePolicies(
@@ -3427,6 +3485,8 @@ async function handleNonStreaming<
             })),
           canonicalizeToolName,
           declaredMcpToolTargets,
+          appaNativeClient,
+          appaHook.getNativeSpawnToolMap(),
         );
         let heldBatchCommitted = false;
         const isNativeStock =
@@ -3522,6 +3582,7 @@ async function handleNonStreaming<
                     name: toolCall.name,
                     arguments: JSON.stringify(toolCall.arguments),
                   })),
+                client: appaNativeClient,
                 clientParentTaskPath: nativeClientTaskPath,
                 logicalParentTaskPath: nativeLogicalTaskPath,
               });
@@ -3905,6 +3966,8 @@ function normalizeToolCallsForAppa(
   toolCalls: Array<{ id: string; name: string; arguments: string }>,
   canonicalizeToolName: utils.gatewayToolNames.ToolNameCanonicalizer,
   declaredMcpToolTargets: ReadonlyMap<string, string>,
+  nativeClient: AppaNativeClient,
+  nativeSpawnToolMap: Readonly<Record<string, string>> | undefined,
 ): AppaOutboundToolCall[] {
   return toolCalls.map((toolCall) => {
     const [normalized] = normalizeToolCallsForPolicy(
@@ -3946,6 +4009,21 @@ function normalizeToolCallsForAppa(
         "MCP tool call is not a declared target of a registered gateway profile",
       );
     }
+    const nativeSpawn = isAppaNativeSpawnTool({
+      client: nativeClient,
+      toolName: toolCall.name,
+    });
+    const nativeSpawnContract = resolveConfiguredNativeSpawnContract({
+      nativeSpawn,
+      // Map only the stock spelling emitted by the client. Normalization may
+      // re-address it for policy dispatch and must not change this contract key.
+      toolName: toolCall.name,
+      nativeSpawnToolMap,
+    });
+    const nativeControlTarget = toAppaRuntimeNativeControlTarget({
+      client: nativeClient,
+      toolName: toolCall.name,
+    });
     return {
       id: toolCall.id,
       emittedName: toolCall.name,
@@ -3953,6 +4031,10 @@ function normalizeToolCallsForAppa(
       emittedArgumentsCanonical: canonicalJsonObject(toolCall.arguments),
       targetName:
         trustedGatewayTarget ??
+        (nativeSpawnContract
+          ? toAppaRuntimeNativeSpawnTarget(nativeSpawnContract)
+          : undefined) ??
+        nativeControlTarget ??
         (normalized.toolCallName === toolCall.name
           ? (declaredMcpToolTargets.get(toolCall.name) ??
             normalized.toolCallName)
@@ -3961,13 +4043,61 @@ function normalizeToolCallsForAppa(
         string,
         unknown
       >,
-      spawn: isAppaSpawnTool(normalized.toolCallName),
+      spawn: nativeSpawn,
     };
   });
 }
 
-function isAppaSpawnTool(toolName: string): boolean {
-  return /(^|__|\.)(spawn_agent|Agent|Task|task)$/.test(toolName);
+/**
+ * The configured map uses kagent's `agent:` spelling, while Proxy V1 carries
+ * the runtime's canonical identity directly and does not invoke that adapter.
+ */
+function toAppaRuntimeNativeSpawnTarget(target: string): string {
+  return target.startsWith("agent:")
+    ? `agent/${target.slice("agent:".length)}`
+    : target;
+}
+
+const CODEX_NATIVE_CONTROL_TOOLS = new Set([
+  "multi_agent_v1.wait_agent",
+  "agents.wait_agent",
+  "collaboration.wait_agent",
+]);
+
+/**
+ * Proxy V1 sends canonical identities directly, unlike the kagent adapter's
+ * native tool spelling. Keep stock Codex lifecycle controls out of the MCP
+ * namespace so their narrow host contracts are enforceable.
+ */
+function toAppaRuntimeNativeControlTarget(params: {
+  client: AppaNativeClient;
+  toolName: string;
+}): string | undefined {
+  return isAppaNativeCodexControlTool(params)
+    ? `host/codex/${params.toolName}`
+    : undefined;
+}
+
+/**
+ * Lifecycle calls execute in the stock Codex client, not through a gateway
+ * dispatch wrapper. Preserve their wire spelling so authorization can bind the
+ * narrow runtime target below without exposing arbitrary direct host tools.
+ */
+function isAppaNativeCodexLifecycleTool(params: {
+  client: AppaNativeClient;
+  toolName: string;
+}): boolean {
+  return isAppaNativeSpawnTool(params) || isAppaNativeCodexControlTool(params);
+}
+
+function isAppaNativeCodexControlTool(params: {
+  client: AppaNativeClient;
+  toolName: string;
+}): boolean {
+  return (
+    params.client === "codex-responses-v1" &&
+    CODEX_NATIVE_CONTROL_TOOLS.has(params.toolName)
+  );
 }
 
 const CLAUDE_NATIVE_CHILD_CONTRACT = "agent/claude-code/Agent";
@@ -4042,12 +4172,18 @@ async function publishNativeChildSpawnAliases(params: {
   session: AppaProxyHookSession;
   frameId: string;
   calls: AccumulatedToolCall[];
+  client: AppaNativeClient;
   clientParentTaskPath: string | null;
   logicalParentTaskPath: string | null;
 }): Promise<AccumulatedToolCall[]> {
   const spawnCalls = params.calls
     .map((call, position) => ({ call, position }))
-    .filter(({ call }) => isAppaSpawnTool(call.name));
+    .filter(({ call }) =>
+      isAppaNativeSpawnTool({
+        client: params.client,
+        toolName: call.name,
+      }),
+    );
   if (spawnCalls.length === 0) return params.calls;
   if (!params.clientParentTaskPath || !params.logicalParentTaskPath) {
     throw new AppaProxySessionProtocolError(
@@ -4064,12 +4200,11 @@ async function publishNativeChildSpawnAliases(params: {
         "native spawn has no runtime-approved spawn binding",
       );
     }
-    const originalProviderTaskName = nativeSpawnTaskName(call.arguments);
-    if (!originalProviderTaskName) {
-      throw new AppaProxySessionProtocolError(
-        "native spawn has invalid task_name arguments",
-      );
-    }
+    // Some stock Codex turns omit task_name. The proxy owns the alias and can
+    // give that approved call a stable, valid task path before it reaches Codex.
+    const originalProviderTaskName =
+      nativeSpawnTaskName(call.arguments) ??
+      nativeSpawnTaskNameFromCallId(call.id);
     const wireTaskName = `${originalProviderTaskName}__proxy_${randomUUID().replaceAll("-", "").slice(0, 12)}`;
     const publication = prepareNativeChildSpawnPublication({
       taskAlias: {
@@ -4086,12 +4221,7 @@ async function publishNativeChildSpawnAliases(params: {
     aliases.push(publication.alias);
     replacements.set(call.id, publication.rewrittenTaskName);
   }
-  await AppaProxyWireModel.addAliases({
-    ...params.session.getNativeWireScope(),
-    frameId: params.frameId,
-    aliases,
-  });
-  return params.calls.map((call) => {
+  const rewrittenCalls = params.calls.map((call) => {
     const taskName = replacements.get(call.id);
     if (!taskName) return call;
     return {
@@ -4102,6 +4232,31 @@ async function publishNativeChildSpawnAliases(params: {
       }),
     };
   });
+  await AppaProxyWireModel.addAliases({
+    ...params.session.getNativeWireScope(),
+    frameId: params.frameId,
+    aliases,
+    nativeChildCallRewrites: spawnCalls.map(({ call }) => {
+      const rewritten = rewrittenCalls.find(
+        (candidate) => candidate.id === call.id,
+      );
+      const binding = bindings.get(call.id);
+      if (!rewritten || !binding) {
+        throw new AppaProxySessionProtocolError(
+          "native spawn rewrite changed unexpectedly",
+        );
+      }
+      return {
+        callId: call.id,
+        spawnBinding: binding,
+        expectedEmittedArguments: call.arguments,
+        expectedEmittedArgumentsCanonical: canonicalJsonObject(call.arguments),
+        emittedArguments: rewritten.arguments,
+        emittedArgumentsCanonical: canonicalJsonObject(rewritten.arguments),
+      };
+    }),
+  });
+  return rewrittenCalls;
 }
 
 function parseNativeSpawnBindings(
@@ -4144,6 +4299,10 @@ function nativeSpawnTaskName(argumentsJson: string): string | null {
   } catch {
     return null;
   }
+}
+
+function nativeSpawnTaskNameFromCallId(callId: string): string {
+  return `task_${callId.replaceAll(/[^A-Za-z0-9_-]/g, "_").slice(0, 48)}`;
 }
 
 function rewriteNativeSpawnTaskName(params: {
@@ -4772,6 +4931,7 @@ function planDispatchRewrites(params: {
   enabledToolNames: Set<string>;
   canonicalizeToolName: utils.gatewayToolNames.ToolNameCanonicalizer;
   providerName: string;
+  preserveDirectToolCall: (toolName: string) => boolean;
 }): AccumulatedToolCall[] | null {
   if (!params.supported) {
     return null;
@@ -4781,6 +4941,7 @@ function planDispatchRewrites(params: {
     toolCalls: params.toolCalls,
     enabledToolNames: params.enabledToolNames,
     canonicalizeToolName: params.canonicalizeToolName,
+    preserveDirectToolCall: params.preserveDirectToolCall,
   });
 
   if (rewritten) {

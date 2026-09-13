@@ -1,10 +1,10 @@
-import {
-  type AppaClientAdapter,
-  type AppaProtocol,
-  type AppaSessionIdentity,
-  type AppaToolCall,
-  type AppaToolResult,
-  isAppaSpawnTool,
+import { isAppaNativeSpawnTool } from "@/services/appa-client-correlation";
+import type {
+  AppaClientAdapter,
+  AppaProtocol,
+  AppaSessionIdentity,
+  AppaToolCall,
+  AppaToolResult,
 } from "../types";
 import { isRecord, readHeader } from "../utils";
 
@@ -92,7 +92,10 @@ export class AppaOpenCodeAdapter implements AppaClientAdapter {
                 name,
                 arguments: args,
                 raw: tc,
-                spawn: isAppaSpawnTool(name),
+                spawn: isAppaNativeSpawnTool({
+                  client: "opencode-kimi",
+                  toolName: name,
+                }),
               });
             }
           }

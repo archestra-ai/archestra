@@ -29,6 +29,7 @@ import {
   AppaProxyHookSession,
   canonicalJsonObject,
   deriveAppaOwnerScope,
+  resolveConfiguredNativeSpawnContract,
 } from "./appa-proxy-hook";
 import anthropicProxyRoutes from "./routes/anthropic";
 import kimiProxyRoutes from "./routes/kimi";
@@ -101,6 +102,40 @@ function nativeOutbound(params: {
     targetArguments: JSON.parse(params.arguments) as Record<string, unknown>,
   };
 }
+
+describe("configured native spawn contracts", () => {
+  const contracts = {
+    "multi_agent_v1.spawn_agent": "agent:fixture/lifecycle_child",
+    "agents.spawn_agent": "agent:fixture/lifecycle_child",
+    "collaboration.spawn_agent": "agent:fixture/lifecycle_child",
+    task: "agent:fixture/lifecycle_child",
+  };
+
+  test.each([
+    ["codex-responses-v1", "multi_agent_v1.spawn_agent"],
+    ["codex-responses-v1", "agents.spawn_agent"],
+    ["codex-responses-v1", "collaboration.spawn_agent"],
+    ["opencode-kimi", "task"],
+  ] as const)("maps %s %s to the declared agent contract", (_client, toolName) => {
+    expect(
+      resolveConfiguredNativeSpawnContract({
+        nativeSpawn: true,
+        toolName,
+        nativeSpawnToolMap: contracts,
+      }),
+    ).toBe("agent:fixture/lifecycle_child");
+  });
+
+  test("does not map a tool unless it was classified as a native spawn", () => {
+    expect(
+      resolveConfiguredNativeSpawnContract({
+        nativeSpawn: false,
+        toolName: "multi_agent_v1.spawn_agent",
+        nativeSpawnToolMap: contracts,
+      }),
+    ).toBeUndefined();
+  });
+});
 
 describe("OpenAPPA durable proxy correlation", () => {
   beforeEach(() => {
@@ -990,7 +1025,19 @@ describe("OpenAPPA proxy route contract", () => {
           protocol_version: 1,
           event_id: envelope.event_id,
           request_sha256: createHash("sha256").update(raw).digest("hex"),
-          decision: { decision: "ack" },
+          decision:
+            envelope.event.event === "tool_calls"
+              ? {
+                  decision: "allow_calls",
+                  calls: (
+                    envelope.event.calls as Array<{ call_id: string }>
+                  ).map((call) => ({
+                    call_id: call.call_id,
+                    dispatch_id: `native-codex-${call.call_id}`,
+                    spawn_binding: `binding_${call.call_id}`,
+                  })),
+                }
+              : { decision: "ack" },
         });
       }),
       http.post(`${runtimeUrl}/proxy/v1/checkpoints`, async ({ request }) => {
@@ -1393,6 +1440,225 @@ describe("OpenAPPA proxy route contract", () => {
     expect(session?.clientSessionId).toBe("codex-v1-root-turn");
   });
 
+  test("maps a native Codex spawn spelling to its canonical kagent runtime contract", async ({
+    makeAgent,
+  }) => {
+    config.llmProxy.appaHook = {
+      ...hookConfig,
+      runtimeToken: "native-codex-spawn-runtime-token",
+      nativeSpawnToolMap: {
+        "multi_agent_v1.spawn_agent": "agent:fixture/lifecycle_child",
+      },
+    };
+    const runtimeEvents: Array<Record<string, unknown>> = [];
+    server.use(
+      http.get(`${runtimeUrl}/proxy/v1/capabilities`, () =>
+        HttpResponse.json({
+          protocol_version: 1,
+          legacy_hooks: false,
+          completed_event_replay: true,
+          typed_offers: true,
+          restriction_acceptance: true,
+          human_approval: false,
+          child_workflows: true,
+          child_actor_targeting: true,
+          sanitized_results: true,
+        }),
+      ),
+      http.post(`${runtimeUrl}/proxy/v1/events`, async ({ request }) => {
+        const raw = await request.text();
+        const envelope = JSON.parse(raw) as {
+          event_id: string;
+          event: Record<string, unknown>;
+        };
+        runtimeEvents.push(envelope.event);
+        return HttpResponse.json({
+          protocol_version: 1,
+          event_id: envelope.event_id,
+          request_sha256: createHash("sha256").update(raw).digest("hex"),
+          decision:
+            envelope.event.event === "tool_calls"
+              ? {
+                  decision: "allow_calls",
+                  calls: (
+                    envelope.event.calls as Array<{ call_id: string }>
+                  ).map((call) => ({
+                    call_id: call.call_id,
+                    dispatch_id: `native-codex-${call.call_id}`,
+                    spawn_binding:
+                      call.call_id === "call_spawn"
+                        ? `binding_${call.call_id}`
+                        : null,
+                  })),
+                }
+              : { decision: "ack" },
+        });
+      }),
+    );
+    vi.mocked(openAiResponsesAdapterFactory.createClient).mockImplementation(
+      () =>
+        ({
+          responses: {
+            create: async () => ({
+              id: "resp_spawn",
+              object: "response",
+              created_at: 1,
+              model: "gpt-4o",
+              status: "completed",
+              output: [
+                {
+                  id: "fc_spawn",
+                  type: "function_call",
+                  call_id: "call_spawn",
+                  namespace: "multi_agent_v1",
+                  name: "spawn_agent",
+                  arguments: '{"prompt":"read the public fixture"}',
+                },
+              ],
+              usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 },
+            }),
+          },
+        }) as never,
+    );
+    const agent = await makeAgent({ name: "APPA native Codex spawn route" });
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/responses`,
+      headers: {
+        authorization: "Bearer test-key",
+        originator: "codex_cli_rs",
+        "content-type": "application/json",
+      },
+      payload: {
+        model: "gpt-4o",
+        input: "delegate",
+        client_metadata: {
+          session_id: "codex-spawn-session",
+          thread_id: "codex-spawn-thread",
+        },
+      },
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    const toolCallsEvent = runtimeEvents.find(
+      (event) => event.event === "tool_calls",
+    );
+    expect(toolCallsEvent?.calls).toEqual([
+      expect.objectContaining({
+        call_id: "call_spawn",
+        tool: "agent/fixture/lifecycle_child",
+        spawn: true,
+      }),
+    ]);
+  });
+
+  test("keeps a native Codex wait call local while authorizing its host target", async ({
+    makeAgent,
+  }) => {
+    config.llmProxy.appaHook = {
+      ...hookConfig,
+      runtimeToken: "native-codex-wait-runtime-token",
+    };
+    const runtimeEvents: Array<Record<string, unknown>> = [];
+    server.use(
+      http.get(`${runtimeUrl}/proxy/v1/capabilities`, () =>
+        HttpResponse.json({
+          protocol_version: 1,
+          legacy_hooks: false,
+          completed_event_replay: true,
+          typed_offers: true,
+          restriction_acceptance: true,
+          human_approval: false,
+          child_workflows: true,
+          child_actor_targeting: true,
+          sanitized_results: true,
+        }),
+      ),
+      http.post(`${runtimeUrl}/proxy/v1/events`, async ({ request }) => {
+        const raw = await request.text();
+        const envelope = JSON.parse(raw) as {
+          event_id: string;
+          event: Record<string, unknown>;
+        };
+        runtimeEvents.push(envelope.event);
+        return HttpResponse.json({
+          protocol_version: 1,
+          event_id: envelope.event_id,
+          request_sha256: createHash("sha256").update(raw).digest("hex"),
+          decision:
+            envelope.event.event === "tool_calls"
+              ? {
+                  decision: "allow_calls",
+                  calls: (
+                    envelope.event.calls as Array<{ call_id: string }>
+                  ).map((call) => ({
+                    call_id: call.call_id,
+                    dispatch_id: `native-codex-${call.call_id}`,
+                  })),
+                }
+              : { decision: "ack" },
+        });
+      }),
+    );
+    vi.mocked(openAiResponsesAdapterFactory.createClient).mockImplementation(
+      () =>
+        ({
+          responses: {
+            create: async () => ({
+              id: "resp_wait",
+              object: "response",
+              created_at: 1,
+              model: "gpt-4o",
+              status: "completed",
+              output: [
+                {
+                  id: "fc_wait",
+                  type: "function_call",
+                  call_id: "call_wait",
+                  namespace: "multi_agent_v1",
+                  name: "wait_agent",
+                  arguments: '{"task_name":"/root/reader__proxy_test"}',
+                },
+              ],
+              usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 },
+            }),
+          },
+        }) as never,
+    );
+    const agent = await makeAgent({ name: "APPA native Codex wait route" });
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/responses`,
+      headers: {
+        authorization: "Bearer test-key",
+        originator: "codex_cli_rs",
+        "content-type": "application/json",
+      },
+      payload: {
+        model: "gpt-4o",
+        input: "wait for the child",
+        client_metadata: {
+          session_id: "codex-wait-session",
+          thread_id: "codex-wait-thread",
+        },
+      },
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.body).toContain('"name":"wait_agent"');
+    expect(response.body).toContain('"namespace":"multi_agent_v1"');
+    const toolCallsEvent = runtimeEvents.find(
+      (event) => event.event === "tool_calls",
+    );
+    expect(toolCallsEvent?.calls).toEqual([
+      expect.objectContaining({
+        call_id: "call_wait",
+        tool: "host/codex/multi_agent_v1.wait_agent",
+        spawn: false,
+      }),
+    ]);
+  });
+
   test("admits a native Claude Code Messages stream without changing its wire protocol", async ({
     makeAgent,
   }) => {
@@ -1425,7 +1691,47 @@ describe("OpenAPPA proxy route contract", () => {
     });
 
     expect(response.statusCode, response.body).toBe(200);
-    expect(response.body).toContain("toolu_test_weather");
+    const calls = await db
+      .select({
+        callId: schema.appaProxyCallsTable.callId,
+        name: schema.appaProxyCallsTable.emittedName,
+        arguments: schema.appaProxyCallsTable.emittedArguments,
+        state: schema.appaProxyCallsTable.state,
+      })
+      .from(schema.appaProxyCallsTable)
+      .innerJoin(
+        schema.appaProxySessionsTable,
+        eq(
+          schema.appaProxyCallsTable.sessionId,
+          schema.appaProxySessionsTable.id,
+        ),
+      )
+      .where(eq(schema.appaProxySessionsTable.profileId, agent.id));
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({ name: "get_weather", state: "open" });
+    const events = response.body
+      .split("\n")
+      .filter((line) => line.startsWith("data: "))
+      .map((line) => JSON.parse(line.slice(6)) as Record<string, unknown>);
+    expect(events).toContainEqual({
+      type: "content_block_start",
+      index: 0,
+      content_block: {
+        type: "tool_use",
+        id: calls[0].callId,
+        name: calls[0].name,
+        input: {},
+      },
+    });
+    expect(events).toContainEqual({
+      type: "content_block_delta",
+      index: 0,
+      delta: {
+        type: "input_json_delta",
+        partial_json: calls[0].arguments,
+      },
+    });
+    expect(events.at(-1)).toEqual({ type: "message_stop" });
   });
 
   test("uses Claude metadata sessions for fresh roots and rejects conflicting aliases", async ({
@@ -1572,7 +1878,7 @@ describe("OpenAPPA proxy route contract", () => {
     expect(response.body).not.toContain("call_test_weather");
   });
 
-  test("delivers an authorized spawn binding and accepts it on child attach", async ({
+  test("propagates one signed OpenCode child carrier and gates its hierarchy", async ({
     makeAgent,
   }) => {
     config.llmProxy.appaHook = {
@@ -1674,8 +1980,9 @@ describe("OpenAPPA proxy route contract", () => {
                                 id: "call_spawn",
                                 type: "function",
                                 function: {
-                                  name: "spawn_agent",
-                                  arguments: "{}",
+                                  name: "task",
+                                  arguments:
+                                    '{"description":"reader","prompt":"inspect the repository"}',
                                 },
                               },
                             ],
@@ -1748,7 +2055,8 @@ describe("OpenAPPA proxy route contract", () => {
       url: `/v1/openai/${agent.id}/chat/completions`,
       headers: {
         authorization: "Bearer test-key",
-        "thread-id": "parent-thread",
+        "user-agent": "opencode/1.18.29",
+        "x-opencode-session": "parent-thread",
       },
       payload: {
         model: "gpt-4o",
@@ -1756,30 +2064,35 @@ describe("OpenAPPA proxy route contract", () => {
       },
     });
     expect(parent.statusCode, parent.body).toBe(200);
-    const bindings = JSON.parse(
-      String(parent.headers["x-archestra-appa-spawn-bindings"]),
-    ) as Record<string, string>;
-    expect(bindings).toEqual({ call_spawn: "binding_call_spawn" });
+    const parentToolCall = parent.json().choices[0].message.tool_calls[0];
+    const parentArguments = JSON.parse(parentToolCall.function.arguments) as {
+      prompt: string;
+    };
+    expect(parentArguments.prompt).toMatch(/^apc1\.call_/);
+    expect(parent.headers["x-archestra-appa-spawn-bindings"]).toContain(
+      "binding_call_appa_",
+    );
     const child = await app.inject({
       method: "POST",
       url: `/v1/openai/${agent.id}/chat/completions`,
       headers: {
         authorization: "Bearer test-key",
-        "thread-id": "child-thread",
-        "x-codex-parent-thread-id": "parent-thread",
-        "x-archestra-appa-spawn-binding": bindings.call_spawn,
+        "user-agent": "opencode/1.18.29",
+        "x-opencode-session": "child-thread",
+        "x-parent-session-id": "parent-thread",
       },
       payload: {
         model: "gpt-4o",
-        messages: [{ role: "user", content: "child" }],
+        messages: [{ role: "user", content: parentArguments.prompt }],
       },
     });
     expect(child.statusCode, child.body).toBe(200);
+    const childCallId = child.json().choices[0].message.tool_calls[0].id;
     expect(events).toContainEqual(
       expect.objectContaining({
         event: "child_start",
         child_id: "child-thread",
-        spawn_binding: "binding_call_spawn",
+        spawn_binding: expect.stringMatching(/^binding_call_appa_/),
       }),
     );
     expect(events).toContainEqual(
@@ -1794,30 +2107,83 @@ describe("OpenAPPA proxy route contract", () => {
         child_id: "child-thread",
       }),
     );
+    const [parentSession] = await db
+      .select({
+        id: schema.appaProxySessionsTable.id,
+        rootId: schema.appaProxySessionsTable.rootId,
+      })
+      .from(schema.appaProxySessionsTable)
+      .where(
+        eq(schema.appaProxySessionsTable.clientSessionId, "parent-thread"),
+      );
+    const [childSession] = await db
+      .select({
+        rootId: schema.appaProxySessionsTable.rootId,
+        parentSessionId: schema.appaProxySessionsTable.parentSessionId,
+      })
+      .from(schema.appaProxySessionsTable)
+      .where(eq(schema.appaProxySessionsTable.clientSessionId, "child-thread"));
+    expect(childSession).toEqual({
+      rootId: parentSession?.rootId,
+      parentSessionId: parentSession?.id,
+    });
+
+    for (const headers of [
+      {
+        authorization: "Bearer test-key",
+        "user-agent": "opencode/1.18.29",
+        "x-opencode-session": "replayed-child-thread",
+        "x-parent-session-id": "parent-thread",
+      },
+      {
+        authorization: "Bearer different-test-key",
+        "user-agent": "opencode/1.18.29",
+        "x-opencode-session": "cross-owner-child-thread",
+        "x-parent-session-id": "parent-thread",
+      },
+      {
+        authorization: "Bearer test-key",
+        "user-agent": "opencode/1.18.29",
+        "x-opencode-session": "wrong-parent-child-thread",
+        "x-parent-session-id": "other-parent-thread",
+      },
+    ]) {
+      const rejected = await app.inject({
+        method: "POST",
+        url: `/v1/openai/${agent.id}/chat/completions`,
+        headers,
+        payload: {
+          model: "gpt-4o",
+          messages: [{ role: "user", content: parentArguments.prompt }],
+        },
+      });
+      expect(rejected.statusCode, rejected.body).toBe(409);
+    }
     const childResult = await app.inject({
       method: "POST",
       url: `/v1/openai/${agent.id}/chat/completions`,
       headers: {
         authorization: "Bearer test-key",
-        "thread-id": "child-thread",
-        "x-codex-parent-thread-id": "parent-thread",
-        "x-archestra-appa-spawn-binding": bindings.call_spawn,
+        "user-agent": "opencode/1.18.29",
+        "x-opencode-session": "child-thread",
+        "x-parent-session-id": "parent-thread",
       },
       payload: {
         model: "gpt-4o",
         messages: [
+          { role: "user", content: parentArguments.prompt },
           {
             role: "assistant",
             content: null,
             tool_calls: [
               {
-                id: "call_child_read",
+                id: childCallId,
                 type: "function",
                 function: { name: "get_weather", arguments: '{"city":"SF"}' },
               },
             ],
           },
-          { role: "tool", tool_call_id: "call_child_read", content: "sunny" },
+          { role: "tool", tool_call_id: childCallId, content: "sunny" },
         ],
       },
     });
@@ -1826,7 +2192,7 @@ describe("OpenAPPA proxy route contract", () => {
       expect.objectContaining({
         event: "tool_result",
         child_id: "child-thread",
-        call_id: "call_child_read",
+        call_id: childCallId,
       }),
     );
   });

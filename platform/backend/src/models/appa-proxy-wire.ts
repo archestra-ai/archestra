@@ -21,6 +21,24 @@ import { AppaProxySessionProtocolError } from "./appa-proxy-session";
 
 type Scope = { sessionId: string; ownerScopeHash: string };
 
+type WireAliasInput = {
+  kind: AppaWireAliasKind;
+  position: number;
+  wireId: string;
+  logicalId?: string;
+  sourceCallId?: string;
+  metadata: unknown;
+};
+
+type NativeChildCallRewrite = {
+  callId: string;
+  spawnBinding: string;
+  expectedEmittedArguments: string;
+  expectedEmittedArgumentsCanonical: string;
+  emittedArguments: string;
+  emittedArgumentsCanonical: string;
+};
+
 /** Durable wire identity and control receipts. No payload is stored in plaintext. */
 export default class AppaProxyWireModel {
   static async createFrame(
@@ -1616,14 +1634,12 @@ export default class AppaProxyWireModel {
   static async addAliases(
     params: Scope & {
       frameId: string;
-      aliases: Array<{
-        kind: AppaWireAliasKind;
-        position: number;
-        wireId: string;
-        logicalId?: string;
-        sourceCallId?: string;
-        metadata: unknown;
-      }>;
+      aliases: WireAliasInput[];
+      /**
+       * Native child task aliases and their rewritten approved calls are one
+       * publication unit. Nothing can issue the frame until both are durable.
+       */
+      nativeChildCallRewrites?: NativeChildCallRewrite[];
     },
   ) {
     if (params.aliases.length > 1000)
@@ -1654,6 +1670,75 @@ export default class AppaProxyWireModel {
         owned.frame.expiresAt <= new Date()
       )
         fail("APPA aliases must persist before frame issuance");
+      const nativeChildCallRewrites = params.nativeChildCallRewrites ?? [];
+      let nativeChildPayloadUpdate:
+        | { serializedPayload: string; payloadBytes: number }
+        | undefined;
+      if (nativeChildCallRewrites.length > 0) {
+        if (
+          owned.frame.kind !== "model_response" ||
+          owned.frame.protocol !== "codex-native-response/v1" ||
+          nativeChildCallRewrites.length !== params.aliases.length ||
+          new Set(nativeChildCallRewrites.map((call) => call.callId)).size !==
+            nativeChildCallRewrites.length ||
+          new Set(params.aliases.map((alias) => alias.sourceCallId)).size !==
+            nativeChildCallRewrites.length ||
+          params.aliases.some(
+            (alias) =>
+              alias.kind !== "task" ||
+              !alias.sourceCallId ||
+              !nativeChildCallRewrites.some(
+                (call) => call.callId === alias.sourceCallId,
+              ),
+          )
+        ) {
+          fail("APPA native child publication is invalid");
+        }
+        const calls = await tx
+          .select()
+          .from(schema.appaProxyCallsTable)
+          .where(
+            and(
+              eq(schema.appaProxyCallsTable.sessionId, params.sessionId),
+              inArray(
+                schema.appaProxyCallsTable.callId,
+                nativeChildCallRewrites.map((call) => call.callId),
+              ),
+            ),
+          )
+          .for("update");
+        if (
+          calls.length !== nativeChildCallRewrites.length ||
+          nativeChildCallRewrites.some((rewrite) => {
+            const call = calls.find(
+              (candidate) => candidate.callId === rewrite.callId,
+            );
+            return (
+              !call ||
+              call.state !== "open" ||
+              call.spawnBinding !== rewrite.spawnBinding ||
+              call.spawnBindingConsumedAt !== null ||
+              call.emittedArguments !== rewrite.expectedEmittedArguments ||
+              call.emittedArgumentsCanonical !==
+                rewrite.expectedEmittedArgumentsCanonical
+            );
+          })
+        ) {
+          fail("APPA native child approved call changed before publication");
+        }
+        const nextPayload = rewriteHeldNativeChildCallArguments({
+          payload: unseal(
+            owned.frame.payloadCiphertext,
+            `frame:${params.sessionId}:${owned.frame.id}`,
+          ),
+          rewrites: nativeChildCallRewrites,
+        });
+        const serializedPayload = canonicalJson(nextPayload);
+        const payloadBytes = Buffer.byteLength(serializedPayload);
+        if (payloadBytes > 16 * 1024 * 1024)
+          fail("APPA wire frame exceeds its storage limit");
+        nativeChildPayloadUpdate = { serializedPayload, payloadBytes };
+      }
       if (params.aliases.length === 0) return [];
       const seenWireKeys = new Set<string>();
       const seenPositions = new Set<number>();
@@ -1732,12 +1817,63 @@ export default class AppaProxyWireModel {
       if (
         (usage?.bytes ?? 0) +
           (frameUsage?.bytes ?? 0) +
+          (nativeChildCallRewrites.length > 0
+            ? -owned.frame.payloadBytes +
+              (nativeChildPayloadUpdate?.payloadBytes ?? 0)
+            : 0) +
           values.reduce((sum, item) => sum + item.metadataBytes, 0) >
         64 * 1024 * 1024
       ) {
         fail(
           "APPA wire history budget exhausted; existing records were preserved",
         );
+      }
+      if (nativeChildPayloadUpdate) {
+        const updatedFrame = await tx
+          .update(frames)
+          .set({
+            payloadCiphertext: seal(
+              nativeChildPayloadUpdate.serializedPayload,
+              `frame:${params.sessionId}:${params.frameId}`,
+            ),
+            payloadHash: digest(nativeChildPayloadUpdate.serializedPayload),
+            payloadBytes: nativeChildPayloadUpdate.payloadBytes,
+          })
+          .where(and(eq(frames.id, params.frameId), eq(frames.state, "held")))
+          .returning({ id: frames.id });
+        if (updatedFrame.length !== 1)
+          fail("APPA native child frame changed before publication");
+        for (const rewrite of nativeChildCallRewrites) {
+          const updated = await tx
+            .update(schema.appaProxyCallsTable)
+            .set({
+              emittedArguments: rewrite.emittedArguments,
+              emittedArgumentsCanonical: rewrite.emittedArgumentsCanonical,
+            })
+            .where(
+              and(
+                eq(schema.appaProxyCallsTable.sessionId, params.sessionId),
+                eq(schema.appaProxyCallsTable.callId, rewrite.callId),
+                eq(
+                  schema.appaProxyCallsTable.spawnBinding,
+                  rewrite.spawnBinding,
+                ),
+                eq(schema.appaProxyCallsTable.state, "open"),
+                sql`${schema.appaProxyCallsTable.spawnBindingConsumedAt} is null`,
+                eq(
+                  schema.appaProxyCallsTable.emittedArguments,
+                  rewrite.expectedEmittedArguments,
+                ),
+                eq(
+                  schema.appaProxyCallsTable.emittedArgumentsCanonical,
+                  rewrite.expectedEmittedArgumentsCanonical,
+                ),
+              ),
+            )
+            .returning({ id: schema.appaProxyCallsTable.id });
+          if (updated.length !== 1)
+            fail("APPA native child approved call changed before publication");
+        }
       }
       return tx.insert(aliases).values(values).returning();
     });
@@ -1899,6 +2035,42 @@ function nativeMcpCallArguments(payload: unknown): Map<string, string> {
     calls.set(call.id, argumentsText);
   }
   return calls;
+}
+
+function rewriteHeldNativeChildCallArguments(params: {
+  payload: unknown;
+  rewrites: NativeChildCallRewrite[];
+}): Record<string, unknown> {
+  if (
+    !isRecord(params.payload) ||
+    !Array.isArray(params.payload.committedCalls)
+  ) {
+    fail("APPA native child response has no committed calls");
+  }
+  const rewrites = new Map(
+    params.rewrites.map((rewrite) => [rewrite.callId, rewrite]),
+  );
+  const matched = new Set<string>();
+  const committedCalls = params.payload.committedCalls.map((candidate) => {
+    if (!isRecord(candidate) || typeof candidate.id !== "string") {
+      fail("APPA native child response has invalid committed calls");
+    }
+    const rewrite = rewrites.get(candidate.id);
+    if (!rewrite) return candidate;
+    if (
+      typeof candidate.arguments !== "string" ||
+      candidate.arguments !== rewrite.expectedEmittedArguments ||
+      matched.has(rewrite.callId)
+    ) {
+      fail("APPA native child committed call changed before publication");
+    }
+    matched.add(rewrite.callId);
+    return { ...candidate, arguments: rewrite.emittedArguments };
+  });
+  if (matched.size !== rewrites.size) {
+    fail("APPA native child approved call is absent from the response");
+  }
+  return { ...params.payload, committedCalls };
 }
 
 function isNativeMcpBinding(value: unknown): value is Record<string, unknown> {

@@ -35,7 +35,10 @@ import {
 import type { OTLPExporterNodeConfigBase } from "@opentelemetry/otlp-exporter-base";
 import dotenv from "dotenv";
 import logger from "@/logging";
-import type { AppaProxyHookConfig } from "@/routes/proxy/appa-proxy-hook";
+import type {
+  AppaNativeSpawnReturnFloor,
+  AppaProxyHookConfig,
+} from "@/routes/proxy/appa-proxy-hook";
 import { SKILL_MARKETPLACE_PREFIX } from "@/routes/route-paths";
 import {
   type EmailProviderType,
@@ -127,6 +130,8 @@ export function parseAppaProxyHookConfig(params: {
   maxCallsPerSession?: string | undefined;
   maxSessionsPerOwner?: string | undefined;
   nativeCodexEnabled?: string | undefined;
+  nativeSpawnToolMap?: string | undefined;
+  nativeSpawnReturnFloorMap?: string | undefined;
   maxStreamBufferBytes?: string | undefined;
 }): AppaProxyHookConfig | undefined {
   const rawUrl = params.url?.trim();
@@ -207,6 +212,23 @@ export function parseAppaProxyHookConfig(params: {
   const maxStreamBufferBytes = params.maxStreamBufferBytes?.trim()
     ? parsePositiveInt(params.maxStreamBufferBytes, 16 * 1024 * 1024)
     : 16 * 1024 * 1024;
+  const nativeSpawnToolMap = parseAppaNativeSpawnToolMap(
+    params.nativeSpawnToolMap,
+  );
+  if (nativeSpawnToolMap && !runtimeToken) {
+    throw new Error(
+      "ARCHESTRA_LLM_PROXY_APPA_NATIVE_SPAWN_TOOL_MAP requires an authenticated APPA v1 runtime token",
+    );
+  }
+  if (params.nativeSpawnReturnFloorMap?.trim() && !runtimeToken) {
+    throw new Error(
+      "ARCHESTRA_LLM_PROXY_APPA_NATIVE_SPAWN_RETURN_FLOOR_MAP requires an authenticated APPA v1 runtime token",
+    );
+  }
+  const nativeSpawnReturnFloorMap = parseAppaNativeSpawnReturnFloorMap(
+    params.nativeSpawnReturnFloorMap,
+    nativeSpawnToolMap,
+  );
   return {
     url: url.toString().replace(/\/$/, ""),
     timeoutMs,
@@ -217,8 +239,138 @@ export function parseAppaProxyHookConfig(params: {
     maxCallsPerSession: parseAppaLedgerLimit(params.maxCallsPerSession, 1000),
     maxSessionsPerOwner: parseAppaLedgerLimit(params.maxSessionsPerOwner, 100),
     nativeCodexEnabled,
+    ...(nativeSpawnToolMap ? { nativeSpawnToolMap } : {}),
+    ...(nativeSpawnReturnFloorMap ? { nativeSpawnReturnFloorMap } : {}),
     maxStreamBufferBytes,
   };
+}
+
+function parseAppaNativeSpawnToolMap(
+  value: string | undefined,
+): Readonly<Record<string, string>> | undefined {
+  const raw = value?.trim();
+  if (!raw) return undefined;
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error(
+      "ARCHESTRA_LLM_PROXY_APPA_NATIVE_SPAWN_TOOL_MAP must be a JSON object",
+    );
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error(
+      "ARCHESTRA_LLM_PROXY_APPA_NATIVE_SPAWN_TOOL_MAP must be a JSON object",
+    );
+  }
+
+  const supportedTools = new Set([
+    "multi_agent_v1.spawn_agent",
+    "agents.spawn_agent",
+    "collaboration.spawn_agent",
+    "task",
+  ]);
+  const entries = Object.entries(parsed);
+  for (const [tool, target] of entries) {
+    if (
+      !supportedTools.has(tool) ||
+      typeof target !== "string" ||
+      !/^agent:[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(target)
+    ) {
+      throw new Error(
+        "ARCHESTRA_LLM_PROXY_APPA_NATIVE_SPAWN_TOOL_MAP must map supported native spawn names to agent:<namespace>/<agent>",
+      );
+    }
+  }
+  return Object.freeze(Object.fromEntries(entries));
+}
+
+function parseAppaNativeSpawnReturnFloorMap(
+  value: string | undefined,
+  nativeSpawnToolMap: Readonly<Record<string, string>> | undefined,
+): Readonly<Record<string, AppaNativeSpawnReturnFloor>> | undefined {
+  const raw = value?.trim();
+  if (!raw) return undefined;
+
+  const error =
+    "ARCHESTRA_LLM_PROXY_APPA_NATIVE_SPAWN_RETURN_FLOOR_MAP must map configured canonical agent targets to non-empty trust and/or audience floors";
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error(error);
+  }
+  if (!isPlainObject(parsed) || Object.keys(parsed).length === 0) {
+    throw new Error(error);
+  }
+
+  const authorizedTargets = new Set(
+    Object.values(nativeSpawnToolMap ?? {}).map((target) =>
+      target.startsWith("agent:")
+        ? `agent/${target.slice("agent:".length)}`
+        : target,
+    ),
+  );
+  const floors: Record<string, AppaNativeSpawnReturnFloor> = {};
+  for (const [target, value] of Object.entries(parsed)) {
+    if (
+      isDangerousObjectKey(target) ||
+      !/^agent\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(target) ||
+      !authorizedTargets.has(target) ||
+      !isPlainObject(value) ||
+      Object.keys(value).some(
+        (key) =>
+          isDangerousObjectKey(key) || (key !== "trust" && key !== "audience"),
+      )
+    ) {
+      throw new Error(error);
+    }
+
+    const trust = value.trust;
+    const audience = value.audience;
+    if (
+      (trust !== undefined &&
+        (typeof trust !== "string" ||
+          trust.length === 0 ||
+          trust.trim() !== trust)) ||
+      (audience !== undefined &&
+        (!Array.isArray(audience) ||
+          audience.length === 0 ||
+          audience.some(
+            (entry) =>
+              typeof entry !== "string" ||
+              entry.length === 0 ||
+              entry.trim() !== entry,
+          ) ||
+          new Set(audience).size !== audience.length)) ||
+      (trust === undefined && audience === undefined)
+    ) {
+      throw new Error(error);
+    }
+    floors[target] = Object.freeze({
+      ...(trust === undefined ? {} : { trust }),
+      ...(audience === undefined
+        ? {}
+        : { audience: Object.freeze([...audience]) }),
+    });
+  }
+  return Object.freeze(floors);
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    Object.getPrototypeOf(value) === Object.prototype
+  );
+}
+
+function isDangerousObjectKey(value: string): boolean {
+  return (
+    value === "__proto__" || value === "constructor" || value === "prototype"
+  );
 }
 
 function parseAppaLedgerLimit(
@@ -3548,6 +3700,10 @@ const config = {
         process.env.ARCHESTRA_LLM_PROXY_APPA_MAX_SESSIONS_PER_OWNER,
       nativeCodexEnabled:
         process.env.ARCHESTRA_LLM_PROXY_APPA_NATIVE_CODEX_ENABLED,
+      nativeSpawnToolMap:
+        process.env.ARCHESTRA_LLM_PROXY_APPA_NATIVE_SPAWN_TOOL_MAP,
+      nativeSpawnReturnFloorMap:
+        process.env.ARCHESTRA_LLM_PROXY_APPA_NATIVE_SPAWN_RETURN_FLOOR_MAP,
       maxStreamBufferBytes:
         process.env.ARCHESTRA_LLM_PROXY_APPA_MAX_STREAM_BUFFER_BYTES,
     }),

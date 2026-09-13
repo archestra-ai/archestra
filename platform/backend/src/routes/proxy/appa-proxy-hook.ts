@@ -34,8 +34,56 @@ export type AppaProxyHookConfig = {
   maxSessionsPerOwner?: number;
   /** Enables the experimental native Codex bridge. Disabled unless explicitly set. */
   nativeCodexEnabled?: boolean;
+  /** Maps stock native spawn tools to raw kagent `agent:<namespace>/<agent>` contracts. */
+  nativeSpawnToolMap?: Readonly<Record<string, string>>;
+  /** Pins a lower child-return floor for an authorized native spawn target. */
+  nativeSpawnReturnFloorMap?: Readonly<
+    Record<string, AppaNativeSpawnReturnFloor>
+  >;
   maxStreamBufferBytes?: number;
 };
+
+export type AppaNativeSpawnReturnFloor = {
+  trust?: string;
+  audience?: readonly string[];
+};
+
+/**
+ * Resolves only current stock delegation spellings. A configuration entry can
+ * never repurpose an unrelated host tool as an agent spawn.
+ */
+export function resolveConfiguredNativeSpawnContract(params: {
+  nativeSpawn: boolean;
+  toolName: string;
+  nativeSpawnToolMap: Readonly<Record<string, string>> | undefined;
+}): string | undefined {
+  return params.nativeSpawn
+    ? params.nativeSpawnToolMap?.[params.toolName]
+    : undefined;
+}
+
+/**
+ * A return floor is operator configuration. It applies only to an exact native
+ * spawn contract that the existing native spawn map authorized.
+ */
+export function resolveConfiguredNativeSpawnReturnFloor(params: {
+  spawn: boolean;
+  targetName: string;
+  nativeSpawnToolMap: Readonly<Record<string, string>> | undefined;
+  nativeSpawnReturnFloorMap:
+    | Readonly<Record<string, AppaNativeSpawnReturnFloor>>
+    | undefined;
+}): AppaNativeSpawnReturnFloor | undefined {
+  if (!params.spawn || !params.nativeSpawnReturnFloorMap) return undefined;
+  const authorizedTargets = new Set(
+    Object.values(params.nativeSpawnToolMap ?? {}).map(
+      nativeSpawnContractTarget,
+    ),
+  );
+  return authorizedTargets.has(params.targetName)
+    ? params.nativeSpawnReturnFloorMap[params.targetName]
+    : undefined;
+}
 
 export type AppaInboundToolResult = {
   id: string;
@@ -629,6 +677,10 @@ export class AppaProxyHookSession {
     };
   }
 
+  getNativeSpawnToolMap(): Readonly<Record<string, string>> | undefined {
+    return this.config.nativeSpawnToolMap;
+  }
+
   /**
    * Seals the exact provider exchange and binds its runtime checkpoint while the
    * turn remains exclusively held. Any uncertain checkpoint side effect causes
@@ -643,6 +695,9 @@ export class AppaProxyHookSession {
     response: unknown;
   }): Promise<void> {
     if (!this.config.runtimeToken) return;
+    // A child closes through its acknowledged child_end event. It cannot be
+    // resumed as a root-level provider checkpoint after that terminal boundary.
+    if (this.turn.session.parentSessionId) return;
     try {
       const frame = await new AppaResponseFrame({
         session: this,
@@ -1279,6 +1334,12 @@ export class AppaProxyHookSession {
     const denial = parseV1BatchDenial(decision, this.rootId, event);
     if (denial) {
       const { offers } = denial;
+      const spawnReturnFloor = resolveConfiguredNativeSpawnReturnFloor({
+        spawn: denial.spawn,
+        targetName: denial.targetName,
+        nativeSpawnToolMap: this.config.nativeSpawnToolMap,
+        nativeSpawnReturnFloorMap: this.config.nativeSpawnReturnFloorMap,
+      });
       const sanitizerOffer = denial.singleton
         ? offers.find((offer) => offer.kind === "sanitizer")
         : undefined;
@@ -1290,7 +1351,7 @@ export class AppaProxyHookSession {
           offer: sanitizerOffer,
           resolution: "apply_sanitizer",
           stage,
-          label: denial.spawn ? {} : undefined,
+          label: denial.spawn ? (spawnReturnFloor ?? {}) : undefined,
         });
         return await this.postV1(
           event,
@@ -1314,9 +1375,9 @@ export class AppaProxyHookSession {
             offer,
             resolution: "accept_restriction",
             stage,
-            // An explicit empty spelling is the runtime's parent-derived
-            // return floor; omitting it leaves a marked spawn incomplete.
-            label: denial.spawn ? {} : undefined,
+            // A marked spawn needs a declaration. Operator configuration may
+            // choose a lower floor; the runtime still validates it.
+            label: denial.spawn ? (spawnReturnFloor ?? {}) : undefined,
           });
           // This is a new semantic attempt. Never reuse the cached deny event.
           return await this.postV1(
@@ -1481,7 +1542,7 @@ export class AppaProxyHookSession {
     resolution: "accept_restriction" | "apply_sanitizer" | "approve" | "deny";
     stage: "input" | "outbound" | "turn_end";
     approval?: Record<string, unknown>;
-    label?: Record<string, never>;
+    label?: AppaNativeSpawnReturnFloor;
   }): Promise<void> {
     const { offer, resolution, stage, approval, label } = params;
     await this.postV1(
@@ -2178,7 +2239,12 @@ function parseV1BatchDenial(
   decision: Record<string, unknown>,
   rootId: string,
   event: Record<string, unknown>,
-): { offers: AppaOffer[]; singleton: boolean; spawn: boolean } | null {
+): {
+  offers: AppaOffer[];
+  singleton: boolean;
+  spawn: boolean;
+  targetName: string;
+} | null {
   if (
     decision.decision !== "deny_calls" ||
     !Array.isArray(decision.calls) ||
@@ -2189,7 +2255,8 @@ function parseV1BatchDenial(
   const proposed = singletonOfferCall(event);
   // Multi-call batches are one atomic runtime proposal. They never resolve a
   // single call and are denied as a whole by the caller.
-  if (!proposed) return { offers: [], singleton: false, spawn: false };
+  if (!proposed)
+    return { offers: [], singleton: false, spawn: false, targetName: "" };
   if (decision.calls.length !== 1) return null;
   const [denied] = decision.calls;
   if (!denied || typeof denied !== "object" || Array.isArray(denied))
@@ -2216,7 +2283,14 @@ function parseV1BatchDenial(
     offers: parseOffers(candidate.offers, rootId, proposed),
     singleton: true,
     spawn: proposed.spawn,
+    targetName: proposed.tool,
   };
+}
+
+function nativeSpawnContractTarget(contract: string): string {
+  return contract.startsWith("agent:")
+    ? `agent/${contract.slice("agent:".length)}`
+    : contract;
 }
 
 function parseOffers(

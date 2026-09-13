@@ -1,10 +1,10 @@
-import {
-  type AppaClientAdapter,
-  type AppaProtocol,
-  type AppaSessionIdentity,
-  type AppaToolCall,
-  type AppaToolResult,
-  isAppaSpawnTool,
+import { isAppaNativeSpawnTool } from "@/services/appa-client-correlation";
+import type {
+  AppaClientAdapter,
+  AppaProtocol,
+  AppaSessionIdentity,
+  AppaToolCall,
+  AppaToolResult,
 } from "../types";
 import { isRecord, readHeader } from "../utils";
 
@@ -90,13 +90,22 @@ export class AppaCodexAdapter implements AppaClientAdapter {
         } else if (isRecord(item.arguments)) {
           args = item.arguments;
         }
-        const name = String(item.name ?? "");
+        const rawName = String(item.name ?? "");
+        const namespace = String(item.namespace ?? "");
+        const name =
+          rawName === "spawn_agent" &&
+          ["multi_agent_v1", "agents", "collaboration"].includes(namespace)
+            ? `${namespace}.${rawName}`
+            : rawName;
         calls.push({
           id: String(item.call_id ?? item.id ?? ""),
           name,
           arguments: args,
           raw: item,
-          spawn: isAppaSpawnTool(name),
+          spawn: isAppaNativeSpawnTool({
+            client: "codex-responses-v1",
+            toolName: name,
+          }),
         });
       }
     }

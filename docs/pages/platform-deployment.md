@@ -1483,6 +1483,17 @@ Verified live coverage is demonstrated on sequential public publication and priv
   - Compaction accepts only owned opaque history and records successor-window lineage before returning output.
   - Keep this disabled until the experimental client, history, and remedy paths required by your workflow are verified.
 
+- **`ARCHESTRA_LLM_PROXY_APPA_NATIVE_SPAWN_TOOL_MAP`** - Maps stock native delegation names to a kagent policy contract.
+  - Use a JSON object. Supported Codex keys are `multi_agent_v1.spawn_agent`, `agents.spawn_agent`, and `collaboration.spawn_agent`. OpenCode uses `task`.
+  - Each value uses the runtime wire form `agent:<namespace>/<agent>`, for example `{"multi_agent_v1.spawn_agent":"agent:fixture/lifecycle_child"}`.
+  - Requires `ARCHESTRA_LLM_PROXY_APPA_RUNTIME_TOKEN`.
+  - Declare the matching canonical `agent/<namespace>/<agent>` tool in the runtime policy. Do not declare the client-native tool name there.
+
+- **`ARCHESTRA_LLM_PROXY_APPA_NATIVE_SPAWN_RETURN_FLOOR_MAP`** - Declares an operator-owned return floor for a configured native child target.
+  - Use a JSON object keyed by the canonical `agent/<namespace>/<agent>` target from `ARCHESTRA_LLM_PROXY_APPA_NATIVE_SPAWN_TOOL_MAP`, for example `{"agent/fixture/lifecycle_child":{"audience":["ops"]}}`.
+  - Each floor includes a non-empty `trust` string, `audience` array, or both. The runtime validates the configured values against its policy lattice.
+  - Requires `ARCHESTRA_LLM_PROXY_APPA_RUNTIME_TOKEN`. The proxy sends the configured floor only while resolving the matching marked native-spawn restriction. A model cannot select or modify it.
+
 The runtime v1 capability response is:
 
 ```json

@@ -8,7 +8,7 @@ import {
 import { HttpResponse, http } from "msw";
 import { vi } from "vitest";
 import config from "@/config";
-import { ModelModel, TeamTokenModel, VirtualApiKeyModel } from "@/models";
+import { ModelModel, UserTokenModel, VirtualApiKeyModel } from "@/models";
 import mcpGatewayRoutes from "@/routes/mcp-gateway";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { useMswServer } from "@/test/msw";
@@ -34,13 +34,14 @@ const hookConfig: AppaProxyHookConfig = {
 // biome-ignore lint/correctness/useHookAtTopLevel: vitest lifecycle helper for HTTP boundary tests
 const server = useMswServer();
 
-describe("multi-turn model negotiation for local and gateway tools", () => {
+describe("runtime-backed held response continuation for local and gateway tools", () => {
   let app: FastifyInstance;
+  let runtimeEvents: Array<Record<string, unknown>>;
   const originalHookConfig = config.llmProxy.appaHook;
 
   beforeEach(async () => {
     config.llmProxy.appaHook = hookConfig;
-    installMockAppaRuntime();
+    runtimeEvents = installMockAppaRuntime();
     app = createRouteApp();
     await app.register(openAiProxyRoutes);
     await app.register(anthropicProxyRoutes);
@@ -73,7 +74,7 @@ describe("multi-turn model negotiation for local and gateway tools", () => {
     await app.close();
   });
 
-  test("Claude Code multi-turn negotiation: holds disallowed call, issues remedy tool_use, releases on tool_result", async ({
+  test("Claude Code holds a disallowed call and releases the rebuilt call after a gateway remedy", async ({
     makeAgent,
     makeMember,
     makeUser,
@@ -88,12 +89,11 @@ describe("multi-turn model negotiation for local and gateway tools", () => {
       scope: "personal",
       authorId: user.id,
     });
-    const { value: mcpToken } = await TeamTokenModel.create({
-      organizationId: agent.organizationId,
-      name: "Claude Gateway Token",
-      teamId: null,
-      isOrganizationToken: true,
-    });
+    const { value: mcpToken } = await UserTokenModel.create(
+      user.id,
+      agent.organizationId,
+      "Claude Gateway Token",
+    );
 
     vi.spyOn(anthropicAdapterFactory, "createClient").mockImplementation(
       () =>
@@ -162,6 +162,81 @@ describe("multi-turn model negotiation for local and gateway tools", () => {
     expect(remedyInput).toHaveProperty("wire_context");
     expect(remedyInput.wire_context.call_id).toBe(remedyToolCallId);
 
+    const otherUser = await makeUser();
+    await makeMember(otherUser.id as never, agent.organizationId as never);
+    const { value: otherMcpToken } = await UserTokenModel.create(
+      otherUser.id,
+      agent.organizationId,
+      "Other Claude Gateway Token",
+    );
+    const rejectedGatewayResponse = await app.inject({
+      method: "POST",
+      url: `/v1/mcp/${agent.id}`,
+      headers: {
+        authorization: `Bearer ${otherMcpToken}`,
+        "content-type": "application/json",
+        accept: "application/json, text/event-stream",
+      },
+      payload: {
+        jsonrpc: "2.0",
+        id: 0,
+        method: "tools/call",
+        params: {
+          name: "archestra__appa_execute_remedy",
+          arguments: remedyInput,
+        },
+      },
+    });
+    expect(rejectedGatewayResponse.statusCode).toBe(200);
+    expect(rejectedGatewayResponse.json().result.isError).toBe(true);
+    expect(
+      runtimeEvents.filter((event) => event.event === "resolve_batch_offer"),
+    ).toHaveLength(0);
+
+    const invalidControls = [
+      { ...remedyInput, intent_id: "different-intent" },
+      { ...remedyInput, remedy_id: "different-remedy" },
+      {
+        ...remedyInput,
+        wire_context: {
+          ...remedyInput.wire_context,
+          thread_id: "different-thread",
+        },
+      },
+      {
+        ...remedyInput,
+        wire_context: {
+          ...remedyInput.wire_context,
+          item_id: "different-item",
+        },
+      },
+    ];
+    for (const arguments_ of invalidControls) {
+      const invalidGatewayResponse = await app.inject({
+        method: "POST",
+        url: `/v1/mcp/${agent.id}`,
+        headers: {
+          authorization: `Bearer ${mcpToken}`,
+          "content-type": "application/json",
+          accept: "application/json, text/event-stream",
+        },
+        payload: {
+          jsonrpc: "2.0",
+          id: 0,
+          method: "tools/call",
+          params: {
+            name: "archestra__appa_execute_remedy",
+            arguments: arguments_,
+          },
+        },
+      });
+      expect(invalidGatewayResponse.statusCode).toBe(200);
+      expect(invalidGatewayResponse.json().result.isError).toBe(true);
+    }
+    expect(
+      runtimeEvents.filter((event) => event.event === "resolve_batch_offer"),
+    ).toHaveLength(0);
+
     // Gateway call: Client executes archestra__appa_execute_remedy via MCP Gateway
     const gatewayResponse = await app.inject({
       method: "POST",
@@ -184,9 +259,35 @@ describe("multi-turn model negotiation for local and gateway tools", () => {
 
     expect(gatewayResponse.statusCode).toBe(200);
     const gatewayJson = gatewayResponse.json();
-    console.error(">>> GATEWAY JSON:", JSON.stringify(gatewayJson));
     const receiptText = gatewayJson.result?.content?.[0]?.text;
     expect(receiptText).toContain("remedied");
+    expect(
+      runtimeEvents.filter((event) => event.event === "resolve_batch_offer"),
+    ).toHaveLength(1);
+
+    const replayGatewayResponse = await app.inject({
+      method: "POST",
+      url: `/v1/mcp/${agent.id}`,
+      headers: {
+        authorization: `Bearer ${mcpToken}`,
+        "content-type": "application/json",
+        accept: "application/json, text/event-stream",
+      },
+      payload: {
+        jsonrpc: "2.0",
+        id: 2,
+        method: "tools/call",
+        params: {
+          name: "archestra__appa_execute_remedy",
+          arguments: remedyInput,
+        },
+      },
+    });
+    expect(replayGatewayResponse.statusCode).toBe(200);
+    expect(replayGatewayResponse.json().result.isError).toBe(false);
+    expect(
+      runtimeEvents.filter((event) => event.event === "resolve_batch_offer"),
+    ).toHaveLength(1);
 
     // Turn 2: Claude Code sends back the tool_result for the remedy
     const turn2Response = await app.inject({
@@ -239,10 +340,10 @@ describe("multi-turn model negotiation for local and gateway tools", () => {
     expect(turn2Json.content).toHaveLength(1);
     expect(turn2Json.content[0].type).toBe("tool_use");
     expect(turn2Json.content[0].name).toBe("Bash");
-    expect(turn2Json.content[0].input).toEqual({ command: "cat /etc/shadow" });
+    expect(turn2Json.content[0].input).toEqual({ command: "echo sanitized" });
   });
 
-  test("OpenCode multi-turn negotiation: holds disallowed call, issues remedy tool_call, releases on tool result", async ({
+  test("OpenCode holds a disallowed call and releases the rebuilt call after a gateway remedy", async ({
     makeAgent,
     makeMember,
     makeUser,
@@ -257,12 +358,11 @@ describe("multi-turn model negotiation for local and gateway tools", () => {
       scope: "personal",
       authorId: user.id,
     });
-    const { value: mcpToken } = await TeamTokenModel.create({
-      organizationId: agent.organizationId,
-      name: "OpenCode Gateway Token",
-      teamId: null,
-      isOrganizationToken: true,
-    });
+    const { value: mcpToken } = await UserTokenModel.create(
+      user.id,
+      agent.organizationId,
+      "OpenCode Gateway Token",
+    );
 
     vi.spyOn(openaiAdapterFactory, "createClient").mockImplementation(
       () =>
@@ -416,11 +516,11 @@ describe("multi-turn model negotiation for local and gateway tools", () => {
     expect(restoredCalls).toHaveLength(1);
     expect(restoredCalls[0].function.name).toBe("edit");
     expect(JSON.parse(restoredCalls[0].function.arguments)).toEqual({
-      file: "/private/keys.env",
+      file: "/safe/public.txt",
     });
   });
 
-  test("Codex multi-turn negotiation: holds disallowed call, issues remedy function_call, releases on tool result", async ({
+  test("Codex holds a disallowed call and releases the rebuilt call after a gateway remedy", async ({
     makeAgent,
     makeMember,
     makeUser,
@@ -435,12 +535,11 @@ describe("multi-turn model negotiation for local and gateway tools", () => {
       scope: "personal",
       authorId: user.id,
     });
-    const { value: mcpToken } = await TeamTokenModel.create({
-      organizationId: agent.organizationId,
-      name: "Codex Gateway Token",
-      teamId: null,
-      isOrganizationToken: true,
-    });
+    const { value: mcpToken } = await UserTokenModel.create(
+      user.id,
+      agent.organizationId,
+      "Codex Gateway Token",
+    );
 
     vi.spyOn(openAiResponsesAdapterFactory, "createClient").mockImplementation(
       () =>
@@ -608,7 +707,7 @@ describe("multi-turn model negotiation for local and gateway tools", () => {
     expect(restoredCall).toBeDefined();
     expect(restoredCall.name).toBe("exec_command");
     expect(JSON.parse(restoredCall.arguments)).toEqual({
-      cmd: "cat /etc/shadow",
+      cmd: "echo sanitized",
     });
   });
 });
@@ -620,7 +719,8 @@ function createRouteApp(): FastifyInstance {
   return app.withTypeProvider<ZodTypeProvider>() as unknown as FastifyInstance;
 }
 
-function installMockAppaRuntime() {
+function installMockAppaRuntime(): Array<Record<string, unknown>> {
+  const events: Array<Record<string, unknown>> = [];
   const batches = new Map<
     string,
     Array<{ call_id: string; tool: string; arguments: Record<string, unknown> }>
@@ -645,6 +745,7 @@ function installMockAppaRuntime() {
         event_id: string;
         event: Record<string, unknown>;
       };
+      events.push(envelope.event);
       const batchId = String(envelope.event.batch_id ?? "batch-1");
       const calls = envelope.event.calls as
         | Array<{
@@ -689,23 +790,36 @@ function installMockAppaRuntime() {
                 review: [],
               })),
             }
-          : envelope.event.event === "commit_batch"
+          : envelope.event.event === "resolve_batch_offer"
             ? {
-                decision: "batch_committed",
-                batch_id: batchId,
-                calls: prepared.map((call, position) => ({
-                  position,
-                  call_id: call.call_id,
-                  dispatch_id: `dispatch-${call.call_id}`,
-                  tool: call.tool,
-                  arguments_sha256: createHash("sha256")
-                    .update(JSON.stringify(call.arguments))
-                    .digest("hex"),
-                  arguments: call.arguments,
-                  spawn_binding: null,
-                })),
+                decision: "batch_offer_resolved",
+                batch_id: envelope.event.batch_id,
+                position: envelope.event.position,
+                offer_id: envelope.event.offer_id,
+                tool: envelope.event.tool,
+                arguments_sha256: envelope.event.arguments_sha256,
+                resolution: "bound",
+                kind: "sanitizer",
               }
-            : { decision: "ack" };
+            : envelope.event.event === "commit_batch"
+              ? {
+                  decision: "batch_committed",
+                  batch_id: batchId,
+                  calls: prepared.map((call, position) => ({
+                    position,
+                    call_id: call.call_id,
+                    dispatch_id: `dispatch-${call.call_id}`,
+                    tool: call.tool,
+                    arguments_sha256: createHash("sha256")
+                      .update(
+                        JSON.stringify(sanitizedArguments(call.arguments)),
+                      )
+                      .digest("hex"),
+                    arguments: sanitizedArguments(call.arguments),
+                    spawn_binding: null,
+                  })),
+                }
+              : { decision: "ack" };
       return HttpResponse.json({
         protocol_version: 1,
         event_id: envelope.event_id,
@@ -714,4 +828,14 @@ function installMockAppaRuntime() {
       });
     }),
   );
+  return events;
+}
+
+function sanitizedArguments(
+  arguments_: Record<string, unknown>,
+): Record<string, unknown> {
+  if ("command" in arguments_) return { command: "echo sanitized" };
+  if ("cmd" in arguments_) return { cmd: "echo sanitized" };
+  if ("file" in arguments_) return { file: "/safe/public.txt" };
+  return {};
 }

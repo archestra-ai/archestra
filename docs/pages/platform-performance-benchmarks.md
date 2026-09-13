@@ -3,7 +3,7 @@ title: Performance & Latency
 category: Archestra Platform
 order: 5
 description: Reproducible LLM proxy latency measurements with a mock inference upstream
-lastUpdated: 2026-09-12
+lastUpdated: 2026-09-13
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -82,10 +82,8 @@ A team considers replacing Fastify or rewriting its proxy in Rust. It first meas
 
 A useful comparison keeps hardware, database, authentication, logging, and security behavior equivalent. Traces can separate database waits from request processing; see [Observability](/docs/platform-observability).
 
-[LiteLLM's Rust launch benchmark](https://docs.litellm.ai/blog/litellm-rust-launch) reports results from a different forwarding harness. Its hardware and request path differ from this baseline. These published numbers do not establish a runtime speed ratio for Archestra.
-
 ## Limits
 
-This local run does not measure `frontend.archestra.dev` or production network latency. The client, mock, and backend share host resources. The small database uses memory-backed storage. Results do not establish production capacity or hardware requirements.
+The client, mock, and backend share host resources. The small database uses memory-backed storage. Results do not establish production capacity or hardware requirements.
 
 Higher concurrency includes queueing in the measured latency. These timings alone do not identify Fastify as the bottleneck. CI uses fewer samples on different hardware; compare its results separately. Streaming tail estimates are based on only 300 requests per target and concurrency.

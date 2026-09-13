@@ -692,6 +692,13 @@ jobs:
         with:
           working-directory: ./platform
 
+      - name: Ensure Zsh for shell startup tests
+        run: |
+          if ! command -v zsh >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y zsh
+          fi
+
       # The NAPI package builds are deliberately uncacheable in turbo
       # (turbo.json sets cache:false on them — the .node artifacts are
       # platform-specific and the remote cache is shared with dev machines),

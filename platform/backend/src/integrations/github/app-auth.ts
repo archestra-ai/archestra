@@ -1,4 +1,4 @@
-import { createHash, createPrivateKey } from "node:crypto";
+import { createHash, createPrivateKey, createPublicKey } from "node:crypto";
 import { TimeInMs } from "@archestra/shared";
 import { SignJWT } from "jose";
 import { LRUCacheManager } from "@/cache-manager";
@@ -137,7 +137,15 @@ function buildInstallationTokenCacheKey(params: {
     params.githubUrl.replace(/\/+$/, ""),
     params.appId,
     params.installationId,
-    createHash("sha256").update(params.privateKey).digest("hex"),
+    // The public-key fingerprint invalidates cached tokens when the App key rotates.
+    createHash("sha256")
+      .update(
+        createPublicKey(normalizePrivateKey(params.privateKey)).export({
+          type: "spki",
+          format: "der",
+        }),
+      )
+      .digest("hex"),
   ].join(":");
 }
 

@@ -26,6 +26,7 @@ import { TableRowActions } from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useFeature } from "@/lib/config/config.query";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import {
   type RuntimeCredentialDefinition,
   useDeleteRuntimeCredential,
@@ -39,6 +40,7 @@ const MANAGE_CREDENTIALS_PERMISSION: Permissions = {
 };
 
 export function RuntimeCredentialsSection() {
+  const appName = useAppName();
   const definitions = useRuntimeCredentials();
   const byosEnabled = useFeature("byosEnabled");
   const [definitionDialog, setDefinitionDialog] = useState<
@@ -110,7 +112,21 @@ export function RuntimeCredentialsSection() {
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground">
                   Used by Claude Code Agents with personal Claude Pro or Max
-                  subscriptions. Each person connects their own account once in{" "}
+                  subscriptions.{" "}
+                  <a
+                    href="https://code.claude.com/docs/en/legal-and-compliance#authentication-and-credential-use"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline underline-offset-4 hover:text-foreground"
+                  >
+                    Anthropic’s terms
+                  </a>{" "}
+                  restrict subscription credentials to native Anthropic apps;
+                  this connection is only for Claude Code in Agent Runtime, not
+                  as a model provider for {appName} chat.
+                </p>
+                <p className="mt-3 text-xs text-muted-foreground">
+                  Each person connects their own account once in{" "}
                   <Link
                     href="/account/connections"
                     className="underline underline-offset-4 hover:text-foreground"

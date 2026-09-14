@@ -27,7 +27,7 @@ export default function GitHubConnectionCallback() {
       if (!code || !state) return;
       complete.mutate(
         { code, state },
-        { onSuccess: () => router.replace("/settings/credentials") },
+        { onSuccess: () => router.replace("/account/connections") },
       );
     });
     return () => {
@@ -45,8 +45,8 @@ export default function GitHubConnectionCallback() {
   const description = pending
     ? "Finishing sign-in and saving your connection. This usually takes a few seconds."
     : success
-      ? "Your account is ready to use across your agents. Taking you back to credentials…"
-      : "This sign-in couldn’t be completed. Return to credentials and connect GitHub again.";
+      ? "Your account is ready to use across your agents. Taking you back to connections…"
+      : "This sign-in couldn’t be completed. Return to connections and connect GitHub again.";
 
   return (
     <div className="flex min-h-[360px] items-center justify-center px-4 py-10 sm:py-16">
@@ -88,10 +88,10 @@ export default function GitHubConnectionCallback() {
             {!pending && !success && (
               <Button
                 className="mt-6 w-full"
-                onClick={() => router.replace("/settings/credentials")}
+                onClick={() => router.replace("/account/connections")}
               >
                 <ArrowLeft aria-hidden="true" />
-                <span>Back to credentials</span>
+                <span>Back to connections</span>
               </Button>
             )}
           </div>

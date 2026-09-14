@@ -23,7 +23,7 @@ beforeEach(() => {
   window.history.replaceState(
     null,
     "",
-    "/settings/credentials/github/callback?code=synthetic-code&state=synthetic-state",
+    "/account/connections/github/callback?code=synthetic-code&state=synthetic-state",
   );
 });
 function renderCallback() {
@@ -35,7 +35,7 @@ function renderCallback() {
     </StrictMode>,
   );
 }
-it("completes once in strict mode and returns to credentials without leaving authorization in the URL", async () => {
+it("completes once in strict mode and returns to personal connections without leaving authorization in the URL", async () => {
   let calls = 0;
   server.use(
     http.post(
@@ -56,7 +56,7 @@ it("completes once in strict mode and returns to credentials without leaving aut
   );
   renderCallback();
   await waitFor(() =>
-    expect(replace).toHaveBeenCalledWith("/settings/credentials"),
+    expect(replace).toHaveBeenCalledWith("/account/connections"),
   );
   expect(calls).toBe(1);
   expect(window.location.search).toBe("");
@@ -77,17 +77,13 @@ it("shows a recovery action when authorization expires instead of retaining the 
   expect(
     screen.queryByRole("status", { name: "Saving GitHub connection" }),
   ).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button", { name: "Back to credentials" }));
-  expect(replace).toHaveBeenCalledWith("/settings/credentials");
+  fireEvent.click(screen.getByRole("button", { name: "Back to connections" }));
+  expect(replace).toHaveBeenCalledWith("/account/connections");
 });
 it("offers a fresh sign-in when opened without authorization parameters", () => {
-  window.history.replaceState(
-    null,
-    "",
-    "/settings/credentials/github/callback",
-  );
+  window.history.replaceState(null, "", "/account/connections/github/callback");
   renderCallback();
   expect(
-    screen.getByRole("button", { name: "Back to credentials" }),
+    screen.getByRole("button", { name: "Back to connections" }),
   ).toBeInTheDocument();
 });

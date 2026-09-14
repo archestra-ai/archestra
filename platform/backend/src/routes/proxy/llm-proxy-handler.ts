@@ -76,10 +76,6 @@ import {
   EVENT_GENAI_CONTENT_COMPLETION,
   type SpanTeamInfo,
 } from "@/observability/tracing";
-import {
-  APPA_CALLER_AUTH_HEADER,
-  verifyChatIdentity,
-} from "@/openappa/chat-identity";
 import { getChatReview } from "@/openappa/chat-review";
 import {
   checkToolCalls,
@@ -1026,36 +1022,21 @@ export async function handleLLMProxy<
           }
         : undefined;
 
-    const appaSessionId = headersForExtraction["x-appa-session-id"];
-    const appaParentId = headersForExtraction["x-appa-parent-id"];
-    const signedChatCaller =
-      openappaEnabled() &&
-      source === "chat" &&
-      isLoopbackRequest(request) &&
-      userId &&
-      typeof appaSessionId === "string" &&
-      (appaParentId === undefined || typeof appaParentId === "string") &&
-      verifyChatIdentity(
-        headersForExtraction[APPA_CALLER_AUTH_HEADER.toLowerCase()],
-        {
-          agentId: resolvedAgent.id,
-          userId,
-          sessionId: appaSessionId,
-          parentId: appaParentId,
-        },
-      );
+    // Use the existing internal Chat trust boundary. External callers must
+    // identify themselves through the proxy's normal authentication.
+    const isInternalChat = source === "chat" && isLoopbackRequest(request);
+    const appaUserId =
+      authenticatedUserId ?? (isInternalChat ? userId : undefined);
     const openappaSession = sessionFromHeaders({
       headers: headersForExtraction,
       organizationId: resolvedAgent.organizationId,
-      callerId: signedChatCaller
-        ? `user:${userId}`
-        : authenticatedUserId
-          ? `user:${authenticatedUserId}`
-          : authenticatedApp
-            ? `app:${authenticatedApp.id}`
-            : virtualKeyId
-              ? `virtual-key:${virtualKeyId}`
-              : undefined,
+      callerId: appaUserId
+        ? `user:${appaUserId}`
+        : authenticatedApp
+          ? `app:${authenticatedApp.id}`
+          : virtualKeyId
+            ? `virtual-key:${virtualKeyId}`
+            : undefined,
     });
     const {
       toolResultUpdates,
@@ -1345,7 +1326,7 @@ export async function handleLLMProxy<
     const ctx: LLMProxyContext<TRequest> = {
       openappaSession,
       openappaReview:
-        signedChatCaller && openappaSession
+        isInternalChat && openappaSession
           ? getChatReview(dualLlmProgressChannel, openappaSession)
           : undefined,
       agent: resolvedAgent,

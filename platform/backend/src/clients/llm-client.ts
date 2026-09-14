@@ -74,10 +74,6 @@ import { LOCKED_CHAT_KEY_HEADER } from "@/content-encryption/locked-chat";
 import logger from "@/logging";
 import ModelModel from "@/models/model";
 import {
-  APPA_CALLER_AUTH_HEADER,
-  signChatIdentity,
-} from "@/openappa/chat-identity";
-import {
   APPA_PARENT_HEADER,
   APPA_SESSION_HEADER,
   openappaEnabled,
@@ -256,14 +252,6 @@ export function createLLMModel(params: {
   }
   if (openappaEnabled() && params.appaParentId)
     clientHeaders[APPA_PARENT_HEADER] = params.appaParentId;
-  if (openappaEnabled() && source === "chat" && sessionId && userId) {
-    clientHeaders[APPA_CALLER_AUTH_HEADER] = signChatIdentity({
-      agentId,
-      userId,
-      sessionId,
-      parentId: params.appaParentId,
-    });
-  }
   if (source) {
     clientHeaders[SOURCE_HEADER] = source;
   }

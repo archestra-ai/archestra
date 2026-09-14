@@ -240,7 +240,6 @@ export async function checkToolCalls(
         refusalMessage: feedback,
         contentMessage: feedback,
         reason: feedback,
-        blockedToolCallId: call.id,
         blockedToolName: call.name,
         toolInput: JSON.parse(target.toolCallArgs),
         allToolCallNames: calls.map((call) => call.name),
@@ -315,9 +314,9 @@ export async function checkToolCalls(
             .join("\n"),
         };
       } else {
-        // Re-evaluate the identical call after the remedy. The native boundary
-        // preserves both receipts and returns the reviewed receipt on later
-        // execution/write-boundary checks, including after a restart.
+        // Re-evaluate the identical call after the remedy. The native library
+        // saves the reviewed answer for repeated proposals, including after
+        // a restart.
         decision = await dispatch(session, {
           ...event,
           event: "resume_tool_call",
@@ -347,7 +346,6 @@ export async function checkToolCalls(
       refusalMessage: feedback,
       contentMessage: feedback,
       reason: feedback,
-      blockedToolCallId: call.id,
       blockedToolName: call.name,
       toolInput: JSON.parse(target.toolCallArgs),
       allToolCallNames: calls.map((call) => call.name),

@@ -8,7 +8,7 @@ and an entry point to the existing MCP remedy implementation.
 
 ```mermaid
 flowchart LR
-  C[Authenticated Archestra Chat] -->|session headers + signed caller scope| P[Existing LLM proxy]
+  C[Authenticated Archestra Chat] -->|conversation + user headers| P[Existing LLM proxy]
   P -->|complete proposed calls / submitted results| N[napi-rs binding]
   N --> H[Existing OpenAPPA hooks and remedies]
   H --> E[OpenAPPA event serialization]
@@ -90,11 +90,11 @@ the runtime feature is off.
 
 Chat sends `X-Appa-Session-ID` using the conversation ID. The model constructor
 also supports `X-Appa-Parent-ID`; the initial top-level Chat flow omits it.
-The proxy derives organization and caller from its authenticated context.
-Chat signs the proxy-agent/user/session/parent tuple using the existing auth
-secret, in an internal header covered by log redaction. Loopback and attribution
-headers alone are insufficient. External authenticated proxy clients can supply
-the identity headers; raw provider keys alone do not identify an Archestra user.
+The proxy derives the organization from the resolved agent. Internal Chat uses
+the existing local-request trust boundary and forwards the user from its
+authenticated Chat route. External callers must identify themselves through the
+proxy's existing authentication; a raw provider key and user headers alone are
+not sufficient. There is no APPA-specific signed identity header.
 
 The native actor ID hashes the organization/caller/session tuple. A changed
 parent is refused. `SessionStart` restores the existing trajectory. This version

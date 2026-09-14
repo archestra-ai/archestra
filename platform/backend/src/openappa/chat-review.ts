@@ -2,8 +2,8 @@ import type { ChatMcpElicitationBridge } from "@/clients/chat-mcp-elicitation";
 import type { OpenAppaSession } from "./service";
 
 // Like Archestra's dual-LLM progress bus, this connects a Chat turn to its
-// loopback proxy request in the same process. A channel is not an identity:
-// the proxy must verify Chat's signature and match the full session scope.
+// local proxy request in the same process. Match the caller and conversation
+// before letting that request use the active Chat approval prompt.
 const viewers = new Map<
   string,
   { scope: string; bridge: ChatMcpElicitationBridge }

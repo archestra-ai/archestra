@@ -25,7 +25,6 @@ import type { PolicyEvaluationContext } from "@/models/tool-invocation-policy";
  * Result returned when tool invocation policies block a tool call.
  */
 export interface PolicyBlockResult {
-  blockedToolCallId?: string;
   refusalMessage: string;
   contentMessage: string;
   /** Human-readable reason why the tool call was blocked */

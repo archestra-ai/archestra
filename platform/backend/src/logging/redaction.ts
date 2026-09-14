@@ -32,9 +32,6 @@ export const REDACTED_LOG_PATHS = [
     '["x-archestra-locked-chat-key"]',
     '*["x-archestra-locked-chat-key"]',
     '*.headers["x-archestra-locked-chat-key"]',
-    '["x-archestra-openappa-caller-auth"]',
-    '*["x-archestra-openappa-caller-auth"]',
-    '*.headers["x-archestra-openappa-caller-auth"]',
   ]);
 
 /**

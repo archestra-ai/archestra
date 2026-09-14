@@ -1227,11 +1227,7 @@ describe("createLLMModel", () => {
     });
     const headers = capturedCreateOpenAIOptions.headers;
     expect(headers?.[SESSION_ID_HEADER]).toBe("session");
-    for (const name of [
-      "X-Appa-Session-ID",
-      "X-Appa-Parent-ID",
-      "X-Archestra-Openappa-Caller-Auth",
-    ]) {
+    for (const name of ["X-Appa-Session-ID", "X-Appa-Parent-ID"]) {
       expect(new Headers(headers).has(name)).toBe(enabled);
     }
   });

@@ -14,10 +14,6 @@ import * as database from "@/database";
 import * as toolInvocation from "@/guardrails/tool-invocation";
 import * as trustedData from "@/guardrails/trusted-data";
 import { ModelModel } from "@/models";
-import {
-  APPA_CALLER_AUTH_HEADER,
-  signChatIdentity,
-} from "@/openappa/chat-identity";
 import { registerChatReview } from "@/openappa/chat-review";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import {
@@ -151,18 +147,13 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     "x-archestra-source": "chat",
     "x-archestra-user-id": userId,
     "x-appa-session-id": "stable-session",
-    [APPA_CALLER_AUTH_HEADER.toLowerCase()]: signChatIdentity({
-      agentId: agent.id,
-      userId,
-      sessionId: "stable-session",
-    }),
   });
   const url = () => `/v1/anthropic/${agent.id}/v1/messages`;
 
   test.each([
     true,
     false,
-  ])("signed Chat opens review before releasing calls (stream=%s)", async (stream) => {
+  ])("internal Chat opens review before releasing calls (stream=%s)", async (stream) => {
     let approved = false;
     native.dispatchHook.mockImplementation(async (raw: string) => {
       const event = JSON.parse(raw);
@@ -643,30 +634,67 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     expect(events).toHaveLength(0);
   });
 
-  test("does not authenticate forwarded attribution hints even from loopback", async () => {
-    const unsigned = headers();
-    delete unsigned[APPA_CALLER_AUTH_HEADER.toLowerCase()];
+  test("uses the existing local Chat identity without an APPA signature", async () => {
     const response = await app.inject({
       method: "POST",
       url: url(),
       remoteAddress: "127.0.0.1",
-      headers: unsigned,
+      headers: headers(),
       payload: payload(false),
     });
-    expect(response.statusCode, response.body).toBe(401);
-    expect(providerRequests).toHaveLength(0);
-    expect(events).toHaveLength(0);
+    expect(response.statusCode, response.body).toBe(200);
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        event: "session_start",
+        organization_id: agent.organizationId,
+        caller_id: `user:${userId}`,
+        session_id: "stable-session",
+      }),
+    );
   });
 
-  test("binds the authenticated Chat signature to its exact session", async () => {
-    const response = await app.inject({
-      method: "POST",
-      url: url(),
-      remoteAddress: "127.0.0.1",
-      headers: { ...headers(), "x-appa-session-id": "another-session" },
-      payload: payload(false),
+  test("does not use another conversation's approval prompt", async () => {
+    native.dispatchHook.mockImplementation(async (raw: string) => {
+      const event = JSON.parse(raw);
+      events.push(event);
+      return JSON.stringify(
+        event.event === "tool_call"
+          ? {
+              decision: "deny_call",
+              feedback: "Approval required",
+              review: [{ offer_id: "offer", text: "Review weather request" }],
+            }
+          : { decision: "ack" },
+      );
     });
-    expect(response.statusCode, response.body).toBe(401);
-    expect(providerRequests).toHaveLength(0);
+    const elicit = vi.fn();
+    const remove = registerChatReview(
+      "review-turn",
+      {
+        organization_id: agent.organizationId,
+        caller_id: `user:${userId}`,
+        session_id: "stable-session",
+      },
+      { elicit } as unknown as ChatMcpElicitationBridge,
+    );
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: url(),
+        remoteAddress: "127.0.0.1",
+        headers: {
+          ...headers(),
+          "x-appa-session-id": "another-session",
+          [DUAL_LLM_PROGRESS_CHANNEL_HEADER]: "review-turn",
+        },
+        payload: payload(false),
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      expect(response.body).toContain("Approval required");
+      expect(response.body).not.toContain('"type":"tool_use"');
+      expect(elicit).not.toHaveBeenCalled();
+    } finally {
+      remove();
+    }
   });
 });

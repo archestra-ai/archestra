@@ -3,6 +3,7 @@ import { z } from "zod";
 /** Snapshot the selected binding; editing an Agent must not grant a live run new access. */
 const RenewableCredentialSchema = z.object({
   credentialId: z.string().min(1),
+  scope: z.enum(["personal", "organization"]).optional(),
   value: z.string(),
   expiresAt: z.number().finite(),
 });

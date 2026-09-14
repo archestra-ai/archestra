@@ -19,6 +19,28 @@ function makeCredentials(installationId: string) {
 }
 
 describe("resolveInstallationToken", () => {
+  test("uses the signing key from an App connection that also supports user sign-in", async () => {
+    const token = await resolveInstallationToken(
+      {
+        ...makeCredentials("combined-secrets"),
+        privateKey: JSON.stringify({
+          privateKey,
+          clientSecret: "oauth-secret",
+        }),
+      },
+      async (_url, init) => {
+        expect(JSON.stringify(init)).not.toContain("oauth-secret");
+        return new Response(
+          JSON.stringify({
+            token: "bot-token",
+            expires_at: new Date(Date.now() + 3_600_000).toISOString(),
+          }),
+        );
+      },
+    );
+    expect(token).toBe("bot-token");
+  });
+
   test("exchanges app credentials for an installation token", async () => {
     const calls: string[] = [];
     const fetchImpl = (async (url: string | URL | Request) => {

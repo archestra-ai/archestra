@@ -11,6 +11,7 @@ import {
   setRuntimeCredentialConnection,
   updateRuntimeCredentialDefinition,
 } from "@/services/agent-runtime/runtime-credentials";
+import { githubUserConnectionManager } from "@/services/github-user-connection";
 import {
   constructResponseSchema,
   InsertRuntimeCredentialDefinitionSchema,
@@ -21,6 +22,63 @@ import {
 } from "@/types";
 
 const runtimeCredentialRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  fastify.post(
+    "/api/credentials/:key/github/start",
+    {
+      schema: {
+        operationId: RouteId.StartGitHubUserConnection,
+        tags: ["Credentials"],
+        params: CredentialKeyParamsSchema,
+        response: constructResponseSchema(
+          z.object({ authorizationUrl: z.string() }),
+        ),
+      },
+    },
+    async (request) => {
+      request.auditSkip = true;
+      return githubUserConnectionManager.start({
+        organizationId: request.organizationId,
+        userId: request.user.id,
+        credentialId: request.params.key,
+      });
+    },
+  );
+
+  fastify.post(
+    "/api/credentials/github/callback",
+    {
+      schema: {
+        operationId: RouteId.CompleteGitHubUserConnection,
+        tags: ["Credentials"],
+        body: z.object({
+          state: z.string().min(1).max(256),
+          code: z.string().min(1).max(512),
+        }),
+        response: constructResponseSchema(
+          z.object({
+            id: z.string(),
+            login: z.string(),
+            configured: z.literal(true),
+          }),
+        ),
+      },
+    },
+    async (request) => {
+      const result = await githubUserConnectionManager.complete({
+        organizationId: request.organizationId,
+        userId: request.user.id,
+        ...request.body,
+      });
+      request.auditBefore = result.before;
+      request.auditAfter = result.after;
+      return {
+        id: result.credentialId,
+        login: result.login,
+        configured: true as const,
+      };
+    },
+  );
+
   fastify.get(
     "/api/credentials",
     {
@@ -171,13 +229,20 @@ const runtimeCredentialRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      request.auditSkip = true;
+      request.auditBefore = await getRuntimeCredentialConnectionAuditSnapshot({
+        organizationId: request.organizationId,
+        userId: request.user.id,
+        credentialId: request.params.key,
+        scope: "personal",
+      });
       const deleted = await deleteRuntimeCredentialConnection({
         organizationId: request.organizationId,
         userId: request.user.id,
         credentialId: request.params.key,
         scope: "personal",
       });
+      if (!deleted) request.auditSkip = true;
+      request.auditAfter = null;
       return reply.send({ deleted });
     },
   );

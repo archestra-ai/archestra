@@ -100,14 +100,26 @@ export async function resolveAgentRuntimeCredentials(params: {
     });
     Object.assign(env, resolved.values);
     for (const declaration of perUser) {
-      const value = declaration.credentialId
-        ? await resolveCredentialValue({
+      const credential = declaration.credentialId
+        ? await resolveCredential({
             organizationId: params.organizationId,
             scope: "personal",
             userId: params.userId,
             credentialId: declaration.credentialId,
+            minimumValidityMs: 50 * 60_000,
           })
+        : null;
+      const value = declaration.credentialId
+        ? credential?.value
         : resolved.values[declaration.key];
+      if (credential?.expiresAt && declaration.credentialId) {
+        renewableCredentials[declaration.key] = {
+          credentialId: declaration.credentialId,
+          scope: "personal",
+          value: credential.value,
+          expiresAt: credential.expiresAt,
+        };
+      }
       if (value) {
         env[declaration.key] = value;
       } else if (declaration.required) {

@@ -2,6 +2,7 @@ import { createHash, createPrivateKey, createPublicKey } from "node:crypto";
 import { TimeInMs } from "@archestra/shared";
 import { SignJWT } from "jose";
 import { LRUCacheManager } from "@/cache-manager";
+import { parseGitHubAppSecrets } from "./app-secrets";
 
 // credentials needed to mint a short-lived installation token for a GitHub App
 type GithubAppCredentials = {
@@ -29,12 +30,13 @@ export async function resolveInstallationCredential(
   credentials: GithubAppCredentials,
   fetchImpl: typeof fetch = globalThis.fetch,
 ): Promise<{ token: string; expiresAt: number }> {
-  const { githubUrl, appId, installationId, privateKey } = credentials;
-  if (!appId || !installationId || !privateKey) {
+  const { githubUrl, appId, installationId } = credentials;
+  if (!appId || !installationId || !credentials.privateKey) {
     throw new Error(
       "GitHub App authentication requires app ID, installation ID, and private key",
     );
   }
+  const { privateKey } = parseGitHubAppSecrets(credentials.privateKey);
 
   const cacheKey = buildInstallationTokenCacheKey({
     githubUrl,

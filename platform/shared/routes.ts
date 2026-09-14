@@ -485,6 +485,8 @@ export const RouteId = {
   SetAgentRuntimeCredential: "setAgentRuntimeCredential",
   DeleteAgentRuntimeCredential: "deleteAgentRuntimeCredential",
   ListRuntimeCredentials: "listRuntimeCredentials",
+  StartGitHubUserConnection: "startGitHubUserConnection",
+  CompleteGitHubUserConnection: "completeGitHubUserConnection",
   CreateRuntimeCredential: "createRuntimeCredential",
   GetRuntimeCredentialUsage: "getRuntimeCredentialUsage",
   UpdateRuntimeCredential: "updateRuntimeCredential",

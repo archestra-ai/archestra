@@ -2078,6 +2078,8 @@ To learn more about enterprise licensing, see the [pricing model](/docs/platform
 
 - `ARCHESTRA_OPENAPPA_ENABLED`: explicit opt-in, default `false`. `ARCHESTRA_BETA` and a policy path do not enable it.
 - `ARCHESTRA_OPENAPPA_POLICY_PATH`: absolute deployment TOML path, required when enabled.
+- `ARCHESTRA_OPENAPPA_SESSION_HMAC_SECRET`: required for native APPA lifecycle receipts, encrypted wire frames, and checkpoints.
+- `ARCHESTRA_OPENAPPA_APPROVAL_SIGNING_SECRET`: optional signing secret for configured human approval grants.
 
 Restart the backend after changing these settings. While disabled, existing Tool
 Guardrails run unchanged and the native APPA runtime and MCP remedy tool are

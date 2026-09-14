@@ -4,15 +4,25 @@ import {
 } from "@archestra/shared";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { resolveRunToolTargetName } from "@/archestra-mcp-server/run-tool-target";
-import { LRUCacheManager } from "@/cache-manager";
-import { AgentModel } from "@/models";
+import { AgentModel, ToolModel } from "@/models";
 
 /**
  * Maps a tool name as an external MCP client presents it to the canonical
  * name the platform knows it by, or returns it unchanged when it is not a
  * decorated gateway tool name.
  */
-export type ToolNameCanonicalizer = (toolName: string) => string;
+export type ToolNameCanonicalizer = ((toolName: string) => string) & {
+  /**
+   * Resolves a target only when the client wire name is backed by this
+   * organization's gateway profile and its currently assigned registry tools.
+   */
+  resolveTrustedGatewayToolTarget?(params: {
+    emittedName: string;
+    targetName: string;
+  }): string | undefined;
+  /** OpenCode native IDs proven by this request's declared gateway tools. */
+  isDeclaredNativeGatewayTool?(toolName: string): boolean;
+};
 
 /**
  * Build a canonicalizer for tool names decorated by external MCP clients.
@@ -49,13 +59,18 @@ export async function buildGatewayToolNameCanonicalizer(params: {
   declaredToolNames?: readonly string[];
 }): Promise<ToolNameCanonicalizer> {
   const { organizationId, declaredToolNames = [] } = params;
-  const serverNames = await getGatewayServerNames(organizationId);
+  const gateways = await getGatewayToolSurfaces(organizationId);
+  const serverNames = new Set(gateways.keys());
   const learnedPrefixes = learnGatewayDecorationPrefixes(declaredToolNames);
-  if (serverNames.size === 0 && learnedPrefixes.length === 0) {
-    return (toolName) => toolName;
-  }
-
-  return (toolName) => {
+  const nativeGatewayTools = declaredNativeGatewayTools(
+    gateways,
+    declaredToolNames,
+  );
+  const canonicalize = ((toolName: string) => {
+    const nativeTool = nativeGatewayTools.get(toolName);
+    if (nativeTool) {
+      return resolveRunToolTargetName(nativeTool.name);
+    }
     const segments = toolName.split(MCP_SERVER_TOOL_NAME_SEPARATOR);
     // The gateway's server-name label sits first, or second behind a fixed
     // client prefix (Claude Code's `mcp`). Require at least one segment after
@@ -74,7 +89,33 @@ export async function buildGatewayToolNameCanonicalizer(params: {
       return resolveRunToolTargetName(canonicalName);
     }
     return stripLearnedDecoration(toolName, learnedPrefixes);
+  }) as ToolNameCanonicalizer;
+
+  canonicalize.resolveTrustedGatewayToolTarget = ({
+    emittedName,
+    targetName,
+  }) => {
+    const gateway = gatewayForWireName(
+      emittedName,
+      gateways,
+      nativeGatewayTools,
+    );
+    if (!gateway) return;
+
+    // APPA's Kagent runtime accepts canonical MCP identities. Keep other
+    // branded tools on their platform authorization path, but qualify the
+    // discovery wrapper that APPA explicitly contracts.
+    if (targetName === "archestra__search_tools") {
+      return `mcp/${gateway.alias}/${targetName}`;
+    }
+    if (archestraMcpBranding.isToolName(targetName)) return targetName;
+    if (!gateway.toolNames.has(targetName)) return;
+    return `mcp/${gateway.alias}/${targetName}`;
   };
+  canonicalize.isDeclaredNativeGatewayTool = (toolName) =>
+    nativeGatewayTools.has(toolName);
+
+  return canonicalize;
 }
 
 // === Internal helpers ===
@@ -134,6 +175,29 @@ function learnGatewayDecorationPrefixes(
 }
 
 /**
+ * OpenCode exposes MCP tools as `<registration_key>_<tool_name>`. Accept that
+ * spelling only when this request declared a branded tool under an actual
+ * organization gateway alias; an arbitrary underscore-prefixed tool is never
+ * treated as a gateway control.
+ */
+function declaredNativeGatewayTools(
+  gateways: ReadonlyMap<string, GatewayToolSurface>,
+  declaredToolNames: readonly string[],
+): ReadonlyMap<string, NativeGatewayTool> {
+  const tools = new Map<string, NativeGatewayTool>();
+  for (const [alias, gateway] of gateways) {
+    const prefix = `${alias}_`;
+    for (const wireName of declaredToolNames) {
+      if (!wireName.startsWith(prefix)) continue;
+      const name = wireName.slice(prefix.length);
+      if (!archestraMcpBranding.isToolName(name)) continue;
+      tools.set(wireName, { gateway, name });
+    }
+  }
+  return tools;
+}
+
+/**
  * Strip a learned decoration prefix, refusing to produce a branded built-in
  * name.
  *
@@ -166,27 +230,46 @@ function stripLearnedDecoration(
 /** How deep into the segments a client's gateway label may sit (0 or 1). */
 const GATEWAY_LABEL_MAX_INDEX = 1;
 
-async function getGatewayServerNames(
+async function getGatewayToolSurfaces(
   organizationId: string,
-): Promise<Set<string>> {
-  const cached = gatewayServerNamesCache.get(organizationId);
-  if (cached) {
-    return cached;
-  }
-  const gatewayNames =
-    await AgentModel.findGatewayNamesByOrganizationId(organizationId);
-  const serverNames = new Set(
-    gatewayNames.map(toMcpClientServerName).filter(Boolean),
+): Promise<Map<string, GatewayToolSurface>> {
+  const profiles =
+    await AgentModel.findGatewayProfilesByOrganizationId(organizationId);
+  const surfaces = await Promise.all(
+    profiles.map(async (profile) => ({
+      alias: toMcpClientServerName(profile.name),
+      toolNames: new Set(await ToolModel.getMcpToolNamesByAgent(profile.id)),
+    })),
   );
-  gatewayServerNamesCache.set(organizationId, serverNames);
-  return serverNames;
+  return new Map(
+    surfaces
+      .filter((surface) => surface.alias)
+      .map((surface) => [surface.alias, surface]),
+  );
 }
 
-/**
- * Per-organization cache of gateway client server names. Gateway renames are
- * rare; a short TTL keeps proxy requests from querying agents on every call.
- */
-const gatewayServerNamesCache = new LRUCacheManager<Set<string>>({
-  maxSize: 500,
-  defaultTtl: 60_000,
-});
+function gatewayForWireName(
+  toolName: string,
+  gateways: ReadonlyMap<string, GatewayToolSurface>,
+  nativeGatewayTools: ReadonlyMap<string, NativeGatewayTool>,
+): GatewayToolSurface | undefined {
+  const nativeTool = nativeGatewayTools.get(toolName);
+  if (nativeTool) return nativeTool.gateway;
+  const segments = toolName.split(MCP_SERVER_TOOL_NAME_SEPARATOR);
+  const labelLimit = Math.min(GATEWAY_LABEL_MAX_INDEX + 1, segments.length - 1);
+  for (let i = 0; i < labelLimit; i++) {
+    const gateway = gateways.get(segments[i]);
+    if (gateway) return gateway;
+  }
+  return undefined;
+}
+
+type GatewayToolSurface = {
+  alias: string;
+  toolNames: ReadonlySet<string>;
+};
+
+type NativeGatewayTool = {
+  gateway: GatewayToolSurface;
+  name: string;
+};

@@ -3,3 +3,6 @@ const { loadNativeBinding, wrapAsync } = require("@archestra/napi-loader");
 const binding = loadNativeBinding({ dir: __dirname, crateName: "openappa_rs", packageName: "@archestra/openappa-rs" });
 module.exports.initializeOpenappa = wrapAsync(binding, "initializeOpenappa");
 module.exports.dispatchHook = wrapAsync(binding, "dispatchHook");
+module.exports.openappaProxyCapabilities = wrapAsync(binding, "openappaProxyCapabilities");
+module.exports.dispatchOpenappaProxyEvent = wrapAsync(binding, "dispatchOpenappaProxyEvent");
+module.exports.dispatchOpenappaCheckpoint = wrapAsync(binding, "dispatchOpenappaCheckpoint");

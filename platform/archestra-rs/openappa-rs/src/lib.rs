@@ -5,7 +5,12 @@ use appa_eventlog::{
     Backend, LogStore,
     postgres::{PostgresError, PostgresStore},
 };
-use appa_runtime::{api::Runtime, config::Config, hooks, mcp};
+use appa_runtime::{
+    api::Runtime,
+    config::Config,
+    hooks, mcp,
+    proxy::{EmbeddedProxy, ProxyError, ProxyResponse},
+};
 use appa_runtime_api::{
     Actor, HookDecision, HookEvent, OutcomeBody, ProposedCall, SpawnRef, ToolOutcome, TrajectoryId,
     WireDecision,
@@ -25,9 +30,11 @@ use tokio::sync::Mutex;
 static STATE: OnceLock<Mutex<Option<State>>> = OnceLock::new();
 
 struct State {
-    runtime: Runtime,
+    runtime: Arc<Runtime>,
     config: Config,
     store: Arc<LogStore>,
+    proxy: EmbeddedProxy,
+    approval_secret: Option<Arc<str>>,
 }
 
 #[derive(Clone, Deserialize)]
@@ -64,17 +71,25 @@ fn required<'a>(value: &'a Option<String>, name: &str) -> napi::Result<&'a str> 
         .filter(|s| !s.is_empty())
         .ok_or_else(|| error(format!("missing {name}")))
 }
-fn wire(decision: &HookDecision) -> Value {
-    serde_json::to_value(WireDecision::of(decision)).expect("wire decision serializes")
+fn wire(decision: &HookDecision) -> napi::Result<Value> {
+    serde_json::to_value(WireDecision::of(decision)).map_err(error)
 }
 fn identity(input: &Input) -> String {
-    let bytes = serde_json::to_vec(&(&input.organization_id, &input.caller_id, &input.session_id))
-        .expect("identity serializes");
-    format!("archestra:{:x}", Sha256::digest(bytes))
+    // Identity fields are validated as non-control strings before this is called,
+    // so NUL is an unambiguous boundary without a fallible serialization step.
+    let bytes = format!(
+        "{}\0{}\0{}",
+        input.organization_id, input.caller_id, input.session_id
+    );
+    format!("archestra:{:x}", Sha256::digest(bytes.as_bytes()))
 }
 
 #[napi(js_name = "initializeOpenappa")]
-pub async fn initialize_openappa(database_url: String, policy_path: String) -> napi::Result<()> {
+pub async fn initialize_openappa(
+    database_url: String,
+    policy_path: String,
+    approval_secret: Option<String>,
+) -> napi::Result<()> {
     let mut slot = STATE.get_or_init(|| Mutex::new(None)).lock().await;
     if slot.is_some() {
         return Ok(());
@@ -85,17 +100,68 @@ pub async fn initialize_openappa(database_url: String, policy_path: String) -> n
         let store =
             Arc::new(LogStore::open(Backend::Postgres { url: database_url }).map_err(error)?);
         let runtime =
-            Runtime::open_with_store(config.clone(), store.clone(), None).map_err(error)?;
+            Arc::new(Runtime::open_with_store(config.clone(), store.clone(), None).map_err(error)?);
+        let approval_secret = approval_secret.map(Arc::<str>::from);
+        let proxy = EmbeddedProxy::new(runtime.clone(), approval_secret.clone());
         Ok(State {
             runtime,
             config,
             store,
+            proxy,
+            approval_secret,
         })
     })
     .await
     .map_err(error)??;
     *slot = Some(state);
     Ok(())
+}
+
+#[napi(js_name = "openappaProxyCapabilities")]
+pub async fn openappa_proxy_capabilities() -> napi::Result<String> {
+    let slot = STATE.get_or_init(|| Mutex::new(None)).lock().await;
+    let state = slot
+        .as_ref()
+        .ok_or_else(|| error("OpenAPPA is not initialized"))?;
+    serde_json::to_string(&state.proxy.capabilities()).map_err(error)
+}
+
+#[napi(js_name = "dispatchOpenappaProxyEvent")]
+pub async fn dispatch_openappa_proxy_event(input: String) -> napi::Result<String> {
+    let mut slot = STATE.get_or_init(|| Mutex::new(None)).lock().await;
+    let state = slot
+        .as_mut()
+        .ok_or_else(|| error("OpenAPPA is not initialized"))?;
+    let result = AssertUnwindSafe(state.proxy.event(input.as_bytes()))
+        .catch_unwind()
+        .await;
+    match result {
+        Ok(Ok(response)) => serialize_proxy_response(response),
+        Ok(Err(error)) => Err(proxy_error(error)),
+        _ => {
+            rebuild(state)?;
+            Err(error("OpenAPPA panicked; proxy event was not released"))
+        }
+    }
+}
+
+#[napi(js_name = "dispatchOpenappaCheckpoint")]
+pub async fn dispatch_openappa_checkpoint(input: String) -> napi::Result<String> {
+    let mut slot = STATE.get_or_init(|| Mutex::new(None)).lock().await;
+    let state = slot
+        .as_mut()
+        .ok_or_else(|| error("OpenAPPA is not initialized"))?;
+    let result = std::panic::catch_unwind(AssertUnwindSafe(|| {
+        state.proxy.checkpoint(input.as_bytes())
+    }));
+    match result {
+        Ok(Ok(response)) => serialize_proxy_response(response),
+        Ok(Err(error)) => Err(proxy_error(error)),
+        Err(_) => {
+            rebuild(state)?;
+            Err(error("OpenAPPA panicked; checkpoint was not released"))
+        }
+    }
 }
 
 #[napi(js_name = "dispatchHook")]
@@ -161,15 +227,32 @@ pub async fn dispatch_hook(input: String) -> napi::Result<String> {
         failure => {
             // A rollback must also discard tentative in-memory vouches and
             // turn markers. Durable pending receipts remain fail-closed.
-            let rebuilt = Runtime::open_with_store(state.config.clone(), state.store.clone(), None)
-                .map_err(error)?;
-            state.runtime = rebuilt;
+            rebuild(state)?;
             match failure {
                 Ok(Err(error)) => Err(error),
                 _ => Err(error("OpenAPPA panicked; operation was not released")),
             }
         }
     }
+}
+
+fn rebuild(state: &mut State) -> napi::Result<()> {
+    let runtime = Arc::new(
+        Runtime::open_with_store(state.config.clone(), state.store.clone(), None).map_err(error)?,
+    );
+    state.proxy = EmbeddedProxy::new(runtime.clone(), state.approval_secret.clone());
+    state.runtime = runtime;
+    Ok(())
+}
+
+fn serialize_proxy_response(response: ProxyResponse) -> napi::Result<String> {
+    std::str::from_utf8(response.body())
+        .map(str::to_owned)
+        .map_err(error)
+}
+
+fn proxy_error(refusal: ProxyError) -> napi::Error {
+    error(format!("{}: {refusal}", refusal.code()))
 }
 
 struct SessionLock {
@@ -205,7 +288,10 @@ impl Drop for SessionLock {
 
 impl State {
     async fn dispatch(&self, input: Input) -> napi::Result<Value> {
-        let pg = self.store.postgres().expect("PostgreSQL runtime");
+        let pg = self
+            .store
+            .postgres()
+            .ok_or_else(|| error("OpenAPPA requires a PostgreSQL event store"))?;
         let actor_id = identity(&input);
         let parent = input.parent_id.clone().map(|id| Input {
             session_id: id,
@@ -273,11 +359,11 @@ impl State {
             };
             let decision = hooks::handle(&self.runtime, start).await;
             if !matches!(decision, HookDecision::Ack | HookDecision::Context { .. }) {
-                return Err(error(wire(&decision)));
+                return Err(error(wire(&decision)?));
             }
             // A return contract must be delivered before the child starts work.
             // Keep it in the start receipt so repeat SessionStart can deliver it.
-            let start_decision = wire(&decision);
+            let start_decision = wire(&decision)?;
             let (id, root, input) = (actor_id.clone(), root.clone(), input.clone());
             pg.with_client(move |client| {
                 client.execute("INSERT INTO openappa_sessions (actor, root, organization_id, caller_id, session_id, parent_id, start_decision) VALUES ($1,$2,$3,$4,$5,$6,$7)",
@@ -336,7 +422,7 @@ impl State {
             )
             .await;
             if !matches!(gate, HookDecision::PassControl) {
-                wire(&gate)
+                wire(&gate)?
             } else {
                 let args = serde_json::from_str(required_arguments(&input)?).map_err(error)?;
                 let result = mcp::execute_embedded_remedy(&self.runtime, &actor, args).await;
@@ -367,7 +453,7 @@ impl State {
                 },
                 _ => return Err(error("unsupported OpenAPPA event")),
             };
-            wire(&hooks::handle(&self.runtime, event).await)
+            wire(&hooks::handle(&self.runtime, event).await)?
         };
         finish_operation(pg, &input, &operation, &decision)?;
         tx.commit().map_err(error)?;
@@ -482,7 +568,7 @@ impl State {
             }
             _ => return Err(error("unexpected tool result decision")),
         };
-        let mut response = wire(&decision);
+        let mut response = wire(&decision)?;
         response["approved_output"] = json!(approved);
         let saved_response = response.clone();
         pg.with_client(move |client| {

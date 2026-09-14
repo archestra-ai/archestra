@@ -2,4 +2,10 @@
 /* eslint-disable */
 export declare function dispatchHook(input: string): Promise<string>
 
-export declare function initializeOpenappa(databaseUrl: string, policyPath: string): Promise<void>
+export declare function dispatchOpenappaCheckpoint(input: string): Promise<string>
+
+export declare function dispatchOpenappaProxyEvent(input: string): Promise<string>
+
+export declare function initializeOpenappa(databaseUrl: string, policyPath: string, approvalSecret?: string | undefined | null): Promise<void>
+
+export declare function openappaProxyCapabilities(): Promise<string>

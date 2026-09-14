@@ -24,7 +24,7 @@ flowchart LR
 ## Build and run
 
 Cargo fetches OpenAPPA from its public Git repository at commit
-`581124c212860713010522971afbd7ab4677cb8d`, pinned in this package's manifest and
+`cecd30e9a684fb4cdcfe28d9438e684a3910cfc1`, pinned in this package's manifest and
 the workspace lockfile. A sibling checkout is not required. Update the revision
 and lockfile together when adopting a newer runtime.
 
@@ -97,10 +97,10 @@ proxy's existing authentication; a raw provider key and user headers alone are
 not sufficient. There is no APPA-specific signed identity header.
 
 The native actor ID hashes the organization/caller/session tuple. A changed
-parent is refused. `SessionStart` restores the existing trajectory. This version
-does not submit `Prompt` or `TurnEnd` from Chat or infer them in the proxy.
-Abandoned-call cleanup and unused remedy-permit lifetime are unchanged.
-Detached MCP task execution remains disabled only while the flag is enabled.
+parent is refused. `SessionStart` restores the existing trajectory. The proxy
+dispatches prompt, tool, result, turn, and child lifecycle events through the
+embedded receipt protocol. An aborted response quarantines any undelivered
+authorized calls rather than replaying them.
 
 Both streaming and non-streaming proxy paths call `ToolCall`; existing streaming
 buffers retain tool deltas until the decision completes. Existing name
@@ -120,7 +120,7 @@ the proxy filters model input, not data already stored or displayed by Chat.
 
 ## Storage and interrupted processing
 
-Migration `0471_openappa_native.sql` creates five tables:
+Migration `0471_openappa_native.sql` creates five OpenAPPA-owned tables:
 
 | Table | Owner / purpose |
 | --- | --- |
@@ -129,6 +129,10 @@ Migration `0471_openappa_native.sql` creates five tables:
 | `openappa_sessions` | Scoped actor/root/parent mapping and start decision |
 | `openappa_operations` | Call, lifecycle, and remedy receipts |
 | `openappa_processed_results` | Result status, decision, and approved output |
+
+Migration `0472_restore-appa-stateful-lifecycle.sql` restores the proxy session,
+call, event, approval, held-batch, checkpoint, and native-child correlation
+tables used by the existing durable proxy adapters.
 
 Rust owns event encoding, decoding, policy validation, replay, ordering, and
 compare-and-swap behavior. TypeScript does not interpret policy events. A
@@ -163,10 +167,8 @@ behavior, not exactly-once execution of arbitrary external services.
 dispatch, schemas, and branding. It is implicit protocol support, like existing
 run controls. The native gate checks the control call and the existing Rust MCP
 implementation validates the offer against the authenticated actor. Registered
-remote authorities and sanitizers work. Narrowing offers remain model decisions.
-This integration does not support human approval. Calls requiring it stay blocked,
-and remedies requiring an unavailable human authority return APPA explanations.
-The binding accepts no host approval ruling and has no review/resume events.
+authorities, sanitizers, and configured human approvals use the existing durable
+approval records. Narrowing offers remain model decisions.
 
 A denied call follows the existing proxy refusal envelope. If one proposed
 call is denied, none of that response's tool calls reach the client. Refusal text
@@ -175,10 +177,10 @@ they are not replaced by legacy Tool Guardrails explanations. There is no
 Chat-specific denied-call execution wrapper or automatic model retry.
 
 Locked chats are refused while enabled because the native tables do not yet
-use their browser-held encryption keys. Delegation remains refused until a
-complete child-return adapter exists. Provider-hosted tools remain outside this
-initial adapter. Existing Chat/gateway permission and policy checks still apply
-independently; only the LLM proxy's legacy policy evaluation is replaced.
+use their browser-held encryption keys. Provider-hosted tools remain outside this
+initial adapter. Existing Chat, gateway, trusted-data, and tool-invocation policy
+checks still apply independently. OpenAPPA adds policy decisions; it does not
+bypass existing enforcement.
 
 Start new conversations when enabling this feature. Historical tool results
 from before activation have no native admission receipts and are refused;
@@ -208,12 +210,12 @@ commit failure with event rollback. The storage test in the OpenAPPA tree is:
 OPENAPPA_TEST_DATABASE_URL=postgresql://... cargo test -p appa-eventlog --features postgres -- --ignored
 ```
 
-Backend coverage includes flag-off Tool Guardrails, APPA proxy calls/results,
-whole-response refusal, explicit protocol errors, replay, session headers, MCP
-remedy availability and refusal of human-approval offers. Chat tests verify that ordinary tools
-execute and return their original output without APPA callbacks in either mode.
+Backend coverage verifies configuration, native session headers, remedy dispatch,
+and redaction of native diagnostics. The real native smoke test covers receipt
+replay, checkpoints, lifecycle events, held-batch cancellation, result replay,
+remedies, sanitization, and interrupted receipt recovery.
 
 The pinned OpenAPPA revision includes the companion PostgreSQL and embedded-remedy
-changes. Archestra uses embedded remedies without a human approval context.
+changes. Archestra records configured approval decisions through its durable proxy lifecycle.
 Previous demo/browser results do not qualify this proxy-only refactor; validation
 for this change is reported separately in the PR.

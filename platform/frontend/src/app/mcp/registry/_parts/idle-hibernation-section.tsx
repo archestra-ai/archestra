@@ -98,7 +98,10 @@ export function IdleHibernationSection({ item }: { item: CatalogItem }) {
           disabled={updateMutation.isPending || installs.length === 0}
           onValueChange={handleChange}
         >
-          <SelectTrigger className="w-[320px]">
+          <SelectTrigger
+            aria-label="Idle hibernation"
+            className="w-full max-w-[320px]"
+          >
             <SelectValue
               placeholder={
                 installs.length === 0

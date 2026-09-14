@@ -17,6 +17,13 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Release completed word animations: Streamdown's default forwards fill keeps
+   an opacity compositing effect per word, making long streams stall chat typing.
+   Backwards fill preserves the fade-in; the final opacity is already 1. */
+[data-sd-animate] {
+  animation-fill-mode: backwards;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);

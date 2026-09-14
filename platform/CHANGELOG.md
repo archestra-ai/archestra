@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.3.60](https://github.com/archestra-ai/archestra/compare/platform-v1.3.59...platform-v1.3.60) (2026-09-14)
+
+
+### Bug Fixes
+
+* **deps:** backport rustls security update to release/1.3 ([#7921](https://github.com/archestra-ai/archestra/issues/7921)) ([f027de7](https://github.com/archestra-ai/archestra/commit/f027de7ed075f28fec28ff6a5dc725ec06f10b05))
+* **frontend:** unify sticky create and edit actions for gateways and agents (backport release/1.3) ([#7906](https://github.com/archestra-ai/archestra/issues/7906)) ([f37db5c](https://github.com/archestra-ai/archestra/commit/f37db5cb23bccbe0d171dda22ddfc3a61cbaa530))
+* **frontend:** unify sticky skill plugin and registry actions (backport release/1.3) ([#7919](https://github.com/archestra-ai/archestra/issues/7919)) ([11b9c1e](https://github.com/archestra-ai/archestra/commit/11b9c1e5f5aa68b3d4500d292711b6a5118a9af6))
+* **llm:** allow personal subscription disconnects (backport release/1.3) ([#7902](https://github.com/archestra-ai/archestra/issues/7902)) ([9795b1f](https://github.com/archestra-ai/archestra/commit/9795b1f691a8598a1eeb248876868ba0e373568a))
+
 ## [1.3.59](https://github.com/archestra-ai/archestra/compare/platform-v1.3.58...platform-v1.3.59) (2026-09-13)
 
 

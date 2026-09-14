@@ -1,6 +1,7 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { PERSISTED_QUERY_META } from "@/lib/query-persistence";
 import { reportApiError, throwOnApiError } from "@/lib/utils";
 
 const {
@@ -33,6 +34,20 @@ export function useRuntimeCredentials(enabled = true) {
       return data ?? [];
     },
     enabled,
+    // Restored on refresh, like the other settings lists this page sits
+    // beside: without it, `/settings/credentials` always sits behind a
+    // "Loading credentials…" placeholder while other settings pages'
+    // persisted queries paint their last-known data immediately. Definitions
+    // carry no secret material — only metadata plus `personalConfigured`/
+    // `organizationConfigured` booleans — so nothing sensitive enters the
+    // snapshot.
+    meta: PERSISTED_QUERY_META,
+    // A restored `personalConfigured`/`organizationConfigured` value can be
+    // acted on (e.g. an agent picks this credential believing it's
+    // connected), so a mount always revalidates in the background instead of
+    // waiting out the default staleTime — the same guarantee `useOrganization`
+    // gives its `fresh` callers.
+    refetchOnMount: "always",
   });
 }
 

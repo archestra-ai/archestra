@@ -12,10 +12,13 @@ import type {
   LlmProxyToolResultsContext,
   LlmProxyToolResultsOutcome,
 } from "@/proxy/plugins/registry";
-import type { AppaClientAdapter, AppaTrustedContext } from "./types";
+import {
+  APPA_PLUGIN_TRUSTED_CONTEXT,
+  type AppaClientAdapter,
+  type AppaTrustedContext,
+} from "./types";
 
 const APPA_PLUGIN_BINDING = "archestra.appa.binding";
-const APPA_PLUGIN_TRUSTED_CONTEXT = "archestra.appa.trusted-context";
 const APPA_PLUGIN_ADAPTER = "archestra.appa.adapter";
 
 type AppaPluginBinding = {

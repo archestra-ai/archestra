@@ -82,6 +82,7 @@ import {
   openappaEnabled,
   sessionFromHeaders,
 } from "@/openappa/service";
+import { APPA_PLUGIN_TRUSTED_CONTEXT } from "@/proxy/plugins/appa-plugin-archestra/types";
 import {
   getLlmProxyPluginRegistry,
   type LlmProxyPluginRegistry,
@@ -143,8 +144,6 @@ import {
   redactLockedChatInteraction,
   resolveLockedChatAuditContext,
 } from "./utils/locked-chat-session";
-
-const APPA_PLUGIN_TRUSTED_CONTEXT = "archestra.appa.trusted-context";
 
 const {
   observability: {
@@ -1993,13 +1992,14 @@ async function handleStreaming<
     // The stream is already client-visible. This observes the assembled wire
     // response without pretending a plugin can rewrite bytes already sent.
     if (pluginRegistry && pluginContext) {
+      const response = streamAdapter.toProviderResponse();
       await pluginRegistry.onModelResponse({
         ...pluginContext,
-        response: streamAdapter.toProviderResponse(),
+        response,
       });
       await pluginRegistry.complete({
         ...pluginContext,
-        response: streamAdapter.toProviderResponse(),
+        response,
       });
     }
 

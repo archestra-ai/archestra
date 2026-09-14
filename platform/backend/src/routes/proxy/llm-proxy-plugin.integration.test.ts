@@ -166,6 +166,31 @@ describe("LLM proxy plugin lifecycle", () => {
     }
   });
 
+  test("streaming hooks observe the same completed response snapshot", async ({
+    makeAgent,
+  }) => {
+    const responses: unknown[] = [];
+    const unregister = registerLlmProxyPlugin({
+      id: `test-stream-snapshot-${crypto.randomUUID()}`,
+      async onModelResponse({ response }) {
+        responses.push(response);
+      },
+      async onComplete({ response }) {
+        responses.push(response);
+      },
+    });
+    const agent = await makeAgent({ agentType: "llm_proxy", isDefault: true });
+
+    try {
+      await assertBaselineProxyResponse({ agentId: agent.id, stream: true });
+      expect(responses).toHaveLength(2);
+      expect(responses[0]).toMatchObject({ model: "gpt-4o" });
+      expect(responses[1]).toBe(responses[0]);
+    } finally {
+      unregister();
+    }
+  });
+
   test("fails a streaming request closed and cleans plugins after a hook error", async ({
     makeAgent,
   }) => {

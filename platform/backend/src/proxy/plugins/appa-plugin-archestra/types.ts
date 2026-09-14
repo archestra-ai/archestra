@@ -1,5 +1,7 @@
 import type { AppaChatSource, OpenAppaSession } from "@/openappa/service";
 
+export const APPA_PLUGIN_TRUSTED_CONTEXT = "archestra.appa.trusted-context";
+
 export type AppaTrustedContext = {
   /** Established by the proxy after authentication and session-root validation. */
   session: OpenAppaSession;
@@ -11,6 +13,7 @@ export type AppaTrustedContext = {
 
 export type AppaClientAdapter = {
   readonly id: string;
+  /** Client signals select tool syntax, not authority; they may be spoofed. */
   matches(context: {
     headers: Readonly<Record<string, string | string[] | undefined>>;
     requestBody: unknown;

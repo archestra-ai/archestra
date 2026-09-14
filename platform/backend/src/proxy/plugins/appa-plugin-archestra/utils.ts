@@ -10,5 +10,6 @@ export function readHeader(
     Object.entries(headers).find(
       ([headerName]) => headerName.toLowerCase() === normalizedName,
     )?.[1];
+  // These client-identification signals are single-valued, not authority headers.
   return Array.isArray(value) ? value[0] : value;
 }

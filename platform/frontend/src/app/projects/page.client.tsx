@@ -209,7 +209,6 @@ function ProjectsList() {
 
   return (
     <PageLayout
-      maxWidth="wizard"
       title="Projects"
       description={PROJECTS_DESCRIPTION}
       actionButton={

@@ -3,6 +3,7 @@ import { mergeTests, type Page } from "@playwright/test";
 import { expect, test as uiTest } from "../fixtures";
 import {
   clickButton,
+  ensureWireMockAnthropicChatProvider,
   openAgentRowMenu,
   selectAgentTableView,
   waitForElementWithReload,
@@ -13,8 +14,8 @@ const test = mergeTests(uiTest, apiTest);
 
 /**
  * Drive the routed setup wizard (`/<family>/new`, first step of the shared
- * AgentForm) to a submitted POST, and land on the second wizard step of the
- * created record.
+ * AgentForm) to a submitted POST, then open the agent's summary or the gateway's
+ * connection instructions.
  *
  * The list's Create button, the wizard's name input, and its submit render
  * before React finishes hydrating, so any interaction landing in that window
@@ -24,7 +25,7 @@ const test = mergeTests(uiTest, apiTest);
  * retried until that state is reached. (Same pre-hydration class as the
  * skills marketplace fix in #6339.)
  *
- * Returns the created record's id, read from the wizard URL.
+ * Returns the created record's id, read from the creation response.
  */
 async function createViaWizard(
   page: Page,
@@ -89,25 +90,18 @@ async function createViaWizard(
     await submitButton.click();
     expect(await requestDispatched).not.toBeNull();
   }).toPass({ timeout: 20_000 });
-  await createResponsePromise;
+  const response = await createResponsePromise;
+  expect(response.ok()).toBe(true);
+  const { id } = (await response.json()) as { id: string };
 
-  // 5. The create lands on the new record's Connect section. A gateway opens
-  // on Connect, so that section IS its bare detail URL and the redirect names
-  // no section; every other kind opens on its configuration and so names
-  // Connect explicitly. Anchored either way, so a URL carrying some other
-  // section cannot satisfy the wait.
-  // Matched as a UUID, not as "any segment": the wizard itself lives at
-  // `<list>/new`, which a looser pattern satisfies the moment it loads —
-  // handing back "new" as the record id, which then 400s on cleanup.
-  const RECORD_ID = "[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}";
-  const connectUrl =
+  // 5. Agents open a summary for the saved record. Gateways still
+  // open on Connect, their default detail section.
+  const destination =
     listPath === "/mcp/gateways"
-      ? new RegExp(`${listPath}/(${RECORD_ID})$`)
-      : new RegExp(`${listPath}/(${RECORD_ID})\\?section=connect$`);
-  await page.waitForURL(connectUrl, { timeout: 30_000 });
+      ? new RegExp(`${listPath}/${id}$`)
+      : new RegExp(`/agents/${id}/created$`);
+  await page.waitForURL(destination, { timeout: 30_000 });
   await page.waitForLoadState("domcontentloaded");
-  const id = page.url().match(connectUrl)?.[1];
-  if (!id) throw new Error(`No record id in detail URL ${page.url()}`);
   // The pointer is still where the Create button was — the bottom-right
   // corner, where the "created" toast now sits and pauses its own dismissal
   // while hovered, covering whatever lands under it. Park the pointer away.
@@ -117,8 +111,20 @@ async function createViaWizard(
 
 test("can create and delete an agent", {
   tag: ["@firefox", "@webkit"],
-}, async ({ page, makeRandomString, goToPage }) => {
+}, async ({
+  page,
+  request,
+  makeApiRequest,
+  syncModels,
+  makeRandomString,
+  goToPage,
+}) => {
   test.setTimeout(120_000);
+  await ensureWireMockAnthropicChatProvider({
+    request,
+    makeApiRequest,
+    syncModels,
+  });
 
   const AGENT_NAME = makeRandomString(10, "Test Agent");
   await goToPage(page, "/agents");
@@ -127,8 +133,29 @@ test("can create and delete an agent", {
 
   const agentId = await createViaWizard(page, "/agents", AGENT_NAME);
 
-  // The create lands on the Connect section, which shows the agent's A2A
-  // endpoint so the user knows how to use it.
+  await expect(
+    page.getByRole("heading", { name: "Agent created", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: AGENT_NAME, exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("region", { name: "Messaging channels" }),
+  ).toBeVisible();
+  await page.reload();
+  await page.getByRole("link", { name: "Chat", exact: true }).click();
+  await expect(page).toHaveURL(new RegExp(`/chat\\?agentId=${agentId}$`));
+
+  // Check the rendered chat selection, not just the redirect URL: a stale
+  // agent list must not silently substitute a different agent after creation.
+  await expect(page.getByTestId(E2eTestId.ChatPromptTextarea)).toBeVisible({
+    timeout: 15_000,
+  });
+  await expect(
+    page.getByRole("combobox").filter({ hasText: AGENT_NAME }),
+  ).toBeVisible();
+
+  await goToPage(page, `/agents/${agentId}?section=connect`);
   await expect(
     page.getByText(new RegExp(`/v2/a2a/${agentId}`)).first(),
   ).toBeVisible({ timeout: 15_000 });

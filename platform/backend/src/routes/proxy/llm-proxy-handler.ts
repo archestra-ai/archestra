@@ -77,6 +77,11 @@ import {
   type SpanTeamInfo,
 } from "@/observability/tracing";
 import {
+  APPA_CHAT_BLOCK_HEADER,
+  APPA_CHAT_BLOCK_VERSION,
+  encodeChatBlock,
+} from "@/openappa/chat-block";
+import {
   checkToolCalls,
   type OpenAppaSession,
   openappaEnabled,
@@ -152,6 +157,7 @@ const {
  */
 export interface LLMProxyContext<TRequest> {
   openappaSession?: OpenAppaSession;
+  openappaChatRequestId?: string;
   agent: GatewayAgent;
   originalRequest: TRequest;
   actualModel: string;
@@ -1338,8 +1344,17 @@ export async function handleLLMProxy<
       }
     }
 
+    const chatBlockCapability = headersForExtraction[APPA_CHAT_BLOCK_HEADER];
     const ctx: LLMProxyContext<TRequest> = {
       openappaSession,
+      openappaChatRequestId:
+        openappaSession &&
+        isInternalChat &&
+        typeof chatBlockCapability === "string" &&
+        chatBlockCapability.startsWith(`${APPA_CHAT_BLOCK_VERSION}:`) &&
+        isUuid(chatBlockCapability.slice(3))
+          ? chatBlockCapability.slice(3)
+          : undefined,
       agent: resolvedAgent,
       originalRequest: requestAdapter.getOriginalRequest(),
       actualModel,
@@ -1847,7 +1862,16 @@ async function handleStreaming<
 
       // Drop the held tool-call events and use the existing refusal format.
       // Its text comes from APPA when enabled.
-      const refusalEvents = streamAdapter.formatCompleteTextSSE(contentMessage);
+      const chatBlock =
+        ctx.openappaChatRequestId && ctx.openappaSession
+          ? encodeChatBlock({
+              session: ctx.openappaSession,
+              requestId: ctx.openappaChatRequestId,
+              feedback: contentMessage,
+              calls: rewrittenToolCalls ?? toolCalls,
+            })
+          : contentMessage;
+      const refusalEvents = streamAdapter.formatCompleteTextSSE(chatBlock);
       for (const event of refusalEvents) {
         writeToClient(event);
       }
@@ -2330,9 +2354,18 @@ async function handleNonStreaming<
         `[${providerName}Proxy] Tool invocation blocked by policy`,
       );
 
+      const chatBlock =
+        ctx.openappaChatRequestId && ctx.openappaSession
+          ? encodeChatBlock({
+              session: ctx.openappaSession,
+              requestId: ctx.openappaChatRequestId,
+              feedback: contentMessage,
+              calls: rewrittenToolCalls ?? toolCalls,
+            })
+          : contentMessage;
       const refusalResponse = responseAdapter.toRefusalResponse(
-        refusalMessage,
-        contentMessage,
+        ctx.openappaChatRequestId ? chatBlock : refusalMessage,
+        chatBlock,
       );
 
       recordBlockedToolCallMetrics({

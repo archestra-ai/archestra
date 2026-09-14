@@ -2082,7 +2082,5 @@ To learn more about enterprise licensing, see the [pricing model](/docs/platform
 Restart the backend after changing these settings. While disabled, existing Tool
 Guardrails run unchanged and the native APPA runtime and MCP remedy tool are
 inactive. While enabled, APPA evaluates calls/results at the same LLM-proxy
-checkpoints; errors fail closed. The existing refusal envelope carries APPA's
-explanation and remedy text. Human approvals and the special MCP remedy tool
-remain available. See [the integration setup](https://github.com/archestra-ai/archestra/blob/main/platform/archestra-rs/openappa-rs/README.md)
+checkpoints; errors fail closed. Chat shows blocked attempts as denied tool calls and returns APPA's feedback to the model. The model can choose a remedy and continue without another user message. Existing approval requirements still apply. External clients receive the existing text refusal; automatic continuation requires client support. See [the integration setup](https://github.com/archestra-ai/archestra/blob/main/platform/archestra-rs/openappa-rs/README.md)
 for paired source builds and current limitations.

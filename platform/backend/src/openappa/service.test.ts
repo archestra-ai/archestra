@@ -80,17 +80,11 @@ describe("APPA feature boundary", () => {
     ).toBe(true);
   });
   test("executes the enabled special MCP remedy through the native binding", async () => {
-    native.dispatchHook.mockImplementation(async (raw: string) =>
-      JSON.stringify(
-        JSON.parse(raw).event === "remedy_review"
-          ? { decision: "review", review: [] }
-          : {
-              decision: "mcp_result",
-              result: {
-                content: [{ type: "text", text: "APPA remedy completed" }],
-              },
-            },
-      ),
+    native.dispatchHook.mockResolvedValue(
+      JSON.stringify({
+        decision: "mcp_result",
+        result: { content: [{ type: "text", text: "APPA remedy completed" }] },
+      }),
     );
     const result = await executeArchestraTool(
       "archestra__execute_remedy_plan",
@@ -109,7 +103,46 @@ describe("APPA feature boundary", () => {
     ]);
     expect(
       native.dispatchHook.mock.calls.map(([raw]) => JSON.parse(raw).event),
-    ).toEqual(["remedy_review", "remedy"]);
+    ).toEqual(["remedy"]);
+  });
+
+  test.each([
+    true,
+    false,
+  ])("preserves APPA remedy feedback and error status without opening Chat prompts (isError=%s)", async (isError) => {
+    const appaResult = {
+      isError,
+      content: [{ type: "text", text: "APPA: authority unreachable" }],
+    };
+    native.dispatchHook.mockResolvedValue(
+      JSON.stringify({ decision: "mcp_result", result: appaResult }),
+    );
+    const elicit = vi.fn();
+    const result = await executeArchestraTool(
+      "archestra__execute_remedy_plan",
+      { offer_id: "human-offer" },
+      {
+        agent: { id: "agent", name: "Assistant" },
+        agentId: "agent",
+        organizationId: "org",
+        userId: "alice",
+        sessionId: "conversation",
+        currentToolCallId: "human-remedy",
+        elicitation: { elicit, setWriter: vi.fn(), createHandler: vi.fn() },
+      },
+    );
+    expect(result).toMatchObject(appaResult);
+    expect(elicit).not.toHaveBeenCalled();
+    expect(
+      native.dispatchHook.mock.calls.map(([raw]) => JSON.parse(raw)),
+    ).toEqual([
+      {
+        ...session,
+        event: "remedy",
+        operation_id: "remedy:human-remedy",
+        arguments: { offer_id: "human-offer" },
+      },
+    ]);
   });
 
   test("admits the first client result without Chat execution reporting", async () => {

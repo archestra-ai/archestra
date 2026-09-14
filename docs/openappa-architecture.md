@@ -1,7 +1,7 @@
 # Archestra × OpenAPPA
 
 APPA evaluates tool calls and results at the existing LLM-proxy Tool Guardrails
-checkpoints. Chat supplies authenticated identity and displays human approvals.
+checkpoints. Chat supplies the user and conversation identity.
 The special MCP remedy tool also calls the embedded runtime.
 
 ## Feature flag
@@ -16,7 +16,7 @@ when changing either setting.
 | Incoming tool results | Existing result policies | APPA admission and saved output |
 | Outgoing calls | Existing invocation policies | APPA decision |
 | Refusal envelope | Existing adapter | Same adapter, APPA explanation and remedies |
-| Identity headers and approval bridge | No APPA wiring | Authenticated session and existing approval form |
+| Session header | No APPA wiring | User and conversation identity |
 | Special MCP remedy | Hidden and unavailable | Existing embedded remedy execution |
 | Runtime | Not loaded or initialized | Lazy native initialization; errors fail closed |
 
@@ -53,27 +53,16 @@ normal result storage and rendering remain intact. The proxy consumes
 client-reported completion and explicit protocol errors; it does not independently
 prove execution. Repeated history reuses persisted admitted output.
 
-## Human approvals and remedies
+## Remedies
 
-```mermaid
-sequenceDiagram
-  participant P as LLM proxy
-  participant A as Embedded APPA
-  participant C as Chat approval UI
-  P->>A: ToolCall
-  A-->>P: Human-review offer
-  P->>C: Existing scoped approval bridge
-  C-->>P: Accept / decline / cancel
-  opt Accepted
-    P->>A: Embedded remedy with host-only ruling
-    P->>A: Resume exact reviewed call
-    A-->>P: Approved decision
-  end
-```
+The `archestra__execute_remedy_plan` MCP tool is available when enabled and
+executes remedies directly through the Rust binding. Registered remote
+authorities, sanitizers, and narrowing remedies remain available.
 
-The existing `archestra__execute_remedy_plan` MCP tool remains available when
-enabled and executes remedies directly through the Rust binding. Human approval
-is outside model-supplied arguments. Narrowing remedies remain model choices.
+This PR does not connect APPA human approval to Chat. Calls requiring human
+approval remain blocked, and a remedy requiring an unavailable human authority
+returns APPA's explanation. There are no APPA approval cards, waiting requests, or
+automatic call retries. Existing Chat and MCP prompts are unchanged.
 
 ## Persistence and current limits
 

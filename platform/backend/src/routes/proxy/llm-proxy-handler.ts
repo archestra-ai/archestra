@@ -76,7 +76,6 @@ import {
   EVENT_GENAI_CONTENT_COMPLETION,
   type SpanTeamInfo,
 } from "@/observability/tracing";
-import { getChatReview } from "@/openappa/chat-review";
 import {
   checkToolCalls,
   type OpenAppaSession,
@@ -152,7 +151,6 @@ const {
  */
 export interface LLMProxyContext<TRequest> {
   openappaSession?: OpenAppaSession;
-  openappaReview?: ReturnType<typeof getChatReview>;
   agent: GatewayAgent;
   originalRequest: TRequest;
   actualModel: string;
@@ -1325,10 +1323,6 @@ export async function handleLLMProxy<
 
     const ctx: LLMProxyContext<TRequest> = {
       openappaSession,
-      openappaReview:
-        isInternalChat && openappaSession
-          ? getChatReview(dualLlmProgressChannel, openappaSession)
-          : undefined,
       agent: resolvedAgent,
       originalRequest: requestAdapter.getOriginalRequest(),
       actualModel,
@@ -1781,7 +1775,6 @@ async function handleStreaming<
             ctx.openappaSession,
             rewrittenToolCalls ?? toolCalls,
             canonicalizeToolName,
-            ctx.openappaReview,
           )
         : await utils.toolInvocation.evaluatePolicies(
             normalizeToolCallsForPolicy(
@@ -2256,7 +2249,6 @@ async function handleNonStreaming<
           ctx.openappaSession,
           rewrittenToolCalls ?? toolCalls,
           canonicalizeToolName,
-          ctx.openappaReview,
         )
       : await utils.toolInvocation.evaluatePolicies(
           normalizeToolCallsForPolicy(

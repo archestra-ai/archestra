@@ -52,7 +52,6 @@ describe("chat MCP elicitation", () => {
 
     expect(writer.write).toHaveBeenCalledWith({
       type: "data-mcp-elicitation",
-      transient: true,
       data: expect.objectContaining({
         conversationId: "00000000-0000-4000-8000-000000000001",
         toolName: "example__create_issue",
@@ -186,7 +185,6 @@ describe("chat MCP elicitation", () => {
 
     expect(writer.write).toHaveBeenCalledWith({
       type: "data-mcp-elicitation",
-      transient: true,
       data: expect.objectContaining({
         conversationId: "00000000-0000-4000-8000-000000000001",
         toolName: "archestra__refine_app",

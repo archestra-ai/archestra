@@ -163,9 +163,10 @@ behavior, not exactly-once execution of arbitrary external services.
 dispatch, schemas, and branding. It is implicit protocol support, like existing
 run controls. The native gate checks the control call and the existing Rust MCP
 implementation validates the offer against the authenticated actor. Registered
-remote authorities and sanitizers work. In authenticated Chat, human-review
-offers open the native approval card and pass the host ruling to embedded
-remedy execution. Narrowing offers remain model decisions.
+remote authorities and sanitizers work. Narrowing offers remain model decisions.
+This integration does not support human approval. Calls requiring it stay blocked,
+and remedies requiring an unavailable human authority return APPA explanations.
+The binding accepts no host approval ruling and has no review/resume events.
 
 A denied call follows the existing proxy refusal envelope. If one proposed
 call is denied, none of that response's tool calls reach the client. Refusal text
@@ -209,10 +210,10 @@ OPENAPPA_TEST_DATABASE_URL=postgresql://... cargo test -p appa-eventlog --featur
 
 Backend coverage includes flag-off Tool Guardrails, APPA proxy calls/results,
 whole-response refusal, explicit protocol errors, replay, session headers, MCP
-remedy availability and human approvals. Chat tests verify that ordinary tools
+remedy availability and refusal of human-approval offers. Chat tests verify that ordinary tools
 execute and return their original output without APPA callbacks in either mode.
 
 The pinned OpenAPPA revision includes the companion PostgreSQL and embedded-remedy
-changes. Its remedy implementation preserves the host ruling without an MCP request context.
+changes. Archestra uses embedded remedies without a human approval context.
 Previous demo/browser results do not qualify this proxy-only refactor; validation
 for this change is reported separately in the PR.

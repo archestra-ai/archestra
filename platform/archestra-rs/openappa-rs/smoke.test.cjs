@@ -149,66 +149,18 @@ builtin = "hitl"
     assert.equal(sanitizations, 1);
   });
 
-  await t.test('host review is durable, actor-scoped and approves only the exact call', async () => {
+  await t.test('human remedies cannot approve a call without a human approval integration', async () => {
     const session = scope();
-    const email = (id, to) => hook(session, { event: 'tool_call', operation_id: `call:${id}`, tool: 'send_email', arguments: { to } });
-    assert.equal((await email('internal', 'alice@acmeinc.com')).decision, 'allow_call');
-    await result(session, 'internal', 'saved internally');
-    const denied = await email('external', 'alice@example.com');
+    const event = { event: 'tool_call', operation_id: 'call:email', tool: 'send_email', arguments: { to: 'partner@example.com' } };
+    const denied = await hook(session, event);
     assert.equal(denied.decision, 'deny_call');
-    assert.equal(denied.review.length, 1);
-    const args = { offer_id: denied.review[0].offer_id };
-    const reviewEvent = { event: 'remedy_review', operation_id: 'remedy:review', arguments: args };
-    const prepared = await restarted(session, reviewEvent);
-    assert.match(prepared.review[0].text, /alice@example.com/);
-    assert.deepEqual((await hook({ ...session, caller_id: 'user:other' }, reviewEvent)).review, []);
-    await assert.rejects(() => hook(session, { ...reviewEvent, event: 'tool_call', tool: 'send_email', ruling: 'approve' }), /only a remedy/);
-    const approved = await hook(session, { ...reviewEvent, event: 'remedy', ruling: 'approve' });
-    assert.notEqual(approved.result.isError, true);
-    assert.match(JSON.stringify(approved.result), /Authorized/);
-    assert.deepEqual(await restarted(session, reviewEvent), approved);
-    const retry = await email('approved', 'alice@example.com');
-    assert.equal(retry.decision, 'allow_call', JSON.stringify({ approved, retry }));
-    await result(session, 'approved', 'saved locally');
-    assert.equal((await email('changed', 'bob@example.com')).decision, 'deny_call');
-  });
-
-  await t.test('host denial never releases an external email', async () => {
-    const session = scope();
-    const event = { event: 'tool_call', operation_id: 'call:email', tool: 'send_email', arguments: { to: 'no@example.com' } };
-    const denied = await hook(session, event);
-    const decision = await hook(session, { event: 'remedy', operation_id: 'remedy:deny', arguments: { offer_id: denied.review[0].offer_id }, ruling: 'deny' });
-    assert.equal(decision.decision, 'mcp_result');
+    const remedyEvent = { event: 'remedy', operation_id: 'remedy:email', arguments: { offer_id: denied.review[0].offer_id } };
+    await assert.rejects(() => hook(session, { ...remedyEvent, ruling: 'approve' }), /unknown field.*ruling/);
+    const remedy = await hook(session, remedyEvent);
+    assert.equal(remedy.decision, 'mcp_result');
+    assert.match(JSON.stringify(remedy.result.content), /unreachable/);
+    assert.deepEqual(await restarted(session, remedyEvent), remedy);
     assert.equal((await hook(session, { ...event, operation_id: 'call:retry' })).decision, 'deny_call');
-  });
-
-  await t.test('host approval resumes the same call with durable exact-argument receipts', async () => {
-    const session = scope();
-    const event = { event: 'tool_call', operation_id: 'call:automatic-email', tool: 'send_email', arguments: { to: 'partner@example.com' } };
-    const denied = await hook(session, event);
-    await assert.rejects(() => hook(session, { ...event, event: 'resume_tool_call', arguments: { to: 'other@example.com' } }), /must match/);
-    await assert.rejects(() => hook(session, { ...event, event: 'resume_tool_call', operation_id: 'call:missing' }), /no original/);
-    const approved = await hook(session, { event: 'remedy', operation_id: 'remedy:automatic-email', arguments: { offer_id: denied.review[0].offer_id }, ruling: 'approve' });
-    assert.notEqual(approved.result.isError, true);
-    const resumed = await hook(session, { ...event, event: 'resume_tool_call' });
-    assert.equal(resumed.decision, 'allow_call');
-    assert.equal(resumed.reviewed, true);
-    assert.deepEqual(await restarted(session, event), resumed);
-    assert.deepEqual(await hook(session, { ...event, event: 'resume_tool_call' }), resumed);
-    await assert.rejects(() => hook(session, { ...event, arguments: { to: 'other@example.com' } }), /reused with different input/);
-    await result(session, 'automatic-email', 'saved');
-    const receipts = await client.query("SELECT count(*) FROM openappa_operations WHERE organization_id=$1 AND session_id=$2 AND operation_id LIKE 'call:automatic-email%'", [session.organization_id, session.session_id]);
-    assert.equal(Number(receipts.rows[0].count), 2);
-  });
-
-  await t.test('resuming without approval still refuses and retains that refusal', async () => {
-    const session = scope();
-    const event = { event: 'tool_call', operation_id: 'call:unapproved-email', tool: 'send_email', arguments: { to: 'partner@example.com' } };
-    await hook(session, event);
-    const resumed = await hook(session, { ...event, event: 'resume_tool_call' });
-    assert.equal(resumed.decision, 'deny_call');
-    assert.equal(resumed.reviewed, true);
-    assert.deepEqual(await restarted(session, event), resumed);
   });
 
   await t.test('unknown execution outcomes never promote an unchecked body', async () => {

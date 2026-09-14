@@ -18,14 +18,6 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 
 export type ChatMcpElicitationRequest = {
-  approval?: {
-    toolName: string;
-    input: unknown;
-    currentTrust?: string;
-    requiredTrust?: string;
-    reason?: string;
-  };
-  presentation?: "approval";
   id: string;
   conversationId: string;
   toolName: string;
@@ -94,10 +86,7 @@ export function McpElicitationDialog({
     await onRespond({
       id: request.id,
       action: "accept",
-      content:
-        request.presentation === "approval"
-          ? {}
-          : normalizeValues(fields, values),
+      content: normalizeValues(fields, values),
     });
   };
 
@@ -111,21 +100,9 @@ export function McpElicitationDialog({
       onOpenChange={(open) => {
         if (!open && !isSubmitting) void respondWithoutContent("cancel");
       }}
-      title={
-        request.presentation === "approval"
-          ? "Approve action"
-          : "Additional Information"
-      }
-      description={
-        request.presentation === "approval" ? (
-          <span className="whitespace-pre-wrap break-words">
-            {request.message}
-          </span>
-        ) : (
-          request.message
-        )
-      }
-      size={request.presentation === "approval" ? "medium" : "small"}
+      title="Additional Information"
+      description={request.message}
+      size="small"
       preventCloseOnInteractOutside
       onSubmit={submit}
       footer={
@@ -149,7 +126,7 @@ export function McpElicitationDialog({
           </Button>
           <Button type="submit" disabled={isSubmitting}>
             <CheckIcon />
-            {request.presentation === "approval" ? "Approve" : "Continue"}
+            Continue
           </Button>
         </>
       }
@@ -166,7 +143,7 @@ export function McpElicitationDialog({
           </a>
         ) : null}
 
-        {request.presentation === "approval" ? null : fields.length === 0 ? (
+        {fields.length === 0 ? (
           <Textarea
             value={String(values.response ?? "")}
             onChange={(event) =>

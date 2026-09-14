@@ -1,6 +1,5 @@
 /** Native decisions at the existing buffered proxy seam. The real native +
  * PostgreSQL engine is exercised separately by openappa-rs/smoke.test.cjs. */
-import { DUAL_LLM_PROGRESS_CHANNEL_HEADER } from "@archestra/shared";
 import Fastify, { type FastifyInstance } from "fastify";
 import {
   serializerCompiler,
@@ -8,13 +7,11 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { vi } from "vitest";
-import type { ChatMcpElicitationBridge } from "@/clients/chat-mcp-elicitation";
 import config from "@/config";
 import * as database from "@/database";
 import * as toolInvocation from "@/guardrails/tool-invocation";
 import * as trustedData from "@/guardrails/trusted-data";
 import { ModelModel } from "@/models";
-import { registerChatReview } from "@/openappa/chat-review";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import {
   type AnthropicStubOptions,
@@ -153,109 +150,59 @@ describe("OpenAPPA on the existing LLM proxy", () => {
   test.each([
     true,
     false,
-  ])("internal Chat opens review before releasing calls (stream=%s)", async (stream) => {
-    let approved = false;
+  ])("human-approval offers remain refusals without automatic remedies (stream=%s)", async (stream) => {
     native.dispatchHook.mockImplementation(async (raw: string) => {
       const event = JSON.parse(raw);
       events.push(event);
-      if (event.event === "tool_call")
-        return JSON.stringify({
-          decision: "deny_call",
-          review: [
-            { offer_id: "review", text: "Review this exact weather request" },
-          ],
-        });
-      if (event.event === "remedy_review")
-        return JSON.stringify({
-          decision: "review",
-          review: [
-            { offer_id: "review", text: "Review this exact weather request" },
-          ],
-        });
-      if (event.event === "remedy") {
-        approved = event.ruling === "approve";
-        return JSON.stringify({
-          decision: "mcp_result",
-          result: { content: [] },
-        });
-      }
-      if (event.event === "resume_tool_call")
-        return JSON.stringify({
-          decision: approved ? "allow_call" : "deny_call",
-          reviewed: true,
-        });
-      return JSON.stringify({ decision: "ack" });
-    });
-    const elicit = vi
-      .fn()
-      .mockResolvedValue({ status: "answered", result: { action: "accept" } });
-    const remove = registerChatReview(
-      "review-turn",
-      {
-        organization_id: agent.organizationId,
-        caller_id: `user:${userId}`,
-        session_id: "stable-session",
-      },
-      { elicit } as unknown as ChatMcpElicitationBridge,
-    );
-    try {
-      const response = await app.inject({
-        method: "POST",
-        url: url(),
-        remoteAddress: "127.0.0.1",
-        headers: {
-          ...headers(),
-          [DUAL_LLM_PROGRESS_CHANNEL_HEADER]: "review-turn",
-        },
-        payload: payload(stream),
-      });
-      expect(response.statusCode, response.body).toBe(200);
-      expect(elicit).toHaveBeenCalledOnce();
-      expect(response.body).toContain('"type":"tool_use"');
-      expect(events.some((event) => event.event === "resume_tool_call")).toBe(
-        true,
+      return JSON.stringify(
+        event.event === "tool_call"
+          ? {
+              decision: "deny_call",
+              feedback: "APPA: human approval required",
+              review: [
+                { offer_id: "review", text: "Review this weather request" },
+              ],
+            }
+          : { decision: "ack" },
       );
-    } finally {
-      remove();
-    }
+    });
+    const response = await app.inject({
+      method: "POST",
+      url: url(),
+      remoteAddress: "127.0.0.1",
+      headers: headers(),
+      payload: payload(stream),
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.body).toContain("APPA: human approval required");
+    expect(response.body).not.toContain('"type":"tool_use"');
+    expect(response.body).not.toContain("input_json_delta");
+    expect(events.map((event) => event.event)).toEqual([
+      "session_start",
+      "tool_call",
+    ]);
   });
 
   for (const stream of [true, false]) {
     test(`returns APPA refusal text to authenticated Chat without executable calls (${stream})`, async () => {
       block = true;
-      const remove = registerChatReview(
-        "blocked-turn",
-        {
-          organization_id: agent.organizationId,
-          caller_id: `user:${userId}`,
-          session_id: "stable-session",
-        },
-        { elicit: vi.fn() } as unknown as ChatMcpElicitationBridge,
+      const response = await app.inject({
+        method: "POST",
+        url: url(),
+        remoteAddress: "127.0.0.1",
+        headers: headers(),
+        payload: payload(stream),
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      expect(response.body).not.toContain('"type":"tool_use"');
+      expect(response.body).not.toContain("input_json_delta");
+      expect(response.body).toContain(
+        "NATIVE REFUSAL: archestra__execute_remedy_plan(offer_id: test-offer)",
       );
-      try {
-        const response = await app.inject({
-          method: "POST",
-          url: url(),
-          remoteAddress: "127.0.0.1",
-          headers: {
-            ...headers(),
-            [DUAL_LLM_PROGRESS_CHANNEL_HEADER]: "blocked-turn",
-          },
-          payload: payload(stream),
-        });
-        expect(response.statusCode, response.body).toBe(200);
-        expect(response.body).not.toContain('"type":"tool_use"');
-        expect(response.body).not.toContain("input_json_delta");
-        expect(response.body).toContain(
-          "NATIVE REFUSAL: archestra__execute_remedy_plan(offer_id: test-offer)",
-        );
-        expect(response.body).not.toContain("tool call policy violated");
-        expect(
-          events.filter((event) => event.event === "tool_call"),
-        ).toHaveLength(1);
-      } finally {
-        remove();
-      }
+      expect(response.body).not.toContain("tool call policy violated");
+      expect(
+        events.filter((event) => event.event === "tool_call"),
+      ).toHaveLength(1);
     });
   }
 
@@ -651,50 +598,5 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         session_id: "stable-session",
       }),
     );
-  });
-
-  test("does not use another conversation's approval prompt", async () => {
-    native.dispatchHook.mockImplementation(async (raw: string) => {
-      const event = JSON.parse(raw);
-      events.push(event);
-      return JSON.stringify(
-        event.event === "tool_call"
-          ? {
-              decision: "deny_call",
-              feedback: "Approval required",
-              review: [{ offer_id: "offer", text: "Review weather request" }],
-            }
-          : { decision: "ack" },
-      );
-    });
-    const elicit = vi.fn();
-    const remove = registerChatReview(
-      "review-turn",
-      {
-        organization_id: agent.organizationId,
-        caller_id: `user:${userId}`,
-        session_id: "stable-session",
-      },
-      { elicit } as unknown as ChatMcpElicitationBridge,
-    );
-    try {
-      const response = await app.inject({
-        method: "POST",
-        url: url(),
-        remoteAddress: "127.0.0.1",
-        headers: {
-          ...headers(),
-          "x-appa-session-id": "another-session",
-          [DUAL_LLM_PROGRESS_CHANNEL_HEADER]: "review-turn",
-        },
-        payload: payload(false),
-      });
-      expect(response.statusCode, response.body).toBe(200);
-      expect(response.body).toContain("Approval required");
-      expect(response.body).not.toContain('"type":"tool_use"');
-      expect(elicit).not.toHaveBeenCalled();
-    } finally {
-      remove();
-    }
   });
 });

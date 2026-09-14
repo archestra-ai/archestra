@@ -45,7 +45,6 @@ const registry = defineArchestraTools([
         session,
         context.currentToolCallId ?? `offer:${args.offer_id}`,
         args,
-        context.elicitation,
       );
     },
   }),

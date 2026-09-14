@@ -2072,3 +2072,17 @@ Automatic deletion of content-bearing records after a configurable number of day
 ### Enterprise Licensing
 
 To learn more about enterprise licensing, see the [pricing model](/docs/platform-pricing-model).
+
+
+### OpenAPPA Tool Guardrails (experimental)
+
+- `ARCHESTRA_OPENAPPA_ENABLED`: explicit opt-in, default `false`. `ARCHESTRA_BETA` and a policy path do not enable it.
+- `ARCHESTRA_OPENAPPA_POLICY_PATH`: absolute deployment TOML path, required when enabled.
+
+Restart the backend after changing these settings. While disabled, existing Tool
+Guardrails run unchanged and the native APPA runtime and MCP remedy tool are
+inactive. While enabled, APPA evaluates calls/results at the same LLM-proxy
+checkpoints; errors fail closed. The existing refusal envelope carries APPA's
+explanation and remedy text. Human approvals and the special MCP remedy tool
+remain available. See [the integration setup](https://github.com/archestra-ai/archestra/blob/main/platform/archestra-rs/openappa-rs/README.md)
+for paired source builds and current limitations.

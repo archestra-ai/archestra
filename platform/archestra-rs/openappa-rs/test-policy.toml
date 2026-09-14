@@ -1,0 +1,33 @@
+# Deterministic integration policy; only these test/read tools are admitted.
+[policy]
+version = 2
+
+[[policy.tool]]
+name = "read_untrusted"
+delta = { trust = "suspicious" }
+
+[[policy.tool]]
+name = "archestra__whoami"
+delta = { trust = "suspicious" }
+
+[[policy.tool]]
+name = "archestra__search_tools"
+delta = {}
+
+[[policy.tool]]
+name = "write_public"
+delta = {}
+requires = { trust = "trusted" }
+
+[[policy.tool]]
+name = "archestra__list_agents"
+delta = {}
+requires = { trust = "trusted" }
+
+[[policy.tool]]
+name = "read_plain"
+delta = {}
+
+[externals]
+timeout_ms = 2000
+max_body_bytes = 65536

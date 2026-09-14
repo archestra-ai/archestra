@@ -8,6 +8,8 @@ import { AppaPluginArchestra } from "./plugin";
 export { APPA_PLUGIN_TRUSTED_CONTEXT } from "./plugin";
 
 const appaPlugin = new AppaPluginArchestra([
+  // Prefer externally declared client protocols; Chat's trusted loopback marker
+  // is intentionally last so incidental SDK headers keep their native syntax.
   new AppaClaudeCodeAdapter(),
   new AppaCodexAdapter(),
   new AppaOpenCodeAdapter(),

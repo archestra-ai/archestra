@@ -32,7 +32,7 @@ These credentials are per-user and personal-only. Each person connects their own
 
 A rejected subscription sign-in requires reconnecting. Reconnecting updates the existing credential and preserves its model and agent selections. Failed model refreshes preserve previously discovered models. Temporary provider failures do not require signing in again.
 
-You can disconnect your own subscription without administrator approval. Disconnecting removes the saved sign-in; it does not cancel your vendor subscription. Remove any virtual-key or OAuth-client mappings before disconnecting.
+Disconnecting signs you out without cancelling your subscription.
 
 Each provider's section below covers what to turn on with the vendor first.
 

@@ -801,11 +801,11 @@ async function findStaticPinsBrokenByTargetChange(params: {
 }
 
 /**
- * Guard for the surfaces that move an agent between scopes/teams (the REST
+ * Guard for the surfaces that change an agent owner, scope, or teams (the REST
  * update route and the MCP edit tools): refuses the change while a static pin
  * still points at a connection the agent would lose. One implementation, so
  * both surfaces reject the same requests with the same wording. A change that
- * moves neither scope nor teams reads nothing.
+ * moves neither ownership, scope, nor teams reads nothing.
  */
 export async function assertNoStaticPinsBrokenByTargetChange(params: {
   agentId: string;
@@ -818,7 +818,11 @@ export async function assertNoStaticPinsBrokenByTargetChange(params: {
     nextTarget.teamIds.some(
       (teamId) => !currentTarget.teamIds.includes(teamId),
     );
-  if (currentTarget.scope === nextTarget.scope && !teamsChanged) {
+  if (
+    currentTarget.scope === nextTarget.scope &&
+    currentTarget.authorId === nextTarget.authorId &&
+    !teamsChanged
+  ) {
     return;
   }
 
@@ -836,7 +840,7 @@ export async function assertNoStaticPinsBrokenByTargetChange(params: {
   const connectionLabel = connections.length > 1 ? "s" : "";
   throw new ApiError(
     400,
-    `These tools are pinned to a connection this agent would lose access to: ${toolNames} (connection${connectionLabel}: ${connections.join(", ")}). Unassign them or switch them to dynamic credentials before changing the agent's teams or scope.`,
+    `These tools are pinned to a connection this agent would lose access to: ${toolNames} (connection${connectionLabel}: ${connections.join(", ")}). Unassign them or switch them to dynamic credentials before changing the agent's owner, teams, or scope.`,
   );
 }
 

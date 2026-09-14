@@ -21,6 +21,7 @@ export const RouteId = {
   GetDefaultMcpGateway: "getDefaultMcpGateway",
   GetLlmProxy: "getLlmProxy",
   UpdateLlmProxy: "updateLlmProxy",
+  TransferAgentOwnership: "transferAgentOwnership",
   UpdateAgent: "updateAgent",
   DeleteAgent: "deleteAgent",
   BulkUpdateAgents: "bulkUpdateAgents",

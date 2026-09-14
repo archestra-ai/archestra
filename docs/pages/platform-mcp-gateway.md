@@ -3,7 +3,7 @@ title: MCP Gateway
 category: MCP
 order: 1
 description: Unified access point for all MCP servers
-lastUpdated: 2026-09-03
+lastUpdated: 2026-09-14
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -27,6 +27,10 @@ Every gateway has its own page, and that page is where you change it. The three 
 Tool assignments can point to a specific installed MCP server connection or use **Resolve at call time**. Resolve-at-call-time is useful when the same gateway should use the caller's own GitHub, Jira, or other upstream credential instead of a shared connection.
 
 After the gateway is configured, use its **Connect** tab to copy connection details for supported clients.
+
+## Ownership Transfers
+
+MCP gateways support [ownership transfers](/docs/platform-agents#ownership-transfers) between organization members. Their endpoint, assigned tools, and sharing settings stay unchanged. Your automatically created personal gateway stays with your account.
 
 ## Tool Assignment
 

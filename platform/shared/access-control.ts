@@ -783,6 +783,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UnpinAgent]: {},
   [RouteId.CreateAgent]: {},
   [RouteId.CloneAgent]: {},
+  [RouteId.TransferAgentOwnership]: {},
   [RouteId.UpdateAgent]: {},
   [RouteId.BulkUpdateAgents]: {},
   [RouteId.BulkDeleteAgents]: {},

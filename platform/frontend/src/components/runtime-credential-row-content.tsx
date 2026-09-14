@@ -18,7 +18,10 @@ export function RuntimeCredentialRowContent({
         <RuntimeCredentialIcon
           icon={
             definition.icon ??
-            (definition.kind === "github_app" ? "logo:github" : null)
+            (definition.kind === "github_app" ||
+            definition.kind === "github_app_user"
+              ? "logo:github"
+              : null)
           }
         />
       </div>
@@ -52,7 +55,9 @@ export function RuntimeCredentialDescription({
 }) {
   if (definition.key === "claude-code") {
     return (
-      <p className={`${className} text-xs text-muted-foreground`}>
+      <p
+        className={`${className} whitespace-pre-line text-xs text-muted-foreground`}
+      >
         Use a personal subscription token created with{" "}
         <code className="rounded bg-muted px-1 py-0.5 font-mono text-[0.9em] text-foreground">
           claude setup-token
@@ -64,7 +69,9 @@ export function RuntimeCredentialDescription({
 
   if (!definition.description.trim()) return null;
   return (
-    <p className={`${className} text-xs text-muted-foreground`}>
+    <p
+      className={`${className} whitespace-pre-line text-xs text-muted-foreground`}
+    >
       {definition.description}
     </p>
   );

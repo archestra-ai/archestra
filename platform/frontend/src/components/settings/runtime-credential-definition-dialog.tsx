@@ -28,6 +28,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   type RuntimeCredentialDefinition,
   useCreateRuntimeCredential,
+  useRuntimeCredentials,
   useUpdateRuntimeCredential,
 } from "@/lib/runtime-credentials.query";
 
@@ -39,6 +40,7 @@ export function RuntimeCredentialDefinitionDialog({
   onClose: () => void;
 }) {
   const create = useCreateRuntimeCredential();
+  const { data: credentials = [] } = useRuntimeCredentials();
   const update = useUpdateRuntimeCredential();
   const form = useForm<DefinitionFormValues>({
     resolver: zodResolver(DefinitionFormSchema),
@@ -48,6 +50,8 @@ export function RuntimeCredentialDefinitionDialog({
       githubUrl: definition?.githubUrl ?? "https://api.github.com",
       appId: definition?.appId ?? "",
       installationId: definition?.installationId ?? "",
+      githubClientId: definition?.githubClientId ?? "",
+      githubAppCredentialKey: definition?.githubAppCredentialKey ?? "",
       description: definition?.description ?? "",
       icon: definition?.icon ?? null,
       scope: definition?.allowOrganization ? "organization" : "personal",
@@ -67,6 +71,14 @@ export function RuntimeCredentialDefinitionDialog({
             appId: values.kind === "github_app" ? values.appId : null,
             installationId:
               values.kind === "github_app" ? values.installationId : null,
+            githubClientId:
+              values.kind === "github_app"
+                ? values.githubClientId || null
+                : null,
+            githubAppCredentialKey:
+              values.kind === "github_app_user"
+                ? values.githubAppCredentialKey
+                : null,
             description: values.description.trim(),
             icon: values.icon,
           },
@@ -84,6 +96,12 @@ export function RuntimeCredentialDefinitionDialog({
         appId: values.kind === "github_app" ? values.appId : null,
         installationId:
           values.kind === "github_app" ? values.installationId : null,
+        githubClientId:
+          values.kind === "github_app" ? values.githubClientId || null : null,
+        githubAppCredentialKey:
+          values.kind === "github_app_user"
+            ? values.githubAppCredentialKey
+            : null,
         name: values.name.trim(),
         description: values.description.trim(),
         icon: values.icon,
@@ -183,6 +201,8 @@ export function RuntimeCredentialDefinitionDialog({
                 value={field.value}
                 onValueChange={(value) => {
                   field.onChange(value);
+                  if (value === "github_app_user")
+                    form.setValue("scope", "personal", { shouldDirty: true });
                   if (value === "github_app")
                     form.setValue("scope", "organization", {
                       shouldDirty: true,
@@ -225,6 +245,17 @@ export function RuntimeCredentialDefinitionDialog({
                   >
                     GitHub App
                   </SelectItem>
+                  <SelectItem
+                    value="github_app_user"
+                    icon={
+                      <RuntimeCredentialIcon
+                        icon="logo:github"
+                        className="size-4"
+                      />
+                    }
+                  >
+                    GitHub user connection
+                  </SelectItem>
                 </SelectContent>
               </Select>
               {field.value === "github_app" && (
@@ -240,7 +271,14 @@ export function RuntimeCredentialDefinitionDialog({
         />
         {form.watch("kind") === "github_app" && (
           <div className="space-y-4">
-            {(["githubUrl", "appId", "installationId"] as const).map((name) => (
+            {(
+              [
+                "githubUrl",
+                "appId",
+                "installationId",
+                "githubClientId",
+              ] as const
+            ).map((name) => (
               <FormField
                 key={name}
                 control={form.control}
@@ -252,7 +290,9 @@ export function RuntimeCredentialDefinitionDialog({
                         ? "GitHub API URL"
                         : name === "appId"
                           ? "App ID"
-                          : "Installation ID"}
+                          : name === "installationId"
+                            ? "Installation ID"
+                            : "OAuth client ID (optional)"}
                     </FormLabel>
                     <FormControl>
                       <Input {...field} />
@@ -263,6 +303,41 @@ export function RuntimeCredentialDefinitionDialog({
               />
             ))}
           </div>
+        )}
+        {form.watch("kind") === "github_app_user" && (
+          <FormField
+            control={form.control}
+            name="githubAppCredentialKey"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Organization GitHub App</FormLabel>
+                <FormDescription>
+                  Each user authorizes this App once. Their connection is shared
+                  across agents and harnesses.
+                </FormDescription>
+                <Select value={field.value} onValueChange={field.onChange}>
+                  <FormControl>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select an App" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    {credentials
+                      .filter(
+                        (entry) =>
+                          entry.kind === "github_app" && entry.githubClientId,
+                      )
+                      .map((entry) => (
+                        <SelectItem key={entry.key} value={entry.key}>
+                          {entry.name}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
         )}
         {!definition && (
           <FormField
@@ -280,7 +355,7 @@ export function RuntimeCredentialDefinitionDialog({
                 <Select
                   value={field.value}
                   onValueChange={field.onChange}
-                  disabled={form.watch("kind") === "github_app"}
+                  disabled={form.watch("kind") !== "secret"}
                 >
                   <FormControl>
                     <SelectTrigger className="w-full">
@@ -320,15 +395,23 @@ const DefinitionFormSchema = z
       .min(1, "Name is required")
       .max(128)
       .regex(/[a-z0-9]/i, "Name must include a letter or number"),
-    description: z.string().max(500),
+    description: z.string().max(1_000),
     icon: z.string().nullable(),
     scope: z.enum(["personal", "organization"]),
-    kind: z.enum(["secret", "github_app"]),
+    kind: z.enum(["secret", "github_app", "github_app_user"]),
     githubUrl: z.string(),
     appId: z.string(),
     installationId: z.string(),
+    githubClientId: z.string(),
+    githubAppCredentialKey: z.string(),
   })
   .superRefine((value, ctx) => {
+    if (value.kind === "github_app_user" && !value.githubAppCredentialKey)
+      ctx.addIssue({
+        code: "custom",
+        path: ["githubAppCredentialKey"],
+        message: "Select an organization GitHub App",
+      });
     if (value.kind !== "github_app") return;
     if (value.scope !== "organization")
       ctx.addIssue({

@@ -6,6 +6,7 @@ import { RuntimeCredentialConnectionDialog } from "./runtime-credential-connecti
 const mocks = vi.hoisted(() => ({ mutate: vi.fn() }));
 
 vi.mock("@/lib/runtime-credentials.query", () => ({
+  useStartGitHubUserConnection: () => ({ mutate: vi.fn(), isPending: false }),
   useSetRuntimeCredentialConnection: () => ({
     mutate: mocks.mutate,
     isPending: false,
@@ -30,6 +31,8 @@ describe("RuntimeCredentialConnectionDialog", () => {
           githubUrl: null,
           appId: null,
           installationId: null,
+          githubClientId: null,
+          githubAppCredentialKey: null,
           key: "github",
           name: "GitHub PAT",
           description: "Repository access",

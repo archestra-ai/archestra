@@ -92848,6 +92848,179 @@ export type PinProjectResponses = {
 
 export type PinProjectResponse = PinProjectResponses[keyof PinProjectResponses];
 
+export type StartGitHubUserConnectionData = {
+    body?: never;
+    path: {
+        key: string;
+    };
+    query?: never;
+    url: '/api/credentials/{key}/github/start';
+};
+
+export type StartGitHubUserConnectionErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type StartGitHubUserConnectionError = StartGitHubUserConnectionErrors[keyof StartGitHubUserConnectionErrors];
+
+export type StartGitHubUserConnectionResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        authorizationUrl: string;
+    };
+};
+
+export type StartGitHubUserConnectionResponse = StartGitHubUserConnectionResponses[keyof StartGitHubUserConnectionResponses];
+
+export type CompleteGitHubUserConnectionData = {
+    body: {
+        state: string;
+        code: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/credentials/github/callback';
+};
+
+export type CompleteGitHubUserConnectionErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type CompleteGitHubUserConnectionError = CompleteGitHubUserConnectionErrors[keyof CompleteGitHubUserConnectionErrors];
+
+export type CompleteGitHubUserConnectionResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        login: string;
+        configured: true;
+    };
+};
+
+export type CompleteGitHubUserConnectionResponse = CompleteGitHubUserConnectionResponses[keyof CompleteGitHubUserConnectionResponses];
+
 export type ListRuntimeCredentialsData = {
     body?: never;
     path?: never;
@@ -92926,10 +93099,12 @@ export type ListRuntimeCredentialsResponses = {
      */
     200: Array<{
         id: string;
-        kind: 'secret' | 'github_app';
+        kind: 'secret' | 'github_app' | 'github_app_user';
         githubUrl: string | null;
         appId: string | null;
         installationId: string | null;
+        githubClientId: string | null;
+        githubAppCredentialKey: string | null;
         key: string;
         name: string;
         description: string;
@@ -92948,10 +93123,12 @@ export type CreateRuntimeCredentialData = {
     body: {
         key: string;
         name: string;
-        kind?: 'secret' | 'github_app';
+        kind?: 'secret' | 'github_app' | 'github_app_user';
         githubUrl?: string | null;
         appId?: string | null;
         installationId?: string | null;
+        githubClientId?: string | null;
+        githubAppCredentialKey?: string | null;
         description?: string;
         icon?: string | null;
         allowPersonal?: boolean;
@@ -93036,10 +93213,12 @@ export type CreateRuntimeCredentialResponses = {
         organizationId: string;
         key: string;
         name: string;
-        kind: 'secret' | 'github_app';
+        kind: 'secret' | 'github_app' | 'github_app_user';
         githubUrl: string | null;
         appId: string | null;
         installationId: string | null;
+        githubClientId: string | null;
+        githubAppCredentialKey: string | null;
         description: string;
         icon: string | null;
         allowPersonal: boolean;
@@ -93237,6 +93416,8 @@ export type UpdateRuntimeCredentialData = {
         githubUrl?: string | null;
         appId?: string | null;
         installationId?: string | null;
+        githubClientId?: string | null;
+        githubAppCredentialKey?: string | null;
         description?: string;
         icon?: string | null;
     };
@@ -93321,10 +93502,12 @@ export type UpdateRuntimeCredentialResponses = {
         organizationId: string;
         key: string;
         name: string;
-        kind: 'secret' | 'github_app';
+        kind: 'secret' | 'github_app' | 'github_app_user';
         githubUrl: string | null;
         appId: string | null;
         installationId: string | null;
+        githubClientId: string | null;
+        githubAppCredentialKey: string | null;
         description: string;
         icon: string | null;
         allowPersonal: boolean;

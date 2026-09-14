@@ -3298,6 +3298,13 @@
       "when": 1789326227254,
       "tag": "0470_lush_jackpot",
       "breakpoints": true
+    },
+    {
+      "idx": 471,
+      "version": "7",
+      "when": 1789389253342,
+      "tag": "0471_outstanding_blur",
+      "breakpoints": true
     }
   ]
 }

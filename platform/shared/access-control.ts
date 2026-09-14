@@ -706,6 +706,8 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.SetAgentRuntimeCredential]: { agent: ["read"] },
   [RouteId.DeleteAgentRuntimeCredential]: { agent: ["read"] },
   [RouteId.ListRuntimeCredentials]: { credential: ["read"] },
+  [RouteId.StartGitHubUserConnection]: { credential: ["read"] },
+  [RouteId.CompleteGitHubUserConnection]: { credential: ["read"] },
   [RouteId.CreateRuntimeCredential]: { credential: ["create"] },
   [RouteId.GetRuntimeCredentialUsage]: { credential: ["read"] },
   [RouteId.UpdateRuntimeCredential]: { credential: ["update"] },

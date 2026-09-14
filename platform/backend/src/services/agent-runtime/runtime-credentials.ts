@@ -4,6 +4,7 @@ import {
   RuntimeCredentialDefinitionModel,
 } from "@/models";
 import { isByosEnabled } from "@/secrets-manager";
+import { githubUserConnectionManager } from "@/services/github-user-connection";
 import type {
   InsertRuntimeCredentialDefinition,
   RuntimeCredentialConnectionScope,
@@ -37,6 +38,8 @@ export async function listRuntimeCredentialDefinitions(params: {
       githubUrl: definition.githubUrl,
       appId: definition.appId,
       installationId: definition.installationId,
+      githubClientId: definition.githubClientId,
+      githubAppCredentialKey: definition.githubAppCredentialKey,
       key: definition.key,
       name: definition.name,
       description: definition.description,
@@ -70,6 +73,7 @@ export async function createRuntimeCredentialDefinition(params: {
     );
   }
   assertProviderConfiguration(params.definition);
+  await assertGitHubAppReference(params.organizationId, params.definition);
   assertExactlyOneScopeAllowed({
     allowPersonal: params.definition.allowPersonal ?? true,
     allowOrganization: params.definition.allowOrganization ?? false,
@@ -111,6 +115,10 @@ export async function updateRuntimeCredentialDefinition(params: {
   const current = await RuntimeCredentialDefinitionModel.find(params);
   if (!current) throw new ApiError(404, "Credential not found");
   assertProviderConfiguration({ ...current, ...params.definition });
+  await assertGitHubAppReference(params.organizationId, {
+    ...current,
+    ...params.definition,
+  });
   const updated = await RuntimeCredentialDefinitionModel.update(params);
   if (!updated) throw new ApiError(404, "Credential not found");
   return updated;
@@ -121,6 +129,7 @@ export async function deleteRuntimeCredentialDefinition(params: {
   key: string;
 }) {
   if (
+    (await RuntimeCredentialDefinitionModel.hasGitHubUserDefinitions(params)) ||
     (await RuntimeCredentialDefinitionModel.isUsedByAgent(params)) ||
     (await RuntimeCredentialDefinitionModel.listOtherUsage(params)).length > 0
   ) {
@@ -148,6 +157,8 @@ export async function setRuntimeCredentialConnection(params: {
   assertConnectionValue(params.value);
   const definition = await requireRuntimeCredentialDefinition(params);
   assertScopeAllowed({ definition, scope: params.scope });
+  if (definition.kind === "github_app_user")
+    throw new ApiError(400, "Use Connect GitHub to authorize your account");
   return RuntimeCredentialConnectionModel.upsert({
     organizationId: params.organizationId,
     userId: params.scope === "personal" ? params.userId : null,
@@ -163,7 +174,11 @@ export async function deleteRuntimeCredentialConnection(params: {
   credentialId: string;
   scope: RuntimeCredentialConnectionScope;
 }): Promise<boolean> {
-  await requireRuntimeCredentialDefinition(params);
+  const definition = await requireRuntimeCredentialDefinition(params);
+  if (definition.kind === "github_app_user") {
+    assertScopeAllowed({ definition, scope: params.scope });
+    return githubUserConnectionManager.disconnect(params);
+  }
   return RuntimeCredentialConnectionModel.delete({
     organizationId: params.organizationId,
     userId: params.scope === "personal" ? params.userId : null,
@@ -176,10 +191,11 @@ export async function getRuntimeCredentialConnectionAuditSnapshot(params: {
   organizationId: string;
   credentialId: string;
   scope: RuntimeCredentialConnectionScope;
+  userId?: string;
 }): Promise<Record<string, unknown> | null> {
   return RuntimeCredentialConnectionModel.findForAudit({
     ...params,
-    userId: null,
+    userId: params.userId ?? null,
   });
 }
 
@@ -203,6 +219,7 @@ async function requireRuntimeCredentialDefinition(params: {
 // ===================== Internals =====================
 
 type Definition = {
+  kind: string;
   key: string;
   name: string;
   description: string;
@@ -265,7 +282,20 @@ function assertProviderConfiguration(definition: {
   githubUrl?: string | null;
   appId?: string | null;
   installationId?: string | null;
+  githubAppCredentialKey?: string | null;
 }): void {
+  if (definition.kind === "github_app_user") {
+    if (
+      !definition.allowPersonal ||
+      definition.allowOrganization ||
+      !definition.githubAppCredentialKey
+    )
+      throw new ApiError(
+        400,
+        "GitHub user connections require personal ownership and an organization GitHub App",
+      );
+    return;
+  }
   if (definition.kind !== "github_app") return;
   if (definition.allowPersonal || !definition.allowOrganization)
     throw new ApiError(400, "GitHub Apps must be provided by the organization");
@@ -288,4 +318,24 @@ function assertProviderConfiguration(definition: {
       "GitHub API URL must use HTTP or HTTPS without embedded credentials",
     );
   }
+}
+
+async function assertGitHubAppReference(
+  organizationId: string,
+  definition: { kind?: string; githubAppCredentialKey?: string | null },
+) {
+  if (definition.kind !== "github_app_user") return;
+  const app = await RuntimeCredentialDefinitionModel.find({
+    organizationId,
+    key: definition.githubAppCredentialKey ?? "",
+  });
+  if (
+    app?.kind !== "github_app" ||
+    !app.allowOrganization ||
+    !app.githubClientId
+  )
+    throw new ApiError(
+      400,
+      "Select an organization GitHub App with an OAuth client ID",
+    );
 }

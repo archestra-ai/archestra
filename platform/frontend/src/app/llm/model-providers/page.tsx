@@ -666,9 +666,14 @@ export default function ApiKeysPage() {
                   icon: <Trash2 className="h-4 w-4" />,
                   label: "Delete",
                   variant: "destructive",
-                  permissions: {
-                    llmProviderApiKey: ["delete"],
-                  },
+                  // Hidden providers keep their subscriptions in this table.
+                  // Owners must still be able to disconnect those credentials.
+                  permissions:
+                    credential.scope === "personal" &&
+                    credential.userId === currentUserId &&
+                    subscriptionKindOfCredential(credential) !== null
+                      ? {}
+                      : { llmProviderApiKey: ["delete"] },
                   disabled: isSystem || isInUse,
                   disabledTooltip: isInUse
                     ? `${keyUsage}. Remove it from Settings > Knowledge before deleting.`

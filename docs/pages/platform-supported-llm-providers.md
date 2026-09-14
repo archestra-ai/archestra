@@ -3,7 +3,7 @@ title: Supported LLM Providers
 category: LLM Proxy
 order: 2
 description: LLM providers supported by Archestra Platform
-lastUpdated: 2026-09-11
+lastUpdated: 2026-09-14
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -31,6 +31,8 @@ Some providers let you sign in with an account you already pay for, instead of b
 These credentials are per-user and personal-only. Each person connects their own account, and requests are billed to that subscription. An agent set up with a subscription credential always runs on the chatting user's own subscription — never someone else's. Users without a connected account get a sign-in prompt in chat.
 
 A rejected subscription sign-in requires reconnecting. Reconnecting updates the existing credential and preserves its model and agent selections. Failed model refreshes preserve previously discovered models. Temporary provider failures do not require signing in again.
+
+You can disconnect your own subscription without administrator approval. Disconnecting removes the saved sign-in; it does not cancel your vendor subscription. Remove any virtual-key or OAuth-client mappings before disconnecting.
 
 Each provider's section below covers what to turn on with the vendor first.
 

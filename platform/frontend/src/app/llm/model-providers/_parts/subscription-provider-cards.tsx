@@ -97,8 +97,13 @@ function SubscriptionProviderCard({
 }) {
   const { credential } = offer;
   const copy = SUBSCRIPTION_CREDENTIALS[offer.kind].connect;
-  const blockedReason = credential ? disconnectBlockedReason(credential) : null;
-  const ownsCredential = isOwnPersonalCredential(credential, currentUserId);
+  // Personal credentials are owner-managed; admin permissions do not override
+  // ownership. Keep this guard while the session is still loading, too.
+  const blockedReason = credential
+    ? !isOwnPersonalCredential(credential, currentUserId)
+      ? "You can only disconnect your own personal subscription."
+      : disconnectBlockedReason(credential)
+    : null;
 
   return (
     <Card
@@ -165,41 +170,20 @@ function SubscriptionProviderCard({
             )}
             {/* Icon-only: the card is narrow enough at four across that a
                 second worded button would be clipped. */}
-            {ownsCredential ? (
-              // The backend's DELETE route lets an owner delete their own
-              // personal key without the llmProviderApiKey:delete permission
-              // (authorizeApiKeyAccess returns early for personal keys owned
-              // by the caller), so the owner's control is a plain button —
-              // gating it on that permission left members who connected a
-              // subscription with no way to ever sign out (#6820). The
-              // PermissionButton stays for keys the viewer does not own: the
-              // offers can pair another person's key into an admin's view,
-              // and the backend refuses that delete even with permission.
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                aria-label="Disconnect"
-                className="text-destructive hover:text-destructive"
-                disabled={blockedReason !== null}
-                title={blockedReason ?? "Disconnect"}
-                onClick={() => onDisconnect(credential)}
-              >
-                <Unplug className="h-4 w-4" />
-              </Button>
-            ) : (
-              <PermissionButton
-                permissions={{ llmProviderApiKey: ["delete"] }}
-                variant="ghost"
-                size="icon-sm"
-                aria-label="Disconnect"
-                className="text-destructive hover:text-destructive"
-                disabled={blockedReason !== null}
-                tooltip={blockedReason ?? "Disconnect"}
-                onClick={() => onDisconnect(credential)}
-              >
-                <Unplug className="h-4 w-4" />
-              </PermissionButton>
-            )}
+            <PermissionButton
+              // Personal subscription deletion is self-service. The ownership
+              // and usage checks above supply any refusal, independently of RBAC.
+              permissions={{}}
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Disconnect"
+              className="text-destructive hover:text-destructive"
+              disabled={blockedReason !== null}
+              tooltip={blockedReason ?? "Disconnect"}
+              onClick={() => onDisconnect(credential)}
+            >
+              <Unplug className="h-4 w-4" />
+            </PermissionButton>
           </div>
         ) : (
           // Personal subscription creation is intentionally self-service on the

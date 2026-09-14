@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -23,36 +23,48 @@ describe("SystemPromptEditor", () => {
     mockGetVisibleDocsUrl.mockImplementation((href) => href);
   });
 
-  it("shows the Archestra docs link when available", () => {
-    mockGetFrontendDocsUrl.mockReturnValue(
-      "https://archestra.ai/docs/platform-agents#system-prompt-templating",
+  it.each([
+    true,
+    false,
+  ])("opens templating help without submitting or losing instructions (docs visible: %s)", async (docsVisible) => {
+    const docsUrl =
+      "https://archestra.ai/docs/platform-agents#system-prompt-templating";
+    mockGetFrontendDocsUrl.mockReturnValue(docsVisible ? docsUrl : null);
+    const user = userEvent.setup();
+    const onSubmit = vi.fn((event) => event.preventDefault());
+    const onChange = vi.fn();
+    render(
+      <form onSubmit={onSubmit}>
+        <SystemPromptEditor
+          value="Help with release notes."
+          onChange={onChange}
+        />
+      </form>,
     );
-
-    render(<SystemPromptEditor value="" onChange={vi.fn()} />);
-
-    expect(
-      screen.getByRole("link", { name: "docs(opens in new tab)" }),
-    ).toHaveAttribute(
-      "href",
-      "https://archestra.ai/docs/platform-agents#system-prompt-templating",
-    );
-    // Ours is the only link: sending a reader to handlebarsjs.com answered a
-    // question the variables list answers better.
-    expect(screen.getAllByRole("link")).toHaveLength(1);
-  });
-
-  it("hides the Archestra docs link under white-labeling", () => {
-    mockGetFrontendDocsUrl.mockReturnValue(null);
-
-    render(<SystemPromptEditor value="" onChange={vi.fn()} />);
 
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
-    expect(
-      screen.getByText(
-        (_, el) =>
-          el?.tagName === "P" && /templating\./.test(el.textContent ?? ""),
-      ),
-    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "More info" }));
+    const dialog = screen.getByRole("dialog", {
+      name: "Handlebars templating",
+    });
+    expect(within(dialog).getByText(/You are helping/)).toHaveTextContent(
+      "{{user.name}}",
+    );
+    const docsLink = within(dialog).queryByRole("link", {
+      name: /View all variables and helpers/,
+    });
+    if (docsVisible) {
+      expect(docsLink).toHaveAttribute("href", docsUrl);
+    } else {
+      expect(docsLink).not.toBeInTheDocument();
+    }
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByTestId("editor")).toHaveValue(
+      "Help with release notes.",
+    );
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(onChange).not.toHaveBeenCalled();
   });
 
   it("grows the box to fit the text, between its floor and its ceiling", () => {

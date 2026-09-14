@@ -10,6 +10,8 @@ import { useRef, useState } from "react";
 
 import { Editor } from "@/components/editor";
 import { ExternalDocsLink } from "@/components/external-docs-link";
+import { StandardDialog } from "@/components/standard-dialog";
+import { Button } from "@/components/ui/button";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import {
   computeHandlebarsReplaceOffsets,
@@ -19,6 +21,7 @@ import { useUnparseableExpressions } from "@/lib/utils/handlebars-validation";
 
 export function SystemPromptEditor({
   title = "Instruction",
+  description,
   value,
   onChange,
   readOnly,
@@ -30,6 +33,7 @@ export function SystemPromptEditor({
   builtInAgentId,
 }: {
   title?: string;
+  description?: string;
   value: string;
   onChange: (value: string) => void;
   readOnly?: boolean;
@@ -75,27 +79,7 @@ export function SystemPromptEditor({
   const templateExpressions = getSystemPromptTemplateExpressions({
     builtInAgentId,
   });
-  // One line, and one link — ours. What the field is for is already said by
-  // the label above it, and sending a reader to handlebarsjs.com answered a
-  // question the variables list answers better.
-  const description = (
-    <>
-      <span>Supports Handlebars templating.</span>
-      {docsUrl && (
-        <>
-          <span> See </span>
-          <ExternalDocsLink
-            href={docsUrl}
-            className="underline hover:text-foreground"
-            showIcon={false}
-          >
-            docs
-          </ExternalDocsLink>
-          <span> for variables.</span>
-        </>
-      )}
-    </>
-  );
+  const [templatingInfoOpen, setTemplatingInfoOpen] = useState(false);
 
   return (
     <div className="space-y-2">
@@ -122,7 +106,17 @@ export function SystemPromptEditor({
                 : "text-xs text-muted-foreground"
             }
           >
-            {description}
+            {description && <span className="mb-1 block">{description}</span>}
+            <span>Supports Handlebars templating.</span>{" "}
+            <Button
+              type="button"
+              variant="link"
+              className="h-auto p-0 text-xs"
+              aria-haspopup="dialog"
+              onClick={() => setTemplatingInfoOpen(true)}
+            >
+              More info
+            </Button>
           </p>
         </div>
         {headerExtra && (
@@ -210,6 +204,37 @@ export function SystemPromptEditor({
         </div>
       </div>
       <UnparseableExpressionsWarning expressions={unparseableExpressions} />
+      <StandardDialog
+        open={templatingInfoOpen}
+        onOpenChange={setTemplatingInfoOpen}
+        title="Handlebars templating"
+        description="Personalize instructions with values filled in before they are sent to the model."
+        size="small"
+      >
+        <div className="space-y-4 text-sm">
+          <p>
+            Use variables for the current user&apos;s name, email, role, or
+            teams. Helpers can add the current date and time, or include
+            instructions only when a condition matches.
+          </p>
+          <pre className="whitespace-pre-wrap break-words rounded-md bg-muted p-3 text-xs leading-relaxed">
+            <code>
+              {
+                "You are helping {{user.name}}.\nToday is {{currentDate}}.\n\n{{#if user.teams}}\nTailor your answer to the user's teams.\n{{/if}}"
+              }
+            </code>
+          </pre>
+          <p className="text-muted-foreground">
+            Type <code>{"{{"}</code> in the editor to see available variables
+            and helpers. Plain text works too.
+          </p>
+          {docsUrl && (
+            <ExternalDocsLink href={docsUrl}>
+              View all variables and helpers
+            </ExternalDocsLink>
+          )}
+        </div>
+      </StandardDialog>
     </div>
   );
 }

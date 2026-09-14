@@ -7,6 +7,7 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { vi } from "vitest";
+import { executeArchestraTool } from "@/archestra-mcp-server";
 import config from "@/config";
 import * as database from "@/database";
 import * as toolInvocation from "@/guardrails/tool-invocation";
@@ -358,7 +359,40 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     ]);
   });
 
+  test("keeps platform tool policies additive after APPA allows a call", async ({
+    makeTool,
+    makeToolPolicy,
+  }) => {
+    const tool = await makeTool({ name: "get_weather", agentId: agent.id });
+    await makeToolPolicy(tool.id, {
+      action: "block_always",
+      conditions: [],
+      reason: "Platform weather policy refused this call",
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: url(),
+      remoteAddress: "127.0.0.1",
+      headers: headers(),
+      payload: payload(false),
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.body).toContain(
+      "Platform weather policy refused this call",
+    );
+    expect(response.body).not.toContain('"type":"tool_use"');
+    expect(events).toContainEqual(
+      expect.objectContaining({ event: "tool_call", tool: "get_weather" }),
+    );
+  });
+
   test("substitutes saved approved results before the provider sees resent history", async () => {
+    const evaluateTrustedData = vi.spyOn(
+      trustedData,
+      "evaluateIfContextIsTrusted",
+    );
     for (const raw of ["RAW SECRET", "ALTERED RAW SECRET"]) {
       const messages = [
         { role: "user", content: "Weather" },
@@ -405,6 +439,101 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         outcome: "success",
       }),
     ]);
+    expect(evaluateTrustedData).not.toHaveBeenCalled();
+  });
+
+  test("executes an explicit remedy, then accepts a separate retry on the same APPA root", async () => {
+    block = true;
+    const denied = await app.inject({
+      method: "POST",
+      url: url(),
+      remoteAddress: "127.0.0.1",
+      headers: headers(),
+      payload: payload(false),
+    });
+
+    expect(denied.statusCode, denied.body).toBe(200);
+    expect(denied.body).toContain("NATIVE REFUSAL");
+    expect(events.map((event) => event.event)).toEqual([
+      "session_start",
+      "tool_call",
+    ]);
+
+    native.dispatchHook.mockImplementation(async (raw: string) => {
+      const event = JSON.parse(raw);
+      events.push(event);
+      return JSON.stringify(
+        event.event === "remedy"
+          ? {
+              decision: "mcp_result",
+              result: { content: [{ type: "text", text: "Remedy applied" }] },
+            }
+          : event.event === "session_start"
+            ? { decision: "ack" }
+            : { decision: "allow_call" },
+      );
+    });
+    await expect(
+      executeArchestraTool(
+        "archestra__execute_remedy_plan",
+        { offer_id: "test-offer" },
+        {
+          agent: { id: agent.id, name: agent.name },
+          agentId: agent.id,
+          organizationId: agent.organizationId,
+          userId,
+          sessionId: "stable-session",
+          currentToolCallId: "remedy-call",
+        },
+      ),
+    ).resolves.toEqual({
+      content: [{ type: "text", text: "Remedy applied" }],
+    });
+
+    const retried = await app.inject({
+      method: "POST",
+      url: url(),
+      remoteAddress: "127.0.0.1",
+      headers: headers(),
+      payload: payload(false),
+    });
+
+    expect(retried.statusCode, retried.body).toBe(200);
+    expect(retried.body).toContain('"type":"tool_use"');
+    expect(events.filter((event) => event.event === "remedy")).toEqual([
+      expect.objectContaining({
+        session_id: "stable-session",
+        operation_id: "remedy:remedy-call",
+      }),
+    ]);
+    expect(
+      events
+        .filter((event) => event.event === "tool_call")
+        .map((event) => event.session_id),
+    ).toEqual(["stable-session", "stable-session"]);
+  });
+
+  test("uses the explicit APPA root for native Claude Code requests", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: url(),
+      remoteAddress: "127.0.0.1",
+      headers: {
+        ...headers(),
+        "user-agent": "Claude-Code/1",
+        "x-claude-code-session-id": "native-client-session",
+      },
+      payload: payload(false),
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        event: "tool_call",
+        session_id: "stable-session",
+        tool: "host/claude-code/get_weather",
+      }),
+    );
   });
 
   test("native failures do not release tool deltas or private diagnostics", async () => {

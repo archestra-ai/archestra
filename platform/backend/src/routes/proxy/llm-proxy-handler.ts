@@ -77,12 +77,21 @@ import {
   type SpanTeamInfo,
 } from "@/observability/tracing";
 import {
-  checkToolCalls,
   type OpenAppaSession,
   openappaEnabled,
-  processProxyResults,
   sessionFromHeaders,
 } from "@/openappa/service";
+import {
+  APPA_PLUGIN_BINDING,
+  getAppaPluginRefusal,
+  getAppaPluginResult,
+  registerAppaLlmProxyPlugin,
+} from "@/proxy/plugins/appa-plugin-archestra";
+import {
+  getLlmProxyPluginRegistry,
+  type LlmProxyPluginRegistry,
+  type LlmProxyRequestContext,
+} from "@/proxy/plugins/registry";
 import { enrichDiscoveredModel } from "@/services/discovered-model-enrichment";
 import { assertSubscriptionCredentialForProvider } from "@/services/subscription-credential-guard";
 import {
@@ -145,6 +154,8 @@ const {
   },
 } = config;
 
+registerAppaLlmProxyPlugin();
+
 /**
  * Shared context passed to streaming and non-streaming handlers.
  * Groups the 15+ parameters that both handlers need into a single object
@@ -152,6 +163,8 @@ const {
  */
 export interface LLMProxyContext<TRequest> {
   openappaSession?: OpenAppaSession;
+  pluginRegistry: LlmProxyPluginRegistry;
+  pluginContext: LlmProxyRequestContext;
   agent: GatewayAgent;
   originalRequest: TRequest;
   actualModel: string;
@@ -292,6 +305,8 @@ export async function handleLLMProxy<
   const headers = request.headers as unknown as THeaders;
   const agentId = (request.params as { agentId?: string }).agentId;
   const providerName = provider.provider;
+  const pluginRegistry = getLlmProxyPluginRegistry();
+  let pluginContext: LlmProxyRequestContext | undefined;
 
   // Extract header-based context
   const headersForExtraction = headers as Record<
@@ -1053,16 +1068,38 @@ export async function handleLLMProxy<
             ? `virtual-key:${virtualKeyId}`
             : undefined,
     });
+    pluginContext = {
+      requestId: request.id,
+      organizationId: resolvedAgent.organizationId,
+      profileId: resolvedAgent.id,
+      ...(userId ? { userId } : {}),
+      provider: providerName,
+      interactionType: provider.interactionType,
+      model: actualModel,
+      streaming: requestAdapter.isStreaming(),
+      headers: request.headers,
+      requestBody: requestAdapter.getOriginalRequest(),
+      resources: new Map(),
+    };
+    if (openappaSession) {
+      pluginContext.resources.set(APPA_PLUGIN_BINDING, {
+        session: openappaSession,
+        canonicalizeToolName,
+      });
+    }
+    await pluginRegistry.onSessionInit(pluginContext);
+    const pluginToolResults = await pluginRegistry.onToolResults({
+      ...pluginContext,
+      toolResults: requestAdapter.getToolResults(),
+    });
+    const appaResult = getAppaPluginResult(pluginContext.resources);
     const {
       toolResultUpdates,
       contextIsTrusted,
       dualLlmAnalyses,
       unsafeContextBoundary,
-    } = openappaSession
-      ? await processProxyResults(
-          openappaSession,
-          requestAdapter.getToolResults(),
-        )
+    } = appaResult
+      ? appaResult
       : await utils.trustedData.evaluateIfContextIsTrusted({
           messages: commonMessages,
           agentId: resolvedAgentId,
@@ -1101,7 +1138,10 @@ export async function handleLLMProxy<
         });
 
     // Apply tool result updates
-    requestAdapter.applyToolResultUpdates(toolResultUpdates);
+    requestAdapter.applyToolResultUpdates({
+      ...pluginToolResults.toolResultUpdates,
+      ...toolResultUpdates,
+    });
 
     logger.info(
       {
@@ -1258,6 +1298,11 @@ export async function handleLLMProxy<
       },
     });
 
+    await pluginRegistry.onPrompt({
+      ...pluginContext,
+      prompt: requestAdapter.getProviderMessages(),
+    });
+
     // Build final request
     const builtRequest = requestAdapter.toProviderRequest();
 
@@ -1340,6 +1385,8 @@ export async function handleLLMProxy<
 
     const ctx: LLMProxyContext<TRequest> = {
       openappaSession,
+      pluginRegistry,
+      pluginContext,
       agent: resolvedAgent,
       originalRequest: requestAdapter.getOriginalRequest(),
       actualModel,
@@ -1397,9 +1444,17 @@ export async function handleLLMProxy<
     // captured as unhandled server exceptions.
     return await handleNonStreaming(client, finalRequest, reply, provider, ctx);
   } catch (error) {
+    let lifecycleError = error;
+    if (pluginContext) {
+      try {
+        await pluginRegistry.fail({ ...pluginContext, error });
+      } catch (pluginError) {
+        lifecycleError = pluginError;
+      }
+    }
     // Persist failed interactions so they appear in LLM logs
     try {
-      const errorMessage = provider.extractErrorMessage(error);
+      const errorMessage = provider.extractErrorMessage(lifecycleError);
       logger.info(
         { profileId: resolvedAgent.id, errorMessage },
         "Persisting error interaction record",
@@ -1444,7 +1499,7 @@ export async function handleLLMProxy<
     }
 
     return handleError(
-      error,
+      lifecycleError,
       reply,
       provider.extractErrorMessage,
       requestAdapter.isStreaming(),
@@ -1506,6 +1561,8 @@ async function handleStreaming<
     teams,
     userTeams,
     streamTiming,
+    pluginRegistry,
+    pluginContext,
   } = ctx;
 
   const providerName = provider.provider;
@@ -1622,6 +1679,7 @@ async function handleStreaming<
       parentContext,
       user: toSpanUserInfo(resolvedUser),
       callback: async (llmSpan) => {
+        await pluginRegistry.onBeforeModel({ ...pluginContext, request });
         const stream = await provider.executeStream(client, request);
         billingMode = getBillingMode();
 
@@ -1804,34 +1862,39 @@ async function handleStreaming<
         "Evaluating tool invocation policies",
       );
 
+      const pluginOutcome = await evaluateProxyPluginToolCalls(
+        ctx.pluginRegistry,
+        ctx.pluginContext,
+        rewrittenToolCalls ?? toolCalls,
+      );
+      if (pluginOutcome.wasRewritten) {
+        rewrittenToolCalls = pluginOutcome.toolCalls;
+      }
+
       // Policies are evaluated against the rewritten calls, which
       // `normalizeToolCallsForPolicy` unwraps straight back to the same
       // targets — so a repaired call faces exactly the gate a `run_tool`
       // dispatch the model wrote itself would have faced.
-      toolInvocationRefusal = ctx.openappaSession
-        ? await checkToolCalls(
-            ctx.openappaSession,
-            rewrittenToolCalls ?? toolCalls,
+      toolInvocationRefusal =
+        pluginOutcome.refusal ??
+        (await utils.toolInvocation.evaluatePolicies(
+          normalizeToolCallsForPolicy(
+            pluginOutcome.toolCalls,
             canonicalizeToolName,
-          )
-        : await utils.toolInvocation.evaluatePolicies(
-            normalizeToolCallsForPolicy(
-              rewrittenToolCalls ?? toolCalls,
-              canonicalizeToolName,
-            ),
-            agent.id,
-            {
-              teamIds: teamIds ?? [],
-              externalAgentId,
-              sensitiveContextOrigin:
-                utils.trustedData.sensitiveContextOriginFromBoundary(
-                  unsafeContextBoundary,
-                ),
-            },
-            contextIsTrusted,
-            enabledToolNames,
-            { surface: "llm-proxy", sessionId: sessionId ?? undefined },
-          );
+          ),
+          agent.id,
+          {
+            teamIds: teamIds ?? [],
+            externalAgentId,
+            sensitiveContextOrigin:
+              utils.trustedData.sensitiveContextOriginFromBoundary(
+                unsafeContextBoundary,
+              ),
+          },
+          contextIsTrusted,
+          enabledToolNames,
+          { surface: "llm-proxy", sessionId: sessionId ?? undefined },
+        ));
 
       logger.info(
         { refused: !!toolInvocationRefusal },
@@ -1897,6 +1960,18 @@ async function handleStreaming<
       }
     }
 
+    // The stream is already client-visible. This observes the assembled wire
+    // response without pretending a plugin can rewrite bytes already sent.
+    await pluginRegistry.onModelResponse({
+      ...pluginContext,
+      response: streamAdapter.toProviderResponse(),
+    });
+
+    await pluginRegistry.complete({
+      ...pluginContext,
+      response: streamAdapter.toProviderResponse(),
+    });
+
     // Stream end events
     writeToClient(streamAdapter.formatEndSSE());
     reply.raw.end();
@@ -1904,6 +1979,12 @@ async function handleStreaming<
     streamCompleted = true;
     return reply;
   } catch (error) {
+    let lifecycleError = error;
+    try {
+      await pluginRegistry.fail({ ...pluginContext, error });
+    } catch (pluginError) {
+      lifecycleError = pluginError;
+    }
     // If the stream never established (e.g. a provider 400 rejecting the
     // request), record the duration here for providers we instrument in the
     // handler. A mid-stream error is not double-recorded: establishment already
@@ -1914,7 +1995,7 @@ async function handleStreaming<
         agent,
         actualModel,
         (Date.now() - streamStartTime) / 1000,
-        extractDurationStatusCode(error),
+        extractDurationStatusCode(lifecycleError),
         source,
       );
       requestDurationRecorded = true;
@@ -1924,7 +2005,7 @@ async function handleStreaming<
     // rejecting the request, or a mid-stream failure once SSE headers and
     // content are already on the wire) still has to reach interaction history.
     if (!streamAdapter.state.usage) {
-      const errorMessage = provider.extractErrorMessage(error);
+      const errorMessage = provider.extractErrorMessage(lifecycleError);
       logger.info(
         { profileId: agent.id, errorMessage },
         "Persisting error interaction record for failed stream",
@@ -1933,7 +2014,7 @@ async function handleStreaming<
     }
 
     return handleError(
-      error,
+      lifecycleError,
       reply,
       provider.extractErrorMessage,
       true,
@@ -2118,6 +2199,8 @@ async function handleNonStreaming<
     teamIds,
     teams,
     userTeams,
+    pluginRegistry,
+    pluginContext,
   } = ctx;
 
   const providerName = provider.provider;
@@ -2159,6 +2242,7 @@ async function handleNonStreaming<
       // must not double-report here — the flag gates that.
       let result: TResponse;
       try {
+        await pluginRegistry.onBeforeModel({ ...pluginContext, request });
         result = await provider.execute(client, request);
         billingMode = getBillingMode();
       } catch (error) {
@@ -2281,46 +2365,48 @@ async function handleNonStreaming<
   // Evaluate tool invocation policies
   let rewrittenToolCalls: AccumulatedToolCall[] | null = null;
   if (toolCalls.length > 0) {
+    const emittedToolCalls = toolCalls.map((toolCall) => ({
+      id: toolCall.id,
+      name: toolCall.name,
+      arguments: JSON.stringify(toolCall.arguments),
+    }));
     rewrittenToolCalls = planDispatchRewrites({
       supported: responseAdapter.withRewrittenToolCalls !== undefined,
-      toolCalls: toolCalls.map((toolCall) => ({
-        id: toolCall.id,
-        name: toolCall.name,
-        arguments: JSON.stringify(toolCall.arguments),
-      })),
+      toolCalls: emittedToolCalls,
       enabledToolNames,
       canonicalizeToolName,
       providerName,
     });
 
-    const toolInvocationRefusal = ctx.openappaSession
-      ? await checkToolCalls(
-          ctx.openappaSession,
-          rewrittenToolCalls ?? toolCalls,
+    const pluginOutcome = await evaluateProxyPluginToolCalls(
+      ctx.pluginRegistry,
+      ctx.pluginContext,
+      rewrittenToolCalls ?? emittedToolCalls,
+    );
+    if (pluginOutcome.wasRewritten) {
+      rewrittenToolCalls = pluginOutcome.toolCalls;
+    }
+
+    const toolInvocationRefusal =
+      pluginOutcome.refusal ??
+      (await utils.toolInvocation.evaluatePolicies(
+        normalizeToolCallsForPolicy(
+          pluginOutcome.toolCalls,
           canonicalizeToolName,
-        )
-      : await utils.toolInvocation.evaluatePolicies(
-          normalizeToolCallsForPolicy(
-            rewrittenToolCalls ??
-              toolCalls.map((toolCall) => ({
-                name: toolCall.name,
-                arguments: toolCall.arguments,
-              })),
-            canonicalizeToolName,
-          ),
-          agent.id,
-          {
-            teamIds: teamIds ?? [],
-            externalAgentId,
-            sensitiveContextOrigin:
-              utils.trustedData.sensitiveContextOriginFromBoundary(
-                unsafeContextBoundary,
-              ),
-          },
-          contextIsTrusted,
-          enabledToolNames,
-          { surface: "llm-proxy", sessionId: sessionId ?? undefined },
-        );
+        ),
+        agent.id,
+        {
+          teamIds: teamIds ?? [],
+          externalAgentId,
+          sensitiveContextOrigin:
+            utils.trustedData.sensitiveContextOriginFromBoundary(
+              unsafeContextBoundary,
+            ),
+        },
+        contextIsTrusted,
+        enabledToolNames,
+        { surface: "llm-proxy", sessionId: sessionId ?? undefined },
+      ));
 
     if (toolInvocationRefusal) {
       const { refusalMessage, contentMessage, reason, allToolCallNames } =
@@ -2411,6 +2497,10 @@ async function handleNonStreaming<
         delegationBillingEnvironmentId,
       );
 
+      await pluginRegistry.complete({
+        ...pluginContext,
+        response: refusalResponse,
+      });
       return reply.send(refusalResponse);
     }
   }
@@ -2421,10 +2511,14 @@ async function handleNonStreaming<
   // Computed once: a translator adapter that rewrites remembers the inner
   // (logged) shape it produced, so `getLoggedResponse` below must observe the
   // same call that produced the client response.
-  const clientResponse =
+  const unobservedClientResponse =
     rewrittenToolCalls && responseAdapter.withRewrittenToolCalls
       ? responseAdapter.withRewrittenToolCalls(rewrittenToolCalls)
       : responseAdapter.getOriginalResponse();
+  const clientResponse = (await pluginRegistry.onModelResponse({
+    ...pluginContext,
+    response: unobservedClientResponse,
+  })) as TResponse;
 
   // Note: Token metrics are reported by getObservableFetch() in the HTTP layer
   // for non-streaming requests. We only report cost here to avoid double counting.
@@ -2508,7 +2602,50 @@ async function handleNonStreaming<
     );
   }
 
+  await pluginRegistry.complete({ ...pluginContext, response: clientResponse });
   return reply.send(clientResponse);
+}
+
+async function evaluateProxyPluginToolCalls(
+  registry: LlmProxyPluginRegistry,
+  context: LlmProxyRequestContext,
+  toolCalls: readonly AccumulatedToolCall[],
+): Promise<{
+  refusal: utils.toolInvocation.PolicyBlockResult | null;
+  toolCalls: AccumulatedToolCall[];
+  wasRewritten: boolean;
+}> {
+  const outcome = await registry.onToolCalls({
+    ...context,
+    toolCalls,
+  });
+  if (outcome.decision === "allow") {
+    return {
+      refusal: null,
+      toolCalls: outcome.toolCalls.map((toolCall) => ({
+        ...toolCall,
+        arguments:
+          typeof toolCall.arguments === "string"
+            ? toolCall.arguments
+            : JSON.stringify(toolCall.arguments),
+      })),
+      wasRewritten: outcome.toolCalls !== toolCalls,
+    };
+  }
+
+  const appaRefusal = getAppaPluginRefusal(context.resources);
+  return {
+    refusal: appaRefusal ?? {
+      refusalMessage: outcome.message,
+      contentMessage: outcome.message,
+      reason: "LLM proxy plugin denied the tool call",
+      blockedToolName: toolCalls[0]?.name ?? "unknown",
+      toolInput: {},
+      allToolCallNames: toolCalls.map((toolCall) => toolCall.name),
+    },
+    toolCalls: [...toolCalls],
+    wasRewritten: false,
+  };
 }
 
 /**

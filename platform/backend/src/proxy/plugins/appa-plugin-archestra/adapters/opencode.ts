@@ -19,12 +19,6 @@ export class AppaOpenCodeAdapter implements AppaClientAdapter {
     );
   }
 
-  getNativeSessionId(
-    context: Parameters<AppaClientAdapter["getNativeSessionId"]>[0],
-  ): string | undefined {
-    return readHeader(context.headers, "x-opencode-session");
-  }
-
   classifyToolName(name: string): "gateway" | "local" {
     return name.startsWith("mcp:") ? "gateway" : "local";
   }

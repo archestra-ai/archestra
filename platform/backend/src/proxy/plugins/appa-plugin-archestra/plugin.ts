@@ -12,11 +12,11 @@ import type {
   LlmProxyToolResultsContext,
   LlmProxyToolResultsOutcome,
 } from "@/proxy/plugins/registry";
-import type { AppaClientAdapter } from "./types";
+import type { AppaClientAdapter, AppaTrustedContext } from "./types";
 
-export const APPA_PLUGIN_BINDING = "archestra.appa.binding";
+const APPA_PLUGIN_BINDING = "archestra.appa.binding";
+export const APPA_PLUGIN_TRUSTED_CONTEXT = "archestra.appa.trusted-context";
 const APPA_PLUGIN_ADAPTER = "archestra.appa.adapter";
-const APPA_PLUGIN_NATIVE_SESSION_ID = "archestra.appa.native-session-id";
 const APPA_PLUGIN_RESULT = "archestra.appa.result";
 const APPA_PLUGIN_REFUSAL = "archestra.appa.refusal";
 
@@ -32,20 +32,19 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
 
   constructor(private readonly clientAdapters: readonly AppaClientAdapter[]) {}
 
-  getClientAdapter(
-    context: LlmProxyRequestContext,
-  ): AppaClientAdapter | undefined {
-    return this.clientAdapters.find((adapter) => adapter.matches(context));
-  }
-
   async onSessionInit(context: LlmProxyRequestContext): Promise<void> {
-    const adapter = this.getClientAdapter(context);
+    const trustedContext = getTrustedContext(context.resources);
+    if (!trustedContext) return;
+    const adapter = this.clientAdapters.find((candidate) =>
+      candidate.matches({ ...context, trustedContext }),
+    );
     if (adapter) {
       context.resources.set(APPA_PLUGIN_ADAPTER, adapter);
-      const sessionId = adapter.getNativeSessionId(context);
-      if (sessionId)
-        context.resources.set(APPA_PLUGIN_NATIVE_SESSION_ID, sessionId);
     }
+    context.resources.set(APPA_PLUGIN_BINDING, {
+      session: trustedContext.session,
+      canonicalizeToolName: trustedContext.canonicalizeToolName,
+    } satisfies AppaPluginBinding);
   }
 
   async onToolResults(
@@ -103,5 +102,18 @@ function getBinding(
     "session" in binding &&
     "canonicalizeToolName" in binding
     ? (binding as AppaPluginBinding)
+    : undefined;
+}
+
+function getTrustedContext(
+  resources: ReadonlyMap<string, unknown>,
+): AppaTrustedContext | undefined {
+  const trustedContext = resources.get(APPA_PLUGIN_TRUSTED_CONTEXT);
+  return typeof trustedContext === "object" &&
+    trustedContext !== null &&
+    "session" in trustedContext &&
+    "profileId" in trustedContext &&
+    "canonicalizeToolName" in trustedContext
+    ? (trustedContext as AppaTrustedContext)
     : undefined;
 }

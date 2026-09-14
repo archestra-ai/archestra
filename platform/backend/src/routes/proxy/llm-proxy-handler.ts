@@ -49,6 +49,7 @@ import logger from "@/logging";
 import {
   AgentTeamModel,
   AppModel,
+  ConversationModel,
   EnvironmentModel,
   InteractionModel,
   LimitValidationService,
@@ -77,16 +78,17 @@ import {
   type SpanTeamInfo,
 } from "@/observability/tracing";
 import {
-  type OpenAppaSession,
+  isAppaChatSource,
   openappaEnabled,
   sessionFromHeaders,
 } from "@/openappa/service";
 import {
-  APPA_PLUGIN_BINDING,
+  APPA_PLUGIN_TRUSTED_CONTEXT,
   getAppaPluginRefusal,
   getAppaPluginResult,
   registerAppaLlmProxyPlugin,
 } from "@/proxy/plugins/appa-plugin-archestra";
+import type { AppaTrustedContext } from "@/proxy/plugins/appa-plugin-archestra/types";
 import {
   getLlmProxyPluginRegistry,
   type LlmProxyPluginRegistry,
@@ -163,7 +165,6 @@ registerAppaLlmProxyPlugin();
  * for maintainability and readability.
  */
 export interface LLMProxyContext<TRequest> {
-  openappaSession?: OpenAppaSession;
   pluginRegistry: LlmProxyPluginRegistry;
   pluginContext: LlmProxyRequestContext;
   agent: GatewayAgent;
@@ -366,11 +367,16 @@ export async function handleLLMProxy<
     SOURCE_HEADER,
   );
   const parsedSource = InteractionSourceSchema.safeParse(rawSource).data;
+  const untrustedAppaChatSource =
+    isAppaChatSource(parsedSource) && !isLoopbackRequest(request);
   // `model_router` is assigned by the route auth override, not accepted from
-  // the public source header.
+  // the public source header. APPA-capable Chat sources have the same
+  // loopback-only trust boundary.
   const source: InteractionSource =
     authOverride?.source ??
-    (parsedSource === "model_router" ? "api" : parsedSource) ??
+    (parsedSource === "model_router" || untrustedAppaChatSource
+      ? "api"
+      : parsedSource) ??
     "api";
   const inheritedContextUntrusted =
     utils.headers.metaHeader.getHeaderValue(
@@ -1053,9 +1059,10 @@ export async function handleLLMProxy<
           }
         : undefined;
 
-    // Use the existing internal Chat trust boundary. External callers must
-    // identify themselves through the proxy's normal authentication.
-    const isInternalChat = source === "chat" && isLoopbackRequest(request);
+    // APPA recognizes Chat only after the loopback caller's owner, organization,
+    // profile, and conversation root have been bound below.
+    const isInternalChat =
+      isAppaChatSource(source) && isLoopbackRequest(request);
     const appaUserId =
       authenticatedUserId ?? (isInternalChat ? userId : undefined);
     const openappaSession = sessionFromHeaders({
@@ -1069,6 +1076,34 @@ export async function handleLLMProxy<
             ? `virtual-key:${virtualKeyId}`
             : undefined,
     });
+    let appaTrustedContext: AppaTrustedContext | undefined;
+    if (openappaSession) {
+      if (isInternalChat && appaUserId) {
+        const conversationAgentId = await ConversationModel.getAgentIdForUser(
+          openappaSession.session_id,
+          appaUserId,
+          resolvedAgent.organizationId,
+        );
+        if (
+          !conversationAgentId ||
+          (source !== "chat:compaction" &&
+            conversationAgentId !== resolvedAgent.id)
+        ) {
+          throw new ApiError(
+            403,
+            "OpenAPPA Chat session does not match the authenticated conversation",
+          );
+        }
+      }
+      appaTrustedContext = {
+        session: openappaSession,
+        profileId: resolvedAgent.id,
+        canonicalizeToolName,
+        ...(isAppaChatSource(source) && isLoopbackRequest(request)
+          ? { chatSource: source }
+          : {}),
+      };
+    }
     pluginContext = {
       requestId: request.id,
       organizationId: resolvedAgent.organizationId,
@@ -1082,14 +1117,14 @@ export async function handleLLMProxy<
       requestBody: requestAdapter.getOriginalRequest(),
       resources: new Map(),
     };
-    if (openappaSession) {
-      pluginContext.resources.set(APPA_PLUGIN_BINDING, {
-        session: openappaSession,
-        canonicalizeToolName,
-      });
+    if (appaTrustedContext) {
+      pluginContext.resources.set(
+        APPA_PLUGIN_TRUSTED_CONTEXT,
+        appaTrustedContext,
+      );
     }
     await pluginRegistry.onSessionInit(pluginContext);
-    const pluginToolResults = await pluginRegistry.onToolResults({
+    await pluginRegistry.onToolResults({
       ...pluginContext,
       toolResults: requestAdapter.getToolResults(),
     });
@@ -1139,7 +1174,7 @@ export async function handleLLMProxy<
         });
 
     // Apply tool result updates
-    requestAdapter.applyToolResultUpdates(pluginToolResults.toolResultUpdates);
+    requestAdapter.applyToolResultUpdates(toolResultUpdates);
 
     logger.info(
       {
@@ -1382,7 +1417,6 @@ export async function handleLLMProxy<
     }
 
     const ctx: LLMProxyContext<TRequest> = {
-      openappaSession,
       pluginRegistry,
       pluginContext,
       agent: resolvedAgent,

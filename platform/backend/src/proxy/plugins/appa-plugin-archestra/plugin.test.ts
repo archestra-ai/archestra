@@ -1,57 +1,64 @@
 import { describe, expect, test } from "@/test";
+import { AppaChatAdapter } from "./adapters/chat";
 import { AppaClaudeCodeAdapter } from "./adapters/claude-code";
 import { AppaCodexAdapter } from "./adapters/codex";
 import { AppaOpenCodeAdapter } from "./adapters/opencode";
 
 describe("APPA client adapters", () => {
-  test("identifies native client metadata and classifies local tools", () => {
+  test("maps each integrated client to its real local tool namespace", () => {
+    const chat = new AppaChatAdapter();
+    const claudeCode = new AppaClaudeCodeAdapter();
+    const codex = new AppaCodexAdapter();
+    const openCode = new AppaOpenCodeAdapter();
+
     expect(
-      new AppaClaudeCodeAdapter().matches({
+      chat.matches({
+        headers: {},
+        requestBody: {},
+        trustedContext: {
+          session: {
+            organization_id: "org",
+            caller_id: "user:user",
+            session_id: "conversation",
+          },
+          profileId: "profile",
+          canonicalizeToolName: (name) => name,
+          chatSource: "chat:tool_call_repair",
+        },
+      }),
+    ).toBe(true);
+    expect(chat.classifyToolName("archestra__run_command")).toBe("gateway");
+    expect(chat.normalizeLocalToolName("read_file")).toBe("read_file");
+
+    expect(
+      claudeCode.matches({
         headers: { "user-agent": "Claude-Code/1" },
         requestBody: {},
       }),
     ).toBe(true);
     expect(
-      new AppaCodexAdapter().matches({
+      codex.matches({
         headers: { originator: "codex" },
         requestBody: {},
       }),
     ).toBe(true);
     expect(
-      new AppaOpenCodeAdapter().matches({
+      openCode.matches({
         headers: { "x-opencode-session": "s" },
         requestBody: {},
       }),
     ).toBe(true);
-    expect(
-      new AppaClaudeCodeAdapter().normalizeLocalToolName(
-        "host/claude-code/Bash",
-      ),
-    ).toBe("host/claude-code/Bash");
-    expect(
-      new AppaCodexAdapter().normalizeLocalToolName("functions.exec_command"),
-    ).toBe("builtin:exec_command");
-    expect(new AppaOpenCodeAdapter().normalizeLocalToolName("read_file")).toBe(
+    expect(claudeCode.normalizeLocalToolName("host/claude-code/Bash")).toBe(
+      "host/claude-code/Bash",
+    );
+    expect(codex.normalizeLocalToolName("functions.exec_command")).toBe(
+      "builtin:exec_command",
+    );
+    expect(openCode.normalizeLocalToolName("read_file")).toBe(
       "builtin:read_file",
     );
-    expect(
-      new AppaClaudeCodeAdapter().getNativeSessionId({
-        headers: { "x-claude-code-session-id": "claude-session" },
-        requestBody: {},
-      }),
-    ).toBe("claude-session");
-    expect(
-      new AppaCodexAdapter().getNativeSessionId({
-        headers: { "x-codex-turn-metadata": "codex-turn" },
-        requestBody: {},
-      }),
-    ).toBe("codex-turn");
-    expect(new AppaOpenCodeAdapter().classifyToolName("mcp:gateway:read")).toBe(
-      "gateway",
-    );
-    expect(
-      new AppaClaudeCodeAdapter().classifyToolName("mcp__gateway__read"),
-    ).toBe("gateway");
-    expect(new AppaClaudeCodeAdapter().classifyToolName("Bash")).toBe("local");
+    expect(openCode.classifyToolName("mcp:gateway:read")).toBe("gateway");
+    expect(claudeCode.classifyToolName("mcp__gateway__read")).toBe("gateway");
+    expect(claudeCode.classifyToolName("Bash")).toBe("local");
   });
 });

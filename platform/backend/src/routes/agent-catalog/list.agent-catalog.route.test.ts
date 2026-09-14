@@ -1,4 +1,7 @@
 import { ADMIN_ROLE_NAME } from "@archestra/shared";
+import { and, eq } from "drizzle-orm";
+import db, { schema } from "@/database";
+import { AgentPinModel } from "@/models";
 import AgentUserModel from "@/models/agent-user";
 import { createA2aRemoteAgent } from "@/services/a2a-outbound-registry";
 import { describe, expect, test, useRouteTestApp } from "@/test";
@@ -119,6 +122,96 @@ describe("GET /api/agent-catalog", () => {
       pagination: { total: 0 },
       totals: { agents: 0, externalAgents: 0 },
     });
+  });
+
+  test("splits pinned internal agents from the unified catalog", async ({
+    makeAgent,
+    makeMember,
+  }) => {
+    await makeMember(ctx.user.id, ctx.organizationId, {
+      role: ADMIN_ROLE_NAME,
+    });
+    const alpha = await makeAgent({
+      organizationId: ctx.organizationId,
+      agentType: "agent",
+      name: "Alpha pinned",
+      scope: "org",
+    });
+    const bravo = await makeAgent({
+      organizationId: ctx.organizationId,
+      agentType: "agent",
+      name: "Bravo unpinned",
+      scope: "org",
+    });
+    const zulu = await makeAgent({
+      organizationId: ctx.organizationId,
+      agentType: "agent",
+      name: "Zulu pinned",
+      scope: "org",
+    });
+    const external = await createA2aRemoteAgent({
+      organizationId: ctx.organizationId,
+      authorId: ctx.user.id,
+      input: {
+        name: "External agent",
+        source: { type: "inline_card", agentCard: makeAgentCard() },
+        auth: { type: "none" },
+        scope: "org",
+      },
+    });
+
+    await AgentPinModel.pin({ userId: ctx.user.id, agentId: alpha.id });
+    await AgentPinModel.pin({ userId: ctx.user.id, agentId: zulu.id });
+    await setPinnedAt(alpha.id, "2026-01-01T00:00:00.000Z");
+    await setPinnedAt(zulu.id, "2026-01-02T00:00:00.000Z");
+
+    const pinned = await ctx.app.inject({
+      method: "GET",
+      url: "/api/agent-catalog?pinned=true&sortBy=name&sortDirection=asc&limit=20&offset=0",
+    });
+    expect(pinned.statusCode, pinned.body).toBe(200);
+    expect(pinned.json()).toMatchObject({
+      data: [
+        { type: "agent", value: { id: zulu.id } },
+        { type: "agent", value: { id: alpha.id } },
+      ],
+      pagination: { total: 2 },
+      totals: { agents: 2, externalAgents: 0 },
+    });
+    expect(
+      pinned
+        .json()
+        .data.every(
+          (row: { value: { pinnedAt: unknown } }) =>
+            typeof row.value.pinnedAt === "string",
+        ),
+    ).toBe(true);
+
+    const unpinned = await ctx.app.inject({
+      method: "GET",
+      url: "/api/agent-catalog?pinned=false&sortBy=name&sortDirection=asc&limit=20&offset=0",
+    });
+    expect(unpinned.statusCode, unpinned.body).toBe(200);
+    expect(unpinned.json()).toMatchObject({
+      data: [
+        { type: "agent", value: { id: bravo.id, pinnedAt: null } },
+        { type: "external", value: { id: external.id } },
+      ],
+      pagination: { total: 2 },
+      totals: { agents: 1, externalAgents: 1 },
+    });
+
+    async function setPinnedAt(agentId: string, value: string) {
+      await db
+        .update(schema.agentPinsTable)
+        .set({ pinnedAt: new Date(value) })
+        .where(
+          and(
+            eq(schema.agentPinsTable.userId, ctx.user.id),
+            eq(schema.agentPinsTable.agentId, agentId),
+          ),
+        );
+    }
   });
 
   test("returns only rows the caller can bulk-select when requested", async ({

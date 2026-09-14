@@ -22,6 +22,7 @@ import type { SubscriptionOffer } from "./subscription-offers";
 export function SubscriptionProviderCards({
   offers,
   isLoading,
+  currentUserId,
   onConnect,
   onManage,
   onDisconnect,
@@ -30,6 +31,8 @@ export function SubscriptionProviderCards({
   offers: SubscriptionOffer[];
   /** The viewer's keys have not arrived yet, so no status can be stated. */
   isLoading: boolean;
+  /** Session user, to recognize the viewer's own credential on a card. */
+  currentUserId: string | null | undefined;
   onConnect: (offer: SubscriptionOffer) => void;
   onManage: (credential: LlmProviderApiKeyResponse) => void;
   onDisconnect: (credential: LlmProviderApiKeyResponse) => void;
@@ -61,6 +64,7 @@ export function SubscriptionProviderCards({
             key={offer.kind}
             offer={offer}
             isLoading={isLoading}
+            currentUserId={currentUserId}
             onConnect={onConnect}
             onManage={onManage}
             onDisconnect={onDisconnect}
@@ -75,6 +79,7 @@ export function SubscriptionProviderCards({
 function SubscriptionProviderCard({
   offer,
   isLoading,
+  currentUserId,
   onConnect,
   onManage,
   onDisconnect,
@@ -82,6 +87,7 @@ function SubscriptionProviderCard({
 }: {
   offer: SubscriptionOffer;
   isLoading: boolean;
+  currentUserId: string | null | undefined;
   onConnect: (offer: SubscriptionOffer) => void;
   onManage: (credential: LlmProviderApiKeyResponse) => void;
   onDisconnect: (credential: LlmProviderApiKeyResponse) => void;
@@ -92,6 +98,7 @@ function SubscriptionProviderCard({
   const { credential } = offer;
   const copy = SUBSCRIPTION_CREDENTIALS[offer.kind].connect;
   const blockedReason = credential ? disconnectBlockedReason(credential) : null;
+  const ownsCredential = isOwnPersonalCredential(credential, currentUserId);
 
   return (
     <Card
@@ -158,18 +165,41 @@ function SubscriptionProviderCard({
             )}
             {/* Icon-only: the card is narrow enough at four across that a
                 second worded button would be clipped. */}
-            <PermissionButton
-              permissions={{ llmProviderApiKey: ["delete"] }}
-              variant="ghost"
-              size="icon-sm"
-              aria-label="Disconnect"
-              className="text-destructive hover:text-destructive"
-              disabled={blockedReason !== null}
-              tooltip={blockedReason ?? "Disconnect"}
-              onClick={() => onDisconnect(credential)}
-            >
-              <Unplug className="h-4 w-4" />
-            </PermissionButton>
+            {ownsCredential ? (
+              // The backend's DELETE route lets an owner delete their own
+              // personal key without the llmProviderApiKey:delete permission
+              // (authorizeApiKeyAccess returns early for personal keys owned
+              // by the caller), so the owner's control is a plain button —
+              // gating it on that permission left members who connected a
+              // subscription with no way to ever sign out (#6820). The
+              // PermissionButton stays for keys the viewer does not own: the
+              // offers can pair another person's key into an admin's view,
+              // and the backend refuses that delete even with permission.
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label="Disconnect"
+                className="text-destructive hover:text-destructive"
+                disabled={blockedReason !== null}
+                title={blockedReason ?? "Disconnect"}
+                onClick={() => onDisconnect(credential)}
+              >
+                <Unplug className="h-4 w-4" />
+              </Button>
+            ) : (
+              <PermissionButton
+                permissions={{ llmProviderApiKey: ["delete"] }}
+                variant="ghost"
+                size="icon-sm"
+                aria-label="Disconnect"
+                className="text-destructive hover:text-destructive"
+                disabled={blockedReason !== null}
+                tooltip={blockedReason ?? "Disconnect"}
+                onClick={() => onDisconnect(credential)}
+              >
+                <Unplug className="h-4 w-4" />
+              </PermissionButton>
+            )}
           </div>
         ) : (
           // Personal subscription creation is intentionally self-service on the
@@ -181,5 +211,21 @@ function SubscriptionProviderCard({
         )}
       </div>
     </Card>
+  );
+}
+
+/**
+ * Whether `credential` is the viewer's own personal subscription key — the one
+ * case the backend lets delete without the llmProviderApiKey:delete permission.
+ */
+function isOwnPersonalCredential(
+  credential: LlmProviderApiKeyResponse | null,
+  currentUserId: string | null | undefined,
+): boolean {
+  return (
+    credential !== null &&
+    credential.scope === "personal" &&
+    currentUserId != null &&
+    credential.userId === currentUserId
   );
 }

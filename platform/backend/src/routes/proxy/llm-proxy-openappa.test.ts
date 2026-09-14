@@ -43,7 +43,8 @@ describe("OpenAPPA on the existing LLM proxy", () => {
   let unregisterAppaPlugin: () => void;
 
   beforeEach(async ({ makeAgent, makeConversation, makeMember, makeUser }) => {
-    config.openappa = { enabled: true, policyPath: "/test/policy.toml" };
+    config.llmProxy.plugins = ["appa"];
+    config.openappa = { policyPath: "/test/policy.toml" };
     unregisterAppaPlugin = registerLlmProxyPlugin(createAppaLlmProxyPlugin());
     vi.spyOn(database, "getDatabaseConnectionString").mockReturnValue(
       "postgresql://test:test@localhost/test?schema=public",
@@ -665,8 +666,9 @@ describe("OpenAPPA on the existing LLM proxy", () => {
   test.each([
     true,
     false,
-  ])("flag off uses existing evaluators without APPA metadata (stream=%s)", async (stream) => {
-    config.openappa.enabled = false;
+  ])("empty plugin list uses existing evaluators without APPA metadata (stream=%s)", async (stream) => {
+    config.llmProxy.plugins = [];
+    unregisterAppaPlugin();
     // A configured path and unavailable native runtime must not affect old guardrails.
     native.initializeOpenappa.mockRejectedValue(
       new Error("native unavailable"),

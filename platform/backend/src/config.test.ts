@@ -3481,33 +3481,23 @@ describe("OpenAPPA feature configuration", () => {
     );
   });
 
-  test.each([
-    undefined,
-    "",
-    "false",
-    "TRUE",
-    "1",
-  ])("does not activate from a policy path or beta flag when enabled=%s", (enabled) => {
+  test("accepts an empty plugin list with or without a policy path", () => {
     vi.stubEnv("ARCHESTRA_BETA", "true");
-    expect(parseOpenAppaConfig(enabled, "/policy.toml")).toEqual({
-      enabled: false,
+    expect(parseOpenAppaConfig([], undefined)).toEqual({
+      policyPath: undefined,
+    });
+    expect(parseOpenAppaConfig([], "/policy.toml")).toEqual({
       policyPath: "/policy.toml",
     });
-    vi.unstubAllEnvs();
   });
-  test("requires a policy path only for explicit activation", () => {
-    expect(parseOpenAppaConfig(undefined, undefined).enabled).toBe(false);
-    expect(parseOpenAppaConfig("true", "/policy.toml", ["appa"])).toEqual({
-      enabled: true,
+  test("requires a policy path when the plugin list includes APPA", () => {
+    expect(parseOpenAppaConfig(["appa"], " /policy.toml ")).toEqual({
       policyPath: "/policy.toml",
     });
     for (const path of [undefined, "", "   "]) {
-      expect(() => parseOpenAppaConfig("true", path)).toThrow(
+      expect(() => parseOpenAppaConfig(["appa"], path)).toThrow(
         "ARCHESTRA_OPENAPPA_POLICY_PATH is required",
       );
     }
-    expect(() => parseOpenAppaConfig("true", "/policy.toml")).toThrow(
-      "ARCHESTRA_LLM_PROXY_PLUGINS=appa",
-    );
   });
 });

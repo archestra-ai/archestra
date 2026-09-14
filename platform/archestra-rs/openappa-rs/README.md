@@ -39,12 +39,13 @@ pnpm --filter @backend db:migrate
 Configure the usual Archestra database and auth secret, then explicitly set:
 
 ```sh
-ARCHESTRA_OPENAPPA_ENABLED=true
+ARCHESTRA_LLM_PROXY_PLUGINS=appa
 ARCHESTRA_OPENAPPA_POLICY_PATH=/absolute/path/to/policy.toml
 ```
 
-The feature flag defaults to false and does not inherit `ARCHESTRA_BETA`.
-A policy path alone does not enable APPA. With the flag off, the existing Tool
+The plugin list defaults to empty and does not inherit `ARCHESTRA_BETA`.
+Including `appa` is the only enablement switch; there is no separate flag.
+A policy path alone does not enable APPA. With the list empty, the existing Tool
 Guardrails run unchanged: APPA is not loaded, session headers are not required
 or injected, and the remedy tool is neither advertised nor callable. Additive
 schema migrations still run normally.
@@ -83,8 +84,8 @@ The production `pnpm deploy` includes `index.cjs`, declarations, the native
 binary, and the shared napi loader. Native builds are excluded from Turbo's
 cross-platform cache. The normal Archestra image and release workflows are
 unchanged; no separate addon release or binary download is introduced. The
-feature flag gates execution, so builds still compile/package the addon when
-the runtime feature is off.
+plugin list gates execution, so builds still compile/package the addon when
+APPA is not enabled.
 
 ## Identity and lifecycle
 

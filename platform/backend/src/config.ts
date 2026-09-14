@@ -2002,27 +2002,20 @@ export function parseLlmProxyPlugins(
 }
 
 /**
- * APPA must be explicitly enabled; a policy path or ARCHESTRA_BETA does not activate it.
+ * Validates APPA settings only when the startup plugin list enables it.
  * @public — exported for testability
  */
 export function parseOpenAppaConfig(
-  enabled: string | undefined,
+  plugins: readonly LlmProxyPluginName[],
   policyPath: string | undefined,
-  plugins: readonly LlmProxyPluginName[] = [],
 ) {
-  const isEnabled = enabled === "true";
   const path = policyPath?.trim() || undefined;
-  if (isEnabled && !path) {
+  if (plugins.includes("appa") && !path) {
     throw new Error(
-      "ARCHESTRA_OPENAPPA_POLICY_PATH is required when ARCHESTRA_OPENAPPA_ENABLED=true",
+      "ARCHESTRA_OPENAPPA_POLICY_PATH is required when ARCHESTRA_LLM_PROXY_PLUGINS includes appa",
     );
   }
-  if (isEnabled && !plugins.includes("appa")) {
-    throw new Error(
-      "ARCHESTRA_OPENAPPA_ENABLED=true requires ARCHESTRA_LLM_PROXY_PLUGINS=appa",
-    );
-  }
-  return { enabled: isEnabled, policyPath: path };
+  return { policyPath: path };
 }
 
 /**
@@ -2218,9 +2211,8 @@ const llmProxyPlugins = parseLlmProxyPlugins(
 
 const config = {
   openappa: parseOpenAppaConfig(
-    process.env.ARCHESTRA_OPENAPPA_ENABLED,
-    process.env.ARCHESTRA_OPENAPPA_POLICY_PATH,
     llmProxyPlugins,
+    process.env.ARCHESTRA_OPENAPPA_POLICY_PATH,
   ),
   frontendBaseUrl,
   api: {

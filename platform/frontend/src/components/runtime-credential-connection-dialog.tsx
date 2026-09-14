@@ -20,6 +20,7 @@ import { SecretInput, SecretTextarea } from "@/components/ui/secret-input";
 import {
   type RuntimeCredentialDefinition,
   useSetRuntimeCredentialConnection,
+  useStartGitHubUserConnection,
 } from "@/lib/runtime-credentials.query";
 
 export function RuntimeCredentialConnectionDialog({
@@ -36,9 +37,10 @@ export function RuntimeCredentialConnectionDialog({
   onConnected?: () => void;
 }) {
   const connect = useSetRuntimeCredentialConnection();
+  const startGitHub = useStartGitHubUserConnection();
   const form = useForm<ConnectionFormValues>({
     resolver: zodResolver(ConnectionFormSchema),
-    defaultValues: { value: "" },
+    defaultValues: { value: "", clientSecret: "" },
   });
 
   const save = (nextValue: string) => {
@@ -57,6 +59,35 @@ export function RuntimeCredentialConnectionDialog({
       },
     );
   };
+
+  if (definition.kind === "github_app_user")
+    return (
+      <StandardFormDialog
+        open
+        onOpenChange={(open) => {
+          if (!open) onClose();
+        }}
+        size="small"
+        title="Connect GitHub"
+        description="Authorize your GitHub account once. All agents using this connection act as you, within the App’s repository access and your own permissions."
+        onSubmit={(event) => {
+          event.preventDefault();
+          startGitHub.mutate(definition.key);
+        }}
+        footer={
+          <>
+            <Button type="button" variant="outline" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={startGitHub.isPending}>
+              {startGitHub.isPending ? "Connecting…" : "Connect GitHub"}
+            </Button>
+          </>
+        }
+      >
+        <RuntimeCredentialDescription definition={definition} />
+      </StandardFormDialog>
+    );
 
   if (useExternalSecretsManager) {
     return (
@@ -87,7 +118,17 @@ export function RuntimeCredentialConnectionDialog({
           ? "This value is private to you. Your agents and personal MCP connections reuse it."
           : "This value is shared by resources using this organization credential."
       }
-      onSubmit={form.handleSubmit(({ value }) => save(value))}
+      onSubmit={form.handleSubmit(({ value, clientSecret }) => {
+        if (definition.kind === "github_app" && definition.githubClientId) {
+          if (!clientSecret.trim()) {
+            form.setError("clientSecret", {
+              message: "OAuth client secret is required",
+            });
+            return;
+          }
+          save(JSON.stringify({ privateKey: value, clientSecret }));
+        } else save(value);
+      })}
       footer={
         <>
           <Button type="button" variant="outline" onClick={onClose}>
@@ -135,12 +176,28 @@ export function RuntimeCredentialConnectionDialog({
             </FormItem>
           )}
         />
+        {definition.kind === "github_app" && definition.githubClientId && (
+          <FormField
+            control={form.control}
+            name="clientSecret"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>OAuth client secret</FormLabel>
+                <FormControl>
+                  <SecretInput {...field} autoComplete="off" revealable />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        )}
       </Form>
     </StandardFormDialog>
   );
 }
 
 const ConnectionFormSchema = z.object({
+  clientSecret: z.string(),
   value: z.string().trim().min(1, "Secret value is required").max(20_000),
 });
 

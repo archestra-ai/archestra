@@ -6,7 +6,11 @@ import {
 import { z } from "zod";
 import { schema } from "@/database";
 
-export const CredentialKindSchema = z.enum(["secret", "github_app"]);
+export const CredentialKindSchema = z.enum([
+  "secret",
+  "github_app",
+  "github_app_user",
+]);
 export type CredentialKind = z.infer<typeof CredentialKindSchema>;
 
 const ConnectionKeySchema = z
@@ -63,6 +67,8 @@ export const UpdateRuntimeCredentialDefinitionSchema = createUpdateSchema(
     githubUrl: true,
     appId: true,
     installationId: true,
+    githubClientId: true,
+    githubAppCredentialKey: true,
     description: true,
     icon: true,
   })
@@ -74,6 +80,8 @@ export const RuntimeCredentialDefinitionViewSchema = z.object({
   githubUrl: z.string().nullable(),
   appId: z.string().nullable(),
   installationId: z.string().nullable(),
+  githubClientId: z.string().nullable(),
+  githubAppCredentialKey: z.string().nullable(),
   key: ConnectionKeySchema,
   name: z.string(),
   description: z.string(),

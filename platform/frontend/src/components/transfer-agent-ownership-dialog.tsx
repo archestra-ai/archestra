@@ -2,15 +2,9 @@
 
 import type { archestraApiTypes } from "@archestra/shared";
 import { useState } from "react";
+import { StandardFormDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { useTransferAgentOwnership } from "@/lib/agent.query";
 import { useOrganizationMembers } from "@/lib/organization.query";
@@ -33,25 +27,47 @@ export function TransferAgentOwnershipDialog({
   const members = useOrganizationMembers();
   const transfer = useTransferAgentOwnership();
   return (
-    <Dialog
+    <StandardFormDialog
       open
+      size="small"
+      title="Transfer ownership"
+      description={`Choose a new owner for ${agent.name}.`}
       onOpenChange={(open) => {
         if (!open && !transfer.isPending) onClose();
       }}
+      onSubmit={() => {
+        if (!ownerId || transfer.isPending || members.isError) return;
+        transfer.mutate(
+          { id: agent.id, ownerId },
+          { onSuccess: onTransferred },
+        );
+      }}
+      bodyClassName="space-y-4"
+      footer={
+        <>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={transfer.isPending}
+            onClick={onClose}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            disabled={!ownerId || transfer.isPending || members.isError}
+          >
+            {transfer.isPending ? "Transferring…" : "Transfer ownership"}
+          </Button>
+        </>
+      }
     >
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Transfer ownership</DialogTitle>
-          <DialogDescription>
-            Choose a new owner for {agent.name}. Its configuration and sharing
-            settings stay the same.
-            {agent.scope === "personal" && (
-              <span> You may lose access after transferring ownership.</span>
-            )}
-          </DialogDescription>
-        </DialogHeader>
+      <div className="space-y-2">
+        <Label htmlFor="transfer-agent-owner">New owner</Label>
         <SearchableSelect
+          id="transfer-agent-owner"
           ariaLabel="New owner"
+          className="w-full"
           value={ownerId}
           onValueChange={setOwnerId}
           placeholder={
@@ -67,35 +83,25 @@ export function TransferAgentOwnershipDialog({
               description: member.email,
             }))}
         />
-        {members.isError && (
-          <p role="alert">
-            Unable to load users.{" "}
-            <Button variant="link" onClick={() => members.refetch()}>
-              Retry
-            </Button>
-          </p>
+      </div>
+      <p className="text-sm text-muted-foreground">
+        Configuration and sharing settings stay the same.
+        {agent.scope === "personal" && (
+          <span> You may lose access after transferring ownership.</span>
         )}
-        <DialogFooter>
+      </p>
+      {members.isError && (
+        <p role="alert">
+          Unable to load users.{" "}
           <Button
-            variant="outline"
-            disabled={transfer.isPending}
-            onClick={onClose}
+            type="button"
+            variant="link"
+            onClick={() => members.refetch()}
           >
-            Cancel
+            Retry
           </Button>
-          <Button
-            disabled={!ownerId || transfer.isPending || members.isError}
-            onClick={() =>
-              transfer.mutate(
-                { id: agent.id, ownerId },
-                { onSuccess: onTransferred },
-              )
-            }
-          >
-            {transfer.isPending ? "Transferring…" : "Transfer ownership"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </p>
+      )}
+    </StandardFormDialog>
   );
 }

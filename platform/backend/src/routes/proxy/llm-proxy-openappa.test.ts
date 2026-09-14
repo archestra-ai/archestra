@@ -204,9 +204,20 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       expect(response.statusCode, response.body).toBe(200);
       expect(response.body).not.toContain('"type":"tool_use"');
       expect(response.body).not.toContain("input_json_delta");
-      expect(response.body).toContain(
-        "NATIVE REFUSAL: archestra__execute_remedy_plan(offer_id: test-offer)",
-      );
+      const refusal =
+        "NATIVE REFUSAL: archestra__execute_remedy_plan(offer_id: test-offer)";
+      expect(response.body).toContain(refusal);
+      if (stream) {
+        expect(response.body).toContain(`"text":"${refusal}"`);
+      } else {
+        expect(response.json().content).toEqual([
+          {
+            type: "text",
+            text: refusal,
+            citations: null,
+          },
+        ]);
+      }
       expect(response.body).not.toContain("tool call policy violated");
       expect(
         events.filter((event) => event.event === "tool_call"),

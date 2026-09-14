@@ -5,7 +5,7 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { vi } from "vitest";
-import { ModelModel } from "@/models";
+import { InteractionModel, ModelModel } from "@/models";
 import { registerLlmProxyPlugin } from "@/proxy/plugins/registry";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { createOpenAiTestClient } from "@/test/llm-provider-stubs";
@@ -136,7 +136,7 @@ describe("LLM proxy plugin lifecycle", () => {
     }
   });
 
-  test("chains transformed tool calls and refuses the final proxy response", async ({
+  test("uses the final plugin's rich refusal after an earlier rewrite", async ({
     makeAgent,
   }) => {
     vi.spyOn(openaiAdapterFactory, "createClient").mockImplementation(
@@ -181,8 +181,16 @@ describe("LLM proxy plugin lifecycle", () => {
     const events: string[] = [];
     const unregisterFirst = registerLlmProxyPlugin({
       id: `test-rewrite-${crypto.randomUUID()}`,
-      async onToolCalls({ toolCalls }) {
+      async onToolCalls({ toolCalls, resources }) {
         events.push(toolCalls[0]?.name ?? "missing");
+        resources.set("archestra.appa.refusal", {
+          refusalMessage: "STALE PRIVATE REFUSAL",
+          contentMessage: "STALE PRIVATE REFUSAL",
+          reason: "stale",
+          blockedToolName: "stale",
+          toolInput: {},
+          allToolCallNames: ["stale"],
+        });
         return {
           decision: "allow",
           toolCalls: toolCalls.map((toolCall) => ({
@@ -196,7 +204,17 @@ describe("LLM proxy plugin lifecycle", () => {
       id: `test-refusal-${crypto.randomUUID()}`,
       async onToolCalls({ toolCalls }) {
         events.push(toolCalls[0]?.name ?? "missing");
-        return { decision: "refuse", message: "Plugin refused reviewed call" };
+        return {
+          decision: "refuse",
+          refusal: {
+            refusalMessage: "PRIVATE GENERIC REFUSAL",
+            contentMessage: "Plugin refused reviewed call",
+            reason: "generic plugin denied reviewed call",
+            blockedToolName: toolCalls[0]?.name ?? "missing",
+            toolInput: { path: "/private" },
+            allToolCallNames: [toolCalls[0]?.name ?? "missing"],
+          },
+        };
       },
     });
     const agent = await makeAgent({ agentType: "llm_proxy", isDefault: true });
@@ -226,7 +244,17 @@ describe("LLM proxy plugin lifecycle", () => {
 
       expect(response.statusCode, response.body).toBe(200);
       expect(response.body).toContain("Plugin refused reviewed call");
+      expect(response.body).not.toContain("PRIVATE GENERIC REFUSAL");
+      expect(response.body).not.toContain("STALE PRIVATE REFUSAL");
+      expect(response.body).not.toContain("/private");
       expect(events).toEqual(["read_file", "reviewed_read_file"]);
+      const [interaction] = await InteractionModel.getAllInteractionsForProfile(
+        agent.id,
+      );
+      expect(interaction.toolCallBlock).toEqual({
+        reason: "generic plugin denied reviewed call",
+        blockedToolCallCount: 1,
+      });
     } finally {
       unregisterSecond();
       unregisterFirst();

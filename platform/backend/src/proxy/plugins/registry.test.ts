@@ -34,7 +34,17 @@ describe("LlmProxyPluginRegistry", () => {
       id: "deny",
       async onToolCalls() {
         events.push("deny");
-        return { decision: "refuse", message: "blocked" };
+        return {
+          decision: "refuse",
+          refusal: {
+            refusalMessage: "blocked",
+            contentMessage: "blocked",
+            reason: "test block",
+            blockedToolName: "read",
+            toolInput: {},
+            allToolCallNames: ["read"],
+          },
+        };
       },
     });
     registry.register({
@@ -47,7 +57,17 @@ describe("LlmProxyPluginRegistry", () => {
     await registry.onSessionInit(requestContext());
     await expect(
       registry.onToolCalls({ ...requestContext(), toolCalls: [] }),
-    ).resolves.toEqual({ decision: "refuse", message: "blocked" });
+    ).resolves.toEqual({
+      decision: "refuse",
+      refusal: {
+        refusalMessage: "blocked",
+        contentMessage: "blocked",
+        reason: "test block",
+        blockedToolName: "read",
+        toolInput: {},
+        allToolCallNames: ["read"],
+      },
+    });
     expect(events).toEqual(["first", "deny"]);
   });
 

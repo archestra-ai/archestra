@@ -84,8 +84,6 @@ import {
 } from "@/openappa/service";
 import {
   APPA_PLUGIN_TRUSTED_CONTEXT,
-  getAppaPluginRefusal,
-  getAppaPluginResult,
   registerAppaLlmProxyPlugin,
 } from "@/proxy/plugins/appa-plugin-archestra";
 import type { AppaTrustedContext } from "@/proxy/plugins/appa-plugin-archestra/types";
@@ -93,6 +91,7 @@ import {
   getLlmProxyPluginRegistry,
   type LlmProxyPluginRegistry,
   type LlmProxyRequestContext,
+  type LlmProxyToolCallRefusal,
 } from "@/proxy/plugins/registry";
 import { enrichDiscoveredModel } from "@/services/discovered-model-enrichment";
 import { assertSubscriptionCredentialForProvider } from "@/services/subscription-credential-guard";
@@ -1124,54 +1123,56 @@ export async function handleLLMProxy<
       );
     }
     await pluginRegistry.onSessionInit(pluginContext);
-    await pluginRegistry.onToolResults({
+    const pluginToolResultsOutcome = await pluginRegistry.onToolResults({
       ...pluginContext,
       toolResults: requestAdapter.getToolResults(),
     });
-    const appaResult = getAppaPluginResult(pluginContext.resources);
-    const {
-      toolResultUpdates,
-      contextIsTrusted,
-      dualLlmAnalyses,
-      unsafeContextBoundary,
-    } = appaResult
-      ? appaResult
-      : await utils.trustedData.evaluateIfContextIsTrusted({
-          messages: commonMessages,
-          agentId: resolvedAgentId,
-          organizationId: resolvedAgent.organizationId,
-          userId,
-          considerContextUntrusted: effectiveConsiderContextUntrusted,
-          policyContext: { teamIds, externalAgentId },
-          onDualLlmStart: (info) => {
-            writeDualLlmKeepAlive?.();
-            publishDualLlmEvent?.({ kind: "start", ...info });
-          },
-          onDualLlmProgress: (progress) => {
-            writeDualLlmKeepAlive?.();
-            publishDualLlmEvent?.({ kind: "qa", ...progress });
-          },
-          // A failed analysis fails the request closed. Chat renders the failure
-          // from the structured event; for other clients the message is written
-          // as a text delta — safe here because the request errors out and no
-          // model output follows that could fuse with it.
-          onDualLlmError: (info) => {
-            publishDualLlmEvent?.({ kind: "error", ...info });
-            if (!publishDualLlmEvent && requestAdapter.isStreaming()) {
-              ensureStreamHeaders();
-              reply.raw.write(streamAdapter.formatTextDeltaSSE(info.message));
-            }
-          },
-          onDualLlmComplete: (analysis, info) =>
-            publishDualLlmEvent?.({
-              kind: "complete",
-              toolCallId: analysis.toolCallId,
-              toolName: info.toolName,
-              analysis,
-              cached: info.cached,
-            }),
-          initialUntrustedReason,
-        });
+    const trustedDataOutcome =
+      pluginToolResultsOutcome.contextTrust ??
+      (await utils.trustedData.evaluateIfContextIsTrusted({
+        messages: commonMessages,
+        agentId: resolvedAgentId,
+        organizationId: resolvedAgent.organizationId,
+        userId,
+        considerContextUntrusted: effectiveConsiderContextUntrusted,
+        policyContext: { teamIds, externalAgentId },
+        onDualLlmStart: (info) => {
+          writeDualLlmKeepAlive?.();
+          publishDualLlmEvent?.({ kind: "start", ...info });
+        },
+        onDualLlmProgress: (progress) => {
+          writeDualLlmKeepAlive?.();
+          publishDualLlmEvent?.({ kind: "qa", ...progress });
+        },
+        // A failed analysis fails the request closed. Chat renders the failure
+        // from the structured event; for other clients the message is written
+        // as a text delta — safe here because the request errors out and no
+        // model output follows that could fuse with it.
+        onDualLlmError: (info) => {
+          publishDualLlmEvent?.({ kind: "error", ...info });
+          if (!publishDualLlmEvent && requestAdapter.isStreaming()) {
+            ensureStreamHeaders();
+            reply.raw.write(streamAdapter.formatTextDeltaSSE(info.message));
+          }
+        },
+        onDualLlmComplete: (analysis, info) =>
+          publishDualLlmEvent?.({
+            kind: "complete",
+            toolCallId: analysis.toolCallId,
+            toolName: info.toolName,
+            analysis,
+            cached: info.cached,
+          }),
+        initialUntrustedReason,
+      }));
+    const { contextIsTrusted, dualLlmAnalyses, unsafeContextBoundary } =
+      trustedDataOutcome;
+    const toolResultUpdates = {
+      ...pluginToolResultsOutcome.toolResultUpdates,
+      ...("toolResultUpdates" in trustedDataOutcome
+        ? trustedDataOutcome.toolResultUpdates
+        : {}),
+    };
 
     // Apply tool result updates
     requestAdapter.applyToolResultUpdates(toolResultUpdates);
@@ -1872,8 +1873,7 @@ async function handleStreaming<
 
     // Evaluate tool invocation policies
     const toolCalls = streamAdapter.state.toolCalls;
-    let toolInvocationRefusal: utils.toolInvocation.PolicyBlockResult | null =
-      null;
+    let toolInvocationRefusal: LlmProxyToolCallRefusal | null = null;
 
     let rewrittenToolCalls: AccumulatedToolCall[] | null = null;
 
@@ -1941,7 +1941,6 @@ async function handleStreaming<
         toolInvocationRefusal;
 
       // Drop the held tool-call events and use the existing refusal format.
-      // Its text comes from APPA when enabled.
       const refusalEvents = streamAdapter.formatCompleteTextSSE(contentMessage);
       for (const event of refusalEvents) {
         writeToClient(event);
@@ -2419,7 +2418,7 @@ async function handleNonStreaming<
       rewrittenToolCalls = pluginOutcome.toolCalls;
     }
 
-    const toolInvocationRefusal =
+    const toolInvocationRefusal: LlmProxyToolCallRefusal | null =
       pluginOutcome.refusal ??
       (await utils.toolInvocation.evaluatePolicies(
         normalizeToolCallsForPolicy(
@@ -2643,7 +2642,7 @@ async function evaluateProxyPluginToolCalls(
   context: LlmProxyRequestContext,
   toolCalls: readonly AccumulatedToolCall[],
 ): Promise<{
-  refusal: utils.toolInvocation.PolicyBlockResult | null;
+  refusal: LlmProxyToolCallRefusal | null;
   toolCalls: AccumulatedToolCall[];
   wasRewritten: boolean;
 }> {
@@ -2665,16 +2664,8 @@ async function evaluateProxyPluginToolCalls(
     };
   }
 
-  const appaRefusal = getAppaPluginRefusal(context.resources);
   return {
-    refusal: appaRefusal ?? {
-      refusalMessage: outcome.message,
-      contentMessage: outcome.message,
-      reason: "LLM proxy plugin denied the tool call",
-      blockedToolName: toolCalls[0]?.name ?? "unknown",
-      toolInput: {},
-      allToolCallNames: toolCalls.map((toolCall) => toolCall.name),
-    },
+    refusal: outcome.refusal,
     toolCalls: [...toolCalls],
     wasRewritten: false,
   };

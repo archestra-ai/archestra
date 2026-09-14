@@ -1,10 +1,10 @@
-import type { PolicyBlockResult } from "@/guardrails/tool-invocation";
 import {
   checkToolCalls,
   type OpenAppaSession,
   processProxyResults,
 } from "@/openappa/service";
 import type {
+  LlmProxyContextTrust,
   LlmProxyPlugin,
   LlmProxyRequestContext,
   LlmProxyToolCallsContext,
@@ -17,15 +17,11 @@ import type { AppaClientAdapter, AppaTrustedContext } from "./types";
 const APPA_PLUGIN_BINDING = "archestra.appa.binding";
 export const APPA_PLUGIN_TRUSTED_CONTEXT = "archestra.appa.trusted-context";
 const APPA_PLUGIN_ADAPTER = "archestra.appa.adapter";
-const APPA_PLUGIN_RESULT = "archestra.appa.result";
-const APPA_PLUGIN_REFUSAL = "archestra.appa.refusal";
 
 type AppaPluginBinding = {
   session: OpenAppaSession;
   canonicalizeToolName: (name: string) => string;
 };
-
-type AppaPluginResult = Awaited<ReturnType<typeof processProxyResults>>;
 
 export class AppaPluginArchestra implements LlmProxyPlugin {
   readonly id = "archestra.appa";
@@ -55,8 +51,14 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     const result = await processProxyResults(binding.session, [
       ...context.toolResults,
     ]);
-    context.resources.set(APPA_PLUGIN_RESULT, result);
-    return { toolResultUpdates: result.toolResultUpdates };
+    return {
+      toolResultUpdates: result.toolResultUpdates,
+      contextTrust: {
+        contextIsTrusted: result.contextIsTrusted,
+        dualLlmAnalyses: result.dualLlmAnalyses,
+        unsafeContextBoundary: result.unsafeContextBoundary,
+      } satisfies LlmProxyContextTrust,
+    };
   }
 
   async onToolCalls(
@@ -76,21 +78,8 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           : binding.canonicalizeToolName(name),
     );
     if (!refusal) return;
-    context.resources.set(APPA_PLUGIN_REFUSAL, refusal);
-    return { decision: "refuse" as const, message: refusal.refusalMessage };
+    return { decision: "refuse", refusal };
   }
-}
-
-export function getAppaPluginResult(
-  resources: ReadonlyMap<string, unknown>,
-): AppaPluginResult | undefined {
-  return resources.get(APPA_PLUGIN_RESULT) as AppaPluginResult | undefined;
-}
-
-export function getAppaPluginRefusal(
-  resources: ReadonlyMap<string, unknown>,
-): PolicyBlockResult | undefined {
-  return resources.get(APPA_PLUGIN_REFUSAL) as PolicyBlockResult | undefined;
 }
 
 function getBinding(

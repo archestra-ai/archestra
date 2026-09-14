@@ -1,5 +1,9 @@
 import logger from "@/logging";
-import type { CommonToolResult } from "@/types";
+import type {
+  CommonToolResult,
+  DualLlmAnalysis,
+  UnsafeContextBoundary,
+} from "@/types";
 
 /**
  * Public extension contract for cross-cutting LLM proxy behavior.
@@ -39,9 +43,20 @@ export type LlmProxyToolCallsContext = LlmProxyRequestContext & {
   toolCalls: readonly LlmProxyToolCall[];
 };
 
+/** A plugin-provided tool-call refusal rendered by the proxy's adapters. */
+export type LlmProxyToolCallRefusal = {
+  refusalMessage: string;
+  contentMessage: string;
+  reason: string;
+  blockedToolName: string;
+  blockedToolId?: string;
+  toolInput: Record<string, unknown>;
+  allToolCallNames: string[];
+};
+
 export type LlmProxyToolCallsOutcome =
   | { decision: "allow"; toolCalls: readonly LlmProxyToolCall[] }
-  | { decision: "refuse"; message: string };
+  | { decision: "refuse"; refusal: LlmProxyToolCallRefusal };
 
 export type LlmProxyToolResult = CommonToolResult;
 
@@ -49,9 +64,17 @@ export type LlmProxyToolResultsContext = LlmProxyRequestContext & {
   toolResults: readonly LlmProxyToolResult[];
 };
 
+export type LlmProxyContextTrust = {
+  contextIsTrusted: boolean;
+  dualLlmAnalyses: DualLlmAnalysis[];
+  unsafeContextBoundary: UnsafeContextBoundary | undefined;
+};
+
 /** Uses the request adapter's existing provider-wire update path. */
 export type LlmProxyToolResultsOutcome = {
   toolResultUpdates: Readonly<Record<string, string>>;
+  /** The final plugin-provided context trust decision, if one was made. */
+  contextTrust?: LlmProxyContextTrust;
 };
 
 export type LlmProxyModelResponseContext = LlmProxyRequestContext & {
@@ -171,6 +194,7 @@ export class LlmProxyPluginRegistry {
   ): Promise<LlmProxyToolResultsOutcome> {
     const updates: Record<string, string> = {};
     let toolResults = context.toolResults;
+    let contextTrust: LlmProxyContextTrust | undefined;
     for (const plugin of this.getSessionPlugins(context)) {
       const result = (await this.invoke(plugin, "onToolResults", {
         ...context,
@@ -178,12 +202,16 @@ export class LlmProxyPluginRegistry {
       })) as LlmProxyToolResultsOutcome | undefined;
       if (!result) continue;
       Object.assign(updates, result.toolResultUpdates);
+      if (result.contextTrust) contextTrust = result.contextTrust;
       toolResults = toolResults.map((toolResult) => ({
         ...toolResult,
         content: result.toolResultUpdates[toolResult.id] ?? toolResult.content,
       }));
     }
-    return { toolResultUpdates: updates };
+    return {
+      toolResultUpdates: updates,
+      ...(contextTrust ? { contextTrust } : {}),
+    };
   }
 
   async onModelResponse(

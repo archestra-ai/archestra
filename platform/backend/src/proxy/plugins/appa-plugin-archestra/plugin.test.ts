@@ -54,6 +54,9 @@ describe("APPA client adapters", () => {
     expect(codex.normalizeLocalToolName("functions.exec_command")).toBe(
       "builtin:exec_command",
     );
+    expect(codex.normalizeLocalToolName("functions.builtin:read_file")).toBe(
+      "builtin:read_file",
+    );
     expect(openCode.normalizeLocalToolName("read_file")).toBe(
       "builtin:read_file",
     );

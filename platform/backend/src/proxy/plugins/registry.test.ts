@@ -74,6 +74,7 @@ describe("LlmProxyPluginRegistry", () => {
   test("chains tool and response transformations in registration order", async () => {
     const registry = new LlmProxyPluginRegistry();
     const context = requestContext();
+    let secondPluginArguments: unknown;
     registry.register({
       id: "first",
       async onToolCalls({ toolCalls }) {
@@ -92,6 +93,7 @@ describe("LlmProxyPluginRegistry", () => {
     registry.register({
       id: "second",
       async onToolCalls({ toolCalls }) {
+        secondPluginArguments = toolCalls[0]?.arguments;
         return {
           decision: "allow",
           toolCalls: toolCalls.map((toolCall) => ({
@@ -115,6 +117,7 @@ describe("LlmProxyPluginRegistry", () => {
       decision: "allow",
       toolCalls: [{ id: "call-1", name: "second_first_read", arguments: {} }],
     });
+    expect(secondPluginArguments).toEqual({});
     await expect(
       registry.onModelResponse({ ...context, response: "provider" }),
     ).resolves.toBe("provider:first:second");
@@ -188,6 +191,7 @@ describe("LlmProxyPluginRegistry", () => {
   test("removes a partial session when initialization cleanup fails", async () => {
     const registry = new LlmProxyPluginRegistry();
     const context = requestContext();
+    const events: string[] = [];
     registry.register({
       id: "cleanup-fails",
       async onCleanup() {
@@ -199,13 +203,45 @@ describe("LlmProxyPluginRegistry", () => {
       async onSessionInit() {
         throw new Error("initialization unavailable");
       },
+      async onCleanup() {
+        events.push("broken-init-cleanup");
+      },
     });
 
     await expect(registry.onSessionInit(context)).rejects.toThrow(
       "LLM proxy plugin cleanup-fails failed during onCleanup",
     );
+    expect(events).toEqual(["broken-init-cleanup"]);
     await expect(registry.onSessionInit(context)).rejects.toThrow(
       "LLM proxy plugin cleanup-fails failed during onCleanup",
     );
+  });
+
+  test.each([
+    "complete",
+    "fail",
+  ] as const)("removes a session after %s cleanup fails", async (phase) => {
+    const registry = new LlmProxyPluginRegistry();
+    const context = requestContext();
+    registry.register({
+      id: "cleanup-fails",
+      async onCleanup() {
+        throw new Error("cleanup unavailable");
+      },
+    });
+
+    await registry.onSessionInit(context);
+    if (phase === "complete") {
+      await expect(registry.complete(context)).rejects.toThrow(
+        "LLM proxy plugin cleanup-fails failed during onCleanup",
+      );
+    } else {
+      await expect(
+        registry.fail({ ...context, error: new Error("request unavailable") }),
+      ).rejects.toThrow(
+        "LLM proxy plugin cleanup-fails failed during onCleanup",
+      );
+    }
+    await expect(registry.onSessionInit(context)).resolves.toBeUndefined();
   });
 });

@@ -10,6 +10,8 @@ export class AppaChatAdapter implements AppaClientAdapter {
   }
 
   classifyToolName(name: string): "gateway" | "local" {
+    // Chat uses the platform's strict branding authority so white-label tool
+    // names and the gateway's own recognized built-ins stay aligned.
     return archestraMcpBranding.isToolName(name) ? "gateway" : "local";
   }
 

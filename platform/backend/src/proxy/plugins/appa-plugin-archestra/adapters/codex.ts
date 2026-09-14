@@ -24,6 +24,8 @@ export class AppaCodexAdapter implements AppaClientAdapter {
   }
 
   normalizeLocalToolName(name: string): string {
+    // Codex decorates local function tools with `functions.` before its native
+    // namespace, so remove that decoration before preserving the native name.
     const stripped = name.startsWith("functions.")
       ? name.slice("functions.".length)
       : name;

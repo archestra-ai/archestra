@@ -33,6 +33,11 @@ export type LlmProxyBeforeModelContext = LlmProxyRequestContext & {
   request: unknown;
 };
 
+/**
+ * Provider-neutral tool calls retain parsed arguments when an adapter already
+ * has them. Plugins must support either representation; the handler serializes
+ * them only when it returns to a provider-specific response adapter.
+ */
 type LlmProxyToolCall = {
   id: string;
   name: string;
@@ -70,7 +75,10 @@ export type LlmProxyContextTrust = {
   unsafeContextBoundary: UnsafeContextBoundary | undefined;
 };
 
-/** Uses the request adapter's existing provider-wire update path. */
+/**
+ * Uses the request adapter's existing provider-wire update path. Later plugins
+ * receive the cumulative updates from earlier plugins in registration order.
+ */
 export type LlmProxyToolResultsOutcome = {
   toolResultUpdates: Readonly<Record<string, string>>;
   /** The final plugin-provided context trust decision, if one was made. */
@@ -152,8 +160,8 @@ export class LlmProxyPluginRegistry {
     this.sessions.set(context.requestId, initialized);
     try {
       for (const plugin of this.plugins) {
-        await this.invoke(plugin, "onSessionInit", context);
         initialized.push(plugin);
+        await this.invoke(plugin, "onSessionInit", context);
       }
     } catch (error) {
       try {
@@ -181,10 +189,14 @@ export class LlmProxyPluginRegistry {
       toolCalls: context.toolCalls,
     };
     for (const plugin of this.getSessionPlugins(context)) {
-      const result = (await this.invoke(plugin, "onToolCalls", {
-        ...context,
-        toolCalls: outcome.toolCalls,
-      })) as LlmProxyToolCallsOutcome | undefined;
+      const result: LlmProxyToolCallsOutcome | undefined = await this.invoke(
+        plugin,
+        "onToolCalls",
+        {
+          ...context,
+          toolCalls: outcome.toolCalls,
+        },
+      );
       if (!result) continue;
       outcome = result;
       if (outcome.decision === "refuse") return outcome;
@@ -199,10 +211,10 @@ export class LlmProxyPluginRegistry {
     let toolResults = context.toolResults;
     let contextTrust: LlmProxyContextTrust | undefined;
     for (const plugin of this.getSessionPlugins(context)) {
-      const result = (await this.invoke(plugin, "onToolResults", {
+      const result = await this.invoke(plugin, "onToolResults", {
         ...context,
         toolResults,
-      })) as LlmProxyToolResultsOutcome | undefined;
+      });
       if (!result) continue;
       Object.assign(updates, result.toolResultUpdates);
       if (result.contextTrust) contextTrust = result.contextTrust;
@@ -222,10 +234,10 @@ export class LlmProxyPluginRegistry {
   ): Promise<unknown> {
     let response = context.response;
     for (const plugin of this.getSessionPlugins(context)) {
-      const result = (await this.invoke(plugin, "onModelResponse", {
+      const result = await this.invoke(plugin, "onModelResponse", {
         ...context,
         response,
-      })) as { response: unknown } | undefined;
+      });
       if (result) response = result.response;
     }
     return response;
@@ -238,8 +250,11 @@ export class LlmProxyPluginRegistry {
         await this.invoke(plugin, "onComplete", context);
       }
     } finally {
-      await this.cleanup(context, plugins);
-      this.sessions.delete(context.requestId);
+      try {
+        await this.cleanup(context, plugins);
+      } finally {
+        this.sessions.delete(context.requestId);
+      }
     }
   }
 
@@ -251,8 +266,11 @@ export class LlmProxyPluginRegistry {
         await this.invoke(plugin, "onError", context);
       }
     } finally {
-      await this.cleanup(context, plugins);
-      this.sessions.delete(context.requestId);
+      try {
+        await this.cleanup(context, plugins);
+      } finally {
+        this.sessions.delete(context.requestId);
+      }
     }
   }
 
@@ -293,6 +311,25 @@ export class LlmProxyPluginRegistry {
     if (firstError) throw firstError;
   }
 
+  private async invoke(
+    plugin: LlmProxyPlugin,
+    phase: "onToolCalls",
+    context: LlmProxyToolCallsContext,
+  ): Promise<LlmProxyToolCallsOutcome | undefined>;
+  private async invoke(
+    plugin: LlmProxyPlugin,
+    phase: "onToolResults",
+    context: LlmProxyToolResultsContext,
+  ): Promise<LlmProxyToolResultsOutcome | undefined>;
+  private async invoke(
+    plugin: LlmProxyPlugin,
+    phase: "onModelResponse",
+    context: LlmProxyModelResponseContext,
+  ): Promise<{ response: unknown } | undefined>;
+  private async invoke<
+    TPhase extends keyof LlmProxyPlugin,
+    TContext extends LlmProxyRequestContext,
+  >(plugin: LlmProxyPlugin, phase: TPhase, context: TContext): Promise<unknown>;
   private async invoke<
     TPhase extends keyof LlmProxyPlugin,
     TContext extends LlmProxyRequestContext,

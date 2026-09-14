@@ -126,7 +126,7 @@ export function sessionFromHeaders(params: {
   if (!params.callerId)
     throw new ApiError(
       401,
-      "OpenAPPA requires an authenticated Archestra caller",
+      `OpenAPPA requires an authenticated ${archestraMcpBranding.appName} caller`,
     );
   return {
     organization_id: params.organizationId,
@@ -227,8 +227,7 @@ export async function checkToolCalls(
         ? "appa/execute_remedy_plan"
         : target.toolCallName;
     if (isAgentTool(tool) || isSkillTool(tool)) {
-      const feedback =
-        "OpenAPPA delegation requires a child-return adapter, which is not yet available in Archestra Chat.";
+      const feedback = `OpenAPPA delegation requires a child-return adapter, which is not yet available in ${archestraMcpBranding.appName} Chat.`;
       return {
         refusalMessage: feedback,
         contentMessage: feedback,

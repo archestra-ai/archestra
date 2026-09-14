@@ -299,7 +299,7 @@ export async function executeArchestraTool(
       content: [
         {
           type: "text",
-          text: "OpenAPPA delegation requires a child-return adapter, which is not yet available in Archestra Chat.",
+          text: `OpenAPPA delegation requires a child-return adapter, which is not yet available in ${archestraMcpBranding.appName} Chat.`,
         },
       ],
     };

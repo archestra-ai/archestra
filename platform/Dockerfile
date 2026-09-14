@@ -247,6 +247,9 @@ RUN set -eux; \
 FROM base AS rust-builder-base
 WORKDIR /app
 RUN apk add --no-cache build-base cargo rust openssl-dev pkgconf
+# Use the builder's installed OpenSSL for PostgreSQL TLS. Cross-builds outside
+# this image use the vendored musl dependency from openappa-rs instead.
+ENV OPENSSL_NO_VENDOR=1
 # Cargo fetches OpenAPPA at the revision pinned in openappa-rs/Cargo.toml and
 # Cargo.lock, including the runtime's plugin fingerprint inputs. No sibling
 # checkout or additional Docker build context is required.

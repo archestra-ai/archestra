@@ -115,10 +115,10 @@ pub async fn dispatch_hook(input: String) -> napi::Result<String> {
         ("operation", &input.operation_id),
         ("tool call", &input.tool_call_id),
     ] {
-        if let Some(value) = value {
-            if value.is_empty() || value.len() > 1024 || value.chars().any(char::is_control) {
-                return Err(error(format!("invalid {name} identity")));
-            }
+        if let Some(value) = value
+            && (value.is_empty() || value.len() > 1024 || value.chars().any(char::is_control))
+        {
+            return Err(error(format!("invalid {name} identity")));
         }
     }
     // Reject malformed host requests before writing an interrupted-operation

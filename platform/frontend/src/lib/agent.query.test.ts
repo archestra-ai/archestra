@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   useChatAgents,
   useCreateProfile,
+  usePinAgent,
   useUpdateProfile,
 } from "@/lib/agent.query";
 import { isReportedApiError } from "@/lib/utils";
@@ -21,6 +22,8 @@ vi.mock("@archestra/shared", async (importOriginal) => {
       ...actual.archestraApiSdk,
       createAgent: vi.fn(),
       getAllAgents: vi.fn(),
+      pinAgent: vi.fn(),
+      unpinAgent: vi.fn(),
       updateAgent: vi.fn(),
     },
   };
@@ -36,7 +39,7 @@ function setup<T>(hook: () => T) {
   });
   const wrapper = ({ children }: { children: ReactNode }) =>
     createElement(QueryClientProvider, { client: queryClient }, children);
-  return renderHook(hook, { wrapper });
+  return { ...renderHook(hook, { wrapper }), queryClient };
 }
 
 const refused = {
@@ -179,5 +182,33 @@ describe("chat agent roster", () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data).toEqual([{ id: "agent-1", name: "Agent" }]);
     expect(sdk.getAllAgents).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("agent pin mutation", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("pins and unpins through the matching API endpoints, then refreshes both list sections", async () => {
+    sdk.pinAgent.mockResolvedValue({
+      data: { ok: true },
+      error: undefined,
+    } as never);
+    sdk.unpinAgent.mockResolvedValue({
+      data: { ok: true },
+      error: undefined,
+    } as never);
+
+    const { result, queryClient } = setup(() => usePinAgent());
+    const invalidate = vi.spyOn(queryClient, "invalidateQueries");
+
+    await result.current.mutateAsync({ id: "agent-1", pinned: true });
+    await result.current.mutateAsync({ id: "agent-1", pinned: false });
+
+    expect(sdk.pinAgent).toHaveBeenCalledWith({ path: { id: "agent-1" } });
+    expect(sdk.unpinAgent).toHaveBeenCalledWith({ path: { id: "agent-1" } });
+    expect(invalidate).toHaveBeenCalledTimes(2);
+    expect(invalidate).toHaveBeenNthCalledWith(1, { queryKey: ["agents"] });
   });
 });

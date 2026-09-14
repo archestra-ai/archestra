@@ -74,6 +74,16 @@ const agentCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
             providerApiKeyId: z
               .union([z.string().uuid(), z.literal("organization-default")])
               .optional(),
+            pinned: z
+              .preprocess(
+                (value) =>
+                  typeof value === "string" ? value === "true" : value,
+                z.boolean(),
+              )
+              .optional()
+              .describe(
+                "Filter internal agents by the current user's pins. Pinned results exclude external A2A agents and are ordered by newest pin first.",
+              ),
           })
           .merge(PaginationQuerySchema)
           .merge(
@@ -108,6 +118,7 @@ const agentCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         labels: parseLabelsParam(query.labels),
         status: query.status,
         providerApiKeyId: query.providerApiKeyId,
+        pinned: query.pinned,
       };
       const sorting = {
         sortBy: query.sortBy,

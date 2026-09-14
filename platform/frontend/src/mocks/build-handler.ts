@@ -5,6 +5,7 @@ type HttpMethod = "get" | "post" | "put" | "patch" | "delete";
 export type HandlerOverride = {
   method: HttpMethod;
   url: string;
+  query?: Record<string, string>;
   status?: number;
   body?: unknown;
   once?: boolean;
@@ -18,7 +19,16 @@ export function buildHandler(
   url: string,
   o: HandlerOverride,
 ): HttpHandler {
-  const responder = async () => {
+  const responder = async ({ request }: { request: Request }) => {
+    const searchParams = new URL(request.url).searchParams;
+    if (
+      o.query &&
+      Object.entries(o.query).some(
+        ([key, value]) => searchParams.get(key) !== value,
+      )
+    ) {
+      return;
+    }
     if (o.delayMs) await msw.delay(o.delayMs);
     return msw.HttpResponse.json(o.body ?? null, { status: o.status ?? 200 });
   };

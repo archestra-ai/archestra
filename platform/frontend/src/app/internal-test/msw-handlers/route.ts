@@ -19,6 +19,7 @@ type HttpMethod = "get" | "post" | "put" | "patch" | "delete";
 type HandlerOverride = {
   method: HttpMethod;
   url: string;
+  query?: Record<string, string>;
   status?: number;
   body?: unknown;
   once?: boolean;
@@ -99,6 +100,10 @@ function isValidOverride(value: unknown): value is HandlerOverride {
     typeof v.url === "string" &&
     typeof v.method === "string" &&
     ["get", "post", "put", "patch", "delete"].includes(v.method) &&
+    (v.query === undefined ||
+      (typeof v.query === "object" &&
+        v.query !== null &&
+        Object.values(v.query).every((entry) => typeof entry === "string"))) &&
     (v.delayMs === undefined ||
       (typeof v.delayMs === "number" && v.delayMs >= 0))
   );

@@ -6,6 +6,7 @@ import {
   History,
   MessageSquare,
   Pencil,
+  Pin,
   PinOff,
   Plug,
   RotateCcw,
@@ -41,6 +42,7 @@ type AgentActionsProps = {
   onClone: (agent: Agent) => void;
   onExport: (agent: Agent) => void;
   onConvertToSkill: (agent: Agent) => void;
+  onTogglePin: (agent: Agent) => void;
   /**
    * The caller's personal default agent, when this row is one of the caller's
    * own personal chat agents. `null` = none set; `undefined` = not applicable
@@ -70,6 +72,7 @@ export function AgentActions({
   onClone,
   onExport,
   onConvertToSkill,
+  onTogglePin,
   personalDefault,
   onHistory,
 }: AgentActionsProps) {
@@ -166,6 +169,15 @@ export function AgentActions({
   ];
 
   const dropdownActions: TableRowAction[] = [
+    {
+      icon: agent.pinnedAt ? (
+        <PinOff className="h-4 w-4" />
+      ) : (
+        <Pin className="h-4 w-4" />
+      ),
+      label: agent.pinnedAt ? "Unpin" : "Pin",
+      onClick: () => onTogglePin(agent),
+    },
     ...(personalDefault
       ? [
           personalDefault.isDefault

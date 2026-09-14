@@ -72,10 +72,17 @@ test.describe("Agents", () => {
     await mswControl.use({
       method: "get",
       url: "/api/agent-catalog",
+      query: { pinned: "false" },
       body: makeAgentCatalog({
         agents: [regularAgent],
         externalAgents: [externalAgent],
       }),
+    });
+    await mswControl.use({
+      method: "get",
+      url: "/api/agent-catalog",
+      query: { pinned: "true" },
+      body: makeAgentCatalog(),
     });
 
     await agentsPage.goto();
@@ -236,12 +243,19 @@ test.describe("Agents", () => {
     await mswControl.use({
       method: "get",
       url: "/api/agent-catalog",
+      query: { pinned: "false" },
       body: makeAgentCatalog({
         agents: [regularAgent],
         externalAgents: [externalAgent],
         total: 3,
         agentTotal: 2,
       }),
+    });
+    await mswControl.use({
+      method: "get",
+      url: "/api/agent-catalog",
+      query: { pinned: "true" },
+      body: makeAgentCatalog(),
     });
     await agentsPage.goto();
 
@@ -250,6 +264,7 @@ test.describe("Agents", () => {
     await mswControl.use({
       method: "get",
       url: "/api/agent-catalog",
+      query: { selectableOnly: "true" },
       status: 500,
       body: { error: { message: "catalog unavailable" } },
     });
@@ -282,6 +297,23 @@ test.describe("Agents", () => {
     await mswControl.use({
       method: "get",
       url: "/api/agent-catalog",
+      query: { pinned: "false" },
+      body: makeAgentCatalog({
+        agents: [regularAgent],
+        total: 2,
+        agentTotal: 2,
+      }),
+    });
+    await mswControl.use({
+      method: "get",
+      url: "/api/agent-catalog",
+      query: { pinned: "true" },
+      body: makeAgentCatalog(),
+    });
+    await mswControl.use({
+      method: "get",
+      url: "/api/agent-catalog",
+      query: { selectableOnly: "true" },
       body: makeAgentCatalog({
         agents: [regularAgent],
         total: 2,
@@ -296,9 +328,13 @@ test.describe("Agents", () => {
         name: "Select all 2 agents that match the current filters.",
       })
       .click();
+    await expect(
+      page.getByRole("button", { name: "Delete", exact: true }),
+    ).toBeEnabled();
     await mswControl.use({
       method: "get",
       url: "/api/agent-catalog",
+      query: { selectableOnly: "true" },
       status: 500,
       body: { error: { message: "catalog unavailable" } },
     });
@@ -324,6 +360,23 @@ test.describe("Agents", () => {
     await mswControl.use({
       method: "get",
       url: "/api/agent-catalog",
+      query: { pinned: "false" },
+      body: makeAgentCatalog({
+        agents: [regularAgent],
+        total: 2,
+        agentTotal: 2,
+      }),
+    });
+    await mswControl.use({
+      method: "get",
+      url: "/api/agent-catalog",
+      query: { pinned: "true" },
+      body: makeAgentCatalog(),
+    });
+    await mswControl.use({
+      method: "get",
+      url: "/api/agent-catalog",
+      query: { selectableOnly: "true" },
       body: makeAgentCatalog({
         agents: [regularAgent],
         total: 2,
@@ -338,9 +391,13 @@ test.describe("Agents", () => {
         name: "Select all 2 agents that match the current filters.",
       })
       .click();
+    await expect(
+      page.getByRole("button", { name: "Edit visibility" }),
+    ).toBeEnabled();
     await mswControl.use({
       method: "get",
       url: "/api/agent-catalog",
+      query: { selectableOnly: "true" },
       body: makeAgentCatalog({
         agents: [{ ...regularAgent, scope: "org" }],
       }),
@@ -367,6 +424,23 @@ test.describe("Agents", () => {
     await mswControl.use({
       method: "get",
       url: "/api/agent-catalog",
+      query: { pinned: "false" },
+      body: makeAgentCatalog({
+        agents: [regularAgent],
+        total: 2,
+        agentTotal: 2,
+      }),
+    });
+    await mswControl.use({
+      method: "get",
+      url: "/api/agent-catalog",
+      query: { pinned: "true" },
+      body: makeAgentCatalog(),
+    });
+    await mswControl.use({
+      method: "get",
+      url: "/api/agent-catalog",
+      query: { selectableOnly: "true" },
       body: makeAgentCatalog({
         agents: [regularAgent],
         total: 2,
@@ -387,6 +461,7 @@ test.describe("Agents", () => {
     await mswControl.use({
       method: "get",
       url: "/api/agent-catalog",
+      query: { selectableOnly: "true" },
       delayMs: 3000,
       body: makeAgentCatalog({ agents: [regularAgent] }),
     });
@@ -428,6 +503,7 @@ test.describe("Agents", () => {
     await mswControl.use({
       method: "get",
       url: "/api/agent-catalog",
+      query: { pinned: "false" },
       body: makeAgentCatalog({
         agents: [firstAgent],
         externalAgents: [makeExternalAgent()],
@@ -435,6 +511,12 @@ test.describe("Agents", () => {
         agentTotal: 2,
         externalAgentTotal: 500,
       }),
+    });
+    await mswControl.use({
+      method: "get",
+      url: "/api/agent-catalog",
+      query: { pinned: "true" },
+      body: makeAgentCatalog(),
     });
     await agentsPage.goto();
     await expect(
@@ -445,6 +527,7 @@ test.describe("Agents", () => {
     await mswControl.use({
       method: "get",
       url: "/api/agent-catalog",
+      query: { selectableOnly: "true" },
       body: makeAgentCatalog({ agents: [firstAgent, secondAgent] }),
     });
     const selectableRequest = page.waitForRequest((request) => {
@@ -480,11 +563,18 @@ test.describe("Agents", () => {
     await mswControl.use({
       method: "get",
       url: "/api/agent-catalog",
+      query: { pinned: "false" },
       body: makeAgentCatalog({
         agents: [regularAgent],
         total: 2,
         agentTotal: 2,
       }),
+    });
+    await mswControl.use({
+      method: "get",
+      url: "/api/agent-catalog",
+      query: { pinned: "true" },
+      body: makeAgentCatalog(),
     });
     await agentsPage.goto();
     await page.getByRole("checkbox", { name: "Select Research Agent" }).click();
@@ -492,6 +582,7 @@ test.describe("Agents", () => {
     await mswControl.use({
       method: "get",
       url: "/api/agent-catalog",
+      query: { selectableOnly: "true" },
       body: makeAgentCatalog({
         agents: [makeAgent({ id: "agent-500", name: "Agent 500" })],
         total: 501,
@@ -506,6 +597,7 @@ test.describe("Agents", () => {
       await mswControl.use({
         method: "get",
         url: "/api/agent-catalog",
+        query: { selectableOnly: "true" },
         body: makeAgentCatalog({
           agents,
           total: 501,
@@ -550,7 +642,14 @@ test.describe("Agents", () => {
     await mswControl.use({
       method: "get",
       url: "/api/agent-catalog",
+      query: { pinned: "false" },
       body: makeAgentCatalog({ agents: [newAgent] }),
+    });
+    await mswControl.use({
+      method: "get",
+      url: "/api/agent-catalog",
+      query: { pinned: "true" },
+      body: makeAgentCatalog(),
     });
 
     await agentsPage.goto();
@@ -592,6 +691,7 @@ test.describe("Agents", () => {
     await mswControl.use({
       method: "get",
       url: "/api/agent-catalog",
+      query: { pinned: "false" },
       body: makeAgentCatalog(),
     });
     await mswControl.use({
@@ -624,7 +724,14 @@ test.describe("Agents", () => {
     await mswControl.use({
       method: "get",
       url: "/api/agent-catalog",
+      query: { pinned: "false" },
       body: makeAgentCatalog({ agents: [original] }),
+    });
+    await mswControl.use({
+      method: "get",
+      url: "/api/agent-catalog",
+      query: { pinned: "true" },
+      body: makeAgentCatalog(),
     });
     await mswControl.use({
       method: "post",

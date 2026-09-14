@@ -703,6 +703,7 @@ export default function ApiKeysPage() {
       <div className="space-y-4">
         <SubscriptionProviderCards
           offers={subscriptionOffers}
+          currentUserId={currentUserId}
           // A viewer without key-read permission never gets a list, so their
           // cards state the offer rather than waiting forever on a query that
           // is disabled — connecting a personal subscription is self-service.

@@ -113,11 +113,7 @@ import { reportChatMessageFeedback } from "@/observability/metrics/chat";
 import { reportQuoteVerification } from "@/observability/metrics/rag";
 import { startActiveChatSpan } from "@/observability/tracing";
 import { registerChatReview } from "@/openappa/chat-review";
-import {
-  chatLifecycle,
-  chatOpenAppaSession,
-  openappaEnabled,
-} from "@/openappa/service";
+import { chatOpenAppaSession, openappaEnabled } from "@/openappa/service";
 import { mcpGatewayTaskRunner } from "@/routes/mcp-gateway/tasks";
 import {
   ACTIVE_CHAT_RUN_TERMINAL_REPLAY_GRACE_MS,
@@ -1141,21 +1137,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 // (the inline connect card) rather than a generic server error.
                 // Pass agent's llmApiKeyId so it's used without a user access
                 // check; pass conversationId as sessionId to group the session.
-                if (openappaEnabled() && trigger === "submit-message") {
-                  const userTurn = [...(messages as ChatMessage[])]
-                    .reverse()
-                    .find((message) => message.role === "user");
-                  if (userTurn?.id)
-                    await chatLifecycle(
-                      chatOpenAppaSession(
-                        organizationId,
-                        user.id,
-                        conversationId,
-                      ),
-                      "prompt",
-                      userTurn.id,
-                    );
-                }
                 const { model, anthropicNativeEndpoint, chatApiKeyId } =
                   await createLLMModelForAgent({
                     organizationId,
@@ -1893,18 +1874,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
                     return serializedChatError;
                   },
-                  onFinish: async ({ messages: finalMessages, isAborted }) => {
-                    if (!isAborted && !chatAbortController.signal.aborted) {
-                      await chatLifecycle(
-                        chatOpenAppaSession(
-                          organizationId,
-                          user.id,
-                          conversationId,
-                        ),
-                        "turn_end",
-                        streamId,
-                      );
-                    }
+                  onFinish: async ({ messages: finalMessages }) => {
                     removeAbortListeners();
                     stopActiveRunPolling();
                     unsubscribeDualLlmProgress();

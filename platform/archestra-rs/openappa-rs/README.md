@@ -2,7 +2,7 @@
 
 This opt-in integration calls the existing OpenAPPA runtime through napi-rs.
 It uses Archestra's native loader, LLM proxy, buffered streaming gate, MCP
-gateway, execution outcomes, and PostgreSQL migrations. It starts no OpenAPPA
+gateway remedy tool, and PostgreSQL migrations. It starts no OpenAPPA
 HTTP server. The paired OpenAPPA change adds an optional PostgreSQL event store
 and an entry point to the existing MCP remedy implementation.
 
@@ -16,7 +16,9 @@ flowchart LR
   N -->|processing receipts and approved outputs| D
   P -->|approved input / buffered allowed calls| L[LLM provider]
   C -->|allowed tool execution| M[Existing MCP gateway]
-  M -->|actual execution outcome and output| N
+  M -->|ordinary tool result| C
+  C -->|next model request includes tool result| P
+  M -->|special remedy tool only| N
 ```
 
 ## Build and run
@@ -33,12 +35,22 @@ pnpm --filter @archestra/openappa-rs build:dev
 pnpm --filter @backend db:migrate
 ```
 
-Configure the usual Archestra database and auth secret, then set
-`ARCHESTRA_OPENAPPA_POLICY_PATH` to an absolute, readable OpenAPPA deployment
-TOML file. The flag applies to the backend deployment. Without it, the existing
-proxy guardrails remain active. Startup/migration errors do not fall back to
-unguarded operation. The native runtime initializes lazily on first use and
-stays initialized; restart the backend to change the deployment configuration.
+Configure the usual Archestra database and auth secret, then explicitly set:
+
+```sh
+ARCHESTRA_OPENAPPA_ENABLED=true
+ARCHESTRA_OPENAPPA_POLICY_PATH=/absolute/path/to/policy.toml
+```
+
+The feature flag defaults to false and does not inherit `ARCHESTRA_BETA`.
+A policy path alone does not enable APPA. With the flag off, the existing Tool
+Guardrails run unchanged: APPA is not loaded, session headers are not required
+or injected, and the remedy tool is neither advertised nor callable. Additive
+schema migrations still run normally.
+
+Enabling without a policy path is a configuration error. The native runtime
+validates the policy and initializes lazily on first use. Failures do not fall
+back to the old evaluator. Restart the backend after changing either setting.
 
 `test-policy.toml` is a narrow verification fixture, not a production policy.
 It treats `archestra__whoami` as suspicious input and requires trusted context
@@ -81,23 +93,26 @@ headers alone are insufficient. External authenticated proxy clients can supply
 the identity headers; raw provider keys alone do not identify an Archestra user.
 
 The native actor ID hashes the organization/caller/session tuple. A changed
-parent is refused. `SessionStart` restores the existing trajectory. Chat reports
-`Prompt` once for an identified submitted user message and `TurnEnd` after a
-non-aborted UI stream completes. An inference response is never treated as a
-turn boundary. Cancellation leaves uncertain work for the existing next-prompt
-cleanup. Detached MCP task execution is disabled for this initial adapter.
+parent is refused. `SessionStart` restores the existing trajectory. This version
+does not submit `Prompt` or `TurnEnd` from Chat or infer them in the proxy.
+Abandoned-call cleanup and unused remedy-permit lifetime are unchanged.
+Detached MCP task execution remains disabled only while the flag is enabled.
 
 Both streaming and non-streaming proxy paths call `ToolCall`; existing streaming
 buffers retain tool deltas until the decision completes. Existing name
-normalization unwraps `run_tool` and client decorations. Chat checks the same
-durable call receipt again immediately before execution, covering resumed
-approvals and conversations created before the feature was enabled.
+normalization unwraps `run_tool` and client decorations. Chat does not check
+APPA again before execution.
 
-Chat captures the existing MCP `isError`/cancellation classification before
-formatting loses it. It checks the result before it reaches the AI SDK and saved
-conversation history. The proxy reapplies receipts when history is resent.
-External adapter `isError=false` defaults do not establish success; their status
-remains unknown and their unchecked bodies are withheld.
+On the next model request, the proxy reads the provider adapter's tool results,
+including explicit protocol error flags. Ordinary results are client-reported
+completion, not independent evidence of execution. It submits them as success
+or explicit failure; structured cancellation retains an unknown outcome. The
+native interface also retains explicitly reported unknown outcomes. No earlier Chat hook is required.
+
+APPA's admitted output or blocking text is applied through the existing
+`toolResultUpdates` mechanism before forwarding to the provider. Repeated history
+uses the persisted answer. Chat keeps its ordinary tool-result storage and UI;
+the proxy filters model input, not data already stored or displayed by Chat.
 
 ## Storage and interrupted processing
 
@@ -148,18 +163,17 @@ remote authorities and sanitizers work. In authenticated Chat, human-review
 offers open the native approval card and pass the host ruling to embedded
 remedy execution. Narrowing offers remain model decisions.
 
-Chat represents denials as tool results and can continue within the same turn.
-External proxy clients retain the refusal-response behavior. Native feedback
-may suggest a child as an alternative, but Chat delegation is explicitly
-refused until a complete child-return adapter exists.
+A denied call follows the existing proxy refusal envelope. If one proposed
+call is denied, none of that response's tool calls reach the client. Refusal text
+and remedy information come from APPA, with existing tool-name translation;
+they are not replaced by legacy Tool Guardrails explanations. There is no
+Chat-specific denied-call execution wrapper or automatic model retry.
 
-Locked chats are refused while enabled because the new native tables do not
-yet use their browser-held encryption keys. Only approved text is returned to
-Chat; rich MCP UI content, images, and structured content are omitted so they
-cannot reintroduce the original result during history/compaction. Other client
-lifecycle detection and provider-hosted tools are outside this initial adapter.
-Existing Chat/gateway permission and policy checks still apply independently;
-only the LLM proxy's legacy policy evaluation is replaced.
+Locked chats are refused while enabled because the native tables do not yet
+use their browser-held encryption keys. Delegation remains refused until a
+complete child-return adapter exists. Provider-hosted tools remain outside this
+initial adapter. Existing Chat/gateway permission and policy checks still apply
+independently; only the LLM proxy's legacy policy evaluation is replaced.
 
 Start new conversations when enabling this feature. Historical tool results
 from before activation have no native admission receipts and are refused;
@@ -189,23 +203,12 @@ commit failure with event rollback. The storage test in the OpenAPPA tree is:
 OPENAPPA_TEST_DATABASE_URL=postgresql://... cargo test -p appa-eventlog --features postgres -- --ignored
 ```
 
-Backend regression coverage lives in
-`backend/src/routes/proxy/llm-proxy-openappa.test.ts`, alongside the existing
-proxy, Chat, gateway, and logging suites. Browser verification and the exact
-observed limitations are recorded in the paired OpenAPPA `summary.md`.
+Backend coverage includes flag-off Tool Guardrails, APPA proxy calls/results,
+whole-response refusal, explicit protocol errors, replay, session headers, MCP
+remedy availability and human approvals. Chat tests verify that ordinary tools
+execute and return their original output without APPA callbacks in either mode.
 
-## Prototype follow-up: Chat denials and human review
-
-The prototype branch now includes the reusable Chat fixes from the demo snapshot:
-
-- A denied tool call remains a tool call with its original ID, name and arguments. Its tool result contains the policy ruling, allowing the model loop to explain the outcome.
-- The native binding substitutes authoritative stored feedback for results attributed to denied calls; supplied result text cannot forge a successful execution.
-- Human-review offers open Archestra's inline approval card through a caller- and session-scoped in-process bridge. The ruling travels only through the host channel, outside model-provided arguments.
-- Approved calls resume against an exact-input receipt. Cancellation, denial, mismatched input and replay cannot release an unapproved call.
-- Non-human audience/trust narrowing offers remain visible to the model. They are not automatically accepted, allowing independent work before accepting a restrictive read.
-
-Use the paired `feat/archestra-native-postgres` OpenAPPA branch: its embedded remedy implementation preserves the host ruling when consulting an authority without an MCP request context.
-
-This port does not include the demo tools/outbox migration, audience resolver, GitHub annotator, policy studio, status line, mascot or fixture deployment. It also does not include the separate Claude MCP protocol negotiation workaround.
-
-Validation covers the real Chat tool wrapper's next model step, signed proxy call preservation, scoped review, cancellation/denial, native PostgreSQL receipts, forged-result rejection and deferred narrowing. No browser or live-provider run was performed for this isolated port.
+Use the paired `feat/archestra-native-postgres` OpenAPPA branch. Its embedded
+remedy implementation preserves the host ruling without an MCP request context.
+Previous demo/browser results do not qualify this proxy-only refactor; validation
+for this change is reported separately in the PR.

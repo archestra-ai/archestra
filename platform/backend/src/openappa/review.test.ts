@@ -1,5 +1,6 @@
 import { vi } from "vitest";
 import type { ChatMcpElicitationBridge } from "@/clients/chat-mcp-elicitation";
+import config from "@/config";
 import * as database from "@/database";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { getChatReview, registerChatReview } from "./chat-review";
@@ -23,7 +24,7 @@ beforeEach(() => {
   vi.spyOn(database, "getDatabaseConnectionString").mockReturnValue(
     "postgresql://test:test@localhost/test",
   );
-  vi.stubEnv("ARCHESTRA_OPENAPPA_POLICY_PATH", "/test/policy.toml");
+  config.openappa = { enabled: true, policyPath: "/test/policy.toml" };
   native.dispatchHook.mockImplementation(async (input: string) =>
     JSON.stringify(
       JSON.parse(input).event === "remedy_review"

@@ -1,121 +1,92 @@
 # Archestra × OpenAPPA
 
-Prototype integration · 11 September 2026
+APPA evaluates tool calls and results at the existing LLM-proxy Tool Guardrails
+checkpoints. Chat supplies authenticated identity and displays human approvals.
+The special MCP remedy tool also calls the embedded runtime.
 
-## 01 · Tool execution
+## Feature flag
 
-```mermaid
-sequenceDiagram
-  participant L as LLM
-  participant P as Archestra proxy
-  participant A as APPA native binding
-  participant C as Chat tool executor
-  participant T as MCP tool
+`ARCHESTRA_OPENAPPA_ENABLED` defaults to `false`. Only explicit `true` enables
+APPA; a configured policy path and `ARCHESTRA_BETA` do not activate it.
+`ARCHESTRA_OPENAPPA_POLICY_PATH` is required when enabled. Restart the backend
+when changing either setting.
 
-  L-->>P: Proposed tool call · ID, name, arguments
-  Note over P: Buffer streamed arguments until complete
-  P->>A: dispatchHook(tool_call)
-  A-->>P: Allow or deny · save decision
-  P-->>C: Original tool call
-  Note over P,C: Authenticated in-process Chat
-  C->>A: dispatchHook(tool_call) · same ID and arguments
-  A-->>C: Return stored decision
+| Boundary | Flag off | Flag on |
+| --- | --- | --- |
+| Incoming tool results | Existing result policies | APPA admission and saved output |
+| Outgoing calls | Existing invocation policies | APPA decision |
+| Refusal envelope | Existing adapter | Same adapter, APPA explanation and remedies |
+| Identity headers and approval bridge | No APPA wiring | Authenticated session and existing approval form |
+| Special MCP remedy | Hidden and unavailable | Existing embedded remedy execution |
+| Runtime | Not loaded or initialized | Lazy native initialization; errors fail closed |
 
-  alt Allowed
-    C->>T: Execute tool
-    T-->>C: Output + execution outcome
-    C->>A: dispatchHook(tool_result)
-    A-->>C: Approved or replaced output
-  else Denied
-    Note over C,T: Tool is not executed
-    C->>C: Use APPA ruling as tool result
-  end
+Migrations remain additive and deployment-wide; runtime APPA records are accessed
+only when enabled. The existing guardrails remain the flag-off behavior.
 
-  C->>P: Next LLM request · includes tool result
-  P->>A: dispatchHook(tool_result)
-  A-->>P: Stored approved output or authoritative denial
-  P->>L: Tool result admitted by APPA
-  L-->>C: Explanation or next tool call · via proxy
-```
-
-The second `tool_call` check is at the execution boundary. For the same call ID and arguments, it returns the persisted decision rather than evaluating policy again. Changed arguments are rejected.
-
-## 02 · Human review and narrowing
+## Tool calls and results
 
 ```mermaid
 sequenceDiagram
-  participant C as Archestra Chat
-  participant A as APPA binding
-  participant H as Human
-  C->>A: tool_call
-  A-->>C: deny_call + human-review offer
-  C->>A: remedy_review
-  A-->>C: Exact action to review
-  C->>H: Native approval card
-  H-->>C: Approve / decline / cancel
-  opt Approved
-    C->>A: remedy + host-only ruling
-    A-->>C: Remedy result
-    C->>A: resume_tool_call · identical arguments
-    A-->>C: Allowed receipt
+  participant C as Chat or proxy client
+  participant P as LLM proxy
+  participant A as Embedded APPA
+  participant L as Model provider
+  participant T as Tool executor
+  C->>P: Request with session identity and history
+  P->>A: SessionStart + submitted ToolResults
+  A-->>P: Admitted output or APPA blocking text
+  P->>L: Request with result replacements applied
+  L-->>P: Proposed calls (buffer until complete)
+  P->>A: ToolCall with exact normalized arguments
+  alt All calls allowed
+    P-->>C: Executable calls
+    C->>T: Normal execution
+    T-->>C: Normal result
+    Note over C,P: Result is admitted on the next model request
+  else Any call denied
+    P-->>C: Existing refusal envelope with APPA text; no executable calls
   end
 ```
+
+Chat does not recheck APPA before execution or submit results directly. Its
+normal result storage and rendering remain intact. The proxy consumes
+client-reported completion and explicit protocol errors; it does not independently
+prove execution. Repeated history reuses persisted admitted output.
+
+## Human approvals and remedies
 
 ```mermaid
-flowchart LR
-  R[Read proposed] --> W[Read withheld + narrowing offer]
-  W --> I[Independent action]
-  I --> E[Model executes offered remedy]
-  E --> A[Restriction accepted]
-  A --> D[Retry read · receive document]
+sequenceDiagram
+  participant P as LLM proxy
+  participant A as Embedded APPA
+  participant C as Chat approval UI
+  P->>A: ToolCall
+  A-->>P: Human-review offer
+  P->>C: Existing scoped approval bridge
+  C-->>P: Accept / decline / cancel
+  opt Accepted
+    P->>A: Embedded remedy with host-only ruling
+    P->>A: Resume exact reviewed call
+    A-->>P: Approved decision
+  end
 ```
 
-**Approval does not reset restrictions.** Narrowing offers are never automatically accepted.
+The existing `archestra__execute_remedy_plan` MCP tool remains available when
+enabled and executes remedies directly through the Rust binding. Human approval
+is outside model-supplied arguments. Narrowing remedies remain model choices.
 
-## 03 · Interface and ownership
+## Persistence and current limits
 
-```mermaid
-flowchart LR
-  subgraph AR[Added to Archestra]
-    A[Identity + Chat/proxy hooks]
-    B[Approval UI + review bridge]
-    C[Native adapter + receipts]
-    D[PostgreSQL migrations]
-  end
-  subgraph API[Native API]
-    I["initializeOpenappa(databaseUrl, policyPath)"]
-    J["dispatchHook(scopedEvent)"]
-  end
-  subgraph AP[Added to APPA]
-    S[PostgreSQL event-store backend]
-    O[Runtime.open_with_store]
-    E[execute_embedded_remedy]
-    H[Embedded host-ruling propagation]
-  end
-  A --> J
-  B --> J
-  C --> I
-  C --> J
-  I --> O --> S
-  J --> E --> H
-  D -.-> S
-```
+The Rust binding owns the existing five PostgreSQL tables and commits APPA
+events with completed processing receipts. Repeated calls retain exact-input
+checks; repeated results return saved admitted output. Pending interrupted work
+retains the existing blocking behavior.
 
-Scope: `organization_id` · `caller_id` · `session_id` · optional `parent_id`.
+This integration does not send `Prompt` or `TurnEnd`. Abandoned-call recovery,
+unresolved-dispatch cleanup and unused remedy-permit lifetime are unchanged.
+The enabled prototype still refuses locked chats and delegation and disables
+detached tool tasks. These restrictions do not apply with the flag off.
 
-Events: `session_start` · `prompt` · `tool_call` · `tool_result` · `remedy_review` · `remedy` · `resume_tool_call` · `turn_end`.
-
-## 04 · Remaining boundaries
-
-```mermaid
-flowchart LR
-  P[Current prototype]
-  P -.-> A[Child / subagent return lifecycle]
-  P -.-> B[Other execution surfaces]
-  P -.-> C[Rich results + locked-chat encryption]
-  P -.-> D[Policy deployment + reload]
-  P -.-> E[Concurrency + recovery + retention]
-  P -.-> F[General prompt / final-answer enforcement]
-```
-
-Not included: demo tools, Policy Studio, team resolver, GitHub annotator, status line.
+Policy reload, general attachment/final-answer enforcement, child return
+integration, provider-hosted tools and operator recovery remain follow-up work.
+Start new conversations when enabling APPA: old tool results have no receipts.

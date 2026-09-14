@@ -1063,7 +1063,10 @@ export async function handleLLMProxy<
       dualLlmAnalyses,
       unsafeContextBoundary,
     } = openappaSession
-      ? await processProxyResults(openappaSession, commonMessages)
+      ? await processProxyResults(
+          openappaSession,
+          requestAdapter.getToolResults(),
+        )
       : await utils.trustedData.evaluateIfContextIsTrusted({
           messages: commonMessages,
           agentId: resolvedAgentId,
@@ -1830,29 +1833,11 @@ async function handleStreaming<
       const { contentMessage, reason, allToolCallNames } =
         toolInvocationRefusal;
 
-      // Keep external proxy clients on the refusal-only protocol.
+      // Use the existing refusal envelope; its text comes from APPA when enabled.
       ensureStreamHeaders();
-      const blockedCall = (rewrittenToolCalls ?? toolCalls).find(
-        (call) => call.id === toolInvocationRefusal.blockedToolCallId,
-      );
-      // Only authenticated in-process Chat may receive the rejected call.
-      // Its tool builder rechecks the persisted denial before any execution,
-      // yielding a tool error to the model so its next step can explain it.
-      if (
-        ctx.openappaReview &&
-        blockedCall &&
-        streamAdapter.formatToolCallsSSE
-      ) {
-        streamAdapter.state.toolCalls.splice(
-          0,
-          streamAdapter.state.toolCalls.length,
-          blockedCall,
-        );
-        for (const event of streamAdapter.formatToolCallsSSE([blockedCall]))
-          reply.raw.write(event);
-      } else {
-        for (const event of streamAdapter.formatCompleteTextSSE(contentMessage))
-          reply.raw.write(event);
+      const refusalEvents = streamAdapter.formatCompleteTextSSE(contentMessage);
+      for (const event of refusalEvents) {
+        reply.raw.write(event);
       }
 
       recordBlockedToolCallMetrics({
@@ -2323,23 +2308,10 @@ async function handleNonStreaming<
         `[${providerName}Proxy] Tool invocation blocked by policy`,
       );
 
-      const blockedCall = (rewrittenToolCalls ?? toolCalls).find(
-        (call) => call.id === toolInvocationRefusal.blockedToolCallId,
+      const refusalResponse = responseAdapter.toRefusalResponse(
+        refusalMessage,
+        contentMessage,
       );
-      const refusalResponse =
-        ctx.openappaReview &&
-        blockedCall &&
-        responseAdapter.withRewrittenToolCalls
-          ? responseAdapter.withRewrittenToolCalls([
-              {
-                ...blockedCall,
-                arguments:
-                  typeof blockedCall.arguments === "string"
-                    ? blockedCall.arguments
-                    : JSON.stringify(blockedCall.arguments),
-              },
-            ])
-          : responseAdapter.toRefusalResponse(refusalMessage, contentMessage);
 
       recordBlockedToolCallMetrics({
         allToolCallNames,

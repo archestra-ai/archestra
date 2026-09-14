@@ -1,17 +1,22 @@
-import { isAgentTool, isSkillTool } from "@archestra/shared";
+import {
+  extractMcpToolError,
+  isAgentTool,
+  isSkillTool,
+} from "@archestra/shared";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import type { ChatMcpElicitationBridge } from "@/clients/chat-mcp-elicitation";
+import config from "@/config";
 import { getDatabaseConnectionString } from "@/database";
 import type { PolicyBlockResult } from "@/guardrails/tool-invocation";
 import { normalizeToolCallsForPolicy } from "@/routes/proxy/llm-proxy-helpers";
-import { ApiError, type CommonMessage } from "@/types";
+import { ApiError, type CommonToolResult } from "@/types";
 
 export const APPA_SESSION_HEADER = "X-Appa-Session-ID";
 export const APPA_PARENT_HEADER = "X-Appa-Parent-ID";
 export const OPENAPPA_REMEDY_TOOL = "archestra__execute_remedy_plan";
-export type ExecutionOutcome = "success" | "failure" | "unknown";
+type ExecutionOutcome = "success" | "failure" | "unknown";
 export type OpenAppaSession = {
   organization_id: string;
   caller_id: string;
@@ -49,19 +54,20 @@ const Decision = z.object({
 
 let native: Promise<typeof import("@archestra/openappa-rs")> | undefined;
 export function openappaEnabled(): boolean {
-  return Boolean(process.env.ARCHESTRA_OPENAPPA_POLICY_PATH);
+  return config.openappa.enabled;
 }
 
 async function binding() {
+  if (!openappaEnabled() || !config.openappa.policyPath) {
+    throw new Error("OpenAPPA is disabled or its policy path is missing");
+  }
+  const policyPath = config.openappa.policyPath;
   native ??= (async () => {
     const module = await import("@archestra/openappa-rs");
     const url = new URL(getDatabaseConnectionString());
     // pg ignores Prisma's legacy schema parameter; rust-postgres rejects it.
     url.searchParams.delete("schema");
-    await module.initializeOpenappa(
-      url.toString(),
-      process.env.ARCHESTRA_OPENAPPA_POLICY_PATH ?? "",
-    );
+    await module.initializeOpenappa(url.toString(), policyPath);
     return module;
   })().catch((error) => {
     native = undefined;
@@ -136,7 +142,7 @@ export function sessionFromHeaders(params: {
   };
 }
 
-export async function startSession(session: OpenAppaSession) {
+async function startSession(session: OpenAppaSession) {
   const decision = await dispatch(session, { event: "session_start" });
   if (decision.decision === "context") {
     // The initial Chat adapter has no child-return lifecycle yet. Refuse
@@ -150,21 +156,7 @@ export async function startSession(session: OpenAppaSession) {
     throw new ApiError(409, decision.detail ?? "OpenAPPA session refused");
 }
 
-export async function chatLifecycle(
-  session: OpenAppaSession,
-  event: "prompt" | "turn_end",
-  turnId: string,
-) {
-  if (!openappaEnabled()) return;
-  const decision = await dispatch(session, {
-    event,
-    operation_id: `${event}:${turnId}`,
-  });
-  if (decision.decision !== "ack")
-    throw new ApiError(409, "OpenAPPA lifecycle event refused");
-}
-
-export async function approveToolResult(
+async function approveToolResult(
   session: OpenAppaSession,
   toolCallId: string,
   output: string,
@@ -183,23 +175,30 @@ export async function approveToolResult(
 
 export async function processProxyResults(
   session: OpenAppaSession,
-  messages: CommonMessage[],
+  results: CommonToolResult[],
 ) {
   await startSession(session);
   const updates: Record<string, string> = {};
-  for (const message of messages) {
-    for (const result of message.toolCalls ?? []) {
-      // isError=false is a default in several provider adapters, not evidence
-      // of successful execution. Chat already supplies the real MCP outcome.
-      updates[result.id] = await approveToolResult(
-        session,
-        result.id,
-        typeof result.content === "string"
-          ? result.content
-          : (JSON.stringify(result.content) ?? ""),
-        result.isError ? "failure" : "unknown",
-      );
-    }
+  for (const result of results) {
+    // Like existing proxy guardrails, consume the client's reported result.
+    // This is protocol-level completion, not independent proof of execution.
+    // Explicit tool errors remain failures; a reported cancellation is unknown.
+    const error =
+      extractMcpToolError(result) ?? extractMcpToolError(result.content);
+    const outcome: ExecutionOutcome =
+      error?.type === "cancelled"
+        ? "unknown"
+        : result.isError
+          ? "failure"
+          : "success";
+    updates[result.id] = await approveToolResult(
+      session,
+      result.id,
+      typeof result.content === "string"
+        ? result.content
+        : (JSON.stringify(result.content) ?? ""),
+      outcome,
+    );
   }
   return {
     toolResultUpdates: updates,

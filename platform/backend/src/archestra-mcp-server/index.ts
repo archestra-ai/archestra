@@ -286,6 +286,18 @@ export async function executeArchestraTool(
   args: Record<string, unknown> | undefined,
   context: ArchestraContext,
 ): Promise<CallToolResult> {
+  // Discovery alone is insufficient: stale assignments and direct calls must
+  // not activate APPA while its feature flag is off.
+  if (
+    !openappaEnabled() &&
+    archestraMcpBranding.getToolShortName(toolName) ===
+      TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME
+  ) {
+    throw {
+      code: -32601,
+      message: `No tool named "${toolName}" exists. ${toolDiscoverySteer()}`,
+    };
+  }
   if (openappaEnabled() && (isAgentTool(toolName) || isSkillTool(toolName))) {
     return {
       isError: true,

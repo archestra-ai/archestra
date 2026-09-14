@@ -252,9 +252,9 @@ export function createLLMModel(params: {
   }
   if (sessionId) {
     clientHeaders[SESSION_ID_HEADER] = sessionId;
-    clientHeaders[APPA_SESSION_HEADER] = sessionId;
+    if (openappaEnabled()) clientHeaders[APPA_SESSION_HEADER] = sessionId;
   }
-  if (params.appaParentId)
+  if (openappaEnabled() && params.appaParentId)
     clientHeaders[APPA_PARENT_HEADER] = params.appaParentId;
   if (openappaEnabled() && source === "chat" && sessionId && userId) {
     clientHeaders[APPA_CALLER_AUTH_HEADER] = signChatIdentity({

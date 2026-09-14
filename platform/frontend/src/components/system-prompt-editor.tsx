@@ -12,6 +12,14 @@ import { Editor } from "@/components/editor";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { StandardDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import {
   computeHandlebarsReplaceOffsets,
@@ -208,29 +216,33 @@ export function SystemPromptEditor({
         open={templatingInfoOpen}
         onOpenChange={setTemplatingInfoOpen}
         title="Handlebars templating"
-        description="Personalize instructions with values filled in before they are sent to the model."
-        size="small"
+        description="Variables and helpers available in your instructions."
+        size="medium"
       >
         <div className="space-y-4 text-sm">
-          <p>
-            Use variables for the current user&apos;s name, email, role, or
-            teams. Helpers can add the current date and time, or include
-            instructions only when a condition matches.
-          </p>
-          <pre className="whitespace-pre-wrap break-words rounded-md bg-muted p-3 text-xs leading-relaxed">
-            <code>
-              {
-                "You are helping {{user.name}}.\nToday is {{currentDate}}.\n\n{{#if user.teams}}\nTailor your answer to the user's teams.\n{{/if}}"
-              }
-            </code>
-          </pre>
-          <p className="text-muted-foreground">
-            Type <code>{"{{"}</code> in the editor to see available variables
-            and helpers. Plain text works too.
-          </p>
+          <Table aria-label="Template variables and helpers">
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-[45%] sm:w-44">Expression</TableHead>
+                <TableHead>Value</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {templateExpressions.map(({ expression, description }) => (
+                <TableRow key={expression}>
+                  <TableCell className="align-top">
+                    <code className="break-all text-xs">{expression}</code>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {description}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
           {docsUrl && (
             <ExternalDocsLink href={docsUrl}>
-              View all variables and helpers
+              Templating documentation
             </ExternalDocsLink>
           )}
         </div>

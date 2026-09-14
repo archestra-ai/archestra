@@ -1,3 +1,4 @@
+import { BUILT_IN_AGENT_IDS } from "@archestra/shared";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -47,11 +48,19 @@ describe("SystemPromptEditor", () => {
     const dialog = screen.getByRole("dialog", {
       name: "Handlebars templating",
     });
-    expect(within(dialog).getByText(/You are helping/)).toHaveTextContent(
-      "{{user.name}}",
-    );
+    expect(
+      within(dialog).getByRole("table", {
+        name: "Template variables and helpers",
+      }),
+    ).toBeVisible();
+    expect(
+      within(dialog).getByRole("row", { name: /\{\{user.teams\}\}/ }),
+    ).toHaveTextContent("Team names the user belongs to (array)");
+    expect(
+      within(dialog).getByRole("row", { name: /\{\{currentTime\}\}/ }),
+    ).toHaveTextContent("HH:MM:SS UTC");
     const docsLink = within(dialog).queryByRole("link", {
-      name: /View all variables and helpers/,
+      name: /Templating documentation/,
     });
     if (docsVisible) {
       expect(docsLink).toHaveAttribute("href", docsUrl);
@@ -65,6 +74,29 @@ describe("SystemPromptEditor", () => {
     );
     expect(onSubmit).not.toHaveBeenCalled();
     expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("includes only the variables available to the selected agent", async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(
+      <SystemPromptEditor value="" onChange={vi.fn()} />,
+    );
+    await user.click(screen.getByRole("button", { name: "More info" }));
+    const table = screen.getByRole("table", {
+      name: "Template variables and helpers",
+    });
+    expect(within(table).queryByText("{{tool.name}}")).not.toBeInTheDocument();
+
+    rerender(
+      <SystemPromptEditor
+        value=""
+        onChange={vi.fn()}
+        builtInAgentId={BUILT_IN_AGENT_IDS.POLICY_CONFIG}
+      />,
+    );
+    expect(within(table).getByText("{{tool.name}}")).toBeVisible();
+    expect(within(table).getByText("{{mcpServerName}}")).toBeVisible();
+    expect(within(table).getByText("{{user.name}}")).toBeVisible();
   });
 
   it("grows the box to fit the text, between its floor and its ceiling", () => {

@@ -116,12 +116,7 @@ def release_paths(base_branch):
         # move to main. Land any required forward repair on main first.
         return [(f"origin/{base_branch}", "WORKTREE"), ("WORKTREE", "origin/main")]
     if base_branch != "main":
-        target = f"origin/{base_branch}"
-        try:
-            git("rev-parse", "--verify", "--quiet", target)
-            return [(target, "WORKTREE")]
-        except Exception:
-            return [("origin/main", "WORKTREE")]
+        raise ValueError(f"Unsupported release base branch: {base_branch}")
     refs = git("for-each-ref", "--format=%(refname:short)", "refs/remotes/origin/release/").decode().splitlines()
     stable_refs = [ref for ref in refs if re.fullmatch(r"origin/release/\d+\.\d+", ref)]
     if not stable_refs:

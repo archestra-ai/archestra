@@ -1485,19 +1485,19 @@ Verified live coverage is demonstrated on sequential public publication and priv
 
 - **`ARCHESTRA_LLM_PROXY_APPA_NATIVE_SPAWN_TOOL_MAP`** - Maps stock native delegation names to a kagent policy contract.
   - Use a JSON object. Claude Code uses `Agent`. Supported Codex keys are `multi_agent_v1.spawn_agent`, `agents.spawn_agent`, and `collaboration.spawn_agent`. OpenCode uses `task`.
-  - Each value uses the runtime wire form `agent:<namespace>/<agent>`, for example `{"multi_agent_v1.spawn_agent":"agent:fixture/lifecycle_child"}`.
+  - Each value uses the runtime wire form `agent:<namespace>/<agent>`, for example `{"multi_agent_v1.spawn_agent":"agent:example/worker"}`.
   - Requires `ARCHESTRA_LLM_PROXY_APPA_RUNTIME_TOKEN`.
   - Declare the matching canonical `agent/<namespace>/<agent>` tool in the runtime policy. Do not declare the client-native tool name there.
 
 - **`ARCHESTRA_LLM_PROXY_APPA_NATIVE_SPAWN_RETURN_FLOOR_MAP`** - Declares an operator-owned return floor for a configured native child target.
-  - Use a JSON object keyed by the canonical `agent/<namespace>/<agent>` target from `ARCHESTRA_LLM_PROXY_APPA_NATIVE_SPAWN_TOOL_MAP`, for example `{"agent/fixture/lifecycle_child":{"audience":["ops"]}}`.
+  - Use a JSON object keyed by the canonical `agent/<namespace>/<agent>` target from `ARCHESTRA_LLM_PROXY_APPA_NATIVE_SPAWN_TOOL_MAP`, for example `{"agent/example/worker":{"audience":["reviewers"]}}`.
   - Each floor includes a non-empty `trust` string, `audience` array, or both. The runtime validates the configured values against its policy lattice.
   - Requires `ARCHESTRA_LLM_PROXY_APPA_RUNTIME_TOKEN`. The proxy sends the configured floor only while resolving the matching marked native-spawn restriction. A model cannot select or modify it.
 
-The runtime v1 capability response is:
+The runtime advertises its supported v1 capabilities, including:
 
 ```json
-{"protocol_version":1,"completed_event_replay":true,"typed_offers":true,"restriction_acceptance":true,"acceptance_settlement":true,"human_approval":true,"approval_grants":true,"legacy_hooks":false,"sanitized_results":true,"general_sanitizers":true,"child_workflows":true,"child_actor_targeting":true}
+{"protocol_version":1,"completed_event_replay":true,"typed_offers":true,"restriction_acceptance":true,"acceptance_settlement":true,"human_approval":true,"approval_grants":true,"legacy_hooks":false,"sanitized_results":true,"general_sanitizers":true,"child_workflows":true,"child_actor_targeting":true,"spawn_result":true}
 ```
 
 The v1 event request and receipt are:

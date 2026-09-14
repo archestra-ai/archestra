@@ -90,14 +90,17 @@ describe("held native opaque history route regression", () => {
     makeMember,
     makeUser,
   }) => {
+    let providerCalls = 0;
     vi.spyOn(openAiResponsesAdapterFactory, "createClient").mockImplementation(
       () =>
         ({
           responses: {
-            create: async (request: Record<string, unknown>) =>
-              request.stream
+            create: async (request: Record<string, unknown>) => {
+              providerCalls++;
+              return request.stream
                 ? responseStream(nativeProviderResponse())
-                : nativeProviderResponse(),
+                : nativeProviderResponse();
+            },
           },
         }) as never,
     );
@@ -123,6 +126,7 @@ describe("held native opaque history route regression", () => {
         stream,
       });
 
+      expect(providerCalls).toBe(stream ? 2 : 1);
       expect(response.statusCode, response.body).toBe(200);
       expect(response.body).toContain("archestra__appa_execute_remedy");
       expect(response.body).not.toContain(providerCallId);
@@ -205,6 +209,7 @@ describe("held native opaque history route regression", () => {
       expect(continued.body).not.toContain(reasoningId);
       expect(continued.body).not.toContain(reasoningCiphertext);
       expect(completedOutput(continued.body)).toHaveLength(1);
+      expect(providerCalls).toBe(stream ? 2 : 1);
     }
   });
 

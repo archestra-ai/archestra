@@ -781,28 +781,26 @@ function CreateProjectDialog({
           form.setValue("icon", next, { shouldDirty: true })
         }
         fallbackType="project"
+        label={<Label htmlFor="new-project-name">Name *</Label>}
       >
-        <div className="space-y-2">
-          <Label htmlFor="new-project-name">Name *</Label>
-          <Input
-            autoFocus
-            id="new-project-name"
-            maxLength={PROJECT_NAME_MAX_LENGTH}
-            aria-invalid={!!form.formState.errors.name}
-            {...form.register("name", {
-              required: "Project name is required.",
-              maxLength: {
-                value: PROJECT_NAME_MAX_LENGTH,
-                message: `Project name must be ${PROJECT_NAME_MAX_LENGTH} characters or fewer.`,
-              },
-            })}
-          />
-          {form.formState.errors.name?.message && (
-            <p className="text-xs text-destructive">
-              {form.formState.errors.name.message}
-            </p>
-          )}
-        </div>
+        <Input
+          autoFocus
+          id="new-project-name"
+          maxLength={PROJECT_NAME_MAX_LENGTH}
+          aria-invalid={!!form.formState.errors.name}
+          {...form.register("name", {
+            required: "Project name is required.",
+            maxLength: {
+              value: PROJECT_NAME_MAX_LENGTH,
+              message: `Project name must be ${PROJECT_NAME_MAX_LENGTH} characters or fewer.`,
+            },
+          })}
+        />
+        {form.formState.errors.name?.message && (
+          <p className="text-xs text-destructive">
+            {form.formState.errors.name.message}
+          </p>
+        )}
       </IdentityFields>
 
       <div className="space-y-2">

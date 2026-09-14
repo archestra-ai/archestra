@@ -15,7 +15,11 @@ import { AgentIconPicker } from "@/components/agent-icon-picker";
  * they are wired to four different form libraries and abstracting that would
  * cost more than the consistency is worth.
  *
- * Pass the name field as `children`, with a real `<Label>`.
+ * The layout is a two-column grid: the `label` sits above the name field in
+ * the second column, and the picker shares the second row with the field, so
+ * the two line up whatever the label's height and whatever the caller stacks
+ * above or below the input. Pass a real `<Label>` (plus any description that
+ * belongs under it) as `label`, and the input with its messages as `children`.
  */
 export function IdentityFields({
   icon,
@@ -23,6 +27,7 @@ export function IdentityFields({
   fallbackType,
   showLogos,
   disabled,
+  label,
   children,
 }: {
   icon: string | null;
@@ -37,20 +42,23 @@ export function IdentityFields({
   showLogos?: boolean;
   /** Render the icon as orientation rather than an edit control. */
   disabled?: boolean;
-  /** The labelled name field that sits beside the picker. */
+  /** The label (and any description) shown above the name field. */
+  label: React.ReactNode;
+  /** The name field, with any validation message, beside the picker. */
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex items-start gap-3">
+    <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-2">
+      <div className="col-start-2 grid gap-2">{label}</div>
       <AgentIconPicker
         value={icon}
         onChange={onIconChange}
         fallbackType={fallbackType}
         showLogos={showLogos}
         disabled={disabled}
-        className="mt-6 size-9 rounded-md"
+        className="col-start-1 row-start-2 size-9 self-start rounded-md"
       />
-      <div className="min-w-0 flex-1">{children}</div>
+      <div className="col-start-2 row-start-2 grid gap-2">{children}</div>
     </div>
   );
 }

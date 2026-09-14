@@ -50,8 +50,19 @@ import { subscriptionAuthRequiredCode } from "./subscription-auth-error";
 
 type OpenAiResponsesRequest = OpenAi.Types.ResponsesRequest;
 type OpenAiResponsesResponse = OpenAi.Types.ResponsesResponse;
-type OpenAiResponsesCompactRequest = OpenAi.Types.ResponsesCompactRequest;
-type OpenAiResponsesCompactResponse = OpenAi.Types.ResponsesCompactResponse;
+// The SDK exposes compact request/response values at runtime but does not yet
+// publish stable aliases for them. Keep the proxy boundary structural so the
+// legacy compact route remains covered by the same durable APPA lifecycle.
+type OpenAiResponsesCompactRequest = {
+  model: string;
+  input?: OpenAiResponseInput;
+  [key: string]: unknown;
+};
+type OpenAiResponsesCompactResponse = {
+  id: string;
+  usage?: OpenAiResponsesResponse["usage"];
+  [key: string]: unknown;
+};
 type OpenAiResponsesHeaders = OpenAi.Types.ChatCompletionsHeaders;
 type OpenAiResponsesStreamChunk = OpenAi.Types.ResponseChunk;
 type OpenAiResponseInput = string | ResponseInput | undefined;
@@ -229,7 +240,7 @@ export const openAiResponsesCompactAdapterFactory: LLMProvider<
     const openaiClient = client as OpenAIProvider;
     return (await openaiClient.responses.compact(
       request as ResponseCompactParams,
-    )) as OpenAiResponsesCompactResponse;
+    )) as unknown as OpenAiResponsesCompactResponse;
   },
 
   async executeStream() {

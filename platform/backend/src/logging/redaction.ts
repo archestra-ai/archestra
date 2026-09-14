@@ -23,22 +23,15 @@ export const REDACTED_LOG_PATHS = [
   "client_secret",
   "secret",
   "password",
-  "spawnBinding",
-  "spawn_binding",
 ]
   .flatMap((key) => [key, `*.${key}`, `*.headers.${key}`])
   .concat([
-    // Browser-held chat keys and one-use child capabilities must not reach logs.
-    // Hyphenated headers need fast-redact's bracket syntax.
+    // The browser-held locked chat key rides this request header;
+    // the server must never persist it, logs included. Hyphenated keys need
+    // fast-redact's bracket syntax (same three shapes as above).
     '["x-archestra-locked-chat-key"]',
     '*["x-archestra-locked-chat-key"]',
     '*.headers["x-archestra-locked-chat-key"]',
-    '["x-archestra-appa-spawn-binding"]',
-    '*["x-archestra-appa-spawn-binding"]',
-    '*.headers["x-archestra-appa-spawn-binding"]',
-    '["x-archestra-appa-spawn-bindings"]',
-    '*["x-archestra-appa-spawn-bindings"]',
-    '*.headers["x-archestra-appa-spawn-bindings"]',
   ]);
 
 /**

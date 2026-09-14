@@ -436,7 +436,7 @@ function fingerprint(value: string): string {
 }
 
 function stableSecret(): string {
-  const secret = config.llmProxy.appaHook?.sessionHmacSecret;
+  const secret = config.openappa.sessionHmacSecret;
   if (!secret) {
     throw new AppaProxyLedgerError(
       "checkpoint correlation requires a stable configured session secret",

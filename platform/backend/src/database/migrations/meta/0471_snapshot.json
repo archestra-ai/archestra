@@ -1,5 +1,5 @@
 {
-  "id": "05d8372e-3c4d-4588-9444-055479276cfd",
+  "id": "5866570b-5d1a-4fcd-a4f3-ecc600380c4e",
   "prevId": "a24271d6-6172-4323-bc52-69fe163acd89",
   "version": "7",
   "dialect": "postgresql",
@@ -6053,1840 +6053,6 @@
             "id"
           ],
           "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.appa_proxy_approvals": {
-      "name": "appa_proxy_approvals",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "organization_id": {
-          "name": "organization_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "session_id": {
-          "name": "session_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "active_turn_id": {
-          "name": "active_turn_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "candidate_call_id": {
-          "name": "candidate_call_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "root_id": {
-          "name": "root_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "tool": {
-          "name": "tool",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "arguments_sha256": {
-          "name": "arguments_sha256",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "offer_id": {
-          "name": "offer_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "status": {
-          "name": "status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'pending'"
-        },
-        "expires_at": {
-          "name": "expires_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "approver_id": {
-          "name": "approver_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "decided_at": {
-          "name": "decided_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "appa_proxy_approvals_org_status_idx": {
-          "name": "appa_proxy_approvals_org_status_idx",
-          "columns": [
-            {
-              "expression": "organization_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "status",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "appa_proxy_approvals_session_turn_idx": {
-          "name": "appa_proxy_approvals_session_turn_idx",
-          "columns": [
-            {
-              "expression": "session_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "active_turn_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "appa_proxy_approvals_session_id_appa_proxy_sessions_id_fk": {
-          "name": "appa_proxy_approvals_session_id_appa_proxy_sessions_id_fk",
-          "tableFrom": "appa_proxy_approvals",
-          "tableTo": "appa_proxy_sessions",
-          "columnsFrom": [
-            "session_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.appa_proxy_history_items": {
-      "name": "appa_proxy_history_items",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "session_id": {
-          "name": "session_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "window_id": {
-          "name": "window_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "provider": {
-          "name": "provider",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "protocol": {
-          "name": "protocol",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "model": {
-          "name": "model",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "provider_item_id": {
-          "name": "provider_item_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "server_identity": {
-          "name": "server_identity",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "item_type": {
-          "name": "item_type",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "source_turn_id": {
-          "name": "source_turn_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "identity_hash": {
-          "name": "identity_hash",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "canonical_payload_encrypted": {
-          "name": "canonical_payload_encrypted",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "canonical_payload_bytes": {
-          "name": "canonical_payload_bytes",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "appa_proxy_history_items_scope_provider_item_uidx": {
-          "name": "appa_proxy_history_items_scope_provider_item_uidx",
-          "columns": [
-            {
-              "expression": "session_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "provider",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "protocol",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "model",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "provider_item_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"appa_proxy_history_items\".\"provider_item_id\" is not null",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "appa_proxy_history_items_scope_identity_uidx": {
-          "name": "appa_proxy_history_items_scope_identity_uidx",
-          "columns": [
-            {
-              "expression": "session_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "provider",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "protocol",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "model",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "identity_hash",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "appa_proxy_history_items_window_idx": {
-          "name": "appa_proxy_history_items_window_idx",
-          "columns": [
-            {
-              "expression": "window_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "appa_proxy_history_items_session_turn_idx": {
-          "name": "appa_proxy_history_items_session_turn_idx",
-          "columns": [
-            {
-              "expression": "session_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "source_turn_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "appa_proxy_history_items_server_identity_uidx": {
-          "name": "appa_proxy_history_items_server_identity_uidx",
-          "columns": [
-            {
-              "expression": "server_identity",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "appa_proxy_history_items_session_id_appa_proxy_sessions_id_fk": {
-          "name": "appa_proxy_history_items_session_id_appa_proxy_sessions_id_fk",
-          "tableFrom": "appa_proxy_history_items",
-          "tableTo": "appa_proxy_sessions",
-          "columnsFrom": [
-            "session_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "appa_proxy_history_items_window_id_appa_proxy_history_windows_id_fk": {
-          "name": "appa_proxy_history_items_window_id_appa_proxy_history_windows_id_fk",
-          "tableFrom": "appa_proxy_history_items",
-          "tableTo": "appa_proxy_history_windows",
-          "columnsFrom": [
-            "window_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "appa_proxy_history_items_payload_bytes_check": {
-          "name": "appa_proxy_history_items_payload_bytes_check",
-          "value": "\"appa_proxy_history_items\".\"canonical_payload_bytes\" >= 0"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.appa_proxy_history_windows": {
-      "name": "appa_proxy_history_windows",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "session_id": {
-          "name": "session_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "provider": {
-          "name": "provider",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "protocol": {
-          "name": "protocol",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "model": {
-          "name": "model",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "provider_window_id": {
-          "name": "provider_window_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "frame_version": {
-          "name": "frame_version",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "source_turn_id": {
-          "name": "source_turn_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "parent_window_id": {
-          "name": "parent_window_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "bound_by_server_identity": {
-          "name": "bound_by_server_identity",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "appa_proxy_history_windows_scope_window_uidx": {
-          "name": "appa_proxy_history_windows_scope_window_uidx",
-          "columns": [
-            {
-              "expression": "session_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "provider",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "protocol",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "model",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "provider_window_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "appa_proxy_history_windows_session_frame_uidx": {
-          "name": "appa_proxy_history_windows_session_frame_uidx",
-          "columns": [
-            {
-              "expression": "session_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "frame_version",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "appa_proxy_history_windows_session_turn_idx": {
-          "name": "appa_proxy_history_windows_session_turn_idx",
-          "columns": [
-            {
-              "expression": "session_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "source_turn_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "appa_proxy_history_windows_bound_item_uidx": {
-          "name": "appa_proxy_history_windows_bound_item_uidx",
-          "columns": [
-            {
-              "expression": "session_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "bound_by_server_identity",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"appa_proxy_history_windows\".\"bound_by_server_identity\" is not null",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "appa_proxy_history_windows_session_id_appa_proxy_sessions_id_fk": {
-          "name": "appa_proxy_history_windows_session_id_appa_proxy_sessions_id_fk",
-          "tableFrom": "appa_proxy_history_windows",
-          "tableTo": "appa_proxy_sessions",
-          "columnsFrom": [
-            "session_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "appa_proxy_history_windows_parent_window_id_appa_proxy_history_windows_id_fk": {
-          "name": "appa_proxy_history_windows_parent_window_id_appa_proxy_history_windows_id_fk",
-          "tableFrom": "appa_proxy_history_windows",
-          "tableTo": "appa_proxy_history_windows",
-          "columnsFrom": [
-            "parent_window_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "appa_proxy_history_windows_frame_version_check": {
-          "name": "appa_proxy_history_windows_frame_version_check",
-          "value": "\"appa_proxy_history_windows\".\"frame_version\" >= 0"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.appa_proxy_calls": {
-      "name": "appa_proxy_calls",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "session_id": {
-          "name": "session_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "call_id": {
-          "name": "call_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "emitted_name": {
-          "name": "emitted_name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "emitted_arguments": {
-          "name": "emitted_arguments",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "emitted_arguments_canonical": {
-          "name": "emitted_arguments_canonical",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "appa_target_name": {
-          "name": "appa_target_name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "appa_target_arguments": {
-          "name": "appa_target_arguments",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "dispatch_id": {
-          "name": "dispatch_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "spawn_binding": {
-          "name": "spawn_binding",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "spawn_binding_consumed_at": {
-          "name": "spawn_binding_consumed_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "state": {
-          "name": "state",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "result_hash": {
-          "name": "result_hash",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "result_status": {
-          "name": "result_status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "result_message_hash": {
-          "name": "result_message_hash",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "result_presentation": {
-          "name": "result_presentation",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "appa_proxy_calls_session_call_uidx": {
-          "name": "appa_proxy_calls_session_call_uidx",
-          "columns": [
-            {
-              "expression": "session_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "call_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "appa_proxy_calls_session_state_idx": {
-          "name": "appa_proxy_calls_session_state_idx",
-          "columns": [
-            {
-              "expression": "session_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "state",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "appa_proxy_calls_session_id_appa_proxy_sessions_id_fk": {
-          "name": "appa_proxy_calls_session_id_appa_proxy_sessions_id_fk",
-          "tableFrom": "appa_proxy_calls",
-          "tableTo": "appa_proxy_sessions",
-          "columnsFrom": [
-            "session_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "appa_proxy_calls_state_check": {
-          "name": "appa_proxy_calls_state_check",
-          "value": "\"appa_proxy_calls\".\"state\" in ('authorization_intent', 'open', 'result_intent', 'result_admitted', 'denied')"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.appa_proxy_events": {
-      "name": "appa_proxy_events",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "session_id": {
-          "name": "session_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "event_id": {
-          "name": "event_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "event": {
-          "name": "event",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "request_body": {
-          "name": "request_body",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "request_sha256": {
-          "name": "request_sha256",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "response": {
-          "name": "response",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "settled_at": {
-          "name": "settled_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "appa_proxy_events_event_id_uidx": {
-          "name": "appa_proxy_events_event_id_uidx",
-          "columns": [
-            {
-              "expression": "event_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "appa_proxy_events_session_id_idx": {
-          "name": "appa_proxy_events_session_id_idx",
-          "columns": [
-            {
-              "expression": "session_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "appa_proxy_events_session_id_appa_proxy_sessions_id_fk": {
-          "name": "appa_proxy_events_session_id_appa_proxy_sessions_id_fk",
-          "tableFrom": "appa_proxy_events",
-          "tableTo": "appa_proxy_sessions",
-          "columnsFrom": [
-            "session_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.appa_proxy_sessions": {
-      "name": "appa_proxy_sessions",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "profile_id": {
-          "name": "profile_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "owner_scope_hash": {
-          "name": "owner_scope_hash",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "client_session_id": {
-          "name": "client_session_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "provider": {
-          "name": "provider",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "protocol": {
-          "name": "protocol",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "model": {
-          "name": "model",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "root_id": {
-          "name": "root_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "state": {
-          "name": "state",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'ready'"
-        },
-        "active_turn_id": {
-          "name": "active_turn_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "pending_remote_event": {
-          "name": "pending_remote_event",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "root_initialized_at": {
-          "name": "root_initialized_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "parent_session_id": {
-          "name": "parent_session_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "parent_call_id": {
-          "name": "parent_call_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "child_started_at": {
-          "name": "child_started_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "appa_proxy_sessions_owner_session_uidx": {
-          "name": "appa_proxy_sessions_owner_session_uidx",
-          "columns": [
-            {
-              "expression": "owner_scope_hash",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "client_session_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "appa_proxy_sessions_profile_id_idx": {
-          "name": "appa_proxy_sessions_profile_id_idx",
-          "columns": [
-            {
-              "expression": "profile_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "appa_proxy_sessions_parent_call_idx": {
-          "name": "appa_proxy_sessions_parent_call_idx",
-          "columns": [
-            {
-              "expression": "parent_session_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "parent_call_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "appa_proxy_sessions_parent_session_id_appa_proxy_sessions_id_fk": {
-          "name": "appa_proxy_sessions_parent_session_id_appa_proxy_sessions_id_fk",
-          "tableFrom": "appa_proxy_sessions",
-          "tableTo": "appa_proxy_sessions",
-          "columnsFrom": [
-            "parent_session_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "appa_proxy_sessions_state_check": {
-          "name": "appa_proxy_sessions_state_check",
-          "value": "\"appa_proxy_sessions\".\"state\" in ('ready', 'in_turn', 'quarantined')"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.appa_proxy_wire_aliases": {
-      "name": "appa_proxy_wire_aliases",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "session_id": {
-          "name": "session_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "frame_id": {
-          "name": "frame_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "kind": {
-          "name": "kind",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "position": {
-          "name": "position",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "wire_id": {
-          "name": "wire_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "logical_id": {
-          "name": "logical_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "source_call_id": {
-          "name": "source_call_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "metadata_ciphertext": {
-          "name": "metadata_ciphertext",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "metadata_bytes": {
-          "name": "metadata_bytes",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "child_thread_id": {
-          "name": "child_thread_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "consumed_at": {
-          "name": "consumed_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "appa_proxy_wire_aliases_wire_uidx": {
-          "name": "appa_proxy_wire_aliases_wire_uidx",
-          "columns": [
-            {
-              "expression": "session_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "kind",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "wire_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "appa_proxy_wire_aliases_position_uidx": {
-          "name": "appa_proxy_wire_aliases_position_uidx",
-          "columns": [
-            {
-              "expression": "frame_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "kind",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "position",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "appa_proxy_wire_aliases_logical_idx": {
-          "name": "appa_proxy_wire_aliases_logical_idx",
-          "columns": [
-            {
-              "expression": "session_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "kind",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "logical_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "appa_proxy_wire_aliases_session_id_appa_proxy_sessions_id_fk": {
-          "name": "appa_proxy_wire_aliases_session_id_appa_proxy_sessions_id_fk",
-          "tableFrom": "appa_proxy_wire_aliases",
-          "tableTo": "appa_proxy_sessions",
-          "columnsFrom": [
-            "session_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "appa_proxy_wire_aliases_frame_id_appa_proxy_wire_frames_id_fk": {
-          "name": "appa_proxy_wire_aliases_frame_id_appa_proxy_wire_frames_id_fk",
-          "tableFrom": "appa_proxy_wire_aliases",
-          "tableTo": "appa_proxy_wire_frames",
-          "columnsFrom": [
-            "frame_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "appa_proxy_wire_aliases_kind_check": {
-          "name": "appa_proxy_wire_aliases_kind_check",
-          "value": "\"appa_proxy_wire_aliases\".\"kind\" in ('call','task','process')"
-        },
-        "appa_proxy_wire_aliases_position_check": {
-          "name": "appa_proxy_wire_aliases_position_check",
-          "value": "\"appa_proxy_wire_aliases\".\"position\" >= 0"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.appa_proxy_wire_frames": {
-      "name": "appa_proxy_wire_frames",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "session_id": {
-          "name": "session_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "parent_frame_id": {
-          "name": "parent_frame_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "turn_id": {
-          "name": "turn_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "kind": {
-          "name": "kind",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "state": {
-          "name": "state",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'held'"
-        },
-        "protocol": {
-          "name": "protocol",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "request_hash": {
-          "name": "request_hash",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "idempotency_key": {
-          "name": "idempotency_key",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "source_response_id": {
-          "name": "source_response_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "control_call_id": {
-          "name": "control_call_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "runtime_batch_id": {
-          "name": "runtime_batch_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "payload_ciphertext": {
-          "name": "payload_ciphertext",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "payload_hash": {
-          "name": "payload_hash",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "payload_bytes": {
-          "name": "payload_bytes",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "receipt_ciphertext": {
-          "name": "receipt_ciphertext",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "receipt_hash": {
-          "name": "receipt_hash",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "receipt_bytes": {
-          "name": "receipt_bytes",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "execution_event_id": {
-          "name": "execution_event_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "execution_request_hash": {
-          "name": "execution_request_hash",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "issued_at": {
-          "name": "issued_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "completed_at": {
-          "name": "completed_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "expires_at": {
-          "name": "expires_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "appa_proxy_wire_frames_session_idx": {
-          "name": "appa_proxy_wire_frames_session_idx",
-          "columns": [
-            {
-              "expression": "session_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "appa_proxy_wire_frames_request_uidx": {
-          "name": "appa_proxy_wire_frames_request_uidx",
-          "columns": [
-            {
-              "expression": "session_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "idempotency_key",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "appa_proxy_wire_frames_control_uidx": {
-          "name": "appa_proxy_wire_frames_control_uidx",
-          "columns": [
-            {
-              "expression": "control_call_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "appa_proxy_wire_frames_session_id_appa_proxy_sessions_id_fk": {
-          "name": "appa_proxy_wire_frames_session_id_appa_proxy_sessions_id_fk",
-          "tableFrom": "appa_proxy_wire_frames",
-          "tableTo": "appa_proxy_sessions",
-          "columnsFrom": [
-            "session_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "appa_proxy_wire_frames_parent_frame_id_appa_proxy_wire_frames_id_fk": {
-          "name": "appa_proxy_wire_frames_parent_frame_id_appa_proxy_wire_frames_id_fk",
-          "tableFrom": "appa_proxy_wire_frames",
-          "tableTo": "appa_proxy_wire_frames",
-          "columnsFrom": [
-            "parent_frame_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "appa_proxy_wire_frames_state_check": {
-          "name": "appa_proxy_wire_frames_state_check",
-          "value": "\"appa_proxy_wire_frames\".\"state\" in ('held','ready','issued','running','completed','cancelled','quarantined')"
-        },
-        "appa_proxy_wire_frames_kind_check": {
-          "name": "appa_proxy_wire_frames_kind_check",
-          "value": "\"appa_proxy_wire_frames\".\"kind\" in ('model_response','inbound_hold','remedy_control')"
-        },
-        "appa_proxy_wire_frames_bytes_check": {
-          "name": "appa_proxy_wire_frames_bytes_check",
-          "value": "\"appa_proxy_wire_frames\".\"payload_bytes\" >= 0 and \"appa_proxy_wire_frames\".\"payload_bytes\" <= 16777216"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.appa_proxy_checkpoint_bindings": {
-      "name": "appa_proxy_checkpoint_bindings",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "source_session_id": {
-          "name": "source_session_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "source_frame_id": {
-          "name": "source_frame_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "runtime_event_id": {
-          "name": "runtime_event_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "checkpoint_id": {
-          "name": "checkpoint_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "checkpoint_position": {
-          "name": "checkpoint_position",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "checkpoint_digest": {
-          "name": "checkpoint_digest",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "provider": {
-          "name": "provider",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "protocol": {
-          "name": "protocol",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "model": {
-          "name": "model",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "bootstrap_digest": {
-          "name": "bootstrap_digest",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "request_prefix_hash": {
-          "name": "request_prefix_hash",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "inherited_prefix_hash": {
-          "name": "inherited_prefix_hash",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "history_ciphertext": {
-          "name": "history_ciphertext",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "history_hash": {
-          "name": "history_hash",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "history_bytes": {
-          "name": "history_bytes",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "issued_items_digest": {
-          "name": "issued_items_digest",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "actual_response_hash": {
-          "name": "actual_response_hash",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "terminal_omission": {
-          "name": "terminal_omission",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "state": {
-          "name": "state",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'bound'"
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "appa_proxy_checkpoint_bindings_session_checkpoint_uidx": {
-          "name": "appa_proxy_checkpoint_bindings_session_checkpoint_uidx",
-          "columns": [
-            {
-              "expression": "source_session_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "checkpoint_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "appa_proxy_checkpoint_bindings_frame_uidx": {
-          "name": "appa_proxy_checkpoint_bindings_frame_uidx",
-          "columns": [
-            {
-              "expression": "source_frame_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "appa_proxy_checkpoint_bindings_lookup_idx": {
-          "name": "appa_proxy_checkpoint_bindings_lookup_idx",
-          "columns": [
-            {
-              "expression": "provider",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "protocol",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "model",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "bootstrap_digest",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "appa_proxy_checkpoint_bindings_source_session_id_appa_proxy_sessions_id_fk": {
-          "name": "appa_proxy_checkpoint_bindings_source_session_id_appa_proxy_sessions_id_fk",
-          "tableFrom": "appa_proxy_checkpoint_bindings",
-          "tableTo": "appa_proxy_sessions",
-          "columnsFrom": [
-            "source_session_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "appa_proxy_checkpoint_bindings_source_frame_id_appa_proxy_wire_frames_id_fk": {
-          "name": "appa_proxy_checkpoint_bindings_source_frame_id_appa_proxy_wire_frames_id_fk",
-          "tableFrom": "appa_proxy_checkpoint_bindings",
-          "tableTo": "appa_proxy_wire_frames",
-          "columnsFrom": [
-            "source_frame_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
           "onUpdate": "no action"
         }
       },
@@ -28031,6 +26197,346 @@
           "onUpdate": "no action"
         }
       },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.openappa_events": {
+      "name": "openappa_events",
+      "schema": "",
+      "columns": {
+        "root": {
+          "name": "root",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "seq": {
+          "name": "seq",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "payload": {
+          "name": "payload",
+          "type": "bytea",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "openappa_events_root_seq_pk": {
+          "name": "openappa_events_root_seq_pk",
+          "columns": [
+            "root",
+            "seq"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "openappa_events_seq_nonnegative": {
+          "name": "openappa_events_seq_nonnegative",
+          "value": "\"openappa_events\".\"seq\" >= 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.openappa_operations": {
+      "name": "openappa_operations",
+      "schema": "",
+      "columns": {
+        "organization_id": {
+          "name": "organization_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "caller_id": {
+          "name": "caller_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "session_id": {
+          "name": "session_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "operation_id": {
+          "name": "operation_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "root": {
+          "name": "root",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "input": {
+          "name": "input",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "decision": {
+          "name": "decision",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "openappa_operations_pending_idx": {
+          "name": "openappa_operations_pending_idx",
+          "columns": [
+            {
+              "expression": "root",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"openappa_operations\".\"status\" = 'pending'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "openappa_operations_pk": {
+          "name": "openappa_operations_pk",
+          "columns": [
+            "organization_id",
+            "caller_id",
+            "session_id",
+            "operation_id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "openappa_operations_status": {
+          "name": "openappa_operations_status",
+          "value": "(\"openappa_operations\".\"status\" = 'pending' AND \"openappa_operations\".\"decision\" IS NULL) OR (\"openappa_operations\".\"status\" = 'complete' AND \"openappa_operations\".\"decision\" IS NOT NULL)"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.openappa_policy_files": {
+      "name": "openappa_policy_files",
+      "schema": "",
+      "columns": {
+        "hash": {
+          "name": "hash",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "bytes": {
+          "name": "bytes",
+          "type": "bytea",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.openappa_processed_results": {
+      "name": "openappa_processed_results",
+      "schema": "",
+      "columns": {
+        "organization_id": {
+          "name": "organization_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "caller_id": {
+          "name": "caller_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "session_id": {
+          "name": "session_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tool_call_id": {
+          "name": "tool_call_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "root": {
+          "name": "root",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "approved_output": {
+          "name": "approved_output",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "decision": {
+          "name": "decision",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "openappa_results_pending_idx": {
+          "name": "openappa_results_pending_idx",
+          "columns": [
+            {
+              "expression": "root",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"openappa_processed_results\".\"status\" = 'pending'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "openappa_results_pk": {
+          "name": "openappa_results_pk",
+          "columns": [
+            "organization_id",
+            "caller_id",
+            "session_id",
+            "tool_call_id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "openappa_results_status": {
+          "name": "openappa_results_status",
+          "value": "(\"openappa_processed_results\".\"status\" = 'pending' AND \"openappa_processed_results\".\"approved_output\" IS NULL AND \"openappa_processed_results\".\"decision\" IS NULL) OR (\"openappa_processed_results\".\"status\" = 'complete' AND \"openappa_processed_results\".\"approved_output\" IS NOT NULL AND \"openappa_processed_results\".\"decision\" IS NOT NULL)"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.openappa_sessions": {
+      "name": "openappa_sessions",
+      "schema": "",
+      "columns": {
+        "actor": {
+          "name": "actor",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "root": {
+          "name": "root",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "organization_id": {
+          "name": "organization_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "caller_id": {
+          "name": "caller_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "session_id": {
+          "name": "session_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "parent_id": {
+          "name": "parent_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "start_decision": {
+          "name": "start_decision",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "openappa_sessions_root_idx": {
+          "name": "openappa_sessions_root_idx",
+          "columns": [
+            {
+              "expression": "root",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},

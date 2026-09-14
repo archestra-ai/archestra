@@ -924,51 +924,6 @@ export const AUDIT_DECISIONS = {
     reason:
       "per-tool-call idempotency ledger; runtime dedup state, mcp_tool_calls audits the execution",
   },
-  appaProxySessionsTable: {
-    audited: false,
-    reason:
-      "proxy correlation authority; quarantine acknowledgments are manually audited without changing session state",
-  },
-  appaProxyCallsTable: {
-    audited: false,
-    reason:
-      "proxy tool-call correlation ledger; result bodies are never stored",
-  },
-  appaProxyEventsTable: {
-    audited: false,
-    reason:
-      "proxy event idempotency ledger; runtime receipts are not user-editable",
-  },
-  appaProxyWireFramesTable: {
-    audited: false,
-    reason:
-      "encrypted APPA wire-frame ledger; immutable runtime correlation state",
-  },
-  appaProxyWireAliasesTable: {
-    audited: false,
-    reason:
-      "encrypted APPA wire-alias ledger; immutable runtime correlation state",
-  },
-  appaProxyCheckpointBindingsTable: {
-    audited: false,
-    reason:
-      "encrypted APPA checkpoint history bindings; immutable runtime correlation state, not admin-mutable",
-  },
-  appaProxyHistoryWindowsTable: {
-    audited: false,
-    reason:
-      "opaque provider context lineage; immutable runtime correlation state",
-  },
-  appaProxyHistoryItemsTable: {
-    audited: false,
-    reason:
-      "encrypted provider opaque-item ledger; immutable runtime correlation state",
-  },
-  appaProxyApprovalsTable: {
-    audited: false,
-    reason:
-      "approval execution state; decision endpoints carry the reviewer audit trail",
-  },
 
   // =========================================================================
   // Site notifications
@@ -976,6 +931,62 @@ export const AUDIT_DECISIONS = {
   siteNotificationsTable: {
     audited: false,
     reason: "ephemeral in-app notifications; per-user UI state",
+  },
+  openappaEventsTable: {
+    audited: false,
+    reason: "OpenAPPA owns its immutable policy event history",
+  },
+  openappaPolicyFilesTable: {
+    audited: false,
+    reason: "OpenAPPA owns content-addressed policy history",
+  },
+  openappaOperationsTable: {
+    audited: false,
+    reason: "native hook idempotency ledger",
+  },
+  openappaProcessedResultsTable: {
+    audited: false,
+    reason: "approved tool outputs and processing receipts",
+  },
+  openappaSessionsTable: {
+    audited: false,
+    reason: "authenticated adapter identity mapping",
+  },
+  appaProxyApprovalsTable: {
+    audited: false,
+    reason: "approval workflow state; decisions write their own audited event",
+  },
+  appaProxyCallsTable: {
+    audited: false,
+    reason: "durable APPA call correlation ledger",
+  },
+  appaProxyCheckpointBindingsTable: {
+    audited: false,
+    reason: "runtime checkpoint to provider-frame binding",
+  },
+  appaProxyEventsTable: {
+    audited: false,
+    reason: "durable native runtime receipt ledger",
+  },
+  appaProxyHistoryItemsTable: {
+    audited: false,
+    reason: "encrypted opaque client-history fragment",
+  },
+  appaProxyHistoryWindowsTable: {
+    audited: false,
+    reason: "encrypted opaque client-history window",
+  },
+  appaProxySessionsTable: {
+    audited: false,
+    reason: "active native APPA lifecycle state",
+  },
+  appaProxyWireAliasesTable: {
+    audited: false,
+    reason: "single-use native client wire alias",
+  },
+  appaProxyWireFramesTable: {
+    audited: false,
+    reason: "encrypted native provider wire frame",
   },
 } satisfies Record<keyof typeof schema, AuditDecision>;
 

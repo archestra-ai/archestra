@@ -1,7 +1,6 @@
-/** Runtime OpenAPI declares the envelope event as unconstrained JSON. */
+/** Runtime events are opaque to the host and validated by the native core. */
 export type AppaProxyEvent = Record<string, unknown> & { event: string };
 
-/** Runtime capability and receipt response schemas are validated at the boundary. */
 export type AppaProxyCapabilities = Record<string, unknown> & {
   protocol_version: number;
   legacy_hooks: boolean;
@@ -21,15 +20,6 @@ export type AppaCheckpoint = {
   digest: string;
 };
 
-export type AppaRuntimeClientOptions = {
-  /** Matches the validated AppaProxyHookConfig.url. */
-  url: string;
-  /** Matches AppaProxyHookConfig.runtimeToken and is required for v1. */
-  runtimeToken: string;
-  timeoutMs?: number;
-  fetch?: typeof fetch;
-};
-
 export type AppaPreparedProxyEvent = {
   eventId: string;
   envelope: { event_id: string; event: AppaProxyEvent };
@@ -37,20 +27,11 @@ export type AppaPreparedProxyEvent = {
   requestSha256: string;
 };
 
-type AppaTransportErrorCode =
-  | "invalid-endpoint"
-  | "timeout"
-  | "transport"
-  | "uncertain"
-  | "refused"
-  | "invalid-response";
-
 export class AppaRuntimeError extends Error {
   constructor(
-    readonly code: AppaTransportErrorCode,
+    readonly code: "unavailable" | "invalid-response" | "uncertain" | "refused",
     message: string,
     readonly status?: number,
-    readonly runtimeCode?: string,
   ) {
     super(message);
     this.name = "AppaRuntimeError";

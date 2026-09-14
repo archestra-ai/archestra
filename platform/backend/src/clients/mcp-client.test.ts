@@ -48,7 +48,6 @@ import { mcpActiveUseTracker } from "@/services/mcp-active-use.ee";
 import { beforeEach, describe, expect, mustExist, test } from "@/test";
 import { agentOwner, appOwner } from "@/types";
 import mcpClient, {
-  readMcpClientToolOutcome,
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
   // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -765,7 +764,7 @@ describe("McpClient", () => {
     expect(loggedResult._meta?.archestraError?.type).toBe("cancelled");
   });
 
-  test("reports a post-dispatch failure as indeterminate without retrying or leaking it", async () => {
+  test("returns an error result (does not throw) for a non-abort failure", async () => {
     const tool = await ToolModel.createToolIfNotExists({
       name: "github-mcp-server__list_repos",
       description: "List repos",
@@ -787,11 +786,6 @@ describe("McpClient", () => {
 
     expect(result.isError).toBe(true);
     expect(mockCallTool).toHaveBeenCalledTimes(1);
-    expect(JSON.stringify(result)).not.toContain("upstream exploded");
-    expect(readMcpClientToolOutcome(result)).toEqual({
-      call_id: "call_non_abort_failure",
-      status: "indeterminate",
-    });
   });
 
   // Regression: inspectServer built its transport without the enterprise
@@ -5021,7 +5015,7 @@ describe("McpClient", () => {
     });
 
     describe("Auth error actionable message", () => {
-      test("reports an OAuth tool error result as failure without redispatching", async ({
+      test("refreshes and retries when an OAuth server returns an auth-related tool error result", async ({
         makeUser,
       }) => {
         const testUser = await makeUser({
@@ -5113,9 +5107,12 @@ describe("McpClient", () => {
           },
         );
 
-        expect(refreshSpy).not.toHaveBeenCalled();
-        expect(mockCallTool).toHaveBeenCalledTimes(1);
-        expect(result.isError).toBe(true);
+        expect(refreshSpy).toHaveBeenCalledWith(secret.id, oauthCatalog.id);
+        expect(mockCallTool).toHaveBeenCalledTimes(2);
+        expect(result).toMatchObject({
+          isError: false,
+          content: [{ type: "text", text: "Issue fetched" }],
+        });
 
         refreshSpy.mockRestore();
       });
@@ -5212,7 +5209,7 @@ describe("McpClient", () => {
         refreshSpy.mockRestore();
       });
 
-      test("does not refresh after an OAuth tool error result", async ({
+      test("a terminal refresh failure records the needs-reauthentication trio on the server row", async ({
         makeUser,
       }) => {
         const testUser = await makeUser({
@@ -5299,11 +5296,12 @@ describe("McpClient", () => {
         );
 
         const row = await McpServerModel.findById(mcpServer.id);
-        expect(refreshSpy).not.toHaveBeenCalled();
-        expect(row?.oauthRefreshError).toBeNull();
-        expect(row?.oauthRefreshErrorMessage).toBeNull();
-        expect(row?.oauthRefreshErrorDescription).toBeNull();
-        expect(row?.oauthRefreshFailedAt).toBeNull();
+        expect(row?.oauthRefreshError).toBe("refresh_failed");
+        expect(row?.oauthRefreshErrorMessage).toBe("invalid_grant");
+        expect(row?.oauthRefreshErrorDescription).toBe(
+          "The refresh token is invalid or has expired",
+        );
+        expect(row?.oauthRefreshFailedAt).toBeInstanceOf(Date);
 
         refreshSpy.mockRestore();
       });
@@ -5411,7 +5409,7 @@ describe("McpClient", () => {
         refreshSpy.mockRestore();
       });
 
-      test("does not clear a prior refresh failure after an OAuth tool error result", async ({
+      test("a successful refresh clears a prior needs-reauthentication state", async ({
         makeUser,
       }) => {
         const testUser = await makeUser({
@@ -5511,13 +5509,10 @@ describe("McpClient", () => {
         );
 
         const row = await McpServerModel.findById(mcpServer.id);
-        expect(refreshSpy).not.toHaveBeenCalled();
-        expect(row?.oauthRefreshError).toBe("refresh_failed");
-        expect(row?.oauthRefreshErrorMessage).toBe("invalid_grant");
-        expect(row?.oauthRefreshErrorDescription).toBe(
-          "The refresh token is invalid",
-        );
-        expect(row?.oauthRefreshFailedAt).toBeInstanceOf(Date);
+        expect(row?.oauthRefreshError).toBeNull();
+        expect(row?.oauthRefreshErrorMessage).toBeNull();
+        expect(row?.oauthRefreshErrorDescription).toBeNull();
+        expect(row?.oauthRefreshFailedAt).toBeNull();
 
         refreshSpy.mockRestore();
       });

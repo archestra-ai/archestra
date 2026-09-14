@@ -35,7 +35,6 @@ import config, {
   parseActiveChatRunPollIntervalMs,
   parseActiveUsersRefreshIntervalMs,
   parseAnthropicWifConfig,
-  parseAppaProxyHookConfig,
   parseBodyLimit,
   parseChatMaxOutputTokens,
   parseChatRateMeteredMaxOutputTokens,
@@ -48,6 +47,7 @@ import config, {
   parseContentMaxLength,
   parseDatabasePoolMax,
   parseDatabaseStatementTimeoutMillis,
+  parseEmbeddedOpenAppaProxyConfig,
   parseEngineDeniedCidrs,
   parseFileStorageFilesystemRoot,
   parseFileStorageProvider,
@@ -71,6 +71,7 @@ import config, {
   // SPDX-SnippetEnd
   parseMetricsPort,
   parseNonNegativeInt,
+  parseOpenAppaConfig,
   parseOptionalPort,
   parseOtelCaptureContent,
   parseProcessType,
@@ -83,9 +84,17 @@ import config, {
   resolveRenderBaseUrl,
 } from "./config";
 
-vi.mock("@/logging");
+// Mock the logger
+vi.mock("./logging", () => ({
+  __esModule: true,
+  default: {
+    warn: vi.fn(),
+    info: vi.fn(),
+    error: vi.fn(),
+  },
+}));
 
-import logger from "@/logging";
+import logger from "./logging";
 
 describe("getAnalyticsConfig", () => {
   const originalEnv = process.env;
@@ -431,315 +440,6 @@ describe("parseFrontendBaseUrl", () => {
     expect(parseFrontendBaseUrl(" https://app.example.com// ")).toBe(
       "https://app.example.com",
     );
-  });
-});
-
-describe("parseAppaProxyHookConfig", () => {
-  test("defaults to disabled and normalizes a valid cluster-local URL", () => {
-    expect(
-      parseAppaProxyHookConfig({
-        url: undefined,
-        timeoutMs: undefined,
-        sessionHmacSecret: undefined,
-      }),
-    ).toBeUndefined();
-    expect(
-      parseAppaProxyHookConfig({
-        url: " http://appa.openappa.svc.cluster.local:18787/ ",
-        timeoutMs: "2500",
-        sessionHmacSecret: "a".repeat(32),
-      }),
-    ).toEqual({
-      url: "http://appa.openappa.svc.cluster.local:18787",
-      timeoutMs: 2500,
-      sessionHmacSecret: "a".repeat(32),
-      maxCallsPerSession: 1000,
-      maxSessionsPerOwner: 100,
-      runtimeToken: undefined,
-      approvalSigningSecret: undefined,
-      autoAcceptRestrictions: false,
-      nativeCodexEnabled: false,
-      maxStreamBufferBytes: 16777216,
-    });
-  });
-
-  test.each([
-    { url: "https://appa.openappa.svc.cluster.local", timeoutMs: undefined },
-    { url: "http://appa.example.com", timeoutMs: undefined },
-    {
-      url: "http://user:password@appa.openappa.svc.cluster.local",
-      timeoutMs: undefined,
-    },
-    { url: "http://appa.openappa.svc.cluster.local", timeoutMs: "0" },
-    { url: "http://appa.openappa.svc.cluster.local", timeoutMs: "120001" },
-    { url: "http://appa.openappa.svc.cluster.local", timeoutMs: "1.5" },
-  ])("rejects unsafe hook configuration %#", ({ url, timeoutMs }) => {
-    expect(() =>
-      parseAppaProxyHookConfig({
-        url,
-        timeoutMs,
-        sessionHmacSecret: "a".repeat(32),
-      }),
-    ).toThrow();
-  });
-
-  test.each([
-    ["http://127.0.0.1:18787", "development"],
-    ["http://[::1]:18787", "test"],
-  ])("accepts literal loopback URL %s only with the development/test opt-in", (url, nodeEnv) => {
-    expect(
-      parseAppaProxyHookConfig({
-        url,
-        timeoutMs: undefined,
-        sessionHmacSecret: "s".repeat(32),
-        allowLoopback: "true",
-        nodeEnv,
-        runtimeToken: "t".repeat(32),
-      }),
-    ).toMatchObject({ url, runtimeToken: "t".repeat(32) });
-  });
-
-  test.each([
-    ["http://127.0.0.1:18787", undefined, "development"],
-    ["http://127.0.0.1:18787", "true", "production"],
-    ["http://127.0.0.1:18787", "true", "prod"],
-    ["http://localhost:18787", "true", "development"],
-    ["http://127.0.0.2:18787", "true", "development"],
-    ["http://192.0.2.10:18787", "true", "development"],
-    ["http://appa.example.test:18787", "true", "development"],
-  ])("refuses non-opted, production, DNS, and remote loopback transports: %s", (url, allowLoopback, nodeEnv) => {
-    expect(() =>
-      parseAppaProxyHookConfig({
-        url,
-        timeoutMs: undefined,
-        sessionHmacSecret: "s".repeat(32),
-        allowLoopback,
-        nodeEnv,
-        runtimeToken: "t".repeat(32),
-      }),
-    ).toThrow("APPA_HOOK_URL");
-  });
-
-  test("requires the v1 runtime token for a loopback transport", () => {
-    expect(() =>
-      parseAppaProxyHookConfig({
-        url: "http://127.0.0.1:18787",
-        timeoutMs: undefined,
-        sessionHmacSecret: "s".repeat(32),
-        allowLoopback: "true",
-        nodeEnv: "development",
-      }),
-    ).toThrow("ALLOW_LOOPBACK requires an authenticated APPA v1 runtime token");
-  });
-
-  test.each([
-    "http://user:password@127.0.0.1:18787",
-    "http://127.0.0.1:18787?target=remote",
-    "http://127.0.0.1:18787#fragment",
-  ])("refuses credentials, queries, and fragments on loopback: %s", (url) => {
-    expect(() =>
-      parseAppaProxyHookConfig({
-        url,
-        timeoutMs: undefined,
-        sessionHmacSecret: "s".repeat(32),
-        allowLoopback: "true",
-        nodeEnv: "development",
-        runtimeToken: "t".repeat(32),
-      }),
-    ).toThrow("APPA_HOOK_URL");
-  });
-
-  test("requires a stable HMAC secret when hooks are enabled", () => {
-    expect(() =>
-      parseAppaProxyHookConfig({
-        url: "http://appa.openappa.svc.cluster.local",
-        timeoutMs: undefined,
-        sessionHmacSecret: "short",
-      }),
-    ).toThrow("SESSION_HMAC_SECRET");
-  });
-
-  test("requires separate valid transport and approval keys", () => {
-    const base = {
-      url: "http://appa.openappa.svc.cluster.local",
-      timeoutMs: undefined,
-      sessionHmacSecret: "s".repeat(32),
-    };
-    expect(() =>
-      parseAppaProxyHookConfig({ ...base, runtimeToken: "short" }),
-    ).toThrow("RUNTIME_TOKEN");
-    expect(() =>
-      parseAppaProxyHookConfig({
-        ...base,
-        approvalSigningSecret: "a".repeat(32),
-      }),
-    ).toThrow("APPROVAL_SIGNING_SECRET");
-    expect(() =>
-      parseAppaProxyHookConfig({
-        ...base,
-        runtimeToken: "t".repeat(32),
-        approvalSigningSecret: "t".repeat(32),
-      }),
-    ).toThrow("APPROVAL_SIGNING_SECRET");
-    expect(
-      parseAppaProxyHookConfig({
-        ...base,
-        runtimeToken: "t".repeat(32),
-        approvalSigningSecret: "a".repeat(32),
-        autoAcceptRestrictions: "true",
-      }),
-    ).toMatchObject({
-      autoAcceptRestrictions: true,
-      approvalSigningSecret: "a".repeat(32),
-    });
-  });
-
-  test("requires an authenticated v1 runtime token before enabling native Codex", () => {
-    const base = {
-      url: "http://appa.openappa.svc.cluster.local",
-      timeoutMs: undefined,
-      sessionHmacSecret: "s".repeat(32),
-    };
-    expect(parseAppaProxyHookConfig(base)).toMatchObject({
-      nativeCodexEnabled: false,
-    });
-    expect(() =>
-      parseAppaProxyHookConfig({ ...base, nativeCodexEnabled: "true" }),
-    ).toThrow(
-      "NATIVE_CODEX_ENABLED requires an authenticated APPA v1 runtime token",
-    );
-    expect(
-      parseAppaProxyHookConfig({
-        ...base,
-        runtimeToken: "t".repeat(32),
-        nativeCodexEnabled: "true",
-      }),
-    ).toMatchObject({ nativeCodexEnabled: true });
-  });
-
-  test("parses only stock native spawn names as raw kagent agent contracts", () => {
-    expect(
-      parseAppaProxyHookConfig({
-        url: "http://appa.openappa.svc.cluster.local",
-        timeoutMs: undefined,
-        sessionHmacSecret: "s".repeat(32),
-        runtimeToken: "t".repeat(32),
-        nativeSpawnToolMap: JSON.stringify({
-          Agent: "agent:fixture/lifecycle_child",
-          "multi_agent_v1.spawn_agent": "agent:fixture/lifecycle_child",
-          "agents.spawn_agent": "agent:fixture/lifecycle_child",
-          "collaboration.spawn_agent": "agent:fixture/lifecycle_child",
-          task: "agent:fixture/lifecycle_child",
-        }),
-        nativeSpawnReturnFloorMap: JSON.stringify({
-          "agent/fixture/lifecycle_child": {
-            trust: "restricted",
-            audience: ["ops"],
-          },
-        }),
-      }),
-    ).toMatchObject({
-      nativeSpawnToolMap: {
-        Agent: "agent:fixture/lifecycle_child",
-        "multi_agent_v1.spawn_agent": "agent:fixture/lifecycle_child",
-        "agents.spawn_agent": "agent:fixture/lifecycle_child",
-        "collaboration.spawn_agent": "agent:fixture/lifecycle_child",
-        task: "agent:fixture/lifecycle_child",
-      },
-      nativeSpawnReturnFloorMap: {
-        "agent/fixture/lifecycle_child": {
-          trust: "restricted",
-          audience: ["ops"],
-        },
-      },
-    });
-  });
-
-  test.each([
-    "not json",
-    "[]",
-    '{"spawn_agent":"agent:fixture/lifecycle_child"}',
-    '{"multi_agent_v1.spawn_agent":"agent/fixture/lifecycle_child"}',
-    '{"mcp__server__Agent":"agent:fixture/lifecycle_child"}',
-    '{"Task":"agent:fixture/lifecycle_child"}',
-  ])("rejects an unsafe native spawn mapping: %s", (nativeSpawnToolMap) => {
-    expect(() =>
-      parseAppaProxyHookConfig({
-        url: "http://appa.openappa.svc.cluster.local",
-        timeoutMs: undefined,
-        sessionHmacSecret: "s".repeat(32),
-        nativeSpawnToolMap,
-        runtimeToken: "t".repeat(32),
-      }),
-    ).toThrow("APPA_NATIVE_SPAWN_TOOL_MAP");
-  });
-
-  test("requires an authenticated v1 runtime for native spawn mapping", () => {
-    expect(() =>
-      parseAppaProxyHookConfig({
-        url: "http://appa.openappa.svc.cluster.local",
-        timeoutMs: undefined,
-        sessionHmacSecret: "s".repeat(32),
-        nativeSpawnToolMap:
-          '{"multi_agent_v1.spawn_agent":"agent:fixture/lifecycle_child"}',
-      }),
-    ).toThrow(
-      "NATIVE_SPAWN_TOOL_MAP requires an authenticated APPA v1 runtime token",
-    );
-  });
-
-  test("requires an authenticated v1 runtime for native spawn return floors", () => {
-    expect(() =>
-      parseAppaProxyHookConfig({
-        url: "http://appa.openappa.svc.cluster.local",
-        timeoutMs: undefined,
-        sessionHmacSecret: "s".repeat(32),
-        nativeSpawnReturnFloorMap:
-          '{"agent/fixture/lifecycle_child":{"audience":["ops"]}}',
-      }),
-    ).toThrow(
-      "NATIVE_SPAWN_RETURN_FLOOR_MAP requires an authenticated APPA v1 runtime token",
-    );
-  });
-
-  test.each([
-    "not json",
-    "[]",
-    "{}",
-    '{"agent/fixture/lifecycle_child":{}}',
-    '{"agent/fixture/lifecycle_child":{"classification":"private"}}',
-    '{"agent/fixture/lifecycle_child":{"audience":[]}}',
-    '{"agent/fixture/lifecycle_child":{"audience":["ops","ops"]}}',
-    '{"agent/fixture/other":{"audience":["ops"]}}',
-    '{"__proto__":{"audience":["ops"]}}',
-    '{"agent/fixture/lifecycle_child":{"constructor":"ops"}}',
-  ])("rejects unsafe native spawn return floor mapping: %s", (nativeSpawnReturnFloorMap) => {
-    expect(() =>
-      parseAppaProxyHookConfig({
-        url: "http://appa.openappa.svc.cluster.local",
-        timeoutMs: undefined,
-        sessionHmacSecret: "s".repeat(32),
-        runtimeToken: "t".repeat(32),
-        nativeSpawnToolMap:
-          '{"multi_agent_v1.spawn_agent":"agent:fixture/lifecycle_child"}',
-        nativeSpawnReturnFloorMap,
-      }),
-    ).toThrow("APPA_NATIVE_SPAWN_RETURN_FLOOR_MAP");
-  });
-
-  test("rejects invalid ledger budgets instead of silently weakening limits", () => {
-    for (const field of ["maxCallsPerSession", "maxSessionsPerOwner"]) {
-      for (const value of ["0", "-1", "NaN", "1.5", "1e20"]) {
-        expect(() =>
-          parseAppaProxyHookConfig({
-            url: "http://appa.openappa.svc.cluster.local",
-            timeoutMs: undefined,
-            sessionHmacSecret: "a".repeat(32),
-            [field]: value,
-          }),
-        ).toThrow("ledger limits");
-      }
-    }
   });
 });
 
@@ -3766,5 +3466,86 @@ describe("parseOtelCaptureContent", () => {
         contentEncryptionConfigured: true,
       }),
     ).toBe(false);
+  });
+});
+
+describe("OpenAPPA feature configuration", () => {
+  test("activates the durable native proxy lifecycle with required secrets", () => {
+    expect(
+      parseEmbeddedOpenAppaProxyConfig({
+        enabled: "true",
+        policyPath: "/policy.toml",
+        sessionHmacSecret: "s".repeat(32),
+        approvalSigningSecret: "a".repeat(32),
+        nativeCodexEnabled: undefined,
+        nativeSpawnToolMap: '{"Agent":"agent:ops/reviewer"}',
+        maxCallsPerSession: "12",
+        maxSessionsPerOwner: "3",
+        maxStreamBufferBytes: "1024",
+      }),
+    ).toMatchObject({
+      nativeCodexEnabled: true,
+      nativeSpawnToolMap: { Agent: "agent:ops/reviewer" },
+      maxCallsPerSession: 12,
+      maxSessionsPerOwner: 3,
+      maxStreamBufferBytes: 1024,
+    });
+  });
+
+  test("refuses incomplete embedded native lifecycle configuration", () => {
+    expect(() =>
+      parseEmbeddedOpenAppaProxyConfig({
+        enabled: "true",
+        policyPath: "/policy.toml",
+        sessionHmacSecret: "short",
+        approvalSigningSecret: undefined,
+        nativeCodexEnabled: undefined,
+        nativeSpawnToolMap: undefined,
+        maxCallsPerSession: undefined,
+        maxSessionsPerOwner: undefined,
+        maxStreamBufferBytes: undefined,
+      }),
+    ).toThrow("ARCHESTRA_OPENAPPA_SESSION_HMAC_SECRET");
+  });
+
+  test.each([
+    undefined,
+    "",
+    "false",
+    "TRUE",
+    "1",
+  ])("does not activate from a policy path or beta flag when enabled=%s", (enabled) => {
+    vi.stubEnv("ARCHESTRA_BETA", "true");
+    expect(parseOpenAppaConfig(enabled, "/policy.toml")).toEqual({
+      enabled: false,
+      policyPath: "/policy.toml",
+    });
+    vi.unstubAllEnvs();
+  });
+  test("requires a policy path only for explicit activation", () => {
+    expect(parseOpenAppaConfig(undefined, undefined).enabled).toBe(false);
+    expect(parseOpenAppaConfig("true", "/policy.toml")).toEqual({
+      enabled: true,
+      policyPath: "/policy.toml",
+    });
+    for (const path of [undefined, "", "   "]) {
+      expect(() => parseOpenAppaConfig("true", path)).toThrow(
+        "ARCHESTRA_OPENAPPA_POLICY_PATH is required",
+      );
+    }
+  });
+
+  test("retains non-empty native APPA signing secrets", () => {
+    expect(
+      parseOpenAppaConfig(
+        "true",
+        "/policy.toml",
+        " approval-secret ",
+        " session-secret ",
+      ),
+    ).toMatchObject({
+      approvalSigningSecret: "approval-secret",
+      sessionHmacSecret: "session-secret",
+    });
   });
 });

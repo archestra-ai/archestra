@@ -144,6 +144,16 @@ importers:
 
   archestra-rs/napi-loader: {}
 
+  archestra-rs/openappa-rs:
+    dependencies:
+      '@archestra/napi-loader':
+        specifier: workspace:*
+        version: link:../napi-loader
+    devDependencies:
+      '@napi-rs/cli':
+        specifier: ^3.4.0
+        version: 3.6.2(@emnapi/runtime@1.11.3)(@types/node@25.9.1)
+
   archestra-rs/sandbox-rs:
     dependencies:
       '@archestra/napi-loader':
@@ -204,6 +214,9 @@ importers:
       '@archestra/image-rs':
         specifier: workspace:*
         version: link:../archestra-rs/image-rs
+      '@archestra/openappa-rs':
+        specifier: workspace:*
+        version: link:../archestra-rs/openappa-rs
       '@archestra/sandbox-rs':
         specifier: workspace:*
         version: link:../archestra-rs/sandbox-rs
@@ -535,9 +548,6 @@ importers:
       '@electric-sql/pglite':
         specifier: ^0.3.16
         version: 0.3.16
-      '@hey-api/openapi-ts':
-        specifier: ^0.97.3
-        version: 0.97.3(@typescript/typescript6@6.0.1)
       '@microsoft/microsoft-graph-types':
         specifier: ^2.43.1
         version: 2.43.1
@@ -21237,7 +21247,8 @@ snapshots:
 
   semver@7.7.4: {}
 
-  semver@7.8.5: {}
+  semver@7.8.5:
+    optional: true
 
   send@1.2.1:
     dependencies:

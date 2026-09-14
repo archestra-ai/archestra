@@ -1723,6 +1723,61 @@ describe("POST /api/llm-provider-api-keys/:id/reconnect", () => {
     await app.close();
   });
 
+  test("disconnects an expired personal subscription without delete permission and audits it", async ({
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const secret = await makeSecret({ secret: { apiKey: storedCredential } });
+    const key = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "openai",
+      scope: "personal",
+      userId: memberUser.id,
+    });
+    await LlmProviderApiKeyModel.setRequiresReauthentication({
+      id: key.id,
+      requiresReauthentication: true,
+    });
+    const response = await app.inject({
+      method: "DELETE",
+      url: `/api/llm-provider-api-keys/${key.id}`,
+    });
+    expect(response.statusCode).toBe(200);
+    expect(await LlmProviderApiKeyModel.findById(key.id)).toBeNull();
+    await vi.waitFor(async () => {
+      const { data: rows } = await AuditLogModel.findPaginated({
+        organizationId,
+        resourceType: "llmProviderApiKey",
+        limit: 50,
+        offset: 0,
+      });
+      expect(rows).toHaveLength(1);
+      expect(rows[0].action).toBe("llmProviderApiKey.deleted");
+      expect(rows[0].before).toMatchObject({ id: key.id });
+      expect(JSON.stringify(rows[0])).not.toContain(storedCredential);
+    });
+  });
+
+  test("refuses disconnecting another user's personal subscription even with admin permissions", async ({
+    makeSecret,
+    makeLlmProviderApiKey,
+    makeUser,
+  }) => {
+    setupAdminApp();
+    const owner = await makeUser();
+    const secret = await makeSecret({ secret: { apiKey: storedCredential } });
+    const key = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "openai",
+      scope: "personal",
+      userId: owner.id,
+    });
+    const response = await app.inject({
+      method: "DELETE",
+      url: `/api/llm-provider-api-keys/${key.id}`,
+    });
+    expect(response.statusCode).toBe(403);
+    expect(await LlmProviderApiKeyModel.findById(key.id)).not.toBeNull();
+  });
+
   test("rotates the caller's own personal subscription key in place", async ({
     makeSecret,
     makeLlmProviderApiKey,

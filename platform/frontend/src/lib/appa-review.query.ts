@@ -1,20 +1,18 @@
-import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
-import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils";
-
-const {
+import {
+  type AppaApprovalReviewApi,
+  type AppaQuarantineReviewApi,
   acknowledgeAppaQuarantine,
   decideAppaApproval,
   getAppaQuarantine,
   listAppaApprovals,
   listAppaQuarantines,
-} = archestraApiSdk;
+} from "@archestra/shared";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils";
 
-export type AppaApprovalReview =
-  archestraApiTypes.ListAppaApprovalsResponses["200"][number];
-export type AppaQuarantineReview =
-  archestraApiTypes.ListAppaQuarantinesResponses["200"][number];
+export type AppaApprovalReview = AppaApprovalReviewApi;
+export type AppaQuarantineReview = AppaQuarantineReviewApi;
 
 const appaReviewKeys = {
   approvals: () => ["appa-review", "approvals"] as const,

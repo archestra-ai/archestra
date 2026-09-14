@@ -161,35 +161,6 @@ describe("planDispatchModeToolCallRewrites", () => {
     ]);
   });
 
-  test("preserves a native spawn while re-addressing unrelated direct calls", () => {
-    const result = planDispatchModeToolCallRewrites({
-      toolCalls: [
-        {
-          id: "spawn",
-          name: "multi_agent_v1.spawn_agent",
-          arguments: '{"prompt":"inspect"}',
-        },
-        { id: "read", name: "gh__read", arguments: '{"n":1}' },
-      ],
-      enabledToolNames: DISPATCH_PAIR,
-      preserveDirectToolCall: (toolName) =>
-        toolName === "multi_agent_v1.spawn_agent",
-    });
-
-    expect(result).toEqual([
-      {
-        id: "spawn",
-        name: "multi_agent_v1.spawn_agent",
-        arguments: '{"prompt":"inspect"}',
-      },
-      {
-        id: "read",
-        name: "archestra__run_tool",
-        arguments: '{"tool_name":"gh__read","tool_args":{"n":1}}',
-      },
-    ]);
-  });
-
   // Two calls at the same tool is the shape the original report showed; both
   // must be repaired, not deduplicated — they carry different arguments.
   test("rewrites repeated calls at the same tool independently", () => {

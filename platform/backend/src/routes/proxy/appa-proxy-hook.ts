@@ -18,17 +18,12 @@ import { AppaProxyPhaseTrace } from "@/services/appa-proxy-phase-trace";
 import { AppaResponseFrame } from "@/services/appa-response-frame";
 import { inspectCodexShellOutput } from "./appa-codex-shell";
 
-const MAX_HOOK_RESPONSE_BYTES = 64 * 1024;
 const MAX_SPAWN_BINDINGS = 16;
 const MAX_SPAWN_BINDING_BYTES = 256;
 const MAX_SPAWN_BINDINGS_HEADER_BYTES = 4096;
 
 export type AppaProxyHookConfig = {
-  url: string;
-  timeoutMs: number;
   sessionHmacSecret: string;
-  /** Presence opts the runtime into the authenticated v1 envelope protocol. */
-  runtimeToken?: string;
   approvalSigningSecret?: string;
   autoAcceptRestrictions?: boolean;
   maxCallsPerSession?: number;
@@ -194,15 +189,13 @@ export class AppaProxyHookSession {
       params.nativeCodexExecution ?? params.config.nativeCodexEnabled === true;
     this.requestSignal = params.signal;
     this.rootId = params.turn.session.rootId;
-    this.phaseTrace = params.config.runtimeToken
-      ? new AppaProxyPhaseTrace({
-          traceId: params.traceId,
-          ownerScopeHash: params.turn.session.ownerScopeHash,
-          provider: params.turn.session.provider ?? "direct",
-          protocol: params.turn.session.protocol ?? "direct",
-          sessionId: params.turn.session.clientSessionId,
-        })
-      : undefined;
+    this.phaseTrace = new AppaProxyPhaseTrace({
+      traceId: params.traceId,
+      ownerScopeHash: params.turn.session.ownerScopeHash,
+      provider: params.turn.session.provider ?? "direct",
+      protocol: params.turn.session.protocol ?? "direct",
+      sessionId: params.turn.session.clientSessionId,
+    });
   }
 
   static async open(params: {
@@ -415,12 +408,6 @@ export class AppaProxyHookSession {
       );
     }
     if (
-      !this.config.runtimeToken &&
-      toolCalls.some((toolCall) => toolCall.spawn)
-    ) {
-      throw new AppaProxyHookError("denied", "outbound");
-    }
-    if (
       toolCalls.some(
         (toolCall) =>
           Buffer.byteLength(toolCall.emittedArguments, "utf8") > 64 * 1024,
@@ -456,64 +443,7 @@ export class AppaProxyHookSession {
     }
 
     try {
-      if (this.config.runtimeToken) {
-        const authorizedCalls = await this.authorizeV1Batch(effectiveToolCalls);
-        if (
-          this.requestSignal?.aborted ||
-          (this.approvalExpiresAt !== undefined &&
-            Date.now() >= this.approvalExpiresAt)
-        ) {
-          throw new AppaProxyHookError("denied", "outbound");
-        }
-        await AppaProxySessionModel.approveOutboundCallBatch({
-          turn: this.turn,
-          calls: authorizedCalls.map((authorizedCall, index) => ({
-            ...authorizedCall,
-            effectiveCall: toOutboundCall(effectiveToolCalls[index]),
-          })),
-        });
-        for (const authorizedCall of authorizedCalls) {
-          if (authorizedCall.spawnBinding) {
-            this.authorizedSpawnBindings.set(
-              authorizedCall.callId,
-              authorizedCall.spawnBinding,
-            );
-          }
-        }
-        const receipt = this.lastValidatedRuntimeReceipt;
-        if (!receipt) {
-          throw new AppaProxyHookError("unavailable", "outbound");
-        }
-        this.phaseTrace?.authorizationReceipt({
-          callIds: authorizedCalls.map((call) => call.callId),
-          receipt,
-        });
-        this.authorizedCallIdsAwaitingWrite.push(
-          ...authorizedCalls.map((call) => call.callId),
-        );
-        this.undeliveredAuthorizedCalls = true;
-        return effectiveToolCalls;
-      }
-      // The legacy unauthenticated hook has no atomic batch operation. Never
-      // open only a prefix of a client-visible batch against that transport.
-      if (toolCalls.length > 1) {
-        throw new AppaProxyHookError("denied", "outbound");
-      }
-      for (const toolCall of effectiveToolCalls) {
-        this.activeCall = toolCall;
-        await this.post(
-          {
-            event: "tool_call",
-            root_id: this.rootId,
-            tool: toolCall.targetName,
-            arguments: toolCall.targetArguments,
-            spawn: toolCall.spawn === true,
-          },
-          "allow_call",
-          "outbound",
-        );
-        this.activeCall = undefined;
-      }
+      const authorizedCalls = await this.authorizeV1Batch(effectiveToolCalls);
       if (
         this.requestSignal?.aborted ||
         (this.approvalExpiresAt !== undefined &&
@@ -521,9 +451,31 @@ export class AppaProxyHookSession {
       ) {
         throw new AppaProxyHookError("denied", "outbound");
       }
-      await AppaProxySessionModel.approveOutboundCalls(
-        this.turn,
-        effectiveToolCalls.map((toolCall) => toolCall.id),
+      await AppaProxySessionModel.approveOutboundCallBatch({
+        turn: this.turn,
+        calls: authorizedCalls.map((authorizedCall, index) => ({
+          ...authorizedCall,
+          effectiveCall: toOutboundCall(effectiveToolCalls[index]),
+        })),
+      });
+      for (const authorizedCall of authorizedCalls) {
+        if (authorizedCall.spawnBinding) {
+          this.authorizedSpawnBindings.set(
+            authorizedCall.callId,
+            authorizedCall.spawnBinding,
+          );
+        }
+      }
+      const receipt = this.lastValidatedRuntimeReceipt;
+      if (!receipt) {
+        throw new AppaProxyHookError("unavailable", "outbound");
+      }
+      this.phaseTrace?.authorizationReceipt({
+        callIds: authorizedCalls.map((call) => call.callId),
+        receipt,
+      });
+      this.authorizedCallIdsAwaitingWrite.push(
+        ...authorizedCalls.map((call) => call.callId),
       );
       this.undeliveredAuthorizedCalls = true;
       return effectiveToolCalls;
@@ -706,7 +658,6 @@ export class AppaProxyHookSession {
     request: unknown;
     response: unknown;
   }): Promise<void> {
-    if (!this.config.runtimeToken) return;
     // A child closes through its acknowledged child_end event. It cannot be
     // resumed as a root-level provider checkpoint after that terminal boundary.
     if (this.turn.session.parentSessionId) return;
@@ -749,9 +700,6 @@ export class AppaProxyHookSession {
     batchId: string;
     calls: AppaOutboundToolCall[];
   }): Promise<Record<string, unknown>> {
-    if (!this.config.runtimeToken) {
-      throw new AppaProxyHookError("denied", "outbound");
-    }
     await this.ensureV1Capabilities();
     await AppaProxySessionModel.createOutboundIntent({
       turn: this.turn,
@@ -799,9 +747,6 @@ export class AppaProxyHookSession {
     batchId: string;
     calls: AppaOutboundToolCall[];
   }): Promise<AppaOutboundToolCall[]> {
-    if (!this.config.runtimeToken) {
-      throw new AppaProxyHookError("denied", "outbound");
-    }
     const decision = await this.postV1(
       {
         event: "commit_batch",
@@ -978,7 +923,7 @@ export class AppaProxyHookSession {
         }
         result = { ...result, status: observation.outcome, message: undefined };
       }
-      if (this.config.runtimeToken && call.spawnBinding !== null) {
+      if (call.spawnBinding !== null) {
         // Discard any property a caller tried to smuggle onto this internal
         // result object. Only the durable task alias can provide agent_id.
         const { spawnControl: _callerSuppliedControl, ...withoutControl } =
@@ -1012,34 +957,17 @@ export class AppaProxyHookSession {
             "tool result id was reused with different content",
           );
         }
-        const historicalStatus = call.resultStatus ?? "success";
         if (call.resultPresentation !== null) {
           this.modelResultUpdates.set(result.id, call.resultPresentation);
-        } else if (this.config.runtimeToken) {
+        } else {
           throw new AppaProxySessionProtocolError(
             "authenticated APPA result has no canonical presentation",
-          );
-        } else if (historicalStatus !== "success") {
-          if (
-            historicalStatus !== "failure" &&
-            historicalStatus !== "indeterminate"
-          ) {
-            throw new AppaProxySessionProtocolError(
-              "unknown recorded result status",
-            );
-          }
-          this.modelResultUpdates.set(
-            result.id,
-            modelOutcomeNotice({ ...result, status: historicalStatus }),
           );
         }
         continue;
       }
       if (call.state !== "open") {
         throw new AppaProxySessionProtocolError("tool result is not pending");
-      }
-      if (!this.config.runtimeToken && outcomeStatus(result) !== "success") {
-        this.modelResultUpdates.set(result.id, modelOutcomeNotice(result));
       }
       prepared.push({ result, resultHash });
     }
@@ -1056,9 +984,6 @@ export class AppaProxyHookSession {
   }
 
   private async attachCheckpointFork(checkpointId: string): Promise<void> {
-    if (!this.config.runtimeToken) {
-      throw new AppaProxyHookError("unavailable", "input");
-    }
     try {
       await this.runtimeClient().checkpointFork({
         checkpointId,
@@ -1074,7 +999,7 @@ export class AppaProxyHookSession {
   private async ensureInboundResultCapabilities(
     prepared: Array<{ result: AppaInboundToolResult; resultHash: string }>,
   ): Promise<void> {
-    if (!this.config.runtimeToken || prepared.length === 0) return;
+    if (prepared.length === 0) return;
     const calls = await AppaProxySessionModel.listCalls(this.turn.session.id);
     if (
       prepared.some((entry) => {
@@ -1104,9 +1029,7 @@ export class AppaProxyHookSession {
           this.config.sessionHmacSecret,
           result,
         ),
-        resultPresentation: this.config.runtimeToken
-          ? null
-          : (this.modelResultUpdates.get(result.id) ?? null),
+        resultPresentation: null,
       })),
     });
 
@@ -1117,13 +1040,12 @@ export class AppaProxyHookSession {
         ).find((candidate) => candidate.callId === result.id);
         if (!call)
           throw new AppaProxySessionProtocolError("tool call disappeared");
-        if (this.config.runtimeToken && !call.dispatchId) {
+        if (!call.dispatchId) {
           throw new AppaProxySessionProtocolError(
             "authenticated APPA call has no dispatch mapping",
           );
         }
-        const isBoundSpawn =
-          this.config.runtimeToken !== undefined && call.spawnBinding !== null;
+        const isBoundSpawn = call.spawnBinding !== null;
         if (isBoundSpawn && !this.capabilities.spawnResults) {
           throw new AppaProxyHookError("unavailable", "input");
         }
@@ -1141,15 +1063,8 @@ export class AppaProxyHookSession {
             : {
                 event: "tool_result",
                 root_id: this.rootId,
-                ...(this.config.runtimeToken
-                  ? {
-                      call_id: result.id,
-                      dispatch_id: call.dispatchId,
-                    }
-                  : {
-                      tool: call.appaTargetName,
-                      arguments: call.appaTargetArguments,
-                    }),
+                call_id: result.id,
+                dispatch_id: call.dispatchId,
                 outcome:
                   outcomeStatus(result) === "success"
                     ? { status: "success", body: result.content }
@@ -1163,17 +1078,15 @@ export class AppaProxyHookSession {
           "ack",
           "input",
         );
-        if (this.config.runtimeToken) {
-          const presentation = parseCanonicalResultPresentation({
-            decision,
-            callId: result.id,
-          });
-          await AppaProxySessionModel.setResultPresentations({
-            turn: this.turn,
-            presentations: [{ callId: result.id, presentation }],
-          });
-          this.modelResultUpdates.set(result.id, presentation);
-        }
+        const presentation = parseCanonicalResultPresentation({
+          decision,
+          callId: result.id,
+        });
+        await AppaProxySessionModel.setResultPresentations({
+          turn: this.turn,
+          presentations: [{ callId: result.id, presentation }],
+        });
+        this.modelResultUpdates.set(result.id, presentation);
         if (outcomeStatus(result) === "indeterminate") {
           // The client cannot attest whether the side effect ran. Do not admit
           // a model-visible success or allow this trajectory to continue.
@@ -1187,17 +1100,15 @@ export class AppaProxyHookSession {
         // advancing so a retry never re-posts an effect APPA already accepted.
         try {
           await AppaProxySessionModel.admitResults(this.turn, [result.id]);
-          if (this.config.runtimeToken) {
-            const receipt = this.lastValidatedRuntimeReceipt;
-            if (!receipt) {
-              throw new AppaProxyHookError("unavailable", "input");
-            }
-            this.phaseTrace?.resultAdmissionReceipt({
-              callId: result.id,
-              receipt,
-            });
-            this.admittedCallIdsAwaitingContinuationWrite.push(result.id);
+          const receipt = this.lastValidatedRuntimeReceipt;
+          if (!receipt) {
+            throw new AppaProxyHookError("unavailable", "input");
           }
+          this.phaseTrace?.resultAdmissionReceipt({
+            callId: result.id,
+            receipt,
+          });
+          this.admittedCallIdsAwaitingContinuationWrite.push(result.id);
         } catch {
           throw new AppaProxyHookError("unavailable", "input");
         }
@@ -1229,65 +1140,16 @@ export class AppaProxyHookSession {
 
   private async post(
     event: Record<string, unknown>,
-    expectedDecision: "ack" | "allow_call" | "allow_calls",
+    expectedDecision:
+      | "ack"
+      | "allow_call"
+      | "allow_calls"
+      | "offer_resolved"
+      | "batch_prepared"
+      | "batch_committed",
     stage: "input" | "outbound" | "turn_end",
   ): Promise<Record<string, unknown>> {
-    event = this.targetChildActor(event);
-    if (this.config.runtimeToken) {
-      return await this.postV1(event, expectedDecision, stage);
-    }
-    await AppaProxySessionModel.markRemoteIntent(
-      this.turn,
-      String(event.event),
-    );
-    const timeoutSignal = AbortSignal.timeout(this.config.timeoutMs);
-    let response: Response;
-    try {
-      response = await fetch(`${this.config.url}/hook`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(event),
-        redirect: "error",
-        signal: timeoutSignal,
-      });
-    } catch {
-      throw new AppaProxyHookError("unavailable", stage);
-    }
-
-    if (response.status === 429 || response.status >= 500) {
-      throw new AppaProxyHookError("unavailable", stage);
-    }
-    if (response.status !== 200 && response.status !== 409) {
-      throw new AppaProxyHookError("unavailable", stage);
-    }
-
-    let body: Record<string, unknown>;
-    try {
-      body = await readHookResponse(response, timeoutSignal);
-    } catch {
-      throw new AppaProxyHookError("unavailable", stage);
-    }
-
-    if (response.status === 409) {
-      if (isRefusalEnvelope(body)) {
-        await AppaProxySessionModel.markRemoteSettled(this.turn);
-        throw new AppaProxyHookError("denied", stage);
-      }
-      throw new AppaProxyHookError("unavailable", stage);
-    }
-    if (isExpectedDecision(body, expectedDecision)) {
-      try {
-        await AppaProxySessionModel.markRemoteSettled(this.turn);
-      } catch {
-        throw new AppaProxyHookError("unavailable", stage);
-      }
-      return body;
-    }
-    if (isPolicyDenialEnvelope(body)) {
-      await AppaProxySessionModel.markRemoteSettled(this.turn);
-      throw new AppaProxyHookError("denied", stage);
-    }
-    throw new AppaProxyHookError("unavailable", stage);
+    return await this.postV1(event, expectedDecision, stage);
   }
 
   private async postV1(
@@ -1328,15 +1190,8 @@ export class AppaProxyHookSession {
 
     let body: Record<string, unknown> | undefined;
     for (let attempt = 0; attempt < 3; attempt++) {
-      const timeoutSignal =
-        this.requestSignal && stage !== "turn_end"
-          ? AbortSignal.any([
-              AbortSignal.timeout(this.config.timeoutMs),
-              this.requestSignal,
-            ])
-          : AbortSignal.timeout(this.config.timeoutMs);
       try {
-        body = await runtime.postPreparedEvent(prepared, timeoutSignal);
+        body = await runtime.postPreparedEvent(prepared, this.requestSignal);
         break;
       } catch (error) {
         if (error instanceof AppaProxyHookError) throw error;
@@ -1550,7 +1405,7 @@ export class AppaProxyHookSession {
   }
 
   private async ensureV1Capabilities(): Promise<void> {
-    if (!this.config.runtimeToken || this.v1CapabilitiesChecked) return;
+    if (this.v1CapabilitiesChecked) return;
     let capabilities: Record<string, unknown>;
     try {
       capabilities = await this.runtimeClient().capabilities();
@@ -1596,14 +1451,7 @@ export class AppaProxyHookSession {
   }
 
   private runtimeClient(): AppaRuntimeClient {
-    if (!this.config.runtimeToken) {
-      throw new AppaProxyHookError("unavailable", "input");
-    }
-    return new AppaRuntimeClient({
-      url: this.config.url,
-      runtimeToken: this.config.runtimeToken,
-      timeoutMs: this.config.timeoutMs,
-    });
+    return new AppaRuntimeClient();
   }
 
   private async resolveOffer(params: {
@@ -1762,66 +1610,6 @@ function stableStringify(value: unknown): string {
         `${JSON.stringify(key)}:${stableStringify((value as Record<string, unknown>)[key])}`,
     )
     .join(",")}}`;
-}
-
-async function readHookResponse(
-  response: Response,
-  signal: AbortSignal,
-): Promise<Record<string, unknown>> {
-  if (!response.body) throw new Error("missing response body");
-  const reader = response.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let size = 0;
-  try {
-    while (true) {
-      const { done, value } = await readChunk(reader, signal);
-      if (done) break;
-      size += value.byteLength;
-      if (size > MAX_HOOK_RESPONSE_BYTES)
-        throw new Error("hook response too large");
-      chunks.push(value);
-    }
-  } finally {
-    reader.releaseLock();
-  }
-  const value: unknown = JSON.parse(
-    new TextDecoder().decode(concatenate(chunks, size)),
-  );
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new Error("hook response is not an object");
-  }
-  return value as Record<string, unknown>;
-}
-
-async function readChunk(
-  reader: ReadableStreamDefaultReader<Uint8Array>,
-  signal: AbortSignal,
-): Promise<ReadableStreamReadResult<Uint8Array>> {
-  if (signal.aborted) throw signal.reason;
-  return new Promise((resolve, reject) => {
-    const onAbort = () => reject(signal.reason);
-    signal.addEventListener("abort", onAbort, { once: true });
-    reader.read().then(
-      (result) => {
-        signal.removeEventListener("abort", onAbort);
-        resolve(result);
-      },
-      (error) => {
-        signal.removeEventListener("abort", onAbort);
-        reject(error);
-      },
-    );
-  });
-}
-
-function concatenate(chunks: Uint8Array[], size: number): Uint8Array {
-  const output = new Uint8Array(size);
-  let offset = 0;
-  for (const chunk of chunks) {
-    output.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return output;
 }
 
 function isExpectedDecision(
@@ -2439,16 +2227,6 @@ function outcomeStatus(
 
 function outcomePresentation(result: AppaInboundToolResult): string {
   return result.message ?? "Tool execution failed.";
-}
-
-function modelOutcomeNotice(result: AppaInboundToolResult): string {
-  return JSON.stringify({
-    status: outcomeStatus(result),
-    message:
-      outcomeStatus(result) === "failure"
-        ? outcomePresentation(result)
-        : "Tool outcome is unknown.",
-  });
 }
 
 function outcomePresentationHash(

@@ -18,13 +18,6 @@ const OPENWEBUI_CHAT_ID_HEADER = "x-openwebui-chat-id";
 const CODEX_SESSION_ID_HEADER = "session-id";
 
 /**
- * Claude Code emits this native session locator alongside
- * `metadata.user_id.session_id`. APPA validates that the two agree before
- * treating it as a native trajectory identity.
- */
-const CLAUDE_CODE_SESSION_ID_HEADER = "x-claude-code-session-id";
-
-/**
  * Session source indicates where the session ID was extracted from. This is
  * stored in the database and is purely about *provenance of the session id* —
  * it does NOT identify the client app. Client-app attribution lives in the
@@ -43,7 +36,6 @@ export type SessionSource =
   | "meta_header"
   | "openwebui_chat"
   | "codex_session"
-  | "opencode_session"
   | "openai_user"
   | null;
 
@@ -63,8 +55,7 @@ export interface SessionInfo {
  * 4. Codex session id — only when `externalAgentId` is a Codex client id:
  *    `client_metadata.session_id` body field first, then the `session-id`
  *    request header (source: 'codex_session')
- * 5. Claude/Anthropic metadata.user_id, then the corroborating native Claude
- *    session header (source: 'claude_metadata')
+ * 5. Claude/Anthropic metadata.user_id (source: 'claude_metadata')
  * 6. OpenAI user field (source: 'openai_user')
  *
  * @param headers - The request headers object
@@ -133,40 +124,11 @@ export function extractSessionInfo({
     }
   }
 
-  // OpenCode uses the ordinary Chat Completions wire but carries its durable
-  // conversation identity in one of these headers. They are correlation hints
-  // only; APPA owner scope is credential-derived in the proxy handler.
-  if (isOpenCodeRequest(headers)) {
-    const openCodeSessionId =
-      getHeaderValue(headers, "x-opencode-session") ??
-      getHeaderValue(headers, "x-session-id") ??
-      getHeaderValue(headers, "x-session-affinity");
-    if (openCodeSessionId) {
-      return {
-        sessionId: openCodeSessionId,
-        sessionSource: "opencode_session",
-      };
-    }
-  }
-
   // Priority 5: Claude/Anthropic metadata.user_id (any known format)
-  const claudeSessionId = extractClaudeMetadataSessionId(
-    body?.metadata?.user_id,
-  );
+  const claudeSessionId = parseClaudeMetadataSessionId(body?.metadata?.user_id);
   if (claudeSessionId) {
     return {
       sessionId: claudeSessionId,
-      sessionSource: CLAUDE_METADATA_SESSION_SOURCE,
-    };
-  }
-
-  const claudeCodeSessionId = getHeaderValue(
-    headers,
-    CLAUDE_CODE_SESSION_ID_HEADER,
-  );
-  if (claudeCodeSessionId) {
-    return {
-      sessionId: claudeCodeSessionId,
       sessionSource: CLAUDE_METADATA_SESSION_SOURCE,
     };
   }
@@ -193,7 +155,7 @@ export function extractSessionInfo({
  * Returns the trimmed session id, or `null` when the value is absent or matches
  * no known Claude format. Kept format-exhaustive for backward compatibility.
  */
-export function extractClaudeMetadataSessionId(
+function parseClaudeMetadataSessionId(
   userId: string | null | undefined,
 ): string | null {
   if (!userId) {
@@ -221,16 +183,11 @@ export function extractClaudeMetadataSessionId(
   return null;
 }
 
-function isOpenCodeRequest(
-  headers: Record<string, string | string[] | undefined>,
-): boolean {
-  const userAgent = getHeaderValue(headers, "user-agent")?.toLowerCase() ?? "";
-  const originator = getHeaderValue(headers, "originator")?.toLowerCase() ?? "";
-  return (
-    userAgent.includes("opencode") ||
-    originator.includes("opencode") ||
-    Boolean(getHeaderValue(headers, "x-opencode-session"))
-  );
+/** Parses the current and legacy Claude metadata session encodings. */
+export function extractClaudeMetadataSessionId(
+  userId: string | null | undefined,
+): string | null {
+  return parseClaudeMetadataSessionId(userId);
 }
 
 /**
@@ -241,5 +198,5 @@ function isOpenCodeRequest(
 export function isClaudeMetadataUserId(
   userId: string | null | undefined,
 ): boolean {
-  return extractClaudeMetadataSessionId(userId) !== null;
+  return parseClaudeMetadataSessionId(userId) !== null;
 }

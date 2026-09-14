@@ -6,6 +6,7 @@ import {
   isAgentTool,
   isSkillTool,
   TOOL_CANCEL_RUN_SHORT_NAME,
+  TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
   TOOL_GET_RUN_SHORT_NAME,
   TOOL_LIST_RUNS_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
@@ -15,6 +16,7 @@ import {
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { ZodError, type ZodType, z } from "zod";
 import config from "@/config";
+import { OPENAPPA_REMEDY_TOOL, openappaEnabled } from "@/openappa/service";
 import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
 // Import all groups
 import { toolEntries as agentToolEntries, tools as agentTools } from "./agents";
@@ -57,6 +59,10 @@ import {
   toolEntries as mcpServerToolEntries,
   tools as mcpServerTools,
 } from "./mcp-servers";
+import {
+  toolEntries as openappaToolEntries,
+  tools as openappaTools,
+} from "./openappa";
 import {
   toolEntries as pluginToolEntries,
   tools as pluginTools,
@@ -142,6 +148,7 @@ function getToolEntries(): Partial<
   if (!toolEntriesCache) {
     toolEntriesCache = {
       ...identityToolEntries,
+      ...openappaToolEntries,
       ...agentToolEntries,
       ...hookToolEntries,
       ...mcpGatewayToolEntries,
@@ -179,6 +186,7 @@ function getAllTools(): (typeof identityTools)[number][] {
   if (!allToolsCache) {
     allToolsCache = [
       ...identityTools,
+      ...openappaTools,
       ...agentTools,
       ...mcpGatewayTools,
       ...mcpServerTools,
@@ -273,6 +281,29 @@ export async function executeArchestraTool(
   args: Record<string, unknown> | undefined,
   context: ArchestraContext,
 ): Promise<CallToolResult> {
+  // Discovery alone is insufficient: stale assignments and direct calls must
+  // not activate APPA while its feature flag is off.
+  if (
+    !openappaEnabled() &&
+    archestraMcpBranding.getToolShortName(toolName) ===
+      TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME
+  ) {
+    throw {
+      code: -32601,
+      message: `No tool named "${toolName}" exists. ${toolDiscoverySteer()}`,
+    };
+  }
+  if (openappaEnabled() && (isAgentTool(toolName) || isSkillTool(toolName))) {
+    return {
+      isError: true,
+      content: [
+        {
+          type: "text",
+          text: `OpenAPPA delegation requires a child-return adapter, which is not yet available in ${archestraMcpBranding.appName} Chat.`,
+        },
+      ],
+    };
+  }
   // Agent delegation tools are dynamic (one per agent) and not in TOOL_PERMISSIONS,
   // so they bypass centralized RBAC. They enforce team-based access checks internally.
   if (isAgentTool(toolName)) {
@@ -393,6 +424,7 @@ export async function executeArchestraTool(
  * mirror is a 404 while the flag is off.
  */
 function isToolRuntimeEnabled(canonicalName: string): boolean {
+  if (canonicalName === OPENAPPA_REMEDY_TOOL) return openappaEnabled();
   if (getSandboxToolNames().has(canonicalName))
     return config.skillsSandbox.enabled;
   if (getHookToolNames().has(canonicalName)) return config.hooks.enabled;
@@ -456,6 +488,8 @@ async function resolveToolAssignment(
   // search_tools invocation skips the extra queries (excluding these tools is
   // also rejected at write time).
   if (ASSIGNMENT_EXEMPT_SHORT_NAMES.has(shortName)) return null;
+  if (openappaEnabled() && shortName === TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME)
+    return null;
 
   // Loaded once per invocation and threaded through both gates. Empty (no-op)
   // unless the agent has accessAllTools on and exclusions configured.

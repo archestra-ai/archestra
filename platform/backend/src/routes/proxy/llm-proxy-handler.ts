@@ -1259,7 +1259,6 @@ export async function handleLLMProxy<
         // client session with an exact recorded provider prefix can attach a
         // checkpoint-forked root.
         if (
-          config.llmProxy.appaHook.runtimeToken &&
           historyProtocol &&
           !nativeChildRequest &&
           !carrierChild &&
@@ -4208,11 +4207,11 @@ function appaHookPolicyBlock(
   toolCalls: AppaOutboundToolCall[],
 ): utils.toolInvocation.PolicyBlockResult {
   const blockedToolName = toolCalls[0]?.targetName || "unknown";
-  const message = `${archestraMcpBranding.appName} LLM Proxy blocked unsafe tool call to ${blockedToolName}: OpenAPPA remote hook denied the call.`;
+  const message = `${archestraMcpBranding.appName} LLM Proxy blocked unsafe tool call to ${blockedToolName}: OpenAPPA policy denied the call.`;
   return {
     refusalMessage: message,
     contentMessage: message,
-    reason: "OpenAPPA remote hook denied the tool call",
+    reason: "OpenAPPA policy denied the tool call",
     blockedToolName,
     toolInput: {},
     allToolCallNames: toolCalls.map((toolCall) => toolCall.targetName),
@@ -5170,11 +5169,11 @@ function toAppaHookApiError(error: unknown): ApiError {
     if (underlyingError.kind === "unavailable") {
       return new ApiError(
         503,
-        "OpenAPPA remote hook did not authorize the request.",
+        "OpenAPPA policy did not authorize the request.",
       );
     }
     if (underlyingError.kind === "denied") {
-      return new ApiError(403, "OpenAPPA remote hook denied the request.");
+      return new ApiError(403, "OpenAPPA policy denied the request.");
     }
   }
   return new ApiError(500, "OpenAPPA proxy enforcement failed unexpectedly.");

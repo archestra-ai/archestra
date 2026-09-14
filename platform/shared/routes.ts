@@ -15,6 +15,7 @@ export const RouteId = {
   ListAppaQuarantines: "listAppaQuarantines",
   GetAppaQuarantine: "getAppaQuarantine",
   AcknowledgeAppaQuarantine: "acknowledgeAppaQuarantine",
+
   // Agent Routes
   GetAgents: "getAgents",
   GetAllAgents: "getAllAgents",
@@ -226,9 +227,6 @@ export const RouteId = {
   OpenAiChatCompletionsWithAgent: "openAiChatCompletionsWithAgent",
   OpenAiResponsesWithDefaultAgent: "openAiResponsesWithDefaultAgent",
   OpenAiResponsesWithAgent: "openAiResponsesWithAgent",
-  OpenAiResponsesCompactWithDefaultAgent:
-    "openAiResponsesCompactWithDefaultAgent",
-  OpenAiResponsesCompactWithAgent: "openAiResponsesCompactWithAgent",
   OpenAiEmbeddingsWithDefaultAgent: "openAiEmbeddingsWithDefaultAgent",
   OpenAiEmbeddingsWithAgent: "openAiEmbeddingsWithAgent",
   OpenAiListModelsWithDefaultAgent: "openAiListModelsWithDefaultAgent",

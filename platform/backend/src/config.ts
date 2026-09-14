@@ -35,10 +35,7 @@ import {
 import type { OTLPExporterNodeConfigBase } from "@opentelemetry/otlp-exporter-base";
 import dotenv from "dotenv";
 import logger from "@/logging";
-import type {
-  AppaNativeSpawnReturnFloor,
-  AppaProxyHookConfig,
-} from "@/routes/proxy/appa-proxy-hook";
+import type { AppaProxyHookConfig } from "@/routes/proxy/appa-proxy-hook";
 import { SKILL_MARKETPLACE_PREFIX } from "@/routes/route-paths";
 import {
   type EmailProviderType,
@@ -116,276 +113,6 @@ export function parseFrontendBaseUrl(rawValue: string | undefined): string {
 const frontendBaseUrl = parseFrontendBaseUrl(
   process.env.ARCHESTRA_FRONTEND_URL,
 );
-
-/** @public — configuration is consumed by the LLM proxy hook client. */
-export function parseAppaProxyHookConfig(params: {
-  url: string | undefined;
-  timeoutMs: string | undefined;
-  sessionHmacSecret: string | undefined;
-  allowLoopback?: string | undefined;
-  nodeEnv?: string | undefined;
-  runtimeToken?: string | undefined;
-  approvalSigningSecret?: string | undefined;
-  autoAcceptRestrictions?: string | undefined;
-  maxCallsPerSession?: string | undefined;
-  maxSessionsPerOwner?: string | undefined;
-  nativeCodexEnabled?: string | undefined;
-  nativeSpawnToolMap?: string | undefined;
-  nativeSpawnReturnFloorMap?: string | undefined;
-  maxStreamBufferBytes?: string | undefined;
-}): AppaProxyHookConfig | undefined {
-  const rawUrl = params.url?.trim();
-  if (!rawUrl) {
-    return undefined;
-  }
-
-  let url: URL;
-  try {
-    url = new URL(rawUrl);
-  } catch {
-    throw new Error(
-      "ARCHESTRA_LLM_PROXY_APPA_HOOK_URL must be an HTTP cluster-local URL",
-    );
-  }
-  const isClusterLocal = url.hostname.endsWith(".svc.cluster.local");
-  const isLoopback = url.hostname === "127.0.0.1" || url.hostname === "[::1]";
-  const allowLoopback =
-    params.allowLoopback === "true" &&
-    ["development", "test"].includes(params.nodeEnv?.toLowerCase() ?? "");
-  if (
-    url.protocol !== "http:" ||
-    url.username ||
-    url.password ||
-    url.search ||
-    url.hash ||
-    !(isClusterLocal || (allowLoopback && isLoopback))
-  ) {
-    throw new Error(
-      "ARCHESTRA_LLM_PROXY_APPA_HOOK_URL must be an HTTP .svc.cluster.local URL without credentials, query, or fragment; development/test may opt into literal loopback with ARCHESTRA_LLM_PROXY_APPA_ALLOW_LOOPBACK=true",
-    );
-  }
-
-  const rawTimeout = params.timeoutMs?.trim();
-  const timeoutMs = rawTimeout ? Number(rawTimeout) : 5000;
-  if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 120_000) {
-    throw new Error(
-      "ARCHESTRA_LLM_PROXY_APPA_HOOK_TIMEOUT_MS must be an integer between 1 and 120000",
-    );
-  }
-
-  const sessionHmacSecret = params.sessionHmacSecret?.trim();
-  if (!sessionHmacSecret || sessionHmacSecret.length < 32) {
-    throw new Error(
-      "ARCHESTRA_LLM_PROXY_APPA_SESSION_HMAC_SECRET must be at least 32 characters when OpenAPPA hooks are enabled",
-    );
-  }
-
-  const runtimeToken = params.runtimeToken?.trim() || undefined;
-  const approvalSigningSecret =
-    params.approvalSigningSecret?.trim() || undefined;
-  if (isLoopback && !runtimeToken) {
-    throw new Error(
-      "ARCHESTRA_LLM_PROXY_APPA_ALLOW_LOOPBACK requires an authenticated APPA v1 runtime token",
-    );
-  }
-  if (runtimeToken && runtimeToken.length < 32) {
-    throw new Error(
-      "ARCHESTRA_LLM_PROXY_APPA_RUNTIME_TOKEN must be at least 32 characters",
-    );
-  }
-  const nativeCodexEnabled = params.nativeCodexEnabled === "true";
-  if (nativeCodexEnabled && !runtimeToken) {
-    throw new Error(
-      "ARCHESTRA_LLM_PROXY_APPA_NATIVE_CODEX_ENABLED requires an authenticated APPA v1 runtime token",
-    );
-  }
-  if (
-    approvalSigningSecret &&
-    (!runtimeToken ||
-      approvalSigningSecret.length < 32 ||
-      approvalSigningSecret === runtimeToken)
-  ) {
-    throw new Error(
-      "ARCHESTRA_LLM_PROXY_APPA_APPROVAL_SIGNING_SECRET requires a separate 32-character secret and runtime token",
-    );
-  }
-  const maxStreamBufferBytes = params.maxStreamBufferBytes?.trim()
-    ? parsePositiveInt(params.maxStreamBufferBytes, 16 * 1024 * 1024)
-    : 16 * 1024 * 1024;
-  const nativeSpawnToolMap = parseAppaNativeSpawnToolMap(
-    params.nativeSpawnToolMap,
-  );
-  if (nativeSpawnToolMap && !runtimeToken) {
-    throw new Error(
-      "ARCHESTRA_LLM_PROXY_APPA_NATIVE_SPAWN_TOOL_MAP requires an authenticated APPA v1 runtime token",
-    );
-  }
-  if (params.nativeSpawnReturnFloorMap?.trim() && !runtimeToken) {
-    throw new Error(
-      "ARCHESTRA_LLM_PROXY_APPA_NATIVE_SPAWN_RETURN_FLOOR_MAP requires an authenticated APPA v1 runtime token",
-    );
-  }
-  const nativeSpawnReturnFloorMap = parseAppaNativeSpawnReturnFloorMap(
-    params.nativeSpawnReturnFloorMap,
-    nativeSpawnToolMap,
-  );
-  return {
-    url: url.toString().replace(/\/$/, ""),
-    timeoutMs,
-    sessionHmacSecret,
-    runtimeToken,
-    approvalSigningSecret,
-    autoAcceptRestrictions: params.autoAcceptRestrictions === "true",
-    maxCallsPerSession: parseAppaLedgerLimit(params.maxCallsPerSession, 1000),
-    maxSessionsPerOwner: parseAppaLedgerLimit(params.maxSessionsPerOwner, 100),
-    nativeCodexEnabled,
-    ...(nativeSpawnToolMap ? { nativeSpawnToolMap } : {}),
-    ...(nativeSpawnReturnFloorMap ? { nativeSpawnReturnFloorMap } : {}),
-    maxStreamBufferBytes,
-  };
-}
-
-function parseAppaNativeSpawnToolMap(
-  value: string | undefined,
-): Readonly<Record<string, string>> | undefined {
-  const raw = value?.trim();
-  if (!raw) return undefined;
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    throw new Error(
-      "ARCHESTRA_LLM_PROXY_APPA_NATIVE_SPAWN_TOOL_MAP must be a JSON object",
-    );
-  }
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new Error(
-      "ARCHESTRA_LLM_PROXY_APPA_NATIVE_SPAWN_TOOL_MAP must be a JSON object",
-    );
-  }
-
-  const supportedTools = new Set([
-    "Agent",
-    "multi_agent_v1.spawn_agent",
-    "agents.spawn_agent",
-    "collaboration.spawn_agent",
-    "task",
-  ]);
-  const entries = Object.entries(parsed);
-  for (const [tool, target] of entries) {
-    if (
-      !supportedTools.has(tool) ||
-      typeof target !== "string" ||
-      !/^agent:[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(target)
-    ) {
-      throw new Error(
-        "ARCHESTRA_LLM_PROXY_APPA_NATIVE_SPAWN_TOOL_MAP must map supported native spawn names to agent:<namespace>/<agent>",
-      );
-    }
-  }
-  return Object.freeze(Object.fromEntries(entries));
-}
-
-function parseAppaNativeSpawnReturnFloorMap(
-  value: string | undefined,
-  nativeSpawnToolMap: Readonly<Record<string, string>> | undefined,
-): Readonly<Record<string, AppaNativeSpawnReturnFloor>> | undefined {
-  const raw = value?.trim();
-  if (!raw) return undefined;
-
-  const error =
-    "ARCHESTRA_LLM_PROXY_APPA_NATIVE_SPAWN_RETURN_FLOOR_MAP must map configured canonical agent targets to non-empty trust and/or audience floors";
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    throw new Error(error);
-  }
-  if (!isPlainObject(parsed) || Object.keys(parsed).length === 0) {
-    throw new Error(error);
-  }
-
-  const authorizedTargets = new Set(
-    Object.values(nativeSpawnToolMap ?? {}).map((target) =>
-      target.startsWith("agent:")
-        ? `agent/${target.slice("agent:".length)}`
-        : target,
-    ),
-  );
-  const floors: Record<string, AppaNativeSpawnReturnFloor> = {};
-  for (const [target, value] of Object.entries(parsed)) {
-    if (
-      isDangerousObjectKey(target) ||
-      !/^agent\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(target) ||
-      !authorizedTargets.has(target) ||
-      !isPlainObject(value) ||
-      Object.keys(value).some(
-        (key) =>
-          isDangerousObjectKey(key) || (key !== "trust" && key !== "audience"),
-      )
-    ) {
-      throw new Error(error);
-    }
-
-    const trust = value.trust;
-    const audience = value.audience;
-    if (
-      (trust !== undefined &&
-        (typeof trust !== "string" ||
-          trust.length === 0 ||
-          trust.trim() !== trust)) ||
-      (audience !== undefined &&
-        (!Array.isArray(audience) ||
-          audience.length === 0 ||
-          audience.some(
-            (entry) =>
-              typeof entry !== "string" ||
-              entry.length === 0 ||
-              entry.trim() !== entry,
-          ) ||
-          new Set(audience).size !== audience.length)) ||
-      (trust === undefined && audience === undefined)
-    ) {
-      throw new Error(error);
-    }
-    floors[target] = Object.freeze({
-      ...(trust === undefined ? {} : { trust }),
-      ...(audience === undefined
-        ? {}
-        : { audience: Object.freeze([...audience]) }),
-    });
-  }
-  return Object.freeze(floors);
-}
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return (
-    value !== null &&
-    typeof value === "object" &&
-    !Array.isArray(value) &&
-    Object.getPrototypeOf(value) === Object.prototype
-  );
-}
-
-function isDangerousObjectKey(value: string): boolean {
-  return (
-    value === "__proto__" || value === "constructor" || value === "prototype"
-  );
-}
-
-function parseAppaLedgerLimit(
-  value: string | undefined,
-  fallback: number,
-): number {
-  if (!value?.trim()) return fallback;
-  const parsed = Number(value);
-  if (!Number.isSafeInteger(parsed) || parsed < 1) {
-    throw new Error("OpenAPPA ledger limits must be positive integers");
-  }
-  return parsed;
-}
-
 const DEFAULT_POSTHOG_KEY = "phc_FFZO7LacnsvX2exKFWehLDAVaXLBfoBaJypdOuYoTk7";
 const DEFAULT_POSTHOG_HOST = "https://eu.i.posthog.com";
 
@@ -2251,6 +1978,143 @@ export function betaFeatureEnabled(envValue: string | undefined): boolean {
 }
 
 /**
+ * APPA must be explicitly enabled; a policy path or ARCHESTRA_BETA does not activate it.
+ * @public — exported for testability
+ */
+export function parseOpenAppaConfig(
+  enabled: string | undefined,
+  policyPath: string | undefined,
+  approvalSigningSecret?: string | undefined,
+  sessionHmacSecret?: string | undefined,
+) {
+  const isEnabled = enabled === "true";
+  const path = policyPath?.trim() || undefined;
+  const approvalSecret = approvalSigningSecret?.trim() || undefined;
+  const sessionSecret = sessionHmacSecret?.trim() || undefined;
+  if (isEnabled && !path) {
+    throw new Error(
+      "ARCHESTRA_OPENAPPA_POLICY_PATH is required when ARCHESTRA_OPENAPPA_ENABLED=true",
+    );
+  }
+  return {
+    enabled: isEnabled,
+    policyPath: path,
+    ...(approvalSecret ? { approvalSigningSecret: approvalSecret } : {}),
+    ...(sessionSecret ? { sessionHmacSecret: sessionSecret } : {}),
+  };
+}
+
+/**
+ * Resolve the embedded OpenAPPA proxy lifecycle.
+ * @public — exported for testability
+ */
+export function parseEmbeddedOpenAppaProxyConfig(params: {
+  enabled: string | undefined;
+  policyPath: string | undefined;
+  sessionHmacSecret: string | undefined;
+  approvalSigningSecret: string | undefined;
+  nativeCodexEnabled: string | undefined;
+  nativeSpawnToolMap: string | undefined;
+  maxCallsPerSession: string | undefined;
+  maxSessionsPerOwner: string | undefined;
+  maxStreamBufferBytes: string | undefined;
+}): AppaProxyHookConfig | undefined {
+  if (params.enabled !== "true") return undefined;
+
+  const policyPath = params.policyPath?.trim();
+  if (!policyPath) {
+    throw new Error(
+      "ARCHESTRA_OPENAPPA_POLICY_PATH is required when ARCHESTRA_OPENAPPA_ENABLED=true",
+    );
+  }
+  const sessionHmacSecret = params.sessionHmacSecret?.trim();
+  if (!sessionHmacSecret || sessionHmacSecret.length < 32) {
+    throw new Error(
+      "ARCHESTRA_OPENAPPA_SESSION_HMAC_SECRET must be at least 32 characters when OpenAPPA is enabled",
+    );
+  }
+  const approvalSigningSecret = params.approvalSigningSecret?.trim();
+  if (approvalSigningSecret && approvalSigningSecret.length < 32) {
+    throw new Error(
+      "ARCHESTRA_OPENAPPA_APPROVAL_SIGNING_SECRET must be at least 32 characters when configured",
+    );
+  }
+
+  const nativeSpawnToolMap = parseEmbeddedOpenAppaSpawnMap(
+    params.nativeSpawnToolMap,
+  );
+  return {
+    sessionHmacSecret,
+    ...(approvalSigningSecret ? { approvalSigningSecret } : {}),
+    nativeCodexEnabled: params.nativeCodexEnabled !== "false",
+    ...(nativeSpawnToolMap ? { nativeSpawnToolMap } : {}),
+    maxCallsPerSession: parseEmbeddedOpenAppaLimit(
+      params.maxCallsPerSession,
+      1_000,
+    ),
+    maxSessionsPerOwner: parseEmbeddedOpenAppaLimit(
+      params.maxSessionsPerOwner,
+      100,
+    ),
+    maxStreamBufferBytes: parseEmbeddedOpenAppaLimit(
+      params.maxStreamBufferBytes,
+      16 * 1024 * 1024,
+    ),
+  };
+}
+
+function parseEmbeddedOpenAppaSpawnMap(
+  value: string | undefined,
+): Readonly<Record<string, string>> | undefined {
+  const raw = value?.trim();
+  if (!raw) return undefined;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error(
+      "ARCHESTRA_OPENAPPA_NATIVE_SPAWN_TOOL_MAP must be a JSON object",
+    );
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error(
+      "ARCHESTRA_OPENAPPA_NATIVE_SPAWN_TOOL_MAP must be a JSON object",
+    );
+  }
+  const supportedTools = new Set([
+    "Agent",
+    "multi_agent_v1.spawn_agent",
+    "agents.spawn_agent",
+    "collaboration.spawn_agent",
+    "task",
+  ]);
+  for (const [tool, target] of Object.entries(parsed)) {
+    if (
+      !supportedTools.has(tool) ||
+      typeof target !== "string" ||
+      !/^agent:[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(target)
+    ) {
+      throw new Error(
+        "ARCHESTRA_OPENAPPA_NATIVE_SPAWN_TOOL_MAP must map supported native spawn names to agent:<namespace>/<agent>",
+      );
+    }
+  }
+  return Object.freeze(Object.fromEntries(Object.entries(parsed)));
+}
+
+function parseEmbeddedOpenAppaLimit(
+  value: string | undefined,
+  fallback: number,
+): number {
+  if (!value?.trim()) return fallback;
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed < 1) {
+    throw new Error("OpenAPPA limits must be positive integers");
+  }
+  return parsed;
+}
+
+/**
  * The hackathon recorder (record/replay/edit app demo sessions).
  *
  * On for every community deployment, and NEVER on for a deployment running an
@@ -2438,6 +2302,12 @@ const fileStorageS3Config = parseFileStorageS3Config({
 });
 
 const config = {
+  openappa: parseOpenAppaConfig(
+    process.env.ARCHESTRA_OPENAPPA_ENABLED,
+    process.env.ARCHESTRA_OPENAPPA_POLICY_PATH,
+    process.env.ARCHESTRA_OPENAPPA_APPROVAL_SIGNING_SECRET,
+    process.env.ARCHESTRA_OPENAPPA_SESSION_HMAC_SECRET,
+  ),
   frontendBaseUrl,
   api: {
     host: isDevelopment ? "127.0.0.1" : "0.0.0.0",
@@ -3683,30 +3553,19 @@ const config = {
       process.env.ARCHESTRA_LLM_PROXY_STREAM_KEEPALIVE_INTERVAL_MS,
       DEFAULT_LLM_PROXY_STREAM_KEEPALIVE_INTERVAL_MS,
     ),
-    appaHook: parseAppaProxyHookConfig({
-      url: process.env.ARCHESTRA_LLM_PROXY_APPA_HOOK_URL,
-      timeoutMs: process.env.ARCHESTRA_LLM_PROXY_APPA_HOOK_TIMEOUT_MS,
-      sessionHmacSecret:
-        process.env.ARCHESTRA_LLM_PROXY_APPA_SESSION_HMAC_SECRET,
-      allowLoopback: process.env.ARCHESTRA_LLM_PROXY_APPA_ALLOW_LOOPBACK,
-      nodeEnv: process.env.NODE_ENV,
-      runtimeToken: process.env.ARCHESTRA_LLM_PROXY_APPA_RUNTIME_TOKEN,
+    appaHook: parseEmbeddedOpenAppaProxyConfig({
+      enabled: process.env.ARCHESTRA_OPENAPPA_ENABLED,
+      policyPath: process.env.ARCHESTRA_OPENAPPA_POLICY_PATH,
+      sessionHmacSecret: process.env.ARCHESTRA_OPENAPPA_SESSION_HMAC_SECRET,
       approvalSigningSecret:
-        process.env.ARCHESTRA_LLM_PROXY_APPA_APPROVAL_SIGNING_SECRET,
-      autoAcceptRestrictions:
-        process.env.ARCHESTRA_LLM_PROXY_APPA_AUTO_ACCEPT_RESTRICTIONS,
-      maxCallsPerSession:
-        process.env.ARCHESTRA_LLM_PROXY_APPA_MAX_CALLS_PER_SESSION,
+        process.env.ARCHESTRA_OPENAPPA_APPROVAL_SIGNING_SECRET,
+      nativeCodexEnabled: process.env.ARCHESTRA_OPENAPPA_NATIVE_CODEX_ENABLED,
+      nativeSpawnToolMap: process.env.ARCHESTRA_OPENAPPA_NATIVE_SPAWN_TOOL_MAP,
+      maxCallsPerSession: process.env.ARCHESTRA_OPENAPPA_MAX_CALLS_PER_SESSION,
       maxSessionsPerOwner:
-        process.env.ARCHESTRA_LLM_PROXY_APPA_MAX_SESSIONS_PER_OWNER,
-      nativeCodexEnabled:
-        process.env.ARCHESTRA_LLM_PROXY_APPA_NATIVE_CODEX_ENABLED,
-      nativeSpawnToolMap:
-        process.env.ARCHESTRA_LLM_PROXY_APPA_NATIVE_SPAWN_TOOL_MAP,
-      nativeSpawnReturnFloorMap:
-        process.env.ARCHESTRA_LLM_PROXY_APPA_NATIVE_SPAWN_RETURN_FLOOR_MAP,
+        process.env.ARCHESTRA_OPENAPPA_MAX_SESSIONS_PER_OWNER,
       maxStreamBufferBytes:
-        process.env.ARCHESTRA_LLM_PROXY_APPA_MAX_STREAM_BUFFER_BYTES,
+        process.env.ARCHESTRA_OPENAPPA_MAX_STREAM_BUFFER_BYTES,
     }),
   },
   kb: {

@@ -21,7 +21,6 @@ import {
   Puzzle,
   Route,
   Settings,
-  ShieldAlert,
   ShieldCheck,
   Sparkles,
   Waypoints,
@@ -303,14 +302,6 @@ export const contentNavGroups: NavGroup[] = [
         testId: E2eTestId.SidebarNavGuardrails,
         customIsActive: (pathname: string) =>
           pathname.startsWith("/mcp/tool-guardrails"),
-      },
-      {
-        title: "Review",
-        tooltipLabel: "OpenAPPA Review",
-        url: "/appa-review",
-        icon: ShieldAlert,
-        customIsActive: (pathname: string) =>
-          pathname.startsWith("/appa-review"),
       },
       {
         title: "Logs",

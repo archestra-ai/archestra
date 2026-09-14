@@ -4,6 +4,7 @@ export * from "./agent-skills";
 export * from "./agents";
 export * from "./app-gallery-categories";
 export * from "./app-recording";
+export * from "./appa-review-api";
 export * from "./archestra-mcp-server";
 export * from "./built-in-agents";
 export * from "./bulk";

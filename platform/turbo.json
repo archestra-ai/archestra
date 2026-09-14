@@ -20,6 +20,10 @@
       "dependsOn": ["^build"],
       "cache": false
     },
+    "@archestra/openappa-rs#build": {
+      "dependsOn": ["^build"],
+      "cache": false
+    },
     "dev": {
       "persistent": true,
       "cache": false,

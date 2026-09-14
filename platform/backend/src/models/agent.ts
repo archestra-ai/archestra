@@ -2032,14 +2032,25 @@ class AgentModel {
   static async findGatewayNamesByOrganizationId(
     organizationId: string,
   ): Promise<string[]> {
-    const gateways =
-      await AgentModel.findGatewayProfilesByOrganizationId(organizationId);
-    return gateways.map((gateway) => gateway.name);
+    const agents = await db
+      .select({ name: schema.agentsTable.name })
+      .from(schema.agentsTable)
+      .where(
+        and(
+          eq(schema.agentsTable.organizationId, organizationId),
+          notDeleted(schema.agentsTable),
+          inArray(schema.agentsTable.agentType, [
+            ...GATEWAY_CAPABLE_AGENT_TYPES,
+          ]),
+        ),
+      );
+
+    return agents.map((agent) => agent.name);
   }
 
   /**
-   * Live gateway identities in one organization. Consumers that bind client
-   * aliases use the id to validate the gateway's current registry tool surface.
+   * Gateway identities with their owning principal. Native client namespace
+   * resolution uses this before admitting a delegated tool result.
    */
   static async findGatewayProfilesByOrganizationId(
     organizationId: string,

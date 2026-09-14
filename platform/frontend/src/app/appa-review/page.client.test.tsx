@@ -1,4 +1,8 @@
-import { archestraApiClient, type archestraApiTypes } from "@archestra/shared";
+import {
+  type AppaApprovalReviewApi,
+  type AppaQuarantineReviewApi,
+  archestraApiClient,
+} from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -23,8 +27,8 @@ vi.mock("@/lib/auth/auth.query");
 const API_ORIGIN = "http://localhost:9000";
 const server = setupServer();
 
-type Approval = archestraApiTypes.ListAppaApprovalsResponses["200"][number];
-type Quarantine = archestraApiTypes.ListAppaQuarantinesResponses["200"][number];
+type Approval = AppaApprovalReviewApi;
+type Quarantine = AppaQuarantineReviewApi;
 
 let approvals: Approval[];
 let quarantines: Quarantine[];

@@ -30,7 +30,6 @@ export function loggingModuleMock() {
     debug: vi.fn(),
     trace: vi.fn(),
     silent: vi.fn(),
-    flush: vi.fn(),
     level: "silent",
     child: vi.fn(),
   };

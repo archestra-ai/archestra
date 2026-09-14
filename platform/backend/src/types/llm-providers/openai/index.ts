@@ -6,9 +6,7 @@
  */
 import type OpenAIProvider from "openai";
 import type {
-  CompactedResponse,
   Response,
-  ResponseCompactParams,
   ResponseCreateParams,
   ResponseStreamEvent,
 } from "openai/resources/responses/responses";
@@ -36,10 +34,6 @@ namespace OpenAi {
     export type Usage = z.infer<typeof OpenAiAPI.ChatCompletionUsageSchema>;
     export type ResponsesRequest = ResponseCreateParams & { model: string };
     export type ResponsesResponse = Response;
-    export type ResponsesCompactRequest = ResponseCompactParams & {
-      model: string;
-    };
-    export type ResponsesCompactResponse = CompactedResponse;
     export type ResponsesUsage = z.infer<typeof OpenAiAPI.ResponsesUsageSchema>;
 
     export type EmbeddingRequest = z.infer<

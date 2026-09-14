@@ -1969,7 +1969,7 @@ export default class AppaProxyWireModel {
 const derivedKeys = new Map<string, Buffer>();
 
 function key(purpose: "encryption" | "fingerprint" = "encryption") {
-  const secret = config.llmProxy.appaHook?.sessionHmacSecret;
+  const secret = config.openappa.sessionHmacSecret;
   if (!secret)
     fail("APPA wire storage requires a stable configured session secret");
   const cacheKey = `${purpose}:${secret}`;

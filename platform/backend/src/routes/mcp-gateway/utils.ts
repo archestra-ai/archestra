@@ -28,7 +28,6 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import {
   CallToolRequestSchema,
-  type CallToolResult,
   ElicitResultSchema,
   ListPromptsRequestSchema,
   ListResourcesRequestSchema,
@@ -54,7 +53,6 @@ import {
 import { structuredToolErrorResult } from "@/archestra-mcp-server/helpers";
 import { userHasPermission } from "@/auth/utils";
 import { LRUCacheManager } from "@/cache-manager";
-import { AppaRuntimeClient } from "@/clients/appa-runtime";
 import mcpClient, { type TokenAuthContext } from "@/clients/mcp-client";
 import { isToolRejectedForMcpHeaders } from "@/clients/mcp-param-headers";
 import config from "@/config";
@@ -81,7 +79,6 @@ import {
   UserTokenModel,
 } from "@/models";
 import { findAgentAccessContextById } from "@/models/agent-access-context";
-import AppaProxyWireModel from "@/models/appa-proxy-wire";
 import { metrics } from "@/observability";
 import {
   ATTR_MCP_IS_ERROR_RESULT,
@@ -112,7 +109,6 @@ import {
   type ToolExposureMode,
 } from "@/types";
 import { APP_LAUNCH_TOOL_NAME } from "@/types/app";
-import { AppaControlFramePayloadSchema } from "@/types/appa-proxy-wire";
 import { deriveAuthMethod } from "@/utils/auth-method";
 import { estimateToolResultContentLength } from "@/utils/tool-result-preview";
 import {
@@ -268,7 +264,10 @@ const rawArchestraTokenCache =
 /**
  * Creates an MCP server for the given agent.
  */
+import { openappaEnabled } from "@/openappa/service";
+
 export async function createAgentServer(params: {
+  openappaSession?: import("@/openappa/service").OpenAppaSession;
   agentId: string;
   tokenAuth?: TokenAuthContext;
   runId?: string;
@@ -424,6 +423,13 @@ export async function createAgentServer(params: {
     const implicitTaskControlTools = hasTaskStarter
       ? getImplicitTaskControlTools()
       : [];
+    const implicitOpenAppaTools = openappaEnabled()
+      ? getArchestraMcpTools().filter(
+          (tool) =>
+            archestraMcpBranding.getToolShortName(tool.name) ===
+            "execute_remedy_plan",
+        )
+      : [];
     const candidateTools = dedupeToolsByName(
       [
         ...mcpTools.filter(
@@ -431,6 +437,7 @@ export async function createAgentServer(params: {
         ),
         ...implicitMetaTools,
         ...implicitTaskControlTools,
+        ...implicitOpenAppaTools,
         ...[...delegationTools, ...skillDelegationTools].map((tool) => ({
           name: tool.name,
           description: tool.description,
@@ -595,73 +602,6 @@ export async function createAgentServer(params: {
       logger.warn({ err: dbError }, "Failed to persist tools/list request:");
     }
 
-    if (config.llmProxy?.appaHook?.runtimeToken) {
-      toolsList.push(
-        {
-          name: "archestra__appa_execute_remedy",
-          title: "Execute APPA Remedy",
-          description:
-            "Execute an approved APPA remedy for a held response intent.",
-          inputSchema: {
-            type: "object",
-            properties: {
-              intent_id: { type: "string" },
-              remedy_id: { type: "string" },
-              wire_context: {
-                type: "object",
-                properties: {
-                  call_id: { type: "string" },
-                  thread_id: { type: "string" },
-                  item_id: { type: "string" },
-                },
-                required: ["call_id", "thread_id", "item_id"],
-              },
-            },
-            required: ["intent_id", "remedy_id", "wire_context"],
-          },
-        },
-        {
-          name: "archestra__appa_inspect_plan",
-          title: "Inspect APPA Plan",
-          description:
-            "Inspect an APPA remedy plan for a held response intent.",
-          inputSchema: {
-            type: "object",
-            properties: {
-              intent_id: { type: "string" },
-              wire_context: {
-                type: "object",
-                properties: {
-                  call_id: { type: "string" },
-                  thread_id: { type: "string" },
-                },
-                required: ["call_id"],
-              },
-            },
-            required: ["intent_id", "wire_context"],
-          },
-        },
-        {
-          name: "archestra__appa_status",
-          title: "Check APPA Status",
-          description: "Check APPA status for the current session or intent.",
-          inputSchema: {
-            type: "object",
-            properties: {
-              intent_id: { type: "string" },
-              wire_context: {
-                type: "object",
-                properties: {
-                  call_id: { type: "string" },
-                  thread_id: { type: "string" },
-                },
-              },
-            },
-          },
-        },
-      );
-    }
-
     // SEP-2549 freshness hints. Always private: this list is filtered per
     // caller, so it must never be shared across users by an intermediary.
     // Deterministic order: the revision asks servers to return tools stably so
@@ -823,7 +763,6 @@ export async function createAgentServer(params: {
       try {
         // Check if this is an Archestra tool or a delegation tool (agent or
         // skill delegation — both dispatch through executeArchestraTool)
-        const isAppaControl = isAppaControlTool(name);
         const isArchestraTool = archestraMcpBranding.isToolName(name);
         const isAgentDelegationTool = isAgentTool(name);
         const isSkillDelegationTool = isSkillTool(name);
@@ -847,7 +786,6 @@ export async function createAgentServer(params: {
         // invocation-policy enabled-tools filter below, so neither path
         // re-queries assignments.
         const assignedToolNames =
-          !isAppaControl &&
           !isArchestraTool &&
           !isAgentDelegationTool &&
           !isSkillDelegationTool &&
@@ -955,32 +893,23 @@ export async function createAgentServer(params: {
           return blockedResult;
         }
 
-        if (
-          isAppaControl ||
-          isArchestraTool ||
-          isAgentDelegationTool ||
-          isSkillDelegationTool
-        ) {
+        if (isArchestraTool || isAgentDelegationTool || isSkillDelegationTool) {
           logger.info(
             {
               agentId,
               toolName: name,
-              toolType: isAppaControl
-                ? "appa-control"
-                : isAgentDelegationTool
-                  ? "agent-delegation"
-                  : isSkillDelegationTool
-                    ? "skill-delegation"
-                    : "archestra",
+              toolType: isAgentDelegationTool
+                ? "agent-delegation"
+                : isSkillDelegationTool
+                  ? "skill-delegation"
+                  : "archestra",
             },
-            isAppaControl
-              ? "APPA control tool call received"
-              : isAgentDelegationTool || isSkillDelegationTool
-                ? "Delegation tool call received"
-                : "Archestra MCP tool call received",
+            isAgentDelegationTool || isSkillDelegationTool
+              ? "Delegation tool call received"
+              : "Archestra MCP tool call received",
           );
 
-          // Handle Archestra, APPA control, and agent delegation tools directly
+          // Handle Archestra and agent delegation tools directly
           const response = await startActiveMcpSpan({
             toolName: name,
             mcpServerName,
@@ -992,19 +921,8 @@ export async function createAgentServer(params: {
             toolArgs: args,
             user: mcpUser,
             callback: async (span) => {
-              if (isAppaControl) {
-                const result = await executeAppaControlTool(name, args, {
-                  userId: tokenAuth?.userId,
-                  organizationId:
-                    tokenAuth?.organizationId ?? agent.organizationId,
-                });
-                span.setAttribute(
-                  ATTR_MCP_IS_ERROR_RESULT,
-                  result.isError ?? false,
-                );
-                return result;
-              }
               const result = await executeArchestraTool(name, args, {
+                openappaSession: params.openappaSession,
                 agent: { id: agent.id, name: agent.name },
                 agentId: agent.id,
                 userId: tokenAuth?.userId,
@@ -2432,6 +2350,9 @@ function filterExposedTools(params: {
     // operator chose. `full` mode hides only the meta tools.
     return toolExposureMode === "search_and_run_only"
       ? isArchestraMetaTool(tool.name) ||
+          (openappaEnabled() &&
+            archestraMcpBranding.getToolShortName(tool.name) ===
+              "execute_remedy_plan") ||
           isTaskControlTool(tool.name) ||
           isAlwaysExposedTool(tool.name) ||
           (advertiseUiResourceTools &&
@@ -2685,332 +2606,4 @@ function isUnavailableResourceError(error: unknown): boolean {
     });
   }
   return false;
-}
-
-function isAppaControlTool(name: string): boolean {
-  const shortName = name.replace(/^.*__(archestra__appa_[a-z_]+)$/, "$1");
-  return (
-    shortName === "archestra__appa_execute_remedy" ||
-    shortName === "archestra__appa_inspect_plan" ||
-    shortName === "archestra__appa_status" ||
-    name === "archestra__appa_execute_remedy" ||
-    name === "archestra__appa_inspect_plan" ||
-    name === "archestra__appa_status"
-  );
-}
-
-async function executeAppaControlTool(
-  toolName: string,
-  args: Record<string, unknown> | undefined,
-  context: {
-    userId?: string;
-    organizationId?: string;
-  },
-): Promise<CallToolResult> {
-  const shortName = toolName.replace(/^.*__(archestra__appa_[a-z_]+)$/, "$1");
-  const wireContext =
-    args && typeof args.wire_context === "object" && args.wire_context !== null
-      ? (args.wire_context as {
-          call_id?: string;
-          thread_id?: string;
-          item_id?: string;
-        })
-      : undefined;
-  const callId = wireContext?.call_id;
-  if (!callId || typeof callId !== "string") {
-    return {
-      isError: true,
-      content: [
-        {
-          type: "text",
-          text: "Missing wire_context.call_id for APPA control execution",
-        },
-      ],
-    };
-  }
-  const organizationId = context.organizationId;
-  if (!organizationId) {
-    return {
-      isError: true,
-      content: [
-        {
-          type: "text",
-          text: "Missing organizationId for APPA control execution",
-        },
-      ],
-    };
-  }
-  if (!context.userId) {
-    return appaControlError("APPA control execution requires a personal token");
-  }
-  const metadata = await AppaProxyWireModel.findControlMetadataForOrganization({
-    controlCallId: callId,
-    organizationId,
-  });
-  if (!metadata) {
-    return {
-      isError: true,
-      content: [
-        {
-          type: "text",
-          text: `APPA control frame not found for call ${callId}`,
-        },
-      ],
-    };
-  }
-  if (shortName === "archestra__appa_execute_remedy") {
-    const payload = AppaControlFramePayloadSchema.safeParse(
-      (
-        await AppaProxyWireModel.findOwned({
-          sessionId: metadata.session.id,
-          ownerScopeHash: metadata.session.ownerScopeHash,
-          frameId: metadata.frame.id,
-        })
-      )?.payload,
-    );
-    if (!payload.success) {
-      return appaControlError("APPA control payload is unavailable");
-    }
-    if (
-      payload.data.owner.id !== context.userId ||
-      payload.data.vouch.operation !== "execute" ||
-      args?.intent_id !== payload.data.heldParentFrameId ||
-      args?.remedy_id !== payload.data.vouch.chosenRemedyId ||
-      wireContext?.thread_id !== payload.data.boundThreadId ||
-      wireContext?.item_id !== payload.data.boundItemId
-    ) {
-      return appaControlError("APPA control does not match its issued binding");
-    }
-    const remedy = payload.data.offers.find(
-      (offer) => offer.id === payload.data.vouch.chosenRemedyId,
-    );
-    if (!remedy || remedy.kind !== "sanitizer") {
-      return appaControlError(
-        "APPA control has no executable sanitizer remedy",
-      );
-    }
-    const hookConfig = config.llmProxy?.appaHook;
-    if (!hookConfig?.runtimeToken) {
-      return appaControlError("APPA runtime is unavailable");
-    }
-    const scope = {
-      sessionId: metadata.session.id,
-      ownerScopeHash: metadata.session.ownerScopeHash,
-      frameId: metadata.frame.id,
-    };
-    const selection = {
-      source: "gateway",
-      intent_id: payload.data.heldParentFrameId,
-      remedy_id: remedy.id,
-      wire_context: {
-        call_id: callId,
-        thread_id: payload.data.boundThreadId,
-        item_id: payload.data.boundItemId,
-      },
-    };
-    const execution = await AppaProxyWireModel.beginControlExecution({
-      ...scope,
-      selection,
-    });
-    if (!execution.acquired) {
-      const completed = await AppaProxyWireModel.findOwned({
-        ...scope,
-        frameId: metadata.frame.id,
-      });
-      if (
-        completed?.frame.state !== "completed" ||
-        !hasRuntimeVouchedSanitizerControlReceipt({
-          payload: payload.data,
-          receipt: completed?.receipt,
-        })
-      ) {
-        return appaControlError("APPA control execution is pending");
-      }
-      return appaControlSuccess({
-        intentId: payload.data.heldParentFrameId,
-        remedyId: remedy.id,
-      });
-    }
-    if (!execution.frame.executionEventId) {
-      return appaControlError("APPA control execution has no event identity");
-    }
-    const runtime = new AppaRuntimeClient({
-      url: hookConfig.url,
-      runtimeToken: hookConfig.runtimeToken,
-      timeoutMs: hookConfig.timeoutMs,
-    });
-    const prepared = runtime.prepareEvent({
-      eventId: execution.frame.executionEventId,
-      event: {
-        event: "resolve_batch_offer",
-        root_id: payload.data.rootId,
-        ...(payload.data.childId ? { child_id: payload.data.childId } : {}),
-        batch_id: remedy.batchId,
-        position: remedy.position,
-        offer_id: remedy.id,
-        tool: remedy.tool,
-        arguments_sha256: remedy.argumentsSha256,
-        resolution: "apply_sanitizer",
-      },
-    });
-    await AppaProxyWireModel.createControlRemoteEventIntent({
-      ...scope,
-      turnId: metadata.frame.turnId,
-      eventId: prepared.eventId,
-      event: "resolve_batch_offer",
-      requestBody: prepared.body,
-      requestSha256: prepared.requestSha256,
-    });
-    let runtimeReceipt: Record<string, unknown>;
-    try {
-      runtimeReceipt = await runtime.postPreparedEvent(
-        prepared,
-        AbortSignal.timeout(hookConfig.timeoutMs),
-      );
-    } catch {
-      return appaControlError("APPA runtime remedy execution is unavailable");
-    }
-    if (
-      !isSanitizerRemedyReceipt({
-        receipt: runtimeReceipt,
-        batchId: remedy.batchId,
-        position: remedy.position,
-        remedy,
-      })
-    ) {
-      return appaControlError("APPA runtime rejected the sanitizer remedy");
-    }
-    await AppaProxyWireModel.settleControlRemoteEvent({
-      ...scope,
-      turnId: metadata.frame.turnId,
-      eventId: prepared.eventId,
-      response: runtimeReceipt,
-    });
-    await AppaProxyWireModel.completeControl({
-      ...scope,
-      receipt: {
-        status: "remedied",
-        intent_id: payload.data.heldParentFrameId,
-        remedy_id: remedy.id,
-        runtime_event_id: prepared.eventId,
-        runtime_receipt: runtimeReceipt,
-      },
-    });
-    return appaControlSuccess({
-      intentId: payload.data.heldParentFrameId,
-      remedyId: remedy.id,
-    });
-  }
-  if (shortName === "archestra__appa_inspect_plan") {
-    return {
-      isError: false,
-      content: [
-        {
-          type: "text",
-          text: JSON.stringify({
-            status: "inspected",
-            intent_id: args?.intent_id,
-          }),
-        },
-      ],
-    };
-  }
-  return {
-    isError: false,
-    content: [
-      {
-        type: "text",
-        text: JSON.stringify({
-          status: "active",
-          intent_id: args?.intent_id,
-        }),
-      },
-    ],
-  };
-}
-
-function appaControlError(message: string): CallToolResult {
-  return { isError: true, content: [{ type: "text", text: message }] };
-}
-
-function appaControlSuccess(params: {
-  intentId: string;
-  remedyId: string;
-}): CallToolResult {
-  return {
-    isError: false,
-    content: [
-      {
-        type: "text",
-        text: JSON.stringify({
-          status: "remedied",
-          intent_id: params.intentId,
-          remedy_id: params.remedyId,
-        }),
-      },
-    ],
-  };
-}
-
-function isSanitizerRemedyReceipt(params: {
-  receipt: Record<string, unknown>;
-  batchId: string;
-  position: number;
-  remedy: {
-    id: string;
-    tool: string;
-    argumentsSha256: string;
-  };
-}): boolean {
-  const decision = params.receipt.decision;
-  return (
-    isRecord(decision) &&
-    decision.decision === "batch_offer_resolved" &&
-    decision.batch_id === params.batchId &&
-    decision.position === params.position &&
-    decision.offer_id === params.remedy.id &&
-    decision.tool === params.remedy.tool &&
-    decision.arguments_sha256 === params.remedy.argumentsSha256 &&
-    decision.resolution === "bound" &&
-    decision.kind === "sanitizer"
-  );
-}
-
-function hasRuntimeVouchedSanitizerControlReceipt(params: {
-  payload: {
-    heldParentFrameId: string;
-    vouch: {
-      operation: "inspect" | "execute" | "status";
-      chosenRemedyId?: string;
-    };
-    offers: Array<{
-      id: string;
-      batchId: string;
-      position: number;
-      kind: string;
-      tool: string;
-      argumentsSha256: string;
-    }>;
-  };
-  receipt: unknown;
-}): boolean {
-  if (params.payload.vouch.operation !== "execute") return false;
-  const remedy = params.payload.offers.find(
-    (offer) => offer.id === params.payload.vouch.chosenRemedyId,
-  );
-  return (
-    remedy?.kind === "sanitizer" &&
-    isRecord(params.receipt) &&
-    params.receipt.status === "remedied" &&
-    params.receipt.intent_id === params.payload.heldParentFrameId &&
-    params.receipt.remedy_id === remedy.id &&
-    typeof params.receipt.runtime_event_id === "string" &&
-    isRecord(params.receipt.runtime_receipt) &&
-    isSanitizerRemedyReceipt({
-      receipt: params.receipt.runtime_receipt,
-      batchId: remedy.batchId,
-      position: remedy.position,
-      remedy,
-    })
-  );
 }

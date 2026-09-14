@@ -23,7 +23,6 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { vi } from "vitest";
-import config from "@/config";
 import db, { schema } from "@/database";
 import {
   type DualLlmProgressEvent,
@@ -37,7 +36,6 @@ import {
   ModelTeamModel,
   VirtualApiKeyModel,
 } from "@/models";
-import { registerLlmProxyPlugin } from "@/plugins/llm-proxy-plugin";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import {
   type AnthropicStubOptions,
@@ -2758,178 +2756,5 @@ describe("LLM Proxy Handler — dual LLM progress delivery", () => {
     // Nothing analysis-related reaches the wire — no comments, no narration.
     expect(response.body).not.toContain("archestra dual-llm");
     expect(response.body).not.toContain("Primary topic?");
-  });
-});
-
-describe("LLM Proxy Handler generic plugin lifecycle", () => {
-  let app: FastifyInstance;
-  let agent: Agent;
-  let unregisterPlugin: (() => void) | undefined;
-  const originalAppaHook = config.llmProxy.appaHook;
-
-  beforeEach(async ({ makeAgent }) => {
-    config.llmProxy.appaHook = undefined;
-    vi.clearAllMocks();
-    mockEvaluatePolicies.mockResolvedValue(null);
-    app = Fastify().withTypeProvider<ZodTypeProvider>();
-    app.setValidatorCompiler(validatorCompiler);
-    app.setSerializerCompiler(serializerCompiler);
-    vi.spyOn(openaiAdapterFactory, "createClient").mockImplementation(
-      () => createOpenAiTestClient({}) as never,
-    );
-    agent = await makeAgent({ name: "Generic Plugin Agent" });
-    await app.register(openAiProxyRoutes);
-  });
-
-  afterEach(async () => {
-    unregisterPlugin?.();
-    unregisterPlugin = undefined;
-    config.llmProxy.appaHook = originalAppaHook;
-    vi.restoreAllMocks();
-    await app.close();
-  });
-
-  test("runs a non-APPA plugin for real result, prompt, tool, and completion boundaries", async () => {
-    const events: string[] = [];
-    unregisterPlugin = registerLlmProxyPlugin({
-      id: "test.generic-lifecycle",
-      async onSessionInit() {
-        events.push("init");
-      },
-      async onToolResults(context) {
-        events.push(`result:${context.toolResults[0]?.id}`);
-      },
-      async onPrompt() {
-        events.push("prompt");
-      },
-      async onToolCalls(context) {
-        events.push(`tool:${context.toolCalls[0]?.name}`);
-        return {
-          decision: "allow",
-          toolCalls: context.toolCalls.map((call) => ({
-            ...call,
-            name: `checked_${call.name}`,
-          })),
-        };
-      },
-      async onTurnEnd() {
-        events.push("end");
-      },
-    });
-
-    const response = await app.inject({
-      method: "POST",
-      url: `/v1/openai/${agent.id}/chat/completions`,
-      headers: { authorization: "Bearer test-key" },
-      payload: {
-        model: "gpt-4o",
-        messages: [
-          { role: "user", content: "Continue the task" },
-          {
-            role: "assistant",
-            tool_calls: [
-              {
-                id: "call_prior",
-                type: "function",
-                function: { name: "list_files", arguments: "{}" },
-              },
-            ],
-          },
-          { role: "tool", tool_call_id: "call_prior", content: "[]" },
-        ],
-        tools: [
-          {
-            type: "function",
-            function: { name: "list_files", parameters: { type: "object" } },
-          },
-        ],
-      },
-    });
-
-    expect(config.llmProxy.appaHook).toBeUndefined();
-    expect(response.statusCode, response.body).toBe(200);
-    expect(response.json().choices[0].message.tool_calls[0].function.name).toBe(
-      "checked_list_files",
-    );
-    expect(events).toEqual([
-      "init",
-      "result:call_prior",
-      "prompt",
-      "tool:list_files",
-      "end",
-    ]);
-  });
-
-  test("propagates a generic plugin refusal and releases the session", async () => {
-    const events: string[] = [];
-    unregisterPlugin = registerLlmProxyPlugin({
-      id: "test.generic-refusal",
-      async onSessionInit() {
-        events.push("init");
-      },
-      async onPrompt() {
-        events.push("prompt");
-      },
-      async onToolCalls() {
-        events.push("tool");
-        return { decision: "refuse", message: "plugin denied this tool" };
-      },
-      async onTurnEnd() {
-        events.push("end");
-      },
-    });
-
-    const response = await app.inject({
-      method: "POST",
-      url: `/v1/openai/${agent.id}/chat/completions`,
-      headers: { authorization: "Bearer test-key" },
-      payload: {
-        model: "gpt-4o",
-        messages: [{ role: "user", content: "List files" }],
-        tools: [
-          {
-            type: "function",
-            function: { name: "list_files", parameters: { type: "object" } },
-          },
-        ],
-      },
-    });
-
-    expect(response.statusCode, response.body).toBe(200);
-    expect(response.json().choices[0].message.content).toContain(
-      "plugin denied this tool",
-    );
-    expect(events).toEqual(["init", "prompt", "tool", "end"]);
-  });
-
-  test("aborts initialized generic plugins when a streaming prompt callback fails", async () => {
-    const events: string[] = [];
-    unregisterPlugin = registerLlmProxyPlugin({
-      id: "test.generic-stream-error",
-      async onSessionInit() {
-        events.push("init");
-      },
-      async onPrompt() {
-        events.push("prompt");
-        throw new Error("plugin prompt unavailable");
-      },
-      async onAbort() {
-        events.push("abort");
-      },
-    });
-
-    const response = await app.inject({
-      method: "POST",
-      url: `/v1/openai/${agent.id}/chat/completions`,
-      headers: { authorization: "Bearer test-key" },
-      payload: {
-        model: "gpt-4o",
-        messages: [{ role: "user", content: "Hello" }],
-        stream: true,
-      },
-    });
-
-    expect(response.statusCode, response.body).toBe(500);
-    expect(events).toEqual(["init", "prompt", "abort"]);
   });
 });

@@ -53,6 +53,7 @@ export function PageLayout({
   mobileVisibleCount = 3,
   maxWidth: maxWidthKey = "wide",
   minWidth: minWidthKey = "none",
+  contentOverflowX = "auto",
 }: {
   children: React.ReactNode;
   /**
@@ -119,6 +120,8 @@ export function PageLayout({
    * horizontally scroll the whole page. Tables inside still scroll.
    */
   minWidth?: keyof typeof MIN_WIDTH_CLASSES;
+  /** Clip without creating a nested scroll container, so form footers can stick to the page. */
+  contentOverflowX?: "auto" | "clip";
 }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -390,7 +393,14 @@ export function PageLayout({
           the bottom of even a short one had a band of nothing under it. */}
         <div
           data-page-content
-          className={cn("w-full flex-1", minWidth && "min-w-0 overflow-x-auto")}
+          className={cn(
+            "w-full flex-1",
+            minWidth && "min-w-0",
+            minWidth &&
+              (contentOverflowX === "clip"
+                ? "overflow-x-clip"
+                : "overflow-x-auto"),
+          )}
         >
           <div
             className={cn(

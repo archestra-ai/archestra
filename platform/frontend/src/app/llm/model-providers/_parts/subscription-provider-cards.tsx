@@ -22,6 +22,7 @@ import type { SubscriptionOffer } from "./subscription-offers";
 export function SubscriptionProviderCards({
   offers,
   isLoading,
+  currentUserId,
   onConnect,
   onManage,
   onDisconnect,
@@ -30,6 +31,8 @@ export function SubscriptionProviderCards({
   offers: SubscriptionOffer[];
   /** The viewer's keys have not arrived yet, so no status can be stated. */
   isLoading: boolean;
+  /** Session user, to recognize the viewer's own credential on a card. */
+  currentUserId: string | null | undefined;
   onConnect: (offer: SubscriptionOffer) => void;
   onManage: (credential: LlmProviderApiKeyResponse) => void;
   onDisconnect: (credential: LlmProviderApiKeyResponse) => void;
@@ -61,6 +64,7 @@ export function SubscriptionProviderCards({
             key={offer.kind}
             offer={offer}
             isLoading={isLoading}
+            currentUserId={currentUserId}
             onConnect={onConnect}
             onManage={onManage}
             onDisconnect={onDisconnect}
@@ -75,6 +79,7 @@ export function SubscriptionProviderCards({
 function SubscriptionProviderCard({
   offer,
   isLoading,
+  currentUserId,
   onConnect,
   onManage,
   onDisconnect,
@@ -82,6 +87,7 @@ function SubscriptionProviderCard({
 }: {
   offer: SubscriptionOffer;
   isLoading: boolean;
+  currentUserId: string | null | undefined;
   onConnect: (offer: SubscriptionOffer) => void;
   onManage: (credential: LlmProviderApiKeyResponse) => void;
   onDisconnect: (credential: LlmProviderApiKeyResponse) => void;
@@ -91,7 +97,13 @@ function SubscriptionProviderCard({
 }) {
   const { credential } = offer;
   const copy = SUBSCRIPTION_CREDENTIALS[offer.kind].connect;
-  const blockedReason = credential ? disconnectBlockedReason(credential) : null;
+  // Personal credentials are owner-managed; admin permissions do not override
+  // ownership. Keep this guard while the session is still loading, too.
+  const blockedReason = credential
+    ? !isOwnPersonalCredential(credential, currentUserId)
+      ? "You can only disconnect your own personal subscription."
+      : disconnectBlockedReason(credential)
+    : null;
 
   return (
     <Card
@@ -159,7 +171,9 @@ function SubscriptionProviderCard({
             {/* Icon-only: the card is narrow enough at four across that a
                 second worded button would be clipped. */}
             <PermissionButton
-              permissions={{ llmProviderApiKey: ["delete"] }}
+              // Personal subscription deletion is self-service. The ownership
+              // and usage checks above supply any refusal, independently of RBAC.
+              permissions={{}}
               variant="ghost"
               size="icon-sm"
               aria-label="Disconnect"
@@ -181,5 +195,21 @@ function SubscriptionProviderCard({
         )}
       </div>
     </Card>
+  );
+}
+
+/**
+ * Whether `credential` is the viewer's own personal subscription key — the one
+ * case the backend lets delete without the llmProviderApiKey:delete permission.
+ */
+function isOwnPersonalCredential(
+  credential: LlmProviderApiKeyResponse | null,
+  currentUserId: string | null | undefined,
+): boolean {
+  return (
+    credential !== null &&
+    credential.scope === "personal" &&
+    currentUserId != null &&
+    credential.userId === currentUserId
   );
 }

@@ -31,7 +31,18 @@ vi.mock("@/components/standard-dialog", () => ({
     ) : null,
 }));
 vi.mock("@/components/identity-fields", () => ({
-  IdentityFields: ({ children }: { children: React.ReactNode }) => children,
+  IdentityFields: ({
+    label,
+    children,
+  }: {
+    label: React.ReactNode;
+    children: React.ReactNode;
+  }) => (
+    <>
+      {label}
+      {children}
+    </>
+  ),
 }));
 
 describe("CreateProjectFromChatDialog", () => {

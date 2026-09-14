@@ -65,6 +65,9 @@ export function useAgentCatalog(
       return data ?? null;
     },
     initialData: useInitialData ? initialData : undefined,
+    // A restored or prefetched catalog may predate a creation or deletion.
+    // Revalidate when the list mounts even while that cache is still fresh.
+    refetchOnMount: "always",
     enabled,
     meta: PERSISTED_QUERY_META,
   });

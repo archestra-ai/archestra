@@ -16,9 +16,17 @@ import {
 } from "vitest";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import { useProfilesPaginated } from "@/lib/agent.query";
+import {
+  agentCatalogQueryKeys,
+  useAgentCatalog,
+} from "@/lib/agent-catalog.query";
 import { prefetchApps, useApps } from "@/lib/app.query";
 import { authQueryKeys } from "@/lib/auth/auth.query";
-import { makeAgent, makeAgentsList } from "@/mocks/data/agents";
+import {
+  makeAgent,
+  makeAgentCatalog,
+  makeAgentsList,
+} from "@/mocks/data/agents";
 
 const origin = "http://localhost:9000";
 const server = setupServer();
@@ -193,5 +201,43 @@ describe("navigation data reuse", () => {
     await new Promise((resolve) => setTimeout(resolve, 25));
 
     expect(consoleError).not.toHaveBeenCalled();
+  });
+});
+
+describe("agent catalog freshness", () => {
+  it.each([
+    false,
+    true,
+  ])("refreshes a restored catalog when mounted (pinned=%s)", async (pinned) => {
+    const { client, wrapper } = setup();
+    const query = {
+      offset: 0,
+      limit: DEFAULT_TABLE_LIMIT,
+      excludeOtherPersonalAgents: true,
+      pinned,
+    };
+    const oldAgent = makeAgent({ id: "old-agent", name: "Old agent" });
+    const newAgent = makeAgent({ id: "new-agent", name: "New agent" });
+    const previous = makeAgentCatalog({ agents: [oldAgent] });
+    const current = makeAgentCatalog({ agents: [newAgent] });
+    // A recently restored cache is still fresh under the app's one-minute
+    // stale time, but must not hide a creation or retain a deleted agent.
+    client.setQueryData(agentCatalogQueryKeys.list(query), previous);
+    server.use(
+      http.get(`${origin}/api/agent-catalog`, () => HttpResponse.json(current)),
+    );
+
+    const { result } = renderHook(
+      () =>
+        useAgentCatalog({
+          ...query,
+          initialData: current,
+          initialDataExcludeOtherPersonalAgents: true,
+          initialDataPinned: pinned,
+        }),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(result.current.data).toEqual(current));
   });
 });

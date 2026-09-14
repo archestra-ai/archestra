@@ -1,44 +1,15 @@
 import { E2eTestId } from "@archestra/shared/e2e-test-ids";
 import { makeUserPermissions } from "@/mocks/data/auth";
-import { makeAgent, makeAgentsList } from "../src/mocks/data/agents";
+import {
+  type ExternalAgent,
+  makeAgent,
+  makeAgentCatalog,
+} from "../src/mocks/data/agents";
 import { expect, test } from "./fixtures";
 
-function makeAgentCatalog({
-  agents = [],
-  externalAgents = [],
-  total = agents.length + externalAgents.length,
-  agentTotal = agents.length,
-  externalAgentTotal = externalAgents.length,
-}: {
-  agents?: ReturnType<typeof makeAgent>[];
-  externalAgents?: Record<string, unknown>[];
-  total?: number;
-  agentTotal?: number;
-  externalAgentTotal?: number;
-} = {}) {
-  const pagination = makeAgentsList({
-    agents,
-  }).pagination;
-
-  return {
-    data: [
-      ...externalAgents.map((value) => ({ type: "external", value })),
-      ...agents.map((value) => ({ type: "agent", value })),
-    ],
-    pagination: {
-      ...pagination,
-      total,
-    },
-    totals: {
-      agents: agentTotal,
-      externalAgents: externalAgentTotal,
-    },
-  };
-}
-
 function makeExternalAgent(
-  overrides: Record<string, unknown> = {},
-): Record<string, unknown> {
+  overrides: Partial<ExternalAgent> = {},
+): ExternalAgent {
   return {
     id: "external-agent",
     organizationId: "org-1",
@@ -53,7 +24,14 @@ function makeExternalAgent(
     updatedAt: "2026-09-08T12:00:00.000Z",
     scope: "org",
     authorId: "user-1",
+    createdByServiceAccountId: null,
     authorName: "Test User",
+    createdBy: {
+      id: "user-1",
+      type: "user",
+      name: "Test User",
+      email: "test@example.com",
+    },
     teams: [],
     users: [],
     connection: {

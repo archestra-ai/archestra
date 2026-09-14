@@ -2,6 +2,11 @@ import type { archestraApiTypes } from "@archestra/shared";
 
 type AgentsList = archestraApiTypes.GetAgentsResponses["200"];
 type Agent = AgentsList["data"][number];
+type AgentCatalog = archestraApiTypes.GetAgentCatalogResponses["200"];
+export type ExternalAgent = Extract<
+  AgentCatalog["data"][number],
+  { type: "external" }
+>["value"];
 
 export function makeAgent(overrides: Partial<Agent> = {}): Agent {
   return {
@@ -72,6 +77,35 @@ export function makeAgentsList(
       hasNext: false,
       hasPrev: false,
       ...overrides.pagination,
+    },
+  };
+}
+
+export function makeAgentCatalog({
+  agents = [],
+  externalAgents = [],
+  total = agents.length + externalAgents.length,
+  agentTotal = agents.length,
+  externalAgentTotal = externalAgents.length,
+}: {
+  agents?: Agent[];
+  externalAgents?: ExternalAgent[];
+  total?: number;
+  agentTotal?: number;
+  externalAgentTotal?: number;
+} = {}): AgentCatalog {
+  return {
+    data: [
+      ...externalAgents.map((value) => ({ type: "external" as const, value })),
+      ...agents.map((value) => ({ type: "agent" as const, value })),
+    ],
+    pagination: {
+      ...makeAgentsList({ agents }).pagination,
+      total,
+    },
+    totals: {
+      agents: agentTotal,
+      externalAgents: externalAgentTotal,
     },
   };
 }

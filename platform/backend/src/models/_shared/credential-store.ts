@@ -2,11 +2,12 @@ import { and, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { RuntimeCredentialDefinition } from "@/types";
 
-export async function listSharedCredentials(
-  organizationId: string,
-  kind: RuntimeCredentialDefinition["kind"],
-) {
-  return db
+export async function listSharedCredentials(params: {
+  organizationId: string;
+  kind: RuntimeCredentialDefinition["kind"];
+  id?: string;
+}) {
+  const query = db
     .select({
       definition: schema.runtimeCredentialDefinitionsTable,
       secretId: schema.runtimeCredentialConnectionsTable.secretId,
@@ -30,12 +31,16 @@ export async function listSharedCredentials(
       and(
         eq(
           schema.runtimeCredentialDefinitionsTable.organizationId,
-          organizationId,
+          params.organizationId,
         ),
-        eq(schema.runtimeCredentialDefinitionsTable.kind, kind),
+        eq(schema.runtimeCredentialDefinitionsTable.kind, params.kind),
+        params.id !== undefined
+          ? eq(schema.runtimeCredentialDefinitionsTable.id, params.id)
+          : undefined,
         eq(schema.runtimeCredentialDefinitionsTable.allowOrganization, true),
       ),
     );
+  return params.id !== undefined ? query.limit(1) : query;
 }
 
 export async function createSharedCredential(data: {

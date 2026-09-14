@@ -835,6 +835,8 @@ export class McpServerRuntimeManager {
       freshImagePull?: boolean;
       /** Existing transition owner for restart/reset/reinstall call chains. */
       transitionLease?: ClusterLeaseGuard;
+      /** Reuse the successful renewal preflight after tearing down the old process. */
+      resolvedCredentials?: Awaited<ReturnType<typeof resolveMcpCredentials>>;
     },
   ): Promise<void> {
     if (
@@ -962,12 +964,14 @@ export class McpServerRuntimeManager {
           (await OrganizationModel.getFirst())?.id;
         if (!organizationId)
           throw new Error("Credential organization is unavailable");
-        const resolvedCredentials = await resolveMcpCredentials({
-          organizationId,
-          userId: mcpServer.ownerId,
-          installationScope: mcpServer.scope,
-          environment: credentialBindings,
-        });
+        const resolvedCredentials =
+          options?.resolvedCredentials ??
+          (await resolveMcpCredentials({
+            organizationId,
+            userId: mcpServer.ownerId,
+            installationScope: mcpServer.scope,
+            environment: credentialBindings,
+          }));
         const credentials = resolvedCredentials.values;
         credentialExpiresAt = resolvedCredentials.expiresAt;
         secretData = { ...secretData, ...credentials };
@@ -1426,6 +1430,8 @@ export class McpServerRuntimeManager {
       awaitReady?: boolean;
       /** Existing transition owner, used only by the hard-reset rebuild. */
       transitionLease?: ClusterLeaseGuard;
+      /** Reuse the successful renewal preflight after tearing down the old process. */
+      resolvedCredentials?: Awaited<ReturnType<typeof resolveMcpCredentials>>;
     },
   ): Promise<void> {
     logger.info(`Reinstalling shared deployment for catalog: ${catalogId}`);
@@ -1486,6 +1492,7 @@ export class McpServerRuntimeManager {
       await this.startServer(representative, undefined, undefined, {
         freshImagePull: options?.freshImagePull,
         transitionLease: lease,
+        resolvedCredentials: options?.resolvedCredentials,
       });
 
       if (options?.awaitReady !== false) {
@@ -3073,7 +3080,7 @@ export class McpServerRuntimeManager {
         if (!organizationId)
           throw new Error("Credential organization is unavailable");
         // Resolve before stopping the old process. A provider outage must not destroy it.
-        await resolveMcpCredentials({
+        const resolvedCredentials = await resolveMcpCredentials({
           organizationId,
           userId: server.ownerId,
           installationScope: server.scope,
@@ -3088,6 +3095,7 @@ export class McpServerRuntimeManager {
           await this.reinstallSharedDeployment(catalog.id, {
             awaitDeletion: true,
             transitionLease: lease,
+            resolvedCredentials,
           });
         } else {
           await McpHttpSessionModel.deleteByMcpServerId(mcpServerId);
@@ -3101,6 +3109,7 @@ export class McpServerRuntimeManager {
           this.mcpServerIdToDeploymentMap.delete(mcpServerId);
           await this.startServer(server, undefined, undefined, {
             transitionLease: lease,
+            resolvedCredentials,
           });
           const replacement = await this.getOrLoadDeployment(mcpServerId);
           await replacement?.waitForDeploymentReady(60, 2000);

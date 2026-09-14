@@ -26,8 +26,12 @@ import {
   MCP_HIBERNATED_ANNOTATION,
   MCP_PRE_HIBERNATION_REPLICAS_ANNOTATION,
 } from "@/k8s/shared";
-import { RuntimeCredentialDefinitionModel } from "@/models";
+import {
+  RuntimeCredentialConnectionModel,
+  RuntimeCredentialDefinitionModel,
+} from "@/models";
 import { MCP_SERVER_LAST_USED_REFRESH_INTERVAL_MS } from "@/models/mcp-server";
+import { secretManager } from "@/secrets-manager";
 // biome-ignore lint/style/noRestrictedImports: runtime-gated EE service import
 import { mcpActiveUseTracker } from "@/services/mcp-active-use.ee";
 import { describe, expect, test } from "@/test";
@@ -140,6 +144,7 @@ class FakeK8sCluster {
         namespace: NAMESPACE,
         annotations: { ...this.annotations },
         resourceVersion: String(this.resourceVersion),
+        uid: "seam-deployment-uid",
       },
       spec: { replicas: this.replicas },
       status: {
@@ -1267,6 +1272,146 @@ test.for([
     await operation;
     mcpActiveUseTracker.remove(first.id);
     mcpActiveUseTracker.remove(second.id);
+    await manager.shutdown();
+  }
+});
+
+test.for([
+  false,
+  true,
+])("renewal starts with pre-resolved secrets when the source fails during teardown (shared=%s)", async (shared, {
+  makeOrganization,
+  makeUser,
+  makeInternalMcpCatalog,
+  makeMcpServer,
+}) => {
+  const organization = await makeOrganization();
+  const owner = await makeUser();
+  await RuntimeCredentialDefinitionModel.create({
+    organizationId: organization.id,
+    createdBy: owner.id,
+    definition: {
+      key: "renewal-secret",
+      name: "Renewal secret",
+      kind: "secret",
+      description: "",
+      icon: null,
+      allowPersonal: false,
+      allowOrganization: true,
+    },
+  });
+  await RuntimeCredentialDefinitionModel.create({
+    organizationId: organization.id,
+    createdBy: owner.id,
+    definition: {
+      key: "optional-app",
+      name: "Optional app",
+      kind: "github_app",
+      description: "",
+      icon: null,
+      allowPersonal: false,
+      allowOrganization: true,
+    },
+  });
+  const connection = {
+    organizationId: organization.id,
+    scope: "organization" as const,
+    userId: null,
+    credentialId: "renewal-secret",
+  };
+  await RuntimeCredentialConnectionModel.upsert({
+    ...connection,
+    value: "pre-resolved-value",
+  });
+  const catalog = await makeInternalMcpCatalog({
+    organizationId: organization.id,
+    name: "Renewal handoff",
+    serverType: "local",
+    multitenant: shared,
+    localConfig: {
+      command: "node",
+      arguments: ["server.js"],
+      environment: [
+        {
+          key: "GITHUB_TOKEN",
+          type: "secret",
+          credentialId: "optional-app",
+          credentialScope: "organization",
+          promptOnInstallation: false,
+          required: false,
+        },
+        {
+          key: "API_TOKEN",
+          type: "secret",
+          credentialId: "renewal-secret",
+          credentialScope: "organization",
+          promptOnInstallation: false,
+          required: true,
+        },
+      ],
+    },
+  });
+  const server = await makeMcpServer({
+    catalogId: catalog.id,
+    name: "renewal-handoff",
+    deploymentName: DEPLOYMENT_NAME,
+  });
+  if (shared) {
+    const sibling = await makeMcpServer({
+      catalogId: catalog.id,
+      name: "renewal-sibling",
+      deploymentName: DEPLOYMENT_NAME,
+    });
+    await db
+      .update(schema.mcpServersTable)
+      .set({ lastUsedAt: new Date(0) })
+      .where(eq(schema.mcpServersTable.id, sibling.id));
+  }
+  await db
+    .update(schema.mcpServersTable)
+    .set({ lastUsedAt: new Date(0) })
+    .where(eq(schema.mcpServersTable.id, server.id));
+  const cluster = new FakeK8sCluster({
+    replicas: 1,
+    annotations: {
+      "archestra.ai/credential-expires-at": String(Date.now() + 60_000),
+      "archestra.ai/credential-refresh-at": String(Date.now() - 1),
+    },
+  });
+  const { manager, internals } = makeManager(cluster);
+  const source = vi.spyOn(secretManager(), "getSecret");
+  internals.k8sNetworkingApi.createNamespacedNetworkPolicy = vi.fn(
+    async ({ body }) => body,
+  );
+  let installedSecret: k8s.V1Secret | undefined;
+  internals.k8sApi.createNamespacedSecret = vi.fn(async ({ body }) => {
+    installedSecret = body;
+    return body;
+  });
+  internals.k8sAppsApi.deleteNamespacedDeployment = vi.fn(async () => {
+    cluster.exists = false;
+    // Simulate losing the credential source after the safe preflight succeeded.
+    source.mockRejectedValue(new Error("Credential source unavailable"));
+    return {};
+  });
+  internals.k8sAppsApi.createNamespacedDeployment = vi.fn(async ({ body }) => {
+    cluster.exists = true;
+    cluster.annotations = body.metadata?.annotations ?? {};
+    return body;
+  });
+  try {
+    await expect(
+      manager.withFreshCredentials(server.id, async () => "replacement-ready"),
+    ).resolves.toBe("replacement-ready");
+    expect(
+      Buffer.from(installedSecret?.data?.API_TOKEN ?? "", "base64").toString(),
+    ).toBe("pre-resolved-value");
+    await expect(
+      RuntimeCredentialConnectionModel.resolveValue(connection),
+    ).rejects.toThrow("Credential source unavailable");
+    expect(cluster.exists).toBe(true);
+  } finally {
+    source.mockRestore();
     await manager.shutdown();
   }
 });

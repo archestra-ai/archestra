@@ -11,25 +11,14 @@ export default class GithubPatModel {
   static async findByOrganization(
     organizationId: string,
   ): Promise<GithubPat[]> {
-    const rows = await listSharedCredentials(organizationId, "secret");
-    return rows.map(({ definition, secretId }) => ({
-      id: definition.id,
-      organizationId: definition.organizationId,
-      name: definition.name,
-      secretId,
-      createdAt: definition.createdAt,
-      updatedAt: definition.updatedAt,
-    }));
+    return GithubPatModel.findShared({ organizationId });
   }
   static async findByIdForOrganization(params: {
     id: string;
     organizationId: string;
   }): Promise<GithubPat | null> {
-    return (
-      (await GithubPatModel.findByOrganization(params.organizationId)).find(
-        (row) => row.id === params.id,
-      ) ?? null
-    );
+    const [credential] = await GithubPatModel.findShared(params);
+    return credential ?? null;
   }
   static async create(data: InsertGithubPat): Promise<GithubPat> {
     const definition = await createSharedCredential({
@@ -71,5 +60,19 @@ export default class GithubPatModel {
   }
   static async delete(id: string): Promise<boolean> {
     return deleteSharedCredential(id);
+  }
+  private static async findShared(params: {
+    organizationId: string;
+    id?: string;
+  }): Promise<GithubPat[]> {
+    const rows = await listSharedCredentials({ ...params, kind: "secret" });
+    return rows.map(({ definition, secretId }) => ({
+      id: definition.id,
+      organizationId: definition.organizationId,
+      name: definition.name,
+      secretId,
+      createdAt: definition.createdAt,
+      updatedAt: definition.updatedAt,
+    }));
   }
 }

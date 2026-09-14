@@ -15,28 +15,14 @@ export default class GithubAppConfigModel {
   static async findByOrganization(
     organizationId: string,
   ): Promise<GithubAppConfig[]> {
-    const rows = await listSharedCredentials(organizationId, "github_app");
-    return rows.map(({ definition, secretId }) => ({
-      id: definition.id,
-      organizationId: definition.organizationId,
-      name: definition.name,
-      secretId,
-      createdAt: definition.createdAt,
-      updatedAt: definition.updatedAt,
-      githubUrl: definition.githubUrl ?? "https://api.github.com",
-      appId: definition.appId ?? "",
-      installationId: definition.installationId ?? "",
-    }));
+    return GithubAppConfigModel.findShared({ organizationId });
   }
   static async findByIdForOrganization(params: {
     id: string;
     organizationId: string;
   }): Promise<GithubAppConfig | null> {
-    return (
-      (
-        await GithubAppConfigModel.findByOrganization(params.organizationId)
-      ).find((row) => row.id === params.id) ?? null
-    );
+    const [credential] = await GithubAppConfigModel.findShared(params);
+    return credential ?? null;
   }
   static async create(data: InsertGithubAppConfig): Promise<GithubAppConfig> {
     const definition = await createSharedCredential({
@@ -81,5 +67,22 @@ export default class GithubAppConfigModel {
   }
   static async delete(id: string): Promise<boolean> {
     return deleteSharedCredential(id);
+  }
+  private static async findShared(params: {
+    organizationId: string;
+    id?: string;
+  }): Promise<GithubAppConfig[]> {
+    const rows = await listSharedCredentials({ ...params, kind: "github_app" });
+    return rows.map(({ definition, secretId }) => ({
+      id: definition.id,
+      organizationId: definition.organizationId,
+      name: definition.name,
+      secretId,
+      createdAt: definition.createdAt,
+      updatedAt: definition.updatedAt,
+      githubUrl: definition.githubUrl ?? "https://api.github.com",
+      appId: definition.appId ?? "",
+      installationId: definition.installationId ?? "",
+    }));
   }
 }

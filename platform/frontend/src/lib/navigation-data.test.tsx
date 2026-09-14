@@ -208,6 +208,33 @@ describe("agent catalog freshness", () => {
   it.each([
     false,
     true,
+  ])("reuses the server catalog without a hydration fetch (pinned=%s)", (pinned) => {
+    const { wrapper } = setup();
+    const initialData = makeAgentCatalog({
+      agents: [makeAgent({ name: "Server-rendered agent" })],
+    });
+    const { result } = renderHook(
+      () =>
+        useAgentCatalog({
+          offset: 0,
+          limit: pinned ? 100 : DEFAULT_TABLE_LIMIT,
+          excludeOtherPersonalAgents: true,
+          pinned,
+          initialData,
+          initialDataExcludeOtherPersonalAgents: true,
+          initialDataPinned: pinned,
+          initialDataLimit: pinned ? 100 : DEFAULT_TABLE_LIMIT,
+        }),
+      { wrapper },
+    );
+
+    expect(result.current.data).toEqual(initialData);
+    expect(result.current.isFetching).toBe(false);
+  });
+
+  it.each([
+    false,
+    true,
   ])("refreshes a restored catalog when mounted (pinned=%s)", async (pinned) => {
     const { client, wrapper } = setup();
     const query = {

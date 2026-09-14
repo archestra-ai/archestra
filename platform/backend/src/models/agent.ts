@@ -3145,6 +3145,37 @@ class AgentModel {
     return updated.length > 0;
   }
 
+  /** Change only ownership, and refuse a stale authorization snapshot. */
+  static async transferOwnership(params: {
+    id: string;
+    organizationId: string;
+    previousOwnerId: string | null;
+    updatedAt: Date;
+    ownerId: string;
+  }): Promise<boolean> {
+    const rows = await db
+      .update(schema.agentsTable)
+      .set({
+        authorId: params.ownerId,
+        createdByServiceAccountId: null,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(schema.agentsTable.id, params.id),
+          eq(schema.agentsTable.organizationId, params.organizationId),
+          params.previousOwnerId === null
+            ? isNull(schema.agentsTable.authorId)
+            : eq(schema.agentsTable.authorId, params.previousOwnerId),
+          // PostgreSQL defaults can carry sub-millisecond precision; JS Date cannot.
+          sql`date_trunc('milliseconds', ${schema.agentsTable.updatedAt}) = ${params.updatedAt.toISOString()}::timestamp`,
+          notDeleted(schema.agentsTable),
+        ),
+      )
+      .returning({ id: schema.agentsTable.id });
+    return rows.length === 1;
+  }
+
   static async update(
     id: string,
     {
@@ -4327,6 +4358,8 @@ class AgentModel {
       name: row.name,
       organizationId: row.organizationId,
       agentType: row.agentType,
+      authorId: row.authorId,
+      createdByServiceAccountId: row.createdByServiceAccountId,
       scope: row.scope,
       description: row.description ?? null,
       systemPrompt: row.systemPrompt ?? null,

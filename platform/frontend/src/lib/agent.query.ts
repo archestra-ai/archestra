@@ -430,6 +430,26 @@ export function useCreateProfile() {
   });
 }
 
+export function useTransferAgentOwnership() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, ownerId }: { id: string; ownerId: string }) => {
+      const { data, error } = await archestraApiSdk.transferAgentOwnership({
+        path: { id },
+        body: { ownerId },
+      });
+      if (error) throw reportApiError(error);
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["agents"] });
+      queryClient.invalidateQueries({ queryKey: ["profileTokens"] });
+      queryClient.invalidateQueries({ queryKey: memberDefaultAgentQueryKey });
+      toast.success("Ownership transferred");
+    },
+  });
+}
+
 export function useUpdateProfile(options?: { successMessage?: string }) {
   const queryClient = useQueryClient();
   return useMutation({

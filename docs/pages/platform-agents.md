@@ -35,6 +35,14 @@ Each agent has its own page for editing. When dedicated runtimes are enabled, **
 
 Switching tabs with unsaved edits asks before it discards them. If you cannot change an agent, its configuration still opens — read-only, with the reason.
 
+## Ownership Transfers
+
+You can hand an agent over to another organization member without recreating it. For example, a departing maintainer can transfer a reporting assistant to their replacement.
+
+The current owner or a resource admin can transfer ownership. The recipient needs permission to manage the agent at its current visibility. Configuration and sharing stay unchanged. Transferring a personal agent can remove the previous owner's access.
+
+Transfers require the recipient to retain access to configured model credentials and pinned tool connections. Platform-managed resources cannot be transferred. Audit logs record the previous and new owners.
+
 ## Tool Access Modes
 
 An agent's **Tools & Knowledge Sources** setting is **Auto** or **Custom** — tabs on the agent's **Tools, Skills & Knowledge** step. The tabs govern both tools and [knowledge sources](#knowledge-sources); this section covers the tools half.

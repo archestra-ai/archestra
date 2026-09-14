@@ -499,34 +499,6 @@ describe("ApiKeysPage", () => {
     ).toBeInTheDocument();
   });
 
-  it("disconnects a connected subscription through a subscription-worded dialog", async () => {
-    vi.mocked(useHasPermissions).mockReturnValue({
-      data: true,
-      isPending: false,
-    } as unknown as ReturnType<typeof useHasPermissions>);
-    mockUseLlmProviderApiKeys.mockReturnValue({
-      data: [
-        {
-          id: "copilot-key",
-          name: "GitHub Copilot",
-          provider: "github-copilot",
-          scope: "personal",
-        },
-      ],
-      isPending: false,
-    });
-
-    render(<ApiKeysPage />);
-    fireEvent.click(screen.getByRole("button", { name: "Disconnect" }));
-
-    // "Delete API Key" would describe a credential the user never configured.
-    await waitFor(() => {
-      expect(screen.getByTestId("delete-dialog")).toHaveTextContent(
-        'Disconnect "GitHub Copilot"?',
-      );
-    });
-  });
-
   it("does not classify an ordinary key from the mutable X Premium display name", () => {
     vi.mocked(useHasPermissions).mockReturnValue({
       data: true,

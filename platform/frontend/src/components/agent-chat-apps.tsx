@@ -211,7 +211,12 @@ export function AgentChatAppsEditor({
     isLoadingError: agentNamesLoadingError,
     refetch: refetchAgentNames,
   } = useProfiles({
-    filters: { agentType: "agent", includeTools: false },
+    // This resolves existing assignments, including built-in agents.
+    filters: {
+      agentType: "agent",
+      includeTools: false,
+      excludeBuiltIn: false,
+    },
     enabled: foreignAgentIds.length > 0,
   });
   const agentNames = new Map(agents.map((item) => [item.id, item.name]));
@@ -812,7 +817,9 @@ function AssignedChannelRow({
   const staged = option.virtualDm
     ? "New direct message"
     : option.assignedAgentName
-      ? `Takes over from ${option.assignedAgentName}`
+      ? option.assignedAgentName === "another agent"
+        ? "Takes over from another agent"
+        : `Takes over from ${option.assignedAgentName} agent`
       : null;
   return (
     // Named: the row's controls say "Settings" and an X, which only mean
@@ -837,7 +844,7 @@ function AssignedChannelRow({
         {staged && (
           <Badge
             variant="outline"
-            className="px-1.5 py-0 text-[10px] font-normal"
+            className="max-w-full whitespace-normal break-words px-1.5 py-0 text-[10px] font-normal"
           >
             {staged}
           </Badge>

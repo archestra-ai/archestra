@@ -3,7 +3,7 @@ import {
   type LlmProxyPlugin,
   LlmProxyPluginRegistry,
   type LlmProxyRequestContext,
-} from "./llm-proxy-plugin";
+} from "./registry";
 
 function requestContext(): LlmProxyRequestContext {
   return {

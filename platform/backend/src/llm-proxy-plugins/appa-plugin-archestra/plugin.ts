@@ -7,7 +7,7 @@ import {
 import type {
   LlmProxyPlugin,
   LlmProxyRequestContext,
-} from "@/plugins/llm-proxy-plugin";
+} from "@/llm-proxy-plugins/registry";
 import type { CommonToolResult } from "@/types";
 import type { AppaClientAdapter } from "./types";
 

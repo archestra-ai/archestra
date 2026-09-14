@@ -6,7 +6,7 @@ import {
 } from "fastify-type-provider-zod";
 import { vi } from "vitest";
 import { ModelModel } from "@/models";
-import { registerLlmProxyPlugin } from "@/plugins/llm-proxy-plugin";
+import { registerLlmProxyPlugin } from "@/llm-proxy-plugins/registry";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { createOpenAiTestClient } from "@/test/llm-provider-stubs";
 import { openaiAdapterFactory } from "./adapters";

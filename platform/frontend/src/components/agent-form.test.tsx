@@ -1780,7 +1780,9 @@ describe("AgentForm delegation state", () => {
 
     render(<AgentForm agentType="mcp_gateway" agent={baseAgent} />);
 
-    expect(await screen.findByText("off-page-skill")).toBeInTheDocument();
+    expect(
+      await screen.findByRole("button", { name: "off-page-skill" }),
+    ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /^Remove off-page-skill/ }),
     ).toBeInTheDocument();
@@ -1819,7 +1821,9 @@ describe("AgentForm delegation state", () => {
 
     render(<AgentForm agentType="mcp_gateway" agent={baseAgent} />);
 
-    expect(await screen.findByText("regraded-skill")).toBeInTheDocument();
+    expect(
+      await screen.findByRole("button", { name: "regraded-skill" }),
+    ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /^Remove regraded-skill/ }),
     ).toBeInTheDocument();

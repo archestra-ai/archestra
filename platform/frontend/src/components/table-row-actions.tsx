@@ -43,6 +43,7 @@ type TableRowAction = {
 type TableRowActionsProps = {
   actions: TableRowAction[];
   dropdownActions?: TableRowAction[];
+  dropdownContent?: React.ReactNode;
   size?: "sm" | "default";
   /**
    * Name of the row's item (e.g. the agent or skill name). Appended to each
@@ -55,6 +56,7 @@ type TableRowActionsProps = {
 export function TableRowActions({
   actions,
   dropdownActions,
+  dropdownContent,
   size = "sm",
   itemName,
 }: TableRowActionsProps) {
@@ -71,7 +73,7 @@ export function TableRowActions({
             itemName={itemName}
           />
         ))}
-        {dropdownActions && dropdownActions.length > 0 && (
+        {((dropdownActions?.length ?? 0) > 0 || dropdownContent) && (
           <DropdownMenu>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -92,7 +94,8 @@ export function TableRowActions({
               align="end"
               onClick={(e: React.MouseEvent) => e.stopPropagation()}
             >
-              {dropdownActions.map((action) => (
+              {dropdownContent}
+              {dropdownActions?.map((action) => (
                 <DropdownActionButton key={action.label} action={action} />
               ))}
             </DropdownMenuContent>

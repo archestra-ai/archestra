@@ -235,6 +235,35 @@ export function afterIdPredicate(afterId: string | undefined): SQL | undefined {
 }
 
 class SkillModel {
+  static async transferOwnership(params: {
+    id: string;
+    organizationId: string;
+    previousOwnerId: string | null;
+    updatedAt: Date;
+    ownerId: string;
+  }): Promise<boolean> {
+    const rows = await db
+      .update(schema.skillsTable)
+      .set({
+        authorId: params.ownerId,
+        createdByServiceAccountId: null,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(schema.skillsTable.id, params.id),
+          eq(schema.skillsTable.organizationId, params.organizationId),
+          params.previousOwnerId === null
+            ? isNull(schema.skillsTable.authorId)
+            : eq(schema.skillsTable.authorId, params.previousOwnerId),
+          sql`date_trunc('milliseconds', ${schema.skillsTable.updatedAt}) = ${params.updatedAt.toISOString()}::timestamp`,
+          notDeleted(schema.skillsTable),
+        ),
+      )
+      .returning({ id: schema.skillsTable.id });
+    return rows.length === 1;
+  }
+
   static async findByOrganization(params: {
     organizationId: string;
     limit?: number;

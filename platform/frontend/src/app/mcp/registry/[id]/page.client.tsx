@@ -40,6 +40,7 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useResourceOwnershipTransfer } from "@/components/use-resource-ownership-transfer";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useEnterpriseFeature, useFeature } from "@/lib/config/config.query";
 import { typeRole } from "@/lib/design/type-scale";
@@ -214,6 +215,11 @@ function CatalogItemDetails({
   onDeleted: () => void;
 }) {
   const router = useRouter();
+  const ownership = useResourceOwnershipTransfer({
+    kind: "catalog",
+    resource: item,
+    onTransferred: () => router.push("/mcp/registry"),
+  });
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
@@ -499,6 +505,7 @@ function CatalogItemDetails({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
+                {ownership.menuItem}
                 {canRestartPods && (
                   <DropdownMenuItem
                     disabled={refreshImageMutation.isPending}
@@ -538,6 +545,7 @@ function CatalogItemDetails({
               </DropdownMenuContent>
             </DropdownMenu>
           )}
+          {ownership.dialog}
         </div>
       }
     >

@@ -33,6 +33,7 @@ import {
   useGuardedInAppNavigation,
   useUnsavedChangesGuard,
 } from "@/components/unsaved-changes-guard";
+import { useResourceOwnershipTransfer } from "@/components/use-resource-ownership-transfer";
 import { getA2aRemoteAgentDeleteDescription } from "@/lib/a2a-remote-agent-delete";
 import { a2aRemoteAgentDetailHref } from "@/lib/a2a-remote-agent-route";
 import {
@@ -119,6 +120,14 @@ export function A2aRemoteAgentDetailPage({ id }: { id: string }) {
   const [formDirty, setFormDirty] = useState(false);
   const navigationGuard = usePageUnsavedChangesGuard(formDirty);
   const agent = query.data;
+  const ownership = useResourceOwnershipTransfer({
+    kind: "remoteAgent",
+    resource: agent,
+    disabledReason: formDirty
+      ? "Save or discard your changes first"
+      : undefined,
+    onTransferred: () => router.push("/agents"),
+  });
   const canManage = !!permission.data;
 
   if (query.isPending || permission.isPending) {
@@ -181,39 +190,43 @@ export function A2aRemoteAgentDetailPage({ id }: { id: string }) {
           ),
           description: agent.description || "External A2A agent",
           action: canManage ? (
-            <TableRowActions
-              itemName={agent.name}
-              actions={[]}
-              dropdownActions={[
-                {
-                  icon: <Power className="h-4 w-4" />,
-                  label: agent.connection.enabled
-                    ? "Disable delegation"
-                    : "Enable delegation",
-                  tooltip: agent.connection.enabled
-                    ? "Pause this connection everywhere without removing its agent assignments."
-                    : "Make this connection available to its assigned agents again.",
-                  disabled: updateMutation.isPending || formDirty,
-                  disabledTooltip: formDirty
-                    ? "Save or discard your changes before changing delegation availability."
-                    : undefined,
-                  onClick: () =>
-                    updateMutation.mutate({
-                      enabled: !agent.connection.enabled,
-                    }),
-                },
-                {
-                  icon: <Trash2 className="h-4 w-4" />,
-                  label: "Delete",
-                  variant: "destructive",
-                  disabled: deleteMutation.isPending || formDirty,
-                  disabledTooltip: formDirty
-                    ? "Save or discard your changes before deleting this external agent."
-                    : undefined,
-                  onClick: () => setDeleteOpen(true),
-                },
-              ]}
-            />
+            <div className="flex items-center gap-2">
+              <TableRowActions
+                dropdownContent={ownership.menuItem}
+                itemName={agent.name}
+                actions={[]}
+                dropdownActions={[
+                  {
+                    icon: <Power className="h-4 w-4" />,
+                    label: agent.connection.enabled
+                      ? "Disable delegation"
+                      : "Enable delegation",
+                    tooltip: agent.connection.enabled
+                      ? "Pause this connection everywhere without removing its agent assignments."
+                      : "Make this connection available to its assigned agents again.",
+                    disabled: updateMutation.isPending || formDirty,
+                    disabledTooltip: formDirty
+                      ? "Save or discard your changes before changing delegation availability."
+                      : undefined,
+                    onClick: () =>
+                      updateMutation.mutate({
+                        enabled: !agent.connection.enabled,
+                      }),
+                  },
+                  {
+                    icon: <Trash2 className="h-4 w-4" />,
+                    label: "Delete",
+                    variant: "destructive",
+                    disabled: deleteMutation.isPending || formDirty,
+                    disabledTooltip: formDirty
+                      ? "Save or discard your changes before deleting this external agent."
+                      : undefined,
+                    onClick: () => setDeleteOpen(true),
+                  },
+                ]}
+              />
+              {ownership.dialog}
+            </div>
           ) : undefined,
         }}
       >

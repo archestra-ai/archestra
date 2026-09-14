@@ -3,7 +3,7 @@ title: Plugins (Beta)
 category: Agents
 order: 4
 description: Client-native extensions for Claude Code, Codex, Copilot CLI, and Cursor
-lastUpdated: 2026-09-14
+lastUpdated: 2026-09-15
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -17,6 +17,10 @@ Review every file before you approve an import or update.
 > **Beta feature** — set `ARCHESTRA_PLUGINS_ENABLED=true`, or enable the `ARCHESTRA_BETA` switch. See [Deployment](/docs/platform-deployment#skills-marketplace).
 
 Go to **Studio → Plugins** to create or import a plugin.
+
+## Ownership
+
+Plugin administrators can transfer a plugin to another plugin administrator. Approved files, pending updates, source configuration, and sharing stay intact.
 
 ## Creating a Plugin
 

@@ -57,6 +57,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useResourceOwnershipTransfer } from "@/components/use-resource-ownership-transfer";
 import { useStartAgentRun } from "@/lib/agent-runtime.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useCreateConversation } from "@/lib/chat/chat.query";
@@ -97,6 +98,17 @@ function ProjectDetail() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const { data: project, isPending, isLoadingError, refetch } = useProject(id);
+  const ownership = useResourceOwnershipTransfer({
+    kind: "project",
+    resource: project
+      ? {
+          ...project,
+          authorId: project.createdBy?.id ?? null,
+          scope: projectVisibilityToScope(project.visibility),
+        }
+      : null,
+    onTransferred: () => router.push("/projects"),
+  });
   // Chats are hidden from admin oversight, so don't even fetch them there.
   const { data: conversations } = useProjectConversations(id, {
     enabled: !!project && project.viewerRole !== "admin",
@@ -212,6 +224,7 @@ function ProjectDetail() {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
+                  {ownership.menuItem}
                   {!isAdminView && (
                     <DropdownMenuItem
                       onSelect={() =>
@@ -246,6 +259,7 @@ function ProjectDetail() {
                   )}
                 </DropdownMenuContent>
               </DropdownMenu>
+              {ownership.dialog}
             </div>
           }
         >

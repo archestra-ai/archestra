@@ -3,7 +3,7 @@ title: External Agents
 category: Agents
 order: 13
 description: Connect external Agent2Agent systems and use them as subagents
-lastUpdated: 2026-09-11
+lastUpdated: 2026-09-15
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -11,6 +11,10 @@ lastUpdated: 2026-09-11
 External A2A agents let an Archestra agent delegate work to another Agent2Agent system. The remote system stays under its owner's control. Archestra manages the connection, assignment, guardrails, and call history.
 
 External targets appear in the same **Subagents** configuration panel as local subagents, in a compact **External Agents** group that identifies calls leaving Archestra.
+
+## Ownership
+
+Settings managers can transfer an external agent connection to another settings manager. Connection settings, credentials, sharing, and subagent assignments stay intact.
 
 ## Connect An External Agent
 

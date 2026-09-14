@@ -504,29 +504,27 @@ export function AppSettingsForm({
               }
               fallbackType="app"
               disabled={readOnly}
+              label={<Label htmlFor="app-settings-name">Name *</Label>}
             >
-              <div className="space-y-2">
-                <Label htmlFor="app-settings-name">Name *</Label>
-                <Input
-                  id="app-settings-name"
-                  disabled={readOnly}
-                  aria-invalid={!!form.formState.errors.name}
-                  {...form.register("name", {
-                    required: "Name is required.",
-                    maxLength: {
-                      value: 100,
-                      message: "Name must be 100 characters or fewer.",
-                    },
-                    validate: (value) =>
-                      value.trim().length > 0 || "Name is required.",
-                  })}
-                />
-                {form.formState.errors.name?.message ? (
-                  <p className="text-xs text-destructive">
-                    {form.formState.errors.name.message}
-                  </p>
-                ) : null}
-              </div>
+              <Input
+                id="app-settings-name"
+                disabled={readOnly}
+                aria-invalid={!!form.formState.errors.name}
+                {...form.register("name", {
+                  required: "Name is required.",
+                  maxLength: {
+                    value: 100,
+                    message: "Name must be 100 characters or fewer.",
+                  },
+                  validate: (value) =>
+                    value.trim().length > 0 || "Name is required.",
+                })}
+              />
+              {form.formState.errors.name?.message ? (
+                <p className="text-xs text-destructive">
+                  {form.formState.errors.name.message}
+                </p>
+              ) : null}
             </IdentityFields>
 
             <div className="space-y-2">

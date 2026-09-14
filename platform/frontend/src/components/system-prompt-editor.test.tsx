@@ -1,4 +1,5 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { BUILT_IN_AGENT_IDS } from "@archestra/shared";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -23,36 +24,109 @@ describe("SystemPromptEditor", () => {
     mockGetVisibleDocsUrl.mockImplementation((href) => href);
   });
 
-  it("shows the Archestra docs link when available", () => {
-    mockGetFrontendDocsUrl.mockReturnValue(
-      "https://archestra.ai/docs/platform-agents#system-prompt-templating",
+  it.each([
+    true,
+    false,
+  ])("opens templating help without submitting or losing instructions (docs visible: %s)", async (docsVisible) => {
+    const docsUrl =
+      "https://archestra.ai/docs/platform-agents#system-prompt-templating";
+    mockGetFrontendDocsUrl.mockReturnValue(docsVisible ? docsUrl : null);
+    const user = userEvent.setup();
+    const onSubmit = vi.fn((event) => event.preventDefault());
+    const onChange = vi.fn();
+    render(
+      <form onSubmit={onSubmit}>
+        <SystemPromptEditor
+          value="Help with release notes."
+          onChange={onChange}
+        />
+      </form>,
     );
-
-    render(<SystemPromptEditor value="" onChange={vi.fn()} />);
-
-    expect(
-      screen.getByRole("link", { name: "docs(opens in new tab)" }),
-    ).toHaveAttribute(
-      "href",
-      "https://archestra.ai/docs/platform-agents#system-prompt-templating",
-    );
-    // Ours is the only link: sending a reader to handlebarsjs.com answered a
-    // question the variables list answers better.
-    expect(screen.getAllByRole("link")).toHaveLength(1);
-  });
-
-  it("hides the Archestra docs link under white-labeling", () => {
-    mockGetFrontendDocsUrl.mockReturnValue(null);
-
-    render(<SystemPromptEditor value="" onChange={vi.fn()} />);
 
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "More info" }));
+    const dialog = screen.getByRole("dialog", {
+      name: "Templating Cheat Sheet",
+    });
     expect(
-      screen.getByText(
-        (_, el) =>
-          el?.tagName === "P" && /templating\./.test(el.textContent ?? ""),
-      ),
-    ).toBeInTheDocument();
+      within(dialog).getByRole("table", {
+        name: "Template variables and helpers",
+      }),
+    ).toBeVisible();
+    expect(
+      within(dialog).getByRole("row", { name: /\{\{user.teams\}\}/ }),
+    ).toHaveTextContent("Team names the user belongs to (array)");
+    expect(
+      within(dialog).getByRole("row", { name: /\{\{currentTime\}\}/ }),
+    ).toHaveTextContent("HH:MM:SS UTC");
+    expect(
+      within(dialog).getByRole("link", { name: /Handlebars/ }),
+    ).toHaveAttribute("href", "https://handlebarsjs.com/");
+    const docsLink = within(dialog).queryByRole("link", {
+      name: /Templating documentation/,
+    });
+    if (docsVisible) {
+      expect(docsLink).toHaveAttribute("href", docsUrl);
+    } else {
+      expect(docsLink).not.toBeInTheDocument();
+    }
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByTestId("editor")).toHaveValue(
+      "Help with release notes.",
+    );
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("includes only the variables available to the selected agent", async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(
+      <SystemPromptEditor value="" onChange={vi.fn()} />,
+    );
+    await user.click(screen.getByRole("button", { name: "More info" }));
+    const table = screen.getByRole("table", {
+      name: "Template variables and helpers",
+    });
+    expect(within(table).queryByText("{{tool.name}}")).not.toBeInTheDocument();
+    const examples = screen.getByRole("region", { name: "Examples" });
+    expect(examples).toHaveTextContent("{{user.name}}");
+
+    rerender(
+      <SystemPromptEditor
+        value=""
+        onChange={vi.fn()}
+        builtInAgentId={BUILT_IN_AGENT_IDS.POLICY_CONFIG}
+      />,
+    );
+    expect(within(table).getByText("{{tool.name}}")).toBeVisible();
+    expect(within(table).getByText("{{mcpServerName}}")).toBeVisible();
+    expect(within(table).queryByText("{{user.name}}")).not.toBeInTheDocument();
+    expect(within(table).getByText("{{currentDate}}")).toBeVisible();
+    expect(examples).toHaveTextContent("{{tool.name}}");
+    expect(examples).not.toHaveTextContent("{{user.name}}");
+    expect(examples).not.toHaveTextContent("user.teams");
+  });
+
+  it("keeps literal instructions editable without advertising or validating templates", async () => {
+    const onChange = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <SystemPromptEditor
+        value="Use {{user.*}} literally."
+        onChange={onChange}
+        templating={false}
+      />,
+    );
+    expect(
+      screen.queryByRole("button", { name: "More info" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/Supports Handlebars/)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/isn't valid Handlebars/),
+    ).not.toBeInTheDocument();
+    await user.type(screen.getByTestId("editor"), "!");
+    expect(onChange).toHaveBeenLastCalledWith("Use {{user.*}} literally.!");
   });
 
   it("grows the box to fit the text, between its floor and its ceiling", () => {

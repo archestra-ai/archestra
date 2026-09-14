@@ -25,10 +25,19 @@ export function useAgentCatalog(
   params?: archestraApiTypes.GetAgentCatalogData["query"] & {
     initialData?: archestraApiTypes.GetAgentCatalogResponses["200"];
     initialDataExcludeOtherPersonalAgents?: boolean;
+    initialDataPinned?: boolean;
+    initialDataLimit?: number;
+    enabled?: boolean;
   },
 ) {
-  const { initialData, initialDataExcludeOtherPersonalAgents, ...query } =
-    params ?? {};
+  const {
+    initialData,
+    initialDataExcludeOtherPersonalAgents,
+    initialDataPinned,
+    initialDataLimit,
+    enabled,
+    ...query
+  } = params ?? {};
   const useInitialData =
     query.offset === 0 &&
     (query.sortBy === undefined || query.sortBy === DEFAULT_SORT_BY) &&
@@ -41,10 +50,12 @@ export function useAgentCatalog(
     query.excludeAuthorIds === undefined &&
     query.excludeOtherPersonalAgents ===
       initialDataExcludeOtherPersonalAgents &&
+    query.pinned === initialDataPinned &&
     query.labels === undefined &&
     query.status === undefined &&
     query.providerApiKeyId === undefined &&
-    (query.limit === undefined || query.limit === DEFAULT_TABLE_LIMIT);
+    (query.limit === undefined ||
+      query.limit === (initialDataLimit ?? DEFAULT_TABLE_LIMIT));
 
   return useQuery({
     queryKey: agentCatalogQueryKeys.list(query),
@@ -54,6 +65,7 @@ export function useAgentCatalog(
       return data ?? null;
     },
     initialData: useInitialData ? initialData : undefined,
+    enabled,
     meta: PERSISTED_QUERY_META,
   });
 }

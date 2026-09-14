@@ -85,7 +85,9 @@ describe("AgentRuntimeFields", () => {
     const user = userEvent.setup();
 
     render(<Harness />);
-    await user.click(screen.getByRole("switch", { name: "Dedicated runtime" }));
+    await user.click(
+      screen.getByRole("switch", { name: "Dedicated Agent runtime" }),
+    );
 
     expect(screen.getByLabelText("Container image")).toHaveValue(
       "registry.example.com/coding-agent:1.2.3",
@@ -153,7 +155,9 @@ describe("AgentRuntimeFields", () => {
     const user = userEvent.setup();
 
     render(<Harness />);
-    await user.click(screen.getByRole("switch", { name: "Dedicated runtime" }));
+    await user.click(
+      screen.getByRole("switch", { name: "Dedicated Agent runtime" }),
+    );
 
     await user.click(screen.getByRole("button", { name: "Add variable" }));
     let dialog = screen.getByRole("dialog");

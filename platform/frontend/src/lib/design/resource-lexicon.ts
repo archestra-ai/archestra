@@ -103,6 +103,8 @@ export const FIELD_LABEL = {
  */
 export const ACTION_LABEL = {
   chat: "Chat",
+  /** Chat's label when sending starts a run in the agent's dedicated runtime. */
+  startRun: "Start run",
   connect: "Connect",
   edit: "Edit",
   /** The read-only destination offered in Edit's place when Edit is not the user's to take. */

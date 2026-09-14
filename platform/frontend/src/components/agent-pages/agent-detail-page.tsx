@@ -29,7 +29,6 @@ import { ExternalDocsLink } from "@/components/external-docs-link";
 import { PageBackLink } from "@/components/page-back-link";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
-import { FloatingActionBar } from "@/components/settings/settings-block";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -54,6 +53,7 @@ import {
   useGuardedInAppNavigation,
   useUnsavedChangesGuard,
 } from "@/components/unsaved-changes-guard";
+import { WizardFooter } from "@/components/wizard-footer";
 import {
   useDeleteProfile,
   useExportAgent,
@@ -441,6 +441,7 @@ function AgentDetails({
       // was created in.
       maxWidth="wizard"
       minWidth="phone"
+      contentOverflowX={activeFormGroups.length > 0 ? "clip" : "auto"}
       title={
         <div className="flex min-w-0 items-center gap-3">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border bg-muted/40">
@@ -636,16 +637,13 @@ function AgentDetails({
                   canSubmit,
                   readOnly,
                 }) =>
-                  // The save row floats at the foot of the form so it is in
-                  // reach without scrolling to the bottom of a long
-                  // configuration, the same bar the settings pages use. The bar
-                  // portals out of the form, so the submit button carries
-                  // `form={formId}` to stay wired to it.
+                  // Share the create flow's sticky row and primary-action
+                  // alignment so saving stays in reach on long forms.
                   // Nothing to save onto once the record is gone; the PUT would
                   // only come back 404. A reader who cannot change it has no
                   // save row at all — the alert above already says why.
                   readOnly ? null : (
-                    <FloatingActionBar>
+                    <WizardFooter className="sm:justify-end">
                       <Button
                         type="submit"
                         form={formId}
@@ -663,7 +661,7 @@ function AgentDetails({
                           <span>Save changes</span>
                         )}
                       </Button>
-                    </FloatingActionBar>
+                    </WizardFooter>
                   )
                 }
               />

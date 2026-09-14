@@ -983,33 +983,37 @@ export function McpCatalogForm({
             {catalogButton}
 
             <div className="space-y-4">
-              <IdentityFields
-                icon={form.watch("icon") ?? null}
-                onIconChange={(icon) =>
-                  form.setValue("icon", icon, { shouldDirty: true })
-                }
-                fallbackType="server"
-                showLogos
-              >
-                <FormField
-                  control={form.control}
-                  name="name"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>
-                        Name <span className="text-destructive">*</span>
-                        <ReinstallHint
-                          show={isNameDirty}
-                          label="renames tools"
-                        />
-                      </FormLabel>
-                      {isNameLocked && (
-                        <FormDescription>
-                          {isAppBacked
-                            ? "This server is backed by an app — rename it from the app's settings."
-                            : "This is a built-in server — its name is system-managed and cannot be changed."}
-                        </FormDescription>
-                      )}
+              <FormField
+                control={form.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <IdentityFields
+                      icon={form.watch("icon") ?? null}
+                      onIconChange={(icon) =>
+                        form.setValue("icon", icon, { shouldDirty: true })
+                      }
+                      fallbackType="server"
+                      showLogos
+                      label={
+                        <>
+                          <FormLabel>
+                            Name <span className="text-destructive">*</span>
+                            <ReinstallHint
+                              show={isNameDirty}
+                              label="renames tools"
+                            />
+                          </FormLabel>
+                          {isNameLocked && (
+                            <FormDescription>
+                              {isAppBacked
+                                ? "This server is backed by an app — rename it from the app's settings."
+                                : "This is a built-in server — its name is system-managed and cannot be changed."}
+                            </FormDescription>
+                          )}
+                        </>
+                      }
+                    >
                       <FormControl>
                         <Input
                           placeholder="e.g., GitHub MCP Server"
@@ -1018,10 +1022,10 @@ export function McpCatalogForm({
                         />
                       </FormControl>
                       <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </IdentityFields>
+                    </IdentityFields>
+                  </FormItem>
+                )}
+              />
               <FormField
                 control={form.control}
                 name="description"

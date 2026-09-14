@@ -13957,6 +13957,10 @@ export type GetAgentCatalogData = {
         labels?: string;
         status?: 'active' | 'deleted';
         providerApiKeyId?: string | 'organization-default';
+        /**
+         * Filter internal agents by the current user's pins. Pinned results exclude external A2A agents and are ordered by newest pin first.
+         */
+        pinned?: boolean;
         limit?: number;
         offset?: number;
         sortBy?: 'name' | 'createdAt' | 'team';
@@ -14171,6 +14175,7 @@ export type GetAgentCatalogResponses = {
                 sandboxAvailable?: boolean;
                 activationSkillsCount?: number;
                 lastUsedAt?: string | null;
+                pinnedAt: string | null;
             };
         } | {
             type: 'external';
@@ -14303,6 +14308,10 @@ export type GetAgentsData = {
          * Filter by a configured provider key, or organization-default for agents with no pinned key or model.
          */
         providerApiKeyId?: string | 'organization-default';
+        /**
+         * Filter by the current user's pins. Pinned results are ordered by newest pin first; unpinned results keep the requested sort.
+         */
+        pinned?: boolean;
         limit?: number;
         offset?: number;
         sortBy?: 'name' | 'createdAt' | 'toolsCount' | 'subagentsCount' | 'knowledgeSourcesCount' | 'team' | 'lastUsedAt';
@@ -14515,6 +14524,7 @@ export type GetAgentsResponses = {
             sandboxAvailable?: boolean;
             activationSkillsCount?: number;
             lastUsedAt?: string | null;
+            pinnedAt: string | null;
         }>;
         pagination: {
             currentPage: number;
@@ -14913,6 +14923,176 @@ export type CreateAgentResponses = {
 };
 
 export type CreateAgentResponse = CreateAgentResponses[keyof CreateAgentResponses];
+
+export type UnpinAgentData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/agents/{id}/pin';
+};
+
+export type UnpinAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UnpinAgentError = UnpinAgentErrors[keyof UnpinAgentErrors];
+
+export type UnpinAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        ok: true;
+    };
+};
+
+export type UnpinAgentResponse = UnpinAgentResponses[keyof UnpinAgentResponses];
+
+export type PinAgentData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/agents/{id}/pin';
+};
+
+export type PinAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type PinAgentError = PinAgentErrors[keyof PinAgentErrors];
+
+export type PinAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        ok: true;
+    };
+};
+
+export type PinAgentResponse = PinAgentResponses[keyof PinAgentResponses];
 
 export type GetAllAgentsData = {
     body?: never;

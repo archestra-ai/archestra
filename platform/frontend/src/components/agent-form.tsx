@@ -3280,17 +3280,15 @@ export function AgentForm({
                       onIconChange={setIcon}
                       fallbackType={defaultIconType}
                       showLogos={agentType === "agent"}
+                      label={<Label htmlFor="agentName">Name *</Label>}
                     >
-                      <div className="space-y-2">
-                        <Label htmlFor="agentName">Name *</Label>
-                        <Input
-                          id="agentName"
-                          value={name}
-                          onChange={(e) => setName(e.target.value)}
-                          placeholder={getNamePlaceholder(agentType)}
-                          autoFocus
-                        />
-                      </div>
+                      <Input
+                        id="agentName"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        placeholder={getNamePlaceholder(agentType)}
+                        autoFocus
+                      />
                     </IdentityFields>
                   )}
 

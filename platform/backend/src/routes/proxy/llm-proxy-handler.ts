@@ -86,12 +86,12 @@ import {
   getAppaPluginRefusal,
   getAppaPluginResult,
   registerAppaLlmProxyPlugin,
-} from "@/llm-proxy-plugins/appa-plugin-archestra";
+} from "@/proxy/plugins/appa-plugin-archestra";
 import {
   getLlmProxyPluginRegistry,
   type LlmProxyPluginRegistry,
   type LlmProxyRequestContext,
-} from "@/llm-proxy-plugins/registry";
+} from "@/proxy/plugins/registry";
 import { enrichDiscoveredModel } from "@/services/discovered-model-enrichment";
 import { assertSubscriptionCredentialForProvider } from "@/services/subscription-credential-guard";
 import {

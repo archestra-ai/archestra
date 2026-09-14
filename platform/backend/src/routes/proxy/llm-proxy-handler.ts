@@ -87,17 +87,17 @@ import {
   type AppaNativeClient,
   getAppaPluginArchestra,
   registerAppaLlmProxyPlugin,
-} from "@/llm-proxy-plugins/appa-plugin-archestra";
+} from "@/proxy/plugins/appa-plugin-archestra";
 import type {
   LlmProxyChildContext,
   LlmProxyPluginRegistry,
   LlmProxyRequestContext,
   LlmProxyToolCall,
-} from "@/llm-proxy-plugins/registry";
+} from "@/proxy/plugins/registry";
 import {
   getLlmProxyPluginRegistry,
   LlmProxyPluginError,
-} from "@/llm-proxy-plugins/registry";
+} from "@/proxy/plugins/registry";
 import {
   collectAppaProtocolToolResults,
   resolveAppaCarrierChild,

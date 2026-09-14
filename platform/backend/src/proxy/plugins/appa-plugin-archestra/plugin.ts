@@ -8,7 +8,7 @@ import type {
   LlmProxyToolResultsContext,
   LlmProxyToolResultsOutcome,
   LlmProxyTurnEndContext,
-} from "@/llm-proxy-plugins/registry";
+} from "@/proxy/plugins/registry";
 import {
   type AppaOutboundToolCall,
   AppaProxyHookSession,

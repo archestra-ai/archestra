@@ -1,4 +1,4 @@
-import { registerLlmProxyPlugin } from "@/llm-proxy-plugins/registry";
+import { registerLlmProxyPlugin } from "@/proxy/plugins/registry";
 import { AppaClaudeCodeAdapter } from "./adapters/claude-code";
 import { AppaCodexAdapter } from "./adapters/codex";
 import { AppaOpenCodeAdapter } from "./adapters/opencode";

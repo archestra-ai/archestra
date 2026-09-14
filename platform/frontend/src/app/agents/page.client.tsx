@@ -1,6 +1,10 @@
 "use client";
 
-import { type archestraApiTypes, E2eTestId } from "@archestra/shared";
+import {
+  type archestraApiTypes,
+  E2eTestId,
+  MAX_BULK_IDS,
+} from "@archestra/shared";
 import type {
   ColumnDef,
   RowSelectionState,
@@ -17,7 +21,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { A2aRemoteAgentActions } from "@/components/a2a-remote-agent-actions";
@@ -91,22 +95,23 @@ import { getA2aRemoteAgentDeleteDescription } from "@/lib/a2a-remote-agent-delet
 import { a2aRemoteAgentDetailHref } from "@/lib/a2a-remote-agent-route";
 import {
   type A2aRemoteAgent,
-  useA2aRemoteAgents,
   useBulkUpdateA2aRemoteAgentVisibility,
   useDeleteA2aRemoteAgent,
 } from "@/lib/a2a-remote-agents.query";
 import {
-  useAllMatchingProfiles,
   useBulkDeleteProfiles,
   useBulkUpdateProfileVisibility,
   useDefaultAgentId,
   useDeleteProfile,
   useExportAgent,
   usePermanentlyDeleteProfile,
-  useProfilesPaginated,
   useRestoreProfile,
   useUpdateDefaultAgentId,
 } from "@/lib/agent.query";
+import {
+  useAgentCatalog,
+  useAllMatchingAgentCatalog,
+} from "@/lib/agent-catalog.query";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import {
   type BulkOutcome,
@@ -129,15 +134,13 @@ import { AgentActions } from "./agent-actions";
 import { ConvertToSkillDialog } from "./convert-to-skill-dialog";
 
 type AgentsInitialData = {
-  agents: archestraApiTypes.GetAgentsResponses["200"] | null;
+  agents: archestraApiTypes.GetAgentCatalogResponses["200"] | null;
   teams: archestraApiTypes.GetTeamsResponses["200"]["data"];
 };
 
-type AgentData = archestraApiTypes.GetAgentsResponses["200"]["data"][number];
-
 type AgentListRow =
-  | { type: "agent"; value: AgentData }
-  | { type: "external"; value: A2aRemoteAgent };
+  archestraApiTypes.GetAgentCatalogResponses["200"]["data"][number];
+type AgentData = Extract<AgentListRow, { type: "agent" }>["value"];
 
 function getAgentListRowId(row: AgentListRow) {
   return `${row.type}:${row.value.id}`;
@@ -168,7 +171,9 @@ function SortIcon({
   isSorted,
 }: {
   isSorted:
-    | NonNullable<archestraApiTypes.GetAgentsData["query"]>["sortDirection"]
+    | NonNullable<
+        archestraApiTypes.GetAgentCatalogData["query"]
+      >["sortDirection"]
     | false;
 }) {
   const upArrow = <ChevronUp className="h-3 w-3" />;
@@ -236,89 +241,11 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   const sortBy = sortByFromUrl || DEFAULT_SORT_BY;
   const sortDirection = sortDirectionFromUrl || DEFAULT_SORT_DIRECTION;
   const isDeletedView = statusFromUrl === "deleted";
-  const includeExternalAgents =
-    !isDeletedView && !labelsFromUrl && !providerApiKeyIdFilter;
 
-  const externalAgentsQuery = useA2aRemoteAgents({
-    enabled: includeExternalAgents,
-  });
-  const filteredExternalAgents = useMemo(() => {
-    if (!includeExternalAgents) return [];
-
-    const normalizedName = nameFilter.trim().toLocaleLowerCase();
-    const filtered = (externalAgentsQuery.data ?? []).filter((agent) => {
-      if (
-        normalizedName &&
-        !agent.name.toLocaleLowerCase().includes(normalizedName)
-      ) {
-        return false;
-      }
-      if (scopeFilter.scope && agent.scope !== scopeFilter.scope) return false;
-      if (
-        scopeFilter.teamIds?.length &&
-        !agent.teams.some((team) => scopeFilter.teamIds?.includes(team.id))
-      ) {
-        return false;
-      }
-      if (
-        scopeFilter.authorIds?.length &&
-        (!agent.authorId || !scopeFilter.authorIds.includes(agent.authorId))
-      ) {
-        return false;
-      }
-      if (
-        scopeFilter.excludeAuthorIds?.length &&
-        agent.authorId &&
-        scopeFilter.excludeAuthorIds.includes(agent.authorId)
-      ) {
-        return false;
-      }
-      if (
-        scopeFilter.excludeOtherPersonal &&
-        agent.scope === "personal" &&
-        currentUserId &&
-        agent.authorId !== currentUserId
-      ) {
-        return false;
-      }
-      return true;
-    });
-
-    return filtered.sort((left, right) => {
-      const leftValue = sortBy === "createdAt" ? left.createdAt : left.name;
-      const rightValue = sortBy === "createdAt" ? right.createdAt : right.name;
-      const result = leftValue.localeCompare(rightValue);
-      return sortDirection === "desc" ? -result : result;
-    });
-  }, [
-    currentUserId,
-    externalAgentsQuery.data,
-    includeExternalAgents,
-    nameFilter,
-    scopeFilter,
-    sortBy,
-    sortDirection,
-  ]);
-
-  // External agents form the first rows in the unified collection. The
-  // regular-agent request starts after that prefix, preserving one accurate
-  // paginator without downloading every regular agent into the browser.
-  const pageStart = pageIndex * pageSize;
-  const pageEnd = pageStart + pageSize;
-  const visibleExternalAgents = filteredExternalAgents.slice(
-    pageStart,
-    pageEnd,
-  );
-  const regularOffset = Math.max(0, pageStart - filteredExternalAgents.length);
-  const regularSlots = Math.max(0, pageSize - visibleExternalAgents.length);
-
-  /** Everything narrowing the table, shared by the page query and
-      the "all matching" walk behind it. */
-  const listFilters = {
+  const catalogFilters = {
     sortBy,
     sortDirection,
     name: nameFilter || undefined,
-    agentTypes: ["agent"],
     scope: scopeFilter.scope,
     teamIds: scopeFilter.teamIds,
     authorIds: scopeFilter.authorIds,
@@ -328,25 +255,22 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     status: statusFromUrl || undefined,
     providerApiKeyId: providerApiKeyIdFilter,
   } satisfies Omit<
-    NonNullable<archestraApiTypes.GetAgentsData["query"]>,
+    NonNullable<archestraApiTypes.GetAgentCatalogData["query"]>,
     "limit" | "offset"
   >;
 
   const {
-    data: agentsResponse,
+    data: catalogResponse,
     isPending,
     isFetching,
     isLoadingError: isAgentsLoadError,
     refetch: refetchAgents,
-  } = useProfilesPaginated({
-    // The API requires a positive limit even when this page is entirely the
-    // external prefix; that single fetched row is deliberately not rendered.
-    limit: Math.max(regularSlots, 1),
-    offset: regularOffset,
-    includeActivationSkillsCount: true,
+  } = useAgentCatalog({
+    limit: pageSize,
+    offset: pageIndex * pageSize,
     initialData: initialData?.agents ?? undefined,
     initialDataExcludeOtherPersonalAgents: true,
-    ...listFilters,
+    ...catalogFilters,
   });
   const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
 
@@ -453,39 +377,44 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     [setPagination],
   );
 
-  const agents = (agentsResponse?.data || []).slice(0, regularSlots);
-  const rows: AgentListRow[] = [
-    ...visibleExternalAgents.map(
-      (agent): AgentListRow => ({ type: "external", value: agent }),
-    ),
-    ...agents.map((agent): AgentListRow => ({ type: "agent", value: agent })),
-  ];
-  const regularTotal = agentsResponse?.pagination.total ?? 0;
+  const rows: AgentListRow[] = catalogResponse?.data ?? [];
+  const regularTotal = catalogResponse?.totals.agents ?? 0;
   const pagination = {
     pageIndex,
     pageSize,
-    total: filteredExternalAgents.length + regularTotal,
+    total: catalogResponse?.pagination.total ?? 0,
   };
-  const showLoading =
-    (isPending ||
-      isFetching ||
-      (includeExternalAgents && externalAgentsQuery.isPending)) &&
-    rows.length === 0;
+  const showLoading = (isPending || isFetching) && rows.length === 0;
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const bulkDeleteAgents = useBulkDeleteProfiles();
   const deleteExternalAgent = useDeleteA2aRemoteAgent();
   const bulkDeleteExternalAgents = useDeleteA2aRemoteAgent({ notify: false });
   const [bulkVisibilityOpen, setBulkVisibilityOpen] = useState(false);
+  const [bulkVisibilityRows, setBulkVisibilityRows] = useState<AgentListRow[]>(
+    [],
+  );
+  const [bulkVisibilityContext, setBulkVisibilityContext] = useState<{
+    filterSignature: string;
+    allMatching: boolean;
+  } | null>(null);
   const bulkAgentVisibility = useBulkUpdateProfileVisibility();
   const bulkExternalAgentVisibility = useBulkUpdateA2aRemoteAgentVisibility();
   // Derived from what is on screen rather than read straight out of
   // `rowSelection`: the table is server-paginated, so ids left behind by
   // another page drop out of both the count and the request. The trash view
   // renders no checkbox column, so it never surfaces a bar either.
-  const filterSignature = JSON.stringify(listFilters);
+  const filterSignature = JSON.stringify(catalogFilters);
   const [escalatedFor, setEscalatedFor] = useState<string | null>(null);
   const allMatchingSelected = escalatedFor === filterSignature;
+  const allMatchingContextRef = useRef({
+    filterSignature,
+    selected: allMatchingSelected,
+  });
+  allMatchingContextRef.current = {
+    filterSignature,
+    selected: allMatchingSelected,
+  };
   const canSelectRow = (row: AgentListRow) =>
     row.type === "agent" || !!canManageExternalAgents;
   const { effectiveRowSelection, onRowSelectionChange, rangeSelection } =
@@ -506,8 +435,25 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     rangeSelection,
     canSelect: canSelectRow,
   });
-  const { data: allMatching, isFetching: isFetchingAllMatching } =
-    useAllMatchingProfiles(listFilters, { enabled: allMatchingSelected });
+  const {
+    data: allMatching,
+    isFetching: isFetchingAllMatching,
+    isError: isAllMatchingError,
+    refetch: refetchAllMatching,
+  } = useAllMatchingAgentCatalog(catalogFilters, {
+    enabled: allMatchingSelected,
+  });
+
+  useEffect(() => {
+    if (!allMatchingSelected || !isAllMatchingError) return;
+    toast.error("Couldn't select all matching agents", {
+      id: "agents-all-matching-error",
+      action: {
+        label: "Retry",
+        onClick: () => void refetchAllMatching(),
+      },
+    });
+  }, [allMatchingSelected, isAllMatchingError, refetchAllMatching]);
 
   const pageSelection = isDeletedView
     ? []
@@ -516,25 +462,83 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
           canSelectRow(row) &&
           effectiveRowSelection[getAgentListRowId(row)] === true,
       );
-  const selectedRegularAgents =
+  const selectedRows =
     allMatchingSelected && allMatching
-      ? allMatching
-      : pageSelection.flatMap((row) =>
-          row.type === "agent" ? [row.value] : [],
-        );
-  const selectedExternalAgents = allMatchingSelected
-    ? canManageExternalAgents
-      ? filteredExternalAgents
-      : []
-    : pageSelection.flatMap((row) =>
-        row.type === "external" ? [row.value] : [],
-      );
+      ? allMatching.filter(canSelectRow)
+      : pageSelection;
+  const selectedRegularAgents = selectedRows.flatMap((row) =>
+    row.type === "agent" ? [row.value] : [],
+  );
+  const selectedExternalAgents = selectedRows.flatMap((row) =>
+    row.type === "external" ? [row.value] : [],
+  );
   const selectedCount =
     selectedRegularAgents.length + selectedExternalAgents.length;
+  const bulkSelectionOverLimit = selectedCount > MAX_BULK_IDS;
+  const allMatchingSelectionUnavailable =
+    allMatchingSelected &&
+    (isFetchingAllMatching || isAllMatchingError || bulkSelectionOverLimit);
+  const bulkVisibilityRegularAgents = bulkVisibilityRows.flatMap((row) =>
+    row.type === "agent" ? [row.value] : [],
+  );
+  const bulkVisibilityExternalAgents = bulkVisibilityRows.flatMap((row) =>
+    row.type === "external" ? [row.value] : [],
+  );
+  const openBulkVisibility = async () => {
+    const requestedFilterSignature = filterSignature;
+    const requestedAllMatching = allMatchingSelected;
+    let refreshedRows = selectedRows;
+    if (requestedAllMatching) {
+      const result = await refetchAllMatching();
+      if (result.isError || !result.data) return;
+      const currentContext = allMatchingContextRef.current;
+      if (
+        currentContext.filterSignature !== requestedFilterSignature ||
+        !currentContext.selected
+      ) {
+        return;
+      }
+      refreshedRows = result.data.filter(canSelectRow);
+    }
+    if (refreshedRows.length > MAX_BULK_IDS) return;
+    setBulkVisibilityRows(refreshedRows);
+    setBulkVisibilityContext({
+      filterSignature: requestedFilterSignature,
+      allMatching: requestedAllMatching,
+    });
+    setBulkVisibilityOpen(true);
+  };
+  const openBulkDelete = () => {
+    setBulkDeleteOpen(true);
+    if (allMatchingSelected) void refetchAllMatching();
+  };
+
+  useEffect(() => {
+    if (!bulkVisibilityOpen || !bulkVisibilityContext) {
+      return;
+    }
+    const contextInvalid =
+      bulkVisibilityContext.filterSignature !== filterSignature ||
+      (bulkVisibilityContext.allMatching && !allMatchingSelected);
+    const selectionRefreshing =
+      bulkVisibilityContext.allMatching && isFetchingAllMatching;
+    if (!contextInvalid && !selectionRefreshing) return;
+    setBulkVisibilityOpen(false);
+    setBulkVisibilityRows([]);
+    setBulkVisibilityContext(null);
+  }, [
+    bulkVisibilityOpen,
+    bulkVisibilityContext,
+    filterSignature,
+    allMatchingSelected,
+    isFetchingAllMatching,
+  ]);
   const selectablePageCount = rows.filter(canSelectRow).length;
   const totalSelectableCount =
     regularTotal +
-    (canManageExternalAgents ? filteredExternalAgents.length : 0);
+    (canManageExternalAgents
+      ? (catalogResponse?.totals.externalAgents ?? 0)
+      : 0);
   const bulkVisibilityPermissions = {
     ...(selectedRegularAgents.length > 0 ? { agent: ["update" as const] } : {}),
     ...(selectedExternalAgents.length > 0
@@ -959,13 +963,11 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
         </div>
       }
     >
-      {isAgentsLoadError ||
-      (includeExternalAgents && externalAgentsQuery.isLoadingError) ? (
+      {isAgentsLoadError ? (
         <QueryLoadError
           title="Couldn't load your agents"
           onRetry={() => {
             void refetchAgents();
-            if (includeExternalAgents) void externalAgentsQuery.refetch();
           }}
         />
       ) : (
@@ -979,11 +981,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                   actions={!isDeletedView ? <TableCardViewToggle /> : undefined}
                   search={
                     <SearchInput
-                      isLoading={
-                        isFetching ||
-                        (includeExternalAgents &&
-                          externalAgentsQuery.isFetching)
-                      }
+                      isLoading={isFetching}
                       objectNamePlural="agents"
                       searchFields={["name"]}
                       paramName="name"
@@ -1029,7 +1027,9 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                 onClear={clearSelection}
                 busy={bulkBusy}
                 selectAllMatching={{
-                  total: totalSelectableCount,
+                  total: allMatchingSelected
+                    ? selectedCount
+                    : totalSelectableCount,
                   pageFullySelected:
                     selectablePageCount > 0 &&
                     pageSelection.length === selectablePageCount,
@@ -1042,18 +1042,20 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
               >
                 <PermissionButton
                   permissions={bulkVisibilityPermissions}
+                  disabled={allMatchingSelectionUnavailable}
                   variant="outline"
                   size="sm"
-                  onClick={() => setBulkVisibilityOpen(true)}
+                  onClick={openBulkVisibility}
                 >
                   <Pencil className="h-4 w-4" />
                   <span>Edit visibility</span>
                 </PermissionButton>
                 <PermissionButton
                   permissions={bulkDeletePermissions}
+                  disabled={allMatchingSelectionUnavailable}
                   variant="destructive"
                   size="sm"
-                  onClick={() => setBulkDeleteOpen(true)}
+                  onClick={openBulkDelete}
                 >
                   <Trash2 className="h-4 w-4" />
                   <span>Delete</span>
@@ -1138,44 +1140,52 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
               {bulkVisibilityOpen && (
                 <BulkVisibilityDialog
                   items={[
-                    ...selectedRegularAgents.map((profile) => ({
+                    ...bulkVisibilityRegularAgents.map((profile) => ({
                       ...profile,
                       teams: profile.teams ?? [],
                       users: profile.users ?? [],
                     })),
-                    ...selectedExternalAgents,
+                    ...bulkVisibilityExternalAgents,
                   ]}
                   noun="agent"
                   plural="agents"
                   open={bulkVisibilityOpen}
-                  onOpenChange={setBulkVisibilityOpen}
+                  onOpenChange={(open) => {
+                    setBulkVisibilityOpen(open);
+                    if (!open) {
+                      setBulkVisibilityRows([]);
+                      setBulkVisibilityContext(null);
+                    }
+                  }}
                   isPending={
                     bulkAgentVisibility.isPending ||
                     bulkExternalAgentVisibility.isPending
                   }
+                  applyDisabled={allMatchingSelectionUnavailable}
                   renderSelector={
-                    selectedExternalAgents.length > 0
+                    bulkVisibilityExternalAgents.length > 0
                       ? ({ subject: _, ...props }) => (
                           <A2aRemoteAgentScopeSelector {...props} />
                         )
                       : undefined
                   }
                   onApply={async (change) => {
+                    if (allMatchingSelectionUnavailable) return false;
                     const outcomes: BulkOutcome[] = [];
-                    if (selectedRegularAgents.length > 0) {
+                    if (bulkVisibilityRegularAgents.length > 0) {
                       outcomes.push(
                         await bulkAgentVisibility.mutateAsync({
-                          profiles: selectedRegularAgents,
+                          profiles: bulkVisibilityRegularAgents,
                           scope: change.scope,
                           teamIds: change.teamIds,
                           userIds: change.userIds,
                         }),
                       );
                     }
-                    if (selectedExternalAgents.length > 0) {
+                    if (bulkVisibilityExternalAgents.length > 0) {
                       outcomes.push(
                         await bulkExternalAgentVisibility.mutateAsync({
-                          agents: selectedExternalAgents,
+                          agents: bulkVisibilityExternalAgents,
                           scope: change.scope,
                           teamIds: change.teamIds,
                           userIds: change.userIds,
@@ -1207,7 +1217,9 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                     bulkDeleteAgents.isPending ||
                     bulkDeleteExternalAgents.isPending
                   }
+                  confirmDisabled={allMatchingSelectionUnavailable}
                   onConfirm={async () => {
+                    if (allMatchingSelectionUnavailable) return;
                     const outcomes: BulkOutcome[] = [];
                     if (selectedRegularAgents.length > 0) {
                       outcomes.push(

@@ -22,7 +22,7 @@ export const dynamic = "force-dynamic";
 
 export default async function AgentsPageServer() {
   let initialData: {
-    agents: archestraApiTypes.GetAgentsResponses["200"] | null;
+    agents: archestraApiTypes.GetAgentCatalogResponses["200"] | null;
     teams: archestraApiTypes.GetTeamsResponses["200"]["data"];
   } = {
     agents: null,
@@ -40,16 +40,14 @@ export default async function AgentsPageServer() {
       error: undefined,
     };
     const [agentsResult, teamsResult] = await Promise.allSettled([
-      archestraApiSdk.getAgents({
+      archestraApiSdk.getAgentCatalog({
         headers,
         query: {
           limit: DEFAULT_TABLE_LIMIT,
           offset: 0,
           sortBy: DEFAULT_SORT_BY,
           sortDirection: DEFAULT_SORT_DIRECTION,
-          agentTypes: ["agent"],
           excludeOtherPersonalAgents: true,
-          includeActivationSkillsCount: true,
         },
       }),
       canReadTeams

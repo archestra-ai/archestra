@@ -770,6 +770,7 @@ export const requiredEndpointPermissionsMap: Partial<
   // Generic agent CRUD routes - enforcement is handled dynamically in route handlers
   // based on agentType (agent, mcp_gateway, llm_proxy map to agent, mcpGateway, llmProxy resources)
   [RouteId.GetAgents]: {},
+  [RouteId.GetAgentCatalog]: {},
   [RouteId.GetAllAgents]: {},
   [RouteId.GetAgentCredentialReadiness]: {},
   [RouteId.GetAgent]: {},

@@ -1,6 +1,84 @@
 import { E2eTestId } from "@archestra/shared/e2e-test-ids";
+import { makeUserPermissions } from "@/mocks/data/auth";
 import { makeAgent, makeAgentsList } from "../src/mocks/data/agents";
 import { expect, test } from "./fixtures";
+
+function makeAgentCatalog({
+  agents = [],
+  externalAgents = [],
+  total = agents.length + externalAgents.length,
+  agentTotal = agents.length,
+  externalAgentTotal = externalAgents.length,
+}: {
+  agents?: ReturnType<typeof makeAgent>[];
+  externalAgents?: Record<string, unknown>[];
+  total?: number;
+  agentTotal?: number;
+  externalAgentTotal?: number;
+} = {}) {
+  const pagination = makeAgentsList({
+    agents,
+  }).pagination;
+
+  return {
+    data: [
+      ...externalAgents.map((value) => ({ type: "external", value })),
+      ...agents.map((value) => ({ type: "agent", value })),
+    ],
+    pagination: {
+      ...pagination,
+      total,
+    },
+    totals: {
+      agents: agentTotal,
+      externalAgents: externalAgentTotal,
+    },
+  };
+}
+
+function makeExternalAgent(
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    id: "external-agent",
+    organizationId: "org-1",
+    name: "Partner Agent",
+    description: "Delegates work to a partner system",
+    discoveryMode: "well_known",
+    discoveryUrl: "https://agent.example.com",
+    agentCard: { name: "Partner Agent" },
+    cardHash: "card-hash",
+    lastDiscoveredAt: "2026-09-08T12:00:00.000Z",
+    createdAt: "2026-09-08T12:00:00.000Z",
+    updatedAt: "2026-09-08T12:00:00.000Z",
+    scope: "org",
+    authorId: "user-1",
+    authorName: "Test User",
+    teams: [],
+    users: [],
+    connection: {
+      id: "connection-1",
+      remoteAgentId: "external-agent",
+      selectedInterface: {
+        url: "https://agent.example.com/a2a",
+        protocolBinding: "JSONRPC",
+        protocolVersion: "1.0",
+      },
+      securityRequirement: null,
+      authType: "none",
+      authConfig: {},
+      enabled: true,
+      lastVerifiedAt: "2026-09-08T12:00:00.000Z",
+      createdAt: "2026-09-08T12:00:00.000Z",
+      updatedAt: "2026-09-08T12:00:00.000Z",
+      hasCredential: false,
+    },
+    toolId: "tool-1",
+    assignmentCount: 1,
+    lastUsedAt: null,
+    ...overrides,
+  };
+}
 
 test.describe("Agents", () => {
   test("selects and bulk modifies regular and external A2A agents together", async ({
@@ -12,53 +90,14 @@ test.describe("Agents", () => {
       id: "regular-agent",
       name: "Research Agent",
     });
-    const externalAgent = {
-      id: "external-agent",
-      organizationId: "org-1",
-      name: "Partner Agent",
-      description: "Delegates work to a partner system",
-      discoveryMode: "well_known",
-      discoveryUrl: "https://agent.example.com",
-      agentCard: { name: "Partner Agent" },
-      cardHash: "card-hash",
-      lastDiscoveredAt: "2026-09-08T12:00:00.000Z",
-      createdAt: "2026-09-08T12:00:00.000Z",
-      updatedAt: "2026-09-08T12:00:00.000Z",
-      scope: "org",
-      authorId: "user-1",
-      authorName: "Test User",
-      teams: [],
-      users: [],
-      connection: {
-        id: "connection-1",
-        remoteAgentId: "external-agent",
-        selectedInterface: {
-          url: "https://agent.example.com/a2a",
-          protocolBinding: "JSONRPC",
-          protocolVersion: "1.0",
-        },
-        securityRequirement: null,
-        authType: "none",
-        authConfig: {},
-        enabled: true,
-        lastVerifiedAt: "2026-09-08T12:00:00.000Z",
-        createdAt: "2026-09-08T12:00:00.000Z",
-        updatedAt: "2026-09-08T12:00:00.000Z",
-        hasCredential: false,
-      },
-      toolId: "tool-1",
-      assignmentCount: 1,
-      lastUsedAt: null,
-    };
+    const externalAgent = makeExternalAgent();
     await mswControl.use({
       method: "get",
-      url: "/api/agents",
-      body: makeAgentsList({ agents: [regularAgent] }),
-    });
-    await mswControl.use({
-      method: "get",
-      url: "/api/a2a/remote-agents",
-      body: [externalAgent],
+      url: "/api/agent-catalog",
+      body: makeAgentCatalog({
+        agents: [regularAgent],
+        externalAgents: [externalAgent],
+      }),
     });
 
     await agentsPage.goto();
@@ -192,8 +231,8 @@ test.describe("Agents", () => {
   }) => {
     await mswControl.use({
       method: "get",
-      url: "/api/agents",
-      body: makeAgentsList({ agents: [] }),
+      url: "/api/agent-catalog",
+      body: makeAgentCatalog(),
     });
 
     for (const [query, emptyMessage] of [
@@ -204,6 +243,314 @@ test.describe("Agents", () => {
       await page.goto(`/agents?${query}`);
       await expect(agentsPage.table.getByText(emptyMessage)).toBeVisible();
     }
+  });
+
+  test("fails closed when selecting all matching agents cannot be loaded", async ({
+    page,
+    agentsPage,
+    mswControl,
+  }) => {
+    const regularAgent = makeAgent({
+      id: "regular-agent",
+      name: "Research Agent",
+    });
+    const externalAgent = makeExternalAgent();
+    await mswControl.use({
+      method: "get",
+      url: "/api/agent-catalog",
+      body: makeAgentCatalog({
+        agents: [regularAgent],
+        externalAgents: [externalAgent],
+        total: 3,
+        agentTotal: 2,
+      }),
+    });
+    await agentsPage.goto();
+
+    await page.getByRole("checkbox", { name: "Select Research Agent" }).click();
+    await page.getByRole("checkbox", { name: "Select Partner Agent" }).click();
+    await mswControl.use({
+      method: "get",
+      url: "/api/agent-catalog",
+      status: 500,
+      body: { error: { message: "catalog unavailable" } },
+    });
+    await page
+      .getByRole("button", {
+        name: "Select all 3 agents that match the current filters.",
+      })
+      .click();
+
+    await expect(
+      page.getByText("Couldn't select all matching agents"),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Edit visibility" }),
+    ).toBeDisabled();
+    await expect(
+      page.getByRole("button", { name: "Delete", exact: true }),
+    ).toBeDisabled();
+  });
+
+  test("blocks an open bulk dialog when all-matching refresh fails", async ({
+    page,
+    agentsPage,
+    mswControl,
+  }) => {
+    const regularAgent = makeAgent({
+      id: "regular-agent",
+      name: "Research Agent",
+    });
+    await mswControl.use({
+      method: "get",
+      url: "/api/agent-catalog",
+      body: makeAgentCatalog({
+        agents: [regularAgent],
+        total: 2,
+        agentTotal: 2,
+      }),
+    });
+    await agentsPage.goto();
+
+    await page.getByRole("checkbox", { name: "Select Research Agent" }).click();
+    await page
+      .getByRole("button", {
+        name: "Select all 2 agents that match the current filters.",
+      })
+      .click();
+    await mswControl.use({
+      method: "get",
+      url: "/api/agent-catalog",
+      status: 500,
+      body: { error: { message: "catalog unavailable" } },
+    });
+    await page.getByRole("button", { name: "Delete", exact: true }).click();
+    const confirm = page.getByRole("button", { name: "Delete agents" });
+
+    await expect(
+      page.getByText("Couldn't select all matching agents"),
+    ).toBeVisible();
+    await expect(confirm).toBeDisabled();
+  });
+
+  test("seeds bulk visibility from the refreshed all-matching rows", async ({
+    page,
+    agentsPage,
+    mswControl,
+  }) => {
+    const regularAgent = makeAgent({
+      id: "regular-agent",
+      name: "Research Agent",
+      scope: "personal",
+    });
+    await mswControl.use({
+      method: "get",
+      url: "/api/agent-catalog",
+      body: makeAgentCatalog({
+        agents: [regularAgent],
+        total: 2,
+        agentTotal: 2,
+      }),
+    });
+    await agentsPage.goto();
+
+    await page.getByRole("checkbox", { name: "Select Research Agent" }).click();
+    await page
+      .getByRole("button", {
+        name: "Select all 2 agents that match the current filters.",
+      })
+      .click();
+    await mswControl.use({
+      method: "get",
+      url: "/api/agent-catalog",
+      body: makeAgentCatalog({
+        agents: [{ ...regularAgent, scope: "org" }],
+      }),
+    });
+    await page.getByRole("button", { name: "Edit visibility" }).click();
+
+    const visibilityDialog = page.getByRole("dialog", {
+      name: "Edit visibility",
+    });
+    await expect(
+      visibilityDialog.getByRole("button", { name: /Organization/ }),
+    ).toBeVisible();
+  });
+
+  test("does not open bulk visibility for filters that changed during refresh", async ({
+    page,
+    agentsPage,
+    mswControl,
+  }) => {
+    const regularAgent = makeAgent({
+      id: "regular-agent",
+      name: "Research Agent",
+    });
+    await mswControl.use({
+      method: "get",
+      url: "/api/agent-catalog",
+      body: makeAgentCatalog({
+        agents: [regularAgent],
+        total: 2,
+        agentTotal: 2,
+      }),
+    });
+    await agentsPage.goto();
+    await page.getByRole("checkbox", { name: "Select Research Agent" }).click();
+    await page
+      .getByRole("button", {
+        name: "Select all 2 agents that match the current filters.",
+      })
+      .click();
+    await expect(
+      page.getByRole("button", { name: "Edit visibility" }),
+    ).toBeEnabled();
+
+    await mswControl.use({
+      method: "get",
+      url: "/api/agent-catalog",
+      delayMs: 3000,
+      body: makeAgentCatalog({ agents: [regularAgent] }),
+    });
+    const refreshResponse = page.waitForResponse((response) => {
+      const url = new URL(response.url());
+      return (
+        url.pathname === "/api/agent-catalog" &&
+        url.searchParams.get("selectableOnly") === "true"
+      );
+    });
+    await page.getByRole("button", { name: "Edit visibility" }).click();
+    await page.evaluate(() => {
+      window.history.pushState({}, "", "/agents?status=deleted");
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    });
+    await expect(page).toHaveURL(/status=deleted/);
+    await refreshResponse;
+
+    await expect(
+      page.getByRole("dialog", { name: "Edit visibility" }),
+    ).toHaveCount(0);
+  });
+
+  test("selects later regular agents without counting unselectable external rows", async ({
+    page,
+    agentsPage,
+    mswControl,
+  }) => {
+    const firstAgent = makeAgent({ id: "regular-1", name: "Regular One" });
+    const secondAgent = makeAgent({ id: "regular-2", name: "Regular Two" });
+    await mswControl.use({
+      method: "get",
+      url: "/api/user/permissions",
+      body: makeUserPermissions({
+        agent: ["read", "update", "delete"],
+        agentSettings: [],
+      }),
+    });
+    await mswControl.use({
+      method: "get",
+      url: "/api/agent-catalog",
+      body: makeAgentCatalog({
+        agents: [firstAgent],
+        externalAgents: [makeExternalAgent()],
+        total: 502,
+        agentTotal: 2,
+        externalAgentTotal: 500,
+      }),
+    });
+    await agentsPage.goto();
+    await expect(
+      page.getByRole("checkbox", { name: "Select Partner Agent" }),
+    ).toBeDisabled();
+    await page.getByRole("checkbox", { name: "Select Regular One" }).click();
+
+    await mswControl.use({
+      method: "get",
+      url: "/api/agent-catalog",
+      body: makeAgentCatalog({ agents: [firstAgent, secondAgent] }),
+    });
+    const selectableRequest = page.waitForRequest((request) => {
+      const url = new URL(request.url());
+      return (
+        url.pathname === "/api/agent-catalog" &&
+        url.searchParams.get("selectableOnly") === "true"
+      );
+    });
+    await page
+      .getByRole("button", {
+        name: "Select all 2 agents that match the current filters.",
+      })
+      .click();
+    await selectableRequest;
+
+    await expect(
+      page
+        .locator('[data-slot="bulk-actions-bar"]')
+        .getByText("2 agents selected"),
+    ).toBeVisible();
+  });
+
+  test("blocks bulk actions when a refreshed selection exceeds the limit", async ({
+    page,
+    agentsPage,
+    mswControl,
+  }) => {
+    const regularAgent = makeAgent({
+      id: "regular-agent",
+      name: "Research Agent",
+    });
+    await mswControl.use({
+      method: "get",
+      url: "/api/agent-catalog",
+      body: makeAgentCatalog({
+        agents: [regularAgent],
+        total: 2,
+        agentTotal: 2,
+      }),
+    });
+    await agentsPage.goto();
+    await page.getByRole("checkbox", { name: "Select Research Agent" }).click();
+
+    await mswControl.use({
+      method: "get",
+      url: "/api/agent-catalog",
+      body: makeAgentCatalog({
+        agents: [makeAgent({ id: "agent-500", name: "Agent 500" })],
+        total: 501,
+        agentTotal: 501,
+      }),
+    });
+    for (let batch = 4; batch >= 0; batch -= 1) {
+      const agents = Array.from({ length: 100 }, (_, index) => {
+        const id = batch * 100 + index;
+        return makeAgent({ id: `agent-${id}`, name: `Agent ${id}` });
+      });
+      await mswControl.use({
+        method: "get",
+        url: "/api/agent-catalog",
+        body: makeAgentCatalog({
+          agents,
+          total: 501,
+          agentTotal: 501,
+        }),
+        once: true,
+      });
+    }
+    await page
+      .getByRole("button", {
+        name: "Select all 2 agents that match the current filters.",
+      })
+      .click();
+
+    await expect(
+      page.getByText("Select at most 500 items at a time."),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Edit visibility" }),
+    ).toBeDisabled();
+    await expect(
+      page.getByRole("button", { name: "Delete", exact: true }),
+    ).toBeDisabled();
   });
 
   test("can create and delete an agent", async ({
@@ -224,8 +571,8 @@ test.describe("Agents", () => {
     });
     await mswControl.use({
       method: "get",
-      url: "/api/agents",
-      body: makeAgentsList({ agents: [newAgent] }),
+      url: "/api/agent-catalog",
+      body: makeAgentCatalog({ agents: [newAgent] }),
     });
 
     await agentsPage.goto();
@@ -266,8 +613,8 @@ test.describe("Agents", () => {
     // following DELETE's onSuccess returns the empty list.
     await mswControl.use({
       method: "get",
-      url: "/api/agents",
-      body: makeAgentsList({ agents: [] }),
+      url: "/api/agent-catalog",
+      body: makeAgentCatalog(),
     });
     await mswControl.use({
       method: "delete",
@@ -298,8 +645,8 @@ test.describe("Agents", () => {
 
     await mswControl.use({
       method: "get",
-      url: "/api/agents",
-      body: makeAgentsList({ agents: [original] }),
+      url: "/api/agent-catalog",
+      body: makeAgentCatalog({ agents: [original] }),
     });
     await mswControl.use({
       method: "post",

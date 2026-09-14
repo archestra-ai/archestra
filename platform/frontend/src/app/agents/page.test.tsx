@@ -3,13 +3,12 @@
 import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { getServerApiHeadersMock, getAgentsMock, getTeamsMock } = vi.hoisted(
-  () => ({
+const { getServerApiHeadersMock, getAgentCatalogMock, getTeamsMock } =
+  vi.hoisted(() => ({
     getServerApiHeadersMock: vi.fn(),
-    getAgentsMock: vi.fn(),
+    getAgentCatalogMock: vi.fn(),
     getTeamsMock: vi.fn(),
-  }),
-);
+  }));
 const { serverCanAccessPageMock, serverHasPermissionsMock } = vi.hoisted(
   () => ({
     serverCanAccessPageMock: vi.fn(),
@@ -19,7 +18,7 @@ const { serverCanAccessPageMock, serverHasPermissionsMock } = vi.hoisted(
 
 vi.mock("@archestra/shared", () => ({
   archestraApiSdk: {
-    getAgents: getAgentsMock,
+    getAgentCatalog: getAgentCatalogMock,
     getTeams: getTeamsMock,
   },
   DocsPage: { PlatformOrchestrator: "platform-orchestrator" },
@@ -52,8 +51,8 @@ describe("AgentsPageServer", () => {
     getTeamsMock.mockResolvedValue({ data: { data: [] } });
   });
 
-  it("keeps rendering the combined page when the regular-agent seed fails", async () => {
-    getAgentsMock.mockRejectedValue(new Error("agents unavailable"));
+  it("keeps rendering the page when the catalog seed fails", async () => {
+    getAgentCatalogMock.mockRejectedValue(new Error("agents unavailable"));
 
     render(await AgentsPageServer());
 
@@ -70,6 +69,6 @@ describe("AgentsPageServer", () => {
     expect(
       screen.getByText("You don't have permission to access this page."),
     ).toBeInTheDocument();
-    expect(getAgentsMock).not.toHaveBeenCalled();
+    expect(getAgentCatalogMock).not.toHaveBeenCalled();
   });
 });

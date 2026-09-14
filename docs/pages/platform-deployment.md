@@ -1484,7 +1484,7 @@ Verified live coverage is demonstrated on sequential public publication and priv
   - Keep this disabled until the experimental client, history, and remedy paths required by your workflow are verified.
 
 - **`ARCHESTRA_LLM_PROXY_APPA_NATIVE_SPAWN_TOOL_MAP`** - Maps stock native delegation names to a kagent policy contract.
-  - Use a JSON object. Supported Codex keys are `multi_agent_v1.spawn_agent`, `agents.spawn_agent`, and `collaboration.spawn_agent`. OpenCode uses `task`.
+  - Use a JSON object. Claude Code uses `Agent`. Supported Codex keys are `multi_agent_v1.spawn_agent`, `agents.spawn_agent`, and `collaboration.spawn_agent`. OpenCode uses `task`.
   - Each value uses the runtime wire form `agent:<namespace>/<agent>`, for example `{"multi_agent_v1.spawn_agent":"agent:fixture/lifecycle_child"}`.
   - Requires `ARCHESTRA_LLM_PROXY_APPA_RUNTIME_TOKEN`.
   - Declare the matching canonical `agent/<namespace>/<agent>` tool in the runtime policy. Do not declare the client-native tool name there.

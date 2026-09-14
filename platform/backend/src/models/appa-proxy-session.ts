@@ -79,6 +79,11 @@ class AppaProxySessionModel {
         .limit(1);
       let created = false;
       if (session) {
+        if (session.profileId !== params.profileId) {
+          throw new AppaProxySessionProtocolError(
+            "client session is already bound to another proxy profile",
+          );
+        }
         assertSessionBinding(session, params.binding ?? directBinding());
       }
       if (!session) {

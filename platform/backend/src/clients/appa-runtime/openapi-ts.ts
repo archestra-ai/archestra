@@ -12,9 +12,9 @@ const directory = fileURLToPath(new URL(".", import.meta.url));
 const canonicalSource = await readFile(sourcePath, "utf8");
 // Export from this runtime revision with:
 // curl --fail --show-error --header "Authorization: Bearer ${APPA_RUNTIME_TOKEN:?}" "${APPA_RUNTIME_URL:?}/proxy/v1/openapi.json" -o runtime.openapi.json
-const canonicalRuntimeRevision = "84d3aac63a386fe49b16f2848e69a95b2ebdbaa4";
+const canonicalRuntimeRevision = "0822bafca16b7fc1ea486b983a1f0a91786a31a8";
 const canonicalSourceDigest =
-  "ef5f3e127f91c9396b1584a2d1363ea79b3f375a1ea2468f11739b8dab6f36ac";
+  "18cdb93ab8b1391881a1242538fb21c09254261b2a804c23c00c3c9e3e5ce8ad";
 if (
   createHash("sha256").update(canonicalSource).digest("hex") !==
   canonicalSourceDigest

@@ -53,6 +53,7 @@ function acknowledge(event: { event: string }) {
 
 function open(params: {
   config?: AppaProxyHookConfig;
+  profileId?: string;
   sessionId?: string;
   ownerScopeHash?: string;
   toolResults?: Parameters<typeof AppaProxyHookSession.open>[0]["toolResults"];
@@ -63,7 +64,7 @@ function open(params: {
 }) {
   return AppaProxyHookSession.open({
     config: params.config ?? hookConfig,
-    profileId,
+    profileId: params.profileId ?? profileId,
     ownerScopeHash: params.ownerScopeHash ?? "owner-a",
     clientSessionId: params.sessionId ?? "conversation-a",
     modelInput: {
@@ -562,6 +563,36 @@ describe("OpenAPPA durable proxy correlation", () => {
     expect(first.rootId).not.toBe(second.rootId);
   });
 
+  test("rejects a result session rebound to another proxy profile", async () => {
+    const sessionId = "profile-bound-result";
+    const first = await open({ sessionId });
+    await first.authorizeOutboundToolCalls([outbound("call_profile_bound")]);
+    await first.finish();
+
+    await expect(
+      open({
+        profileId: "00000000-0000-4000-8000-000000000002",
+        sessionId,
+        toolResults: [{ id: "call_profile_bound", content: "reported" }],
+      }),
+    ).rejects.toThrow("another proxy profile");
+  });
+
+  test("rejects a result replayed into another owner scope", async () => {
+    const sessionId = "owner-bound-result";
+    const first = await open({ sessionId, ownerScopeHash: "owner-a" });
+    await first.authorizeOutboundToolCalls([outbound("call_owner_bound")]);
+    await first.finish();
+
+    await expect(
+      open({
+        sessionId,
+        ownerScopeHash: "owner-b",
+        toolResults: [{ id: "call_owner_bound", content: "reported" }],
+      }),
+    ).rejects.toThrow("does not match");
+  });
+
   test("correlates a dispatch rewrite by emitted bytes and APPA target", async () => {
     const events: Array<Record<string, unknown>> = [];
     server.use(
@@ -827,6 +858,206 @@ describe("OpenAPPA durable proxy correlation", () => {
     await session.finish();
   });
 
+  test("replays a bound native spawn result instead of admitting its raw content blocks", async () => {
+    const runtimeConfig = { ...hookConfig, runtimeToken: "runtime-token" };
+    const events: Array<Record<string, unknown>> = [];
+    server.use(
+      http.get(`${runtimeUrl}/proxy/v1/capabilities`, () =>
+        HttpResponse.json({
+          protocol_version: 1,
+          legacy_hooks: false,
+          completed_event_replay: true,
+          typed_offers: true,
+          restriction_acceptance: true,
+          human_approval: false,
+          approval_grants: false,
+          held_batches: true,
+          position_bound_batch_offers: true,
+          batch_commit: true,
+          input_rewrite_holds_dispatch: true,
+          dispatch_call_mapping: true,
+          sanitized_results: true,
+          child_workflows: true,
+          child_actor_targeting: true,
+          spawn_result: true,
+        }),
+      ),
+      http.post(`${runtimeUrl}/proxy/v1/events`, async ({ request }) => {
+        const raw = await request.text();
+        const envelope = JSON.parse(raw) as {
+          event_id: string;
+          event: Record<string, unknown>;
+        };
+        events.push(envelope.event);
+        const decision =
+          envelope.event.event === "tool_calls"
+            ? {
+                decision: "allow_calls",
+                calls: [
+                  {
+                    call_id: "native-agent",
+                    dispatch_id: "spawn-dispatch",
+                    spawn_binding: "spawn-binding",
+                  },
+                ],
+              }
+            : envelope.event.event === "spawn_result"
+              ? {
+                  decision: "result_admitted",
+                  call_id: "native-agent",
+                  presentation: "child answer",
+                }
+              : { decision: "ack" };
+        return HttpResponse.json({
+          protocol_version: 1,
+          event_id: envelope.event_id,
+          request_sha256: createHash("sha256").update(raw).digest("hex"),
+          decision,
+        });
+      }),
+    );
+    const parent = await open({
+      config: runtimeConfig,
+      sessionId: "native-spawn-parent",
+    });
+    const argumentsJson = '{"prompt":"read"}';
+    await parent.authorizeOutboundToolCalls([
+      {
+        id: "native-agent",
+        emittedName: "Agent",
+        emittedArguments: argumentsJson,
+        emittedArgumentsCanonical: canonicalJsonObject(argumentsJson),
+        targetName: "agent/fixture/lifecycle_child",
+        targetArguments: { prompt: "read" },
+        spawn: true,
+      },
+    ]);
+    await parent.finish();
+
+    const continuation = await open({
+      config: runtimeConfig,
+      sessionId: "native-spawn-parent",
+      toolResults: [
+        {
+          id: "native-agent",
+          content: [{ type: "text", text: "private child answer" }],
+          status: "failure",
+          message: "private failure message",
+          spawnControl: { agentId: "caller-supplied-agent" },
+          claimedCall: { name: "Agent", rawArguments: argumentsJson },
+        },
+      ],
+    });
+    expect(events.findLast((event) => event.event === "spawn_result")).toEqual({
+      event: "spawn_result",
+      root_id: continuation.rootId,
+      call_id: "native-agent",
+      dispatch_id: "spawn-dispatch",
+    });
+    expect(
+      events.some(
+        (event) =>
+          event.event === "tool_result" && event.call_id === "native-agent",
+      ),
+    ).toBe(false);
+    await continuation.finish();
+  });
+
+  test("rejects a bound spawn result before result admission on an older runtime", async () => {
+    const runtimeConfig = { ...hookConfig, runtimeToken: "runtime-token" };
+    const events: Array<Record<string, unknown>> = [];
+    server.use(
+      http.get(`${runtimeUrl}/proxy/v1/capabilities`, () =>
+        HttpResponse.json({
+          protocol_version: 1,
+          legacy_hooks: false,
+          completed_event_replay: true,
+          typed_offers: true,
+          restriction_acceptance: true,
+          human_approval: false,
+          approval_grants: false,
+          held_batches: true,
+          position_bound_batch_offers: true,
+          batch_commit: true,
+          input_rewrite_holds_dispatch: true,
+          dispatch_call_mapping: true,
+          sanitized_results: true,
+          child_workflows: true,
+          child_actor_targeting: true,
+        }),
+      ),
+      http.post(`${runtimeUrl}/proxy/v1/events`, async ({ request }) => {
+        const raw = await request.text();
+        const envelope = JSON.parse(raw) as {
+          event_id: string;
+          event: Record<string, unknown>;
+        };
+        events.push(envelope.event);
+        return HttpResponse.json({
+          protocol_version: 1,
+          event_id: envelope.event_id,
+          request_sha256: createHash("sha256").update(raw).digest("hex"),
+          decision:
+            envelope.event.event === "tool_calls"
+              ? {
+                  decision: "allow_calls",
+                  calls: [
+                    {
+                      call_id: "old-runtime-spawn",
+                      dispatch_id: "old-runtime-dispatch",
+                      spawn_binding: "old-runtime-binding",
+                    },
+                  ],
+                }
+              : { decision: "ack" },
+        });
+      }),
+    );
+    const parent = await open({
+      config: runtimeConfig,
+      sessionId: "old-runtime-parent",
+    });
+    await parent.authorizeOutboundToolCalls([
+      {
+        ...outbound("old-runtime-spawn"),
+        emittedName: "Agent",
+        targetName: "agent/fixture/lifecycle_child",
+        spawn: true,
+      },
+    ]);
+    await parent.finish();
+
+    await expect(
+      open({
+        config: runtimeConfig,
+        sessionId: "old-runtime-parent",
+        toolResults: [
+          {
+            id: "old-runtime-spawn",
+            content: { agent_id: "child", private: "must not submit" },
+          },
+        ],
+      }),
+    ).rejects.toMatchObject({ kind: "unavailable" });
+    expect(events.filter((event) => event.event === "spawn_result")).toEqual(
+      [],
+    );
+    const [call] = await db
+      .select({ state: schema.appaProxyCallsTable.state })
+      .from(schema.appaProxyCallsTable)
+      .innerJoin(
+        schema.appaProxySessionsTable,
+        eq(
+          schema.appaProxyCallsTable.sessionId,
+          schema.appaProxySessionsTable.id,
+        ),
+      )
+      .where(
+        eq(schema.appaProxySessionsTable.clientSessionId, "old-runtime-parent"),
+      );
+    expect(call?.state).toBe("open");
+  });
+
   test("quarantines an uncertain hook send and never replays it", async () => {
     let attempts = 0;
     server.use(
@@ -985,6 +1216,234 @@ describe("OpenAPPA proxy route contract", () => {
         api === "responses" ? "call_response_1" : "call_list_files",
       );
     }
+  });
+
+  test("does not infer after a stock client omits an issued local-tool observation body", async ({
+    makeAgent,
+  }) => {
+    const claudeAgent = await makeAgent({
+      name: "APPA missing Claude observation",
+    });
+    let claudeProviderCalls = 0;
+    vi.spyOn(anthropicAdapterFactory, "createClient").mockImplementation(() => {
+      const client = createAnthropicTestClient({
+        includeToolUseNonStreaming: true,
+      });
+      const create = client.messages.create;
+      return {
+        messages: {
+          ...client.messages,
+          create: async (...args: Parameters<typeof create>) => {
+            claudeProviderCalls++;
+            return await create(...args);
+          },
+        },
+      } as never;
+    });
+    const claudeInitial = await app.inject({
+      method: "POST",
+      url: `/v1/anthropic/${claudeAgent.id}/v1/messages`,
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": "test-key",
+        "anthropic-version": "2023-06-01",
+        "user-agent": "claude-code/2.1.258",
+      },
+      payload: {
+        model: "claude-3-5-sonnet-20241022",
+        max_tokens: 64,
+        metadata: { user_id: '{"session_id":"missing-claude-body"}' },
+        system:
+          "x-anthropic-billing-header: cc_version=2.1.258; cc_entrypoint=claude-code;",
+        messages: [{ role: "user", content: "inspect" }],
+        tools: [
+          {
+            name: "get_weather",
+            description: "Gets weather",
+            input_schema: { type: "object", properties: {} },
+          },
+        ],
+      },
+    });
+    expect(claudeInitial.statusCode, claudeInitial.body).toBe(200);
+    const claudeMessage = claudeInitial.json();
+    const claudeCall = claudeMessage.content.find(
+      (item: { type: string }) => item.type === "tool_use",
+    );
+    const claudeMissing = await app.inject({
+      method: "POST",
+      url: `/v1/anthropic/${claudeAgent.id}/v1/messages`,
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": "test-key",
+        "anthropic-version": "2023-06-01",
+        "user-agent": "claude-code/2.1.258",
+      },
+      payload: {
+        model: "claude-3-5-sonnet-20241022",
+        max_tokens: 64,
+        metadata: { user_id: '{"session_id":"missing-claude-body"}' },
+        system:
+          "x-anthropic-billing-header: cc_version=2.1.258; cc_entrypoint=claude-code;",
+        messages: [
+          { role: "user", content: "inspect" },
+          { role: "assistant", content: claudeMessage.content },
+          {
+            role: "user",
+            content: [{ type: "tool_result", tool_use_id: claudeCall.id }],
+          },
+        ],
+      },
+    });
+    expect(claudeMissing.statusCode, claudeMissing.body).toBeGreaterThanOrEqual(
+      400,
+    );
+    expect(claudeProviderCalls).toBe(1);
+
+    const openCodeAgent = await makeAgent({
+      name: "APPA missing OpenCode observation",
+    });
+    let openCodeProviderCalls = 0;
+    vi.spyOn(kimiAdapterFactory, "createClient").mockImplementation(() => {
+      const client = createOpenAiTestClient({ includeToolCalls: true });
+      const create = client.chat.completions.create;
+      return {
+        chat: {
+          completions: {
+            ...client.chat.completions,
+            create: async (...args: Parameters<typeof create>) => {
+              openCodeProviderCalls++;
+              return await create(...args);
+            },
+          },
+        },
+      } as never;
+    });
+    const openCodeHeaders = {
+      authorization: "Bearer test-key",
+      "content-type": "application/json",
+      "user-agent": "opencode/1.18.29",
+      "x-opencode-session": "missing-opencode-body",
+    };
+    const openCodeInitial = await app.inject({
+      method: "POST",
+      url: `/v1/kimi/${openCodeAgent.id}/chat/completions`,
+      headers: openCodeHeaders,
+      payload: {
+        model: "kimi-k2-0711-preview",
+        messages: [{ role: "user", content: "inspect" }],
+        tools: [
+          {
+            type: "function",
+            function: {
+              name: "get_weather",
+              parameters: { type: "object", properties: {} },
+            },
+          },
+        ],
+      },
+    });
+    expect(openCodeInitial.statusCode, openCodeInitial.body).toBe(200);
+    const openCodeMessage = openCodeInitial.json().choices[0].message;
+    const openCodeMissing = await app.inject({
+      method: "POST",
+      url: `/v1/kimi/${openCodeAgent.id}/chat/completions`,
+      headers: openCodeHeaders,
+      payload: {
+        model: "kimi-k2-0711-preview",
+        messages: [
+          { role: "user", content: "inspect" },
+          openCodeMessage,
+          { role: "tool", tool_call_id: openCodeMessage.tool_calls[0].id },
+        ],
+      },
+    });
+    expect(
+      openCodeMissing.statusCode,
+      openCodeMissing.body,
+    ).toBeGreaterThanOrEqual(400);
+    expect(openCodeProviderCalls).toBe(1);
+
+    config.llmProxy.appaHook = { ...hookConfig, nativeCodexEnabled: true };
+    const codexAgent = await makeAgent({
+      name: "APPA missing Codex observation",
+    });
+    let codexProviderCalls = 0;
+    vi.spyOn(openAiResponsesAdapterFactory, "createClient").mockReturnValue({
+      responses: {
+        create: async () => {
+          codexProviderCalls++;
+          return {
+            id: "resp-missing-codex-body",
+            object: "response",
+            created_at: 1,
+            model: "gpt-4o",
+            status: "completed",
+            output: [
+              {
+                id: "fc-missing-codex-body",
+                type: "function_call",
+                call_id: "call-missing-codex-body",
+                namespace: "functions",
+                name: "exec_command",
+                arguments: '{"cmd":"pwd"}',
+              },
+            ],
+            usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 },
+          };
+        },
+      },
+    } as never);
+    const codexHeaders = {
+      authorization: "Bearer test-key",
+      originator: "codex_cli_rs",
+      "content-type": "application/json",
+      "x-archestra-session-id": "missing-codex-body",
+    };
+    const codexTools = [
+      {
+        type: "function",
+        name: "exec_command",
+        parameters: { type: "object", required: ["cmd"] },
+      },
+      {
+        type: "function",
+        name: "write_stdin",
+        parameters: { type: "object", required: ["session_id"] },
+      },
+    ];
+    const codexInitial = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${codexAgent.id}/responses`,
+      headers: codexHeaders,
+      payload: {
+        model: "gpt-4o",
+        input: [{ type: "message", role: "user", content: "inspect" }],
+        tools: codexTools,
+      },
+    });
+    expect(codexInitial.statusCode, codexInitial.body).toBe(200);
+    const codexCall = codexInitial
+      .json()
+      .output.find((item: { type: string }) => item.type === "function_call");
+    const codexMissing = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${codexAgent.id}/responses`,
+      headers: codexHeaders,
+      payload: {
+        model: "gpt-4o",
+        input: [
+          { type: "message", role: "user", content: "inspect" },
+          codexCall,
+          { type: "function_call_output", call_id: codexCall.call_id },
+        ],
+        tools: codexTools,
+      },
+    });
+    expect(codexMissing.statusCode, codexMissing.body).toBeGreaterThanOrEqual(
+      400,
+    );
+    expect(codexProviderCalls).toBe(1);
   });
 
   test("binds completed Claude responses before release then forks an exact new thread without session reset in both stream modes", async ({

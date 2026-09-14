@@ -140,11 +140,24 @@ WITH relevant_sessions AS (
         AND c.appa_target_arguments ->> 'run_id' = :'run_id'
     )
 ), relevant_calls AS (
-  SELECT c.*, s.root_id, s.client_session_id, s.owner_scope_hash
+  SELECT c.*, s.root_id, s.client_session_id, s.owner_scope_hash,
+         CASE WHEN s.parent_session_id IS NULL THEN NULL ELSE s.client_session_id END AS child_actor_id
   FROM appa_proxy_calls c
   JOIN relevant_sessions s ON s.id = c.session_id
-  WHERE c.appa_target_arguments ->> 'request_key' = :'request_key'
-    AND c.appa_target_arguments ->> 'run_id' = :'run_id'
+   WHERE (
+     (c.appa_target_arguments ->> 'request_key' = :'request_key'
+      AND c.appa_target_arguments ->> 'run_id' = :'run_id')
+     OR (
+       c.appa_target_name = :'local_target_name'
+       AND c.appa_target_arguments = :'local_arguments'::jsonb
+     )
+    )
+), root_local_calls AS (
+   SELECT c.appa_target_name, c.emitted_name, c.state,
+          c.appa_target_arguments = :'local_arguments'::jsonb AS exact_arguments
+   FROM appa_proxy_calls c
+   JOIN relevant_sessions s ON s.id = c.session_id
+   WHERE c.emitted_name = :'local_emitted_name'
 ), call_bindings AS (
   SELECT c.id,
          c.call_id,
@@ -153,6 +166,7 @@ WITH relevant_sessions AS (
           c.appa_target_name,
           c.state,
           c.root_id,
+          c.child_actor_id,
           c.updated_at,
           c.dispatch_id,
           encode(sha256(convert_to(c.client_session_id::text, 'UTF8')), 'hex') AS session_id_sha256,
@@ -196,6 +210,7 @@ WITH relevant_sessions AS (
          parent_call.emitted_name AS parent_emitted_name,
           parent_call.appa_target_name AS parent_target_name,
           parent_call.appa_target_arguments AS parent_target_arguments,
+          parent_call.dispatch_id AS parent_dispatch_id,
           (SELECT count(*) FROM appa_proxy_calls pc
            WHERE pc.session_id = parent.id AND pc.state = 'result_admitted'
              AND pc.appa_target_arguments ->> 'kind' IN ('public', 'private')) AS parent_source_count,
@@ -248,6 +263,7 @@ SELECT json_build_object(
     'parent_emitted_name', parent_emitted_name,
     'parent_target_name', parent_target_name,
     'parent_target_arguments', parent_target_arguments,
+    'parent_dispatch_id', parent_dispatch_id,
     'parent_source_count', parent_source_count,
     'spawn_binding', spawn_binding,
     'signed_carrier_present', signed_carrier_present,
@@ -265,7 +281,13 @@ SELECT json_build_object(
       AND jsonb_path_exists(i.request, '$.tools[*] ? (@.type == "mcp")')
   ),
   'checkpoint_binding_count', (SELECT count(*) FROM appa_proxy_checkpoint_bindings b JOIN relevant_sessions s ON s.id = b.source_session_id),
-  'denied_call_count', (SELECT count(*) FROM relevant_calls WHERE state = 'denied'),
+   'denied_call_count', (SELECT count(*) FROM relevant_calls WHERE state = 'denied'),
+   'root_local_calls', COALESCE((SELECT json_agg(json_build_object(
+     'target_name', appa_target_name,
+     'emitted_name', emitted_name,
+     'state', state,
+     'exact_arguments', exact_arguments
+   ) ORDER BY emitted_name, state) FROM root_local_calls), '[]'::json),
   'unsanitized_result_count', (SELECT count(*) FROM relevant_calls WHERE result_presentation ILIKE '%SYNTHETIC_PRIVATE_NOTE%'),
   'server_binding', (SELECT json_build_object('provider', provider, 'protocol', protocol, 'model', model) FROM relevant_sessions LIMIT 1),
    'event_receipts', COALESCE((SELECT json_agg(json_build_object(
@@ -285,6 +307,7 @@ SELECT json_build_object(
      'call_id_sha256', encode(sha256(convert_to(call_id::text, 'UTF8')), 'hex'),
      'proxy_session_id', proxy_session_id,
      'root_id', root_id,
+     'child_actor_id', child_actor_id,
     'dispatch_id_sha256', CASE WHEN dispatch_id IS NULL THEN NULL ELSE encode(sha256(convert_to(dispatch_id::text, 'UTF8')), 'hex') END,
     'session_id_sha256', session_id_sha256,
     'bound_auth_scope_hash', bound_auth_scope_hash,
@@ -324,7 +347,7 @@ NATIVE_CHILD_CONTRACTS = {
     },
     "claude": {
         "emitted_names": {"Agent"},
-        "target_name": "agent/claude-code/Agent",
+        "target_name": "agent/fixture/lifecycle_child",
         "requires_signed_carrier": True,
         "task_alias_count": 0,
     },
@@ -358,7 +381,8 @@ def main() -> int:
     validate_identifier(args.run_id, "--run-id")
     runtime_pod = single_pod(args.kubectl, args.kubectl_context, args.runtime_namespace, args.runtime_selector)
     postgres_pod = single_pod(args.kubectl, args.kubectl_context, args.pg_namespace, args.pg_selector)
-    postgres = postgres_evidence(args, postgres_pod)
+    local_probe = read_local_probe_contract(args.local_probe_contract, args) if args.local_probe_contract else None
+    postgres = postgres_evidence(args, postgres_pod, local_probe)
     gateway_profile = read_gateway_profile(args.gateway_profile) if args.gateway_profile else None
     gateway = gateway_evidence(args, postgres_pod, gateway_profile) if gateway_profile else {"bindings": []}
     roots = [str(root) for root in postgres.pop("roots", []) if isinstance(root, str)]
@@ -368,7 +392,7 @@ def main() -> int:
     runtime = runtime_evidence(args, runtime_pod, candidates, postgres.get("child_bindings"))
     review = review_evidence(args, runtime_pod)
     fixture = read_fixture_evidence(args.fixture_evidence) if args.fixture_evidence else None
-    evidence = project(args, runtime_pod, postgres_pod, postgres, runtime, review, roots, fixture, gateway)
+    evidence = project(args, runtime_pod, postgres_pod, postgres, runtime, review, roots, fixture, gateway, local_probe)
     print(json.dumps(evidence, sort_keys=True))
     return 0
 
@@ -381,6 +405,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--run-id", required=True)
     parser.add_argument("--run-dir", required=True)
     parser.add_argument("--fixture-evidence", type=Path)
+    parser.add_argument("--local-probe-contract", type=Path)
     parser.add_argument("--gateway-profile", type=Path)
     parser.add_argument("--agent-id", required=True)
     parser.add_argument("--kubectl", default=os.environ.get("APPA_NATIVE_LIVE_KUBECTL", "kubectl"))
@@ -411,7 +436,7 @@ def single_pod(kubectl: str, context: str | None, namespace: str, selector: str)
     return pods[0]
 
 
-def postgres_evidence(args: argparse.Namespace, pod: str) -> dict[str, Any]:
+def postgres_evidence(args: argparse.Namespace, pod: str, local_probe: dict[str, Any] | None = None) -> dict[str, Any]:
     password = os.environ.get(args.pg_password_env)
     if not password:
         raise SystemExit(f"PostgreSQL collector requires a password in {args.pg_password_env}")
@@ -421,9 +446,12 @@ def postgres_evidence(args: argparse.Namespace, pod: str) -> dict[str, Any]:
         "agent_id": args.agent_id,
         "request_key": args.request_key,
         "run_id": args.run_id,
+        "local_target_name": local_probe["target_name"] if local_probe else "__no_local_target__",
+        "local_emitted_name": local_probe["emitted_name"] if local_probe else "__no_local_emitted_name__",
+        "local_arguments": json.dumps(local_probe["arguments"] if local_probe else {}, sort_keys=True, separators=(",", ":")),
         **identity,
     }.items():
-        query = query.replace(f":'{key}'", f"'{value}'")
+        query = query.replace(f":'{key}'", sql_literal(value))
     command = kubectl_prefix(args.kubectl, args.kubectl_context, args.pg_namespace) + ["exec", pod, "-c", args.pg_container, "--", "env", f"PGPASSWORD={password}", "psql", "-Xq", "-v", "ON_ERROR_STOP=1", "-At", "-U", args.pg_user, "-d", args.pg_database, "-c", "BEGIN TRANSACTION READ ONLY; " + query + " COMMIT;"]
     output = run(command)
     try:
@@ -468,12 +496,12 @@ def review_evidence(args: argparse.Namespace, pod: str) -> dict[str, Any] | None
     return value
 
 
-def project(args: argparse.Namespace, runtime_pod: str, postgres_pod: str, postgres: dict[str, Any], runtime: dict[str, Any], review: dict[str, Any] | None, roots: list[str], fixture: dict[str, Any] | None, gateway: dict[str, Any]) -> dict[str, Any]:
+def project(args: argparse.Namespace, runtime_pod: str, postgres_pod: str, postgres: dict[str, Any], runtime: dict[str, Any], review: dict[str, Any] | None, roots: list[str], fixture: dict[str, Any] | None, gateway: dict[str, Any], local_probe: dict[str, Any] | None = None) -> dict[str, Any]:
     expected_identity = EXPECTED_BACKEND_IDENTITIES[args.client]
     bindings = postgres.get("call_bindings") if isinstance(postgres.get("call_bindings"), list) else []
-    exact_bindings = [project_call_binding(binding, gateway.get("tool_names")) for binding in bindings if isinstance(binding, dict)]
+    exact_bindings = [project_call_binding(binding, gateway.get("tool_names"), local_probe) for binding in bindings if isinstance(binding, dict)]
     exact_bindings = [binding for binding in exact_bindings if binding is not None]
-    denial_receipts = project_denial_receipts(bindings, postgres.get("event_receipts"), gateway.get("tool_names"))
+    denial_receipts = project_denial_receipts(bindings, postgres.get("event_receipts"), gateway.get("tool_names"), local_probe)
     denied_bindings = [binding for binding in exact_bindings if binding.get("state") == "denied"]
     accepted_bindings = [
         binding
@@ -497,8 +525,17 @@ def project(args: argparse.Namespace, runtime_pod: str, postgres_pod: str, postg
         and bool(runtime.get("journal_record_count"))
         and bool(runtime.get("request_key_hits"))
     )
-    fixture_join = exact_fixture_join(args.run_id, dispatched_bindings, fixture)
-    gateway_join = exact_gateway_join(dispatched_bindings, gateway)
+    mcp_dispatched_bindings = [binding for binding in dispatched_bindings if binding.get("target_name") != "local_callback"]
+    fixture_join = exact_fixture_join(args.run_id, mcp_dispatched_bindings, fixture)
+    gateway_join = exact_gateway_join(mcp_dispatched_bindings, gateway)
+    local_effect = project_local_effect(
+        args,
+        exact_bindings,
+        denial_receipts,
+        fixture,
+        local_probe,
+        postgres.get("root_local_calls"),
+    )
     raw_child_bindings = postgres.get("child_bindings") if isinstance(postgres.get("child_bindings"), list) else []
     child_bindings = [
         {
@@ -511,6 +548,7 @@ def project(args: argparse.Namespace, runtime_pod: str, postgres_pod: str, postg
                 "root_id",
                 "spawn_binding",
                 "parent_target_arguments",
+                "parent_dispatch_id",
             }
         }
         for binding in raw_child_bindings
@@ -550,7 +588,7 @@ def project(args: argparse.Namespace, runtime_pod: str, postgres_pod: str, postg
     child_start = next((receipt for receipt in child_lifecycle["receipts"] if receipt["event"] == "child_start"), None)
     parent_id = exact_child_bindings[0]["parent_proxy_session_id_sha256"] if len(exact_child_bindings) == 1 else None
     parent_publication_is_denied = parent_publication_denied(
-        denied_bindings,
+        exact_bindings,
         denial_receipts,
         parent_id,
         child_end.get("settled_at") if child_end and child_lifecycle["ordered"] else None,
@@ -580,6 +618,9 @@ def project(args: argparse.Namespace, runtime_pod: str, postgres_pod: str, postg
         "lifecycle_receipts": child_lifecycle["receipts"],
         "source_admission_order": source_admission_order,
         "non_void_return": child_end is not None and child_end.get("non_void_return") is True,
+        "parent_spawn_presentation": project_parent_spawn_presentation(
+            args.client, postgres.get("event_receipts"), raw_child_bindings,
+        ),
         "parent_has_no_source": len(exact_child_bindings) == 1 and exact_child_bindings[0].get("parent_source_count") == 0,
         "return_floor_receipts": project_child_return_floor(
             args.client, postgres.get("event_receipts"), raw_child_bindings,
@@ -605,8 +646,9 @@ def project(args: argparse.Namespace, runtime_pod: str, postgres_pod: str, postg
             "runtime_journal": runtime.get("journal_record_count", 0) > 0,
             "runtime_request_key": runtime.get("request_key_hits", 0) > 0,
             "native_child_attachment": child["exact_attachment"],
-            "fixture_exact_call_join": fixture_join["matched"] and gateway_join["matched"],
+            "fixture_exact_call_join": local_effect["callback_join"] if local_probe else fixture_join["matched"] and gateway_join["matched"],
             "gateway_tool_receipt": gateway_join["matched"],
+            "local_policy": local_effect["policy_bound"] if local_probe else True,
             "linked": linked,
         },
         "server_binding": postgres.get("server_binding"),
@@ -616,10 +658,16 @@ def project(args: argparse.Namespace, runtime_pod: str, postgres_pod: str, postg
         "fixture_join": fixture_join,
         "gateway": gateway,
         "gateway_join": gateway_join,
+        "local_effect": local_effect,
         "archestra": {key: postgres.get(key, 0) for key in ("session_count", "root_count", "call_count", "checkpoint_binding_count", "interaction_count", "provider_hosted_mcp_declaration_count", "denied_call_count", "unsanitized_result_count")},
         "runtime": {key: runtime.get(key, False) for key in ("journal_root_count", "journal_record_count", "request_key_hits", "checkpoint_count", "gate_denied", "gate_allowed")},
         "denied": exact_denial_receipts_match(denied_bindings, denial_receipts),
         "parent_publication_denied": parent_publication_is_denied,
+        "parent_publication_attempt_count": sum(binding.get("target_name") == "publish" and binding.get("proxy_session_id_sha256") == parent_id for binding in exact_bindings),
+        "parent_publication": parent_publication_completed(
+            exact_bindings, parent_id,
+            child_end.get("settled_at") if child_end and child_lifecycle["ordered"] else None,
+        ),
         # Marker absence cannot prove that a sanitizer was offered or executed.
         "sanitizer_proof_gap": "held-control execution and transformed-argument receipts are not projected by this collector",
         "root_kind": "fork" if bool(runtime.get("fork")) else "root",
@@ -634,7 +682,10 @@ def project(args: argparse.Namespace, runtime_pod: str, postgres_pod: str, postg
             "result_admissions": [],
             "result_releases": [],
         },
-        "proof_gaps": ["current backend evidence has no per-call authorization receipt, proposal socket-write finish, result-admission receipt, or continuation socket-write finish trace"],
+        "proof_gaps": [
+            "current backend evidence has no per-call authorization receipt, proposal socket-write finish, result-admission receipt, or continuation socket-write finish trace",
+            *(["local callback evidence observes the synthetic HTTP effect, not operating-system process execution"] if local_probe else []),
+        ],
     }
 
 
@@ -680,6 +731,44 @@ def read_fixture_evidence(path: Path) -> dict[str, Any]:
         raise SystemExit("fixture observer evidence is unreadable") from error
     if not isinstance(value, dict):
         raise SystemExit("fixture observer evidence must be an object")
+    return value
+
+
+def read_local_probe_contract(path: Path, args: argparse.Namespace) -> dict[str, Any]:
+    if path.is_symlink() or not path.is_file() or (path.stat().st_mode & 0o777) != 0o600:
+        raise SystemExit("local probe contract must be a regular mode-0600 file")
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise SystemExit("local probe contract is unreadable") from error
+    expected = {
+        "claude": ("Bash", "Bash", "command"),
+        "codex": ("functions.exec_command", "functions.exec_command", "cmd"),
+        "opencode": ("bash", "bash", "command"),
+    }[args.client]
+    if (
+        not isinstance(value, dict)
+        or value.get("version") != 1
+        or value.get("mode") not in {"public-effect", "private-effect-denied"}
+        or value.get("emitted_name") != expected[0]
+        or value.get("target_name") != expected[1]
+        or not isinstance(value.get("arguments"), dict)
+        or set(value["arguments"]) != ({expected[2], "login"} if args.client == "codex" else {expected[2], "description"} if args.client == "opencode" else {expected[2]})
+        or not isinstance(value["arguments"].get(expected[2]), str)
+        or value["arguments"].get(expected[2]) != value.get("command")
+        or (args.client == "codex" and value["arguments"].get("login") is not False)
+        or (args.client == "opencode" and value["arguments"].get("description") != "Run the fixed controlled local-effect probe.")
+        or not isinstance(value.get("callback_arguments"), dict)
+        or value["callback_arguments"] != {
+            "run_id": args.run_id,
+            "request_key": args.request_key,
+            "effect": "SYNTHETIC_LOCAL_PUBLIC_EFFECT",
+            "probe": "fixed-node-local-probe/v1",
+        }
+        or not isinstance(value.get("command_sha256"), str)
+        or sha256(value["command"].encode()).hexdigest() != value["command_sha256"]
+    ):
+        raise SystemExit("local probe contract is invalid")
     return value
 
 
@@ -751,8 +840,9 @@ def exact_fixture_join(run_id: str, calls: list[dict[str, Any]], fixture: dict[s
         (binding.get("tool_name"), binding.get("arguments_sha256"))
         for binding in bindings
         if isinstance(binding, dict)
+        and binding.get("tool_name") != "local_callback"
     )
-    if not backend or sum(observed.values()) != len(bindings) or backend != observed:
+    if backend != observed:
         return {"matched": False, "reason": "tool-or-canonical-argument-mismatch"}
     return {"matched": True, "binding_count": len(bindings)}
 
@@ -769,16 +859,164 @@ def exact_gateway_join(calls: list[dict[str, Any]], gateway: dict[str, Any]) -> 
         and isinstance(binding.get("receipt_id_sha256"), str)
         and isinstance(binding.get("created_at"), str)
     )
-    if not backend or sum(observed.values()) != len(bindings) or backend != observed:
+    if backend != observed:
         return {"matched": False, "reason": "gateway-tool-or-argument-mismatch"}
     return {"matched": True, "receipt_count": len(bindings)}
 
 
-def project_call_binding(value: dict[str, Any], gateway_tool_names: object = None) -> dict[str, Any] | None:
-    target_name = fixture_tool_name(value.get("target_name"), gateway_tool_names)
+def project_local_effect(
+    args: argparse.Namespace,
+    bindings: list[dict[str, Any]],
+    denial_receipts: list[dict[str, Any]],
+    fixture: dict[str, Any] | None,
+    local_probe: dict[str, Any] | None,
+    root_local_calls: object = None,
+) -> dict[str, Any]:
+    if local_probe is None:
+        return {
+            "mode": None,
+            "policy_bound": True,
+            "callback_join": False,
+            "client_reported_result": None,
+        }
+    local_bindings = [binding for binding in bindings if binding.get("target_name") == "local_callback"]
+    expected_source_kind = "public" if local_probe["mode"] == "public-effect" else "private"
+    all_source_reads = [binding for binding in bindings if binding.get("target_name") == "read_source"]
+    source_reads = [
+        binding
+        for binding in bindings
+        if binding.get("target_name") == "read_source"
+        and binding.get("state") == "result_admitted"
+        and binding.get("source_kind") == expected_source_kind
+    ]
+    root_local = root_local_calls if isinstance(root_local_calls, list) else []
+    root_local_exact = (
+        len(root_local) == 1
+        and isinstance(root_local[0], dict)
+        and root_local[0].get("target_name") == local_probe["target_name"]
+        and root_local[0].get("emitted_name") == local_probe["emitted_name"]
+        and root_local[0].get("exact_arguments") is True
+    )
+    local_denials = [receipt for receipt in denial_receipts if receipt.get("target_name") == "local_callback"]
+    accepted = [binding for binding in local_bindings if binding.get("state") == "result_admitted"]
+    denied = [binding for binding in local_bindings if binding.get("state") == "denied"]
+    callback_arguments_sha256 = receipt_sha256(local_probe["callback_arguments"])
+    observer_bindings = fixture.get("call_bindings") if isinstance(fixture, dict) else None
+    callback_bindings = [
+        binding
+        for binding in observer_bindings if isinstance(binding, dict)
+        and binding.get("tool_name") == "local_callback"
+        and binding.get("arguments_sha256") == callback_arguments_sha256
+    ] if isinstance(observer_bindings, list) else []
+    effect_counts = fixture.get("effect_counts") if isinstance(fixture, dict) else None
+    callback_count = effect_counts.get("local_callback") if isinstance(effect_counts, dict) else None
+    mode = local_probe["mode"]
+    if mode == "public-effect":
+        callback_join = (
+            len(accepted) == 1
+            and not denied
+            and len(callback_bindings) == 1
+            and callback_count == 1
+            and valid_local_callback_binding(callback_bindings[0])
+        )
+        return {
+            "mode": mode,
+            "policy_bound": len(all_source_reads) == 1 and len(source_reads) == 1 and len(local_bindings) == 1 and len(accepted) == 1 and root_local_exact and source_precedes_local(source_reads[0], accepted[0]),
+            "callback_join": callback_join,
+            "callback_effect_count": callback_count,
+            "callback": project_local_callback(callback_bindings[0]) if callback_join else None,
+            "local_call": project_local_call(accepted[0]) if len(accepted) == 1 else None,
+            "client_reported_result": {
+                "provenance": "sealed-client-reported-observation",
+                "state": "result_admitted",
+                "not_os_process_attestation": True,
+            } if len(accepted) == 1 else None,
+        }
+    denied_exact = exact_denial_receipts_match(denied, local_denials)
+    return {
+        "mode": mode,
+        "policy_bound": len(all_source_reads) == 1 and len(source_reads) == 1 and len(local_bindings) == 1 and len(denied) == 1 and denied_exact and root_local_exact and source_precedes_local(source_reads[0], denied[0]),
+        "callback_join": callback_count == 0 and not callback_bindings,
+        "callback_effect_count": callback_count,
+        "callback": None,
+        "local_call": project_local_call(denied[0]) if len(denied) == 1 else None,
+        "client_reported_result": None,
+        "denial_receipt_count": len(local_denials),
+        "root_local_call_count": len(root_local),
+    }
+
+
+def valid_local_callback_binding(value: dict[str, Any]) -> bool:
+    sequences = (
+        value.get("invocation_sequence"),
+        value.get("invoked_sequence"),
+        value.get("effect_committed_sequence"),
+        value.get("result_sequence"),
+    )
+    return (
+        value.get("effect_state") == "known_committed"
+        and value.get("reply_state") == "known"
+        and value.get("result_status") == "result_ready"
+        and all(isinstance(sequence, int) for sequence in sequences)
+        and sequences[0] == sequences[1] < sequences[2] < sequences[3]
+        and is_sha256(value.get("arguments_sha256"))
+        and is_sha256(value.get("source_host_sha256"))
+        and is_sha256(value.get("result_sha256"))
+        and isinstance(value.get("service_instance_id"), str)
+    )
+
+
+def source_precedes_local(source: dict[str, Any], local: dict[str, Any]) -> bool:
+    source_settled = source.get("event_settled_at")
+    local_authorized = local.get("authorization_at")
+    return isinstance(source_settled, str) and isinstance(local_authorized, str) and source_settled <= local_authorized
+
+
+def project_local_callback(value: dict[str, Any]) -> dict[str, Any]:
+    return {
+        key: value.get(key)
+        for key in (
+            "arguments_sha256",
+            "source_host_sha256",
+            "result_sha256",
+            "service_instance_id",
+            "invocation_sequence",
+            "invoked_sequence",
+            "effect_committed_sequence",
+            "result_sequence",
+            "effect_state",
+            "reply_state",
+            "result_status",
+        )
+    }
+
+
+def project_local_call(value: dict[str, Any]) -> dict[str, Any]:
+    return {
+        key: value.get(key)
+        for key in (
+            "call_id_sha256",
+            "dispatch_id_sha256",
+            "session_id_sha256",
+            "proxy_session_id_sha256",
+            "bound_auth_scope_hash",
+            "arguments_sha256",
+            "state",
+            "authorization_at",
+            "receipt_at",
+            "event_settled_at",
+        )
+    }
+
+
+def project_call_binding(value: dict[str, Any], gateway_tool_names: object = None, local_probe: dict[str, Any] | None = None) -> dict[str, Any] | None:
+    target_name = canonical_target_name(value.get("target_name"), gateway_tool_names, local_probe)
     arguments = value.get("target_arguments")
     if target_name is None or not isinstance(arguments, dict):
         return None
+    if target_name == "local_callback" and local_probe is not None:
+        if value.get("emitted_name") != local_probe["emitted_name"] or arguments != local_probe["arguments"]:
+            return None
     arguments_sha256 = receipt_sha256(arguments)
     source_kind = (
         arguments.get("kind")
@@ -804,6 +1042,7 @@ def project_call_binding(value: dict[str, Any], gateway_tool_names: object = Non
     } | {
         "call_row_id_sha256": hash_identifier(value.get("id")),
         "proxy_session_id_sha256": hash_identifier(value.get("proxy_session_id")),
+        "child_actor_id_sha256": hash_identifier(value.get("child_actor_id")),
         "target_name": target_name,
         "arguments_sha256": arguments_sha256,
         "source_kind": source_kind,
@@ -886,6 +1125,58 @@ def child_lifecycle_event_matches(event: dict[str, Any], binding: dict[str, Any]
     ):
         return False
     return event["event"] != "child_start" or payload.get("spawn_binding") == binding.get("spawn_binding")
+
+
+def project_parent_spawn_presentation(client: str, events: object, bindings: object) -> dict[str, Any]:
+    if not isinstance(events, list) or not isinstance(bindings, list) or len(bindings) != 1:
+        return {"verified": False}
+    binding = bindings[0]
+    if not isinstance(binding, dict) or not valid_child_attachment(client, binding) or not isinstance(binding.get("parent_dispatch_id"), str):
+        return {"verified": False}
+    ends = [event for event in events if isinstance(event, dict) and event.get("event") == "child_end" and event.get("decision") == "ack" and event.get("session_id") == binding.get("child_session_id") and child_lifecycle_event_matches(event, binding)]
+    if len(ends) != 1:
+        return {"verified": False}
+    end = ends[0]
+    child_value = (settled_event_request(end) or {}).get("value")
+    if not isinstance(child_value, str) or not child_value:
+        return {"verified": False}
+    candidates = []
+    for event in events:
+        if not isinstance(event, dict) or hash_identifier(event.get("session_id")) != binding["parent_proxy_session_id_sha256"]:
+            continue
+        request = settled_event_request(event)
+        if not request or request.get("event") != "spawn_result" or hash_identifier(request.get("call_id")) != binding["parent_call_id_sha256"]:
+            continue
+        decision = event["response"].get("decision")
+        control = request.get("control")
+        if (
+            not set(request).issubset({"event", "root_id", "call_id", "dispatch_id", "control"})
+            or (control is not None and (not isinstance(control, dict) or set(control) != {"agent_id"} or control.get("agent_id") != binding.get("child_client_session_id")))
+            or request.get("root_id") != binding.get("root_id")
+            or request.get("child_id") is not None
+            or request.get("dispatch_id") != binding["parent_dispatch_id"]
+            or not isinstance(decision, dict) or decision.get("decision") != "result_admitted"
+            or not isinstance(decision.get("presentation"), str)
+        ):
+            return {"verified": False}
+        presentation = decision["presentation"]
+        kind = None
+        if ordered_timestamps(end["settled_at"], event.get("settled_at")):
+            if presentation == child_value:
+                kind = "child_return"
+        elif ordered_timestamps(event.get("settled_at"), end["settled_at"]):
+            if presentation == json.dumps({"agent_id": binding.get("child_client_session_id")}, separators=(",", ":"), ensure_ascii=False):
+                kind = "control_metadata"
+            elif presentation == '{"status":"unavailable"}':
+                kind = "unavailable"
+        if kind is None:
+            return {"verified": False}
+        candidates.append(project_event_receipt(event) | {
+            "kind": kind,
+            "parent_call_id_sha256": binding["parent_call_id_sha256"],
+            "presentation_sha256": sha256(presentation.encode()).hexdigest(),
+        })
+    return {"verified": len(candidates) == 1, "receipts": candidates}
 
 
 def project_child_return_floor(client: str, events: object, bindings: object, child_start_at: str | None) -> list[dict[str, Any]]:
@@ -989,7 +1280,7 @@ def settled_event_request(event: dict[str, Any]) -> dict[str, Any] | None:
     return request if isinstance(request, dict) and request.get("event") == event.get("event") else None
 
 
-def project_denial_receipts(bindings: object, events: object, gateway_tool_names: object = None) -> list[dict[str, Any]]:
+def project_denial_receipts(bindings: object, events: object, gateway_tool_names: object = None, local_probe: dict[str, Any] | None = None) -> list[dict[str, Any]]:
     """Project only uniquely-bound, settled single-call denial receipts.
 
     The database keeps event envelopes and responses in full so the projection
@@ -1006,7 +1297,7 @@ def project_denial_receipts(bindings: object, events: object, gateway_tool_names
             receipt
             for event in events
             if isinstance(event, dict)
-            for receipt in [project_denial_receipt(binding, event, gateway_tool_names)]
+            for receipt in [project_denial_receipt(binding, event, gateway_tool_names, local_probe)]
             if receipt is not None
         ]
         if len(matches) != 1:
@@ -1015,11 +1306,11 @@ def project_denial_receipts(bindings: object, events: object, gateway_tool_names
     return receipts
 
 
-def project_denial_receipt(binding: dict[str, Any], event: dict[str, Any], gateway_tool_names: object) -> dict[str, Any] | None:
+def project_denial_receipt(binding: dict[str, Any], event: dict[str, Any], gateway_tool_names: object, local_probe: dict[str, Any] | None = None) -> dict[str, Any] | None:
     call_id = binding.get("call_id")
     session_id = binding.get("proxy_session_id")
     bound_auth_scope_hash = binding.get("bound_auth_scope_hash")
-    target_name = fixture_tool_name(binding.get("target_name"), gateway_tool_names)
+    target_name = canonical_target_name(binding.get("target_name"), gateway_tool_names, local_probe)
     target_arguments = binding.get("target_arguments")
     response = event.get("response")
     if (
@@ -1053,10 +1344,17 @@ def project_denial_receipt(binding: dict[str, Any], event: dict[str, Any], gatew
         return None
     proposal = envelope["event"]
     calls = proposal.get("calls")
+    child_actor_id = binding.get("child_actor_id")
+    expected_fields = {"event", "root_id", "calls"}
+    if child_actor_id is not None:
+        if not isinstance(child_actor_id, str) or not child_actor_id:
+            return None
+        expected_fields.add("child_id")
     if (
-        set(proposal) != {"event", "root_id", "calls"}
+        set(proposal) != expected_fields
         or proposal.get("event") != "tool_calls"
         or proposal.get("root_id") != binding.get("root_id")
+        or proposal.get("child_id") != child_actor_id
         or not isinstance(calls, list)
         or len(calls) != 1
         or not isinstance(calls[0], dict)
@@ -1066,7 +1364,7 @@ def project_denial_receipt(binding: dict[str, Any], event: dict[str, Any], gatew
     if (
         set(call) != {"call_id", "tool", "arguments", "spawn"}
         or call.get("call_id") != call_id
-        or fixture_tool_name(call.get("tool"), gateway_tool_names) != target_name
+        or canonical_target_name(call.get("tool"), gateway_tool_names, local_probe) != target_name
         or call.get("arguments") != target_arguments
     ):
         return None
@@ -1099,6 +1397,7 @@ def project_denial_receipt(binding: dict[str, Any], event: dict[str, Any], gatew
         "call_row_id_sha256": hash_identifier(binding.get("id")),
         "call_id_sha256": hash_identifier(call_id),
         "proxy_session_id_sha256": hash_identifier(session_id),
+        "child_actor_id_sha256": hash_identifier(child_actor_id),
         "bound_auth_scope_hash": bound_auth_scope_hash,
         "target_name": target_name,
         "arguments_sha256": receipt_sha256(target_arguments),
@@ -1121,6 +1420,7 @@ def exact_denial_receipts_match(bindings: list[dict[str, Any]], receipts: list[d
             binding.get("call_row_id_sha256"),
             binding.get("call_id_sha256"),
             binding.get("proxy_session_id_sha256"),
+            binding.get("child_actor_id_sha256"),
             binding.get("bound_auth_scope_hash"),
             binding.get("target_name"),
             binding.get("arguments_sha256"),
@@ -1132,6 +1432,7 @@ def exact_denial_receipts_match(bindings: list[dict[str, Any]], receipts: list[d
             receipt.get("call_row_id_sha256"),
             receipt.get("call_id_sha256"),
             receipt.get("proxy_session_id_sha256"),
+            receipt.get("child_actor_id_sha256"),
             receipt.get("bound_auth_scope_hash"),
             receipt.get("target_name"),
             receipt.get("arguments_sha256"),
@@ -1139,6 +1440,16 @@ def exact_denial_receipts_match(bindings: list[dict[str, Any]], receipts: list[d
         for receipt in receipts
     }
     return len(expected) == len(bindings) and len(observed) == len(receipts) and expected == observed
+
+
+def parent_publication_completed(bindings: list[dict[str, Any]], parent_proxy_id: str | None, child_end_at: str | None) -> bool:
+    publications = [binding for binding in bindings if binding.get("target_name") == "publish"]
+    return (
+        is_sha256(parent_proxy_id) and len(publications) == 1
+        and publications[0].get("proxy_session_id_sha256") == parent_proxy_id
+        and publications[0].get("state") == "result_admitted"
+        and ordered_timestamps(child_end_at, publications[0].get("authorization_at"), publications[0].get("result_admitted_at"))
+    )
 
 
 def parent_publication_denied(
@@ -1152,20 +1463,25 @@ def parent_publication_denied(
     parent_bindings = [
         binding
         for binding in bindings
-        if binding.get("proxy_session_id_sha256") == parent_proxy_id
-        and binding.get("target_name") == "publish"
+        if binding.get("target_name") == "publish"
     ]
     parent_receipts = [
         receipt
         for receipt in receipts
-        if receipt.get("proxy_session_id_sha256") == parent_proxy_id
-        and receipt.get("target_name") == "publish"
+        if receipt.get("target_name") == "publish"
     ]
     return (
-        len(parent_bindings) == len(parent_receipts) == 1
+        bool(parent_bindings)
+        and all(binding.get("proxy_session_id_sha256") == parent_proxy_id and binding.get("state") == "denied" for binding in parent_bindings)
+        and len(parent_bindings) == len(parent_receipts)
         and exact_denial_receipts_match(parent_bindings, parent_receipts)
-        and parent_receipts[0].get("basis") == "readers_not_public"
-        and ordered_timestamps(child_end_at, parent_bindings[0].get("authorization_at"), parent_receipts[0].get("settled_at"))
+        and all(receipt.get("basis") == "readers_not_public" for receipt in parent_receipts)
+        and all(
+            ordered_timestamps(child_end_at, binding.get("authorization_at"), receipt.get("settled_at"))
+            for binding in parent_bindings
+            for receipt in parent_receipts
+            if binding.get("call_row_id_sha256") == receipt.get("call_row_id_sha256")
+        )
     )
 
 
@@ -1243,6 +1559,16 @@ def fixture_tool_name(value: object, gateway_tool_names: object = None) -> str |
         return value
     match = re.fullmatch(r"(?:mcp__)?appa_fixture(?:__|\.)(read_source|publish|protected_publish)", value)
     return match.group(1) if match else None
+
+
+def canonical_target_name(value: object, gateway_tool_names: object = None, local_probe: dict[str, Any] | None = None) -> str | None:
+    if local_probe is not None and value in {local_probe.get("target_name"), local_probe.get("emitted_name")}:
+        return "local_callback"
+    return fixture_tool_name(value, gateway_tool_names)
+
+
+def sql_literal(value: object) -> str:
+    return "'" + str(value).replace("'", "''") + "'"
 
 
 def receipt_sha256(value: dict[str, Any]) -> str:

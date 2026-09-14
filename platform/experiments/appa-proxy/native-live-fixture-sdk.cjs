@@ -14,6 +14,8 @@ const MAX_BODY = 65_536;
 const RUN_ID = /^run-[a-z0-9][a-z0-9-]{7,95}$/;
 const REQUEST_KEY = /^synthetic-[a-zA-Z0-9_-]{1,100}$/;
 const VALUE = /^SYNTHETIC_[A-Z0-9_ -]{1,2000}$/;
+const LOCAL_EFFECT = "SYNTHETIC_LOCAL_PUBLIC_EFFECT";
+const LOCAL_PROBE = "fixed-node-local-probe/v1";
 
 const options = parseOptions(process.argv.slice(2));
 const token = requiredEnvironment("APPA_NATIVE_FIXTURE_TOKEN");
@@ -39,6 +41,20 @@ const httpServer = createServer(async (request, response) => {
     }
     return sendJson(response, 200, { events: transportEvents });
   }
+  if (url.pathname === "/observer/local-effect" && request.method === "POST") {
+    try {
+      const result = submitLocalEffect(database, await readJson(request), request, request.headers.authorization);
+      if (result.replyDropped) {
+        // The durable observer state remains available to the operator.
+        return response.destroy();
+      }
+      return sendJson(response, 201, result.response);
+    } catch (error) {
+      return sendJson(response, error?.message === "unauthorized" ? 401 : 400, {
+        error: "invalid local effect callback",
+      });
+    }
+  }
   const adminMatch = url.pathname.match(/^\/admin\/runs\/(run-[a-z0-9-]{8,96})(?:\/(state|audit|observer))?$/);
   if (adminMatch) {
     if (!authorized(request, adminToken)) {
@@ -49,8 +65,20 @@ const httpServer = createServer(async (request, response) => {
       return sendJson(response, 400, { error: "invalid run" });
     }
     if (request.method === "POST" && !endpoint) {
-      createRun(database, runId);
-      return sendJson(response, 201, { run_id: runId, created: true });
+      let controls;
+      try {
+        controls = await readOptionalRunControls(request);
+      } catch {
+        return sendJson(response, 400, { error: "invalid run controls" });
+      }
+      const created = createRun(database, runId, controls);
+      return sendJson(response, created.created ? 201 : 200, {
+        run_id: runId,
+        created: created.created,
+        ...(created.localCallbackCapability
+          ? { local_callback_capability: created.localCallbackCapability }
+          : {}),
+      });
     }
     if (request.method === "GET" && endpoint === "state") {
       return sendJson(response, 200, summary(database, runId));
@@ -270,11 +298,39 @@ function initialize(db) {
       FOREIGN KEY(invocation_id) REFERENCES fixture_invocations(invocation_id),
       FOREIGN KEY(run_id) REFERENCES runs(run_id)
     );
+    CREATE TABLE IF NOT EXISTS run_local_callback_capabilities (
+      run_id TEXT PRIMARY KEY,
+      capability_sha256 TEXT NOT NULL,
+      FOREIGN KEY(run_id) REFERENCES runs(run_id)
+    );
+    CREATE TABLE IF NOT EXISTS run_local_callback_controls (
+      run_id TEXT PRIMARY KEY,
+      reply_drop_after_effect INTEGER NOT NULL DEFAULT 0 CHECK(reply_drop_after_effect IN (0, 1)),
+      FOREIGN KEY(run_id) REFERENCES runs(run_id)
+    );
+    CREATE TABLE IF NOT EXISTS local_effects (
+      run_id TEXT NOT NULL,
+      request_key TEXT NOT NULL,
+      effect TEXT NOT NULL,
+      PRIMARY KEY(run_id, request_key),
+      FOREIGN KEY(run_id) REFERENCES runs(run_id)
+    );
   `);
 }
 
-function createRun(db, runId) {
-  db.prepare("INSERT INTO runs(run_id) VALUES (?) ON CONFLICT(run_id) DO NOTHING").run(runId);
+function createRun(db, runId, controls = { replyDropAfterEffect: false }) {
+  const insertion = db.prepare("INSERT INTO runs(run_id) VALUES (?) ON CONFLICT(run_id) DO NOTHING").run(runId);
+  if (insertion.changes === 0) {
+    return { created: false, localCallbackCapability: null };
+  }
+  const localCallbackCapability = randomUUID().replaceAll("-", "") + randomUUID().replaceAll("-", "");
+  db.prepare(
+    "INSERT INTO run_local_callback_capabilities(run_id, capability_sha256) VALUES (?, ?)",
+  ).run(runId, digest(localCallbackCapability));
+  db.prepare(
+    "INSERT INTO run_local_callback_controls(run_id, reply_drop_after_effect) VALUES (?, ?)",
+  ).run(runId, controls.replyDropAfterEffect ? 1 : 0);
+  return { created: true, localCallbackCapability };
 }
 
 function summary(db, runId) {
@@ -299,6 +355,7 @@ function summary(db, runId) {
     ),
     audit_count: count(db, "audit", runId),
     audit_outcomes: outcomes,
+    local_callback_effect_count: count(db, "local_effects", runId),
   };
 }
 
@@ -341,7 +398,7 @@ function observerSummary(db, runId) {
      AND effect.event_kind = 'effect_committed'
     LEFT JOIN fixture_audit_events result
       ON result.invocation_id = invocation.invocation_id
-     AND result.event_kind IN ('result_ready', 'failed')
+      AND result.event_kind IN ('result_ready', 'failed', 'result_reply_dropped')
     WHERE invocation.run_id = ?
     ORDER BY invocation.sequence
   `).all(runId);
@@ -358,15 +415,80 @@ function observerSummary(db, runId) {
       "effect_commit_timestamp",
       "result_digest",
       "service_instance_identity",
+      "run_scoped_local_callback_capability",
+      "zero_effect_counts",
+      "reply_delivery_state",
     ],
     run_id: runId,
     service_instance_id: serviceInstanceId,
     audit_record_count: eventCount,
+    effect_counts: {
+      local_callback: count(db, "local_effects", runId),
+      mcp_publication: count(db, "publications", runId),
+    },
     call_bindings: bindings.map((binding) => ({
       ...binding,
       arguments_sha256: binding.canonical_arguments_sha256,
+      effect_state: binding.effect_committed_sequence === null ? "none_observed" : "known_committed",
+      reply_state: binding.result_status === "result_reply_dropped" ? "unknown" : "known",
     })),
   };
+}
+
+function submitLocalEffect(db, body, request, authorization) {
+  if (
+    !body
+    || typeof body !== "object"
+    || Array.isArray(body)
+    || Object.keys(body).length !== 4
+    || body.run_id === undefined
+    || body.request_key === undefined
+    || body.effect !== LOCAL_EFFECT
+    || body.probe !== LOCAL_PROBE
+    || !RUN_ID.test(body.run_id)
+    || !REQUEST_KEY.test(body.request_key)
+  ) {
+    throw new Error("invalid local callback");
+  }
+  const capability = bearerToken(authorization);
+  const stored = db.prepare(
+    "SELECT capability_sha256 FROM run_local_callback_capabilities WHERE run_id = ?",
+  ).get(body.run_id);
+  if (!capability || !stored || !safeEqualText(stored.capability_sha256, digest(capability))) {
+    throw new Error("unauthorized");
+  }
+  const invocation = createInvocation(db, {
+    runId: body.run_id,
+    requestKey: body.request_key,
+    name: "local_callback",
+    args: body,
+    sourceHost: peerSourceHost(request),
+  });
+  const insertion = db.prepare(
+    "INSERT INTO local_effects(run_id, request_key, effect) VALUES (?, ?, ?) ON CONFLICT(run_id, request_key) DO NOTHING",
+  ).run(body.run_id, body.request_key, body.effect);
+  const committed = insertion.changes === 1;
+  if (committed) {
+    audit(db, body.run_id, body.request_key, "local_callback", "effect_committed", body.effect);
+    recordInvocationEvent(db, invocation, "effect_committed");
+  } else {
+    recordInvocationEvent(db, invocation, "effect_already_committed");
+  }
+  const replyDropped = committed && db.prepare(
+    "SELECT reply_drop_after_effect FROM run_local_callback_controls WHERE run_id = ?",
+  ).get(body.run_id)?.reply_drop_after_effect === 1;
+  const result = {
+    run_id: body.run_id,
+    request_key: body.request_key,
+    effect: body.effect,
+    effect_state: committed ? "committed" : "already_committed",
+  };
+  if (replyDropped) {
+    recordInvocationEvent(db, invocation, "result_reply_dropped");
+    return { replyDropped: true };
+  }
+  recordInvocationEvent(db, invocation, "result_ready", result);
+  return { replyDropped: false, response: result };
 }
 
 function ensureRun(db, runId) {
@@ -414,7 +536,7 @@ function createInvocation(db, { runId, requestKey, name, args, sourceHost }) {
 }
 
 function recordInvocationEvent(db, invocation, eventKind, result) {
-  const isResult = eventKind === "result_ready" || eventKind === "failed";
+  const hasResultDigest = result !== undefined && result !== null;
   db.prepare(`
     INSERT INTO fixture_audit_events(
       invocation_id, run_id, event_kind, occurred_at, result_sha256, result_status
@@ -424,7 +546,7 @@ function recordInvocationEvent(db, invocation, eventKind, result) {
     invocation.runId,
     eventKind,
     new Date().toISOString(),
-    isResult ? digest(result) : null,
+    hasResultDigest ? digest(result) : null,
     eventKind,
   );
 }
@@ -472,6 +594,18 @@ async function readJson(request) {
   return body;
 }
 
+async function readOptionalRunControls(request) {
+  const length = Number(request.headers["content-length"] || 0);
+  if (length === 0) {
+    return { replyDropAfterEffect: false };
+  }
+  const body = await readJson(request);
+  if (Object.keys(body).length === 1 && body.post_commit_reply_drop === "local_callback") {
+    return { replyDropAfterEffect: true };
+  }
+  throw new Error("invalid run controls");
+}
+
 function recordTransport(request, rpcMethod) {
   transportEvents.push({
     http_method: request.method,
@@ -492,6 +626,20 @@ function authorized(request, expected) {
   const received = Buffer.from(request.headers.authorization || "");
   const wanted = Buffer.from(`Bearer ${expected}`);
   return received.length === wanted.length && timingSafeEqual(received, wanted);
+}
+
+function bearerToken(authorization) {
+  if (typeof authorization !== "string" || !authorization.startsWith("Bearer ")) {
+    return null;
+  }
+  const token = authorization.slice("Bearer ".length);
+  return token.length > 0 && token.length <= 256 ? token : null;
+}
+
+function safeEqualText(left, right) {
+  const leftBuffer = Buffer.from(left);
+  const rightBuffer = Buffer.from(right);
+  return leftBuffer.length === rightBuffer.length && timingSafeEqual(leftBuffer, rightBuffer);
 }
 
 function sendJson(response, status, body) {

@@ -193,7 +193,13 @@ export function collectAppaProtocolToolResults(params: {
     for (const message of objects(request.messages)) {
       if (message.role !== "user") continue;
       for (const block of objects(message.content)) {
-        if (block.type !== "tool_result" || !text(block.tool_use_id)) continue;
+        if (
+          block.type !== "tool_result" ||
+          !text(block.tool_use_id) ||
+          !hasReportedResultContent(block, "content")
+        ) {
+          continue;
+        }
         results.push({
           id: block.tool_use_id,
           content: block.content,
@@ -229,7 +235,11 @@ export function collectAppaProtocolToolResults(params: {
           });
         }
       }
-      if (message.role === "tool" && text(message.tool_call_id)) {
+      if (
+        message.role === "tool" &&
+        text(message.tool_call_id) &&
+        hasReportedResultContent(message, "content")
+      ) {
         results.push({
           id: message.tool_call_id,
           content: message.content,
@@ -258,7 +268,11 @@ export function collectAppaProtocolToolResults(params: {
           rawArguments: item.arguments,
         });
       }
-      if (item.type === "function_call_output" && text(item.call_id)) {
+      if (
+        item.type === "function_call_output" &&
+        text(item.call_id) &&
+        hasReportedResultContent(item, "output")
+      ) {
         results.push({
           id: item.call_id,
           content: item.output,
@@ -415,6 +429,14 @@ function objects(value: unknown): Record<string, unknown>[] {
 
 function object(value: unknown): Record<string, unknown> {
   return isObject(value) ? value : {};
+}
+
+/** A local observation is valid only when the stock wire carries a result body. */
+function hasReportedResultContent(
+  value: Record<string, unknown>,
+  field: "content" | "output",
+): boolean {
+  return Object.hasOwn(value, field) && value[field] !== null;
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {

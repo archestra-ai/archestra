@@ -1287,7 +1287,11 @@ export async function handleLLMProxy<
                     scope: session.getNativeWireScope(),
                     request: requestBody,
                   });
-                } catch {
+                } catch (error) {
+                  session.recordFailure({
+                    phase: "native_process_history",
+                    error,
+                  });
                   // The provider and opaque-history store can only see the
                   // durable proxy handle, never a client-local fallback.
                   throw new AppaProxyHookError("unavailable", "input");
@@ -1415,6 +1419,7 @@ export async function handleLLMProxy<
           streamAdapter = provider.createStreamAdapter(presented);
         }
       } catch (error) {
+        activeAppaHook?.recordFailure({ phase: "native_setup", error });
         throw toAppaHookApiError(error);
       }
     }
@@ -2811,6 +2816,9 @@ async function handleStreaming<
           (rewrittenToolCalls ?? toolCalls).length > 0;
         const awaitingClientToolSearch =
           nativeCodex && hasNativeCodexToolSearch(providerResponseForFrame);
+        const awaitingClientContinuation =
+          !toolInvocationRefusal &&
+          (awaitingClientToolExecution || awaitingClientToolSearch);
         if (
           nativeCodex &&
           !toolInvocationRefusal &&
@@ -2832,14 +2840,15 @@ async function handleStreaming<
         }
         await appaHook.finish({
           childReturn: streamAdapter.state.text,
+          awaitClientContinuation: awaitingClientContinuation,
           beforeRelease:
-            !toolInvocationRefusal && awaitingClientToolExecution && nativeCodex
+            awaitingClientContinuation && nativeCodex
               ? () =>
                   persistPendingNativeCodexHistory({
                     history: nativeCodexHistory,
                     response: providerResponseForFrame,
                   })
-              : !toolInvocationRefusal && !awaitingClientToolExecution
+              : !toolInvocationRefusal && !awaitingClientContinuation
                 ? () =>
                     persistAppaCompletedResponse({
                       session: appaHook,
@@ -3659,18 +3668,23 @@ async function handleNonStreaming<
         const awaitingClientToolExecution =
           !toolInvocationRefusal &&
           (rewrittenToolCalls ?? toolCalls).length > 0;
+        const awaitingClientToolSearch =
+          nativeCodexWire &&
+          hasNativeCodexToolSearch(responseAdapter.getOriginalResponse());
+        const awaitingClientContinuation =
+          !toolInvocationRefusal &&
+          (awaitingClientToolExecution || awaitingClientToolSearch);
         await appaHook.finish({
           childReturn: responseAdapter.getText?.(),
+          awaitClientContinuation: awaitingClientContinuation,
           beforeRelease:
-            !toolInvocationRefusal &&
-            awaitingClientToolExecution &&
-            nativeCodexWire
+            awaitingClientContinuation && nativeCodexWire
               ? () =>
                   persistPendingNativeCodexHistory({
                     history: nativeCodexHistory,
                     response: responseAdapter.getOriginalResponse(),
                   })
-              : !toolInvocationRefusal && !awaitingClientToolExecution
+              : !toolInvocationRefusal && !awaitingClientContinuation
                 ? () =>
                     persistAppaCompletedResponse({
                       session: appaHook,
@@ -3805,6 +3819,9 @@ async function handleNonStreaming<
 
   if (toolCalls.length === 0 && appaHook) {
     try {
+      const awaitingClientToolSearch =
+        nativeCodexWire &&
+        hasNativeCodexToolSearch(responseAdapter.getOriginalResponse());
       if (nativeCodexWire) {
         const prepared = await prepareNativeCodexCallAliases({
           session: appaHook,
@@ -3819,18 +3836,25 @@ async function handleNonStreaming<
       }
       await appaHook.finish({
         childReturn: responseAdapter.getText?.(),
-        beforeRelease: () =>
-          persistAppaCompletedResponse({
-            session: appaHook,
-            profileId: agent.id,
-            provider: providerName,
-            protocol: appaHistoryProtocol(provider.interactionType),
-            model: actualModel,
-            request,
-            clientResponse,
-            providerResponse: responseAdapter.getOriginalResponse(),
-            nativeCodexHistory,
-          }),
+        awaitClientContinuation: awaitingClientToolSearch,
+        beforeRelease: awaitingClientToolSearch
+          ? () =>
+              persistPendingNativeCodexHistory({
+                history: nativeCodexHistory,
+                response: responseAdapter.getOriginalResponse(),
+              })
+          : () =>
+              persistAppaCompletedResponse({
+                session: appaHook,
+                profileId: agent.id,
+                provider: providerName,
+                protocol: appaHistoryProtocol(provider.interactionType),
+                model: actualModel,
+                request,
+                clientResponse,
+                providerResponse: responseAdapter.getOriginalResponse(),
+                nativeCodexHistory,
+              }),
       });
       appaHook.markContinuationResponseReady();
     } catch (error) {
@@ -4742,7 +4766,10 @@ function collectAppaInboundToolResults(params: {
   const protocolResults = collectAppaProtocolToolResults(params);
   if (
     protocolResults.length > 0 ||
-    params.interactionType === "anthropic:messages"
+    params.interactionType === "anthropic:messages" ||
+    params.interactionType === "openai:chatCompletions" ||
+    params.interactionType === "kimi:chatCompletions" ||
+    params.interactionType === "openai:responses"
   ) {
     return protocolResults;
   }

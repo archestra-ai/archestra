@@ -7,6 +7,80 @@ import { AppaProxySessionProtocolError } from "./appa-proxy-session";
  * spawn binding remains the authority for creating the child session.
  */
 export default class AppaNativeChildCorrelationModel {
+  /**
+   * Returns the only launch control the parent may receive: the child identity
+   * already bound to its issued task alias. Result payload bytes never enter
+   * this projection.
+   */
+  static async projectBoundSpawnControl(params: {
+    parentSessionId: string;
+    ownerScopeHash: string;
+    profileId: string;
+    sourceCallId: string;
+  }): Promise<{ agentId: string } | null> {
+    assertIdentifiers(params);
+    const rows = await db
+      .select({ agentId: schema.appaProxyWireAliasesTable.childThreadId })
+      .from(schema.appaProxyWireAliasesTable)
+      .innerJoin(
+        schema.appaProxyWireFramesTable,
+        and(
+          eq(
+            schema.appaProxyWireAliasesTable.frameId,
+            schema.appaProxyWireFramesTable.id,
+          ),
+          eq(
+            schema.appaProxyWireAliasesTable.sessionId,
+            schema.appaProxyWireFramesTable.sessionId,
+          ),
+        ),
+      )
+      .innerJoin(
+        schema.appaProxySessionsTable,
+        eq(
+          schema.appaProxyWireAliasesTable.sessionId,
+          schema.appaProxySessionsTable.id,
+        ),
+      )
+      .innerJoin(
+        schema.appaProxyCallsTable,
+        and(
+          eq(
+            schema.appaProxyWireAliasesTable.sessionId,
+            schema.appaProxyCallsTable.sessionId,
+          ),
+          eq(
+            schema.appaProxyWireAliasesTable.sourceCallId,
+            schema.appaProxyCallsTable.callId,
+          ),
+        ),
+      )
+      .where(
+        and(
+          eq(
+            schema.appaProxyWireAliasesTable.sessionId,
+            params.parentSessionId,
+          ),
+          eq(
+            schema.appaProxySessionsTable.ownerScopeHash,
+            params.ownerScopeHash,
+          ),
+          eq(schema.appaProxySessionsTable.profileId, params.profileId),
+          eq(
+            schema.appaProxyWireAliasesTable.sourceCallId,
+            params.sourceCallId,
+          ),
+          isNotNull(schema.appaProxyWireAliasesTable.childThreadId),
+          issuedSpawnAliasWhere({
+            parentSessionId: params.parentSessionId,
+            now: new Date(),
+          }),
+        ),
+      );
+    if (rows.length !== 1 || !rows[0]?.agentId) return null;
+    return { agentId: rows[0].agentId };
+  }
+
   static async listIssuedSpawnSourceCallIds(params: {
     parentSessionId: string;
     ownerScopeHash: string;
@@ -396,7 +470,12 @@ export default class AppaNativeChildCorrelationModel {
     await withDbTransaction(async (tx) => {
       const parent = await getOwnedParent({ tx, ...params });
       const child = await getAttachedChild({ tx, parent, ...params });
-      if (!child.childStartedAt) {
+      // Attachment follows local acquisition; childStartedAt is set only after
+      // sendPrompt receives the runtime's child_start acknowledgement.
+      if (
+        !child.childStartedAt &&
+        (child.state !== "in_turn" || !child.activeTurnId)
+      ) {
         throw new AppaProxySessionProtocolError(
           "native child session has not started its acquired turn",
         );
@@ -585,6 +664,7 @@ async function getAttachedChild(params: {
   ownerScopeHash: string;
   profileId: string;
   childClientSessionId: string;
+  sourceCallId: string;
 }) {
   const [child] = await params.tx
     .select()
@@ -598,6 +678,7 @@ async function getAttachedChild(params: {
         eq(schema.appaProxySessionsTable.ownerScopeHash, params.ownerScopeHash),
         eq(schema.appaProxySessionsTable.profileId, params.profileId),
         eq(schema.appaProxySessionsTable.parentSessionId, params.parent.id),
+        eq(schema.appaProxySessionsTable.parentCallId, params.sourceCallId),
         eq(schema.appaProxySessionsTable.rootId, params.parent.rootId),
       ),
     )

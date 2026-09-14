@@ -715,6 +715,88 @@ describe("OpenAPPA v1 transport", () => {
     ]);
   });
 
+  test("keeps a child open through discovery and a client tool before its final return", async () => {
+    const events: Array<Record<string, unknown>> = [];
+    server.use(
+      http.get(`${url}/proxy/v1/capabilities`, () =>
+        HttpResponse.json({
+          protocol_version: 1,
+          legacy_hooks: false,
+          completed_event_replay: true,
+          typed_offers: true,
+          restriction_acceptance: true,
+          human_approval: false,
+          child_workflows: true,
+          child_actor_targeting: true,
+          sanitized_results: true,
+        }),
+      ),
+      http.post(`${url}/proxy/v1/events`, async ({ request }) =>
+        HttpResponse.json(
+          await receipt(request, (event) => {
+            events.push(event);
+            return allowDecision(event);
+          }),
+        ),
+      ),
+    );
+    const parent = await open("continuation-parent");
+    await parent.authorizeOutboundToolCalls([
+      {
+        ...call,
+        id: "continuation-spawn",
+        targetName: "spawn_agent",
+        emittedName: "spawn_agent",
+        spawn: true,
+      },
+    ]);
+    await parent.finish();
+
+    const childParams = {
+      config,
+      profileId: "00000000-0000-4000-8000-000000000071",
+      ownerScopeHash: "v1-owner",
+      clientSessionId: "continuation-child",
+      parentClientSessionId: "continuation-parent",
+      spawnBinding: "fork_continuation-spawn",
+    };
+    const discovery = await AppaProxyHookSession.open({
+      ...childParams,
+      modelInput: "discover available tools",
+      toolResults: [],
+    });
+    await discovery.finish({ awaitClientContinuation: true });
+    expect(events.filter((event) => event.event === "child_end")).toEqual([]);
+
+    const readProposal = await AppaProxyHookSession.open({
+      ...childParams,
+      modelInput: "read the selected fixture",
+      toolResults: [],
+    });
+    await readProposal.authorizeOutboundToolCalls([
+      { ...call, id: "continuation-read" },
+    ]);
+    await readProposal.finish();
+    expect(events.filter((event) => event.event === "child_end")).toEqual([]);
+
+    const finalReturn = await AppaProxyHookSession.open({
+      ...childParams,
+      modelInput: "summarize the fixture",
+      toolResults: [{ id: "continuation-read", content: "fixture content" }],
+    });
+    await finalReturn.finish({ childReturn: "final child answer" });
+
+    expect(events.filter((event) => event.event === "child_start")).toEqual([
+      expect.objectContaining({ child_id: "continuation-child" }),
+    ]);
+    expect(events.filter((event) => event.event === "child_end")).toEqual([
+      expect.objectContaining({
+        child_id: "continuation-child",
+        value: "final child answer",
+      }),
+    ]);
+  });
+
   test("declares an operator return floor only for its configured native spawn contract", async () => {
     const events: Array<Record<string, unknown>> = [];
     const deniedCalls = new Set<string>();

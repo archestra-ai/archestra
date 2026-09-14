@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { toMcpClientServerName } from "@archestra/shared";
 import { HttpResponse, http } from "msw";
+import { beforeEach } from "vitest";
 import config from "@/config";
 import AppaProxyWireModel from "@/models/appa-proxy-wire";
 import { AppaProxyHookSession } from "@/routes/proxy/appa-proxy-hook";
@@ -25,6 +26,8 @@ const runtimeUrl = "http://native-bridge.test";
 const server = useMswServer();
 
 describe("isNativeCodexCodeModeRequest", () => {
+  beforeEach(() => installNativeRuntime());
+
   test("derives a provider-only native principal only from a registered gateway", async ({
     makeAgent,
     makeMember,

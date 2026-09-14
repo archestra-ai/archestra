@@ -111,6 +111,42 @@ describe("APPA proxy phase trace", () => {
     );
   });
 
+  test("failure diagnostics retain source locations without private error or trace fields", () => {
+    const trace = new AppaProxyPhaseTrace({
+      traceId: "private-trace",
+      ownerScopeHash: "private-owner",
+      provider: "openai",
+      protocol: "openai-responses",
+      sessionId: "private-session",
+    });
+    const error = new Error(
+      "Bearer private-credential private-user-data\n at input (/private/home/src/services/appa-private-user-data.ts:8:9)",
+    );
+    error.stack = `Error: ${error.message}\n at call (/private/home/src/services/appa-codex-native-bridge.ts:27:9)\n at fetch (/private/home/node_modules/client/index.js:3:1)`;
+    trace.failure({ phase: "native_setup", error });
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: "appa_proxy_failure",
+        phase: "native_setup",
+        source_locations: ["src/services/appa-codex-native-bridge.ts:27:9"],
+        error_sha256: digest(error.message),
+        session_id_sha256: digest("private-session"),
+      }),
+      "APPA proxy failure",
+    );
+    const logged = JSON.stringify(vi.mocked(logger.warn).mock.calls);
+    for (const sensitive of [
+      "private-credential",
+      "private-user-data",
+      "private-trace",
+      "private-session",
+      "private-owner",
+      "/private/home",
+    ]) {
+      expect(logged).not.toContain(sensitive);
+    }
+  });
+
   test("waits for the real Fastify response finish before recording proposal delivery", async () => {
     app = Fastify();
     app.get("/proposal", async (_request, reply) => {

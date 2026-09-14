@@ -14,6 +14,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import tomllib
 from unittest import mock
 import unittest
 from urllib.error import HTTPError
@@ -84,6 +85,12 @@ class NativeLiveHarnessTests(unittest.TestCase):
             RUNNER_MODULE.sanitize("synthetic.person@example.test", "SYNTHETIC_PRIVATE_NOTE"),
             "<redacted-email>",
         )
+        carrier = f"apc1.call-parent.{'a' * 64}.{'b' * 64}"
+        captured = json.dumps({"prompt": f"{carrier}\nperform the scoped read", "call_id": "expected-call"})
+        cleaned = RUNNER_MODULE.sanitize(captured, "SYNTHETIC_PRIVATE_NOTE")
+        self.assertNotIn(carrier, cleaned)
+        self.assertIsNone(RUNNER_MODULE.CHILD_CARRIER_PATTERN.search(cleaned))
+        self.assertEqual(json.loads(cleaned), {"prompt": "<redacted-child-carrier>\nperform the scoped read", "call_id": "expected-call"})
 
     def test_allows_only_explicit_dev_loopback_runtime_transport(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -108,6 +115,7 @@ class NativeLiveHarnessTests(unittest.TestCase):
             "missing-receipt": lambda value: value["runtime_evidence"]["call_bindings"][0].pop("result_admission_receipt"),
             "unadmitted-open-call": lambda value: value["runtime_evidence"]["call_bindings"][0].update({"state": "open"}),
             "unadmitted-result-intent": lambda value: value["runtime_evidence"]["call_bindings"][0].update({"state": "result_intent"}),
+            "missing-authority-redaction": lambda value: value["captures"].pop("authority_tokens_redacted"),
             "missing-proposal-write": lambda value: value["runtime_evidence"]["phase_traces"].update({"proposal_deliveries": []}),
         }
         with tempfile.TemporaryDirectory() as directory:
@@ -227,11 +235,11 @@ class NativeLiveHarnessTests(unittest.TestCase):
             )
             persisted = json.loads((run_dir / "harness-attestation.json").read_text())
             self.assertEqual(attestation, persisted)
-            self.assertEqual(attestation["pipeline_version"], "native-live-harness/v2")
+            self.assertEqual(attestation["pipeline_version"], "native-live-harness/v3")
             self.assertEqual(attestation["configuration_sha256"], "b" * 64)
             self.assertEqual(attestation["client_binary"], {"version": "0.153.0", "sha256": "a" * 64})
             self.assertEqual(set(attestation), {"pipeline_version", "source_archive_version", "source_archive", "configuration_sha256", "client_binary", "gateway_control_inventory"})
-            self.assertEqual(attestation["source_archive_version"], 2)
+            self.assertEqual(attestation["source_archive_version"], 3)
             self.assertIsNone(attestation["gateway_control_inventory"])
             archive = attestation["source_archive"]
             self.assertEqual(set(archive["files"]), set(RUNNER_MODULE.SOURCE_ARCHIVE_FILES))
@@ -516,13 +524,14 @@ process.stdout.write(createHash('sha256').update(stable(value)).digest('hex'));
                 "root_id": "root-1",
             }
 
-        def event(call_id: str, event_id: str, *, tool: str = "mcp__appa_fixture__publish", call_arguments: object = arguments) -> dict[str, object]:
+        def event(call_id: str, event_id: str, *, tool: str = "mcp__appa_fixture__publish", call_arguments: object = arguments, child_id: str | None = None) -> dict[str, object]:
             body = json.dumps(
                 {
                     "event_id": event_id,
                     "event": {
                         "event": "tool_calls",
                         "root_id": "root-1",
+                        **({"child_id": child_id} if child_id is not None else {}),
                         "calls": [{"call_id": call_id, "tool": tool, "arguments": call_arguments, "spawn": False}],
                     },
                 },
@@ -590,6 +599,24 @@ process.stdout.write(createHash('sha256').update(stable(value)).digest('hex'));
         wrong_basis["response"]["decision"]["calls"][0]["feedback"] = "unrelated policy feedback"
         self.assertEqual(COLLECTOR_MODULE.project_denial_receipts(bindings, [wrong_basis, events[1]]), [])
 
+        child_binding = binding("call-child", "row-child") | {"child_actor_id": "child-actor"}
+        child_event = event("call-child", "88888888-8888-4888-8888-888888888888", child_id="child-actor")
+        child_receipts = COLLECTOR_MODULE.project_denial_receipts([child_binding], [child_event])
+        self.assertEqual(len(child_receipts), 1)
+        self.assertEqual(child_receipts[0]["child_actor_id_sha256"], sha256(b"child-actor").hexdigest())
+        child_projected = [COLLECTOR_MODULE.project_call_binding(child_binding)]
+        self.assertTrue(COLLECTOR_MODULE.exact_denial_receipts_match(child_projected, child_receipts))
+        altered = [child_receipts[0] | {"child_actor_id_sha256": sha256(b"other-child").hexdigest()}]
+        self.assertFalse(COLLECTOR_MODULE.exact_denial_receipts_match(child_projected, altered))
+        ASSERT_MODULE.assert_denial_receipts(checks, {
+            "denial_receipts": altered,
+            "event_receipts": [COLLECTOR_MODULE.project_event_receipt(child_event)],
+        }, child_projected)
+        self.assertFalse(checks["exact_denial_receipts"])
+        self.assertEqual(COLLECTOR_MODULE.project_denial_receipts([binding("call-child", "row-child")], [child_event]), [])
+        self.assertEqual(COLLECTOR_MODULE.project_denial_receipts([child_binding], [event("call-child", "88888888-8888-4888-8888-888888888888")]), [])
+        self.assertEqual(COLLECTOR_MODULE.project_denial_receipts([child_binding], [event("call-child", "88888888-8888-4888-8888-888888888888", child_id="other-child")]), [])
+
     def qualifying_result(self) -> dict[str, object]:
         digest = "a" * 64
         return {
@@ -607,7 +634,7 @@ process.stdout.write(createHash('sha256').update(stable(value)).digest('hex'));
             "runtime": {"logical_service_url": RUNTIME_URL, "backend_transport_url": RUNTIME_URL, "backend_transport_kind": "cluster-dns"},
             "client_provenance": {"provenance_verified": True, "expected_version": "0.153.0", "observed_version": "0.153.0", "sha256": digest, "resolved_path": "/verified/codex"},
             "configuration": {"sha256": digest, "sanitized": {"client": "codex", "environment_names": ["OPENAI_API_KEY"], "argv": ["<verified-client>", "exec", "<scenario-prompt>"], "argv_sha256": digest}},
-            "captures": {"private_source_redacted": True},
+            "captures": {"private_source_redacted": True, "authority_tokens_redacted": True},
             "fixture_before": {"publication_count": 0, "audit_count": 0},
             "fixture_after": {"publication_count": 1, "private_marker_in_publication": False, "public_value_only": True, "audit_count": 3},
             "runtime_evidence": {
@@ -742,6 +769,20 @@ process.stdout.write(createHash('sha256').update(stable(value)).digest('hex'));
                 {"id": "child-public", "clients": ["claude", "codex"], "client_prompts": scenario["client_prompts"]},
             )
 
+    def test_fixture_prompt_uses_the_clients_real_dispatcher_namespace(self) -> None:
+        scenario = {"id": "public-sink", "prompt": "Call appa_fixture.read_source with {run_id} and {request_key}."}
+        gateway = {"client_server_key": "test_gateway", "tool_names": {"read_source": "native_live_fixture__read_source"}}
+        for client in ("claude", "codex", "opencode"):
+            with self.subTest(client=client):
+                prompt = RUNNER_MODULE.scenario_prompt(scenario, client, "request-token", "run-token", gateway)
+                expected = "mcp__test_gateway.archestra__run_tool" if client == "codex" else "mcp__test_gateway__archestra__run_tool"
+                self.assertIn(expected, prompt)
+                self.assertIn("native_live_fixture__read_source", prompt)
+                self.assertIn("run-token and request-token", prompt)
+                self.assertNotIn("appa_fixture.read_source", prompt)
+                if client == "codex":
+                    self.assertNotIn("mcp__test_gateway__archestra__run_tool", prompt)
+
     def test_private_child_scenario_requires_parent_publication_denial(self) -> None:
         scenarios = json.loads((ROOT / "native-live-scenarios.json").read_text())
         scenario = next(item for item in scenarios["scenarios"] if item["id"] == "child-private-denied")
@@ -751,7 +792,7 @@ process.stdout.write(createHash('sha256').update(stable(value)).digest('hex'));
             prompt.index("Then use exactly one native subagent"),
         )
         self.assertIn("child must call appa_fixture.read_source", prompt)
-        self.assertIn("return its policy result without attempting publication", prompt)
+        self.assertIn("return only its private_note string without attempting publication", prompt)
         self.assertIn("parent must attempt appa_fixture.publish exactly once", prompt)
         self.assertEqual(scenario["expect"]["runtime"]["child"], "private")
         self.assertTrue(scenario["expect"]["runtime"]["parent_publication_denied"])
@@ -949,7 +990,7 @@ process.stdout.write(createHash('sha256').update(stable(value)).digest('hex'));
         }
         claude = binding | {
             "parent_emitted_name": "Agent",
-            "parent_target_name": "agent/claude-code/Agent",
+            "parent_target_name": "agent/fixture/lifecycle_child",
             "signed_carrier_present": True,
             "task_alias_count": 0,
         }
@@ -984,6 +1025,8 @@ process.stdout.write(createHash('sha256').update(stable(value)).digest('hex'));
             ("codex", codex, "parent_target_name", "agent:fixture/lifecycle_child"),
             ("codex", codex, "task_alias_matches_child", False),
             ("claude", claude, "signed_carrier_present", False),
+            ("claude", claude, "parent_target_name", "agent/other/child"),
+            ("claude", claude, "parent_emitted_name", "mcp__server__Agent"),
             ("opencode", opencode, "parent_target_name", "agent:fixture/lifecycle_child"),
             ("opencode", opencode, "task_alias_count", 1),
         ):
@@ -1127,11 +1170,31 @@ process.stdout.write(createHash('sha256').update(stable(value)).digest('hex'));
                     "lifecycle_order": True,
                     "source_read_count": 1,
                     "source_admission_order": True,
+                    "parent_spawn_presentation": {"verified": True},
                 },
             },
             "codex",
         )
         self.assertTrue(all(checks.values()), checks)
+
+    def test_public_child_requires_publication_by_its_exact_parent_after_return(self) -> None:
+        parent, child = "a" * 64, "b" * 64
+        child_end = "2026-01-01T00:00:02Z"
+        publication = {"proxy_session_id_sha256": parent, "target_name": "publish", "state": "result_admitted", "authorization_at": "2026-01-01T00:00:03Z", "result_admitted_at": "2026-01-01T00:00:04Z"}
+        self.assertTrue(COLLECTOR_MODULE.parent_publication_completed([publication], parent, child_end))
+        for mutation in (
+            {"proxy_session_id_sha256": child},
+            {"proxy_session_id_sha256": "c" * 64},
+            {"state": "open"},
+            {"authorization_at": "2026-01-01T00:00:01Z"},
+        ):
+            with self.subTest(mutation=mutation):
+                self.assertFalse(COLLECTOR_MODULE.parent_publication_completed([publication | mutation], parent, child_end))
+        self.assertFalse(COLLECTOR_MODULE.parent_publication_completed([publication, publication], parent, child_end))
+        self.assertFalse(COLLECTOR_MODULE.parent_publication_completed([publication], parent, None))
+        checks: dict[str, bool] = {}
+        ASSERT_MODULE.assert_runtime(checks, {"parent_publication": True}, {"parent_publication": False}, "claude")
+        self.assertFalse(checks["parent_publication_after_child_return"])
 
     def test_parent_publication_denial_requires_the_parent_receipt(self) -> None:
         parent_id = "a" * 64
@@ -1144,11 +1207,13 @@ process.stdout.write(createHash('sha256').update(stable(value)).digest('hex'));
             "target_name": "publish",
             "arguments_sha256": "f" * 64,
             "authorization_at": "2026-01-01T00:00:03Z",
+            "state": "denied",
         }
         child = parent | {
             "call_row_id_sha256": "1" * 64,
             "call_id_sha256": "2" * 64,
             "proxy_session_id_sha256": child_id,
+            "target_name": "read_source",
         }
         receipt = parent | {"settled_at": "2026-01-01T00:00:04Z", "basis": "readers_not_public"}
         child_end = "2026-01-01T00:00:02Z"
@@ -1162,6 +1227,13 @@ process.stdout.write(createHash('sha256').update(stable(value)).digest('hex'));
         self.assertFalse(COLLECTOR_MODULE.parent_publication_denied([parent | {"proxy_session_id_sha256": sibling_id}], [receipt | {"proxy_session_id_sha256": sibling_id}], parent_id, child_end))
         self.assertFalse(COLLECTOR_MODULE.parent_publication_denied([parent], [receipt], parent_id, "2026-01-01T00:00:05Z"))
         self.assertFalse(COLLECTOR_MODULE.parent_publication_denied([parent | {"authorization_at": "2026-01-01T00:00:01Z"}], [receipt], parent_id, child_end))
+        retried = parent | {"call_row_id_sha256": "7" * 64, "call_id_sha256": "8" * 64, "arguments_sha256": "9" * 64}
+        retry_receipt = retried | {"settled_at": "2026-01-01T00:00:05Z", "basis": "readers_not_public"}
+        self.assertTrue(COLLECTOR_MODULE.parent_publication_denied([parent, retried, child], [receipt, retry_receipt], parent_id, child_end))
+        self.assertFalse(COLLECTOR_MODULE.parent_publication_denied([parent, retried | {"state": "result_admitted"}], [receipt, retry_receipt], parent_id, child_end))
+        self.assertFalse(COLLECTOR_MODULE.parent_publication_denied([parent, retried | {"proxy_session_id_sha256": sibling_id}], [receipt, retry_receipt | {"proxy_session_id_sha256": sibling_id}], parent_id, child_end))
+        self.assertFalse(COLLECTOR_MODULE.parent_publication_denied([parent, retried], [receipt], parent_id, child_end))
+        self.assertFalse(COLLECTOR_MODULE.parent_publication_denied([parent, parent], [receipt, receipt], parent_id, child_end))
 
         checks: dict[str, bool] = {}
         ASSERT_MODULE.assert_runtime(
@@ -1246,6 +1318,7 @@ process.stdout.write(createHash('sha256').update(stable(value)).digest('hex'));
             "spawn_binding_consumed": True, "parent_emitted_name": "task",
             "parent_target_name": target, "parent_target_arguments": arguments,
             "parent_source_count": 0,
+            "parent_dispatch_id": "spawn-dispatch",
             "signed_carrier_present": True, "task_alias_count": 0,
             "child_session_id": child, "child_client_session_id": "child-thread",
             "root_id": root, "spawn_binding": "spawn-capability",
@@ -1270,6 +1343,11 @@ process.stdout.write(createHash('sha256').update(stable(value)).digest('hex'));
                 {"event": "child_end", "root_id": root, "child_id": "child-thread", "value": "synthetic private return"},
                 {"decision": "ack"}, session=child, event_id="end", settled_at="2026-01-01T00:00:04Z",
             ),
+            settled_runtime_event(
+                {"event": "spawn_result", "root_id": root, "call_id": "spawn", "dispatch_id": "spawn-dispatch"},
+                {"decision": "result_admitted", "presentation": "synthetic private return"},
+                session=parent, event_id="parent-result", settled_at="2026-01-01T00:00:05Z",
+            ),
         ]
         source = {
             "id": "source-row", "call_id": "source-call", "proxy_session_id": child,
@@ -1289,6 +1367,7 @@ process.stdout.write(createHash('sha256').update(stable(value)).digest('hex'));
             self.assertFalse(sanitizer_checks["runtime_sanitized"])
             self.assertNotIn("spawn-capability", json.dumps(projected))
             self.assertNotIn("read the private fixture", json.dumps(projected))
+            self.assertNotIn("spawn-dispatch", json.dumps(projected))
             return checks
 
         self.assertTrue(all(check_projection(postgres).values()))
@@ -1298,6 +1377,7 @@ process.stdout.write(createHash('sha256').update(stable(value)).digest('hex'));
             ("read after child return", {"call_bindings": [source | {"updated_at": "2026-01-01T00:00:05Z"}]}),
             ("parent read any source", {"child_bindings": [binding | {"parent_source_count": 1}]}),
             ("missing declaration", {"event_receipts": declarations[2:]}),
+            ("missing parent presentation", {"event_receipts": declarations[:4]}),
         ]
         for position, field, value in (
             (1, "label", {"audience": ["public"]}),
@@ -1314,6 +1394,26 @@ process.stdout.write(createHash('sha256').update(stable(value)).digest('hex'));
         for name, mutation in mutations:
             with self.subTest(name=name):
                 self.assertFalse(all(check_projection(postgres | mutation).values()))
+        for presentation, expected in (
+            ('{"agent_id":"child-thread"}', True),
+            ('{"status":"unavailable"}', True),
+            ('{"agent_id":"child-thread","extra":"private child data"}', False),
+            ('{"agent_id":"another-child"}', False),
+            ("synthetic private return", False),
+        ):
+            event = settled_runtime_event(
+                {"event": "spawn_result", "root_id": root, "call_id": "spawn", "dispatch_id": "spawn-dispatch", "control": {"agent_id": "child-thread"}},
+                {"decision": "result_admitted", "presentation": presentation},
+                session=parent, event_id="parent-result", settled_at="2026-01-01T00:00:01.500Z",
+            )
+            proof = COLLECTOR_MODULE.project_parent_spawn_presentation("opencode", declarations[:4] + [event], [binding])
+            self.assertEqual(proof["verified"], expected, presentation)
+        leaked_body = settled_runtime_event(
+            {"event": "spawn_result", "root_id": root, "call_id": "spawn", "dispatch_id": "spawn-dispatch", "outcome": {"status": "success", "body": "private child data"}},
+            {"decision": "result_admitted", "presentation": '{"status":"unavailable"}'},
+            session=parent, event_id="parent-result", settled_at="2026-01-01T00:00:01.500Z",
+        )
+        self.assertFalse(COLLECTOR_MODULE.project_parent_spawn_presentation("opencode", declarations[:4] + [leaked_body], [binding])["verified"])
 
     def test_runtime_child_facts_parse_openappa_log_batches(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -1349,6 +1449,164 @@ process.stdout.write(createHash('sha256').update(stable(value)).digest('hex'));
             expected = sha256(child_id.encode()).hexdigest()
             self.assertEqual(facts["fork_opened_child_ids_sha256"], [expected])
             self.assertEqual(facts["child_returned_ids_sha256"], [expected])
+
+    def test_local_policy_scenarios_cover_all_stock_clients(self) -> None:
+        scenarios = json.loads((ROOT / "native-live-scenarios.json").read_text())
+        local = {
+            scenario["id"]: scenario
+            for scenario in scenarios["scenarios"]
+            if scenario["id"].startswith("local-")
+        }
+        self.assertEqual(set(local), {"local-public-effect", "local-private-effect-denied"})
+        for scenario in local.values():
+            RUNNER_MODULE.validate_scenario_contract(scenario)
+            self.assertEqual(set(scenario["clients"]), {"claude", "codex", "opencode"})
+        self.assertEqual(local["local-public-effect"]["expect"]["local_callback_effect_count"], 1)
+        self.assertEqual(local["local-private-effect-denied"]["expect"]["local_callback_effect_count"], 0)
+        self.assertIn("kind private", local["local-private-effect-denied"]["prompt"])
+        self.assertIn("before delivery to the client", local["local-private-effect-denied"]["prompt"])
+
+    def test_local_probe_contract_is_exact_and_capability_stays_out_of_command(self) -> None:
+        capability = "a" * 64
+        with tempfile.TemporaryDirectory() as directory:
+            probe = Path(directory) / "probe.cjs"
+            probe.write_text("#!/usr/bin/env node\n")
+            probe.chmod(0o700)
+            for client, target in (("claude", "Bash"), ("codex", "functions.exec_command"), ("opencode", "bash")):
+                args = argparse.Namespace(client=client, local_probe_path=probe, local_probe_observer_url="http://127.0.0.1:18880/observer/local-effect")
+                contract, environment = RUNNER_MODULE.prepare_local_probe(args, {"id": "local-public-effect"}, "run-local-contract", "synthetic-local-contract", {"local_callback_capability": capability})
+                self.assertIsNotNone(contract)
+                assert contract is not None
+                self.assertEqual(contract["target_name"], target)
+                self.assertNotIn("run-local-contract", contract["command"])
+                self.assertNotIn("synthetic-local-contract", contract["command"])
+                self.assertNotIn(capability, contract["command"])
+                if client == "opencode":
+                    self.assertEqual(contract["arguments"]["description"], RUNNER_MODULE.LOCAL_PROBE_DESCRIPTION)
+                self.assertEqual(environment["APPA_NATIVE_LOCAL_CALLBACK_CAPABILITY"], capability)
+                self.assertEqual(contract["callback_arguments"], {"run_id": "run-local-contract", "request_key": "synthetic-local-contract", "effect": "SYNTHETIC_LOCAL_PUBLIC_EFFECT", "probe": "fixed-node-local-probe/v1"})
+                altered = {**contract["arguments"], next(iter(contract["arguments"])): "node arbitrary"}
+                self.assertIsNone(COLLECTOR_MODULE.project_call_binding({"target_name": target, "emitted_name": contract["emitted_name"], "target_arguments": altered}, local_probe=contract))
+
+    def test_local_client_configs_enable_only_the_required_local_tool(self) -> None:
+        local_probe = {"target_name": "ignored", "emitted_name": "ignored", "arguments": {"command": "node /operator/probe"}}
+        gateway = {"url": "http://127.0.0.1:9002/v1/mcp/test", "token_env": "TEST_GATEWAY_TOKEN", "client_server_key": "my_gateway"}
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for client in ("claude", "codex", "opencode"):
+                (root / client).mkdir()
+            environment = {"APPA_NATIVE_LIVE_ANTHROPIC_API_KEY": "provider-key", "APPA_NATIVE_LIVE_OPENAI_API_KEY": "provider-key", "APPA_NATIVE_LIVE_KIMI_API_KEY": "provider-key", "TEST_GATEWAY_TOKEN": "gateway-token"}
+            with mock.patch.dict(RUNNER_MODULE.os.environ, environment, clear=False):
+                claude, _env, _transient = RUNNER_MODULE.client_command(argparse.Namespace(client="claude", scenario="local-public-effect", resume_session=None, resume_from_run_dir=None, gateway_token_file=None), "http://127.0.0.1:9002/v1/anthropic/agent", "prompt", root / "claude", sys.executable, gateway, local_probe)
+                codex, _env, _transient = RUNNER_MODULE.client_command(argparse.Namespace(client="codex", scenario="local-public-effect", resume_session=None, resume_from_run_dir=None, gateway_token_file=None), "http://127.0.0.1:9002/v1/openai/agent", "prompt", root / "codex", sys.executable, gateway, local_probe)
+                _command, _env, transient = RUNNER_MODULE.client_command(argparse.Namespace(client="opencode", scenario="local-public-effect", resume_session=None, resume_from_run_dir=None, gateway_token_file=None), "http://127.0.0.1:9002/v1/kimi/agent", "prompt", root / "opencode", sys.executable, gateway, local_probe)
+            tools_at = claude.index("--tools")
+            allowed_at = claude.index("--allowedTools")
+            self.assertEqual(claude[tools_at + 1:allowed_at][-1], "Bash")
+            self.assertEqual(codex[codex.index("--sandbox") + 1], "workspace-write")
+            self.assertEqual(json.loads(transient[0].read_text())["permission"]["bash"], "allow")
+
+    def test_local_effect_projection_requires_exact_command_and_one_observed_callback(self) -> None:
+        arguments = {"cmd": "node /operator/probe", "login": False}
+        contract = {"version": 1, "mode": "public-effect", "emitted_name": "functions.exec_command", "target_name": "functions.exec_command", "arguments": arguments, "command": arguments["cmd"], "command_sha256": sha256(arguments["cmd"].encode()).hexdigest(), "callback_arguments": {"run_id": "run-local-observed", "request_key": "synthetic-local-observed", "effect": "SYNTHETIC_LOCAL_PUBLIC_EFFECT", "probe": "fixed-node-local-probe/v1"}}
+        raw = {"id": "row-1", "call_id": "call-1", "proxy_session_id": "session-1", "bound_auth_scope_hash": "b" * 64, "emitted_name": "functions.exec_command", "target_name": "functions.exec_command", "target_arguments": arguments, "state": "result_admitted", "dispatch_id_sha256": "c" * 64, "session_id_sha256": "d" * 64, "emitted_arguments_sha256": "e" * 64, "runtime_event_id_sha256": "f" * 64, "receipt_sha256": "1" * 64, "authorization_at": "2026-01-01T00:00:03Z", "receipt_at": "2026-01-01T00:00:04Z", "event_settled_at": "2026-01-01T00:00:05Z", "updated_at": "2026-01-01T00:00:05Z"}
+        binding = COLLECTOR_MODULE.project_call_binding(raw, local_probe=contract)
+        self.assertIsNotNone(binding)
+        assert binding is not None
+        callback_hash = COLLECTOR_MODULE.receipt_sha256(contract["callback_arguments"])
+        fixture = {"effect_counts": {"local_callback": 1}, "call_bindings": [{"tool_name": "local_callback", "arguments_sha256": callback_hash, "source_host_sha256": "2" * 64, "result_sha256": "3" * 64, "service_instance_id": "fixture-a", "effect_state": "known_committed", "reply_state": "known", "result_status": "result_ready", "invocation_sequence": 4, "invoked_sequence": 4, "effect_committed_sequence": 5, "result_sequence": 6}]}
+        source = COLLECTOR_MODULE.project_call_binding({"id": "source-row", "call_id": "source-call", "proxy_session_id": "session-1", "bound_auth_scope_hash": "b" * 64, "emitted_name": "read_source", "target_name": "read_source", "target_arguments": {"run_id": "run-local-observed", "request_key": "synthetic-local-observed", "kind": "public"}, "state": "result_admitted", "event_settled_at": "2026-01-01T00:00:02Z"})
+        assert source is not None
+        evidence = COLLECTOR_MODULE.project_local_effect(argparse.Namespace(), [source, binding], [], fixture, contract, [{"target_name": contract["target_name"], "emitted_name": contract["emitted_name"], "state": "result_admitted", "exact_arguments": True}])
+        self.assertTrue(evidence["callback_join"])
+        self.assertEqual(evidence["client_reported_result"]["provenance"], "sealed-client-reported-observation")
+        self.assertTrue(ASSERT_MODULE.valid_local_callback(evidence["callback"]))
+        self.assertFalse(ASSERT_MODULE.valid_client_reported_local_result({"provenance": "os-attestation"}))
+
+    def test_local_policy_contract_uses_runtime_targets_and_parseable_fixed_toml(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            probe = Path(directory) / "native-live-local-probe.cjs"
+            probe.write_text("#!/usr/bin/env node\n")
+            probe.chmod(0o700)
+            contract = RUNNER_MODULE.local_policy_contract(probe)
+        self.assertNotIn("<", json.dumps(contract))
+        toml = contract["runtime_config_map_patch"]["per_client_policy_toml"]
+        self.assertEqual(RUNNER_MODULE.LOCAL_TOOL_CONTRACTS["codex"]["target_name"], "functions.exec_command")
+        self.assertIn('name = "functions.exec_command"', toml["codex"])
+        self.assertIn('name = "Bash"', toml["claude"])
+        self.assertIn('name = "bash"', toml["opencode"])
+        self.assertIn('description = { type = "string", const = "Run the fixed controlled local-effect probe." }', toml["opencode"])
+        self.assertTrue(all("<" not in snippet for snippet in toml.values()))
+        for snippet in toml.values():
+            policy = tomllib.loads("[policy]\nversion = 2\n\n" + snippet)["policy"]
+            self.assertEqual(policy["version"], 2)
+            self.assertEqual(policy["tool"][0]["requires"], {"trust": "trusted", "audience": {"contains": ["public"]}})
+        codex_stock = (ROOT / "../../backend/src/routes/proxy/appa-native-codex-stock.integration.test.ts").resolve().read_text()
+        self.assertIn('name = "functions.exec_command"', codex_stock)
+        self.assertIn('required = ["cmd", "login"]', codex_stock)
+
+    def test_local_private_denial_requires_exact_policy_call_and_zero_callback_effects(self) -> None:
+        arguments = {"command": "node /operator/probe"}
+        contract = {"version": 1, "mode": "private-effect-denied", "emitted_name": "Bash", "target_name": "Bash", "arguments": arguments, "command": arguments["command"], "command_sha256": sha256(arguments["command"].encode()).hexdigest(), "callback_arguments": {"run_id": "run-local-denied", "request_key": "synthetic-local-denied", "effect": "SYNTHETIC_LOCAL_PUBLIC_EFFECT", "probe": "fixed-node-local-probe/v1"}}
+        raw = {"id": "row-denied", "call_id": "call-denied", "proxy_session_id": "session-denied", "bound_auth_scope_hash": "a" * 64, "emitted_name": "Bash", "target_name": "Bash", "target_arguments": arguments, "state": "denied", "authorization_at": "2026-01-01T00:00:03Z"}
+        binding = COLLECTOR_MODULE.project_call_binding(raw, local_probe=contract)
+        self.assertIsNotNone(binding)
+        assert binding is not None
+        receipt = {
+            "call_row_id_sha256": binding["call_row_id_sha256"],
+            "call_id_sha256": binding["call_id_sha256"],
+            "proxy_session_id_sha256": binding["proxy_session_id_sha256"],
+            "child_actor_id_sha256": binding["child_actor_id_sha256"],
+            "bound_auth_scope_hash": binding["bound_auth_scope_hash"],
+            "target_name": "local_callback",
+            "arguments_sha256": binding["arguments_sha256"],
+        }
+        source = COLLECTOR_MODULE.project_call_binding({"id": "source-denied", "call_id": "source-call", "proxy_session_id": "session-denied", "bound_auth_scope_hash": "a" * 64, "emitted_name": "read_source", "target_name": "read_source", "target_arguments": {"run_id": "run-local-denied", "request_key": "synthetic-local-denied", "kind": "private"}, "state": "result_admitted", "event_settled_at": "2026-01-01T00:00:02Z"})
+        assert source is not None
+        evidence = COLLECTOR_MODULE.project_local_effect(
+            argparse.Namespace(), [source, binding], [receipt], {"effect_counts": {"local_callback": 0}, "call_bindings": []}, contract, [{"target_name": contract["target_name"], "emitted_name": contract["emitted_name"], "state": "denied", "exact_arguments": True}],
+        )
+        self.assertTrue(evidence["policy_bound"])
+        self.assertTrue(evidence["callback_join"])
+        self.assertIsNone(evidence["client_reported_result"])
+        hidden_allowed = COLLECTOR_MODULE.project_local_effect(
+            argparse.Namespace(), [source, binding], [receipt], {"effect_counts": {"local_callback": 0}, "call_bindings": []}, contract,
+            [{"target_name": contract["target_name"], "emitted_name": contract["emitted_name"], "state": "denied", "exact_arguments": True}, {"target_name": contract["target_name"], "emitted_name": contract["emitted_name"], "state": "result_admitted", "exact_arguments": False}],
+        )
+        self.assertFalse(hidden_allowed["policy_bound"])
+
+    def test_local_sql_selector_requires_exact_json_arguments(self) -> None:
+        self.assertIn("c.appa_target_arguments = :'local_arguments'::jsonb", COLLECTOR_MODULE.POSTGRES_SQL)
+        self.assertIn("c.appa_target_name = :'local_target_name'", COLLECTOR_MODULE.POSTGRES_SQL)
+        self.assertNotIn("local_arguments ->>", COLLECTOR_MODULE.POSTGRES_SQL)
+        self.assertEqual(COLLECTOR_MODULE.sql_literal("a'b"), "'a''b'")
+
+    def test_source_archive_v2_remains_verifiable_after_local_probe_addition(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            run_dir = Path(directory)
+            files = {
+                name: RUNNER_MODULE.archive_harness_source(run_dir, source)
+                for name, source in RUNNER_MODULE.LEGACY_SOURCE_ARCHIVE_FILES.items()
+            }
+            manifest_path = run_dir / "harness-sources" / "source-manifest.json"
+            RUNNER_MODULE.write_json(manifest_path, {"version": 2, "files": files})
+            manifest = manifest_path.read_bytes()
+            RUNNER_MODULE.write_json(
+                run_dir / "harness-attestation.json",
+                {
+                    "source_archive_version": 2,
+                    "source_archive": {
+                        "manifest": {
+                            "name": manifest_path.name,
+                            "sha256": sha256(manifest).hexdigest(),
+                            "bytes": len(manifest),
+                            "snapshot": "harness-sources/source-manifest.json",
+                        },
+                        "files": files,
+                    },
+                },
+            )
+            RUNNER_MODULE.verify_source_archive(run_dir)
 
 def settled_runtime_event(request: dict, decision: dict, *, session: str, event_id: str, settled_at: str) -> dict:
     body = json.dumps({"event_id": event_id, "event": request}, sort_keys=True, separators=(",", ":"))

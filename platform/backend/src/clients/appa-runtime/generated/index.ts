@@ -30,6 +30,8 @@ export type {
   ResolveOffer,
   ResolveOfferApprovalGrant,
   ResolveOfferWireLabel,
+  SpawnResult,
+  SpawnResultSpawnResultControl,
   ToolCalls,
   ToolCallsBatchCall,
   ToolResult,

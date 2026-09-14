@@ -35,6 +35,8 @@ const hookConfig: AppaProxyHookConfig = {
   sessionHmacSecret: "held-history-session-secret".repeat(3),
   nativeCodexEnabled: true,
 };
+let runtimeEvents: Array<Record<string, unknown>> = [];
+let checkpointRequests = 0;
 
 // biome-ignore lint/correctness/useHookAtTopLevel: vitest lifecycle helper for HTTP boundary tests
 const server = useMswServer();
@@ -47,6 +49,8 @@ describe("held native opaque history route regression", () => {
   beforeEach(async () => {
     config.llmProxy.appaHook = hookConfig;
     historyVisibleBeforeControlRelease = false;
+    runtimeEvents = [];
+    checkpointRequests = 0;
     installHeldRuntime();
     app = createRouteApp();
     app.addHook("onSend", async (_request, _reply, payload) => {
@@ -252,54 +256,62 @@ describe("held native opaque history route regression", () => {
     expect(session).toEqual({ state: "quarantined" });
   });
 
-  test("seals stock client-only tool-search bookkeeping without a platform user identity", async ({
+  test("keeps stock client-only tool-search responses open without checkpointing", async ({
     makeAgent,
   }) => {
     vi.spyOn(openAiResponsesAdapterFactory, "createClient").mockReturnValue({
       responses: {
-        create: async () => responseStream(nativeToolSearchResponse()),
+        create: async (request: { stream?: boolean }) =>
+          request.stream
+            ? responseStream(nativeToolSearchResponse())
+            : nativeToolSearchResponse(),
       },
     } as never);
     const agent = await makeAgent({
       name: "Held tool search credential scope",
     });
 
-    const response = await app.inject({
-      method: "POST",
-      url: `/v1/openai/${agent.id}/responses`,
-      headers: {
-        authorization: "Bearer test-provider-key",
-        "x-archestra-session-id": "held-tool-search-credential-scope",
-      },
-      payload: {
-        model,
-        stream: true,
-        input: [{ type: "message", role: "user", content: "inspect" }],
-        tools: [
-          {
-            type: "function",
-            name: "exec_command",
-            parameters: {
-              type: "object",
-              properties: { cmd: { type: "string" } },
-              required: ["cmd"],
+    for (const stream of [false, true]) {
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/openai/${agent.id}/responses`,
+        headers: {
+          authorization: "Bearer test-provider-key",
+          "x-archestra-session-id": `held-tool-search-${stream ? "stream" : "response"}`,
+        },
+        payload: {
+          model,
+          stream,
+          input: [{ type: "message", role: "user", content: "inspect" }],
+          tools: [
+            {
+              type: "function",
+              name: "exec_command",
+              parameters: {
+                type: "object",
+                properties: { cmd: { type: "string" } },
+                required: ["cmd"],
+              },
             },
-          },
-          {
-            type: "function",
-            name: "write_stdin",
-            parameters: {
-              type: "object",
-              properties: { session_id: { type: "integer" } },
-              required: ["session_id"],
+            {
+              type: "function",
+              name: "write_stdin",
+              parameters: {
+                type: "object",
+                properties: { session_id: { type: "integer" } },
+                required: ["session_id"],
+              },
             },
-          },
-        ],
-      },
-    });
+          ],
+        },
+      });
 
-    expect(response.statusCode, response.body).toBe(200);
-    expect(response.body).toContain("tool_search_call");
+      expect(response.statusCode, response.body).toBe(200);
+      expect(response.body).toContain("tool_search_call");
+    }
+
+    expect(runtimeEvents.map((event) => event.event)).not.toContain("turn_end");
+    expect(checkpointRequests).toBe(0);
   });
 });
 
@@ -585,6 +597,7 @@ function installHeldRuntime(): void {
         event_id: string;
         event: Record<string, unknown>;
       };
+      runtimeEvents.push(envelope.event);
       const batchId = String(envelope.event.batch_id ?? "");
       const calls = envelope.event.calls as
         | Array<{
@@ -647,6 +660,7 @@ function installHeldRuntime(): void {
       });
     }),
     http.post(`${runtimeUrl}/proxy/v1/checkpoints`, async ({ request }) => {
+      checkpointRequests++;
       const body = (await request.json()) as Record<string, unknown>;
       return HttpResponse.json({
         checkpoint_id: `checkpoint-${randomUUID()}`,

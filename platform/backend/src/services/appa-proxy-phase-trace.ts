@@ -65,6 +65,43 @@ export class AppaProxyPhaseTrace {
     });
   }
 
+  failure(params: {
+    phase: "acquire" | "native_setup" | "native_process_history" | "turn_close";
+    error: unknown;
+  }): void {
+    const error = params.error instanceof Error ? params.error : undefined;
+    // Keep only source locations from this integration, never error text,
+    // absolute paths, caller-supplied fields, or the surrounding trace context.
+    const prefix = error ? `${error.name}: ${error.message}` : "";
+    const frames = error?.stack?.startsWith(prefix)
+      ? error.stack.slice(prefix.length)
+      : "";
+    const locations = frames
+      .split("\n")
+      .filter((line) => /^\s+at\s/.test(line))
+      .flatMap(
+        (line) =>
+          line.match(
+            /src\/(?:routes\/proxy|services|models)\/(?:appa-[a-z-]+|llm-proxy-handler)\.ts:\d+:\d+/g,
+          ) ?? [],
+      );
+    otelContext.with(ROOT_CONTEXT, () => {
+      logger.warn(
+        {
+          event: "appa_proxy_failure",
+          phase: params.phase,
+          occurred_at: new Date().toISOString(),
+          session_id_sha256: sha256(this.context.sessionId),
+          trace_id_sha256: sha256(this.context.traceId ?? "unavailable"),
+          error_sha256: sha256(error?.message ?? typeof params.error),
+          source_locations: [...new Set(locations ?? [])].slice(0, 6),
+        },
+        "APPA proxy failure",
+      );
+      logger.flush();
+    });
+  }
+
   private recordMany(params: {
     phase: AppaProxyPhase;
     callIds: readonly string[];

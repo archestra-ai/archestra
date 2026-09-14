@@ -266,6 +266,7 @@ function parseAppaNativeSpawnToolMap(
   }
 
   const supportedTools = new Set([
+    "Agent",
     "multi_agent_v1.spawn_agent",
     "agents.spawn_agent",
     "collaboration.spawn_agent",

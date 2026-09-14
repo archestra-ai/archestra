@@ -142,6 +142,55 @@ describe("APPA native client correlation", () => {
     ]);
   });
 
+  test("leaves malformed stock result callbacks pending instead of inventing success", () => {
+    const cases = [
+      {
+        interactionType: "anthropic:messages",
+        request: {
+          messages: [
+            {
+              role: "user",
+              content: [{ type: "tool_result", tool_use_id: "toolu_missing" }],
+            },
+          ],
+        },
+      },
+      {
+        interactionType: "openai:chatCompletions",
+        request: {
+          messages: [{ role: "tool", tool_call_id: "call_missing" }],
+        },
+      },
+      {
+        interactionType: "openai:responses",
+        request: {
+          input: [{ type: "function_call_output", call_id: "call_missing" }],
+        },
+      },
+    ];
+
+    for (const params of cases) {
+      expect(collectAppaProtocolToolResults(params)).toEqual([]);
+    }
+
+    expect(
+      collectAppaProtocolToolResults({
+        interactionType: "openai:responses",
+        request: {
+          input: [
+            {
+              type: "function_call_output",
+              call_id: "call_empty_but_reported",
+              output: "",
+            },
+          ],
+        },
+      }),
+    ).toEqual([
+      { id: "call_empty_but_reported", content: "", claimedCall: undefined },
+    ]);
+  });
+
   test("rejects lifecycle assertions that lack a durable signed native binding", () => {
     expect(
       unsupportedNativeLifecycleReason({

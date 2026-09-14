@@ -1,12 +1,15 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
+import { HttpResponse, http } from "msw";
 import { beforeEach, describe } from "vitest";
 import config from "@/config";
 import db, { schema } from "@/database";
 import AppaNativeChildCorrelationModel from "@/models/appa-native-child-correlation";
 import AppaProxySessionModel from "@/models/appa-proxy-session";
 import AppaProxyWireModel from "@/models/appa-proxy-wire";
+import { AppaProxyHookSession } from "@/routes/proxy/appa-proxy-hook";
 import { expect, test } from "@/test";
+import { useMswServer } from "@/test/msw";
 import {
   admitNativeChildCompletion,
   attachNativeChild,
@@ -25,6 +28,98 @@ beforeEach(() => {
 });
 
 describe("native child correlation", () => {
+  const server = useMswServer();
+  test("attaches an acquired child before its first acknowledged runtime start", async ({
+    makeAgent,
+  }) => {
+    const runtimeConfig = {
+      url: "http://native-child.test",
+      timeoutMs: 1000,
+      sessionHmacSecret: "native-child-session-secret".repeat(3),
+      runtimeToken: "native-child-runtime-token",
+    };
+    config.llmProxy.appaHook = runtimeConfig;
+    const fixture = await createPublishedChildFixture({ makeAgent });
+    const events: string[] = [];
+    server.use(
+      http.get(`${runtimeConfig.url}/proxy/v1/capabilities`, () =>
+        HttpResponse.json({
+          protocol_version: 1,
+          legacy_hooks: false,
+          completed_event_replay: true,
+          typed_offers: true,
+          restriction_acceptance: true,
+          human_approval: false,
+          child_workflows: true,
+          child_actor_targeting: true,
+          sanitized_results: true,
+        }),
+      ),
+      http.post(`${runtimeConfig.url}/proxy/v1/events`, async ({ request }) => {
+        const body = await request.text();
+        const envelope = JSON.parse(body);
+        events.push(envelope.event.event);
+        expect(envelope.event.root_id).toBe(fixture.rootId);
+        expect(envelope.event.child_id).toBe(
+          fixture.child.childClientSessionId,
+        );
+        if (envelope.event.event === "child_start") {
+          expect(envelope.event.spawn_binding).toBe(fixture.spawnBinding);
+        }
+        return HttpResponse.json({
+          protocol_version: 1,
+          event_id: envelope.event_id,
+          request_sha256: createHash("sha256").update(body).digest("hex"),
+          decision: { decision: "ack" },
+        });
+      }),
+    );
+    const acquisition = {
+      config: runtimeConfig,
+      ownerScopeHash: fixture.scope.ownerScopeHash,
+      profileId: fixture.scope.profileId,
+      clientSessionId: fixture.child.childClientSessionId,
+      parentClientSessionId: fixture.parentClientSessionId,
+      spawnBinding: fixture.spawnBinding,
+      toolResults: [],
+    };
+    let session = await AppaProxyHookSession.acquire(acquisition);
+    const attachment = {
+      ...fixture.scope,
+      parentClientSessionId: fixture.parentClientSessionId,
+      spawnBinding: fixture.spawnBinding,
+      ...fixture.child,
+    };
+    await attachNativeChild(attachment);
+    expect(events).toEqual([]);
+    const [before] = await db
+      .select()
+      .from(schema.appaProxySessionsTable)
+      .where(
+        eq(
+          schema.appaProxySessionsTable.id,
+          session.getNativeWireScope().sessionId,
+        ),
+      );
+    expect(before).toMatchObject({ state: "in_turn", childStartedAt: null });
+    await session.releaseWithoutPrompt();
+    await expect(attachNativeChild(attachment)).rejects.toThrow(
+      "not started its acquired turn",
+    );
+    session = await AppaProxyHookSession.acquire(acquisition);
+    await attachNativeChild(attachment);
+    await session.sendPrompt({ message: "synthetic child task" });
+    expect(events).toEqual(["child_start", "prompt"]);
+    const [after] = await db
+      .select()
+      .from(schema.appaProxySessionsTable)
+      .where(eq(schema.appaProxySessionsTable.id, before.id));
+    expect(after.childStartedAt).toBeInstanceOf(Date);
+    await session.finish({ childReturn: "synthetic child return" });
+    expect(events.at(-1)).toBe("child_end");
+    await expect(attachNativeChild(attachment)).resolves.toBeUndefined();
+  });
+
   test("resolves only an issued task alias, then lets the hook consume it once", async ({
     makeAgent,
   }) => {
@@ -162,6 +257,29 @@ describe("native child correlation", () => {
         ...fixture.child,
       }),
     ).resolves.toBeUndefined();
+  });
+
+  test("projects only the bound child identity from the issued alias", async ({
+    makeAgent,
+  }) => {
+    const fixture = await createPublishedChildFixture({ makeAgent });
+
+    await expect(
+      AppaNativeChildCorrelationModel.projectBoundSpawnControl({
+        parentSessionId: fixture.scope.sessionId,
+        ownerScopeHash: fixture.scope.ownerScopeHash,
+        profileId: fixture.scope.profileId,
+        sourceCallId: fixture.sourceCallId,
+      }),
+    ).resolves.toEqual({ agentId: fixture.child.childClientSessionId });
+    await expect(
+      AppaNativeChildCorrelationModel.projectBoundSpawnControl({
+        parentSessionId: fixture.scope.sessionId,
+        ownerScopeHash: fixture.scope.ownerScopeHash,
+        profileId: fixture.scope.profileId,
+        sourceCallId: `other-${fixture.sourceCallId}`,
+      }),
+    ).resolves.toBeNull();
   });
 
   test("resolves an issued child alias after Codex admits the spawn result", async ({

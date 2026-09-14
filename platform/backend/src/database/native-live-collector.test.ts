@@ -130,7 +130,7 @@ test("executes the complete native live collector PostgreSQL query", async ({
     settledAt: new Date("2026-01-01T00:00:05Z"),
   });
 
-  const query = collectorPostgresSql()
+  const queryTemplate = collectorPostgresSql()
     .replaceAll(":'agent_id'", `'${agent.id}'`)
     .replaceAll(":'request_key'", `'${requestKey}'`)
     .replaceAll(":'run_id'", `'${runId}'`)
@@ -138,6 +138,10 @@ test("executes the complete native live collector PostgreSQL query", async ({
     .replaceAll(":'protocol'", "'openai-responses'")
     .replaceAll(":'model'", "'gpt-5.4'")
     .replaceAll(":'interaction_type'", "'openai:responses'");
+  const query = queryTemplate
+    .replaceAll(":'local_target_name'", "'__not_local__'")
+    .replaceAll(":'local_emitted_name'", "'__not_local__'")
+    .replaceAll(":'local_arguments'", "'{}'");
 
   const result = await db.execute(sql.raw(query));
 
@@ -154,6 +158,7 @@ test("executes the complete native live collector PostgreSQL query", async ({
       ],
       call_bindings: expect.arrayContaining([
         expect.objectContaining({
+          child_actor_id: "collector-child-session",
           updated_at: expect.stringMatching(/(?:Z|[+-]\d{2}:\d{2})$/),
           authorization_at: expect.stringMatching(/(?:Z|[+-]\d{2}:\d{2})$/),
         }),
@@ -192,6 +197,49 @@ test("executes the complete native live collector PostgreSQL query", async ({
   expect(withParentRead.rows[0]).toMatchObject({
     json_build_object: {
       child_bindings: [expect.objectContaining({ parent_source_count: 1 })],
+    },
+  });
+
+  const otherSessionId = randomUUID();
+  await db.insert(schema.appaProxySessionsTable).values({
+    id: otherSessionId,
+    profileId: agent.id,
+    ownerScopeHash: "unrelated-collector-owner",
+    clientSessionId: "unrelated-collector-session",
+    rootId: "collector-root",
+    provider: "openai",
+    protocol: "openai-responses",
+    model: "gpt-5.4",
+    state: "ready",
+  });
+  const command = "node /operator/fixed-probe";
+  const localArguments = { cmd: command, login: false };
+  await db.insert(schema.appaProxyCallsTable).values(
+    [parentSessionId, otherSessionId].map((sessionId) => ({
+      sessionId,
+      callId: `local-${sessionId}`,
+      emittedName: "functions.exec_command",
+      emittedArguments: JSON.stringify(localArguments),
+      emittedArgumentsCanonical: JSON.stringify(localArguments),
+      appaTargetName: "functions.exec_command",
+      appaTargetArguments: localArguments,
+      state: "result_admitted" as const,
+    })),
+  );
+  const localQuery = queryTemplate
+    .replaceAll(":'local_target_name'", "'functions.exec_command'")
+    .replaceAll(":'local_emitted_name'", "'functions.exec_command'")
+    .replaceAll(":'local_arguments'", `'${JSON.stringify(localArguments)}'`);
+  const localResult = await db.execute(sql.raw(localQuery));
+  expect(localResult.rows[0]).toMatchObject({
+    json_build_object: {
+      root_count: 1,
+      root_local_calls: [
+        expect.objectContaining({
+          emitted_name: "functions.exec_command",
+          exact_arguments: true,
+        }),
+      ],
     },
   });
 });

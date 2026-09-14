@@ -126,6 +126,18 @@ export type ToolResult = {
     root_id: string;
 };
 
+/**
+ * SpawnResult
+ */
+export type SpawnResult = {
+    call_id: string;
+    child_id?: string | null;
+    control?: SpawnResultSpawnResultControl | null;
+    dispatch_id: string;
+    event: string;
+    root_id: string;
+};
+
 export type PrepareBatchBatchCall = {
     call_id: string;
     spawn?: boolean;
@@ -167,6 +179,10 @@ export type ToolResultProxyOutcome = {
     body?: unknown;
     message?: string | null;
     status: string;
+};
+
+export type SpawnResultSpawnResultControl = {
+    agent_id: string;
 };
 
 export type GetProxyV1CapabilitiesData = {

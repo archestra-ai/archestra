@@ -34,20 +34,25 @@ ROOT = Path(__file__).resolve().parent
 SCENARIOS_PATH = ROOT / "native-live-scenarios.json"
 FORBIDDEN_RELAY_PORTS = set(range(18700, 18800))
 MAX_CAPTURE_BYTES = 2 * 1024 * 1024
+CHILD_CARRIER_PATTERN = re.compile(r'\bapc1\.[^.\s"\\]+\.[a-f0-9]{64}\.[a-f0-9]{64}\b')
 STOCK_CLIENT_VERSIONS = {
     "claude": "2.1.258",
     "codex": "0.153.0",
     "opencode": "1.18.29",
 }
-PIPELINE_VERSION = "native-live-harness/v2"
-SOURCE_ARCHIVE_VERSION = 2
-SOURCE_ARCHIVE_FILES = {
+PIPELINE_VERSION = "native-live-harness/v3"
+SOURCE_ARCHIVE_VERSION = 3
+LEGACY_SOURCE_ARCHIVE_FILES = {
     "invoked_runner": ROOT / "native-live-runner.py",
     "phase_parser": ROOT / "backend-phase-trace-reader.py",
     "collector": ROOT / "native-live-collector.py",
     "assertion": ROOT / "native-live-assert.py",
     "scenarios": ROOT / "native-live-scenarios.json",
     "phase_reader_wrapper": ROOT / "backend-phase-trace-reader.sh",
+}
+SOURCE_ARCHIVE_FILES = {
+    **LEGACY_SOURCE_ARCHIVE_FILES,
+    "local_probe": ROOT / "native-live-local-probe.cjs",
 }
 GATEWAY_CONTROL_METHODS = (
     "archestra__appa_execute_remedy",
@@ -56,10 +61,34 @@ GATEWAY_CONTROL_METHODS = (
     "archestra__run_tool",
     "archestra__search_tools",
 )
+LOCAL_PROBE_SCENARIOS = {"local-public-effect", "local-private-effect-denied"}
+LOCAL_PROBE_EFFECT = "SYNTHETIC_LOCAL_PUBLIC_EFFECT"
+LOCAL_PROBE_VERSION = "fixed-node-local-probe/v1"
+LOCAL_PROBE_DESCRIPTION = "Run the fixed controlled local-effect probe."
+LOCAL_TOOL_CONTRACTS = {
+    "claude": {
+        "emitted_name": "Bash",
+        "target_name": "Bash",
+        "argument_key": "command",
+    },
+    "codex": {
+        "emitted_name": "functions.exec_command",
+        "target_name": "functions.exec_command",
+        "argument_key": "cmd",
+    },
+    "opencode": {
+        "emitted_name": "bash",
+        "target_name": "bash",
+        "argument_key": "command",
+    },
+}
 
 
 def main() -> int:
     args = parse_args()
+    if args.print_local_policy_contract:
+        print(json.dumps(local_policy_contract(args.local_probe_path), indent=2, sort_keys=True))
+        return 0
     if args.verify_source_archive:
         verify_source_archive(args.verify_source_archive)
         print(json.dumps({"source_archive": "verified"}, sort_keys=True))
@@ -152,7 +181,7 @@ def main() -> int:
     write_json(run_dir / "plan.json", plan)
     write_json(run_dir / "client-provenance.json", client_identity)
 
-    create_fixture_run(args.fixture_url, required_env("APPA_NATIVE_FIXTURE_ADMIN_TOKEN"), run_id)
+    fixture_run = create_fixture_run(args.fixture_url, required_env("APPA_NATIVE_FIXTURE_ADMIN_TOKEN"), run_id)
     # The observer is scoped to a fixture run. This authenticated read occurs
     # after inert run creation but before the client can initiate provider work.
     fixture_observer = verify_fixture_observer(args, run_id)
@@ -160,8 +189,25 @@ def main() -> int:
     write_json(run_dir / "plan.json", plan)
     fixture_before = fixture_summary(args.fixture_url, required_env("APPA_NATIVE_FIXTURE_ADMIN_TOKEN"), run_id)
     write_json(run_dir / "fixture-before.json", fixture_before)
-    prompt = scenario_prompt(scenario, args.client, request_key, run_id, gateway)
-    command, env, transient_paths = client_command(args, provider_base, prompt, run_dir, client_identity["resolved_path"], gateway)
+    local_probe, local_probe_env = prepare_local_probe(
+        args,
+        scenario,
+        run_id,
+        request_key,
+        fixture_run,
+    )
+    if local_probe:
+        write_private_json(run_dir / "local-probe-contract.json", local_probe)
+        plan["local_effect"] = {
+            "mode": local_probe["mode"],
+            "target_name": local_probe["target_name"],
+            "command_sha256": local_probe["command_sha256"],
+            "client_result_provenance": "sealed-client-reported-observation",
+            "callback_provenance": "trusted-fixture-http-observer/v1",
+        }
+    prompt = scenario_prompt(scenario, args.client, request_key, run_id, gateway, local_probe)
+    command, env, transient_paths = client_command(args, provider_base, prompt, run_dir, client_identity["resolved_path"], gateway, local_probe)
+    env.update(local_probe_env)
     # The launch record is finalized before the process starts. It retains an
     # exact argv fingerprint, not prompts, secret values, or private config.
     plan["configuration"] = configuration_fingerprint(args, provider_base, command, gateway)
@@ -219,6 +265,7 @@ def main() -> int:
             "stdout_bytes": len(sanitized_stdout.encode()),
             "stderr_bytes": len(sanitized_stderr.encode()),
             "private_source_redacted": all(marker not in sanitized_stdout + sanitized_stderr for marker in (scenarios["fixtures"]["private_marker"], "synthetic.person@example.test")),
+            "authority_tokens_redacted": CHILD_CARRIER_PATTERN.search(sanitized_stdout + sanitized_stderr) is None,
         },
     }
     write_json(run_dir / "result.json", result)
@@ -227,12 +274,21 @@ def main() -> int:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run one native APPA live fixture case without a relay")
+    parser = argparse.ArgumentParser(
+        description="Run one native APPA live fixture case without a relay",
+        epilog=(
+            "Local-effect cases require --local-probe-path (an operator-owned absolute "
+            "path) and --local-probe-observer-url (or APPA_NATIVE_LIVE_LOCAL_PROBE_OBSERVER_URL). "
+            "The runner delivers the newly issued per-run callback capability only through the "
+            "client environment. Use --print-local-policy-contract for the required runtime policy shape."
+        ),
+    )
     parser.add_argument("--client", choices=["claude", "codex", "opencode"])
     parser.add_argument("--scenario")
     parser.add_argument("--run-id", help="launcher-provided unique ID used to isolate backend phase capture")
     parser.add_argument("--provision-stock-provenance", action="store_true", help="create an explicit stock-client provenance manifest from PATH")
     parser.add_argument("--verify-source-archive", type=Path)
+    parser.add_argument("--print-local-policy-contract", action="store_true")
     parser.add_argument("--agent-id")
     parser.add_argument("--evidence-dir", type=Path)
     parser.add_argument("--proxy-url", help="direct Archestra native proxy URL for this deployment")
@@ -242,6 +298,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--runtime-profile", help="attested isolated runtime profile for a non-service loopback port")
     parser.add_argument("--allow-dev-loopback-runtime-transport", action="store_true", help="explicit development-only opt-in for a 127.0.0.1 kubectl port-forward")
     parser.add_argument("--fixture-url", help="native fixture base URL; required for live execution")
+    parser.add_argument("--local-probe-path", type=Path, default=Path(os.environ["APPA_NATIVE_LIVE_LOCAL_PROBE_PATH"]) if os.environ.get("APPA_NATIVE_LIVE_LOCAL_PROBE_PATH") else None, help="operator-owned absolute path to native-live-local-probe.cjs; defaults to APPA_NATIVE_LIVE_LOCAL_PROBE_PATH")
+    parser.add_argument("--local-probe-observer-url", default=os.environ.get("APPA_NATIVE_LIVE_LOCAL_PROBE_OBSERVER_URL"), help="operator-owned loopback/private fixture callback URL; required only for local-effect cases")
     parser.add_argument("--client-bin", help="diagnostic client launcher path")
     parser.add_argument("--stock-client-bin", type=Path, help="explicit qualifying stock launcher; otherwise resolve the client from PATH")
     parser.add_argument("--stock-provenance", type=Path, help="mode-0600 qualifying stock-client provenance manifest")
@@ -289,6 +347,13 @@ def validate_scenario_contract(scenario: dict[str, Any]) -> None:
             or not all(isinstance(prompt, str) and prompt for prompt in client_prompts.values())
         ):
             raise SystemExit("native child scenarios require one explicit stock-tool prompt per client")
+    if scenario_id in LOCAL_PROBE_SCENARIOS:
+        expected = scenario.get("expect")
+        if set(clients) != set(STOCK_CLIENT_VERSIONS) or not isinstance(expected, dict):
+            raise SystemExit("local-effect scenarios must cover every stock client and declare effects")
+        runtime = expected.get("runtime")
+        if not isinstance(runtime, dict) or runtime.get("local_effect") not in {"public-effect", "private-effect-denied"}:
+            raise SystemExit("local-effect scenarios require an explicit local effect mode")
 
 
 def require_live_inputs(args: argparse.Namespace) -> None:
@@ -384,7 +449,7 @@ def provider_base_url(proxy_url: str, agent_id: str, client: str) -> str:
     return f"{base}/v1/openai/{agent_id}"
 
 
-def client_command(args: argparse.Namespace, base_url: str, prompt: str, run_dir: Path, executable: str, gateway: dict[str, Any] | None) -> tuple[list[str], dict[str, str], list[Path]]:
+def client_command(args: argparse.Namespace, base_url: str, prompt: str, run_dir: Path, executable: str, gateway: dict[str, Any] | None, local_probe: dict[str, Any] | None = None) -> tuple[list[str], dict[str, str], list[Path]]:
     home = run_dir / "client-home"
     home.mkdir(mode=0o700)
     os.chmod(home, 0o700)
@@ -410,7 +475,7 @@ def client_command(args: argparse.Namespace, base_url: str, prompt: str, run_dir
         write_private_json(config_path, {"mcpServers": {mcp_key: {"type": "http", "url": mcp_url, "headers": {"Authorization": f"Bearer {mcp_token}"}}}})
         transient.append(config_path)
         env.update({"ANTHROPIC_API_KEY": required_env("APPA_NATIVE_LIVE_ANTHROPIC_API_KEY"), "ANTHROPIC_BASE_URL": base_url, "CLAUDE_CONFIG_DIR": str(home / ".claude"), "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"})
-        claude_tools = claude_allowed_tools(args, gateway, mcp_key)
+        claude_tools = claude_allowed_tools(args, gateway, mcp_key, local_probe is not None)
         gateway_tool_options = ["--tools", *claude_tools, "--allowedTools", *claude_tools]
         command = [
             str(executable),
@@ -440,7 +505,7 @@ def client_command(args: argparse.Namespace, base_url: str, prompt: str, run_dir
         codex_home.mkdir(mode=0o700, exist_ok=True)
         os.chmod(codex_home, 0o700)
         env.update({"OPENAI_API_KEY": required_env("APPA_NATIVE_LIVE_OPENAI_API_KEY"), "CODEX_HOME": str(codex_home)})
-        command = [str(executable), "--ask-for-approval", "never", "exec", "--ignore-user-config", "--ignore-rules", "--skip-git-repo-check", "--json", "--sandbox", "read-only", "-m", "gpt-5.4", "-c", 'model_provider="archestra"', "-c", 'model_providers.archestra.name="Archestra native"', "-c", f'model_providers.archestra.base_url="{base_url}"', "-c", 'model_providers.archestra.env_key="OPENAI_API_KEY"', "-c", 'model_providers.archestra.wire_api="responses"', "-c", 'model_providers.archestra.supports_websockets=false', "-c", 'model_reasoning_effort="low"', "-c", "features.multi_agent_v2=false", "-c", f'mcp_servers.{mcp_key}.url="{mcp_url}"', "-c", f'mcp_servers.{mcp_key}.bearer_token_env_var="{mcp_token_env}"']
+        command = [str(executable), "--ask-for-approval", "never", "exec", "--ignore-user-config", "--ignore-rules", "--skip-git-repo-check", "--json", "--sandbox", "workspace-write" if local_probe else "read-only", "-m", "gpt-5.4", "-c", 'model_provider="archestra"', "-c", 'model_providers.archestra.name="Archestra native"', "-c", f'model_providers.archestra.base_url="{base_url}"', "-c", 'model_providers.archestra.env_key="OPENAI_API_KEY"', "-c", 'model_providers.archestra.wire_api="responses"', "-c", 'model_providers.archestra.supports_websockets=false', "-c", 'model_reasoning_effort="low"', "-c", "features.multi_agent_v2=false", "-c", f'mcp_servers.{mcp_key}.url="{mcp_url}"', "-c", f'mcp_servers.{mcp_key}.bearer_token_env_var="{mcp_token_env}"']
         if args.scenario.startswith("child-"):
             command.extend(["--enable", "multi_agent"])
         if gateway:
@@ -471,6 +536,7 @@ def client_command(args: argparse.Namespace, base_url: str, prompt: str, run_dir
         permission = {
             "*": "deny",
             **({"task": "allow"} if args.scenario.startswith("child-") else {}),
+            **({"bash": "allow"} if local_probe else {}),
             **{f"{mcp_key}_{tool}": "allow" for tool in allowed_mcp_tools},
         }
         write_private_json(config_path, {"$schema": "https://opencode.ai/config.json", "share": "disabled", "enabled_providers": ["archestra-native"], "model": "archestra-native/kimi-for-coding", "provider": {"archestra-native": {"npm": "@ai-sdk/openai-compatible", "name": "Archestra native", "models": {"kimi-for-coding": {"name": "Kimi for Coding", "tool_call": True, "limit": {"context": 262144, "output": 16384}}}, "options": {"baseURL": base_url, "apiKey": required_env("APPA_NATIVE_LIVE_KIMI_API_KEY")}}}, "mcp": {mcp_key: {"type": "remote", "url": mcp_url, "headers": {"Authorization": f"Bearer {mcp_token}"}, "enabled": True}}, "permission": permission})
@@ -543,6 +609,7 @@ def claude_allowed_tools(
     args: argparse.Namespace,
     gateway: dict[str, Any] | None,
     mcp_key: str,
+    enable_local_bash: bool = False,
 ) -> list[str]:
     if gateway:
         tools = [f"mcp__{mcp_key}__archestra__run_tool"]
@@ -556,7 +623,7 @@ def claude_allowed_tools(
         if args.client != "claude":
             raise SystemExit("native Agent lifecycle scenarios require Claude")
         return ["Agent", *tools]
-    return tools
+    return [*tools, *(["Bash"] if enable_local_bash else [])]
 
 
 def claude_resume_compaction_command(command: list[str]) -> list[str]:
@@ -597,13 +664,17 @@ def run_test_reviewer(command_text: str, run_dir: Path, scenario: str, client: s
     return summary
 
 
-def create_fixture_run(base_url: str, admin_token: str, run_id: str) -> None:
+def create_fixture_run(base_url: str, admin_token: str, run_id: str) -> dict[str, Any]:
     request = Request(f"{base_url.rstrip('/')}/admin/runs/{run_id}", method="POST", headers={"authorization": f"Bearer {admin_token}"})
     try:
         response = fixture_admin_request(request)
         if response.status not in {200, 201}:
             raise SystemExit("native fixture refused run initialization")
-    except (HTTPError, URLError, TimeoutError, OSError) as error:
+        value = json.loads(response.read())
+        if not isinstance(value, dict) or value.get("run_id") != run_id:
+            raise SystemExit("native fixture returned an invalid run initialization response")
+        return value
+    except (HTTPError, URLError, TimeoutError, OSError, json.JSONDecodeError) as error:
         raise SystemExit("native fixture run initialization is unavailable") from error
 
 
@@ -632,7 +703,7 @@ def fixture_summary(base_url: str, admin_token: str, run_id: str) -> dict[str, A
             f"native fixture state endpoint returned a non-object JSON value "
             f"(HTTP {response.status}, content type {response.content_type})"
         )
-    return {key: state.get(key) for key in ("run_id", "publication_count", "job_count", "private_marker_in_publication", "public_value_only", "audit_count", "audit_outcomes")}
+    return {key: state.get(key) for key in ("run_id", "publication_count", "job_count", "private_marker_in_publication", "public_value_only", "audit_count", "audit_outcomes", "local_callback_effect_count")}
 
 
 def fixture_admin_request(request: Request) -> Any:
@@ -681,6 +752,9 @@ def collect_runtime_evidence(args: argparse.Namespace, run_dir: Path, run_id: st
     fixture_evidence_path = run_dir / "fixture-evidence.json"
     if fixture_evidence_path.is_file():
         command.extend(["--fixture-evidence", str(fixture_evidence_path)])
+    local_probe_contract = run_dir / "local-probe-contract.json"
+    if local_probe_contract.is_file():
+        command.extend(["--local-probe-contract", str(local_probe_contract)])
     if args.evidence_mode == "qualifying":
         assert args.gateway_profile is not None
         command.extend(["--gateway-profile", str(args.gateway_profile)])
@@ -1097,11 +1171,212 @@ def parse_env_reference(lines: list[str], name: str) -> str:
     return values[0]
 
 
-def scenario_prompt(scenario: dict[str, Any], client: str, request_key: str, run_id: str, gateway: dict[str, Any] | None) -> str:
+def prepare_local_probe(
+    args: argparse.Namespace,
+    scenario: dict[str, Any],
+    run_id: str,
+    request_key: str,
+    fixture_run: dict[str, Any],
+) -> tuple[dict[str, Any] | None, dict[str, str]]:
+    if scenario.get("id") not in LOCAL_PROBE_SCENARIOS:
+        return None, {}
+    probe_path = args.local_probe_path
+    if probe_path is None or not probe_path.is_absolute() or probe_path.is_symlink() or not probe_path.is_file():
+        raise SystemExit("local-effect cases require an operator-owned absolute --local-probe-path regular file")
+    observer_url = args.local_probe_observer_url
+    if not isinstance(observer_url, str) or not valid_local_observer_url(observer_url):
+        raise SystemExit("local-effect cases require an operator-owned loopback/private --local-probe-observer-url")
+    capability = fixture_run.get("local_callback_capability")
+    if not isinstance(capability, str) or not re.fullmatch(r"[a-f0-9]{64}", capability):
+        raise SystemExit("native fixture did not issue a valid new per-run local callback capability")
+    node = shutil.which("node")
+    if not node:
+        raise SystemExit("local-effect cases require the operator Node executable")
+    node_path = Path(node).resolve()
+    if not node_path.is_file() or not os.access(node_path, os.X_OK):
+        raise SystemExit("local-effect Node executable is unavailable")
+    invocation = [str(node_path), str(probe_path)]
+    tool = LOCAL_TOOL_CONTRACTS[args.client]
+    arguments: dict[str, Any] = {tool["argument_key"]: shlex.join(invocation)}
+    if args.client == "codex":
+        arguments["login"] = False
+    if args.client == "opencode":
+        arguments["description"] = LOCAL_PROBE_DESCRIPTION
+    callback_arguments = {
+        "run_id": run_id,
+        "request_key": request_key,
+        "effect": LOCAL_PROBE_EFFECT,
+        "probe": LOCAL_PROBE_VERSION,
+    }
+    contract = {
+        "version": 1,
+        "mode": "public-effect" if scenario["id"] == "local-public-effect" else "private-effect-denied",
+        "emitted_name": tool["emitted_name"],
+        "target_name": tool["target_name"],
+        "arguments": arguments,
+        "callback_arguments": callback_arguments,
+        "command": arguments[tool["argument_key"]],
+        "command_sha256": sha256(arguments[tool["argument_key"]].encode()).hexdigest(),
+    }
+    return contract, {
+        "APPA_NATIVE_LOCAL_PROBE_OBSERVER_URL": observer_url,
+        "APPA_NATIVE_LOCAL_CALLBACK_CAPABILITY": capability,
+        "APPA_NATIVE_LOCAL_PROBE_RUN_ID": run_id,
+        "APPA_NATIVE_LOCAL_PROBE_REQUEST_KEY": request_key,
+    }
+
+
+def valid_local_observer_url(value: str) -> bool:
+    from ipaddress import ip_address
+    from urllib.parse import urlparse
+
+    parsed = urlparse(value)
+    if (
+        parsed.scheme != "http"
+        or parsed.path != "/observer/local-effect"
+        or parsed.params
+        or parsed.query
+        or parsed.fragment
+        or parsed.username
+        or parsed.password
+        or not parsed.hostname
+    ):
+        return False
+    if parsed.hostname == "localhost":
+        return True
+    try:
+        address = ip_address(parsed.hostname)
+    except ValueError:
+        return False
+    if address.is_loopback:
+        return True
+    if address.version == 4:
+        first, second, *_ = (int(part) for part in str(address).split("."))
+        return (
+            first == 10
+            or (first == 192 and second == 168)
+            or (first == 172 and 16 <= second <= 31)
+        )
+    return address.is_private and str(address).lower().startswith(("fc", "fd"))
+
+
+def local_policy_contract(probe_path: Path | None) -> dict[str, Any]:
+    if probe_path is None or not probe_path.is_absolute() or probe_path.is_symlink() or not probe_path.is_file():
+        raise SystemExit("--print-local-policy-contract requires an operator-owned absolute --local-probe-path or APPA_NATIVE_LIVE_LOCAL_PROBE_PATH")
+    node = shutil.which("node")
+    if not node:
+        raise SystemExit("--print-local-policy-contract requires the operator Node executable")
+    command = shlex.join([str(Path(node).resolve()), str(probe_path)])
+    policy_tools = {
+        client: {
+            "name": contract["emitted_name"],
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    contract["argument_key"]: {
+                        "type": "string",
+                        "const": command,
+                    },
+                    **({"login": {"type": "boolean", "const": False}} if client == "codex" else {}),
+                    **({"description": {"type": "string", "const": LOCAL_PROBE_DESCRIPTION}} if client == "opencode" else {}),
+                },
+                "required": [contract["argument_key"], *(["login"] if client == "codex" else []), *(["description"] if client == "opencode" else [])],
+                "additionalProperties": False,
+            },
+        }
+        for client, contract in LOCAL_TOOL_CONTRACTS.items()
+    }
+    policy_toml = {
+        client: local_policy_toml(contract["target_name"], policy_tools[client]["parameters"])
+        for client, contract in LOCAL_TOOL_CONTRACTS.items()
+    }
+    return {
+        "version": 1,
+        "scenarios": sorted(LOCAL_PROBE_SCENARIOS),
+        "client_tools": {
+            client: {
+                "emitted_name": contract["emitted_name"],
+                "target_name": contract["target_name"],
+                "arguments": {
+                    contract["argument_key"]: command,
+                    **({"login": False} if client == "codex" else {}),
+                    **({"description": LOCAL_PROBE_DESCRIPTION} if client == "opencode" else {}),
+                },
+            }
+            for client, contract in LOCAL_TOOL_CONTRACTS.items()
+        },
+        "runtime_config_map_patch": {
+            "apiVersion": "v1",
+            "kind": "ConfigMap",
+            "data": {
+                "policy.toml.append": "Append exactly one selected per_client_policy_toml block to the configured rootPolicy/context_control ConfigMap value. Do not replace existing reader, trust, or replay controls."
+            },
+            "per_client_policy_tools": policy_tools,
+            "per_client_policy_toml": policy_toml,
+            "policy": {
+                "version": 2,
+                "tool": "one exact client-local target and fixed operator command per client",
+                "public_effect": "allow only after public context",
+                "private_effect": "deny before tool delivery when readers are not public",
+            },
+            "invariants": [
+                "the capability is an environment value and never a command-line or model argument",
+                "the callback observer is an independent synthetic effect witness, not OS process attestation",
+                "the local client result is sealed client-reported observation only",
+                "preserve existing one-time wire IDs and result replay behavior",
+            ],
+        },
+    }
+
+
+def local_policy_toml(target_name: str, parameters: dict[str, Any]) -> str:
+    import tomllib
+
+    parameter_literal = toml_inline(parameters)
+    snippet = (
+        "# Additive local controlled-effect policy block.\n"
+        "[[policy.tool]]\n"
+        f"name = {json.dumps(target_name)}\n"
+        f"parameters = {parameter_literal}\n"
+        "delta = {}\n\n"
+        "[policy.tool.requires]\n"
+        "trust = \"trusted\"\n"
+        "audience = { contains = [\"public\"] }\n"
+    )
+    parsed = tomllib.loads("[policy]\nversion = 2\n\n" + snippet)
+    if parsed.get("policy", {}).get("tool", [{}])[0].get("name") != target_name:
+        raise SystemExit("generated local policy TOML did not parse")
+    return snippet
+
+
+def toml_inline(value: Any) -> str:
+    if value is True:
+        return "true"
+    if value is False:
+        return "false"
+    if value is None:
+        raise SystemExit("generated local policy cannot contain null")
+    if isinstance(value, str):
+        return json.dumps(value)
+    if isinstance(value, (int, float)):
+        return str(value)
+    if isinstance(value, list):
+        return "[" + ", ".join(toml_inline(item) for item in value) + "]"
+    if isinstance(value, dict) and all(isinstance(key, str) and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", key) for key in value):
+        return "{ " + ", ".join(f"{key} = {toml_inline(item)}" for key, item in value.items()) + " }"
+    raise SystemExit("generated local policy contains an unsupported TOML value")
+
+
+def scenario_prompt(scenario: dict[str, Any], client: str, request_key: str, run_id: str, gateway: dict[str, Any] | None, local_probe: dict[str, Any] | None = None) -> str:
     template = scenario.get("prompt")
     if not isinstance(template, str):
         raise SystemExit("scenario prompt is invalid")
-    prompt = template.format(request_key=request_key, run_id=run_id)
+    prompt = template.format(
+        request_key=request_key,
+        run_id=run_id,
+        local_probe_command=local_probe["command"] if local_probe else "",
+        local_probe_arguments=json.dumps(local_probe["arguments"], sort_keys=True) if local_probe else "{}",
+    )
     if str(scenario.get("id", "")).startswith("child-"):
         client_prompts = scenario.get("client_prompts")
         client_prompt = client_prompts.get(client) if isinstance(client_prompts, dict) else None
@@ -1113,12 +1388,19 @@ def scenario_prompt(scenario: dict[str, Any], client: str, request_key: str, run
     for fixture_name, gateway_name in gateway["tool_names"].items():
         prompt = prompt.replace(f"appa_fixture.{fixture_name}", gateway_name)
         prompt = prompt.replace(f"mcp__appa_fixture__{fixture_name}", gateway_name)
-    wrapper = f"mcp__{gateway['client_server_key']}__archestra__run_tool"
+    namespace = f"mcp__{gateway['client_server_key']}"
+    wrapper = f"{namespace}.archestra__run_tool" if client == "codex" else f"{namespace}__archestra__run_tool"
+    namespace_instruction = (
+        f" In Codex, use the archestra__run_tool member of the {namespace} namespace, "
+        "not an invented flat function name. Pass that same namespaced tool identity to a child."
+        if client == "codex" else ""
+    )
     return (
         f"{prompt}\n\n"
         f"The fixture names above are registered targets behind the {wrapper} gateway tool, "
         "not direct client tools. For every fixture operation, call that wrapper with "
         "tool_name set to the stated target and tool_args set to that operation's arguments."
+        f"{namespace_instruction}"
     )
 
 
@@ -1141,7 +1423,7 @@ def configuration_fingerprint(args: argparse.Namespace, provider_base: str, comm
         "mcp_gateway_url": gateway["url"] if gateway else None,
         "model": {"claude": "claude-haiku-4-5", "codex": "gpt-5.4", "opencode": "kimi-for-coding"}[args.client],
         "mcp_transport": "streamable-http",
-        "environment_names": sorted({"HOME", "XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME", "TERM", "APPA_NATIVE_FIXTURE_TOKEN", *({"ANTHROPIC_API_KEY", "ANTHROPIC_BASE_URL", "CLAUDE_CONFIG_DIR"} if args.client == "claude" else {"OPENAI_API_KEY", "CODEX_HOME"} if args.client == "codex" else {"OPENCODE_CONFIG"})}),
+        "environment_names": sorted({"HOME", "XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME", "TERM", "APPA_NATIVE_FIXTURE_TOKEN", *({"APPA_NATIVE_LOCAL_PROBE_OBSERVER_URL", "APPA_NATIVE_LOCAL_CALLBACK_CAPABILITY", "APPA_NATIVE_LOCAL_PROBE_RUN_ID", "APPA_NATIVE_LOCAL_PROBE_REQUEST_KEY"} if args.scenario in LOCAL_PROBE_SCENARIOS else set()), *({"ANTHROPIC_API_KEY", "ANTHROPIC_BASE_URL", "CLAUDE_CONFIG_DIR"} if args.client == "claude" else {"OPENAI_API_KEY", "CODEX_HOME"} if args.client == "codex" else {"OPENCODE_CONFIG"})}),
     }
     if command is not None:
         configuration["argv"] = sanitize_argv(command)
@@ -1214,7 +1496,12 @@ def verify_source_archive(run_dir: Path) -> None:
         raise SystemExit("source archive run directory is unavailable")
     attestation = read_json(run_dir / "harness-attestation.json")
     archive = attestation.get("source_archive")
-    if attestation.get("source_archive_version") != SOURCE_ARCHIVE_VERSION or not isinstance(archive, dict):
+    archive_version = attestation.get("source_archive_version")
+    expected_sources = {
+        2: LEGACY_SOURCE_ARCHIVE_FILES,
+        SOURCE_ARCHIVE_VERSION: SOURCE_ARCHIVE_FILES,
+    }.get(archive_version)
+    if expected_sources is None or not isinstance(archive, dict):
         raise SystemExit("source archive version is unsupported or incomplete")
     manifest_identity = archive.get("manifest")
     files = archive.get("files")
@@ -1228,9 +1515,9 @@ def verify_source_archive(run_dir: Path) -> None:
         manifest = json.loads(manifest_content)
     except json.JSONDecodeError as error:
         raise SystemExit("source archive manifest is invalid") from error
-    if not isinstance(manifest, dict) or manifest.get("version") != SOURCE_ARCHIVE_VERSION or manifest.get("files") != files:
+    if not isinstance(manifest, dict) or manifest.get("version") != archive_version or manifest.get("files") != files:
         raise SystemExit("source archive manifest does not match attestation")
-    if set(files) != set(SOURCE_ARCHIVE_FILES):
+    if set(files) != set(expected_sources):
         raise SystemExit("source archive dependency set is incomplete")
     archive_dir = run_dir / "harness-sources"
     if archive_dir.is_symlink() or not archive_dir.is_dir() or archive_dir.stat().st_mode & 0o777 != 0o700:
@@ -1317,6 +1604,7 @@ def sanitize(value: str, private_marker: str) -> str:
         value,
     ).replace(private_marker, "<redacted-fixture-source>")
     redacted = re.sub(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+", "<redacted-email>", redacted)
+    redacted = CHILD_CARRIER_PATTERN.sub("<redacted-child-carrier>", redacted)
     for name, candidate in os.environ.items():
         if candidate and re.search(r"(?:KEY|TOKEN|SECRET|COOKIE|PASSWORD)", name, re.I):
             redacted = redacted.replace(candidate, f"<redacted:{name.lower()}>")

@@ -6,6 +6,7 @@ import {
   AppaProxySessionModel,
   AppaProxySessionProtocolError,
 } from "@/models";
+import AppaNativeChildCorrelationModel from "@/models/appa-native-child-correlation";
 import {
   normalizeNativeCodexWriteStdinArguments,
   persistNativeCodexProcessRoute,
@@ -95,6 +96,8 @@ export type AppaInboundToolResult = {
     name: string;
     rawArguments: string;
   };
+  /** Server-derived native spawn control. Never accepted from client input. */
+  spawnControl?: { agentId: string };
 };
 
 export type AppaOutboundToolCall = {
@@ -153,6 +156,7 @@ export class AppaProxyHookSession {
     humanApprovals: false,
     sanitizedResults: false,
     childWorkflows: false,
+    spawnResults: false,
   };
   private approvalExpiresAt: number | undefined;
   private readonly modelResultUpdates = new Map<string, string>();
@@ -296,17 +300,19 @@ export class AppaProxyHookSession {
         : params.toolResults;
       const preparedResults =
         await session.prepareInboundResults(inboundResults);
+      await session.ensureV1Capabilities();
+      await session.ensureInboundResultCapabilities(preparedResults);
       if (preparedResults.length > 0 && !turn.session.rootInitializedAt) {
         throw new AppaProxySessionProtocolError(
           "tool result has no initialized APPA root",
         );
       }
-      // Admission happens before content classifiers. It hashes and sends the
-      // unmodified client result once; later Archestra transforms only affect
-      // the prompt delivered to the model.
+      // Admission precedes content classifiers. Native spawn results expose
+      // only bound control metadata or a runtime-approved child return.
       await session.admitInboundResults(preparedResults);
       return session;
     } catch (error) {
+      session.recordFailure({ phase: "acquire", error });
       await session.closeAfterKnownFailure(error);
       throw error;
     }
@@ -541,6 +547,11 @@ export class AppaProxyHookSession {
   async finish(params?: {
     childReturn?: string;
     /**
+     * Set only by a server path that has prepared a response requiring a client
+     * continuation. Client request payloads are never evidence of this wait.
+     */
+    awaitClientContinuation?: boolean;
+    /**
      * Trusted persistence runs after APPA has accepted the turn boundary, but
      * before another request can acquire this local turn.
      */
@@ -550,9 +561,10 @@ export class AppaProxyHookSession {
     const hasOutstandingCall = (
       await AppaProxySessionModel.listCalls(this.turn.session.id)
     ).some((call) => call.state === "open");
-    if (hasOutstandingCall) {
-      // Do not call turn_end while the client executes the emitted tool. The
-      // next request posts the matched result against this still-open turn.
+    if (hasOutstandingCall || params?.awaitClientContinuation) {
+      // Do not call turn_end while the client executes the emitted tool or a
+      // server-issued native continuation such as tool discovery. The next
+      // request resumes this still-open root with its durable wire state.
       try {
         await this.runBeforeRelease(params?.beforeRelease);
         await AppaProxySessionModel.releaseTurn(this.turn);
@@ -856,6 +868,10 @@ export class AppaProxyHookSession {
     this.closed = true;
   }
 
+  recordFailure(params: Parameters<AppaProxyPhaseTrace["failure"]>[0]): void {
+    this.phaseTrace?.failure(params);
+  }
+
   private async prepareInboundResults(
     toolResults: AppaInboundToolResult[],
   ): Promise<Array<{ result: AppaInboundToolResult; resultHash: string }>> {
@@ -962,6 +978,23 @@ export class AppaProxyHookSession {
         }
         result = { ...result, status: observation.outcome, message: undefined };
       }
+      if (this.config.runtimeToken && call.spawnBinding !== null) {
+        // Discard any property a caller tried to smuggle onto this internal
+        // result object. Only the durable task alias can provide agent_id.
+        const { spawnControl: _callerSuppliedControl, ...withoutControl } =
+          result;
+        result = withoutControl;
+        if (this.nativeCodexExecution) {
+          const spawnControl =
+            await AppaNativeChildCorrelationModel.projectBoundSpawnControl({
+              ownerScopeHash: this.turn.session.ownerScopeHash,
+              profileId: this.turn.session.profileId,
+              parentSessionId: this.turn.session.id,
+              sourceCallId: result.id,
+            });
+          if (spawnControl) result = { ...result, spawnControl };
+        }
+      }
       const resultHash = keyedDigest(
         this.config.sessionHmacSecret,
         result.content,
@@ -1038,6 +1071,24 @@ export class AppaProxyHookSession {
     }
   }
 
+  private async ensureInboundResultCapabilities(
+    prepared: Array<{ result: AppaInboundToolResult; resultHash: string }>,
+  ): Promise<void> {
+    if (!this.config.runtimeToken || prepared.length === 0) return;
+    const calls = await AppaProxySessionModel.listCalls(this.turn.session.id);
+    if (
+      prepared.some((entry) => {
+        const call = calls.find(
+          (candidate) => candidate.callId === entry.result.id,
+        );
+        return Boolean(call?.spawnBinding);
+      }) &&
+      !this.capabilities.spawnResults
+    ) {
+      throw new AppaProxyHookError("unavailable", "input");
+    }
+  }
+
   private async admitInboundResults(
     prepared: Array<{ result: AppaInboundToolResult; resultHash: string }>,
   ): Promise<void> {
@@ -1071,29 +1122,44 @@ export class AppaProxyHookSession {
             "authenticated APPA call has no dispatch mapping",
           );
         }
+        const isBoundSpawn =
+          this.config.runtimeToken !== undefined && call.spawnBinding !== null;
+        if (isBoundSpawn && !this.capabilities.spawnResults) {
+          throw new AppaProxyHookError("unavailable", "input");
+        }
         const decision = await this.post(
-          {
-            event: "tool_result",
-            root_id: this.rootId,
-            ...(this.config.runtimeToken
-              ? {
-                  call_id: result.id,
-                  dispatch_id: call.dispatchId,
-                }
-              : {
-                  tool: call.appaTargetName,
-                  arguments: call.appaTargetArguments,
-                }),
-            outcome:
-              outcomeStatus(result) === "success"
-                ? { status: "success", body: result.content }
-                : outcomeStatus(result) === "failure"
+          isBoundSpawn
+            ? {
+                event: "spawn_result",
+                root_id: this.rootId,
+                call_id: result.id,
+                dispatch_id: call.dispatchId,
+                ...(result.spawnControl
+                  ? { control: { agent_id: result.spawnControl.agentId } }
+                  : {}),
+              }
+            : {
+                event: "tool_result",
+                root_id: this.rootId,
+                ...(this.config.runtimeToken
                   ? {
-                      status: "failure",
-                      message: outcomePresentation(result),
+                      call_id: result.id,
+                      dispatch_id: call.dispatchId,
                     }
-                  : { status: "indeterminate" },
-          },
+                  : {
+                      tool: call.appaTargetName,
+                      arguments: call.appaTargetArguments,
+                    }),
+                outcome:
+                  outcomeStatus(result) === "success"
+                    ? { status: "success", body: result.content }
+                    : outcomeStatus(result) === "failure"
+                      ? {
+                          status: "failure",
+                          message: outcomePresentation(result),
+                        }
+                      : { status: "indeterminate" },
+              },
           "ack",
           "input",
         );
@@ -1325,7 +1391,7 @@ export class AppaProxyHookSession {
     }
     if (
       isExpectedDecision(decision, expectedDecision) ||
-      (event.event === "tool_result" &&
+      ((event.event === "tool_result" || event.event === "spawn_result") &&
         expectedDecision === "ack" &&
         isCanonicalResultPresentation(decision))
     ) {
@@ -1503,6 +1569,8 @@ export class AppaProxyHookSession {
       typeof capabilities.human_approval !== "boolean" ||
       capabilities.sanitized_results !== true ||
       typeof capabilities.child_workflows !== "boolean" ||
+      (capabilities.spawn_result !== undefined &&
+        typeof capabilities.spawn_result !== "boolean") ||
       (capabilities.child_actor_targeting !== undefined &&
         typeof capabilities.child_actor_targeting !== "boolean")
     ) {
@@ -1522,6 +1590,7 @@ export class AppaProxyHookSession {
       childWorkflows:
         capabilities.child_workflows === true &&
         capabilities.child_actor_targeting === true,
+      spawnResults: capabilities.spawn_result === true,
     };
     this.v1CapabilitiesChecked = true;
   }
@@ -1601,6 +1670,7 @@ export class AppaProxyHookSession {
 
   private async closeAfterKnownFailure(error: unknown): Promise<void> {
     if (this.closed) return;
+    this.recordFailure({ phase: "turn_close", error });
     if (this.pendingApprovalId)
       await AppaApprovalModel.cancel(this.pendingApprovalId);
     if (

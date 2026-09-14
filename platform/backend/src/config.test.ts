@@ -625,6 +625,7 @@ describe("parseAppaProxyHookConfig", () => {
         sessionHmacSecret: "s".repeat(32),
         runtimeToken: "t".repeat(32),
         nativeSpawnToolMap: JSON.stringify({
+          Agent: "agent:fixture/lifecycle_child",
           "multi_agent_v1.spawn_agent": "agent:fixture/lifecycle_child",
           "agents.spawn_agent": "agent:fixture/lifecycle_child",
           "collaboration.spawn_agent": "agent:fixture/lifecycle_child",
@@ -639,6 +640,7 @@ describe("parseAppaProxyHookConfig", () => {
       }),
     ).toMatchObject({
       nativeSpawnToolMap: {
+        Agent: "agent:fixture/lifecycle_child",
         "multi_agent_v1.spawn_agent": "agent:fixture/lifecycle_child",
         "agents.spawn_agent": "agent:fixture/lifecycle_child",
         "collaboration.spawn_agent": "agent:fixture/lifecycle_child",
@@ -658,6 +660,8 @@ describe("parseAppaProxyHookConfig", () => {
     "[]",
     '{"spawn_agent":"agent:fixture/lifecycle_child"}',
     '{"multi_agent_v1.spawn_agent":"agent/fixture/lifecycle_child"}',
+    '{"mcp__server__Agent":"agent:fixture/lifecycle_child"}',
+    '{"Task":"agent:fixture/lifecycle_child"}',
   ])("rejects an unsafe native spawn mapping: %s", (nativeSpawnToolMap) => {
     expect(() =>
       parseAppaProxyHookConfig({
@@ -665,6 +669,7 @@ describe("parseAppaProxyHookConfig", () => {
         timeoutMs: undefined,
         sessionHmacSecret: "s".repeat(32),
         nativeSpawnToolMap,
+        runtimeToken: "t".repeat(32),
       }),
     ).toThrow("APPA_NATIVE_SPAWN_TOOL_MAP");
   });

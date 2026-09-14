@@ -32,7 +32,7 @@ NATIVE_CHILD_CONTRACTS = {
     },
     "claude": {
         "emitted_names": {"Agent"},
-        "target_name": "agent/claude-code/Agent",
+        "target_name": "agent/fixture/lifecycle_child",
         "requires_signed_carrier": True,
         "task_alias_count": 0,
     },
@@ -84,6 +84,7 @@ def main() -> int:
     assert_client_provenance(checks, result)
     assert_configuration_fingerprint(checks, result)
     check(checks, "private_capture_redacted", result.get("captures", {}).get("private_source_redacted") is True)
+    check(checks, "authority_capture_redacted", result.get("captures", {}).get("authority_tokens_redacted") is True)
     runtime_evidence = result.get("runtime_evidence")
     check(checks, "runtime_evidence_present", isinstance(runtime_evidence, dict) and runtime_evidence.get("collector_status") is None)
     if isinstance(runtime_evidence, dict):
@@ -100,6 +101,12 @@ def main() -> int:
         after = result.get("fixture_after", {})
         if "publication_count" in expected:
             check(checks, "publication_count", after.get("publication_count") == expected["publication_count"])
+        if "local_callback_effect_count" in expected:
+            check(
+                checks,
+                "local_callback_effect_count",
+                after.get("local_callback_effect_count") == expected["local_callback_effect_count"],
+            )
         if "private_marker_in_publication" in expected:
             check(checks, "private_marker_not_published", after.get("private_marker_in_publication") == expected["private_marker_in_publication"])
         if expected.get("publication_count"):
@@ -117,6 +124,33 @@ def main() -> int:
 
 
 def assert_runtime(checks: dict[str, bool], expected: dict[str, Any], runtime: dict[str, Any], client: str) -> None:
+    if "local_effect" in expected:
+        local = runtime.get("local_effect")
+        expected_mode = expected["local_effect"]
+        if expected_mode == "public-effect":
+            check(
+                checks,
+                "local_public_effect_is_independently_observed",
+                isinstance(local, dict)
+                and local.get("mode") == expected_mode
+                and local.get("policy_bound") is True
+                and local.get("callback_join") is True
+                and local.get("callback_effect_count") == 1
+                and valid_client_reported_local_result(local.get("client_reported_result"))
+                and valid_local_callback(local.get("callback")),
+            )
+        else:
+            check(
+                checks,
+                "local_private_effect_denied_before_callback",
+                isinstance(local, dict)
+                and local.get("mode") == expected_mode
+                and local.get("policy_bound") is True
+                and local.get("callback_join") is True
+                and local.get("callback_effect_count") == 0
+                and local.get("client_reported_result") is None
+                and local.get("denial_receipt_count") == 1,
+            )
     if expected.get("denied"):
         check(checks, "runtime_denied", runtime.get("denied") is True)
         assert_denial_receipts(checks, runtime, runtime.get("call_bindings"))
@@ -136,6 +170,7 @@ def assert_runtime(checks: dict[str, bool], expected: dict[str, Any], runtime: d
         check(checks, "runtime_child_opened", isinstance(child, dict) and child.get("runtime_opened") is True and child.get("scope_preserved") is True)
         check(checks, "child_lifecycle_order", isinstance(child, dict) and child.get("lifecycle_order") is True)
         check(checks, "child_source_admission_order", isinstance(child, dict) and child.get("source_read_count") == 1 and child.get("source_admission_order") is True)
+        check(checks, "parent_spawn_presentation_verified", isinstance(child, dict) and isinstance(child.get("parent_spawn_presentation"), dict) and child["parent_spawn_presentation"].get("verified") is True)
     if expected.get("child_completion"):
         child = runtime.get("child", {})
         check(checks, "runtime_child_completion", isinstance(child, dict) and child.get("completion_admitted") is True)
@@ -143,6 +178,8 @@ def assert_runtime(checks: dict[str, bool], expected: dict[str, Any], runtime: d
         child = runtime.get("child", {})
         check(checks, "child_private_source_admitted", isinstance(child, dict) and child.get("classification") == "private" and child.get("source_read_count") == 1)
         check(checks, "parent_publication_denied", runtime.get("parent_publication_denied") is True)
+    if expected.get("parent_publication"):
+        check(checks, "parent_publication_after_child_return", runtime.get("parent_publication") is True)
     if expected.get("child_return_floor"):
         child = runtime.get("child", {})
         receipts = child.get("return_floor_receipts") if isinstance(child, dict) else None
@@ -187,6 +224,7 @@ def assert_configuration_fingerprint(checks: dict[str, bool], result: dict[str, 
 
 def assert_evidence_contract(checks: dict[str, bool], runtime: dict[str, Any], client: str) -> None:
     linkage = runtime.get("linkage", {})
+    local_mode = runtime.get("local_effect", {}).get("mode") if isinstance(runtime.get("local_effect"), dict) else None
     required_linkage = (
         "linked",
         "owner_bound_session",
@@ -199,7 +237,7 @@ def assert_evidence_contract(checks: dict[str, bool], runtime: dict[str, Any], c
         "runtime_journal",
         "runtime_request_key",
         "fixture_exact_call_join",
-        "gateway_tool_receipt",
+        *(("local_policy",) if local_mode else ("gateway_tool_receipt",)),
     )
     check(checks, "native_enforcement_linkage", isinstance(linkage, dict) and all(linkage.get(name) is True for name in required_linkage))
     bindings = runtime.get("call_bindings")
@@ -208,7 +246,7 @@ def assert_evidence_contract(checks: dict[str, bool], runtime: dict[str, Any], c
     check(checks, "no_cross_root_evidence", isinstance(archestra, dict) and archestra.get("root_count") == 1)
     check(checks, "server_identity_matches_selected_stock_client", runtime.get("server_binding") == EXPECTED_BACKEND_IDENTITIES.get(client))
     check(checks, "collector_fixture_exact_join", isinstance(runtime.get("fixture_join"), dict) and runtime["fixture_join"].get("matched") is True)
-    check(checks, "collector_gateway_receipt_join", isinstance(runtime.get("gateway_join"), dict) and runtime["gateway_join"].get("matched") is True)
+    check(checks, "collector_gateway_receipt_join", local_mode is not None or isinstance(runtime.get("gateway_join"), dict) and runtime["gateway_join"].get("matched") is True)
     if isinstance(bindings, list) and any(isinstance(binding, dict) and binding.get("state") == "denied" for binding in bindings):
         assert_denial_receipts(checks, runtime, bindings)
 
@@ -218,16 +256,20 @@ def assert_fixture_evidence(checks: dict[str, bool], result: dict[str, Any], run
     before = result.get("fixture_before", {})
     after = result.get("fixture_after", {})
     bindings = runtime.get("call_bindings") if isinstance(runtime.get("call_bindings"), list) else []
+    local = runtime.get("local_effect") if isinstance(runtime.get("local_effect"), dict) else None
     check(checks, "fixture_trusted_observer_present", isinstance(evidence, dict) and evidence.get("collector_status") is None and evidence.get("source") == "trusted-fixture-audit/v1")
     if not isinstance(evidence, dict):
         return
     check(checks, "fixture_observer_scoped_to_run", isinstance(result.get("run_id"), str) and evidence.get("run_id") == result.get("run_id"))
-    check(checks, "fixture_effects_start_after_empty_run", isinstance(before, dict) and before.get("audit_count") == 0 and before.get("publication_count") == 0)
+    check(checks, "fixture_effects_start_after_empty_run", isinstance(before, dict) and before.get("audit_count") == 0 and before.get("publication_count") == 0 and before.get("local_callback_effect_count", 0) == 0)
     fixture_bindings = evidence.get("call_bindings")
-    check(checks, "fixture_audit_count_matches_observed_state", isinstance(after, dict) and evidence.get("audit_record_count") == after.get("audit_count"))
+    check(checks, "fixture_audit_count_matches_observed_state", isinstance(after, dict) and (isinstance(evidence.get("audit_record_count"), int) if local else evidence.get("audit_record_count") == after.get("audit_count")))
     check(checks, "fixture_bindings_have_trusted_ordering", isinstance(fixture_bindings, list) and bool(fixture_bindings) and all(valid_fixture_binding(item) for item in fixture_bindings))
     check(checks, "fixture_bindings_share_service_instance", isinstance(fixture_bindings, list) and isinstance(evidence.get("service_instance_id"), str) and all(isinstance(item, dict) and item.get("service_instance_id") == evidence["service_instance_id"] for item in fixture_bindings))
     if not isinstance(fixture_bindings, list):
+        return
+    if local:
+        check(checks, "local_effect_count_matches_fixture_state", after.get("local_callback_effect_count") == local.get("callback_effect_count"))
         return
     expected = Counter(
         (item.get("target_name"), item.get("arguments_sha256"))
@@ -344,11 +386,11 @@ def has_exact_denial_receipts(runtime: dict[str, Any], bindings: object = None) 
     candidate_bindings = bindings if isinstance(bindings, list) else runtime.get("call_bindings")
     denied = [binding for binding in candidate_bindings if isinstance(binding, dict) and binding.get("state") == "denied"] if isinstance(candidate_bindings, list) else []
     expected = {
-        (binding.get("call_row_id_sha256"), binding.get("call_id_sha256"), binding.get("proxy_session_id_sha256"), binding.get("bound_auth_scope_hash"), binding.get("target_name"), binding.get("arguments_sha256"))
+        (binding.get("call_row_id_sha256"), binding.get("call_id_sha256"), binding.get("proxy_session_id_sha256"), binding.get("child_actor_id_sha256"), binding.get("bound_auth_scope_hash"), binding.get("target_name"), binding.get("arguments_sha256"))
         for binding in denied
     }
     observed = {
-        (receipt.get("call_row_id_sha256"), receipt.get("call_id_sha256"), receipt.get("proxy_session_id_sha256"), receipt.get("bound_auth_scope_hash"), receipt.get("target_name"), receipt.get("arguments_sha256"))
+        (receipt.get("call_row_id_sha256"), receipt.get("call_id_sha256"), receipt.get("proxy_session_id_sha256"), receipt.get("child_actor_id_sha256"), receipt.get("bound_auth_scope_hash"), receipt.get("target_name"), receipt.get("arguments_sha256"))
         for receipt in receipts
         if isinstance(receipt, dict)
     } if isinstance(receipts, list) else set()
@@ -407,6 +449,35 @@ def valid_fixture_binding(value: Any) -> bool:
     effect_timestamp = parse_timestamp(effect_at) if effect_at is not None else None
     sequences = (value.get("invocation_sequence"), value.get("invoked_sequence"), value.get("effect_committed_sequence"), value.get("result_sequence"))
     return observed_at is not None and completed_at is not None and observed_at <= completed_at and (effect_timestamp is None or observed_at <= effect_timestamp <= completed_at) and isinstance(sequences[0], int) and isinstance(sequences[1], int) and isinstance(sequences[3], int) and (sequences[2] is None or isinstance(sequences[2], int))
+
+
+def valid_client_reported_local_result(value: Any) -> bool:
+    return (
+        isinstance(value, dict)
+        and value.get("provenance") == "sealed-client-reported-observation"
+        and value.get("state") == "result_admitted"
+        and value.get("not_os_process_attestation") is True
+    )
+
+
+def valid_local_callback(value: Any) -> bool:
+    if not isinstance(value, dict):
+        return False
+    sequences = (
+        value.get("invocation_sequence"),
+        value.get("invoked_sequence"),
+        value.get("effect_committed_sequence"),
+        value.get("result_sequence"),
+    )
+    return (
+        value.get("effect_state") == "known_committed"
+        and value.get("reply_state") == "known"
+        and value.get("result_status") == "result_ready"
+        and all(isinstance(sequence, int) for sequence in sequences)
+        and sequences[0] == sequences[1] < sequences[2] < sequences[3]
+        and all(is_hash(value.get(name)) for name in ("arguments_sha256", "source_host_sha256", "result_sha256"))
+        and isinstance(value.get("service_instance_id"), str)
+    )
 
 
 def parse_timestamp(value: Any) -> dt.datetime | None:

@@ -46,7 +46,7 @@ describe("SystemPromptEditor", () => {
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "More info" }));
     const dialog = screen.getByRole("dialog", {
-      name: "Handlebars templating",
+      name: "Templating Cheat Sheet",
     });
     expect(
       within(dialog).getByRole("table", {
@@ -59,6 +59,9 @@ describe("SystemPromptEditor", () => {
     expect(
       within(dialog).getByRole("row", { name: /\{\{currentTime\}\}/ }),
     ).toHaveTextContent("HH:MM:SS UTC");
+    expect(
+      within(dialog).getByRole("link", { name: /Handlebars/ }),
+    ).toHaveAttribute("href", "https://handlebarsjs.com/");
     const docsLink = within(dialog).queryByRole("link", {
       name: /Templating documentation/,
     });
@@ -86,6 +89,8 @@ describe("SystemPromptEditor", () => {
       name: "Template variables and helpers",
     });
     expect(within(table).queryByText("{{tool.name}}")).not.toBeInTheDocument();
+    const examples = screen.getByRole("region", { name: "Examples" });
+    expect(examples).toHaveTextContent("{{user.name}}");
 
     rerender(
       <SystemPromptEditor
@@ -98,6 +103,9 @@ describe("SystemPromptEditor", () => {
     expect(within(table).getByText("{{mcpServerName}}")).toBeVisible();
     expect(within(table).queryByText("{{user.name}}")).not.toBeInTheDocument();
     expect(within(table).getByText("{{currentDate}}")).toBeVisible();
+    expect(examples).toHaveTextContent("{{tool.name}}");
+    expect(examples).not.toHaveTextContent("{{user.name}}");
+    expect(examples).not.toHaveTextContent("user.teams");
   });
 
   it("keeps literal instructions editable without advertising or validating templates", async () => {

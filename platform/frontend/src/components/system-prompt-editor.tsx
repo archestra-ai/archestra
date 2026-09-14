@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  BUILT_IN_AGENT_IDS,
   DocsPage,
   getSystemPromptTemplateExpressions,
 } from "@archestra/shared";
@@ -228,31 +229,84 @@ export function SystemPromptEditor({
         <StandardDialog
           open={templatingInfoOpen}
           onOpenChange={setTemplatingInfoOpen}
-          title="Handlebars templating"
-          description="Variables and helpers available in your instructions."
+          title="Templating Cheat Sheet"
+          description={
+            <>
+              <span>Instructions use </span>
+              <ExternalDocsLink
+                href="https://handlebarsjs.com/"
+                showIcon={false}
+              >
+                Handlebars
+              </ExternalDocsLink>
+              <span> to fill in variables when the agent runs.</span>
+            </>
+          }
           size="medium"
         >
-          <div className="space-y-4 text-sm">
-            <Table aria-label="Template variables and helpers">
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[45%] sm:w-44">Expression</TableHead>
-                  <TableHead>Value</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {templateExpressions.map(({ expression, description }) => (
-                  <TableRow key={expression}>
-                    <TableCell className="align-top">
-                      <code className="break-all text-xs">{expression}</code>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {description}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+          <div className="space-y-6 text-sm">
+            <section className="space-y-3" aria-label="Available variables">
+              <h3 className="font-medium">Available variables</h3>
+              <div className="overflow-hidden rounded-md border">
+                <Table aria-label="Template variables and helpers">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-[45%] sm:w-44">
+                        Expression
+                      </TableHead>
+                      <TableHead>Value</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {templateExpressions.map(({ expression, description }) => (
+                      <TableRow key={expression}>
+                        <TableCell className="align-top">
+                          <code className="break-all text-xs">
+                            {expression}
+                          </code>
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {description}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </section>
+            <section className="space-y-3" aria-label="Examples">
+              <h3 className="font-medium">Examples</h3>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <p className="text-xs text-muted-foreground">
+                    {builtInAgentId === BUILT_IN_AGENT_IDS.POLICY_CONFIG
+                      ? "Use the tool context"
+                      : "Personalize a response"}
+                  </p>
+                  <pre className="whitespace-pre-wrap break-words rounded-md bg-muted/50 p-3 text-xs leading-relaxed">
+                    <code>
+                      {builtInAgentId === BUILT_IN_AGENT_IDS.POLICY_CONFIG
+                        ? "Evaluate {{tool.name}} from {{mcpServerName}}."
+                        : "You are helping {{user.name}}. Today is {{currentDate}}."}
+                    </code>
+                  </pre>
+                </div>
+                <div className="space-y-2">
+                  <p className="text-xs text-muted-foreground">
+                    {builtInAgentId === BUILT_IN_AGENT_IDS.POLICY_CONFIG
+                      ? "Include details when available"
+                      : "Tailor instructions to a team"}
+                  </p>
+                  <pre className="whitespace-pre-wrap break-words rounded-md bg-muted/50 p-3 text-xs leading-relaxed">
+                    <code>
+                      {builtInAgentId === BUILT_IN_AGENT_IDS.POLICY_CONFIG
+                        ? "{{#if tool.description}}\nConsider: {{tool.description}}\n{{/if}}"
+                        : '{{#includes user.teams "Engineering"}}\nUse technical detail and code examples.\n{{/includes}}'}
+                    </code>
+                  </pre>
+                </div>
+              </div>
+            </section>
             {docsUrl && (
               <ExternalDocsLink href={docsUrl}>
                 Templating documentation

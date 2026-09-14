@@ -3509,7 +3509,6 @@ export function AgentForm({
                       className="space-y-4 border-y py-6"
                       aria-label="Agent runtime"
                     >
-                      <h3 className="text-sm font-medium">Agent runtime</h3>
                       <AgentRuntimeFields
                         value={runtime}
                         onChange={setAgentRuntime}
@@ -4096,10 +4095,7 @@ export function AgentForm({
               <SettingsSectionGroup
                 className={cn(!isActiveSection("runtime") && "hidden")}
               >
-                <SettingsSection
-                  title="Agent runtime"
-                  description="Whether this agent may run on its own, and the credentials it runs with."
-                >
+                <SettingsSection aria-label="Agent runtime">
                   <AgentRuntimeFields
                     value={runtime}
                     onChange={setAgentRuntime}

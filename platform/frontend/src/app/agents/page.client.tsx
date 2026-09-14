@@ -47,6 +47,7 @@ import { computeCanModifyAgent } from "@/components/agent-pages/use-agent-access
 import { AgentProviderIndicator } from "@/components/agent-provider-indicator";
 import { AgentVersionHistoryDialog } from "@/components/agent-version-history-dialog";
 import { BulkVisibilityDialog } from "@/components/bulk-visibility-dialog";
+import { RuntimeCapableIndicator } from "@/components/chat/runtime-capable-indicator";
 import { CloneAgentDialog } from "@/components/clone-agent-dialog";
 import {
   DefaultAgentTag,
@@ -742,13 +743,19 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
         key={getAgentListRowId(row)}
         icon={<AgentIcon icon={agent.icon} size={20} />}
         title={
-          <span className="flex min-w-0 items-center gap-1.5">
+          // Wraps so the name keeps the first line: a pill that refuses to
+          // shrink beside a name that does left a phone-width card reading
+          // "M… [Runtime]" with the actions cluster taking the rest.
+          <span className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1">
             <Link
               href={agentDetailHref("agent", agent.id)}
               className="truncate"
             >
               {agent.name}
             </Link>
+            {agent.runtime != null && (
+              <RuntimeCapableIndicator variant="pill" />
+            )}
             <LabelTags labels={agent.labels} />
           </span>
         }
@@ -847,9 +854,14 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
             description={agent.description}
             labels={agent.labels}
             extraBadges={
-              effectiveDefault?.agentId === agent.id ? (
-                <DefaultAgentTag source={effectiveDefault.source} />
-              ) : undefined
+              <>
+                {agent.runtime != null && (
+                  <RuntimeCapableIndicator variant="pill" />
+                )}
+                {effectiveDefault?.agentId === agent.id ? (
+                  <DefaultAgentTag source={effectiveDefault.source} />
+                ) : null}
+              </>
             }
           />
         );

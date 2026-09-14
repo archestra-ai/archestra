@@ -11,6 +11,7 @@ import {
   MoreHorizontal,
   PackageX,
   Sparkles,
+  TerminalSquare,
   Trash2,
 } from "lucide-react";
 import Link from "next/link";
@@ -23,6 +24,7 @@ import { AgentForm, type AgentFormSection } from "@/components/agent-form";
 import { AgentIcon } from "@/components/agent-icon";
 import { AgentRuntimeCredentialsDeepLink } from "@/components/agent-runtime-credentials-dialog";
 import { AgentVersionHistoryDialog } from "@/components/agent-version-history-dialog";
+import { RuntimeCapableIndicator } from "@/components/chat/runtime-capable-indicator";
 import { CloneAgentDialog } from "@/components/clone-agent-dialog";
 import { CreatedByCell } from "@/components/created-by-cell";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
@@ -239,7 +241,12 @@ function AgentDetails({
     isBuiltIn,
     isPending: isAccessPending,
   } = useAgentAccess(agent, kind);
-  const actionModel = getAgentActionModel({ kind, agent });
+  const runtimeEnabled = useFeature("agentRuntime") === true;
+  const actionModel = getAgentActionModel({
+    kind,
+    agent,
+    agentRuntimeEnabled: runtimeEnabled,
+  });
   const connectAction = agentAction(actionModel, "connect");
   const chatAction = agentAction(actionModel, "chat");
   const cloneAction = agentAction(actionModel, "clone");
@@ -267,7 +274,6 @@ function AgentDetails({
   });
 
   const showConnect = connectAction.visible;
-  const runtimeEnabled = useFeature("agentRuntime") === true;
   const hasAgentRuntime =
     runtimeEnabled && kind === "agent" && agent.runtime != null;
 
@@ -460,6 +466,16 @@ function AgentDetails({
             type={isBuiltIn ? "builtIn" : agent.scope}
             className="font-normal"
           />
+          {/* Dropped on phones: the wizard header is one clipped line, so a
+              second pill there only squeezes the name to "My Ass…". The
+              "Start run" button directly below already carries the glyph and
+              the verb at that width. */}
+          {hasAgentRuntime && (
+            <RuntimeCapableIndicator
+              variant="pill"
+              className="hidden font-normal sm:inline-flex"
+            />
+          )}
           {kind === "mcp_gateway" && environmentName && (
             <Badge variant="outline" className="font-normal">
               {environmentName}
@@ -534,8 +550,12 @@ function AgentDetails({
           {chatAction.visible && chatAction.href && (
             <Button variant="outline" asChild>
               <Link href={chatAction.href}>
-                <MessageSquare className="h-4 w-4" />
-                {chatAction.label}
+                {chatAction.startsRun ? (
+                  <TerminalSquare className="h-4 w-4" />
+                ) : (
+                  <MessageSquare className="h-4 w-4" />
+                )}
+                <span>{chatAction.label}</span>
               </Link>
             </Button>
           )}

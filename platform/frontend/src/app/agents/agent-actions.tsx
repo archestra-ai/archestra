@@ -11,6 +11,7 @@ import {
   RotateCcw,
   Sparkles,
   Star,
+  TerminalSquare,
   Trash2,
 } from "lucide-react";
 import {
@@ -23,6 +24,7 @@ import {
   TableRowActions,
 } from "@/components/table-row-actions";
 import type { useProfilesPaginated } from "@/lib/agent.query";
+import { useFeature } from "@/lib/config/config.query";
 import { ACTION_LABEL, notYoursToChange } from "@/lib/design/resource-lexicon";
 import { useIsGlobalAdmin } from "@/lib/organization.query";
 
@@ -76,7 +78,12 @@ export function AgentActions({
   const admin = useIsGlobalAdmin();
   const isBuiltIn = Boolean(agent.builtIn);
   const isDeleted = Boolean(agent.deletedAt);
-  const actionModel = getAgentActionModel({ kind: "agent", agent });
+  const agentRuntimeEnabled = useFeature("agentRuntime") === true;
+  const actionModel = getAgentActionModel({
+    kind: "agent",
+    agent,
+    agentRuntimeEnabled,
+  });
   const connectAction = agentAction(actionModel, "connect");
   const chatAction = agentAction(actionModel, "chat");
   const editAction = agentAction(actionModel, "edit");
@@ -156,7 +163,11 @@ export function AgentActions({
     ...(chatAction.visible
       ? [
           {
-            icon: <MessageSquare className="h-4 w-4" />,
+            icon: chatAction.startsRun ? (
+              <TerminalSquare className="h-4 w-4" />
+            ) : (
+              <MessageSquare className="h-4 w-4" />
+            ),
             label: chatAction.label,
             href: chatAction.href,
           },

@@ -103,6 +103,12 @@ export const FIELD_LABEL = {
  */
 export const ACTION_LABEL = {
   chat: "Chat",
+  /**
+   * Chat's label on an agent with a dedicated runtime. The destination is the
+   * same composer, but sending there starts a run in a live terminal rather
+   * than a conversation, and the verb says so before the click.
+   */
+  startRun: "Start run",
   connect: "Connect",
   edit: "Edit",
   /** The read-only destination offered in Edit's place when Edit is not the user's to take. */

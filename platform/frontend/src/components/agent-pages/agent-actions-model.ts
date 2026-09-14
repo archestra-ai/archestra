@@ -26,6 +26,13 @@ export interface AgentActionDefinition {
   visible: boolean;
   permissions?: Permissions;
   href?: string;
+  /**
+   * Chat only: the composer it opens starts a run in the agent's dedicated
+   * runtime instead of a conversation. Renderers swap the glyph on it, and
+   * the label already says "Start run", so the row and the detail header
+   * cannot disagree about what the click does.
+   */
+  startsRun?: boolean;
 }
 
 /**
@@ -36,16 +43,27 @@ export interface AgentActionDefinition {
 export function getAgentActionModel({
   kind,
   agent,
+  agentRuntimeEnabled = false,
 }: {
   kind: AgentPageKind;
   agent: {
     id: string;
     agentType: AgentType;
     builtIn?: boolean | null;
+    runtime?: unknown | null;
   };
+  /**
+   * The deployment's `agentRuntime` feature. A stored runtime config only
+   * changes what Chat does while the feature is on — the composer applies the
+   * same gate — so an agent configured on a deployment that later turned the
+   * runtime off goes back to offering a plain Chat.
+   */
+  agentRuntimeEnabled?: boolean;
 }): AgentActionDefinition[] {
   const builtIn = !!agent.builtIn;
   const resource = getResourceForAgentType(agent.agentType);
+  const startsRun =
+    agentRuntimeEnabled && kind === "agent" && agent.runtime != null;
 
   return [
     {
@@ -57,9 +75,10 @@ export function getAgentActionModel({
     },
     {
       id: "chat",
-      label: ACTION_LABEL.chat,
+      label: startsRun ? ACTION_LABEL.startRun : ACTION_LABEL.chat,
       visible: kind === "agent" && !builtIn,
       href: `/chat/new?agent_id=${agent.id}`,
+      startsRun,
     },
     {
       id: "edit",

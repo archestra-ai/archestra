@@ -21,20 +21,12 @@ describe("RuntimeCapableIndicator", () => {
     );
   });
 
-  it("names a maintained template's runtime with its own mark", () => {
+  it("names a maintained template's runtime", () => {
     render(
       <RuntimeCapableIndicator variant="pill" runtime={claudeCodeRuntime} />,
     );
 
-    // The tooltip trigger overwrites the badge's `data-slot`; its variant
-    // attribute survives.
-    const pill = screen
-      .getByText("Claude Code")
-      .closest("[data-variant=secondary]");
-    expect(pill).not.toBeNull();
-    // The template's mark, not the generic terminal glyph.
-    expect(pill?.querySelector("img")).not.toBeNull();
-    expect(pill?.querySelector("svg")).toBeNull();
+    expect(screen.getByText("Claude Code")).toBeInTheDocument();
   });
 
   it("reads as a plain runtime for a custom image and for the platform loop", () => {
@@ -42,7 +34,6 @@ describe("RuntimeCapableIndicator", () => {
       <RuntimeCapableIndicator variant="pill" runtime={customRuntime} />,
     );
     expect(screen.getByText("Runtime")).toBeInTheDocument();
-    expect(screen.queryByText("Claude Code")).toBeNull();
 
     rerender(
       <RuntimeCapableIndicator

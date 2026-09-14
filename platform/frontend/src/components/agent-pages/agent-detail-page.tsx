@@ -466,10 +466,8 @@ function AgentDetails({
             type={isBuiltIn ? "builtIn" : agent.scope}
             className="font-normal"
           />
-          {/* Dropped on phones: the wizard header is one clipped line, so a
-              second pill there only squeezes the name to "My Ass…". The
-              "Start run" button directly below already carries the glyph and
-              the verb at that width. */}
+          {/* Hidden below sm: the header is one clipped line, and the Start
+              run button below already carries the glyph. */}
           {hasAgentRuntime && (
             <RuntimeCapableIndicator
               variant="pill"

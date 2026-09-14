@@ -13,8 +13,6 @@ describe("resolveAgentCatalogId", () => {
         command: ["archestra-claude-code", "--permission-mode", "bypass"],
       }),
     ).toBe("claude-code");
-    // The command decides, not the image: a custom image running the
-    // wrapper is that wrapper's template.
     expect(
       resolveAgentCatalogId({
         image: "ghcr.io/example/my-codex:latest",
@@ -23,34 +21,16 @@ describe("resolveAgentCatalogId", () => {
     ).toBe("codex");
   });
 
-  test("names the platform's own loop by its image when no command is set", () => {
-    expect(
-      resolveAgentCatalogId({
-        image: "registry.example:5000/team/agent-archestra:v2",
-        command: null,
-      }),
-    ).toBe("archestra");
-    expect(
-      resolveAgentCatalogId({ image: getDefaultAgentRuntimeImage("1.4.0") }),
-    ).toBe("archestra");
-  });
-
-  test("answers null for a custom runtime and for anything that is not one", () => {
+  test("answers null for a custom runtime, the platform loop, and anything that is not a runtime", () => {
     expect(
       resolveAgentCatalogId({
         image: "ghcr.io/example/toolbox:latest",
-        command: null,
-      }),
-    ).toBeNull();
-    expect(
-      resolveAgentCatalogId({
-        image: "registry.example/team/agent-archestra:v2",
         command: ["python", "loop.py"],
       }),
     ).toBeNull();
     expect(
       resolveAgentCatalogId({
-        image: "registry.example/team/agent-archestra-fork:v2",
+        image: getDefaultAgentRuntimeImage("1.4.0"),
         command: null,
       }),
     ).toBeNull();

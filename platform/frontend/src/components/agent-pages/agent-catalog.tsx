@@ -4,13 +4,11 @@ import {
   getDefaultAgentRuntimeImage,
   type SubscriptionCredentialKind,
 } from "@archestra/shared";
-import { Network } from "lucide-react";
+import { Bot, Network } from "lucide-react";
+import Image from "next/image";
 import type { AgentFormInitialValues } from "@/components/agent-form";
-import {
-  AGENT_CATALOG_TEMPLATE_NAMES,
-  CatalogAgentIcon,
-} from "@/components/agent-pages/agent-catalog-identity";
 import { CatalogSourceCard } from "@/components/catalog-source-card";
+import { ProviderIcon } from "@/components/provider-icon";
 import { Badge } from "@/components/ui/badge";
 import appConfig from "@/lib/config/config";
 import { useFeature } from "@/lib/config/config.query";
@@ -27,6 +25,21 @@ export interface AgentCatalogTemplate {
   icon: string | null;
   initialValues: AgentFormInitialValues;
 }
+
+/**
+ * Shared by the catalog card and the runtime pill. `archestra` is absent: its
+ * name is composed from the app name.
+ */
+export const AGENT_CATALOG_TEMPLATE_NAMES: Record<
+  Exclude<AgentCatalogId, "archestra">,
+  string
+> = {
+  "claude-code": "Claude Code",
+  codex: "Codex",
+  opencode: "OpenCode",
+  hermes: "Hermes",
+  openclaw: "OpenClaw",
+};
 
 export function getAgentCatalogTemplates(
   archestraImage: string,
@@ -197,6 +210,75 @@ export function AgentCatalog({
       </div>
     </div>
   );
+}
+
+export function CatalogAgentIcon({
+  id,
+  appIconLogo = null,
+  size = 22,
+}: {
+  id: AgentCatalogId;
+  appIconLogo?: string | null;
+  size?: number;
+}) {
+  const box = { width: size, height: size };
+  switch (id) {
+    case "archestra":
+      return appIconLogo ? (
+        <Image
+          src={appIconLogo}
+          alt=""
+          width={size}
+          height={size}
+          style={box}
+          className="rounded-sm object-contain"
+        />
+      ) : (
+        <Bot className="size-5" />
+      );
+    case "claude-code":
+      return <ProviderIcon provider="anthropic" size={size} />;
+    case "codex":
+      return <ProviderIcon provider="openai" size={size} />;
+    case "opencode":
+      return (
+        <Image
+          src="/agent-logos/opencode.svg"
+          alt=""
+          width={size}
+          height={size}
+          style={{ height: size }}
+          className="w-auto object-contain dark:invert"
+        />
+      );
+    case "hermes": {
+      // The artwork carries its own padding, so it draws larger than its peers.
+      const hermesSize = Math.round((size * 30) / 22);
+      return (
+        <Image
+          src="/agent-logos/hermes.png"
+          alt=""
+          width={hermesSize}
+          height={hermesSize}
+          style={{ width: hermesSize, height: hermesSize }}
+          className="rounded-md object-contain"
+        />
+      );
+    }
+    case "openclaw":
+      return (
+        <Image
+          src="/agent-logos/openclaw.svg"
+          alt=""
+          width={size}
+          height={size}
+          style={box}
+          className="object-contain"
+        />
+      );
+    default:
+      return <Bot className="size-5" />;
+  }
 }
 
 function template(params: {

@@ -52,12 +52,9 @@ describe("getAgentActionModel", () => {
     expect(withRuntime).toMatchObject({
       label: "Start run",
       startsRun: true,
-      // Same composer either way: the runtime decides what sending does.
       href: "/chat/new?agent_id=agent-1",
     });
 
-    // The composer ignores a stored runtime while the deployment feature is
-    // off, so the row goes back to promising a chat.
     const featureOff = agentAction(
       getAgentActionModel({ kind: "agent", agent: runtimeAgent }),
       "chat",

@@ -774,11 +774,8 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
             currentUserId={currentUserId}
             showSelfAsMe
           />
-          {/* In the badge row rather than beside the name as the table has
-              it: a card title shares its line with the four-button action
-              cluster, and at phone width that left "Claude Code" clipped to
-              "Claude Cod". The row below has the card's full width and
-              already wraps. */}
+          {/* Badge row, not the title line: the title shares its line with
+              the action cluster and clips at phone width. */}
           {agent.runtime != null && (
             <RuntimeCapableIndicator variant="pill" runtime={agent.runtime} />
           )}

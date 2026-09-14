@@ -43,6 +43,7 @@ type TableRowAction = {
 type TableRowActionsProps = {
   actions: TableRowAction[];
   dropdownActions?: TableRowAction[];
+  /** Extra items appear immediately before the first destructive action. */
   dropdownContent?: React.ReactNode;
   size?: "sm" | "default";
   /**
@@ -61,6 +62,13 @@ export function TableRowActions({
   itemName,
 }: TableRowActionsProps) {
   const buttonSize = size === "sm" ? "icon-sm" : "icon";
+  const firstDestructiveIndex =
+    dropdownActions?.findIndex((action) => action.variant === "destructive") ??
+    -1;
+  const contentIndex =
+    firstDestructiveIndex < 0
+      ? (dropdownActions?.length ?? 0)
+      : firstDestructiveIndex;
 
   return (
     <div className="flex">
@@ -94,8 +102,11 @@ export function TableRowActions({
               align="end"
               onClick={(e: React.MouseEvent) => e.stopPropagation()}
             >
+              {dropdownActions?.slice(0, contentIndex).map((action) => (
+                <DropdownActionButton key={action.label} action={action} />
+              ))}
               {dropdownContent}
-              {dropdownActions?.map((action) => (
+              {dropdownActions?.slice(contentIndex).map((action) => (
                 <DropdownActionButton key={action.label} action={action} />
               ))}
             </DropdownMenuContent>

@@ -417,7 +417,6 @@ function PluginDetailView({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              {ownership.menuItem}
               {isGithubPlugin && (
                 <DropdownMenuItem
                   aria-disabled={isReadOnly || undefined}
@@ -449,6 +448,7 @@ function PluginDetailView({
                   )}
                 </DropdownMenuItem>
               )}
+              {ownership.menuItem}
               {isGithubPlugin && <DropdownMenuSeparator />}
               <DropdownMenuItem
                 variant="destructive"

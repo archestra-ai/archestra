@@ -1,8 +1,13 @@
 "use client";
-import { ARCHESTRA_MCP_CATALOG_ID } from "@archestra/shared";
+import {
+  type AgentType,
+  ARCHESTRA_MCP_CATALOG_ID,
+  getResourceForAgentType,
+} from "@archestra/shared";
 import { UserRoundCog } from "lucide-react";
 import { useState } from "react";
 import { KebabItem } from "@/components/kebab-item";
+import { TransferAgentOwnershipDialog } from "@/components/transfer-agent-ownership-dialog";
 import { TransferOwnershipDialog } from "@/components/transfer-ownership-dialog";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import {
@@ -16,7 +21,7 @@ export function useResourceOwnershipTransfer({
   onTransferred,
   disabledReason,
 }: {
-  kind: TransferResourceKind;
+  kind: TransferResourceKind | "agent" | "mcp_gateway";
   resource?: {
     id: string;
     name: string;
@@ -25,6 +30,10 @@ export function useResourceOwnershipTransfer({
     sourceRef?: string | null;
     serverType?: string;
     organizationId?: string | null;
+    agentType?: AgentType;
+    builtIn?: boolean | null;
+    isPersonalGateway?: boolean;
+    isPersonalProxy?: boolean;
   } | null;
   onTransferred?: () => void;
   disabledReason?: string;
@@ -32,11 +41,15 @@ export function useResourceOwnershipTransfer({
   const [open, setOpen] = useState(false);
   const { data: session } = useSession();
   const permissionResource =
-    kind === "catalog"
-      ? "mcpRegistry"
-      : kind === "remoteAgent"
-        ? "agentSettings"
-        : kind;
+    kind === "agent" || kind === "mcp_gateway"
+      ? getResourceForAgentType(
+          resource?.agentType ?? (kind === "agent" ? "agent" : "mcp_gateway"),
+        )
+      : kind === "catalog"
+        ? "mcpRegistry"
+        : kind === "remoteAgent"
+          ? "agentSettings"
+          : kind;
   const update = useHasPermissions({ [permissionResource]: ["update"] });
   const admin = useHasPermissions(
     kind === "catalog"
@@ -46,6 +59,11 @@ export function useResourceOwnershipTransfer({
         : { [permissionResource]: ["admin"] },
   );
   const managed =
+    ((kind === "agent" || kind === "mcp_gateway") &&
+      (resource?.builtIn ||
+        resource?.isPersonalGateway ||
+        resource?.isPersonalProxy ||
+        resource?.agentType === "llm_proxy")) ||
     (kind === "skill" && resource?.sourceRef?.startsWith("builtin:")) ||
     (kind === "catalog" &&
       (resource?.organizationId === null ||
@@ -87,7 +105,7 @@ export function useResourceOwnershipTransfer({
 }
 
 function ResourceTransferDialog(props: {
-  kind: TransferResourceKind;
+  kind: TransferResourceKind | "agent" | "mcp_gateway";
   resource: {
     id: string;
     name: string;
@@ -97,6 +115,26 @@ function ResourceTransferDialog(props: {
   onClose: () => void;
   onTransferred: () => void;
 }) {
+  if (props.kind === "agent" || props.kind === "mcp_gateway") {
+    return (
+      <TransferAgentOwnershipDialog
+        agent={{
+          ...props.resource,
+          scope: props.resource.scope as "personal" | "team" | "org",
+        }}
+        onClose={props.onClose}
+        onTransferred={props.onTransferred}
+      />
+    );
+  }
+  return <NonAgentTransferDialog {...props} kind={props.kind} />;
+}
+
+function NonAgentTransferDialog(
+  props: Omit<Parameters<typeof ResourceTransferDialog>[0], "kind"> & {
+    kind: TransferResourceKind;
+  },
+) {
   const transfer = useTransferResourceOwnership(props.kind);
   return <TransferOwnershipDialog {...props} transfer={transfer} />;
 }

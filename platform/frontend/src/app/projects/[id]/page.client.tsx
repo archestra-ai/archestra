@@ -224,7 +224,6 @@ function ProjectDetail() {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  {ownership.menuItem}
                   {!isAdminView && (
                     <DropdownMenuItem
                       onSelect={() =>
@@ -248,6 +247,7 @@ function ProjectDetail() {
                       Edit details
                     </DropdownMenuItem>
                   )}
+                  {ownership.menuItem}
                   {canManage && canDelete && (
                     <DropdownMenuItem
                       variant="destructive"

@@ -370,11 +370,11 @@ function SkillDetailView({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              {ownership.menuItem}
               <DropdownMenuItem onClick={() => setHistoryOpen(true)}>
                 <History className="h-4 w-4" />
                 {historyAction.label}
               </DropdownMenuItem>
+              {ownership.menuItem}
               <DropdownMenuSeparator />
               {/* `aria-disabled` rather than Radix's `disabled`, so the item
                   keeps its place in the menu's roving focus and the reason

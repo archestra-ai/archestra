@@ -12,6 +12,7 @@ import {
   it,
   vi,
 } from "vitest";
+import { ResourceTableRowActions } from "@/components/resource-table-row-actions";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -190,4 +191,79 @@ it("does not trigger the containing resource when selecting an owner", async () 
   fireEvent.click(await screen.findByText("New Owner"));
   fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
   expect(openResource).not.toHaveBeenCalled();
+});
+
+it.each([
+  ["skill", "skills"],
+  ["plugin", "plugins"],
+  ["project", "projects"],
+  ["app", "apps"],
+  ["catalog", "internal_mcp_catalog"],
+  ["remoteAgent", "a2a/remote-agents"],
+  ["agent", "agents"],
+  ["mcp_gateway", "agents"],
+] as const)("transfers %s from its row menu without opening or deleting the resource", async (kind, path) => {
+  const openResource = vi.fn();
+  const deleteResource = vi.fn();
+  const received: unknown[] = [];
+  server.use(
+    http.post(
+      `${origin}/api/${path}/${agent.id}/transfer-ownership`,
+      async ({ request }) => {
+        received.push(await request.json());
+        return HttpResponse.json({ success: true });
+      },
+    ),
+  );
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  render(
+    <QueryClientProvider client={client}>
+      <Table>
+        <TableBody>
+          <TableRow onClick={openResource}>
+            <TableCell>
+              <ResourceTableRowActions
+                kind={kind}
+                resource={agent}
+                actions={[]}
+                dropdownActions={[
+                  {
+                    label: "Delete",
+                    icon: null,
+                    variant: "destructive",
+                    onClick: deleteResource,
+                  },
+                ]}
+              />
+            </TableCell>
+          </TableRow>
+        </TableBody>
+      </Table>
+    </QueryClientProvider>,
+  );
+  fireEvent.pointerDown(screen.getByRole("button", { name: "More actions" }), {
+    button: 0,
+    ctrlKey: false,
+  });
+  expect(
+    screen.getAllByRole("menuitem").map((item) => item.textContent),
+  ).toEqual(["Transfer ownership", "Delete"]);
+  fireEvent.click(screen.getByRole("menuitem", { name: "Transfer ownership" }));
+  const picker = screen.getByRole("combobox", { name: "New owner" });
+  await waitFor(() => expect(picker).toBeEnabled());
+  fireEvent.click(picker);
+  fireEvent.click(await screen.findByText("New Owner"));
+  fireEvent.click(
+    within(screen.getByRole("dialog")).getByRole("button", {
+      name: "Transfer ownership",
+    }),
+  );
+  await waitFor(() =>
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+  );
+  expect(received).toEqual([{ ownerId: "owner-2" }]);
+  expect(openResource).not.toHaveBeenCalled();
+  expect(deleteResource).not.toHaveBeenCalled();
 });

@@ -27,6 +27,7 @@ import { type MouseEventHandler, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { LabelTags } from "@/components/label-tags";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
+import { ResourceTableRowActions } from "@/components/resource-table-row-actions";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { TableCard } from "@/components/table-card-view";
 import {
@@ -1081,7 +1082,17 @@ export function McpServerCard({
             {deploymentStatusIndicator}
           </span>
         }
-        actions={canEditCatalog ? settingsButton : undefined}
+        actions={
+          <div className="flex items-center gap-1">
+            {canEditCatalog ? settingsButton : null}
+            <ResourceTableRowActions
+              kind="catalog"
+              resource={item}
+              itemName={item.name}
+              actions={[]}
+            />
+          </div>
+        }
         selected={selection?.selected}
         selectionDisabled={selection?.disabled}
         selectionDisabledTooltip={selection?.disabledTooltip}

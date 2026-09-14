@@ -505,7 +505,6 @@ function CatalogItemDetails({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                {ownership.menuItem}
                 {canRestartPods && (
                   <DropdownMenuItem
                     disabled={refreshImageMutation.isPending}
@@ -530,6 +529,7 @@ function CatalogItemDetails({
                     {cloneAction.label}
                   </DropdownMenuItem>
                 )}
+                {ownership.menuItem}
                 {canModify && !isPlaywright && (
                   <>
                     <DropdownMenuSeparator />

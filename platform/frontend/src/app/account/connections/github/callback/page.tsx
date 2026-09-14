@@ -2,16 +2,20 @@
 
 import { ArrowLeft, CircleAlert, CircleCheck } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { LoadingState } from "@/components/loading";
 import { RuntimeCredentialIcon } from "@/components/runtime-credential-icon";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
+import { consumeGitHubConnectionReturn } from "@/lib/github-connection-return";
 import { useCompleteGitHubUserConnection } from "@/lib/runtime-credentials.query";
 
 export default function GitHubConnectionCallback() {
   const router = useRouter();
   const started = useRef(false);
+  const [returnTo, setReturnTo] = useState("/account/connections");
+  const returnLabel =
+    returnTo === "/settings/credentials" ? "credentials" : "connections";
   const complete = useCompleteGitHubUserConnection();
   useEffect(() => {
     let active = true;
@@ -23,11 +27,13 @@ export default function GitHubConnectionCallback() {
       const query = new URLSearchParams(window.location.search);
       const code = query.get("code");
       const state = query.get("state");
+      const destination = consumeGitHubConnectionReturn(state);
+      setReturnTo(destination);
       window.history.replaceState(null, "", window.location.pathname);
       if (!code || !state) return;
       complete.mutate(
         { code, state },
-        { onSuccess: () => router.replace("/account/connections") },
+        { onSuccess: () => router.replace(destination) },
       );
     });
     return () => {
@@ -45,8 +51,8 @@ export default function GitHubConnectionCallback() {
   const description = pending
     ? "Finishing sign-in and saving your connection. This usually takes a few seconds."
     : success
-      ? "Your account is ready to use across your agents. Taking you back to connections…"
-      : "This sign-in couldn’t be completed. Return to connections and connect GitHub again.";
+      ? `Your account is ready to use across your agents. Taking you back to ${returnLabel}…`
+      : `This sign-in couldn’t be completed. Return to ${returnLabel} and connect GitHub again.`;
 
   return (
     <div className="flex min-h-[360px] items-center justify-center px-4 py-10 sm:py-16">
@@ -88,10 +94,10 @@ export default function GitHubConnectionCallback() {
             {!pending && !success && (
               <Button
                 className="mt-6 w-full"
-                onClick={() => router.replace("/account/connections")}
+                onClick={() => router.replace(returnTo)}
               >
                 <ArrowLeft aria-hidden="true" />
-                <span>Back to connections</span>
+                <span>Back to {returnLabel}</span>
               </Button>
             )}
           </div>

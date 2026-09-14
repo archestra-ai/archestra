@@ -99,7 +99,7 @@ beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 beforeEach(() => {
   vi.clearAllMocks();
   archestraApiClient.setConfig({ baseUrl: API_ORIGIN });
-  vi.mocked(usePathname).mockReturnValue("/a2a/agents/new");
+  vi.mocked(usePathname).mockReturnValue("/agents/a2a/new");
   vi.mocked(useSearchParams).mockReturnValue(
     new URLSearchParams() as ReturnType<typeof useSearchParams>,
   );
@@ -204,7 +204,7 @@ describe("external A2A agent routed pages", () => {
         users: [],
       });
     });
-    expect(push).toHaveBeenCalledWith("/a2a/agents/remote-agent-1");
+    expect(push).toHaveBeenCalledWith("/agents/a2a/remote-agent-1");
   });
 
   it("guards the create page from discarding an unsaved connection", async () => {
@@ -233,14 +233,14 @@ describe("external A2A agent routed pages", () => {
       screen.getByLabelText("Agent base URL"),
       remoteAgent.discoveryUrl,
     );
-    await user.click(screen.getByRole("link", { name: "External Agents" }));
+    await user.click(screen.getByRole("link", { name: "Add Agent" }));
 
     expect(
       screen.getByRole("heading", { name: "Discard unsaved changes?" }),
     ).toBeInTheDocument();
     expect(push).not.toHaveBeenCalled();
     await user.click(screen.getByRole("button", { name: "Discard changes" }));
-    expect(push).toHaveBeenCalledWith("/a2a/agents");
+    expect(push).toHaveBeenCalledWith("/agents/new");
   });
 
   it.each([

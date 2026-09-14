@@ -22,6 +22,7 @@ type HandlerOverride = {
   status?: number;
   body?: unknown;
   once?: boolean;
+  delayMs?: number;
 };
 
 declare global {
@@ -97,6 +98,8 @@ function isValidOverride(value: unknown): value is HandlerOverride {
   return (
     typeof v.url === "string" &&
     typeof v.method === "string" &&
-    ["get", "post", "put", "patch", "delete"].includes(v.method)
+    ["get", "post", "put", "patch", "delete"].includes(v.method) &&
+    (v.delayMs === undefined ||
+      (typeof v.delayMs === "number" && v.delayMs >= 0))
   );
 }

@@ -157,15 +157,6 @@ export const contentNavGroups: NavGroup[] = [
         customIsActive: (pathname: string) => pathname.startsWith("/agents"),
       },
       {
-        title: "External Agents",
-        url: "/a2a/agents",
-        icon: Network,
-        customIsActive: (pathname: string) =>
-          pathname.startsWith("/a2a/agents"),
-        beta: true,
-        badgeLabel: "Beta",
-      },
-      {
         title: "Skills",
         url: "/skills",
         icon: Sparkles,

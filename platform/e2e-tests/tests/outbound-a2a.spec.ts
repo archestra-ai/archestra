@@ -40,15 +40,17 @@ test("delegates from a parent agent to an external A2A agent", async ({
   try {
     await resetA2aFixture(request);
 
-    // Connect the remote protocol endpoint through the same routed screen a
-    // user sees. Checking the base URL exercises Agent Card discovery without
+    // Enter through the consolidated Agents page and its shared source
+    // chooser. Checking the base URL exercises Agent Card discovery without
     // creating a half-configured connection.
-    await goToPage(page, "/a2a/agents");
+    await goToPage(page, "/agents");
     await page
-      .getByRole("button", { name: "Connect agent", exact: true })
+      .getByRole("button", { name: "Add Agent", exact: true })
       .first()
       .click();
-    await expect(page).toHaveURL(/\/a2a\/agents\/new$/);
+    await expect(page).toHaveURL(/\/agents\/new$/);
+    await page.getByRole("button", { name: /Connect via A2A/ }).click();
+    await expect(page).toHaveURL(/\/agents\/a2a\/new$/);
     await expect(
       page.getByRole("heading", {
         name: "Connect external A2A agent",
@@ -73,7 +75,7 @@ test("delegates from a parent agent to an external A2A agent", async ({
     const createdResponse = await createRemoteResponse;
     expect(createdResponse.ok()).toBe(true);
     remoteAgent = (await createdResponse.json()) as RemoteAgent;
-    await expect(page).toHaveURL(new RegExp(`/a2a/agents/${remoteAgent.id}$`));
+    await expect(page).toHaveURL(new RegExp(`/agents/a2a/${remoteAgent.id}$`));
     await expect(
       page.getByRole("heading", { name: remoteName, level: 1 }),
     ).toBeVisible({ timeout: 15_000 });

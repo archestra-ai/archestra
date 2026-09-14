@@ -10,35 +10,15 @@ import {
 import { requiredPagePermissionsMap } from "@archestra/shared/access-control";
 import { useQueryClient } from "@tanstack/react-query";
 import {
-  AppWindow,
   BookOpen,
-  Bot,
-  Boxes,
-  Brain,
   Bug,
-  Cable,
-  CircleDollarSign,
-  Database,
-  Files,
-  FolderKanban,
   Github,
-  Inbox,
-  KeyRound,
   type LucideIcon,
   MessageCircle,
-  MessagesSquare,
   MoreHorizontal,
-  Network,
   PencilRuler,
-  Plug,
-  Puzzle,
-  Route,
-  Settings,
-  ShieldCheck,
   Slack,
-  Sparkles,
   Star,
-  Waypoints,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -54,7 +34,6 @@ import {
   type NavItem,
 } from "@/app/_parts/studio-nav";
 import { AppLogo } from "@/components/app-logo";
-import { McpRegistryAttentionBadge } from "@/components/mcp-registry-attention-badge";
 import { OnboardingDot } from "@/components/onboarding-dot";
 import { SidebarWarningsAccordion } from "@/components/sidebar-warnings-accordion";
 import { Badge } from "@/components/ui/badge";
@@ -101,6 +80,7 @@ function routeSidebarMode(pathname: string): SidebarMode | null {
   }
   const studioPrefixes = [
     "/agents",
+    "/a2a",
     "/skills",
     "/plugins",
     "/mcp",

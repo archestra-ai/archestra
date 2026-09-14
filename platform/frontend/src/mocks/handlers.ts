@@ -8,7 +8,7 @@ import {
   clientFilterToAgentIds,
 } from "@archestra/shared/interactions/client";
 import { type HttpHandler, HttpResponse, http, type JsonBodyType } from "msw";
-import { agentsSeed, makeAgent } from "./data/agents";
+import { agentsSeed, makeAgent, makeAgentCatalog } from "./data/agents";
 import {
   adminPermissionsSeed,
   betterAuthOrgSeed,
@@ -279,6 +279,7 @@ export const handlers: HttpHandler[] = [
 
   // Agents
   ...getJson("/api/agents", agentsSeed),
+  ...getJson("/api/agent-catalog", makeAgentCatalog()),
   ...getJson("/api/agents/all", []),
   // Keep literal agent routes before `:id`, or MSW treats the literal segment
   // as an id and returns an agent-shaped response to the activation editor.

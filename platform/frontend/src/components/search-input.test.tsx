@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useQueryParamsAdapter } from "@/lib/hooks/use-query-params-adapter";
 import { SearchInput } from "./search-input";
 
 vi.mock("next/navigation");
@@ -75,6 +76,41 @@ describe("SearchInput", () => {
       expect(mockPush).toHaveBeenCalledWith("/mcp/registry?search=tools", {
         scroll: false,
       });
+    });
+  });
+
+  it("updates only the adapted search and pagination keys", async () => {
+    vi.mocked(usePathname).mockReturnValue("/agents");
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams(
+        "name=regular&page=4&externalName=remote&externalPage=3",
+      ) as unknown as ReturnType<typeof useSearchParams>,
+    );
+
+    function ExternalSearch() {
+      const queryParamsAdapter = useQueryParamsAdapter({
+        paramNames: { name: "externalName", page: "externalPage" },
+      });
+      return (
+        <SearchInput
+          placeholder="Search external agents"
+          paramName="name"
+          debounceMs={0}
+          queryParamsAdapter={queryParamsAdapter}
+        />
+      );
+    }
+
+    render(<ExternalSearch />);
+    fireEvent.change(screen.getByPlaceholderText("Search external agents"), {
+      target: { value: "updated" },
+    });
+
+    await waitFor(() => {
+      expect(mockPush).toHaveBeenCalledWith(
+        "/agents?name=regular&page=4&externalName=updated&externalPage=1",
+        { scroll: false },
+      );
     });
   });
   /**

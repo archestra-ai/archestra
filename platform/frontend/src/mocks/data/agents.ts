@@ -2,6 +2,11 @@ import type { archestraApiTypes } from "@archestra/shared";
 
 type AgentsList = archestraApiTypes.GetAgentsResponses["200"];
 type Agent = AgentsList["data"][number];
+type AgentCatalog = archestraApiTypes.GetAgentCatalogResponses["200"];
+export type ExternalAgent = Extract<
+  AgentCatalog["data"][number],
+  { type: "external" }
+>["value"];
 
 export function makeAgent(overrides: Partial<Agent> = {}): Agent {
   return {
@@ -62,18 +67,55 @@ export function makeAgentsList(
   } = {},
 ): AgentsList {
   const agents = overrides.agents ?? [];
+  const total = overrides.pagination?.total ?? agents.length;
   return {
     data: agents,
-    pagination: {
-      currentPage: 1,
-      limit: 50,
-      total: agents.length,
-      totalPages: agents.length === 0 ? 0 : 1,
-      hasNext: false,
-      hasPrev: false,
-      ...overrides.pagination,
+    pagination: makePagination(total, overrides.pagination),
+  };
+}
+
+export function makeAgentCatalog({
+  agents = [],
+  externalAgents = [],
+  total = agents.length + externalAgents.length,
+  agentTotal = agents.length,
+  externalAgentTotal = externalAgents.length,
+}: {
+  agents?: Agent[];
+  externalAgents?: ExternalAgent[];
+  total?: number;
+  agentTotal?: number;
+  externalAgentTotal?: number;
+} = {}): AgentCatalog {
+  return {
+    data: [
+      ...externalAgents.map((value) => ({ type: "external" as const, value })),
+      ...agents.map((value) => ({ type: "agent" as const, value })),
+    ],
+    pagination: makePagination(total),
+    totals: {
+      agents: agentTotal,
+      externalAgents: externalAgentTotal,
     },
   };
 }
 
 export const agentsSeed = makeAgentsList();
+
+function makePagination(
+  total: number,
+  overrides: Partial<AgentsList["pagination"]> = {},
+): AgentsList["pagination"] {
+  const currentPage = overrides.currentPage ?? 1;
+  const limit = overrides.limit ?? 50;
+  const totalPages = Math.ceil(total / limit);
+  return {
+    currentPage,
+    limit,
+    total,
+    totalPages,
+    hasNext: currentPage < totalPages,
+    hasPrev: currentPage > 1,
+    ...overrides,
+  };
+}

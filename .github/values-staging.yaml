@@ -75,6 +75,9 @@ archestra:
   env:
     ARCHESTRA_ANALYTICS: disabled
     ARCHESTRA_BETA: "true"
+    # Register APPA only in staging. OpenAPPA itself stays disabled until the
+    # deployment receives its policy file from the separately managed cluster.
+    ARCHESTRA_LLM_PROXY_PLUGINS: "appa"
     # BETA: MCP registry attention, ownership and dismissal workflows.
     # Explicit so staging keeps it if the beta master switch is disabled.
     ARCHESTRA_MCP_SERVER_ALERTING_ENABLED: "true"

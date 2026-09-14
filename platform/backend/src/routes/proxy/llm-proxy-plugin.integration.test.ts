@@ -6,7 +6,10 @@ import {
 } from "fastify-type-provider-zod";
 import { vi } from "vitest";
 import { InteractionModel, ModelModel } from "@/models";
-import { registerLlmProxyPlugin } from "@/proxy/plugins/registry";
+import {
+  getLlmProxyPluginRegistry,
+  registerLlmProxyPlugin,
+} from "@/proxy/plugins/registry";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { createOpenAiTestClient } from "@/test/llm-provider-stubs";
 import { openaiAdapterFactory } from "./adapters";
@@ -38,6 +41,75 @@ describe("LLM proxy plugin lifecycle", () => {
   afterEach(async () => {
     vi.restoreAllMocks();
     await app.close();
+  });
+
+  async function assertBaselineProxyResponse(params: {
+    agentId: string;
+    stream: boolean;
+  }) {
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${params.agentId}/chat/completions`,
+      headers: {
+        authorization: "Bearer test-key",
+        "content-type": "application/json",
+      },
+      payload: {
+        model: "gpt-4o",
+        messages: [{ role: "user", content: "hello" }],
+        stream: params.stream,
+      },
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+  }
+
+  test("preserves the non-streaming proxy flow with no configured plugins", async ({
+    makeAgent,
+  }) => {
+    expect(getLlmProxyPluginRegistry().hasPlugins()).toBe(false);
+    const agent = await makeAgent({
+      agentType: "llm_proxy",
+      isDefault: true,
+    });
+    await assertBaselineProxyResponse({ agentId: agent.id, stream: false });
+  });
+
+  test("preserves the streaming proxy flow with no configured plugins", async ({
+    makeAgent,
+  }) => {
+    expect(getLlmProxyPluginRegistry().hasPlugins()).toBe(false);
+    const agent = await makeAgent({
+      agentType: "llm_proxy",
+      isDefault: true,
+    });
+    await assertBaselineProxyResponse({ agentId: agent.id, stream: true });
+  });
+
+  test("preserves proxy error handling with no configured plugins", async ({
+    makeAgent,
+  }) => {
+    expect(getLlmProxyPluginRegistry().hasPlugins()).toBe(false);
+    vi.spyOn(openaiAdapterFactory, "createClient").mockImplementation(() => {
+      throw new Error("provider unavailable");
+    });
+    const agent = await makeAgent({ agentType: "llm_proxy", isDefault: true });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/chat/completions`,
+      headers: {
+        authorization: "Bearer test-key",
+        "content-type": "application/json",
+      },
+      payload: {
+        model: "gpt-4o",
+        messages: [{ role: "user", content: "hello" }],
+      },
+    });
+
+    expect(response.statusCode, response.body).toBeGreaterThanOrEqual(400);
+    expect(response.body).toContain("provider unavailable");
   });
 
   test("runs generic request and response hooks for a non-APPA request", async ({

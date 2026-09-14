@@ -1,3 +1,4 @@
+import config from "@/config";
 import logger from "@/logging";
 import type {
   CommonToolResult,
@@ -150,7 +151,12 @@ export class LlmProxyPluginRegistry {
     };
   }
 
+  hasPlugins(): boolean {
+    return this.plugins.length > 0;
+  }
+
   async onSessionInit(context: LlmProxyRequestContext): Promise<void> {
+    if (!this.hasPlugins()) return;
     if (this.sessions.has(context.requestId)) {
       throw new Error(
         `LLM proxy request ${context.requestId} is already active`,
@@ -174,16 +180,21 @@ export class LlmProxyPluginRegistry {
   }
 
   async onPrompt(context: LlmProxyPromptContext): Promise<void> {
+    if (!this.hasPlugins()) return;
     await this.dispatch(context, "onPrompt");
   }
 
   async onBeforeModel(context: LlmProxyBeforeModelContext): Promise<void> {
+    if (!this.hasPlugins()) return;
     await this.dispatch(context, "onBeforeModel");
   }
 
   async onToolCalls(
     context: LlmProxyToolCallsContext,
   ): Promise<LlmProxyToolCallsOutcome> {
+    if (!this.hasPlugins()) {
+      return { decision: "allow", toolCalls: context.toolCalls };
+    }
     let outcome: LlmProxyToolCallsOutcome = {
       decision: "allow",
       toolCalls: context.toolCalls,
@@ -207,6 +218,7 @@ export class LlmProxyPluginRegistry {
   async onToolResults(
     context: LlmProxyToolResultsContext,
   ): Promise<LlmProxyToolResultsOutcome> {
+    if (!this.hasPlugins()) return EMPTY_TOOL_RESULTS_OUTCOME;
     const updates: Record<string, string> = {};
     let toolResults = context.toolResults;
     let contextTrust: LlmProxyContextTrust | undefined;
@@ -232,6 +244,7 @@ export class LlmProxyPluginRegistry {
   async onModelResponse(
     context: LlmProxyModelResponseContext,
   ): Promise<unknown> {
+    if (!this.hasPlugins()) return context.response;
     let response = context.response;
     for (const plugin of this.getSessionPlugins(context)) {
       const result = await this.invoke(plugin, "onModelResponse", {
@@ -244,6 +257,7 @@ export class LlmProxyPluginRegistry {
   }
 
   async complete(context: LlmProxyCompleteContext): Promise<void> {
+    if (!this.hasPlugins()) return;
     const plugins = this.getSessionPlugins(context);
     try {
       for (const plugin of plugins) {
@@ -259,6 +273,7 @@ export class LlmProxyPluginRegistry {
   }
 
   async fail(context: LlmProxyErrorContext): Promise<void> {
+    if (!this.hasPlugins()) return;
     const plugins = this.sessions.get(context.requestId);
     if (!plugins) return;
     try {
@@ -284,6 +299,7 @@ export class LlmProxyPluginRegistry {
   }
 
   private getSessionPlugins(context: LlmProxyRequestContext): LlmProxyPlugin[] {
+    if (!this.hasPlugins()) return [];
     const plugins = this.sessions.get(context.requestId);
     if (!plugins)
       throw new Error(`LLM proxy request ${context.requestId} is not active`);
@@ -352,8 +368,27 @@ export class LlmProxyPluginRegistry {
 }
 
 const defaultLlmProxyPluginRegistry = new LlmProxyPluginRegistry();
+const EMPTY_TOOL_RESULTS_OUTCOME: LlmProxyToolResultsOutcome = {
+  toolResultUpdates: {},
+};
+let configuredPlugins: Promise<void> | undefined;
 
-/** Registers a plugin for every LLM proxy request in this process. */
+/** Loads and registers the deployment's allowlisted proxy plugins once at startup. */
+export function initializeLlmProxyPlugins(): Promise<void> {
+  configuredPlugins ??= (async () => {
+    for (const pluginName of config.llmProxy.plugins) {
+      if (pluginName === "appa") {
+        const { createAppaLlmProxyPlugin } = await import(
+          "./appa-plugin-archestra"
+        );
+        defaultLlmProxyPluginRegistry.register(createAppaLlmProxyPlugin());
+      }
+    }
+  })();
+  return configuredPlugins;
+}
+
+/** @public — test-only registration verifies generic lifecycle behavior. */
 export function registerLlmProxyPlugin(plugin: LlmProxyPlugin): () => void {
   return defaultLlmProxyPluginRegistry.register(plugin);
 }

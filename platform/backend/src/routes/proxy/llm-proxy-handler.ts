@@ -83,11 +83,6 @@ import {
   sessionFromHeaders,
 } from "@/openappa/service";
 import {
-  APPA_PLUGIN_TRUSTED_CONTEXT,
-  registerAppaLlmProxyPlugin,
-} from "@/proxy/plugins/appa-plugin-archestra";
-import type { AppaTrustedContext } from "@/proxy/plugins/appa-plugin-archestra/types";
-import {
   getLlmProxyPluginRegistry,
   type LlmProxyPluginRegistry,
   type LlmProxyRequestContext,
@@ -149,14 +144,13 @@ import {
   resolveLockedChatAuditContext,
 } from "./utils/locked-chat-session";
 
+const APPA_PLUGIN_TRUSTED_CONTEXT = "archestra.appa.trusted-context";
+
 const {
   observability: {
     otel: { captureContent, contentMaxLength },
   },
 } = config;
-
-// Register at import time so every proxy route shares the same lifecycle set.
-registerAppaLlmProxyPlugin();
 
 /**
  * Shared context passed to streaming and non-streaming handlers.
@@ -164,8 +158,8 @@ registerAppaLlmProxyPlugin();
  * for maintainability and readability.
  */
 export interface LLMProxyContext<TRequest> {
-  pluginRegistry: LlmProxyPluginRegistry;
-  pluginContext: LlmProxyRequestContext;
+  pluginRegistry?: LlmProxyPluginRegistry;
+  pluginContext?: LlmProxyRequestContext;
   agent: GatewayAgent;
   originalRequest: TRequest;
   actualModel: string;
@@ -307,6 +301,7 @@ export async function handleLLMProxy<
   const agentId = (request.params as { agentId?: string }).agentId;
   const providerName = provider.provider;
   const pluginRegistry = getLlmProxyPluginRegistry();
+  const hasProxyPlugins = pluginRegistry.hasPlugins();
   let pluginContext: LlmProxyRequestContext | undefined;
 
   // Extract header-based context
@@ -1058,77 +1053,75 @@ export async function handleLLMProxy<
           }
         : undefined;
 
-    // APPA recognizes Chat only after the loopback caller's owner, organization,
-    // profile, and conversation root have been bound below.
-    const isInternalChat =
-      isAppaChatSource(source) && isLoopbackRequest(request);
-    const appaUserId =
-      authenticatedUserId ?? (isInternalChat ? userId : undefined);
-    const openappaSession = sessionFromHeaders({
-      headers: headersForExtraction,
-      organizationId: resolvedAgent.organizationId,
-      callerId: appaUserId
-        ? `user:${appaUserId}`
-        : authenticatedApp
-          ? `app:${authenticatedApp.id}`
-          : virtualKeyId
-            ? `virtual-key:${virtualKeyId}`
-            : undefined,
-    });
-    let appaTrustedContext: AppaTrustedContext | undefined;
-    if (openappaSession) {
-      if (isInternalChat && appaUserId) {
-        const conversationAgentId = await ConversationModel.getAgentIdForUser(
-          openappaSession.session_id,
-          appaUserId,
-          resolvedAgent.organizationId,
-        );
-        if (
-          !conversationAgentId ||
-          (source !== "chat:compaction" &&
-            conversationAgentId !== resolvedAgent.id)
-        ) {
-          throw new ApiError(
-            403,
-            "OpenAPPA Chat session does not match the authenticated conversation",
-          );
-        }
-      }
-      appaTrustedContext = {
-        session: openappaSession,
+    let pluginToolResultsOutcome:
+      | Awaited<ReturnType<LlmProxyPluginRegistry["onToolResults"]>>
+      | undefined;
+    if (hasProxyPlugins) {
+      // APPA recognizes Chat only after the loopback caller's owner,
+      // organization, profile, and conversation root have been bound below.
+      const isInternalChat =
+        isAppaChatSource(source) && isLoopbackRequest(request);
+      const appaUserId =
+        authenticatedUserId ?? (isInternalChat ? userId : undefined);
+      const openappaSession = sessionFromHeaders({
+        headers: headersForExtraction,
+        organizationId: resolvedAgent.organizationId,
+        callerId: appaUserId
+          ? `user:${appaUserId}`
+          : authenticatedApp
+            ? `app:${authenticatedApp.id}`
+            : virtualKeyId
+              ? `virtual-key:${virtualKeyId}`
+              : undefined,
+      });
+      pluginContext = {
+        requestId: request.id,
+        organizationId: resolvedAgent.organizationId,
         profileId: resolvedAgent.id,
-        canonicalizeToolName,
-        ...(isAppaChatSource(source) && isLoopbackRequest(request)
-          ? { chatSource: source }
-          : {}),
+        ...(userId ? { userId } : {}),
+        provider: providerName,
+        interactionType: provider.interactionType,
+        model: actualModel,
+        streaming: requestAdapter.isStreaming(),
+        headers: request.headers,
+        requestBody: requestAdapter.getOriginalRequest(),
+        resources: new Map(),
       };
+      if (openappaSession) {
+        if (isInternalChat && appaUserId) {
+          const conversationAgentId = await ConversationModel.getAgentIdForUser(
+            openappaSession.session_id,
+            appaUserId,
+            resolvedAgent.organizationId,
+          );
+          if (
+            !conversationAgentId ||
+            (source !== "chat:compaction" &&
+              conversationAgentId !== resolvedAgent.id)
+          ) {
+            throw new ApiError(
+              403,
+              "OpenAPPA Chat session does not match the authenticated conversation",
+            );
+          }
+        }
+        pluginContext.resources.set(APPA_PLUGIN_TRUSTED_CONTEXT, {
+          session: openappaSession,
+          profileId: resolvedAgent.id,
+          canonicalizeToolName,
+          ...(isAppaChatSource(source) && isLoopbackRequest(request)
+            ? { chatSource: source }
+            : {}),
+        });
+      }
+      await pluginRegistry.onSessionInit(pluginContext);
+      pluginToolResultsOutcome = await pluginRegistry.onToolResults({
+        ...pluginContext,
+        toolResults: requestAdapter.getToolResults(),
+      });
     }
-    pluginContext = {
-      requestId: request.id,
-      organizationId: resolvedAgent.organizationId,
-      profileId: resolvedAgent.id,
-      ...(userId ? { userId } : {}),
-      provider: providerName,
-      interactionType: provider.interactionType,
-      model: actualModel,
-      streaming: requestAdapter.isStreaming(),
-      headers: request.headers,
-      requestBody: requestAdapter.getOriginalRequest(),
-      resources: new Map(),
-    };
-    if (appaTrustedContext) {
-      pluginContext.resources.set(
-        APPA_PLUGIN_TRUSTED_CONTEXT,
-        appaTrustedContext,
-      );
-    }
-    await pluginRegistry.onSessionInit(pluginContext);
-    const pluginToolResultsOutcome = await pluginRegistry.onToolResults({
-      ...pluginContext,
-      toolResults: requestAdapter.getToolResults(),
-    });
     const trustedDataOutcome =
-      pluginToolResultsOutcome.contextTrust ??
+      pluginToolResultsOutcome?.contextTrust ??
       (await utils.trustedData.evaluateIfContextIsTrusted({
         messages: commonMessages,
         agentId: resolvedAgentId,
@@ -1168,7 +1161,7 @@ export async function handleLLMProxy<
     const { contextIsTrusted, dualLlmAnalyses, unsafeContextBoundary } =
       trustedDataOutcome;
     const toolResultUpdates = {
-      ...pluginToolResultsOutcome.toolResultUpdates,
+      ...pluginToolResultsOutcome?.toolResultUpdates,
       ...("toolResultUpdates" in trustedDataOutcome
         ? trustedDataOutcome.toolResultUpdates
         : {}),
@@ -1332,10 +1325,12 @@ export async function handleLLMProxy<
       },
     });
 
-    await pluginRegistry.onPrompt({
-      ...pluginContext,
-      prompt: requestAdapter.getProviderMessages(),
-    });
+    if (pluginContext) {
+      await pluginRegistry.onPrompt({
+        ...pluginContext,
+        prompt: requestAdapter.getProviderMessages(),
+      });
+    }
 
     // Build final request
     const builtRequest = requestAdapter.toProviderRequest();
@@ -1418,8 +1413,7 @@ export async function handleLLMProxy<
     }
 
     const ctx: LLMProxyContext<TRequest> = {
-      pluginRegistry,
-      pluginContext,
+      ...(pluginContext ? { pluginRegistry, pluginContext } : {}),
       agent: resolvedAgent,
       originalRequest: requestAdapter.getOriginalRequest(),
       actualModel,
@@ -1712,7 +1706,9 @@ async function handleStreaming<
       parentContext,
       user: toSpanUserInfo(resolvedUser),
       callback: async (llmSpan) => {
-        await pluginRegistry.onBeforeModel({ ...pluginContext, request });
+        if (pluginRegistry && pluginContext) {
+          await pluginRegistry.onBeforeModel({ ...pluginContext, request });
+        }
         const stream = await provider.executeStream(client, request);
         billingMode = getBillingMode();
 
@@ -1894,13 +1890,19 @@ async function handleStreaming<
         "Evaluating tool invocation policies",
       );
 
-      const pluginOutcome = await evaluateProxyPluginToolCalls(
-        ctx.pluginRegistry,
-        ctx.pluginContext,
-        rewrittenToolCalls ?? toolCalls,
-      );
-      if (pluginOutcome.wasRewritten) {
-        rewrittenToolCalls = pluginOutcome.toolCalls;
+      let policyToolCalls = rewrittenToolCalls ?? toolCalls;
+      let pluginRefusal: LlmProxyToolCallRefusal | null = null;
+      if (ctx.pluginRegistry && ctx.pluginContext) {
+        const pluginOutcome = await evaluateProxyPluginToolCalls(
+          ctx.pluginRegistry,
+          ctx.pluginContext,
+          policyToolCalls,
+        );
+        if (pluginOutcome.wasRewritten) {
+          rewrittenToolCalls = pluginOutcome.toolCalls;
+          policyToolCalls = pluginOutcome.toolCalls;
+        }
+        pluginRefusal = pluginOutcome.refusal;
       }
 
       // Policies are evaluated against the rewritten calls, which
@@ -1908,12 +1910,9 @@ async function handleStreaming<
       // targets — so a repaired call faces exactly the gate a `run_tool`
       // dispatch the model wrote itself would have faced.
       toolInvocationRefusal =
-        pluginOutcome.refusal ??
+        pluginRefusal ??
         (await utils.toolInvocation.evaluatePolicies(
-          normalizeToolCallsForPolicy(
-            pluginOutcome.toolCalls,
-            canonicalizeToolName,
-          ),
+          normalizeToolCallsForPolicy(policyToolCalls, canonicalizeToolName),
           agent.id,
           {
             teamIds: teamIds ?? [],
@@ -1993,15 +1992,16 @@ async function handleStreaming<
 
     // The stream is already client-visible. This observes the assembled wire
     // response without pretending a plugin can rewrite bytes already sent.
-    await pluginRegistry.onModelResponse({
-      ...pluginContext,
-      response: streamAdapter.toProviderResponse(),
-    });
-
-    await pluginRegistry.complete({
-      ...pluginContext,
-      response: streamAdapter.toProviderResponse(),
-    });
+    if (pluginRegistry && pluginContext) {
+      await pluginRegistry.onModelResponse({
+        ...pluginContext,
+        response: streamAdapter.toProviderResponse(),
+      });
+      await pluginRegistry.complete({
+        ...pluginContext,
+        response: streamAdapter.toProviderResponse(),
+      });
+    }
 
     // Stream end events
     writeToClient(streamAdapter.formatEndSSE());
@@ -2012,7 +2012,9 @@ async function handleStreaming<
   } catch (error) {
     let lifecycleError = error;
     try {
-      await pluginRegistry.fail({ ...pluginContext, error });
+      if (pluginRegistry && pluginContext) {
+        await pluginRegistry.fail({ ...pluginContext, error });
+      }
     } catch (pluginError) {
       lifecycleError = pluginError;
     }
@@ -2273,7 +2275,9 @@ async function handleNonStreaming<
       // must not double-report here — the flag gates that.
       let result: TResponse;
       try {
-        await pluginRegistry.onBeforeModel({ ...pluginContext, request });
+        if (pluginRegistry && pluginContext) {
+          await pluginRegistry.onBeforeModel({ ...pluginContext, request });
+        }
         result = await provider.execute(client, request);
         billingMode = getBillingMode();
       } catch (error) {
@@ -2409,22 +2413,25 @@ async function handleNonStreaming<
       providerName,
     });
 
-    const pluginOutcome = await evaluateProxyPluginToolCalls(
-      ctx.pluginRegistry,
-      ctx.pluginContext,
-      rewrittenToolCalls ?? emittedToolCalls,
-    );
-    if (pluginOutcome.wasRewritten) {
-      rewrittenToolCalls = pluginOutcome.toolCalls;
+    let policyToolCalls = rewrittenToolCalls ?? emittedToolCalls;
+    let pluginRefusal: LlmProxyToolCallRefusal | null = null;
+    if (ctx.pluginRegistry && ctx.pluginContext) {
+      const pluginOutcome = await evaluateProxyPluginToolCalls(
+        ctx.pluginRegistry,
+        ctx.pluginContext,
+        policyToolCalls,
+      );
+      if (pluginOutcome.wasRewritten) {
+        rewrittenToolCalls = pluginOutcome.toolCalls;
+        policyToolCalls = pluginOutcome.toolCalls;
+      }
+      pluginRefusal = pluginOutcome.refusal;
     }
 
     const toolInvocationRefusal: LlmProxyToolCallRefusal | null =
-      pluginOutcome.refusal ??
+      pluginRefusal ??
       (await utils.toolInvocation.evaluatePolicies(
-        normalizeToolCallsForPolicy(
-          pluginOutcome.toolCalls,
-          canonicalizeToolName,
-        ),
+        normalizeToolCallsForPolicy(policyToolCalls, canonicalizeToolName),
         agent.id,
         {
           teamIds: teamIds ?? [],
@@ -2528,10 +2535,12 @@ async function handleNonStreaming<
         delegationBillingEnvironmentId,
       );
 
-      await pluginRegistry.complete({
-        ...pluginContext,
-        response: refusalResponse,
-      });
+      if (pluginRegistry && pluginContext) {
+        await pluginRegistry.complete({
+          ...pluginContext,
+          response: refusalResponse,
+        });
+      }
       return reply.send(refusalResponse);
     }
   }
@@ -2546,10 +2555,13 @@ async function handleNonStreaming<
     rewrittenToolCalls && responseAdapter.withRewrittenToolCalls
       ? responseAdapter.withRewrittenToolCalls(rewrittenToolCalls)
       : responseAdapter.getOriginalResponse();
-  const clientResponse = (await pluginRegistry.onModelResponse({
-    ...pluginContext,
-    response: unobservedClientResponse,
-  })) as TResponse;
+  const clientResponse =
+    pluginRegistry && pluginContext
+      ? ((await pluginRegistry.onModelResponse({
+          ...pluginContext,
+          response: unobservedClientResponse,
+        })) as TResponse)
+      : unobservedClientResponse;
 
   // Note: Token metrics are reported by getObservableFetch() in the HTTP layer
   // for non-streaming requests. We only report cost here to avoid double counting.
@@ -2633,7 +2645,12 @@ async function handleNonStreaming<
     );
   }
 
-  await pluginRegistry.complete({ ...pluginContext, response: clientResponse });
+  if (pluginRegistry && pluginContext) {
+    await pluginRegistry.complete({
+      ...pluginContext,
+      response: clientResponse,
+    });
+  }
   return reply.send(clientResponse);
 }
 

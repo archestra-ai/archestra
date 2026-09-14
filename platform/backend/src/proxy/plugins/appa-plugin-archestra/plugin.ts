@@ -15,7 +15,7 @@ import type {
 import type { AppaClientAdapter, AppaTrustedContext } from "./types";
 
 const APPA_PLUGIN_BINDING = "archestra.appa.binding";
-export const APPA_PLUGIN_TRUSTED_CONTEXT = "archestra.appa.trusted-context";
+const APPA_PLUGIN_TRUSTED_CONTEXT = "archestra.appa.trusted-context";
 const APPA_PLUGIN_ADAPTER = "archestra.appa.adapter";
 
 type AppaPluginBinding = {

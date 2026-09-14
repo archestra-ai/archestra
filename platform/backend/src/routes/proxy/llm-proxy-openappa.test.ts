@@ -13,6 +13,8 @@ import * as database from "@/database";
 import * as toolInvocation from "@/guardrails/tool-invocation";
 import * as trustedData from "@/guardrails/trusted-data";
 import { ModelModel } from "@/models";
+import { createAppaLlmProxyPlugin } from "@/proxy/plugins/appa-plugin-archestra";
+import { registerLlmProxyPlugin } from "@/proxy/plugins/registry";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import {
   type AnthropicStubOptions,
@@ -38,9 +40,11 @@ describe("OpenAPPA on the existing LLM proxy", () => {
   let events: Array<Record<string, unknown>>;
   let block: boolean;
   let fail: boolean;
+  let unregisterAppaPlugin: () => void;
 
   beforeEach(async ({ makeAgent, makeConversation, makeMember, makeUser }) => {
     config.openappa = { enabled: true, policyPath: "/test/policy.toml" };
+    unregisterAppaPlugin = registerLlmProxyPlugin(createAppaLlmProxyPlugin());
     vi.spyOn(database, "getDatabaseConnectionString").mockReturnValue(
       "postgresql://test:test@localhost/test?schema=public",
     );
@@ -122,6 +126,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
   });
 
   afterEach(async () => {
+    unregisterAppaPlugin();
     vi.restoreAllMocks();
     vi.unstubAllEnvs();
     await app.close();

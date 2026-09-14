@@ -1,4 +1,4 @@
-import { describe, expect, test } from "@/test";
+import { describe, expect, test, vi } from "@/test";
 import {
   type LlmProxyPlugin,
   LlmProxyPluginRegistry,
@@ -21,6 +21,29 @@ function requestContext(): LlmProxyRequestContext {
 }
 
 describe("LlmProxyPluginRegistry", () => {
+  test("does not allocate lifecycle state or invoke callbacks when empty", async () => {
+    const registry = new LlmProxyPluginRegistry();
+    const context = requestContext();
+    const set = vi.spyOn(Map.prototype, "set");
+
+    await registry.onSessionInit(context);
+    await registry.onPrompt({ ...context, prompt: {} });
+    await registry.onBeforeModel({ ...context, request: {} });
+    await expect(
+      registry.onToolCalls({ ...context, toolCalls: [] }),
+    ).resolves.toEqual({ decision: "allow", toolCalls: [] });
+    await expect(
+      registry.onToolResults({ ...context, toolResults: [] }),
+    ).resolves.toEqual({ toolResultUpdates: {} });
+    await expect(
+      registry.onModelResponse({ ...context, response: "provider" }),
+    ).resolves.toBe("provider");
+    await registry.complete(context);
+    await registry.fail({ ...context, error: new Error("provider failed") });
+
+    expect(set).not.toHaveBeenCalled();
+  });
+
   test("runs registered plugins in order and stops at a refusal", async () => {
     const registry = new LlmProxyPluginRegistry();
     const events: string[] = [];

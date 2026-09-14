@@ -2076,7 +2076,8 @@ To learn more about enterprise licensing, see the [pricing model](/docs/platform
 
 ### OpenAPPA Tool Guardrails (experimental)
 
-- `ARCHESTRA_OPENAPPA_ENABLED`: explicit opt-in, default `false`. `ARCHESTRA_BETA` and a policy path do not enable it.
+- `ARCHESTRA_LLM_PROXY_PLUGINS`: comma-separated startup allowlist. It defaults to empty. `appa` is the only supported value.
+- `ARCHESTRA_OPENAPPA_ENABLED`: explicit opt-in, default `false`. It requires `ARCHESTRA_LLM_PROXY_PLUGINS=appa`. `ARCHESTRA_BETA` and a policy path do not enable it.
 - `ARCHESTRA_OPENAPPA_POLICY_PATH`: absolute deployment TOML path, required when enabled.
 
 Restart the backend after changing these settings. While disabled, existing Tool

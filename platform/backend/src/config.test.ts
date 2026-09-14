@@ -62,6 +62,7 @@ import config, {
   // SPDX-SnippetEnd
   parseK8sResourceQuantity,
   parseKeepAliveTimeoutMs,
+  parseLlmProxyPlugins,
   parseLogFormat,
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -3469,6 +3470,17 @@ describe("parseOtelCaptureContent", () => {
 });
 
 describe("OpenAPPA feature configuration", () => {
+  test("defaults proxy plugins to empty and accepts only the APPA plugin", () => {
+    expect(parseLlmProxyPlugins(undefined)).toEqual([]);
+    expect(parseLlmProxyPlugins(" appa ")).toEqual(["appa"]);
+    expect(() => parseLlmProxyPlugins("unknown")).toThrow(
+      "ARCHESTRA_LLM_PROXY_PLUGINS contains unsupported plugin names",
+    );
+    expect(() => parseLlmProxyPlugins("appa,appa")).toThrow(
+      "ARCHESTRA_LLM_PROXY_PLUGINS must not contain duplicates",
+    );
+  });
+
   test.each([
     undefined,
     "",
@@ -3485,7 +3497,7 @@ describe("OpenAPPA feature configuration", () => {
   });
   test("requires a policy path only for explicit activation", () => {
     expect(parseOpenAppaConfig(undefined, undefined).enabled).toBe(false);
-    expect(parseOpenAppaConfig("true", "/policy.toml")).toEqual({
+    expect(parseOpenAppaConfig("true", "/policy.toml", ["appa"])).toEqual({
       enabled: true,
       policyPath: "/policy.toml",
     });
@@ -3494,5 +3506,8 @@ describe("OpenAPPA feature configuration", () => {
         "ARCHESTRA_OPENAPPA_POLICY_PATH is required",
       );
     }
+    expect(() => parseOpenAppaConfig("true", "/policy.toml")).toThrow(
+      "ARCHESTRA_LLM_PROXY_PLUGINS=appa",
+    );
   });
 });

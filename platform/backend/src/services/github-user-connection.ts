@@ -301,7 +301,9 @@ function hash(value: string) {
   return createHash("sha256").update(value).digest("base64url");
 }
 function flowIdentifier(owner: Owner) {
-  return `github-user:${hash(JSON.stringify([owner.organizationId, owner.userId, owner.credentialId]))}`;
+  // These are database identifiers, not credentials. JSON preserves unambiguous
+  // boundaries between owners without applying password-like hashing to identity.
+  return `github-user:${JSON.stringify([owner.organizationId, owner.userId, owner.credentialId])}`;
 }
 function callbackUrl() {
   return `${config.frontendBaseUrl}/settings/credentials/github/callback`;

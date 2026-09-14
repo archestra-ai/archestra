@@ -62,6 +62,7 @@ export async function listA2aRemoteAgents(params: {
   scope?: ResourceVisibilityScope;
   teamId?: string;
   authorId?: string;
+  ids?: string[];
 }): Promise<PublicA2aRemoteAgent[]> {
   const rows = await A2aRemoteAgentModel.findAllVisible(params);
   return hydratePublicRemoteAgents(rows);

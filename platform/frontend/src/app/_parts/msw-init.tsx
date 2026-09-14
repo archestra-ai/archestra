@@ -11,6 +11,7 @@ type HandlerOverride = {
   status?: number;
   body?: unknown;
   once?: boolean;
+  delayMs?: number;
 };
 
 declare global {

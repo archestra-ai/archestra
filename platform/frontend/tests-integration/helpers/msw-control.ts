@@ -8,6 +8,7 @@ export type HandlerOverride = {
   status?: number;
   body?: unknown;
   once?: boolean;
+  delayMs?: number;
 };
 
 export class MswControl {

@@ -3,8 +3,11 @@
  * Used across backend, frontend, and e2e-tests.
  */
 import { AGENT_TOOL_PREFIX } from "./agents";
+import { BUILT_IN_AGENT_IDS } from "./built-in-agent-ids";
 import { POLICY_CONFIG_SYSTEM_PROMPT_EXPRESSIONS } from "./system-prompt-template";
 import { slugify } from "./utils";
+
+export { BUILT_IN_AGENT_IDS } from "./built-in-agent-ids";
 
 /** Display names for built-in agents */
 export const BUILT_IN_AGENT_NAMES = {
@@ -16,10 +19,6 @@ export const BUILT_IN_AGENT_NAMES = {
   APP_RUNTIME: "App Runtime LLM Agent",
   ADVISOR: "Advisor",
 } as const;
-
-import { BUILT_IN_AGENT_IDS } from "./built-in-agent-ids";
-
-export { BUILT_IN_AGENT_IDS } from "./built-in-agent-ids";
 
 /**
  * Default question rounds per dual LLM analysis. Three rounds capture what

@@ -29,7 +29,7 @@ Hover or focus an agent's provider logo to see its configured key name and model
 
 ## Creating and Editing an Agent
 
-**Create Agent** opens a setup wizard. **Configuration** asks for the name, visibility, instructions, and model. **Tools, Skills & Knowledge** picks the tools, knowledge sources, subagents, skills, and hooks. **Messaging Channels** sets where the agent answers. **Advanced** holds labels, security, and the identity provider. Nothing is saved until you press **Create** on the last step. A confirmation page summarizes its email address and assigned messaging channels. Select **Chat** to start a conversation with the new agent.
+**Add Agent** opens a catalog. Start from scratch to open the setup wizard. When the Agent runtime is enabled, popular agents can prefill that wizard. **Configuration** asks for the name, visibility, instructions, and model. **Tools, Skills & Knowledge** picks the tools, knowledge sources, subagents, skills, and hooks. **Messaging Channels** sets where the agent answers. **Advanced** holds labels, security, and the identity provider. Nothing is saved until you press **Create** on the last step. A confirmation page summarizes its email address and assigned messaging channels. Select **Chat** to start a conversation with the new agent.
 
 Every agent has its own page, and that page is where you change it. The same three groups are its tabs, edited in place: **Configuration**, **Tools, Skills & Knowledge**, and **Advanced**. **Save changes** writes the tab you are on and leaves you there, so a rename is one save rather than a walk through the rest. **Connect** holds the endpoint, authentication options, and examples.
 

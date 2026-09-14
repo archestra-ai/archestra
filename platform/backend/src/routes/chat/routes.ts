@@ -112,6 +112,7 @@ import { toConversationApiMessages } from "@/models/conversation";
 import { reportChatMessageFeedback } from "@/observability/metrics/chat";
 import { reportQuoteVerification } from "@/observability/metrics/rag";
 import { startActiveChatSpan } from "@/observability/tracing";
+import { openappaEnabled } from "@/openappa/service";
 import { mcpGatewayTaskRunner } from "@/routes/mcp-gateway/tasks";
 import {
   ACTIVE_CHAT_RUN_TERMINAL_REPLAY_GRACE_MS,
@@ -407,6 +408,13 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       if (!conversation) {
         throw new ApiError(404, "Conversation not found");
+      }
+
+      if (openappaEnabled() && conversation.lockedChat) {
+        throw new ApiError(
+          409,
+          "OpenAPPA does not yet support encrypted policy storage for locked chats",
+        );
       }
 
       // Check if the agent was deleted

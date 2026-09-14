@@ -1,0 +1,29 @@
+[package]
+name = "openappa_rs"
+version = "0.1.0"
+edition = "2024"
+build = "build.rs"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "581124c212860713010522971afbd7ab4677cb8d" }
+appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "581124c212860713010522971afbd7ab4677cb8d" }
+appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "581124c212860713010522971afbd7ab4677cb8d", features = ["postgres"] }
+napi = { version = "3", features = ["tokio_rt"] }
+napi-derive = "3"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["raw_value"] }
+sha2 = "0.10"
+tokio = { version = "1", features = ["sync"] }
+futures-util = "0.3"
+
+[target.'cfg(target_env = "musl")'.dependencies]
+# Cross-builds need OpenSSL compiled for musl. The Docker builder uses its
+# installed OpenSSL through OPENSSL_NO_VENDOR instead.
+openssl = { version = "0.10", features = ["vendored"] }
+
+[build-dependencies]
+napi-build = "2"

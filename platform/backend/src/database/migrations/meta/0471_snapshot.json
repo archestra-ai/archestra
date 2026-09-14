@@ -1,5 +1,5 @@
 {
-  "id": "25a6ffb1-479d-487a-b01f-ebfb33faba44",
+  "id": "5866570b-5d1a-4fcd-a4f3-ecc600380c4e",
   "prevId": "a24271d6-6172-4323-bc52-69fe163acd89",
   "version": "7",
   "dialect": "postgresql",
@@ -19974,18 +19974,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "github_client_id": {
-          "name": "github_client_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "github_app_credential_key": {
-          "name": "github_app_credential_key",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "description": {
           "name": "description",
           "type": "text",
@@ -26209,6 +26197,346 @@
           "onUpdate": "no action"
         }
       },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.openappa_events": {
+      "name": "openappa_events",
+      "schema": "",
+      "columns": {
+        "root": {
+          "name": "root",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "seq": {
+          "name": "seq",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "payload": {
+          "name": "payload",
+          "type": "bytea",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "openappa_events_root_seq_pk": {
+          "name": "openappa_events_root_seq_pk",
+          "columns": [
+            "root",
+            "seq"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "openappa_events_seq_nonnegative": {
+          "name": "openappa_events_seq_nonnegative",
+          "value": "\"openappa_events\".\"seq\" >= 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.openappa_operations": {
+      "name": "openappa_operations",
+      "schema": "",
+      "columns": {
+        "organization_id": {
+          "name": "organization_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "caller_id": {
+          "name": "caller_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "session_id": {
+          "name": "session_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "operation_id": {
+          "name": "operation_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "root": {
+          "name": "root",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "input": {
+          "name": "input",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "decision": {
+          "name": "decision",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "openappa_operations_pending_idx": {
+          "name": "openappa_operations_pending_idx",
+          "columns": [
+            {
+              "expression": "root",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"openappa_operations\".\"status\" = 'pending'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "openappa_operations_pk": {
+          "name": "openappa_operations_pk",
+          "columns": [
+            "organization_id",
+            "caller_id",
+            "session_id",
+            "operation_id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "openappa_operations_status": {
+          "name": "openappa_operations_status",
+          "value": "(\"openappa_operations\".\"status\" = 'pending' AND \"openappa_operations\".\"decision\" IS NULL) OR (\"openappa_operations\".\"status\" = 'complete' AND \"openappa_operations\".\"decision\" IS NOT NULL)"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.openappa_policy_files": {
+      "name": "openappa_policy_files",
+      "schema": "",
+      "columns": {
+        "hash": {
+          "name": "hash",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "bytes": {
+          "name": "bytes",
+          "type": "bytea",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.openappa_processed_results": {
+      "name": "openappa_processed_results",
+      "schema": "",
+      "columns": {
+        "organization_id": {
+          "name": "organization_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "caller_id": {
+          "name": "caller_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "session_id": {
+          "name": "session_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tool_call_id": {
+          "name": "tool_call_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "root": {
+          "name": "root",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "approved_output": {
+          "name": "approved_output",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "decision": {
+          "name": "decision",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "openappa_results_pending_idx": {
+          "name": "openappa_results_pending_idx",
+          "columns": [
+            {
+              "expression": "root",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"openappa_processed_results\".\"status\" = 'pending'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "openappa_results_pk": {
+          "name": "openappa_results_pk",
+          "columns": [
+            "organization_id",
+            "caller_id",
+            "session_id",
+            "tool_call_id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "openappa_results_status": {
+          "name": "openappa_results_status",
+          "value": "(\"openappa_processed_results\".\"status\" = 'pending' AND \"openappa_processed_results\".\"approved_output\" IS NULL AND \"openappa_processed_results\".\"decision\" IS NULL) OR (\"openappa_processed_results\".\"status\" = 'complete' AND \"openappa_processed_results\".\"approved_output\" IS NOT NULL AND \"openappa_processed_results\".\"decision\" IS NOT NULL)"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.openappa_sessions": {
+      "name": "openappa_sessions",
+      "schema": "",
+      "columns": {
+        "actor": {
+          "name": "actor",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "root": {
+          "name": "root",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "organization_id": {
+          "name": "organization_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "caller_id": {
+          "name": "caller_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "session_id": {
+          "name": "session_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "parent_id": {
+          "name": "parent_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "start_decision": {
+          "name": "start_decision",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "openappa_sessions_root_idx": {
+          "name": "openappa_sessions_root_idx",
+          "columns": [
+            {
+              "expression": "root",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},

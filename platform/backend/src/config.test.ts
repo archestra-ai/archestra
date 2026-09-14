@@ -70,6 +70,7 @@ import config, {
   // SPDX-SnippetEnd
   parseMetricsPort,
   parseNonNegativeInt,
+  parseOpenAppaConfig,
   parseOptionalPort,
   parseOtelCaptureContent,
   parseProcessType,
@@ -3464,5 +3465,34 @@ describe("parseOtelCaptureContent", () => {
         contentEncryptionConfigured: true,
       }),
     ).toBe(false);
+  });
+});
+
+describe("OpenAPPA feature configuration", () => {
+  test.each([
+    undefined,
+    "",
+    "false",
+    "TRUE",
+    "1",
+  ])("does not activate from a policy path or beta flag when enabled=%s", (enabled) => {
+    vi.stubEnv("ARCHESTRA_BETA", "true");
+    expect(parseOpenAppaConfig(enabled, "/policy.toml")).toEqual({
+      enabled: false,
+      policyPath: "/policy.toml",
+    });
+    vi.unstubAllEnvs();
+  });
+  test("requires a policy path only for explicit activation", () => {
+    expect(parseOpenAppaConfig(undefined, undefined).enabled).toBe(false);
+    expect(parseOpenAppaConfig("true", "/policy.toml")).toEqual({
+      enabled: true,
+      policyPath: "/policy.toml",
+    });
+    for (const path of [undefined, "", "   "]) {
+      expect(() => parseOpenAppaConfig("true", path)).toThrow(
+        "ARCHESTRA_OPENAPPA_POLICY_PATH is required",
+      );
+    }
   });
 });

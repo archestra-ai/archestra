@@ -73,6 +73,11 @@ import config from "@/config";
 import { LOCKED_CHAT_KEY_HEADER } from "@/content-encryption/locked-chat";
 import logger from "@/logging";
 import ModelModel from "@/models/model";
+import {
+  APPA_PARENT_HEADER,
+  APPA_SESSION_HEADER,
+  openappaEnabled,
+} from "@/openappa/service";
 import { ApiError } from "@/types";
 import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
 import { LlmProviderAuthRequiredError } from "@/utils/llm-provider-auth-error";
@@ -187,6 +192,7 @@ export function createLLMModel(params: {
   userId?: string;
   externalAgentId?: string;
   sessionId?: string;
+  appaParentId?: string;
   source?: InteractionSource;
   baseUrl: string | null;
   contextIsTrusted?: boolean;
@@ -242,7 +248,10 @@ export function createLLMModel(params: {
   }
   if (sessionId) {
     clientHeaders[SESSION_ID_HEADER] = sessionId;
+    if (openappaEnabled()) clientHeaders[APPA_SESSION_HEADER] = sessionId;
   }
+  if (openappaEnabled() && params.appaParentId)
+    clientHeaders[APPA_PARENT_HEADER] = params.appaParentId;
   if (source) {
     clientHeaders[SOURCE_HEADER] = source;
   }

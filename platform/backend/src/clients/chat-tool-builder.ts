@@ -65,6 +65,7 @@ import {
   type SpanTeamInfo,
   startActiveMcpSpan,
 } from "@/observability/tracing";
+import { openappaEnabled } from "@/openappa/service";
 import { TASK_TTL_MS } from "@/routes/mcp-gateway/tasks";
 import type {
   Tool as CatalogTool,
@@ -277,9 +278,10 @@ export function buildMcpGatewayTool(params: {
                 // LockedChat: never detach into a durable task — task rows
                 // persist tool results in plaintext. Forcing inline execution
                 // keeps the result inside the encrypted conversation only.
-                taskBridge: ctx.suppressContentLogging
-                  ? undefined
-                  : ctx.taskBridge,
+                taskBridge:
+                  ctx.suppressContentLogging || openappaEnabled()
+                    ? undefined
+                    : ctx.taskBridge,
                 // Lets a task minted inside run_tool attach its card to the
                 // run_tool call the user sees, not the synthetic inner id.
                 currentToolCallId: options.toolCallId,
@@ -397,7 +399,7 @@ export function buildMcpGatewayTool(params: {
               considerContextUntrusted: ctx.considerContextUntrusted,
               abortSignal: ctx.abortSignal,
               elicitation: ctx.elicitation,
-              taskBridge: ctx.taskBridge,
+              taskBridge: openappaEnabled() ? undefined : ctx.taskBridge,
               toolCallId: options.toolCallId,
               isUiProvidingTool,
               suppressContentLogging: ctx.suppressContentLogging,

@@ -2048,31 +2048,6 @@ class AgentModel {
     return agents.map((agent) => agent.name);
   }
 
-  /**
-   * Gateway identities with their owning principal. Native client namespace
-   * resolution uses this before admitting a delegated tool result.
-   */
-  static async findGatewayProfilesByOrganizationId(
-    organizationId: string,
-  ): Promise<Array<{ id: string; name: string; authorId: string | null }>> {
-    return await db
-      .select({
-        id: schema.agentsTable.id,
-        name: schema.agentsTable.name,
-        authorId: schema.agentsTable.authorId,
-      })
-      .from(schema.agentsTable)
-      .where(
-        and(
-          eq(schema.agentsTable.organizationId, organizationId),
-          notDeleted(schema.agentsTable),
-          inArray(schema.agentsTable.agentType, [
-            ...GATEWAY_CAPABLE_AGENT_TYPES,
-          ]),
-        ),
-      );
-  }
-
   static async findIdsByOrganizationId(
     organizationId: string,
   ): Promise<string[]> {

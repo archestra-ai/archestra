@@ -64,8 +64,6 @@ builtin = "hitl"
   const hook = async (session, event) => JSON.parse(await native.dispatchHook(JSON.stringify({ ...session, ...event })));
   const call = (session, id, tool) => hook(session, { event: 'tool_call', operation_id: `call:${id}`, tool, arguments: {} });
   const result = (session, id, output, outcome = 'success') => hook(session, { event: 'tool_result', tool_call_id: id, output, outcome });
-  const proxy = async (event) => JSON.parse(await native.dispatchOpenappaProxyEvent(JSON.stringify(event)));
-  const checkpoint = async (request) => JSON.parse(await native.dispatchOpenappaCheckpoint(JSON.stringify(request)));
   const restarted = (session, event) => new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [path.join(__dirname, 'smoke-worker.cjs')], { env: { ...process.env, OPENAPPA_TEST_POLICY_PATH: policyPath }, stdio: ['pipe', 'pipe', 'pipe'] });
     let stdout = '', stderr = '';
@@ -76,73 +74,6 @@ builtin = "hitl"
     child.stdin.end(JSON.stringify({ ...session, ...event }));
   });
   const count = async (session) => Number((await client.query('SELECT count(*) AS n FROM openappa_events WHERE root=(SELECT root FROM openappa_sessions WHERE organization_id=$1 AND caller_id=$2 AND session_id=$3)', [session.organization_id, session.caller_id, session.session_id])).rows[0].n);
-
-  await t.test('embedded v1 receipts replay exactly, reject changed bytes, and checkpoint without HTTP', async () => {
-    const capabilities = JSON.parse(await native.openappaProxyCapabilities());
-    assert.equal(capabilities.protocol_version, 1);
-    assert.equal(capabilities.completed_event_replay, true);
-    assert.equal(capabilities.durable_checkpoints, true);
-    assert.equal(capabilities.child_workflows, true);
-
-    const root_id = `native-v1-${randomUUID()}`;
-    const event_id = randomUUID();
-    const envelope = { event_id, event: { event: 'session_start', root_id } };
-    const first = await proxy(envelope);
-    const replay = await proxy(envelope);
-    assert.deepEqual(replay, first);
-    await assert.rejects(
-      () => native.dispatchOpenappaProxyEvent(`${JSON.stringify(envelope)} `),
-      /event_conflict:/,
-    );
-
-    const created = await checkpoint({ protocol: 1, adapter: 'kagent', operation: 'create', root_id });
-    assert.equal(typeof created.checkpoint_id, 'string');
-    const forked = await checkpoint({ protocol: 1, adapter: 'kagent', operation: 'fork', checkpoint_id: created.checkpoint_id, root_id: `${root_id}-fork` });
-    assert.equal(forked.root_id, `${root_id}-fork`);
-  });
-
-  await t.test('embedded lifecycle admits prompt, tool result, turn end, and held-batch cancellation', async () => {
-    const root_id = `native-lifecycle-${randomUUID()}`;
-    const event = async (body) => proxy({
-      event_id: randomUUID(),
-      event: { root_id, ...body },
-    });
-    assert.equal((await event({ event: 'session_start' })).decision.decision, 'ack');
-    assert.equal((await event({ event: 'prompt', text: 'inspect the request' })).decision.decision, 'ack');
-    const calls = await event({
-      event: 'tool_calls',
-      calls: [{ call_id: 'call-1', tool: 'read_plain', arguments: {}, spawn: false }],
-    });
-    assert.equal(calls.decision.decision, 'allow_calls');
-    const dispatch_id = calls.decision.calls[0].dispatch_id;
-    assert.equal(typeof dispatch_id, 'string');
-    assert.equal((await event({
-      event: 'tool_result',
-      call_id: 'call-1',
-      dispatch_id,
-      outcome: { status: 'success', body: 'approved result' },
-    })).decision.decision, 'ack');
-    assert.equal((await event({ event: 'turn_end' })).decision.decision, 'ack');
-
-    const batchRoot = `native-cancel-${randomUUID()}`;
-    const batchEvent = async (body) => proxy({
-      event_id: randomUUID(),
-      event: { root_id: batchRoot, ...body },
-    });
-    assert.equal((await batchEvent({ event: 'session_start' })).decision.decision, 'ack');
-    const batch_id = randomUUID();
-    assert.equal((await batchEvent({
-      event: 'prepare_batch',
-      batch_id,
-      calls: [{ call_id: 'held-1', tool: 'read_plain', arguments: {}, spawn: false }],
-    })).decision.decision, 'batch_prepared');
-    const cancelled = await batchEvent({
-      event: 'cancel_batch',
-      batch_id,
-      reason: 'client disconnected before batch delivery',
-    });
-    assert.equal(cancelled.decision.decision, 'batch_quarantined');
-  });
 
   await t.test('duplicate results across processes reuse one approved output, including altered resends', async () => {
     const session = scope();

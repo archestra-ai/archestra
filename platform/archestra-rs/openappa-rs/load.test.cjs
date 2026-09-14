@@ -1,11 +1,8 @@
 "use strict";
 const assert = require("node:assert/strict");
-const { initializeOpenappa, dispatchHook, openappaProxyCapabilities, dispatchOpenappaProxyEvent, dispatchOpenappaCheckpoint } = require("./index.cjs");
+const { initializeOpenappa, dispatchHook } = require("./index.cjs");
 assert.equal(typeof initializeOpenappa, "function");
 assert.equal(typeof dispatchHook, "function");
-assert.equal(typeof openappaProxyCapabilities, "function");
-assert.equal(typeof dispatchOpenappaProxyEvent, "function");
-assert.equal(typeof dispatchOpenappaCheckpoint, "function");
 // Exercise the native async boundary without requiring a database or policy.
 async function checkNativeBoundary() {
   await assert.rejects(dispatchHook("{}"), /missing field/);

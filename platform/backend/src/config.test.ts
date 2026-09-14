@@ -47,7 +47,6 @@ import config, {
   parseContentMaxLength,
   parseDatabasePoolMax,
   parseDatabaseStatementTimeoutMillis,
-  parseEmbeddedOpenAppaProxyConfig,
   parseEngineDeniedCidrs,
   parseFileStorageFilesystemRoot,
   parseFileStorageProvider,
@@ -3470,44 +3469,6 @@ describe("parseOtelCaptureContent", () => {
 });
 
 describe("OpenAPPA feature configuration", () => {
-  test("activates the durable native proxy lifecycle with required secrets", () => {
-    expect(
-      parseEmbeddedOpenAppaProxyConfig({
-        enabled: "true",
-        policyPath: "/policy.toml",
-        sessionHmacSecret: "s".repeat(32),
-        approvalSigningSecret: "a".repeat(32),
-        nativeCodexEnabled: undefined,
-        nativeSpawnToolMap: '{"Agent":"agent:ops/reviewer"}',
-        maxCallsPerSession: "12",
-        maxSessionsPerOwner: "3",
-        maxStreamBufferBytes: "1024",
-      }),
-    ).toMatchObject({
-      nativeCodexEnabled: true,
-      nativeSpawnToolMap: { Agent: "agent:ops/reviewer" },
-      maxCallsPerSession: 12,
-      maxSessionsPerOwner: 3,
-      maxStreamBufferBytes: 1024,
-    });
-  });
-
-  test("refuses incomplete embedded native lifecycle configuration", () => {
-    expect(() =>
-      parseEmbeddedOpenAppaProxyConfig({
-        enabled: "true",
-        policyPath: "/policy.toml",
-        sessionHmacSecret: "short",
-        approvalSigningSecret: undefined,
-        nativeCodexEnabled: undefined,
-        nativeSpawnToolMap: undefined,
-        maxCallsPerSession: undefined,
-        maxSessionsPerOwner: undefined,
-        maxStreamBufferBytes: undefined,
-      }),
-    ).toThrow("ARCHESTRA_OPENAPPA_SESSION_HMAC_SECRET");
-  });
-
   test.each([
     undefined,
     "",
@@ -3533,19 +3494,5 @@ describe("OpenAPPA feature configuration", () => {
         "ARCHESTRA_OPENAPPA_POLICY_PATH is required",
       );
     }
-  });
-
-  test("retains non-empty native APPA signing secrets", () => {
-    expect(
-      parseOpenAppaConfig(
-        "true",
-        "/policy.toml",
-        " approval-secret ",
-        " session-secret ",
-      ),
-    ).toMatchObject({
-      approvalSigningSecret: "approval-secret",
-      sessionHmacSecret: "session-secret",
-    });
   });
 });

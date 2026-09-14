@@ -688,13 +688,6 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateA2aRemoteAgent]: { agentSettings: ["update"] },
   [RouteId.DeleteA2aRemoteAgent]: { agentSettings: ["update"] },
 
-  [RouteId.ListAppaApprovals]: { agentSettings: ["update"] },
-  [RouteId.GetAppaApproval]: { agentSettings: ["update"] },
-  [RouteId.DecideAppaApproval]: { agentSettings: ["update"] },
-  [RouteId.ListAppaQuarantines]: { agentSettings: ["update"] },
-  [RouteId.GetAppaQuarantine]: { agentSettings: ["update"] },
-  [RouteId.AcknowledgeAppaQuarantine]: { agentSettings: ["update"] },
-
   /**
    * Getting basic info about the organization requires the user to be
    * authenticated but no specific permission.

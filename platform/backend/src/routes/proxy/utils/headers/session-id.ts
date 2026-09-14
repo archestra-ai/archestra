@@ -183,13 +183,6 @@ function parseClaudeMetadataSessionId(
   return null;
 }
 
-/** Parses the current and legacy Claude metadata session encodings. */
-export function extractClaudeMetadataSessionId(
-  userId: string | null | undefined,
-): string | null {
-  return parseClaudeMetadataSessionId(userId);
-}
-
 /**
  * Whether a `metadata.user_id` value matches any known Claude/Anthropic format.
  * Used by client-app auto-discovery to attribute a request to the generic

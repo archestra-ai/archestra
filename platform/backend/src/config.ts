@@ -1977,6 +1977,24 @@ export function betaFeatureEnabled(envValue: string | undefined): boolean {
 }
 
 /**
+ * APPA must be explicitly enabled; a policy path or ARCHESTRA_BETA does not activate it.
+ * @public — exported for testability
+ */
+export function parseOpenAppaConfig(
+  enabled: string | undefined,
+  policyPath: string | undefined,
+) {
+  const isEnabled = enabled === "true";
+  const path = policyPath?.trim() || undefined;
+  if (isEnabled && !path) {
+    throw new Error(
+      "ARCHESTRA_OPENAPPA_POLICY_PATH is required when ARCHESTRA_OPENAPPA_ENABLED=true",
+    );
+  }
+  return { enabled: isEnabled, policyPath: path };
+}
+
+/**
  * The hackathon recorder (record/replay/edit app demo sessions).
  *
  * On for every community deployment, and NEVER on for a deployment running an
@@ -2164,6 +2182,10 @@ const fileStorageS3Config = parseFileStorageS3Config({
 });
 
 const config = {
+  openappa: parseOpenAppaConfig(
+    process.env.ARCHESTRA_OPENAPPA_ENABLED,
+    process.env.ARCHESTRA_OPENAPPA_POLICY_PATH,
+  ),
   frontendBaseUrl,
   api: {
     host: isDevelopment ? "127.0.0.1" : "0.0.0.0",

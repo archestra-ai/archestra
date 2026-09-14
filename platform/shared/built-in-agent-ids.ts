@@ -1,4 +1,4 @@
-/** Discriminator values for builtInAgentConfig.name. */
+/** Discriminator values for builtInAgentConfig.name */
 export const BUILT_IN_AGENT_IDS = {
   POLICY_CONFIG: "policy-configuration-subagent",
   DUAL_LLM_MAIN: "dual-llm-main-agent",

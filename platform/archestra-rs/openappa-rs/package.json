@@ -1,0 +1,29 @@
+{
+  "name": "@archestra/openappa-rs",
+  "version": "0.1.0",
+  "private": true,
+  "type": "commonjs",
+  "main": "index.cjs",
+  "types": "index.d.ts",
+  "scripts": {
+    "build": "napi build --release --platform",
+    "build:dev": "napi build --profile release-fast --platform",
+    "type-check": "cargo check -p openappa_rs",
+    "test": "node --test smoke.test.cjs",
+    "check:ci": "pnpm build && pnpm smoke:load && pnpm test",
+    "check:musl": "pnpm build && pnpm smoke:load",
+    "smoke:load": "node load.test.cjs",
+    "lint": "cargo fmt --check --all"
+  },
+  "dependencies": {
+    "@archestra/napi-loader": "workspace:*"
+  },
+  "devDependencies": {
+    "@napi-rs/cli": "^3.4.0"
+  },
+  "files": [
+    "index.cjs",
+    "index.d.ts",
+    "*.node"
+  ]
+}

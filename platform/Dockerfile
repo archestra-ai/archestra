@@ -223,6 +223,7 @@ COPY archestra-rs/napi-loader/package.json archestra-rs/napi-loader/
 COPY archestra-rs/sandbox-rs/package.json archestra-rs/sandbox-rs/
 COPY archestra-rs/app-runtime-rs/package.json archestra-rs/app-runtime-rs/
 COPY archestra-rs/image-rs/package.json archestra-rs/image-rs/
+COPY archestra-rs/openappa-rs/package.json archestra-rs/openappa-rs/
 
 # Install all dependencies
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
@@ -245,7 +246,13 @@ RUN set -eux; \
 # <----- Rust dependency cache ----->
 FROM base AS rust-builder-base
 WORKDIR /app
-RUN apk add --no-cache build-base cargo rust
+RUN apk add --no-cache build-base cargo rust openssl-dev pkgconf
+# Use the builder's installed OpenSSL for PostgreSQL TLS. Cross-builds outside
+# this image use the vendored musl dependency from openappa-rs instead.
+ENV OPENSSL_NO_VENDOR=1
+# Cargo fetches OpenAPPA at the revision pinned in openappa-rs/Cargo.toml and
+# Cargo.lock, including the runtime's plugin fingerprint inputs. No sibling
+# checkout or additional Docker build context is required.
 
 FROM rust-builder-base AS rust-deps
 ARG TARGETARCH
@@ -256,9 +263,10 @@ COPY archestra-rs/app-runtime-core/Cargo.toml ./archestra-rs/app-runtime-core/
 COPY archestra-rs/app-runtime-rs/Cargo.toml archestra-rs/app-runtime-rs/build.rs ./archestra-rs/app-runtime-rs/
 COPY archestra-rs/image-core/Cargo.toml ./archestra-rs/image-core/
 COPY archestra-rs/image-rs/Cargo.toml archestra-rs/image-rs/build.rs ./archestra-rs/image-rs/
+COPY archestra-rs/openappa-rs/Cargo.toml archestra-rs/openappa-rs/build.rs ./archestra-rs/openappa-rs/
 RUN --mount=type=cache,target=/root/.cargo/registry \
     --mount=type=cache,target=/root/.cargo/git \
-    for crate in sandbox-core sandbox-rs app-runtime-core app-runtime-rs image-core image-rs; do \
+    for crate in sandbox-core sandbox-rs app-runtime-core app-runtime-rs image-core image-rs openappa-rs; do \
       mkdir -p "archestra-rs/${crate}/src"; \
       printf 'pub fn dependency_cache_placeholder() {}\n' > "archestra-rs/${crate}/src/lib.rs"; \
     done && \
@@ -268,7 +276,7 @@ RUN --mount=type=cache,target=/root/.cargo/registry \
       arm64) RUST_TARGET=aarch64-alpine-linux-musl ;; \
       *) echo "Unsupported Rust architecture: ${TARGETARCH}" >&2; exit 1 ;; \
     esac && \
-    for package in app_runtime_rs image_rs sandbox_rs; do \
+    for package in app_runtime_rs image_rs sandbox_rs openappa_rs; do \
       RUSTFLAGS='-C target-feature=-crt-static' cargo build --release --locked \
         --target "${RUST_TARGET}" -p "${package}"; \
     done
@@ -282,6 +290,7 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/archestra-rs/sandbox-rs/node_modules ./archestra-rs/sandbox-rs/node_modules
 COPY --from=deps /app/archestra-rs/app-runtime-rs/node_modules ./archestra-rs/app-runtime-rs/node_modules
 COPY --from=deps /app/archestra-rs/image-rs/node_modules ./archestra-rs/image-rs/node_modules
+COPY --from=deps /app/archestra-rs/openappa-rs/node_modules ./archestra-rs/openappa-rs/node_modules
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY archestra-rs/Cargo.toml archestra-rs/Cargo.lock ./archestra-rs/
 COPY archestra-rs/napi-loader ./archestra-rs/napi-loader
@@ -291,6 +300,7 @@ COPY archestra-rs/app-runtime-core ./archestra-rs/app-runtime-core
 COPY archestra-rs/app-runtime-rs ./archestra-rs/app-runtime-rs
 COPY archestra-rs/image-core ./archestra-rs/image-core
 COPY archestra-rs/image-rs ./archestra-rs/image-rs
+COPY archestra-rs/openappa-rs ./archestra-rs/openappa-rs
 
 # These tasks stay outside Turbo's shared cache because their artifacts are
 # platform-specific. This Docker layer is architecture-scoped and exportable,
@@ -303,7 +313,8 @@ RUN --mount=type=cache,target=/root/.cargo/registry \
     find archestra-rs -type f -path '*/src/*.rs' -exec touch {} + && \
     pnpm --filter @archestra/sandbox-rs \
          --filter @archestra/app-runtime-rs \
-         --filter @archestra/image-rs build
+         --filter @archestra/image-rs \
+         --filter @archestra/openappa-rs build
 
 # VERSION is intentionally declared after the native RUN. Build args implicitly
 # participate in following RUN cache keys, and every staging commit has a new
@@ -333,7 +344,7 @@ RUN --mount=type=cache,target=/root/.cargo/registry \
     --mount=type=cache,target=/root/.cargo/git \
     --mount=type=bind,from=rust-deps,source=/app/archestra-rs/target,target=/app/archestra-rs/target,rw \
     --mount=type=cache,id=rust-napi-debug,target=/app/archestra-rs/target/debug \
-    pnpm --filter @archestra/sandbox-rs --filter @archestra/app-runtime-rs --filter @archestra/image-rs check:musl
+    pnpm --filter @archestra/sandbox-rs --filter @archestra/app-runtime-rs --filter @archestra/image-rs --filter @archestra/openappa-rs check:musl
 
 # <----- Builder stage ----->
 FROM builder-base AS builder
@@ -351,7 +362,7 @@ FROM builder-base AS builder
 # https://docs.docker.com/build/building/secrets/#target
 # Native artifacts were built in builder-base before application source was
 # copied. Include shared's synthetic build task so its source remains in the
-# backend/frontend Turbo cache keys while excluding the three N-API tasks.
+# backend/frontend Turbo cache keys while excluding the four N-API tasks.
 RUN --mount=type=cache,target=/app/.turbo \
     --mount=type=cache,target=/app/frontend/.next/cache \
     --mount=type=secret,id=turbo_team,env=TURBO_TEAM \
@@ -364,7 +375,7 @@ RUN --mount=type=cache,target=/app/.turbo \
 # Assemble the production backend with `pnpm deploy` — pnpm's recommended
 # monorepo packaging step (https://pnpm.io/cli/deploy). It produces a
 # self-contained /prod/backend whose node_modules includes every workspace
-# dependency (the three NAPI crates, @archestra/napi-loader, @archestra/shared)
+# dependency (the four NAPI crates, @archestra/napi-loader, @archestra/shared)
 # alongside their transitive production deps, with each crate able to resolve
 # @archestra/napi-loader from a nested store. This replaces the old hand-rolled
 # COPY of each crate's *.node / index.cjs into a workspace-shaped, root-hoisted
@@ -592,7 +603,7 @@ RUN rm -rf /root/.cache/node/corepack /usr/local/bin/pnpm /usr/local/bin/pnpx
 # Copy the fully-assembled backend from the builder's `pnpm deploy` output.
 # /prod/backend contains backend/dist, scripts, drizzle.config.ts and the
 # migrations (scoped by the backend package's `files` field) plus a
-# self-contained node_modules — including the three NAPI crates with their
+# self-contained node_modules — including the four NAPI crates with their
 # compiled *.node addons and a resolvable @archestra/napi-loader. This single
 # tree replaces the previous per-crate .node/index.cjs copy choreography and
 # the runtime `pnpm install`.

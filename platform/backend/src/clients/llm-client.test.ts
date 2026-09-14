@@ -14,6 +14,7 @@ import {
 import { generateObject, generateText, streamText } from "ai";
 import { vi } from "vitest";
 import { z } from "zod";
+import config from "@/config";
 import { ConversationModel, LlmProviderApiKeyModel } from "@/models";
 import { encodeOpenAiCodexCredential } from "@/services/openai-codex-credentials";
 import { describe, expect, it, test } from "@/test";
@@ -1208,6 +1209,29 @@ describe("createDirectLLMModel", () => {
 });
 
 describe("createLLMModel", () => {
+  test.each([
+    false,
+    true,
+  ])("gates every APPA identity header (enabled=%s)", (enabled) => {
+    config.openappa = { enabled, policyPath: "/test/policy.toml" };
+    createLLMModel({
+      provider: "openai",
+      apiKey: "test",
+      agentId: "agent",
+      modelName: "gpt-4",
+      baseUrl: null,
+      source: "chat",
+      userId: "user",
+      sessionId: "session",
+      appaParentId: "parent",
+    });
+    const headers = capturedCreateOpenAIOptions.headers;
+    expect(headers?.[SESSION_ID_HEADER]).toBe("session");
+    for (const name of ["X-Appa-Session-ID", "X-Appa-Parent-ID"]) {
+      expect(new Headers(headers).has(name)).toBe(enabled);
+    }
+  });
+
   test("sends keyless Bedrock chat to the proxy without signing or a placeholder credential", async () => {
     vi.stubEnv("AWS_ACCESS_KEY_ID", undefined);
     vi.stubEnv("AWS_SECRET_ACCESS_KEY", undefined);

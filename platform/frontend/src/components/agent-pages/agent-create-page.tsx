@@ -162,6 +162,7 @@ export function AgentCreatePage({
 
   return (
     <AgentPageShell
+      stickyFooter
       // The list needs the same read permission this role is missing, so on
       // the success state there is nowhere to go back to.
       backHref={showsUnreadableSuccess ? undefined : agentListHref(kind)}

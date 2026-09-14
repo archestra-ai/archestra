@@ -3291,6 +3291,13 @@
       "when": 1789246809432,
       "tag": "0469_typical_shape",
       "breakpoints": true
+    },
+    {
+      "idx": 470,
+      "version": "7",
+      "when": 1789326227254,
+      "tag": "0470_lush_jackpot",
+      "breakpoints": true
     }
   ]
 }

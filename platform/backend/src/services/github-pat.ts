@@ -1,7 +1,9 @@
 import GithubPatModel from "@/models/github-pat";
 import PluginModel from "@/models/plugin";
+import RuntimeCredentialDefinitionModel from "@/models/runtime-credential-definition";
 import SkillModel from "@/models/skill";
 import { secretManager } from "@/secrets-manager";
+import { deleteRuntimeCredentialDefinition } from "@/services/agent-runtime/runtime-credentials";
 import {
   ApiError,
   type CreateGithubPatRequest,
@@ -9,7 +11,6 @@ import {
   type PublicGithubPat,
   type UpdateGithubPatRequest,
 } from "@/types";
-import { isForeignKeyConstraintError } from "@/utils/db";
 
 export async function listGithubPats(
   organizationId: string,
@@ -62,7 +63,7 @@ export async function updateGithubPat(params: {
 
   const updated = await GithubPatModel.update(id, {
     name: data.name,
-    secretId,
+    secretId: data.token ? secretId : undefined,
   });
   if (!updated) {
     throw new ApiError(404, "GitHub token not found");
@@ -98,25 +99,15 @@ export async function deleteGithubPat(params: {
     );
   }
 
-  try {
-    await GithubPatModel.delete(existing.id);
-  } catch (error) {
-    if (isForeignKeyConstraintError(error)) {
-      throw new ApiError(
-        409,
-        "GitHub token became referenced by a synced resource; disconnect it and retry",
-      );
-    }
-    throw error;
-  }
-  if (existing.secretId) {
-    try {
-      await secretManager().deleteSecret(existing.secretId);
-    } catch (error) {
-      await GithubPatModel.restore(existing);
-      throw error;
-    }
-  }
+  const definition = await RuntimeCredentialDefinitionModel.findById({
+    id: existing.id,
+    organizationId: params.organizationId,
+  });
+  if (!definition) throw new ApiError(404, "Credential not found");
+  await deleteRuntimeCredentialDefinition({
+    organizationId: params.organizationId,
+    key: definition.key,
+  });
 }
 
 // ===== Internal helpers =====

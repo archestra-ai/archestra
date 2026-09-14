@@ -34,6 +34,9 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "agentRun.shared": "Agent run shared",
   "agentRun.unshared": "Agent run unshared",
   // Runtime credential
+  "credential.created": "Credential created",
+  "credential.updated": "Credential updated",
+  "credential.deleted": "Credential deleted",
   "runtimeCredential.created": "Runtime credential created",
   "runtimeCredential.updated": "Runtime credential updated",
   "runtimeCredential.deleted": "Runtime credential deleted",
@@ -353,7 +356,7 @@ export const KNOWN_RESOURCE_TYPES: readonly string[] = [
   "connector",
   "defaultUserLimit",
   "environment",
-  "githubAppConfig",
+  "credential",
   "githubPat",
   "identityProvider",
   "internalMcpCatalog",

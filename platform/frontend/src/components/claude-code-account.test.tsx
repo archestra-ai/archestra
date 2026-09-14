@@ -37,7 +37,10 @@ beforeEach(() => {
 });
 
 describe("ClaudeCodeAccount setup", () => {
-  it("guides an unconnected user from account status to native sign-in", async () => {
+  it.each([
+    "card",
+    "compact",
+  ] as const)("guides an unconnected user from %s status to native sign-in", async (variant) => {
     const user = userEvent.setup();
     let started = false;
     const status = () =>
@@ -55,7 +58,7 @@ describe("ClaudeCodeAccount setup", () => {
         return HttpResponse.json(status());
       }),
     );
-    renderAccount();
+    renderAccount(variant);
 
     expect(await screen.findByText("Sign in to use this agent.")).toBeVisible();
     await user.click(screen.getByRole("button", { name: "Sign in" }));
@@ -98,10 +101,10 @@ describe("ClaudeCodeAccount setup", () => {
   });
 });
 
-function renderAccount() {
+function renderAccount(variant: "card" | "compact" = "card") {
   render(
     <QueryClientProvider client={queryClient}>
-      <ClaudeCodeAccount agentId="agent-1" />
+      <ClaudeCodeAccount agentId="agent-1" variant={variant} />
     </QueryClientProvider>,
   );
 }

@@ -1,22 +1,22 @@
 import { isVaultReference } from "@archestra/shared";
 import logger from "@/logging";
-import {
-  AgentModel,
-  RuntimeCredentialConnectionModel,
-  SecretModel,
-  UserCredentialModel,
-} from "@/models";
+import { AgentModel, SecretModel, UserCredentialModel } from "@/models";
 import { isByosEnabled, secretManager } from "@/secrets-manager";
 import {
   deleteRuntimeCredentialConnection,
   setRuntimeCredentialConnection,
 } from "@/services/agent-runtime/runtime-credentials";
+import {
+  resolveCredential,
+  resolveCredentialValue,
+} from "@/services/credentials";
 import type {
   AgentRuntimeCredentialDeclaration,
   MissingAgentRuntimeCredential,
   ResolvedAgentRuntime,
 } from "@/types";
 import { ApiError } from "@/types";
+import type { RenewableCredential } from "@/types/renewable-credential";
 
 /**
  * Outcome of resolving one Agent Runtime run's declared credentials for one user.
@@ -29,6 +29,7 @@ import { ApiError } from "@/types";
  */
 type AgentRuntimeCredentialResolution = {
   env: Record<string, string>;
+  renewableCredentials: Record<string, RenewableCredential>;
   missing: MissingAgentRuntimeCredential[];
   misconfigured: MissingAgentRuntimeCredential[];
 };
@@ -46,19 +47,31 @@ export async function resolveAgentRuntimeCredentials(params: {
 }): Promise<AgentRuntimeCredentialResolution> {
   const { shared, perUser } = splitDeclarations(applicableCredentials(params));
   const env: Record<string, string> = {};
+  const renewableCredentials: Record<string, RenewableCredential> = {};
   const missing: MissingAgentRuntimeCredential[] = [];
   const misconfigured: MissingAgentRuntimeCredential[] = [];
 
   if (shared.length > 0) {
     const bag = await readSharedBag(params.runtime.secretId);
     for (const declaration of shared) {
-      const value = declaration.credentialId
-        ? await RuntimeCredentialConnectionModel.resolveValue({
+      const credential = declaration.credentialId
+        ? await resolveCredential({
             organizationId: params.organizationId,
             scope: "organization",
             credentialId: declaration.credentialId,
+            minimumValidityMs: 50 * 60_000,
           })
+        : null;
+      const value = declaration.credentialId
+        ? credential?.value
         : bag[declaration.key];
+      if (credential?.expiresAt && declaration.credentialId) {
+        renewableCredentials[declaration.key] = {
+          credentialId: declaration.credentialId,
+          value: credential.value,
+          expiresAt: credential.expiresAt,
+        };
+      }
       if (typeof value === "string" && value.length > 0) {
         env[declaration.key] = value;
       } else if (declaration.required) {
@@ -71,6 +84,7 @@ export async function resolveAgentRuntimeCredentials(params: {
     if (!params.userId) {
       return {
         env,
+        renewableCredentials,
         missing: perUser.filter((entry) => entry.required).map(toMissing),
         misconfigured,
       };
@@ -87,7 +101,7 @@ export async function resolveAgentRuntimeCredentials(params: {
     Object.assign(env, resolved.values);
     for (const declaration of perUser) {
       const value = declaration.credentialId
-        ? await RuntimeCredentialConnectionModel.resolveValue({
+        ? await resolveCredentialValue({
             organizationId: params.organizationId,
             scope: "personal",
             userId: params.userId,
@@ -102,13 +116,12 @@ export async function resolveAgentRuntimeCredentials(params: {
     }
   }
 
-  return { env, missing, misconfigured };
+  return { env, renewableCredentials, missing, misconfigured };
 }
 
 /**
- * The same answer without reading any secret material: used to annotate the
- * UI before a user asks for an Agent Runtime run, so a start button can say what is needed
- * rather than failing on click.
+ * Check credential availability before launch without returning secret values
+ * to the UI. Saved GitHub Apps also validate the installation-token exchange.
  */
 export async function preflightAgentRuntimeCredentials(params: {
   runtime: Pick<ResolvedAgentRuntime, "agentId" | "credentials" | "secretId"> &
@@ -129,7 +142,7 @@ export async function preflightAgentRuntimeCredentials(params: {
     const bag = await readSharedBag(params.runtime.secretId);
     for (const declaration of shared) {
       const value = declaration.credentialId
-        ? await RuntimeCredentialConnectionModel.resolveValue({
+        ? await resolveCredentialValue({
             organizationId: params.organizationId,
             scope: "organization",
             credentialId: declaration.credentialId,
@@ -160,7 +173,7 @@ export async function preflightAgentRuntimeCredentials(params: {
     for (const declaration of perUser) {
       const connected = declaration.credentialId
         ? Boolean(
-            await RuntimeCredentialConnectionModel.resolveValue({
+            await resolveCredentialValue({
               organizationId: params.organizationId,
               scope: "personal",
               userId: params.userId,

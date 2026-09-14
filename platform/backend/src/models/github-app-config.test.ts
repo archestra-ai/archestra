@@ -1,5 +1,6 @@
 import { describe, expect } from "vitest";
 import { GithubAppConfigModel } from "@/models";
+import GithubPatModel from "@/models/github-pat";
 import { secretManager } from "@/secrets-manager";
 import { test } from "@/test";
 
@@ -130,4 +131,49 @@ describe("GithubAppConfigModel", () => {
     expect(snapshot).not.toHaveProperty("secretId");
     expect(snapshot?.name).toBe("Audited");
   });
+});
+
+test("individual credential lookups select the requested kind and organization", async ({
+  makeOrganization,
+}) => {
+  const organization = await makeOrganization();
+  const otherOrganization = await makeOrganization();
+  const app = await GithubAppConfigModel.create({
+    organizationId: organization.id,
+    name: "App",
+    appId: "1",
+    installationId: "2",
+  });
+  const first = await GithubPatModel.create({
+    organizationId: organization.id,
+    name: "First token",
+  });
+  const second = await GithubPatModel.create({
+    organizationId: organization.id,
+    name: "Second token",
+  });
+  expect(
+    await GithubPatModel.findByIdForOrganization({
+      id: second.id,
+      organizationId: organization.id,
+    }),
+  ).toMatchObject({ id: second.id, name: "Second token" });
+  expect(
+    await GithubPatModel.findByIdForOrganization({
+      id: first.id,
+      organizationId: otherOrganization.id,
+    }),
+  ).toBeNull();
+  expect(
+    await GithubPatModel.findByIdForOrganization({
+      id: app.id,
+      organizationId: organization.id,
+    }),
+  ).toBeNull();
+  expect(
+    await GithubAppConfigModel.findByIdForOrganization({
+      id: first.id,
+      organizationId: organization.id,
+    }),
+  ).toBeNull();
 });

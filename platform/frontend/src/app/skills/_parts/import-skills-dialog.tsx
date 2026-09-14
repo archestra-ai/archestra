@@ -136,7 +136,7 @@ export function ImportSkillsDialog({
   // pull schedule for every skill selected in this import: imports are
   // always synced from the repo and read-only here until disconnected.
   const [syncInterval, setSyncInterval] = useState<"15m" | "1h" | "1d">("1d");
-  // name under which a newly pasted token is saved (Settings -> GitHub)
+  // name under which a newly pasted token is saved (Settings → Credentials)
   const [newTokenName, setNewTokenName] = useState("");
   // subpath + authentication live behind this fold; opened automatically when
   // a discover failure looks like a missing-auth problem.
@@ -806,10 +806,10 @@ export function ImportSkillsDialog({
                         Synced imports stay authenticated with this saved token.
                         Manage saved tokens in{" "}
                         <a
-                          href="/settings/github"
+                          href="/settings/credentials"
                           className="font-medium text-primary underline-offset-4 hover:underline"
                         >
-                          Settings → GitHub
+                          Settings → Credentials
                         </a>
                         .
                       </p>
@@ -835,10 +835,10 @@ export function ImportSkillsDialog({
                         <p className="text-sm text-muted-foreground">
                           Needed for private repositories. Saved to{" "}
                           <a
-                            href="/settings/github"
+                            href="/settings/credentials"
                             className="font-medium text-primary underline-offset-4 hover:underline"
                           >
-                            Settings → GitHub
+                            Settings → Credentials
                           </a>{" "}
                           on import so scheduled syncs stay authenticated.{" "}
                           <a

@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { type ToolSet, tool } from "ai";
 import { z } from "zod";
+import { credentialEnvironment } from "./credential-environment.js";
 
 /**
  * Pod-local workspace tools for the built-in Archestra Agent.
@@ -38,10 +39,16 @@ async function runCommand(params: {
   command: string;
   timeoutMs: number;
 }): Promise<string> {
+  let env: NodeJS.ProcessEnv;
+  try {
+    env = await credentialEnvironment();
+  } catch {
+    return "Command could not start: renewable credentials are unavailable or expired. Retry after credential refresh.";
+  }
   return await new Promise((resolve) => {
     const child = spawn("/bin/bash", ["-lc", params.command], {
       cwd: process.cwd(),
-      env: process.env,
+      env,
       stdio: ["ignore", "pipe", "pipe"],
     });
     const output: Buffer[] = [];

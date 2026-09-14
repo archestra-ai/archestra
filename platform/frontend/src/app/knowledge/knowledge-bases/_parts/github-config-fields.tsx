@@ -1,11 +1,8 @@
 "use client";
 
-import { type ReactNode, useEffect } from "react";
+import Link from "next/link";
+import { type ReactNode, useEffect, useId } from "react";
 import type { UseFormReturn } from "react-hook-form";
-import {
-  GithubAuthConfigFields,
-  type GithubAuthMethod,
-} from "@/components/github-auth-config-fields";
 import {
   FormControl,
   FormDescription,
@@ -15,8 +12,15 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { useGithubAppConfigs } from "@/lib/github-app-config.query";
+import { useRuntimeCredentials } from "@/lib/runtime-credentials.query";
 
 interface GithubConfigFieldsProps {
   // biome-ignore lint/suspicious/noExplicitAny: form type is generic across different form schemas
@@ -43,14 +47,22 @@ export function GithubConfigFields({
   hideRepositoryOptions = false,
   appConfigDescription,
 }: GithubConfigFieldsProps) {
-  const authMethod = form.watch(`${prefix}.authMethod`) as string | undefined;
+  const credentialSelectId = useId();
   const githubAppConfigId = form.watch(`${prefix}.githubAppConfigId`) as
     | string
     | undefined;
   const includeRepositoryFiles = form.watch(
     `${prefix}.includeRepositoryFiles`,
   ) as boolean | undefined;
-  const { data: githubAppConfigs = [] } = useGithubAppConfigs();
+  const { data: credentials = [] } = useRuntimeCredentials();
+  const credentialId = form.watch(`${prefix}.credentialId`) as
+    | string
+    | undefined;
+  const githubCredentials = credentials.filter(
+    (credential) =>
+      credential.allowOrganization &&
+      ["github_app", "secret"].includes(credential.kind),
+  );
   const appConfigError = hideAuth
     ? undefined
     : getFieldError(form.formState.errors, `${prefix}.githubAppConfigId`);
@@ -65,21 +77,6 @@ export function GithubConfigFields({
         "Select a GitHub App configuration",
     });
   }, [form, hideAuth, prefix]);
-
-  const handleAuthMethodChange = (value: GithubAuthMethod) => {
-    form.setValue(`${prefix}.authMethod`, value, {
-      shouldDirty: true,
-      shouldValidate: true,
-    });
-    if (value === "pat") {
-      // undefined, not "": the backend validates the field as an optional
-      // UUID, and an empty string fails that check on submit
-      form.setValue(`${prefix}.githubAppConfigId`, undefined, {
-        shouldDirty: true,
-        shouldValidate: true,
-      });
-    }
-  };
 
   return (
     <div className="space-y-4">
@@ -125,20 +122,62 @@ export function GithubConfigFields({
       )}
 
       {!hideAuth && (
-        <GithubAuthConfigFields
-          authMethod={(authMethod as GithubAuthMethod | undefined) ?? "pat"}
-          onAuthMethodChange={handleAuthMethodChange}
-          githubAppConfigId={githubAppConfigId ?? ""}
-          onGithubAppConfigIdChange={(value) =>
-            form.setValue(`${prefix}.githubAppConfigId`, value, {
-              shouldDirty: true,
-              shouldValidate: true,
-            })
-          }
-          githubAppConfigs={githubAppConfigs}
-          appConfigError={appConfigError}
-          appConfigDescription={appConfigDescription}
-        />
+        <FormItem>
+          <FormLabel htmlFor={credentialSelectId}>Credential</FormLabel>
+          <Select
+            value={
+              credentialId ??
+              githubCredentials.find(
+                (credential) => credential.id === githubAppConfigId,
+              )?.key ??
+              "inline"
+            }
+            onValueChange={(value) => {
+              form.setValue(
+                `${prefix}.credentialId`,
+                value === "inline" ? undefined : value,
+                { shouldDirty: true, shouldValidate: true },
+              );
+              form.setValue(
+                `${prefix}.authMethod`,
+                value === "inline" ? "pat" : "credential",
+                { shouldDirty: true, shouldValidate: true },
+              );
+              form.setValue(`${prefix}.githubAppConfigId`, undefined, {
+                shouldDirty: true,
+                shouldValidate: true,
+              });
+            }}
+          >
+            <SelectTrigger id={credentialSelectId} className="w-full">
+              <SelectValue placeholder="Select a credential" />
+            </SelectTrigger>
+            <SelectContent>
+              {githubCredentials.map((credential) => (
+                <SelectItem
+                  key={credential.key}
+                  value={credential.key}
+                  description="Organization credential"
+                >
+                  {credential.name}
+                </SelectItem>
+              ))}
+              <SelectItem value="inline">
+                Enter a token for this connector
+              </SelectItem>
+            </SelectContent>
+          </Select>
+          <FormDescription>
+            Organization credentials support scheduled syncs.{" "}
+            <Link href="/settings/credentials" className="underline">
+              Manage credentials
+            </Link>
+            . {appConfigDescription}
+          </FormDescription>
+          {appConfigError && (
+            <p className="text-sm text-destructive">{appConfigError}</p>
+          )}
+        </FormItem>
       )}
 
       {!hideRepositoryOptions && (

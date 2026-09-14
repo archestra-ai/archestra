@@ -15,8 +15,7 @@ import type {
   PluginSourceKind,
 } from "@/types/plugin";
 import type { ResourceVisibilityScope } from "@/types/visibility";
-import githubAppConfigsTable from "./github-app-config";
-import githubPatsTable from "./github-pat";
+import runtimeCredentialDefinitionsTable from "./runtime-credential-definition";
 import serviceAccountsTable from "./service-account";
 import { softDeletablePgTable } from "./soft-deletable-table";
 import usersTable from "./user";
@@ -61,12 +60,15 @@ const pluginsTable = softDeletablePgTable(
     ).$type<PluginGithubSyncInterval>(),
     githubSyncRef: text("github_sync_ref"),
     githubAppConfigId: uuid("github_app_config_id").references(
-      () => githubAppConfigsTable.id,
+      () => runtimeCredentialDefinitionsTable.id,
       { onDelete: "restrict" },
     ),
-    githubPatId: uuid("github_pat_id").references(() => githubPatsTable.id, {
-      onDelete: "restrict",
-    }),
+    githubPatId: uuid("github_pat_id").references(
+      () => runtimeCredentialDefinitionsTable.id,
+      {
+        onDelete: "restrict",
+      },
+    ),
     lastSyncedAt: timestamp("last_synced_at", { mode: "date" }),
     lastSyncError: text("last_sync_error"),
     pendingSourceSha: text("pending_source_sha"),

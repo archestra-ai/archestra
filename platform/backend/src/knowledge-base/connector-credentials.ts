@@ -1,6 +1,11 @@
+import {
+  RuntimeCredentialConnectionModel,
+  RuntimeCredentialDefinitionModel,
+} from "@/models";
 import GithubAppConfigModel from "@/models/github-app-config";
 import SecretModel from "@/models/secret";
 import { secretManager } from "@/secrets-manager";
+import { resolveCredentialValue } from "@/services/credentials";
 import {
   ApiError,
   type ConnectorConfig,
@@ -35,6 +40,17 @@ export async function resolveConnectorCredentials(
       organizationId: connector.organizationId,
       uncached: options?.uncached ?? false,
     });
+  }
+
+  if (connector.config.type === "github" && connector.config.credentialId) {
+    const token = await resolveCredentialValue({
+      organizationId: connector.organizationId,
+      credentialId: connector.config.credentialId,
+      scope: "organization",
+    });
+    if (!token)
+      throw new ApiError(400, "Connect the GitHub credential before syncing");
+    return { apiToken: token };
   }
 
   if (connector.config.type === "web_crawler") {
@@ -87,8 +103,20 @@ async function resolveGithubAppCredentials(params: {
     throw new ApiError(404, "GitHub App configuration not found");
   }
 
+  const definition = await RuntimeCredentialDefinitionModel.findById({
+    id: appConfig.id,
+    organizationId: params.organizationId,
+  });
+  if (!definition) throw new ApiError(404, "GitHub App credential not found");
+  const privateKey = await RuntimeCredentialConnectionModel.resolveValue({
+    organizationId: params.organizationId,
+    credentialId: definition.key,
+    scope: "organization",
+  });
+  if (!privateKey)
+    throw new ApiError(400, "GitHub App credential has no private key");
   return {
-    apiToken: await readSecretApiToken(appConfig.secretId, params.uncached),
+    apiToken: privateKey,
     githubApp: {
       githubUrl: appConfig.githubUrl,
       appId: appConfig.appId,
@@ -156,15 +184,6 @@ function resolveGoogleOAuthCredential(
       ? { refreshToken }
       : {}),
   };
-}
-
-async function readSecretApiToken(
-  secretId: string | null,
-  uncached: boolean,
-): Promise<string> {
-  const secret = await getSecretOrThrow(secretId, uncached);
-  const data = secret.secret as Record<string, unknown>;
-  return (data.apiToken as string) || "";
 }
 
 async function getSecretOrThrow(secretId: string | null, uncached: boolean) {

@@ -81,6 +81,47 @@ describe("Runtime credential routes", () => {
     Reflect.set(agentRuntimeManager, "clusterReachable", true);
   });
 
+  test("GitHub App definitions require organization ownership", async () => {
+    const definition = {
+      key: "repository-app",
+      name: "Repository App",
+      kind: "github_app",
+      description: "Repository access",
+      icon: "logo:github",
+      githubUrl: "https://api.github.com",
+      appId: "123",
+      installationId: "456",
+      allowPersonal: true,
+      allowOrganization: false,
+    };
+    const rejected = await app.inject({
+      method: "POST",
+      url: "/api/credentials",
+      payload: definition,
+    });
+    expect(rejected.statusCode).toBe(400);
+    expect(rejected.json().error.message).toContain(
+      "provided by the organization",
+    );
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/credentials",
+      payload: { ...definition, allowPersonal: false, allowOrganization: true },
+    });
+    expect(created.statusCode).toBe(200);
+    expect(created.json()).toMatchObject({
+      kind: "github_app",
+      allowPersonal: false,
+      allowOrganization: true,
+    });
+    const [audit] = await db
+      .select()
+      .from(schema.auditLogsTable)
+      .where(eq(schema.auditLogsTable.action, "credential.created"));
+    expect(audit).toBeDefined();
+    expect(JSON.stringify(audit)).toContain("repository-app");
+  });
+
   afterEach(async () => {
     config.agentRuntime.enabled = previousFeatureEnabled;
     Reflect.set(
@@ -94,7 +135,7 @@ describe("Runtime credential routes", () => {
   test("lists custom credentials and tracks a personal connection without exposing its value", async () => {
     const initial = await app.inject({
       method: "GET",
-      url: "/api/runtime-credentials",
+      url: "/api/credentials",
     });
     expect(initial.statusCode).toBe(200);
     expect(initial.json()).toEqual(
@@ -110,14 +151,14 @@ describe("Runtime credential routes", () => {
 
     const connected = await app.inject({
       method: "PUT",
-      url: "/api/runtime-credentials/github/personal",
+      url: "/api/credentials/github/personal",
       payload: { value: "personal-github-token" },
     });
     expect(connected.statusCode).toBe(200);
 
     const listed = await app.inject({
       method: "GET",
-      url: "/api/runtime-credentials",
+      url: "/api/credentials",
     });
     const github = listed
       .json<Array<Record<string, unknown>>>()
@@ -136,19 +177,20 @@ describe("Runtime credential routes", () => {
   test("lists Agents that use a credential", async () => {
     const response = await app.inject({
       method: "GET",
-      url: "/api/runtime-credentials/github/usage",
+      url: "/api/credentials/github/usage",
     });
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({
       agents: [{ id: agent.id, name: agent.name }],
+      resources: [],
     });
   });
 
   test("creates a custom credential and reuses its organization connection", async () => {
     const created = await app.inject({
       method: "POST",
-      url: "/api/runtime-credentials",
+      url: "/api/credentials",
       payload: {
         key: "gitlab-pat",
         name: "GitLab access token",
@@ -162,14 +204,14 @@ describe("Runtime credential routes", () => {
 
     const connected = await app.inject({
       method: "PUT",
-      url: "/api/runtime-credentials/gitlab-pat/organization",
+      url: "/api/credentials/gitlab-pat/organization",
       payload: { value: "shared-gitlab-token" },
     });
     expect(connected.statusCode).toBe(200);
 
     const listed = await app.inject({
       method: "GET",
-      url: "/api/runtime-credentials",
+      url: "/api/credentials",
     });
     expect(
       listed
@@ -197,7 +239,7 @@ describe("Runtime credential routes", () => {
       .where(
         and(
           eq(schema.auditLogsTable.organizationId, organizationId),
-          eq(schema.auditLogsTable.action, "runtimeCredential.updated"),
+          eq(schema.auditLogsTable.action, "credential.updated"),
         ),
       );
     expect(audit).toBeDefined();
@@ -207,21 +249,21 @@ describe("Runtime credential routes", () => {
   test("rejects an organization connection for a personal-only credential", async () => {
     const response = await app.inject({
       method: "PUT",
-      url: "/api/runtime-credentials/github/organization",
+      url: "/api/credentials/github/organization",
       payload: { value: "not-stored" },
     });
 
     expect(response.statusCode).toBe(400);
   });
 
-  test("hides credential endpoints when Agent Runtime is disabled", async () => {
+  test("keeps credentials available when Agent Runtime is disabled", async () => {
     config.agentRuntime.enabled = false;
 
     const response = await app.inject({
       method: "GET",
-      url: "/api/runtime-credentials",
+      url: "/api/credentials",
     });
 
-    expect(response.statusCode).toBe(404);
+    expect(response.statusCode).toBe(200);
   });
 });

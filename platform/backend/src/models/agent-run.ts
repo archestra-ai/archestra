@@ -30,6 +30,27 @@ import A2AMessageModel from "./a2a/message";
  * task's state machine is the record of how the work is going.
  */
 class AgentRunModel {
+  /** Closed turns can retain an interactive process until workspace cleanup. */
+  static async listRetainedForCredentialRefresh(): Promise<AgentRunRecord[]> {
+    return db
+      .select(getTableColumns(schema.agentRunsTable))
+      .from(schema.agentRunsTable)
+      .innerJoin(
+        schema.agentWorkspacesTable,
+        eq(
+          schema.agentWorkspacesTable.lastTaskId,
+          schema.agentRunsTable.taskId,
+        ),
+      )
+      .where(
+        and(
+          isNotNull(schema.agentRunsTable.endedAt),
+          inArray(schema.agentWorkspacesTable.state, ["idle", "active"]),
+          sql`${schema.agentWorkspacesTable.expiresAt} > now()`,
+        ),
+      );
+  }
+
   static async create(
     run: InsertAgentRunRecord & { id?: AgentRunRecord["id"] },
   ): Promise<AgentRunRecord> {

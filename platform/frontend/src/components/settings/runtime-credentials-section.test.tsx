@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -98,7 +99,15 @@ describe("RuntimeCredentialsSection", () => {
 
   it("creates a reusable definition with a generated stable key and chosen availability", async () => {
     const user = userEvent.setup();
-    render(<RuntimeCredentialsSection />);
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    client.setQueryData(["secrets", "type"], { type: "database" });
+    render(
+      <QueryClientProvider client={client}>
+        <RuntimeCredentialsSection />
+      </QueryClientProvider>,
+    );
 
     expect(screen.getByText("GitHub PAT")).toBeVisible();
     await user.click(screen.getByRole("button", { name: "Add credential" }));
@@ -114,7 +123,7 @@ describe("RuntimeCredentialsSection", () => {
 
     expect(mocks.create).toHaveBeenCalledWith(
       expect.objectContaining({
-        key: "gitlab-pat",
+        key: "credential-gitlab-pat",
         name: "GitLab PAT",
         allowPersonal: true,
         allowOrganization: false,
@@ -144,7 +153,15 @@ describe("RuntimeCredentialsSection", () => {
       isError: false,
     });
 
-    render(<RuntimeCredentialsSection />);
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    client.setQueryData(["secrets", "type"], { type: "database" });
+    render(
+      <QueryClientProvider client={client}>
+        <RuntimeCredentialsSection />
+      </QueryClientProvider>,
+    );
     await user.click(
       screen.getByRole("button", { name: "More actions GitLab PAT" }),
     );

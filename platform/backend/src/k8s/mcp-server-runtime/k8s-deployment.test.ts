@@ -4128,6 +4128,60 @@ describe("K8sDeployment.stopDeployment", () => {
     });
   });
 
+  test("renewal waits for foreground deletion before admitting a replacement", async () => {
+    let deleted = false;
+    let release: (() => void) | undefined;
+    const gone = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const api = {
+      readNamespacedDeployment: vi.fn(async () => {
+        if (!deleted) return { metadata: { uid: "previous-process" } };
+        await gone;
+        throw { statusCode: 404 };
+      }),
+      deleteNamespacedDeployment: vi.fn(async () => {
+        deleted = true;
+        return {};
+      }),
+    };
+    const deployment = createK8sDeploymentWithMockedApis({}, api);
+    let insideMutation = false;
+    let completed = false;
+    const stopping = deployment
+      .stopDeployment({
+        uidPrecondition: true,
+        awaitDeletion: true,
+        assertOwned: async () => {
+          expect(insideMutation).toBe(false);
+        },
+        runFencedMutation: async (mutation) => {
+          insideMutation = true;
+          try {
+            return await mutation();
+          } finally {
+            insideMutation = false;
+          }
+        },
+      })
+      .then(() => {
+        completed = true;
+      });
+    await vi.waitFor(() => expect(deleted).toBe(true));
+    expect(completed).toBe(false);
+    expect(api.deleteNamespacedDeployment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        body: {
+          preconditions: { uid: "previous-process" },
+          propagationPolicy: "Foreground",
+        },
+      }),
+    );
+    release?.();
+    await stopping;
+    expect(completed).toBe(true);
+  });
+
   test("UID-preconditioned stop cannot delete a replacement deployment", async () => {
     const assertOwned = vi.fn().mockResolvedValue(undefined);
     const mockDeleteDeployment = vi.fn().mockResolvedValue({});

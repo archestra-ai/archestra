@@ -11,8 +11,7 @@ import {
 } from "drizzle-orm/pg-core";
 import type { SkillGithubSyncInterval, SkillSourceType } from "@/types/skill";
 import type { ResourceVisibilityScope } from "@/types/visibility";
-import githubAppConfigsTable from "./github-app-config";
-import githubPatsTable from "./github-pat";
+import runtimeCredentialDefinitionsTable from "./runtime-credential-definition";
 import serviceAccountsTable from "./service-account";
 import { softDeletablePgTable } from "./soft-deletable-table";
 import usersTable from "./user";
@@ -163,7 +162,7 @@ const skillsTable = softDeletablePgTable(
      * in `lastSyncError`).
      */
     githubAppConfigId: uuid("github_app_config_id").references(
-      () => githubAppConfigsTable.id,
+      () => runtimeCredentialDefinitionsTable.id,
       { onDelete: "set null" },
     ),
     /**
@@ -171,9 +170,12 @@ const skillsTable = softDeletablePgTable(
      * of `githubAppConfigId` (at most one of the two is set). Deleting the
      * PAT is blocked while synced skills reference it.
      */
-    githubPatId: uuid("github_pat_id").references(() => githubPatsTable.id, {
-      onDelete: "set null",
-    }),
+    githubPatId: uuid("github_pat_id").references(
+      () => runtimeCredentialDefinitionsTable.id,
+      {
+        onDelete: "set null",
+      },
+    ),
     /** When the last scheduled/manual sync ran (success or failure). */
     lastSyncedAt: timestamp("last_synced_at", { mode: "date" }),
     /** Why the last sync failed; null when it succeeded. */

@@ -17,7 +17,7 @@ import {
 } from "@/types";
 
 /**
- * Stored GitHub personal access tokens, managed at /settings/github alongside
+ * Stored GitHub personal access tokens, managed at /settings/credentials alongside
  * GitHub App configs (same RBAC resource). The token value is stored in the
  * secret manager and is never returned by any endpoint. Stored tokens
  * authenticate skill imports and recurring skill sync.

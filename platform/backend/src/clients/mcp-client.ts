@@ -1469,6 +1469,15 @@ class McpClient {
           ? options.abortSignal.reason
           : new Error("The tool call was aborted before dispatch");
       }
+      if (
+        catalogItem.localConfig?.environment?.some(
+          (entry) => entry.credentialId,
+        )
+      )
+        return McpServerRuntimeManager.withFreshCredentials(
+          targetMcpServerId,
+          runDemandPath,
+        );
       return mcpActiveUseTracker.trackActiveUse(
         targetMcpServerId,
         runDemandPath,
@@ -4023,6 +4032,15 @@ class McpClient {
     // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
     // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
     if (catalogItem.serverType === "local") {
+      if (
+        catalogItem.localConfig?.environment?.some(
+          (entry) => entry.credentialId,
+        )
+      )
+        return McpServerRuntimeManager.withFreshCredentials(
+          mcpServerId,
+          inspectWithStaleSessionRetry,
+        );
       return mcpActiveUseTracker.trackActiveUse(mcpServerId, async () => {
         await McpServerRuntimeManager.ensureAwake(mcpServerId);
         return inspectWithStaleSessionRetry();
@@ -4108,6 +4126,15 @@ class McpClient {
     // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
     // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
     if (catalogItem.serverType === "local") {
+      if (
+        catalogItem.localConfig?.environment?.some(
+          (entry) => entry.credentialId,
+        )
+      )
+        return McpServerRuntimeManager.withFreshCredentials(
+          mcpServerId,
+          runWithClient,
+        );
       return mcpActiveUseTracker.trackActiveUse(mcpServerId, async () => {
         await McpServerRuntimeManager.ensureAwake(mcpServerId);
         return runWithClient();
@@ -4690,6 +4717,15 @@ class McpClient {
     // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
     if (catalogItem.serverType === "local") {
       if (options?.wake !== false) {
+        if (
+          catalogItem.localConfig?.environment?.some(
+            (entry) => entry.credentialId,
+          )
+        )
+          return McpServerRuntimeManager.withFreshCredentials(
+            server.id,
+            readFromServer,
+          );
         return mcpActiveUseTracker.trackActiveUse(server.id, async () => {
           await McpServerRuntimeManager.ensureAwake(server.id);
           return readFromServer();

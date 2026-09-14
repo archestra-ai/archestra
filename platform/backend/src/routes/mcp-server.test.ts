@@ -22,6 +22,7 @@ import {
   test,
 } from "@/test";
 import type { User } from "@/types";
+import { ApiError } from "@/types";
 
 const {
   connectAndGetToolsMock,
@@ -3583,6 +3584,38 @@ describe("mcp server inspect route", () => {
         type: "api_conflict_error",
       },
     });
+  });
+
+  test("preserves retryable renewal responses in the inspector", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      serverType: "local",
+    });
+    const mcpServer = await makeMcpServer({
+      ownerId: user.id,
+      catalogId: catalog.id,
+    });
+
+    inspectServerMock.mockRejectedValueOnce(
+      new ApiError(
+        503,
+        "MCP credential renewal is draining active calls. Retry shortly.",
+      ),
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/mcp_server/${mcpServer.id}/inspect`,
+      payload: { method: "tools/list" },
+    });
+
+    expect(response.statusCode).toBe(503);
+    expect(response.json().error.message).toBe(
+      "MCP credential renewal is draining active calls. Retry shortly.",
+    );
   });
 
   test("keeps unexpected inspect failures as 502 responses", async ({

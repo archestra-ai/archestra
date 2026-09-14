@@ -9,8 +9,6 @@ import ChatOpsChannelBindingModel from "@/models/chatops-channel-binding";
 import EnvironmentModel from "@/models/environment";
 import EnvironmentDefaultUserLimitModel from "@/models/environment-default-user-limit";
 import EnvironmentResourceDefaultModel from "@/models/environment-resource-default";
-import GithubAppConfigModel from "@/models/github-app-config";
-import GithubPatModel from "@/models/github-pat";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import KbDirectoryModel from "@/models/kb-directory";
 import KbFileModel from "@/models/kb-file";
@@ -126,8 +124,6 @@ export const AUDIT_DECISIONS = {
     audited: true,
     model: EnvironmentResourceDefaultModel,
   },
-  githubAppConfigsTable: { audited: true, model: GithubAppConfigModel },
-  githubPatsTable: { audited: true, model: GithubPatModel },
   internalMcpCatalogTable: { audited: true, model: InternalMcpCatalogModel },
   mcpCatalogSkillsTable: {
     audited: false,

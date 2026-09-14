@@ -4149,7 +4149,7 @@ export const postV1GeminiByAgentIdV1BetaModelsByModelStreamGenerateContent = <Th
  *
  * Authorization:
  *
- * `githubAppConfig:read`: View GitHub App configurations
+ * `credential:read`: View saved credentials
  */
 export const listGithubAppConfigs = <ThrowOnError extends boolean = false>(options?: Options<ListGithubAppConfigsData, ThrowOnError>) => (options?.client ?? client).get<ListGithubAppConfigsResponses, ListGithubAppConfigsErrors, ThrowOnError>({ url: '/api/github-app-configs', ...options });
 
@@ -4162,7 +4162,7 @@ export const listGithubAppConfigs = <ThrowOnError extends boolean = false>(optio
  *
  * Authorization:
  *
- * `githubAppConfig:create`: Create GitHub App configurations
+ * `credential:create`: Create saved credentials
  */
 export const createGithubAppConfig = <ThrowOnError extends boolean = false>(options: Options<CreateGithubAppConfigData, ThrowOnError>) => (options.client ?? client).post<CreateGithubAppConfigResponses, CreateGithubAppConfigErrors, ThrowOnError>({
     url: '/api/github-app-configs',
@@ -4182,7 +4182,7 @@ export const createGithubAppConfig = <ThrowOnError extends boolean = false>(opti
  *
  * Authorization:
  *
- * `githubAppConfig:delete`: Delete GitHub App configurations
+ * `credential:delete`: Delete saved credentials
  */
 export const deleteGithubAppConfig = <ThrowOnError extends boolean = false>(options: Options<DeleteGithubAppConfigData, ThrowOnError>) => (options.client ?? client).delete<DeleteGithubAppConfigResponses, DeleteGithubAppConfigErrors, ThrowOnError>({ url: '/api/github-app-configs/{id}', ...options });
 
@@ -4195,7 +4195,7 @@ export const deleteGithubAppConfig = <ThrowOnError extends boolean = false>(opti
  *
  * Authorization:
  *
- * `githubAppConfig:read`: View GitHub App configurations
+ * `credential:read`: View saved credentials
  */
 export const getGithubAppConfig = <ThrowOnError extends boolean = false>(options: Options<GetGithubAppConfigData, ThrowOnError>) => (options.client ?? client).get<GetGithubAppConfigResponses, GetGithubAppConfigErrors, ThrowOnError>({ url: '/api/github-app-configs/{id}', ...options });
 
@@ -4208,7 +4208,7 @@ export const getGithubAppConfig = <ThrowOnError extends boolean = false>(options
  *
  * Authorization:
  *
- * `githubAppConfig:update`: Modify GitHub App configurations
+ * `credential:update`: Modify saved credentials
  */
 export const updateGithubAppConfig = <ThrowOnError extends boolean = false>(options: Options<UpdateGithubAppConfigData, ThrowOnError>) => (options.client ?? client).put<UpdateGithubAppConfigResponses, UpdateGithubAppConfigErrors, ThrowOnError>({
     url: '/api/github-app-configs/{id}',
@@ -4343,7 +4343,7 @@ export const githubCopilotListModelsWithAgent = <ThrowOnError extends boolean = 
  *
  * Authorization:
  *
- * `githubAppConfig:read`: View GitHub App configurations
+ * `credential:read`: View saved credentials
  */
 export const listGithubPats = <ThrowOnError extends boolean = false>(options?: Options<ListGithubPatsData, ThrowOnError>) => (options?.client ?? client).get<ListGithubPatsResponses, ListGithubPatsErrors, ThrowOnError>({ url: '/api/github-pats', ...options });
 
@@ -4356,7 +4356,7 @@ export const listGithubPats = <ThrowOnError extends boolean = false>(options?: O
  *
  * Authorization:
  *
- * `githubAppConfig:create`: Create GitHub App configurations
+ * `credential:create`: Create saved credentials
  */
 export const createGithubPat = <ThrowOnError extends boolean = false>(options: Options<CreateGithubPatData, ThrowOnError>) => (options.client ?? client).post<CreateGithubPatResponses, CreateGithubPatErrors, ThrowOnError>({
     url: '/api/github-pats',
@@ -4376,7 +4376,7 @@ export const createGithubPat = <ThrowOnError extends boolean = false>(options: O
  *
  * Authorization:
  *
- * `githubAppConfig:delete`: Delete GitHub App configurations
+ * `credential:delete`: Delete saved credentials
  */
 export const deleteGithubPat = <ThrowOnError extends boolean = false>(options: Options<DeleteGithubPatData, ThrowOnError>) => (options.client ?? client).delete<DeleteGithubPatResponses, DeleteGithubPatErrors, ThrowOnError>({ url: '/api/github-pats/{id}', ...options });
 
@@ -4389,7 +4389,7 @@ export const deleteGithubPat = <ThrowOnError extends boolean = false>(options: O
  *
  * Authorization:
  *
- * `githubAppConfig:update`: Modify GitHub App configurations
+ * `credential:update`: Modify saved credentials
  */
 export const updateGithubPat = <ThrowOnError extends boolean = false>(options: Options<UpdateGithubPatData, ThrowOnError>) => (options.client ?? client).put<UpdateGithubPatResponses, UpdateGithubPatErrors, ThrowOnError>({
     url: '/api/github-pats/{id}',
@@ -8965,7 +8965,7 @@ export const unpinProject = <ThrowOnError extends boolean = false>(options: Opti
 export const pinProject = <ThrowOnError extends boolean = false>(options: Options<PinProjectData, ThrowOnError>) => (options.client ?? client).put<PinProjectResponses, PinProjectErrors, ThrowOnError>({ url: '/api/projects/{id}/pin', ...options });
 
 /**
- * List runtime credentials available to Agents
+ * List reusable credentials available to platform integrations
  *
  * Authentication:
  *
@@ -8973,12 +8973,12 @@ export const pinProject = <ThrowOnError extends boolean = false>(options: Option
  *
  * Authorization:
  *
- * `agent:read`: View and list agents
+ * `credential:read`: View saved credentials
  */
-export const listRuntimeCredentials = <ThrowOnError extends boolean = false>(options?: Options<ListRuntimeCredentialsData, ThrowOnError>) => (options?.client ?? client).get<ListRuntimeCredentialsResponses, ListRuntimeCredentialsErrors, ThrowOnError>({ url: '/api/runtime-credentials', ...options });
+export const listRuntimeCredentials = <ThrowOnError extends boolean = false>(options?: Options<ListRuntimeCredentialsData, ThrowOnError>) => (options?.client ?? client).get<ListRuntimeCredentialsResponses, ListRuntimeCredentialsErrors, ThrowOnError>({ url: '/api/credentials', ...options });
 
 /**
- * Create an runtime credential definition
+ * Create a credential definition
  *
  * Authentication:
  *
@@ -8986,10 +8986,10 @@ export const listRuntimeCredentials = <ThrowOnError extends boolean = false>(opt
  *
  * Authorization:
  *
- * `agentSettings:update`: Modify agent settings (default model, default agent, default tool guardrails, file uploads, Apps Hackathon recorder)
+ * `credential:create`: Create saved credentials
  */
 export const createRuntimeCredential = <ThrowOnError extends boolean = false>(options: Options<CreateRuntimeCredentialData, ThrowOnError>) => (options.client ?? client).post<CreateRuntimeCredentialResponses, CreateRuntimeCredentialErrors, ThrowOnError>({
-    url: '/api/runtime-credentials',
+    url: '/api/credentials',
     ...options,
     headers: {
         'Content-Type': 'application/json',
@@ -8998,7 +8998,7 @@ export const createRuntimeCredential = <ThrowOnError extends boolean = false>(op
 });
 
 /**
- * List Agents using an runtime credential
+ * List resources using a saved credential
  *
  * Authentication:
  *
@@ -9006,12 +9006,12 @@ export const createRuntimeCredential = <ThrowOnError extends boolean = false>(op
  *
  * Authorization:
  *
- * `agentSettings:update`: Modify agent settings (default model, default agent, default tool guardrails, file uploads, Apps Hackathon recorder)
+ * `credential:read`: View saved credentials
  */
-export const getRuntimeCredentialUsage = <ThrowOnError extends boolean = false>(options: Options<GetRuntimeCredentialUsageData, ThrowOnError>) => (options.client ?? client).get<GetRuntimeCredentialUsageResponses, GetRuntimeCredentialUsageErrors, ThrowOnError>({ url: '/api/runtime-credentials/{key}/usage', ...options });
+export const getRuntimeCredentialUsage = <ThrowOnError extends boolean = false>(options: Options<GetRuntimeCredentialUsageData, ThrowOnError>) => (options.client ?? client).get<GetRuntimeCredentialUsageResponses, GetRuntimeCredentialUsageErrors, ThrowOnError>({ url: '/api/credentials/{key}/usage', ...options });
 
 /**
- * Delete an runtime credential definition
+ * Delete a credential definition
  *
  * Authentication:
  *
@@ -9019,12 +9019,12 @@ export const getRuntimeCredentialUsage = <ThrowOnError extends boolean = false>(
  *
  * Authorization:
  *
- * `agentSettings:update`: Modify agent settings (default model, default agent, default tool guardrails, file uploads, Apps Hackathon recorder)
+ * `credential:delete`: Delete saved credentials
  */
-export const deleteRuntimeCredential = <ThrowOnError extends boolean = false>(options: Options<DeleteRuntimeCredentialData, ThrowOnError>) => (options.client ?? client).delete<DeleteRuntimeCredentialResponses, DeleteRuntimeCredentialErrors, ThrowOnError>({ url: '/api/runtime-credentials/{key}', ...options });
+export const deleteRuntimeCredential = <ThrowOnError extends boolean = false>(options: Options<DeleteRuntimeCredentialData, ThrowOnError>) => (options.client ?? client).delete<DeleteRuntimeCredentialResponses, DeleteRuntimeCredentialErrors, ThrowOnError>({ url: '/api/credentials/{key}', ...options });
 
 /**
- * Update an runtime credential definition
+ * Update a credential definition
  *
  * Authentication:
  *
@@ -9032,10 +9032,10 @@ export const deleteRuntimeCredential = <ThrowOnError extends boolean = false>(op
  *
  * Authorization:
  *
- * `agentSettings:update`: Modify agent settings (default model, default agent, default tool guardrails, file uploads, Apps Hackathon recorder)
+ * `credential:update`: Modify saved credentials
  */
 export const updateRuntimeCredential = <ThrowOnError extends boolean = false>(options: Options<UpdateRuntimeCredentialData, ThrowOnError>) => (options.client ?? client).patch<UpdateRuntimeCredentialResponses, UpdateRuntimeCredentialErrors, ThrowOnError>({
-    url: '/api/runtime-credentials/{key}',
+    url: '/api/credentials/{key}',
     ...options,
     headers: {
         'Content-Type': 'application/json',
@@ -9044,7 +9044,7 @@ export const updateRuntimeCredential = <ThrowOnError extends boolean = false>(op
 });
 
 /**
- * Disconnect a personal runtime credential
+ * Disconnect a personal credential
  *
  * Authentication:
  *
@@ -9052,12 +9052,12 @@ export const updateRuntimeCredential = <ThrowOnError extends boolean = false>(op
  *
  * Authorization:
  *
- * `agent:read`: View and list agents
+ * `credential:read`: View saved credentials
  */
-export const deletePersonalRuntimeCredentialConnection = <ThrowOnError extends boolean = false>(options: Options<DeletePersonalRuntimeCredentialConnectionData, ThrowOnError>) => (options.client ?? client).delete<DeletePersonalRuntimeCredentialConnectionResponses, DeletePersonalRuntimeCredentialConnectionErrors, ThrowOnError>({ url: '/api/runtime-credentials/{key}/personal', ...options });
+export const deletePersonalRuntimeCredentialConnection = <ThrowOnError extends boolean = false>(options: Options<DeletePersonalRuntimeCredentialConnectionData, ThrowOnError>) => (options.client ?? client).delete<DeletePersonalRuntimeCredentialConnectionResponses, DeletePersonalRuntimeCredentialConnectionErrors, ThrowOnError>({ url: '/api/credentials/{key}/personal', ...options });
 
 /**
- * Connect a personal runtime credential
+ * Connect a personal credential
  *
  * Authentication:
  *
@@ -9065,10 +9065,10 @@ export const deletePersonalRuntimeCredentialConnection = <ThrowOnError extends b
  *
  * Authorization:
  *
- * `agent:read`: View and list agents
+ * `credential:read`: View saved credentials
  */
 export const setPersonalRuntimeCredentialConnection = <ThrowOnError extends boolean = false>(options: Options<SetPersonalRuntimeCredentialConnectionData, ThrowOnError>) => (options.client ?? client).put<SetPersonalRuntimeCredentialConnectionResponses, SetPersonalRuntimeCredentialConnectionErrors, ThrowOnError>({
-    url: '/api/runtime-credentials/{key}/personal',
+    url: '/api/credentials/{key}/personal',
     ...options,
     headers: {
         'Content-Type': 'application/json',
@@ -9077,7 +9077,7 @@ export const setPersonalRuntimeCredentialConnection = <ThrowOnError extends bool
 });
 
 /**
- * Disconnect an organization runtime credential
+ * Disconnect an organization credential
  *
  * Authentication:
  *
@@ -9085,12 +9085,12 @@ export const setPersonalRuntimeCredentialConnection = <ThrowOnError extends bool
  *
  * Authorization:
  *
- * `agentSettings:update`: Modify agent settings (default model, default agent, default tool guardrails, file uploads, Apps Hackathon recorder)
+ * `credential:update`: Modify saved credentials
  */
-export const deleteOrganizationRuntimeCredentialConnection = <ThrowOnError extends boolean = false>(options: Options<DeleteOrganizationRuntimeCredentialConnectionData, ThrowOnError>) => (options.client ?? client).delete<DeleteOrganizationRuntimeCredentialConnectionResponses, DeleteOrganizationRuntimeCredentialConnectionErrors, ThrowOnError>({ url: '/api/runtime-credentials/{key}/organization', ...options });
+export const deleteOrganizationRuntimeCredentialConnection = <ThrowOnError extends boolean = false>(options: Options<DeleteOrganizationRuntimeCredentialConnectionData, ThrowOnError>) => (options.client ?? client).delete<DeleteOrganizationRuntimeCredentialConnectionResponses, DeleteOrganizationRuntimeCredentialConnectionErrors, ThrowOnError>({ url: '/api/credentials/{key}/organization', ...options });
 
 /**
- * Connect an organization runtime credential
+ * Connect an organization credential
  *
  * Authentication:
  *
@@ -9098,10 +9098,10 @@ export const deleteOrganizationRuntimeCredentialConnection = <ThrowOnError exten
  *
  * Authorization:
  *
- * `agentSettings:update`: Modify agent settings (default model, default agent, default tool guardrails, file uploads, Apps Hackathon recorder)
+ * `credential:update`: Modify saved credentials
  */
 export const setOrganizationRuntimeCredentialConnection = <ThrowOnError extends boolean = false>(options: Options<SetOrganizationRuntimeCredentialConnectionData, ThrowOnError>) => (options.client ?? client).put<SetOrganizationRuntimeCredentialConnectionResponses, SetOrganizationRuntimeCredentialConnectionErrors, ThrowOnError>({
-    url: '/api/runtime-credentials/{key}/organization',
+    url: '/api/credentials/{key}/organization',
     ...options,
     headers: {
         'Content-Type': 'application/json',

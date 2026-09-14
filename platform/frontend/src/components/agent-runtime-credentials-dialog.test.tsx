@@ -95,7 +95,7 @@ beforeEach(() => {
       HttpResponse.json(permissions),
     ),
     http.get(`${origin}/api/config`, () => HttpResponse.json(makeConfig())),
-    http.get(`${origin}/api/runtime-credentials`, () =>
+    http.get(`${origin}/api/credentials`, () =>
       HttpResponse.json([
         {
           key: "github",
@@ -412,7 +412,7 @@ describe("credential setup deep links", () => {
     const claudeDescription =
       "Run claude setup-token on your own machine.\nComplete the sign-in flow in your browser.\nCopy the resulting subscription token and paste it below.";
     server.use(
-      http.get(`${origin}/api/runtime-credentials`, () =>
+      http.get(`${origin}/api/credentials`, () =>
         HttpResponse.json([
           {
             key: "github",

@@ -32,6 +32,11 @@ export async function listRuntimeCredentialDefinitions(params: {
   );
   return [
     ...custom.map((definition) => ({
+      id: definition.id,
+      kind: definition.kind,
+      githubUrl: definition.githubUrl,
+      appId: definition.appId,
+      installationId: definition.installationId,
       key: definition.key,
       name: definition.name,
       description: definition.description,
@@ -64,6 +69,7 @@ export async function createRuntimeCredentialDefinition(params: {
       "Claude Code accounts connect through native sign-in on the Agent.",
     );
   }
+  assertProviderConfiguration(params.definition);
   assertExactlyOneScopeAllowed({
     allowPersonal: params.definition.allowPersonal ?? true,
     allowOrganization: params.definition.allowOrganization ?? false,
@@ -93,6 +99,7 @@ export async function getRuntimeCredentialUsage(params: {
   });
   return {
     agents: await RuntimeCredentialDefinitionModel.listAgentsUsing(params),
+    resources: await RuntimeCredentialDefinitionModel.listOtherUsage(params),
   };
 }
 
@@ -103,6 +110,7 @@ export async function updateRuntimeCredentialDefinition(params: {
 }) {
   const current = await RuntimeCredentialDefinitionModel.find(params);
   if (!current) throw new ApiError(404, "Credential not found");
+  assertProviderConfiguration({ ...current, ...params.definition });
   const updated = await RuntimeCredentialDefinitionModel.update(params);
   if (!updated) throw new ApiError(404, "Credential not found");
   return updated;
@@ -112,10 +120,13 @@ export async function deleteRuntimeCredentialDefinition(params: {
   organizationId: string;
   key: string;
 }) {
-  if (await RuntimeCredentialDefinitionModel.isUsedByAgent(params)) {
+  if (
+    (await RuntimeCredentialDefinitionModel.isUsedByAgent(params)) ||
+    (await RuntimeCredentialDefinitionModel.listOtherUsage(params)).length > 0
+  ) {
     throw new ApiError(
       409,
-      "Remove this credential from Agent bindings before deleting it",
+      "Remove this credential from its resources before deleting it",
     );
   }
   const deleted = await RuntimeCredentialDefinitionModel.delete(params);
@@ -243,6 +254,38 @@ function assertConnectionValue(value: string): void {
     throw new ApiError(
       400,
       "Readonly Vault credentials must select a secret and key",
+    );
+  }
+}
+
+function assertProviderConfiguration(definition: {
+  kind?: string;
+  allowPersonal?: boolean;
+  allowOrganization?: boolean;
+  githubUrl?: string | null;
+  appId?: string | null;
+  installationId?: string | null;
+}): void {
+  if (definition.kind !== "github_app") return;
+  if (definition.allowPersonal || !definition.allowOrganization)
+    throw new ApiError(400, "GitHub Apps must be provided by the organization");
+  if (!definition.appId?.trim() || !definition.installationId?.trim())
+    throw new ApiError(
+      400,
+      "GitHub App credentials require an app ID and installation ID",
+    );
+  try {
+    const url = new URL(definition.githubUrl ?? "");
+    if (
+      !["http:", "https:"].includes(url.protocol) ||
+      url.username ||
+      url.password
+    )
+      throw new Error();
+  } catch {
+    throw new ApiError(
+      400,
+      "GitHub API URL must use HTTP or HTTPS without embedded credentials",
     );
   }
 }

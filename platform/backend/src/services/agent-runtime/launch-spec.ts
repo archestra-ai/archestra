@@ -330,6 +330,9 @@ export async function buildAgentRunLaunchSpec(params: {
       },
       env: nonSecretEnv,
       secretEnv,
+      ...(Object.keys(credentials.renewableCredentials).length
+        ? { renewableCredentials: credentials.renewableCredentials }
+        : {}),
       activeDeadlineSeconds:
         (params.runtime.ttlHours ?? config.agentRuntime.defaultTtlHours) *
         60 *

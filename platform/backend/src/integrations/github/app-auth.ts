@@ -1,4 +1,4 @@
-import { createPrivateKey } from "node:crypto";
+import { createHash, createPrivateKey, createPublicKey } from "node:crypto";
 import { TimeInMs } from "@archestra/shared";
 import { SignJWT } from "jose";
 import { LRUCacheManager } from "@/cache-manager";
@@ -9,6 +9,7 @@ type GithubAppCredentials = {
   appId: string;
   installationId: string;
   privateKey: string;
+  minimumValidityMs?: number;
 };
 
 /**
@@ -20,6 +21,14 @@ export async function resolveInstallationToken(
   credentials: GithubAppCredentials,
   fetchImpl: typeof fetch = globalThis.fetch,
 ): Promise<string> {
+  return (await resolveInstallationCredential(credentials, fetchImpl)).token;
+}
+
+/** Retain the upstream expiry so workload refresh never guesses token age. */
+export async function resolveInstallationCredential(
+  credentials: GithubAppCredentials,
+  fetchImpl: typeof fetch = globalThis.fetch,
+): Promise<{ token: string; expiresAt: number }> {
   const { githubUrl, appId, installationId, privateKey } = credentials;
   if (!appId || !installationId || !privateKey) {
     throw new Error(
@@ -31,9 +40,14 @@ export async function resolveInstallationToken(
     githubUrl,
     appId,
     installationId,
+    privateKey,
   });
   const cachedToken = installationTokenCache.get(cacheKey);
-  if (cachedToken) {
+  if (
+    cachedToken &&
+    cachedToken.expiresAt - Date.now() >
+      (credentials.minimumValidityMs ?? 60_000)
+  ) {
     return cachedToken;
   }
 
@@ -63,19 +77,27 @@ export async function resolveInstallationToken(
     );
   }
 
-  const body = (await response.json()) as { token?: string };
+  const body = (await response.json()) as {
+    token?: string;
+    expires_at?: string;
+  };
   if (!body.token) {
     throw new Error(
       "GitHub App installation token response did not include a token",
     );
   }
 
+  const expiresAt = body.expires_at ? Date.parse(body.expires_at) : NaN;
+  if (!Number.isFinite(expiresAt) || expiresAt <= Date.now())
+    throw new Error(
+      "GitHub App installation token has an invalid or expired lifetime",
+    );
   installationTokenCache.set(
     cacheKey,
-    body.token,
-    GITHUB_APP_INSTALLATION_TOKEN_TTL_MS,
+    { token: body.token, expiresAt },
+    Math.min(GITHUB_APP_INSTALLATION_TOKEN_TTL_MS, expiresAt - Date.now()),
   );
-  return body.token;
+  return { token: body.token, expiresAt };
 }
 
 // ===== Internal helpers =====
@@ -83,7 +105,10 @@ export async function resolveInstallationToken(
 const GITHUB_APP_INSTALLATION_TOKEN_TTL_MS = 55 * TimeInMs.Minute;
 const INSTALLATION_TOKEN_REQUEST_TIMEOUT_MS = 30_000;
 
-const installationTokenCache = new LRUCacheManager<string>({
+const installationTokenCache = new LRUCacheManager<{
+  token: string;
+  expiresAt: number;
+}>({
   maxSize: 500,
   defaultTtl: GITHUB_APP_INSTALLATION_TOKEN_TTL_MS,
 });
@@ -106,11 +131,21 @@ function buildInstallationTokenCacheKey(params: {
   githubUrl: string;
   appId: string;
   installationId: string;
+  privateKey: string;
 }): string {
   return [
     params.githubUrl.replace(/\/+$/, ""),
     params.appId,
     params.installationId,
+    // The public-key fingerprint invalidates cached tokens when the App key rotates.
+    createHash("sha256")
+      .update(
+        createPublicKey(normalizePrivateKey(params.privateKey)).export({
+          type: "spki",
+          format: "der",
+        }),
+      )
+      .digest("hex"),
   ].join(":");
 }
 

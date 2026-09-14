@@ -53,6 +53,19 @@ class AgentRunReconciler {
       for (const workspace of workspaces)
         await this.reconcileWorkspace(workspace);
       const sessions = await AgentRunModel.listOpen();
+      const retained = await AgentRunModel.listRetainedForCredentialRefresh();
+      for (const session of [...sessions, ...retained]) {
+        try {
+          await resolveAgentRuntimeBackendDriver(
+            session.backend,
+          ).refreshCredentials?.(session);
+        } catch {
+          logger.warn(
+            { taskId: session.taskId },
+            "Agent Runtime credential refresh will retry; expired values cannot start new managed commands",
+          );
+        }
+      }
       for (const session of sessions) {
         if (this.inFlight.has(session.id)) continue;
         void this.reconcileSession(session);

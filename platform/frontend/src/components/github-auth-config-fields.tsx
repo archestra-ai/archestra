@@ -124,10 +124,10 @@ export function GithubAuthConfigFields({
 function GithubAppSettingsLink() {
   return (
     <Link
-      href="/settings/github"
+      href="/settings/credentials"
       className="font-medium text-primary underline-offset-4 hover:underline"
     >
-      Settings → GitHub
+      Settings → Credentials
     </Link>
   );
 }

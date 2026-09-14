@@ -51,8 +51,11 @@ keys still require provider-qualified ids.
 When an Agent declares `GITHUB_TOKEN`, the launch contract also supplies the
 GitHub CLI's canonical `GH_TOKEN` alias and configures the CLI as Git's
 credential helper before the Agent command starts. Clone, push, and
-pull-request workflows therefore remain non-interactive while the token stays
-a per-user Agent Runtime secret. GitHub SSH clone URLs are normalized
+pull-request workflows therefore remain non-interactive using the selected
+personal or organization credential. GitHub App tokens are projected into a
+renewable credential file; the maintained `gh` wrapper rereads it on every
+invocation, including Git credential-helper calls. Custom clients that cache
+a token must adopt the file contract described in `runtime-contract.md`. GitHub SSH clone URLs are normalized
 to that authenticated HTTPS transport, so a catalog Agent does not also need a
 separate SSH key.
 

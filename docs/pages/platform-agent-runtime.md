@@ -145,7 +145,7 @@ Custom images should use the proxy and gateway to retain platform controls. Send
 
 Use environment variables for ordinary configuration and **Secret** for sensitive values. Reusable connections supply credentials to multiple Agents. One-off secrets belong to one Agent.
 
-Administrators manage shared connections; users connect their own personal accounts. See [Runtime Credentials](/docs/platform-runtime-credentials) for supported scopes and Vault setup.
+Administrators manage shared connections; users connect their own personal accounts. See [Credentials](/docs/platform-credentials) for supported scopes and Vault setup.
 
 ### Run Controls
 
@@ -228,4 +228,4 @@ A coordinator Agent answers questions in a messaging channel. It delegates codin
 
 ### Use Case: Fix A Bug And Prepare A Pull Request
 
-Connect repository credentials through [Runtime Credentials](/docs/platform-runtime-credentials). Ask the coding Agent to fix a bug, run tests, and prepare a pull request. Review its terminal output, then send follow-up instructions if tests reveal another issue. Share the run with a teammate for review. The same specialist can receive tasks from Chat, a channel coordinator, or an external client.
+Connect repository credentials through [Credentials](/docs/platform-credentials). Ask the coding Agent to fix a bug, run tests, and prepare a pull request. Review its terminal output, then send follow-up instructions if tests reveal another issue. Share the run with a teammate for review. The same specialist can receive tasks from Chat, a channel coordinator, or an external client.

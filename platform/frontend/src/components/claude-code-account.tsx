@@ -7,6 +7,10 @@ import { QueryLoadError } from "@/components/query-load-error";
 import { RuntimeCredentialIcon } from "@/components/runtime-credential-icon";
 import { StandardDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
+import {
+  CompactWarning,
+  CompactWarningText,
+} from "@/components/ui/compact-warning";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { DialogCancelButton } from "@/components/unsaved-changes-guard";
@@ -25,7 +29,7 @@ export function ClaudeCodeAccount({
   variant = "card",
 }: {
   agentId: string;
-  variant?: "card" | "row";
+  variant?: "card" | "row" | "compact";
   model?: string;
   onModelChange?: (model: string) => void;
 }) {
@@ -77,6 +81,18 @@ export function ClaudeCodeAccount({
     return () => clearTimeout(timer);
   }, [open, state, flowId, finishing, signInFailed, finishSignIn]);
 
+  const statusText = account.isPending
+    ? "Checking connection…"
+    : account.isError
+      ? "Could not check connection"
+      : connected
+        ? "Signed in for you"
+        : account.data?.state === "expired"
+          ? "Connection expired. Sign in again."
+          : variant === "row"
+            ? "Sign in once for all your Claude Code agents."
+            : "Sign in to use this agent.";
+
   if (!agentId)
     return (
       <p className="text-sm text-muted-foreground">
@@ -86,47 +102,56 @@ export function ClaudeCodeAccount({
 
   return (
     <div className="space-y-4">
-      <div
-        className={
-          variant === "row"
-            ? "flex flex-wrap items-center gap-3 p-3"
-            : "flex flex-wrap items-center gap-3 rounded-lg border px-3 py-2.5"
-        }
-      >
-        <div className="flex size-8 shrink-0 items-center justify-center rounded-md border bg-background">
-          <RuntimeCredentialIcon icon="logo:anthropic" className="size-4" />
-        </div>
-        <div className="min-w-0 flex-1 space-y-0.5">
-          <p className="text-sm font-medium">Claude Code</p>
-          <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            {connected && <CheckCircle2 className="size-3.5 text-green-500" />}
-            <span>
-              {account.isPending
-                ? "Checking connection…"
-                : account.isError
-                  ? "Could not check connection"
-                  : connected
-                    ? "Signed in for you"
-                    : account.data?.state === "expired"
-                      ? "Connection expired. Sign in again."
-                      : variant === "row"
-                        ? "Sign in once for all your Claude Code agents."
-                        : "Sign in to use this agent."}
-            </span>
-          </p>
-        </div>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="h-7 shrink-0 gap-1.5 px-2.5 text-xs"
-          onClick={() => setOpen(true)}
-          disabled={account.isPending}
+      {variant === "compact" ? (
+        <CompactWarning>
+          <RuntimeCredentialIcon icon="logo:anthropic" className="size-3.5" />
+          <span className="font-medium">Claude Code</span>
+          <CompactWarningText>{statusText}</CompactWarningText>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="ml-auto h-6 shrink-0 gap-1.5 bg-background px-2 text-xs"
+            onClick={() => setOpen(true)}
+            disabled={account.isPending}
+          >
+            <span>{connected ? "Manage" : "Sign in"}</span>
+            <ExternalLink className="size-3" />
+          </Button>
+        </CompactWarning>
+      ) : (
+        <div
+          className={
+            variant === "row"
+              ? "flex flex-wrap items-center gap-3 p-3"
+              : "flex flex-wrap items-center gap-3 rounded-lg border px-3 py-2.5"
+          }
         >
-          <span>{connected ? "Manage" : "Sign in"}</span>
-          <ExternalLink className="size-3" />
-        </Button>
-      </div>
+          <div className="flex size-8 shrink-0 items-center justify-center rounded-md border bg-background">
+            <RuntimeCredentialIcon icon="logo:anthropic" className="size-4" />
+          </div>
+          <div className="min-w-0 flex-1 space-y-0.5">
+            <p className="text-sm font-medium">Claude Code</p>
+            <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              {connected && (
+                <CheckCircle2 className="size-3.5 text-green-500" />
+              )}
+              <span>{statusText}</span>
+            </p>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-7 shrink-0 gap-1.5 px-2.5 text-xs"
+            onClick={() => setOpen(true)}
+            disabled={account.isPending}
+          >
+            <span>{connected ? "Manage" : "Sign in"}</span>
+            <ExternalLink className="size-3" />
+          </Button>
+        </div>
+      )}
       {connected && onModelChange && (
         <div className="space-y-2">
           <Label>Model</Label>

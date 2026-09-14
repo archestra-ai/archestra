@@ -20,6 +20,8 @@ interface DeploymentEnvironmentVariablesEditorProps {
   targetLabel: string;
   installationLabel: string;
   staticLabel: string;
+  installationDescription?: string;
+  staticDescription?: string;
   installationCalloutTitle: string;
   requiredDescription: string;
   promptedValueLabel: string;
@@ -37,6 +39,8 @@ export function DeploymentEnvironmentVariablesEditor({
   targetLabel,
   installationLabel,
   staticLabel,
+  installationDescription,
+  staticDescription,
   installationCalloutTitle,
   requiredDescription,
   promptedValueLabel,
@@ -80,6 +84,12 @@ export function DeploymentEnvironmentVariablesEditor({
       ) : (
         <EnvironmentVariablesTable
           rows={rows}
+          credentialLabels={Object.fromEntries(
+            (credentialBindingOptions ?? []).map((option) => [
+              option.id,
+              option.label,
+            ]),
+          )}
           promptedValueLabel={promptedValueLabel}
           onEdit={(index) => setDialog({ mode: "edit", index })}
           onDelete={(index) => onChange(value.filter((_, i) => i !== index))}
@@ -98,6 +108,8 @@ export function DeploymentEnvironmentVariablesEditor({
         targetLabel={targetLabel}
         installationLabel={installationLabel}
         staticLabel={staticLabel}
+        installationDescription={installationDescription}
+        staticDescription={staticDescription}
         installationCalloutTitle={installationCalloutTitle}
         requiredDescription={requiredDescription}
         deferStaticSecretValue={deferStaticSecretValue}

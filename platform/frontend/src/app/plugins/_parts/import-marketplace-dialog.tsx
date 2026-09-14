@@ -140,7 +140,7 @@ export function ImportMarketplaceDialog({
     ...CONNECT_PLATFORM_OPTIONS,
   ]);
   const [clients, setClients] = useState<ConnectClient[]>([]);
-  // name under which a newly pasted token is saved (Settings -> GitHub)
+  // name under which a newly pasted token is saved (Settings → Credentials)
   const [newTokenName, setNewTokenName] = useState("");
   // ref + authentication live behind this fold; opened automatically when a
   // discover failure looks like a missing-auth problem.
@@ -882,10 +882,10 @@ export function ImportMarketplaceDialog({
                         Scheduled checks stay authenticated with this saved
                         token. Manage saved tokens in{" "}
                         <a
-                          href="/settings/github"
+                          href="/settings/credentials"
                           className="font-medium text-primary underline-offset-4 hover:underline"
                         >
-                          Settings → GitHub
+                          Settings → Credentials
                         </a>
                         .
                       </p>
@@ -911,10 +911,10 @@ export function ImportMarketplaceDialog({
                         <p className="text-sm text-muted-foreground">
                           Needed for private repositories. Saved to{" "}
                           <a
-                            href="/settings/github"
+                            href="/settings/credentials"
                             className="font-medium text-primary underline-offset-4 hover:underline"
                           >
-                            Settings → GitHub
+                            Settings → Credentials
                           </a>{" "}
                           on import so scheduled checks stay authenticated.{" "}
                           <a

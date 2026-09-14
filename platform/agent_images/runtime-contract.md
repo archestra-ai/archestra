@@ -83,6 +83,7 @@ Archestra supplies the applicable variables below when launching a run. You do n
 | `ARCHESTRA_AGENT_RUNTIME_AGENT_ID`, `ARCHESTRA_AGENT_RUNTIME_AGENT_NAME` | Durable Agent identity. |
 | `ARCHESTRA_AGENT_RUNTIME_TASK_ID` | Durable run identifier. |
 | `ARCHESTRA_AGENT_RUNTIME_DIR` | Runtime-owned control and artifact directory. Defaults to `/var/run/archestra`. |
+| `ARCHESTRA_AGENT_RUNTIME_CREDENTIALS_FILE` | Managed JSON credential bundle, reread before authenticating. Each entry has `value` and Unix-millisecond `expiresAt`; the bundle is scoped by `taskId`. |
 | `ARCHESTRA_AGENT_RUNTIME_MODE` | `interactive` for a Chat-owned live terminal; `one_shot` for unattended delegation that must exit when complete. |
 | `ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID`, `ARCHESTRA_AGENT_RUNTIME_CONTINUE` | Stable workspace identity and `1` when restoring a saved client session for a follow-up. |
 | `ARCHESTRA_AGENT_RUNTIME_TASK`, `ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT` | Initial task and Agent instructions. |

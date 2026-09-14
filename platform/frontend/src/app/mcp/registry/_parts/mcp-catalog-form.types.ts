@@ -17,6 +17,8 @@ const headerNameSchema = z
 const additionalHeaderSchema = z.object({
   fieldName: z.string().optional(),
   headerName: headerNameSchema,
+  credentialId: z.string().min(1).max(128).optional(),
+  credentialScope: z.enum(["personal", "organization"]).optional(),
   promptOnInstallation: z.boolean(),
   required: z.boolean(),
   value: z.string().optional(),

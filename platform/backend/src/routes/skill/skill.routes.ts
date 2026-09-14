@@ -109,7 +109,7 @@ import { registerEntityLabelRoutes } from "../entity-labels";
  * Shared fields identifying a GitHub skill source. Authentication is optional
  * and at most one method may be supplied: a transient one-time PAT
  * (`githubToken`, never stored), a stored PAT (`githubPatId`, managed at
- * /settings/github), or a stored GitHub App config (`githubAppConfigId`).
+ * /settings/credentials), or a stored GitHub App config (`githubAppConfigId`).
  */
 const githubSkillSourceShape = {
   repoUrl: z.string().min(1),
@@ -2215,7 +2215,7 @@ async function resolveGithubImportToken(params: {
   const allowed = await userHasPermission(
     userId,
     organizationId,
-    "githubAppConfig",
+    "credential",
     "read",
   );
   if (!allowed) {

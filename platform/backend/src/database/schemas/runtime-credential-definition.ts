@@ -9,17 +9,22 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+import type { CredentialKind } from "@/types/runtime-credential-definition";
 import serviceAccountsTable from "./service-account";
 import usersTable from "./user";
 
-/** Organization-defined credential types available to Agent image bindings. */
+/** Reusable credential definitions shared by every platform consumer. */
 const runtimeCredentialDefinitionsTable = pgTable(
-  "runtime_credential_definitions",
+  "credential_definitions",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     organizationId: text("organization_id").notNull(),
     key: text("key").notNull(),
     name: text("name").notNull(),
+    kind: text("kind").$type<CredentialKind>().notNull().default("secret"),
+    githubUrl: text("github_url"),
+    appId: text("app_id"),
+    installationId: text("installation_id"),
     description: text("description").notNull().default(""),
     icon: text("icon"),
     allowPersonal: boolean("allow_personal").notNull().default(true),
@@ -40,11 +45,11 @@ const runtimeCredentialDefinitionsTable = pgTable(
   },
   (table) => [
     check(
-      "runtime_credential_definitions_scope_check",
+      "credential_definitions_scope_check",
       sql`(${table.allowPersonal} and not ${table.allowOrganization}) or (${table.allowOrganization} and not ${table.allowPersonal})`,
     ),
-    index("runtime_credential_definitions_org_idx").on(table.organizationId),
-    uniqueIndex("runtime_credential_definitions_org_key_uidx").on(
+    index("credential_definitions_org_idx").on(table.organizationId),
+    uniqueIndex("credential_definitions_org_key_uidx").on(
       table.organizationId,
       table.key,
     ),

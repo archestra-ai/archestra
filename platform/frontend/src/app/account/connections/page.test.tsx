@@ -46,7 +46,7 @@ beforeEach(() => {
   >);
   server.use(
     http.get(`${origin}/api/agents/all`, () => HttpResponse.json([])),
-    http.get(`${origin}/api/runtime-credentials`, () =>
+    http.get(`${origin}/api/credentials`, () =>
       HttpResponse.json([
         {
           key: "github",
@@ -77,7 +77,7 @@ describe("AccountConnectionsPage", () => {
     const user = userEvent.setup();
     let deleted = false;
     server.use(
-      http.delete(`${origin}/api/runtime-credentials/github/personal`, () => {
+      http.delete(`${origin}/api/credentials/github/personal`, () => {
         deleted = true;
         return HttpResponse.json({ deleted: true });
       }),

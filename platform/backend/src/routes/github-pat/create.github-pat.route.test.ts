@@ -52,12 +52,12 @@ describe("POST /api/github-pats", () => {
     await settleAuditWrites();
     const { data: auditRows } = await AuditLogModel.findPaginated({
       organizationId: organization.id,
-      resourceType: "githubPat",
+      resourceType: "credential",
       sortDirection: "asc",
       limit: 10,
       offset: 0,
     });
-    expect(auditRows.map((row) => row.action)).toEqual(["githubPat.created"]);
+    expect(auditRows.map((row) => row.action)).toEqual(["credential.created"]);
   });
 
   test("default members cannot store tokens", async ({

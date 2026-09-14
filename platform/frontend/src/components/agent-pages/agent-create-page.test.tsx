@@ -433,17 +433,24 @@ describe("AgentCreatePage", () => {
     );
   });
 
-  it("lands the created record on its Connect section", async () => {
+  it("opens the newly created agent’s summary", async () => {
     const user = userEvent.setup();
     renderAgentCreatePage();
     await user.click(
       screen.getByRole("button", { name: /start from scratch/i }),
     );
     await user.click(screen.getByRole("button", { name: "fire created" }));
-    expect(push).toHaveBeenCalledWith("/agents/new-1?section=connect");
+    expect(push).toHaveBeenCalledWith("/agents/new-1/created");
   });
 
-  it("lands a new Claude Code agent where its personal account connection is shown", async () => {
+  it("keeps a newly created MCP gateway on its connection instructions", async () => {
+    const user = userEvent.setup();
+    render(<AgentCreatePage kind="mcp_gateway" />);
+    await user.click(screen.getByRole("button", { name: "fire created" }));
+    expect(push).toHaveBeenCalledWith("/mcp/gateways/new-1");
+  });
+
+  it("opens the summary for a newly created Claude Code agent", async () => {
     const user = userEvent.setup();
     vi.mocked(useFeature).mockImplementation((feature) =>
       feature === "agentRuntime" ? true : undefined,
@@ -453,7 +460,7 @@ describe("AgentCreatePage", () => {
     await user.click(screen.getByRole("button", { name: /claude code/i }));
     await user.click(screen.getByRole("button", { name: "fire created" }));
 
-    expect(push).toHaveBeenCalledWith("/agents/new-1");
+    expect(push).toHaveBeenCalledWith("/agents/new-1/created");
   });
 
   it("stays put with a success state when the creator may not read what it made", async () => {
@@ -499,7 +506,7 @@ describe("AgentCreatePage", () => {
     rerender(
       <AgentCreatePage kind="agent" canAddExternalAgent canCreateAgent />,
     );
-    expect(push).toHaveBeenCalledWith("/agents/new-1?section=connect");
+    expect(push).toHaveBeenCalledWith("/agents/new-1/created");
   });
 
   it("shows the success state when the pending permission settles to a no", async () => {

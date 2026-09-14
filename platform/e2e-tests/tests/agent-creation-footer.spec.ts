@@ -150,12 +150,24 @@ for (const viewport of [
         createdId = created.id;
         expect(created.name).toBe(name);
         expect(createRequests).toBe(1);
-        await expect(page).toHaveURL(
-          new RegExp(`${family.path}/${createdId}(\\?section=connect)?$`),
-        );
-        await expect(
-          page.getByRole("heading", { name: "Endpoint", exact: true }),
-        ).toBeVisible();
+        if (family.title === "Agent") {
+          await expect(page).toHaveURL(
+            new RegExp(`${family.path}/${createdId}/created$`),
+          );
+          await expect(
+            page.getByRole("heading", { name: "Agent created", exact: true }),
+          ).toBeVisible();
+          await expect(
+            page.getByRole("heading", { name, exact: true }),
+          ).toBeVisible();
+        } else {
+          await expect(page).toHaveURL(
+            new RegExp(`${family.path}/${createdId}(\\?section=connect)?$`),
+          );
+          await expect(
+            page.getByRole("heading", { name: "Endpoint", exact: true }),
+          ).toBeVisible();
+        }
 
         const editPath = `${family.path}/${createdId}${
           family.title === "MCP Gateway" ? "?section=settings" : ""

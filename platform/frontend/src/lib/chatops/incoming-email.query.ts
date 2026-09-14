@@ -95,7 +95,10 @@ export function useDeleteIncomingEmailSubscription() {
  * Hook to fetch the email address for a specific agent (internal agent)
  * Pass null to disable the query
  */
-export function useAgentEmailAddress(agentId: string | null) {
+export function useAgentEmailAddress(
+  agentId: string | null,
+  options?: { toastOnError?: boolean },
+) {
   return useQuery({
     queryKey: incomingEmailKeys.promptEmailAddress(agentId ?? ""),
     queryFn: async () => {
@@ -103,7 +106,10 @@ export function useAgentEmailAddress(agentId: string | null) {
       const { data, error } = await getAgentEmailAddress({
         path: { agentId },
       });
-      throwOnApiError(error, { allowNotFound: true });
+      throwOnApiError(error, {
+        allowNotFound: true,
+        toastOnError: options?.toastOnError,
+      });
       return data as archestraApiTypes.GetAgentEmailAddressResponses["200"];
     },
     enabled: !!agentId,

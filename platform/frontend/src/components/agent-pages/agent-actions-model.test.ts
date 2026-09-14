@@ -33,6 +33,45 @@ describe("getAgentActionModel", () => {
     expect(connect.href).toBe("/agents/agent-1?section=connect");
   });
 
+  it("offers Start run instead of Chat on a dedicated-runtime agent while the feature is on", () => {
+    const runtimeAgent = {
+      id: "agent-1",
+      agentType: "agent" as const,
+      builtIn: false,
+      runtime: { image: "ghcr.io/example/runtime" },
+    };
+
+    const withRuntime = agentAction(
+      getAgentActionModel({
+        kind: "agent",
+        agent: runtimeAgent,
+        agentRuntimeEnabled: true,
+      }),
+      "chat",
+    );
+    expect(withRuntime).toMatchObject({
+      label: "Start run",
+      startsRun: true,
+      href: "/chat/new?agent_id=agent-1",
+    });
+
+    const featureOff = agentAction(
+      getAgentActionModel({ kind: "agent", agent: runtimeAgent }),
+      "chat",
+    );
+    expect(featureOff).toMatchObject({ label: "Chat", startsRun: false });
+
+    const noRuntime = agentAction(
+      getAgentActionModel({
+        kind: "agent",
+        agent: { ...runtimeAgent, runtime: null },
+        agentRuntimeEnabled: true,
+      }),
+      "chat",
+    );
+    expect(noRuntime).toMatchObject({ label: "Chat", startsRun: false });
+  });
+
   it("removes Connect from built-in list and detail surfaces", () => {
     const model = getAgentActionModel({
       kind: "mcp_gateway",

@@ -47,6 +47,7 @@ import { computeCanModifyAgent } from "@/components/agent-pages/use-agent-access
 import { AgentProviderIndicator } from "@/components/agent-provider-indicator";
 import { AgentVersionHistoryDialog } from "@/components/agent-version-history-dialog";
 import { BulkVisibilityDialog } from "@/components/bulk-visibility-dialog";
+import { RuntimeCapableIndicator } from "@/components/chat/runtime-capable-indicator";
 import { CloneAgentDialog } from "@/components/clone-agent-dialog";
 import {
   DefaultAgentTag,
@@ -812,6 +813,11 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
             currentUserId={currentUserId}
             showSelfAsMe
           />
+          {/* Badge row, not the title line: the title shares its line with
+              the action cluster and clips at phone width. */}
+          {agent.runtime != null && (
+            <RuntimeCapableIndicator variant="pill" runtime={agent.runtime} />
+          )}
           {effectiveDefault?.agentId === agent.id ? (
             <DefaultAgentTag source={effectiveDefault.source} />
           ) : null}
@@ -886,9 +892,17 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
             description={agent.description}
             labels={agent.labels}
             extraBadges={
-              effectiveDefault?.agentId === agent.id ? (
-                <DefaultAgentTag source={effectiveDefault.source} />
-              ) : undefined
+              <>
+                {agent.runtime != null && (
+                  <RuntimeCapableIndicator
+                    variant="pill"
+                    runtime={agent.runtime}
+                  />
+                )}
+                {effectiveDefault?.agentId === agent.id ? (
+                  <DefaultAgentTag source={effectiveDefault.source} />
+                ) : null}
+              </>
             }
           />
         );

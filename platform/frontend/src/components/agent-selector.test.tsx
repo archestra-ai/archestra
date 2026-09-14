@@ -1,7 +1,11 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeAll, describe, expect, it, vi } from "vitest";
+import { useFeature } from "@/lib/config/config.query";
 import { AgentSelector, type AgentSelectorAgent } from "./agent-selector";
+
+// The runtime marker gates itself on the deployment's `agentRuntime` feature.
+vi.mock("@/lib/config/config.query");
 
 const personalProxy: AgentSelectorAgent = {
   id: "p1",
@@ -21,6 +25,9 @@ const orgProxy: AgentSelectorAgent = {
 };
 
 beforeAll(() => {
+  vi.mocked(useFeature).mockImplementation((flag) =>
+    flag === "agentRuntime" ? true : undefined,
+  );
   // Radix Popover + cmdk reach for these APIs jsdom doesn't implement.
   Element.prototype.scrollIntoView = vi.fn();
   Element.prototype.hasPointerCapture = vi.fn();

@@ -1,63 +1,23 @@
 import { describe, expect, test } from "vitest";
 import {
-  classifyAppaNativeClient,
   collectAppaProtocolToolResults,
-  isAppaNativeSpawnTool,
-  unsupportedNativeLifecycleReason,
+  extractAppaSpawnCarrier,
 } from "./appa-client-correlation";
 
-describe("APPA native client correlation", () => {
-  test("classifies unmodified Claude Code, Codex V1, and OpenCode Kimi evidence without treating it as identity", () => {
+describe("APPA shared correlation primitives", () => {
+  test("extracts exactly one proxy-issued carrier from user prompt positions", () => {
+    const carrier =
+      "apc1.call_1.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
     expect(
-      classifyAppaNativeClient({
-        provider: "anthropic",
-        interactionType: "anthropic:messages",
-        headers: {},
-        request: {
-          metadata: { user_id: '{"session_id":"claude-session"}' },
-          system:
-            "x-anthropic-billing-header: cc_version=2.1.258; cc_entrypoint=claude-code;",
-        },
+      extractAppaSpawnCarrier({
+        messages: [{ role: "user", content: carrier }],
       }),
-    ).toBe("claude-code");
+    ).toEqual({ callId: "call_1", carrier });
     expect(
-      classifyAppaNativeClient({
-        provider: "openai",
-        interactionType: "openai:responses",
-        headers: { originator: "codex_cli_rs" },
-        request: { client_metadata: { thread_id: "codex-thread" } },
+      extractAppaSpawnCarrier({
+        messages: [{ role: "user", content: `${carrier}\n${carrier}` }],
       }),
-    ).toBe("codex-responses-v1");
-    expect(
-      classifyAppaNativeClient({
-        provider: "kimi",
-        interactionType: "kimi:chatCompletions",
-        headers: { "user-agent": "opencode/1.18.29" },
-        request: {},
-      }),
-    ).toBe("opencode-kimi");
-  });
-
-  test("marks only verified client-native delegation tools as spawns", () => {
-    for (const [client, toolName] of [
-      ["claude-code", "Agent"],
-      ["codex-responses-v1", "multi_agent_v1.spawn_agent"],
-      ["codex-responses-v1", "agents.spawn_agent"],
-      ["codex-responses-v1", "collaboration.spawn_agent"],
-      ["opencode-kimi", "task"],
-    ] as const) {
-      expect(isAppaNativeSpawnTool({ client, toolName })).toBe(true);
-    }
-
-    for (const [client, toolName] of [
-      ["claude-code", "mcp__gateway__Agent"],
-      ["codex-responses-v1", "mcp__server__task"],
-      ["opencode-kimi", "mcp__server__task"],
-      ["opencode-kimi", "Task"],
-      ["unknown", "multi_agent_v1.spawn_agent"],
-    ] as const) {
-      expect(isAppaNativeSpawnTool({ client, toolName })).toBe(false);
-    }
+    ).toBeNull();
   });
 
   test("uses only native Anthropic tool positions and preserves a reported failure", () => {
@@ -189,41 +149,5 @@ describe("APPA native client correlation", () => {
     ).toEqual([
       { id: "call_empty_but_reported", content: "", claimedCall: undefined },
     ]);
-  });
-
-  test("rejects lifecycle assertions that lack a durable signed native binding", () => {
-    expect(
-      unsupportedNativeLifecycleReason({
-        client: "claude-code",
-        headers: {},
-        request: {
-          messages: [
-            {
-              role: "user",
-              content:
-                "apc1.call_1.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-            },
-          ],
-        },
-      }),
-    ).toContain("native child locator and signed proxy binding");
-    expect(
-      unsupportedNativeLifecycleReason({
-        client: "opencode-kimi",
-        headers: { "x-parent-session-id": "parent-session" },
-        request: {},
-      }),
-    ).toContain("signed native child binding");
-    expect(
-      unsupportedNativeLifecycleReason({
-        client: "codex-responses-v1",
-        headers: {},
-        request: {
-          client_metadata: {
-            "x-codex-turn-metadata": { forked_from_thread_id: "parent" },
-          },
-        },
-      }),
-    ).toContain("durable native lifecycle binding");
   });
 });

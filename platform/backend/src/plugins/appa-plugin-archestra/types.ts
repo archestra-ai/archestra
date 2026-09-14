@@ -5,6 +5,12 @@
 
 export type AppaProtocol = "anthropic" | "responses" | "chat_completions";
 
+export type AppaNativeClient =
+  | "claude-code"
+  | "codex-responses-v1"
+  | "opencode-kimi"
+  | "unknown";
+
 export type AppaToolCall = {
   id: string;
   name: string;
@@ -18,9 +24,11 @@ export type AppaToolResult = {
   name?: string;
   content: unknown;
   isError?: boolean;
+  status?: "success" | "failure" | "indeterminate";
+  message?: string;
   claimedCall?: {
     name: string;
-    rawArguments: Record<string, unknown>;
+    rawArguments: string;
   };
 };
 
@@ -31,63 +39,10 @@ export type AppaSessionIdentity = {
   spawnBinding?: string;
 };
 
-export type AppaSessionInitContext = {
-  protocol: AppaProtocol;
-  clientApp?: string;
-  headers: Record<string, string | string[] | undefined>;
-  requestBody: unknown;
-  organizationId: string;
-  userId: string;
-  profileId: string;
-  model: string;
-  provider: string;
-};
-
-export type AppaPromptContext = {
-  requestBody: unknown;
-  promptText?: string;
-};
-
-export type AppaToolCallsContext = {
-  toolCalls: AppaToolCall[];
-  rawResponse?: unknown;
-};
-
-export type AppaToolCallsDecision =
-  | {
-      decision: "allow";
-      calls: Array<AppaToolCall & { dispatchId?: string }>;
-    }
-  | {
-      decision: "refuse";
-      message: string;
-      refusalResponse?: unknown;
-    }
-  | {
-      decision: "held";
-      heldResponse: unknown;
-    };
-
-export type AppaToolResultContext = {
-  results: AppaToolResult[];
-};
-
-export type AppaToolResultOutcome = {
-  status: "admitted" | "sanitized" | "quarantined";
-  admittedResults: AppaToolResult[];
-  modelUpdates?: unknown;
-};
-
-export type AppaTurnEndContext = {
-  responseBody?: unknown;
-  error?: unknown;
-};
-
-export type AppaChildContext = {
-  childId: string;
-  spawnBinding?: string;
-  result?: unknown;
-};
+export type AppaSessionIdentityResolution =
+  | AppaSessionIdentity
+  | { error: string }
+  | null;
 
 /**
  * Client-specific adapter interface (e.g. appa-plugin-archestra-claude-code,
@@ -96,18 +51,43 @@ export type AppaChildContext = {
  */
 export interface AppaClientAdapter {
   readonly id: string;
+  readonly nativeClient: Exclude<AppaNativeClient, "unknown">;
   readonly protocol: AppaProtocol;
 
   matches(context: {
     protocol: AppaProtocol;
+    provider?: string;
     headers: Record<string, string | string[] | undefined>;
     requestBody: unknown;
   }): boolean;
 
-  extractSessionIdentity(context: {
+  resolveSessionIdentity(context: {
     headers: Record<string, string | string[] | undefined>;
     requestBody: unknown;
-  }): AppaSessionIdentity;
+    sessionId?: string | null;
+    sessionSource?: string | null;
+  }): AppaSessionIdentityResolution;
+
+  isNativeSpawnTool(toolName: string): boolean;
+
+  unsupportedNativeLifecycleReason(context: {
+    headers: Record<string, string | string[] | undefined>;
+    requestBody: unknown;
+  }): string | null;
+
+  extractCarrierChild(context: {
+    headers: Record<string, string | string[] | undefined>;
+    requestBody: unknown;
+    sessionId: string | null;
+  }): {
+    parentClientSessionId: string;
+    childClientSessionId: string;
+    requestThreadId: string;
+  } | null;
+
+  nativeControlTarget?(toolName: string): string | undefined;
+  readonly usesSpawnCarrier?: boolean;
+  carrierSpawnTarget?(targetName: string): string;
 
   extractToolCalls(responseBody: unknown): AppaToolCall[];
 
@@ -125,34 +105,4 @@ export interface AppaClientAdapter {
    * the canonical tool identity expected by OpenAPPA runtime policies.
    */
   canonicalizeLocalToolName?(rawName: string): string;
-}
-
-/**
- * Pluggable lifecycle hook callbacks interface implemented by the foundational
- * appa-plugin-archestra meta-plugin.
- */
-export interface AppaLifecycleHookCallbacks {
-  onSessionInit(
-    context: AppaSessionInitContext,
-  ): Promise<AppaSessionHookInstance | undefined>;
-}
-
-export interface AppaSessionHookInstance {
-  readonly sessionId: string;
-  readonly rootId: string;
-  readonly adapter: AppaClientAdapter;
-
-  onPrompt(context: AppaPromptContext): Promise<void>;
-
-  onToolCalls(context: AppaToolCallsContext): Promise<AppaToolCallsDecision>;
-
-  onToolResult(context: AppaToolResultContext): Promise<AppaToolResultOutcome>;
-
-  onTurnEnd(context: AppaTurnEndContext): Promise<void>;
-
-  onChildStart(context: AppaChildContext): Promise<void>;
-
-  onChildEnd(context: AppaChildContext): Promise<void>;
-
-  abort(): Promise<void>;
 }

@@ -221,10 +221,10 @@ describe("APPA checkpoint correlation", () => {
     ).resolves.toBe("runtime-spawn-binding");
     await expect(
       resolveAppaCarrierChild({
-        client: "claude-code",
-        headers: {
-          "x-claude-code-session-id": clientSessionId,
-          "x-claude-code-agent-id": "native-child-agent",
+        child: {
+          parentClientSessionId: clientSessionId,
+          childClientSessionId: `claude:${clientSessionId}:agent:native-child-agent`,
+          requestThreadId: clientSessionId,
         },
         request: {
           messages: [
@@ -234,7 +234,6 @@ describe("APPA checkpoint correlation", () => {
             },
           ],
         },
-        sessionId: clientSessionId,
         ownerScopeHash,
         profileId,
       }),

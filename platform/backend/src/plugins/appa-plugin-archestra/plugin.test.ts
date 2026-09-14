@@ -27,7 +27,7 @@ describe("AppaPluginArchestra", () => {
 
     const opencodeAdapter = plugin.resolveClientAdapter({
       protocol: "chat_completions",
-      headers: { "x-session-affinity": "session-456" },
+      headers: { "x-opencode-session": "session-456" },
       requestBody: {},
     });
     expect(opencodeAdapter?.id).toBe("opencode");
@@ -37,11 +37,17 @@ describe("AppaPluginArchestra", () => {
     const adapter = new AppaClaudeCodeAdapter();
 
     test("extracts session identity and tool calls from Anthropic Messages", () => {
-      const identity = adapter.extractSessionIdentity({
-        headers: { "x-session-id": "claude-session-1" },
+      const identity = adapter.resolveSessionIdentity({
+        headers: {
+          "x-claude-code-session-id": "claude-session-1",
+          "x-appa-spawn-binding": "untrusted-binding",
+        },
         requestBody: {},
       });
-      expect(identity.clientSessionId).toBe("claude-session-1");
+      expect(identity).toEqual({
+        clientSessionId: "claude-session-1",
+        threadId: "claude-session-1",
+      });
 
       const toolCalls = adapter.extractToolCalls({
         content: [
@@ -119,15 +125,20 @@ describe("AppaPluginArchestra", () => {
     const adapter = new AppaCodexAdapter();
 
     test("extracts session identity and tool calls from OpenAI Responses", () => {
-      const identity = adapter.extractSessionIdentity({
+      const identity = adapter.resolveSessionIdentity({
         headers: {
           "x-codex-turn-metadata": JSON.stringify({
             thread_id: "codex-thread-1",
           }),
+          "x-session-id": "synthetic-session",
+          "x-appa-spawn-binding": "untrusted-binding",
         },
         requestBody: {},
       });
-      expect(identity.clientSessionId).toBe("codex-thread-1");
+      expect(identity).toEqual({
+        clientSessionId: "codex-thread-1",
+        threadId: "codex-thread-1",
+      });
 
       const toolCalls = adapter.extractToolCalls({
         output: [
@@ -192,11 +203,20 @@ describe("AppaPluginArchestra", () => {
     const adapter = new AppaOpenCodeAdapter();
 
     test("extracts session identity and tool calls from OpenAI Chat Completions", () => {
-      const identity = adapter.extractSessionIdentity({
-        headers: { "x-session-affinity": "opencode-session-1" },
+      const identity = adapter.resolveSessionIdentity({
+        headers: {
+          "x-opencode-session": "opencode-session-1",
+          "x-parent-session-id": "opencode-parent-1",
+          "x-session-affinity": "synthetic-session",
+          "x-appa-spawn-binding": "untrusted-binding",
+        },
         requestBody: {},
       });
-      expect(identity.clientSessionId).toBe("opencode-session-1");
+      expect(identity).toEqual({
+        clientSessionId: "opencode-session-1",
+        parentSessionId: "opencode-parent-1",
+        threadId: "opencode-session-1",
+      });
 
       const toolCalls = adapter.extractToolCalls({
         choices: [
@@ -327,5 +347,155 @@ describe("AppaPluginArchestra", () => {
       });
       expect(opencodeCalls.map((call) => call.spawn)).toEqual([true, false]);
     });
+  });
+
+  test("classifies native wire evidence through the owning adapter", () => {
+    const plugin = getAppaPluginArchestra();
+    expect(
+      plugin.resolveClientAdapter({
+        protocol: "anthropic",
+        provider: "anthropic",
+        headers: {},
+        requestBody: {
+          metadata: { user_id: '{"session_id":"claude-session"}' },
+          system:
+            "x-anthropic-billing-header: cc_version=2.1.258; cc_entrypoint=claude-code;",
+        },
+      })?.nativeClient,
+    ).toBe("claude-code");
+    expect(
+      plugin.resolveClientAdapter({
+        protocol: "responses",
+        provider: "openai",
+        headers: { originator: "codex_cli_rs" },
+        requestBody: { client_metadata: { thread_id: "codex-thread" } },
+      })?.nativeClient,
+    ).toBe("codex-responses-v1");
+    expect(
+      plugin.resolveClientAdapter({
+        protocol: "chat_completions",
+        provider: "kimi",
+        headers: { "user-agent": "opencode/1.18.29" },
+        requestBody: {},
+      })?.nativeClient,
+    ).toBe("opencode-kimi");
+  });
+
+  test("keeps native child and lifecycle rules in their client adapters", () => {
+    const carrier =
+      "apc1.call_1.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+    const claude = new AppaClaudeCodeAdapter();
+    expect(
+      claude.unsupportedNativeLifecycleReason({
+        headers: {},
+        requestBody: { messages: [{ role: "user", content: carrier }] },
+      }),
+    ).toContain("native child locator and signed proxy binding");
+    expect(
+      claude.extractCarrierChild({
+        headers: { "x-claude-code-agent-id": "child-agent" },
+        requestBody: { messages: [{ role: "user", content: carrier }] },
+        sessionId: "parent-session",
+      }),
+    ).toEqual({
+      parentClientSessionId: "parent-session",
+      childClientSessionId: "claude:parent-session:agent:child-agent",
+      requestThreadId: "parent-session",
+    });
+
+    const codex = new AppaCodexAdapter();
+    expect(
+      codex.unsupportedNativeLifecycleReason({
+        headers: {},
+        requestBody: {
+          client_metadata: {
+            "x-codex-turn-metadata": { forked_from_thread_id: "parent" },
+          },
+        },
+      }),
+    ).toContain("durable native lifecycle binding");
+    expect(codex.nativeControlTarget?.("agents.wait_agent")).toBe(
+      "host/codex/agents.wait_agent",
+    );
+
+    const opencode = new AppaOpenCodeAdapter();
+    expect(
+      opencode.unsupportedNativeLifecycleReason({
+        headers: { "x-parent-session-id": "parent-session" },
+        requestBody: {},
+      }),
+    ).toContain("signed native child binding");
+    expect(
+      opencode.extractCarrierChild({
+        headers: { "x-parent-session-id": "parent-session" },
+        requestBody: { messages: [{ role: "user", content: carrier }] },
+        sessionId: "child-session",
+      }),
+    ).toEqual({
+      parentClientSessionId: "parent-session",
+      childClientSessionId: "child-session",
+      requestThreadId: "child-session",
+    });
+  });
+
+  test("does not identify native adapters from synthetic client headers", () => {
+    const claude = new AppaClaudeCodeAdapter();
+    expect(
+      claude.matches({
+        protocol: "anthropic",
+        headers: { "x-client-app": "claude-code" },
+        requestBody: {},
+      }),
+    ).toBe(false);
+    expect(
+      claude.resolveSessionIdentity({
+        headers: {
+          "x-session-id": "synthetic-session",
+          "x-anthropic-session-id": "synthetic-anthropic-session",
+          "x-appa-spawn-binding": "untrusted-binding",
+        },
+        requestBody: {},
+      }),
+    ).toEqual({});
+
+    const codex = new AppaCodexAdapter();
+    expect(
+      codex.matches({
+        protocol: "responses",
+        headers: { "x-client-app": "codex" },
+        requestBody: {},
+      }),
+    ).toBe(false);
+    expect(
+      codex.resolveSessionIdentity({
+        headers: {
+          "x-session-id": "synthetic-session",
+          "x-appa-spawn-binding": "untrusted-binding",
+        },
+        requestBody: {},
+      }),
+    ).toEqual({});
+
+    const opencode = new AppaOpenCodeAdapter();
+    expect(
+      opencode.matches({
+        protocol: "chat_completions",
+        headers: {
+          "x-client-app": "opencode",
+          "x-session-affinity": "synthetic-session",
+        },
+        requestBody: {},
+      }),
+    ).toBe(false);
+    expect(
+      opencode.resolveSessionIdentity({
+        headers: {
+          "x-session-id": "synthetic-session",
+          "x-session-affinity": "synthetic-affinity",
+          "x-appa-spawn-binding": "untrusted-binding",
+        },
+        requestBody: {},
+      }),
+    ).toEqual({});
   });
 });

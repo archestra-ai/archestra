@@ -1,4 +1,4 @@
-import { isAppaNativeSpawnTool } from "@/services/appa-client-correlation";
+import { extractAppaSpawnCarrier } from "@/services/appa-client-correlation";
 import type {
   AppaClientAdapter,
   AppaProtocol,
@@ -6,48 +6,117 @@ import type {
   AppaToolCall,
   AppaToolResult,
 } from "../types";
-import { isRecord, readHeader } from "../utils";
+import {
+  hasReportedResultContent,
+  isRecord,
+  nonEmptyString,
+  readHeader,
+  records,
+} from "../utils";
 
 /**
  * Client adapter for OpenCode over OpenAI Chat Completions protocol (/v1/chat/completions).
  */
 export class AppaOpenCodeAdapter implements AppaClientAdapter {
   readonly id = "opencode";
+  readonly nativeClient = "opencode-kimi" as const;
   readonly protocol: AppaProtocol = "chat_completions";
+  readonly usesSpawnCarrier = true;
 
   matches(context: {
     protocol: AppaProtocol;
+    provider?: string;
     headers: Record<string, string | string[] | undefined>;
     requestBody: unknown;
   }): boolean {
-    if (context.protocol !== "chat_completions") return false;
-    const sessionAffinity = readHeader(context.headers, "x-session-affinity");
-    const userAgent = String(
-      context.headers["user-agent"] ?? context.headers["User-Agent"] ?? "",
+    if (
+      context.protocol !== "chat_completions" ||
+      (context.provider !== undefined &&
+        context.provider !== "kimi" &&
+        context.provider !== "openai")
+    ) {
+      return false;
+    }
+    const userAgent = (
+      readHeader(context.headers, "user-agent") ?? ""
     ).toLowerCase();
-    const clientApp = String(
-      context.headers["x-client-app"] ?? "",
+    const originator = (
+      readHeader(context.headers, "originator") ?? ""
     ).toLowerCase();
     return (
-      Boolean(sessionAffinity) ||
+      Boolean(readHeader(context.headers, "x-opencode-session")) ||
       userAgent.includes("opencode") ||
-      clientApp.includes("opencode")
+      originator.includes("opencode")
     );
   }
 
-  extractSessionIdentity(context: {
+  resolveSessionIdentity(context: {
     headers: Record<string, string | string[] | undefined>;
     requestBody: unknown;
+    sessionId?: string | null;
+    sessionSource?: string | null;
   }): AppaSessionIdentity {
-    const affinity = readHeader(context.headers, "x-session-affinity");
-    const sessionId = affinity ?? readHeader(context.headers, "x-session-id");
+    const request = isRecord(context.requestBody) ? context.requestBody : {};
+    const metadata = isRecord(request.client_metadata)
+      ? request.client_metadata
+      : {};
+    const threadId =
+      readHeader(context.headers, "thread-id") ??
+      readHeader(context.headers, "x-opencode-session") ??
+      (typeof metadata.root_turn_id === "string"
+        ? metadata.root_turn_id
+        : undefined) ??
+      (typeof metadata.session_id === "string"
+        ? metadata.session_id
+        : undefined) ??
+      (typeof metadata.thread_id === "string"
+        ? metadata.thread_id
+        : undefined) ??
+      (context.sessionSource !== "openai_user"
+        ? context.sessionId
+        : undefined) ??
+      undefined;
+    if (!threadId) return {};
     const parentSessionId = readHeader(context.headers, "x-parent-session-id");
-    const spawnBinding = readHeader(context.headers, "x-appa-spawn-binding");
     return {
-      clientSessionId: sessionId,
-      parentSessionId,
-      threadId: sessionId,
-      spawnBinding,
+      clientSessionId: threadId,
+      threadId,
+      ...(parentSessionId ? { parentSessionId } : {}),
+    };
+  }
+
+  isNativeSpawnTool(toolName: string): boolean {
+    return toolName === "task";
+  }
+
+  unsupportedNativeLifecycleReason(context: {
+    headers: Record<string, string | string[] | undefined>;
+    requestBody: unknown;
+  }): string | null {
+    return readHeader(context.headers, "x-parent-session-id")
+      ? "OpenCode child requests require a signed native child binding."
+      : null;
+  }
+
+  extractCarrierChild(context: {
+    headers: Record<string, string | string[] | undefined>;
+    requestBody: unknown;
+    sessionId: string | null;
+  }): {
+    parentClientSessionId: string;
+    childClientSessionId: string;
+    requestThreadId: string;
+  } | null {
+    if (!extractAppaSpawnCarrier(context.requestBody)) return null;
+    const parentClientSessionId = readHeader(
+      context.headers,
+      "x-parent-session-id",
+    );
+    if (!context.sessionId || !parentClientSessionId) return null;
+    return {
+      parentClientSessionId,
+      childClientSessionId: context.sessionId,
+      requestThreadId: context.sessionId,
     };
   }
 
@@ -92,10 +161,7 @@ export class AppaOpenCodeAdapter implements AppaClientAdapter {
                 name,
                 arguments: args,
                 raw: tc,
-                spawn: isAppaNativeSpawnTool({
-                  client: "opencode-kimi",
-                  toolName: name,
-                }),
+                spawn: this.isNativeSpawnTool(name),
               });
             }
           }
@@ -152,12 +218,36 @@ export class AppaOpenCodeAdapter implements AppaClientAdapter {
     if (!isRecord(requestBody) || !Array.isArray(requestBody.messages)) {
       return [];
     }
+    const claimedCalls = new Map<
+      string,
+      { name: string; rawArguments: string }
+    >();
     const results: AppaToolResult[] = [];
-    for (const message of requestBody.messages) {
-      if (isRecord(message) && message.role === "tool") {
+    for (const message of records(requestBody.messages)) {
+      for (const call of records(message.tool_calls)) {
+        const fn = isRecord(call.function) ? call.function : {};
+        if (
+          nonEmptyString(call.id) &&
+          nonEmptyString(fn.name) &&
+          nonEmptyString(fn.arguments)
+        ) {
+          claimedCalls.set(call.id, {
+            name: fn.name,
+            rawArguments: fn.arguments,
+          });
+        }
+      }
+      if (
+        message.role === "tool" &&
+        nonEmptyString(message.tool_call_id) &&
+        hasReportedResultContent(message, "content")
+      ) {
         results.push({
-          id: String(message.tool_call_id ?? ""),
+          id: message.tool_call_id,
           content: message.content,
+          ...(claimedCalls.has(message.tool_call_id)
+            ? { claimedCall: claimedCalls.get(message.tool_call_id) }
+            : {}),
         });
       }
     }

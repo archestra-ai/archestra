@@ -82,14 +82,25 @@ import {
   EVENT_GENAI_CONTENT_COMPLETION,
   type SpanTeamInfo,
 } from "@/observability/tracing";
-import { getAppaPluginArchestra } from "@/plugins/appa-plugin-archestra";
 import {
+  type AppaClientAdapter,
   type AppaNativeClient,
-  classifyAppaNativeClient,
+  getAppaPluginArchestra,
+  registerAppaLlmProxyPlugin,
+} from "@/plugins/appa-plugin-archestra";
+import type {
+  LlmProxyChildContext,
+  LlmProxyPluginRegistry,
+  LlmProxyRequestContext,
+  LlmProxyToolCall,
+} from "@/plugins/llm-proxy-plugin";
+import {
+  getLlmProxyPluginRegistry,
+  LlmProxyPluginError,
+} from "@/plugins/llm-proxy-plugin";
+import {
   collectAppaProtocolToolResults,
-  isAppaNativeSpawnTool,
   resolveAppaCarrierChild,
-  unsupportedNativeLifecycleReason,
 } from "@/services/appa-client-correlation";
 import {
   type NativeCodexHistory,
@@ -245,6 +256,7 @@ export interface LLMProxyContext<TRequest> {
     threadId: string;
   };
   appaNativeClient: AppaNativeClient;
+  appaNativeAdapter?: AppaClientAdapter;
   /** Maps client-decorated gateway tool names to the platform's own names. */
   canonicalizeToolName: utils.gatewayToolNames.ToolNameCanonicalizer;
   /** APPA-only canonical identities proven by this request's MCP declarations. */
@@ -301,6 +313,8 @@ export interface LLMProxyContext<TRequest> {
   teams?: SpanTeamInfo[];
   userTeams?: SpanTeamInfo[];
   appaHook?: AppaProxyHookSession;
+  proxyPlugins: LlmProxyPluginRegistry;
+  proxyPluginContext: LlmProxyRequestContext;
   nativeClientTaskPath: string | null;
   nativeLogicalTaskPath: string | null;
   /**
@@ -476,7 +490,9 @@ export async function handleLLMProxy<
     otelContext.active(),
     request.headers,
   );
-  getAppaPluginArchestra();
+  const appaPlugin = getAppaPluginArchestra();
+  registerAppaLlmProxyPlugin();
+  const proxyPlugins = getLlmProxyPluginRegistry();
 
   let requestBody = config.llmProxy.appaHook?.nativeCodexEnabled
     ? normalizeNativeCodexInput(body)
@@ -492,6 +508,7 @@ export async function handleLLMProxy<
   let nativeClientTaskPath: string | null = null;
   let nativeLogicalTaskPath: string | null = null;
   let appaNativeClient: AppaNativeClient = "unknown";
+  let appaNativeAdapter: AppaClientAdapter | undefined;
   const nativeCodexRequested =
     config.llmProxy.appaHook?.nativeCodexEnabled === true &&
     provider.interactionType === "openai:responses" &&
@@ -892,24 +909,39 @@ export async function handleLLMProxy<
   const attributedAppId = await resolveAttributedAppId(request, resolvedAgent);
 
   let activeAppaHook: AppaProxyHookSession | undefined;
+  const proxyPluginContext: LlmProxyRequestContext = {
+    requestId: randomUUID(),
+    organizationId: resolvedAgent.organizationId,
+    profileId: resolvedAgent.id,
+    userId,
+    provider: providerName,
+    protocol: provider.interactionType,
+    model: stripClaudeContextVariantSuffix(requestAdapter.getModel()),
+    headers: headersForExtraction,
+    requestBody: requestAdapter.getOriginalRequest(),
+    session: { id: sessionId ?? randomUUID() },
+    resources: new Map(),
+  };
 
   // Check usage limits
   try {
-    appaNativeClient = config.llmProxy.appaHook
-      ? classifyAppaNativeClient({
+    appaNativeAdapter = config.llmProxy.appaHook
+      ? resolveAppaNativeAdapter({
+          plugin: appaPlugin,
           provider: providerName,
           interactionType: provider.interactionType,
           headers: headersForExtraction,
           request: requestAdapter.getOriginalRequest(),
         })
-      : "unknown";
+      : undefined;
+    appaNativeClient = appaNativeAdapter?.nativeClient ?? "unknown";
     const appaThreadCandidate = config.llmProxy.appaHook
       ? resolveAppaThreadContext({
+          adapter: appaNativeAdapter,
           headers: headersForExtraction,
           request: requestAdapter.getOriginalRequest(),
           sessionId,
           sessionSource,
-          nativeClient: appaNativeClient,
         })
       : null;
     // Once configured, APPA owns every request on this proxy boundary. A
@@ -1059,19 +1091,18 @@ export async function handleLLMProxy<
         const carrierChild = nativeCodexRequested
           ? null
           : await resolveAppaCarrierChild({
-              client: appaNativeClient,
-              headers: headersForExtraction,
+              child:
+                appaNativeAdapter?.extractCarrierChild({
+                  headers: headersForExtraction,
+                  requestBody: requestAdapter.getOriginalRequest(),
+                  sessionId: appaThread.threadId,
+                }) ?? null,
               request: requestAdapter.getOriginalRequest(),
-              sessionId: appaThread.threadId,
               ownerScopeHash,
               profileId: resolvedAgent.id,
             });
         if (carrierChild) {
-          const expectedThread =
-            appaNativeClient === "claude-code"
-              ? carrierChild.parentClientSessionId
-              : carrierChild.childClientSessionId;
-          if (appaThread.threadId !== expectedThread) {
+          if (appaThread.threadId !== carrierChild.requestThreadId) {
             throw new ApiError(
               400,
               "Native child session metadata does not match the proxy-issued carrier.",
@@ -1083,11 +1114,11 @@ export async function handleLLMProxy<
             spawnBinding: carrierChild.spawnBinding,
           };
         }
-        const unsupportedNativeLifecycle = unsupportedNativeLifecycleReason({
-          client: appaNativeClient,
-          headers: headersForExtraction,
-          request: requestAdapter.getOriginalRequest(),
-        });
+        const unsupportedNativeLifecycle =
+          appaNativeAdapter?.unsupportedNativeLifecycleReason({
+            headers: headersForExtraction,
+            requestBody: requestAdapter.getOriginalRequest(),
+          }) ?? null;
         if (
           unsupportedNativeLifecycle &&
           !nativeCodexRequested &&
@@ -1129,6 +1160,7 @@ export async function handleLLMProxy<
           }
         }
         let inboundToolResults = collectAppaInboundToolResults({
+          adapter: appaNativeAdapter,
           request: nativeCodexRequested
             ? normalizeNativeCodexInput(body)
             : body,
@@ -1309,6 +1341,20 @@ export async function handleLLMProxy<
             : undefined,
           toolResults: inboundToolResults,
         });
+        proxyPluginContext.session = {
+          id: appaThread.threadId,
+          ...(appaThread.parentThreadId
+            ? { parentId: appaThread.parentThreadId }
+            : {}),
+          ...(appaThread.spawnBinding
+            ? { binding: appaThread.spawnBinding }
+            : {}),
+        };
+        proxyPluginContext.resources.set(appaPlugin.id, {
+          session: activeAppaHook,
+          adapter: appaNativeAdapter,
+        });
+        await proxyPlugins.onSessionInit(proxyPluginContext);
         if (nativeChildRequest && nativeChildNeedsAttachment) {
           await attachNativeChild({
             ownerScopeHash,
@@ -1337,7 +1383,10 @@ export async function handleLLMProxy<
               session: activeAppaHook,
               request: nativeRequest,
             });
-            await activeAppaHook.releaseWithoutPrompt();
+            await proxyPlugins.onTurnEnd({
+              ...proxyPluginContext,
+              response: bootstrap,
+            });
             activeAppaHook = undefined;
             return requestAdapter.isStreaming()
               ? reply
@@ -1409,7 +1458,14 @@ export async function handleLLMProxy<
             threadId: appaThread.threadId,
           };
         }
-        const modelResultUpdates = activeAppaHook.getModelResultUpdates();
+        const pluginToolResults = await proxyPlugins.onToolResults({
+          ...proxyPluginContext,
+          toolResults: inboundToolResults,
+        });
+        const modelResultUpdates =
+          pluginToolResults.modelUpdates instanceof Map
+            ? pluginToolResults.modelUpdates
+            : activeAppaHook.getModelResultUpdates();
         if (modelResultUpdates.size > 0) {
           const presented = applyAppaOutcomeNotices(
             requestAdapter.toProviderRequest(),
@@ -1421,6 +1477,20 @@ export async function handleLLMProxy<
       } catch (error) {
         activeAppaHook?.recordFailure({ phase: "native_setup", error });
         throw toAppaHookApiError(error);
+      }
+    }
+    if (!config.llmProxy.appaHook) {
+      await proxyPlugins.onSessionInit(proxyPluginContext);
+      const inboundToolResults = collectAppaInboundToolResults({
+        adapter: undefined,
+        request: body,
+        interactionType: provider.interactionType,
+      });
+      if (inboundToolResults.length > 0) {
+        await proxyPlugins.onToolResults({
+          ...proxyPluginContext,
+          toolResults: inboundToolResults,
+        });
       }
     }
     logger.debug(
@@ -1450,6 +1520,7 @@ export async function handleLLMProxy<
       // 402 Payment Required is non-retryable in all SDKs and semantically a
       // budget stop. The Archestra-specific `type` plus the stable `code` keep
       // structured detection working.
+      await proxyPlugins.onAbort(proxyPluginContext);
       return reply.status(402).send({
         error: {
           message: contentMessage,
@@ -1614,6 +1685,7 @@ export async function handleLLMProxy<
       // Standard error envelope with a machine-readable `internal_code`
       // (mirrors the provider_auth_required block above) so SDK clients
       // surface a clear, non-retryable failure.
+      await proxyPlugins.onAbort(proxyPluginContext);
       return reply.status(403).send({
         error: {
           message: modelTeamAccess.message,
@@ -1942,12 +2014,17 @@ export async function handleLLMProxy<
     }
     const finalRequest = repairedRequest as TRequest;
 
-    if (activeAppaHook) {
-      try {
-        await activeAppaHook.sendPrompt(finalRequest);
-      } catch (error) {
-        throw toAppaHookApiError(error);
-      }
+    try {
+      await proxyPlugins.onPrompt({
+        ...proxyPluginContext,
+        prompt: finalRequest,
+      });
+      await dispatchProxyChildStart({
+        proxyPlugins,
+        proxyPluginContext,
+      });
+    } catch (error) {
+      throw activeAppaHook ? toAppaHookApiError(error) : error;
     }
 
     // Which called tool names count as available to evaluatePolicies, in the
@@ -2015,6 +2092,7 @@ export async function handleLLMProxy<
       nativeCodexHistory,
       nativeCodexControl,
       appaNativeClient,
+      appaNativeAdapter,
       nativeCodexGatewayPrincipals,
       authenticatedUserId,
       canonicalizeToolName,
@@ -2046,6 +2124,8 @@ export async function handleLLMProxy<
       userTeams,
       streamTiming,
       appaHook: activeAppaHook,
+      proxyPlugins,
+      proxyPluginContext,
       nativeClientTaskPath,
       nativeLogicalTaskPath,
     };
@@ -2074,7 +2154,12 @@ export async function handleLLMProxy<
     return await handleNonStreaming(client, finalRequest, reply, provider, ctx);
   } catch (error) {
     let handledError = error;
-    if (activeAppaHook) {
+    try {
+      await proxyPlugins.onAbort(proxyPluginContext);
+    } catch (abortError) {
+      handledError = abortError;
+    }
+    if (activeAppaHook && !appaNativeAdapter) {
       try {
         await activeAppaHook.abort();
       } catch (abortError) {
@@ -2191,10 +2276,13 @@ async function handleStreaming<
     teams,
     userTeams,
     appaHook,
+    proxyPlugins,
+    proxyPluginContext,
     nativeCodex,
     nativeCodexHistory,
     nativeCodexControl,
     appaNativeClient,
+    appaNativeAdapter,
     nativeCodexGatewayPrincipals,
     authenticatedUserId,
     nativeClientTaskPath,
@@ -2537,7 +2625,7 @@ async function handleStreaming<
         providerName,
         preserveDirectToolCall: (toolName) =>
           isAppaNativeCodexLifecycleTool({
-            client: appaNativeClient,
+            adapter: appaNativeAdapter,
             toolName,
           }),
       });
@@ -2648,7 +2736,7 @@ async function handleStreaming<
         rewrittenToolCalls ?? toolCalls,
         canonicalizeToolName,
         declaredMcpToolTargets,
-        appaNativeClient,
+        appaNativeAdapter,
         appaHook.getNativeSpawnToolMap(),
       );
       let heldBatchCommitted = false;
@@ -2683,6 +2771,17 @@ async function handleStreaming<
           reply.raw.end(
             nativeBootstrapSse({ client: appaNativeClient, response }),
           );
+          await dispatchProxyChildEnd({
+            proxyPlugins,
+            proxyPluginContext,
+            result: response,
+          });
+          await proxyPlugins.onTurnEnd({
+            ...proxyPluginContext,
+            response,
+            awaitClientContinuation: true,
+            deferCleanup: true,
+          });
           streamCompleted = true;
           return reply;
         }
@@ -2699,22 +2798,26 @@ async function handleStreaming<
           throw new AppaProxyHookError("unavailable", "outbound");
         }
         if (!heldBatchCommitted) {
-          const effectiveCalls = await appaHook.authorizeOutboundToolCalls(
-            appaToolCalls,
-            nativeSpawnCarrierPreparation({
-              session: appaHook,
-              profileId: agent.id,
-              client: appaNativeClient,
-            }),
-          );
+          const pluginOutcome = await proxyPlugins.onToolCalls({
+            ...proxyPluginContext,
+            toolCalls: toLlmProxyToolCalls(appaToolCalls),
+            response: streamAdapter.toProviderResponse(),
+          });
+          if (pluginOutcome.decision !== "allow") {
+            throw new AppaProxyHookError("denied", "outbound");
+          }
+          const effectiveCalls = pluginOutcome.toolCalls;
           if (reply.raw.destroyed) {
             await appaHook.quarantineUndeliveredCalls();
             throw new AppaProxyHookError("unavailable", "outbound");
           }
           rewrittenToolCalls = effectiveCalls.map((call) => ({
             id: call.id,
-            name: call.emittedName,
-            arguments: call.emittedArguments,
+            name: call.name,
+            arguments:
+              typeof call.arguments === "string"
+                ? call.arguments
+                : JSON.stringify(call.arguments),
           }));
         }
         if (
@@ -2737,7 +2840,7 @@ async function handleStreaming<
               session: appaHook,
               frameId: nativeFrameId,
               calls: rewrittenToolCalls ?? toolCalls,
-              client: appaNativeClient,
+              adapter: appaNativeAdapter,
               clientParentTaskPath: nativeClientTaskPath,
               logicalParentTaskPath: nativeLogicalTaskPath,
             });
@@ -2790,6 +2893,41 @@ async function handleStreaming<
       }
     }
 
+    if (!toolInvocationRefusal && !appaHook && toolCalls.length > 0) {
+      const pluginOutcome = await proxyPlugins.onToolCalls({
+        ...proxyPluginContext,
+        toolCalls: toolCalls.map((call) => ({
+          id: call.id,
+          name: call.name,
+          arguments: call.arguments,
+        })),
+        response: streamAdapter.toProviderResponse(),
+      });
+      if (pluginOutcome.decision === "refuse") {
+        toolInvocationRefusal = proxyPluginPolicyBlock({
+          toolCalls:
+            pluginOutcome.decision === "refuse"
+              ? toolCalls.map((call) => ({
+                  id: call.id,
+                  name: call.name,
+                  arguments: call.arguments,
+                }))
+              : [],
+          message: pluginOutcome.message,
+        });
+        toolCallBlock = toToolCallBlock(toolInvocationRefusal);
+      } else {
+        rewrittenToolCalls = pluginOutcome.toolCalls.map((call) => ({
+          id: call.id,
+          name: call.name,
+          arguments:
+            typeof call.arguments === "string"
+              ? call.arguments
+              : JSON.stringify(call.arguments),
+        }));
+      }
+    }
+
     // Freeze the post-authorization response before the durable completion is
     // sealed. The same state later drives the emitted SSE, so no mutation can
     // change executable arguments after APPA authorizes and attests them.
@@ -2838,10 +2976,16 @@ async function handleStreaming<
             frameId: prepared.frameId,
           });
         }
-        await appaHook.finish({
-          childReturn: streamAdapter.state.text,
+        await dispatchProxyChildEnd({
+          proxyPlugins,
+          proxyPluginContext,
+          result: clientResponseForFrame,
+        });
+        await proxyPlugins.onTurnEnd({
+          ...proxyPluginContext,
+          resultText: streamAdapter.state.text,
           awaitClientContinuation: awaitingClientContinuation,
-          beforeRelease:
+          beforeResponseRelease:
             awaitingClientContinuation && nativeCodex
               ? () =>
                   persistPendingNativeCodexHistory({
@@ -2867,6 +3011,18 @@ async function handleStreaming<
       } catch (error) {
         throw toAppaHookApiError(error);
       }
+    }
+    if (!appaHook) {
+      await dispatchProxyChildEnd({
+        proxyPlugins,
+        proxyPluginContext,
+        result: clientResponseForFrame,
+      });
+      await proxyPlugins.onTurnEnd({
+        ...proxyPluginContext,
+        response: clientResponseForFrame,
+        resultText: streamAdapter.state.text,
+      });
     }
 
     if (
@@ -2951,7 +3107,12 @@ async function handleStreaming<
     return reply;
   } catch (error) {
     let handledError = error;
-    if (appaHook) {
+    try {
+      await proxyPlugins.onAbort(proxyPluginContext);
+    } catch (abortError) {
+      handledError = abortError;
+    }
+    if (appaHook && !appaNativeAdapter) {
       try {
         await appaHook.abort();
       } catch (abortError) {
@@ -3179,8 +3340,11 @@ async function handleNonStreaming<
     teams,
     userTeams,
     appaHook,
+    proxyPlugins,
+    proxyPluginContext,
     nativeCodexControl,
     appaNativeClient,
+    appaNativeAdapter,
     nativeCodexGatewayPrincipals,
     authenticatedUserId,
   } = ctx;
@@ -3387,7 +3551,7 @@ async function handleNonStreaming<
         providerName,
         preserveDirectToolCall: (toolName) =>
           isAppaNativeCodexLifecycleTool({
-            client: appaNativeClient,
+            adapter: appaNativeAdapter,
             toolName,
           }),
       });
@@ -3494,7 +3658,7 @@ async function handleNonStreaming<
             })),
           canonicalizeToolName,
           declaredMcpToolTargets,
-          appaNativeClient,
+          appaNativeAdapter,
           appaHook.getNativeSpawnToolMap(),
         );
         let heldBatchCommitted = false;
@@ -3519,14 +3683,24 @@ async function handleNonStreaming<
               history: nativeCodexWire ? nativeCodexHistory : undefined,
               response: responseAdapter.getOriginalResponse(),
             });
-            return reply.send(
-              await restoreHeldNativeResponse({
-                session: appaHook,
-                heldFrameId: nativeFrameId,
-                calls: [held.control],
-                client: appaNativeClient,
-              }),
-            );
+            const response = await restoreHeldNativeResponse({
+              session: appaHook,
+              heldFrameId: nativeFrameId,
+              calls: [held.control],
+              client: appaNativeClient,
+            });
+            await dispatchProxyChildEnd({
+              proxyPlugins,
+              proxyPluginContext,
+              result: response,
+            });
+            await proxyPlugins.onTurnEnd({
+              ...proxyPluginContext,
+              response,
+              awaitClientContinuation: true,
+              deferCleanup: true,
+            });
+            return reply.send(response);
           }
           rewrittenToolCalls = held.calls.map((call) => ({
             id: call.id,
@@ -3541,22 +3715,26 @@ async function handleNonStreaming<
             throw new AppaProxyHookError("unavailable", "outbound");
           }
           if (!heldBatchCommitted) {
-            const effectiveCalls = await appaHook.authorizeOutboundToolCalls(
-              appaToolCalls,
-              nativeSpawnCarrierPreparation({
-                session: appaHook,
-                profileId: agent.id,
-                client: appaNativeClient,
-              }),
-            );
+            const pluginOutcome = await proxyPlugins.onToolCalls({
+              ...proxyPluginContext,
+              toolCalls: toLlmProxyToolCalls(appaToolCalls),
+              response: responseAdapter.getOriginalResponse(),
+            });
+            if (pluginOutcome.decision !== "allow") {
+              throw new AppaProxyHookError("denied", "outbound");
+            }
+            const effectiveCalls = pluginOutcome.toolCalls;
             if (reply.raw.destroyed) {
               await appaHook.quarantineUndeliveredCalls();
               throw new AppaProxyHookError("unavailable", "outbound");
             }
             rewrittenToolCalls = effectiveCalls.map((call) => ({
               id: call.id,
-              name: call.emittedName,
-              arguments: call.emittedArguments,
+              name: call.name,
+              arguments:
+                typeof call.arguments === "string"
+                  ? call.arguments
+                  : JSON.stringify(call.arguments),
             }));
           }
           if (
@@ -3591,7 +3769,7 @@ async function handleNonStreaming<
                     name: toolCall.name,
                     arguments: JSON.stringify(toolCall.arguments),
                   })),
-                client: appaNativeClient,
+                adapter: appaNativeAdapter,
                 clientParentTaskPath: nativeClientTaskPath,
                 logicalParentTaskPath: nativeLogicalTaskPath,
               });
@@ -3674,10 +3852,16 @@ async function handleNonStreaming<
         const awaitingClientContinuation =
           !toolInvocationRefusal &&
           (awaitingClientToolExecution || awaitingClientToolSearch);
-        await appaHook.finish({
-          childReturn: responseAdapter.getText?.(),
+        await dispatchProxyChildEnd({
+          proxyPlugins,
+          proxyPluginContext,
+          result: finalClientResponse,
+        });
+        await proxyPlugins.onTurnEnd({
+          ...proxyPluginContext,
+          resultText: responseAdapter.getText?.(),
           awaitClientContinuation: awaitingClientContinuation,
-          beforeRelease:
+          beforeResponseRelease:
             awaitingClientContinuation && nativeCodexWire
               ? () =>
                   persistPendingNativeCodexHistory({
@@ -3702,6 +3886,37 @@ async function handleNonStreaming<
         appaHook.markContinuationResponseReady();
       } catch (error) {
         throw toAppaHookApiError(error);
+      }
+    }
+
+    if (!toolInvocationRefusal && !appaHook && toolCalls.length > 0) {
+      const pluginOutcome = await proxyPlugins.onToolCalls({
+        ...proxyPluginContext,
+        toolCalls: toolCalls.map((call) => ({
+          id: call.id,
+          name: call.name,
+          arguments: call.arguments,
+        })),
+        response: responseAdapter.getOriginalResponse(),
+      });
+      if (pluginOutcome.decision === "refuse") {
+        toolInvocationRefusal = proxyPluginPolicyBlock({
+          toolCalls: toolCalls.map((call) => ({
+            id: call.id,
+            name: call.name,
+            arguments: call.arguments,
+          })),
+          message: pluginOutcome.message,
+        });
+      } else {
+        rewrittenToolCalls = pluginOutcome.toolCalls.map((call) => ({
+          id: call.id,
+          name: call.name,
+          arguments:
+            typeof call.arguments === "string"
+              ? call.arguments
+              : JSON.stringify(call.arguments),
+        }));
       }
     }
 
@@ -3794,6 +4009,18 @@ async function handleNonStreaming<
         delegationBillingEnvironmentId,
       );
 
+      if (!appaHook) {
+        await dispatchProxyChildEnd({
+          proxyPlugins,
+          proxyPluginContext,
+          result: refusalResponse,
+        });
+        await proxyPlugins.onTurnEnd({
+          ...proxyPluginContext,
+          response: refusalResponse,
+          resultText: contentMessage,
+        });
+      }
       return reply.send(refusalResponse);
     }
   }
@@ -3834,10 +4061,16 @@ async function handleNonStreaming<
           frameId: prepared.frameId,
         });
       }
-      await appaHook.finish({
-        childReturn: responseAdapter.getText?.(),
+      await dispatchProxyChildEnd({
+        proxyPlugins,
+        proxyPluginContext,
+        result: clientResponse,
+      });
+      await proxyPlugins.onTurnEnd({
+        ...proxyPluginContext,
+        resultText: responseAdapter.getText?.(),
         awaitClientContinuation: awaitingClientToolSearch,
-        beforeRelease: awaitingClientToolSearch
+        beforeResponseRelease: awaitingClientToolSearch
           ? () =>
               persistPendingNativeCodexHistory({
                 history: nativeCodexHistory,
@@ -3860,6 +4093,18 @@ async function handleNonStreaming<
     } catch (error) {
       throw toAppaHookApiError(error);
     }
+  }
+  if (!appaHook) {
+    await dispatchProxyChildEnd({
+      proxyPlugins,
+      proxyPluginContext,
+      result: clientResponse,
+    });
+    await proxyPlugins.onTurnEnd({
+      ...proxyPluginContext,
+      response: responseAdapter.getOriginalResponse(),
+      resultText: responseAdapter.getText?.(),
+    });
   }
 
   // Tool calls allowed (or no tool calls) - return response.
@@ -3974,6 +4219,69 @@ function appaHookPolicyBlock(
   };
 }
 
+function toLlmProxyToolCalls(
+  toolCalls: readonly AppaOutboundToolCall[],
+): LlmProxyToolCall[] {
+  return toolCalls.map((call) => ({
+    id: call.id,
+    name: call.emittedName,
+    arguments: call.emittedArguments,
+    target: {
+      name: call.targetName,
+      arguments: call.targetArguments,
+    },
+    isChildSpawn: call.spawn,
+  }));
+}
+
+async function dispatchProxyChildStart(params: {
+  proxyPlugins: LlmProxyPluginRegistry;
+  proxyPluginContext: LlmProxyRequestContext;
+}): Promise<void> {
+  const context = proxyChildContext(params.proxyPluginContext);
+  if (context) await params.proxyPlugins.onChildStart(context);
+}
+
+async function dispatchProxyChildEnd(params: {
+  proxyPlugins: LlmProxyPluginRegistry;
+  proxyPluginContext: LlmProxyRequestContext;
+  result: unknown;
+}): Promise<void> {
+  const context = proxyChildContext(params.proxyPluginContext, params.result);
+  if (context) await params.proxyPlugins.onChildEnd(context);
+}
+
+function proxyChildContext(
+  context: LlmProxyRequestContext,
+  result?: unknown,
+): LlmProxyChildContext | undefined {
+  if (!context.session.parentId) return undefined;
+  return {
+    ...context,
+    childSessionId: context.session.id,
+    ...(context.session.binding ? { binding: context.session.binding } : {}),
+    ...(result !== undefined ? { result } : {}),
+  };
+}
+
+function proxyPluginPolicyBlock(params: {
+  toolCalls: readonly LlmProxyToolCall[];
+  message: string;
+}): utils.toolInvocation.PolicyBlockResult {
+  const blockedToolName =
+    params.toolCalls[0]?.target?.name ?? params.toolCalls[0]?.name ?? "unknown";
+  return {
+    refusalMessage: params.message,
+    contentMessage: params.message,
+    reason: "LLM proxy plugin denied the tool call",
+    blockedToolName,
+    toolInput: {},
+    allToolCallNames: params.toolCalls.map(
+      (toolCall) => toolCall.target?.name ?? toolCall.name,
+    ),
+  };
+}
+
 function appaUnsupportedToolCallBlock(): utils.toolInvocation.PolicyBlockResult {
   const message = `${archestraMcpBranding.appName} LLM Proxy blocked an unsupported tool call while OpenAPPA hooks are enabled.`;
   return {
@@ -3990,7 +4298,7 @@ function normalizeToolCallsForAppa(
   toolCalls: Array<{ id: string; name: string; arguments: string }>,
   canonicalizeToolName: utils.gatewayToolNames.ToolNameCanonicalizer,
   declaredMcpToolTargets: ReadonlyMap<string, string>,
-  nativeClient: AppaNativeClient,
+  nativeAdapter: AppaClientAdapter | undefined,
   nativeSpawnToolMap: Readonly<Record<string, string>> | undefined,
 ): AppaOutboundToolCall[] {
   return toolCalls.map((toolCall) => {
@@ -4033,10 +4341,8 @@ function normalizeToolCallsForAppa(
         "MCP tool call is not a declared target of a registered gateway profile",
       );
     }
-    const nativeSpawn = isAppaNativeSpawnTool({
-      client: nativeClient,
-      toolName: toolCall.name,
-    });
+    const nativeSpawn =
+      nativeAdapter?.isNativeSpawnTool(toolCall.name) ?? false;
     const nativeSpawnContract = resolveConfiguredNativeSpawnContract({
       nativeSpawn,
       // Map only the stock spelling emitted by the client. Normalization may
@@ -4044,10 +4350,9 @@ function normalizeToolCallsForAppa(
       toolName: toolCall.name,
       nativeSpawnToolMap,
     });
-    const nativeControlTarget = toAppaRuntimeNativeControlTarget({
-      client: nativeClient,
-      toolName: toolCall.name,
-    });
+    const nativeControlTarget = nativeAdapter?.nativeControlTarget?.(
+      toolCall.name,
+    );
     return {
       id: toolCall.id,
       emittedName: toolCall.name,
@@ -4082,109 +4387,19 @@ function toAppaRuntimeNativeSpawnTarget(target: string): string {
     : target;
 }
 
-const CODEX_NATIVE_CONTROL_TOOLS = new Set([
-  "multi_agent_v1.wait_agent",
-  "agents.wait_agent",
-  "collaboration.wait_agent",
-]);
-
-/**
- * Proxy V1 sends canonical identities directly, unlike the kagent adapter's
- * native tool spelling. Keep stock Codex lifecycle controls out of the MCP
- * namespace so their narrow host contracts are enforceable.
- */
-function toAppaRuntimeNativeControlTarget(params: {
-  client: AppaNativeClient;
-  toolName: string;
-}): string | undefined {
-  return isAppaNativeCodexControlTool(params)
-    ? `host/codex/${params.toolName}`
-    : undefined;
-}
-
 /**
  * Lifecycle calls execute in the stock Codex client, not through a gateway
  * dispatch wrapper. Preserve their wire spelling so authorization can bind the
  * narrow runtime target below without exposing arbitrary direct host tools.
  */
 function isAppaNativeCodexLifecycleTool(params: {
-  client: AppaNativeClient;
-  toolName: string;
-}): boolean {
-  return isAppaNativeSpawnTool(params) || isAppaNativeCodexControlTool(params);
-}
-
-function isAppaNativeCodexControlTool(params: {
-  client: AppaNativeClient;
+  adapter: AppaClientAdapter | undefined;
   toolName: string;
 }): boolean {
   return (
-    params.client === "codex-responses-v1" &&
-    CODEX_NATIVE_CONTROL_TOOLS.has(params.toolName)
+    params.adapter?.isNativeSpawnTool(params.toolName) === true ||
+    params.adapter?.nativeControlTarget?.(params.toolName) !== undefined
   );
-}
-
-const CLAUDE_NATIVE_CHILD_CONTRACT = "agent/claude-code/Agent";
-
-function nativeSpawnCarrierPreparation(params: {
-  session: AppaProxyHookSession;
-  profileId: string;
-  client: AppaNativeClient;
-}):
-  | {
-      prepareSpawn: (
-        call: AppaOutboundToolCall,
-      ) => Promise<AppaOutboundToolCall>;
-    }
-  | undefined {
-  if (params.client !== "claude-code" && params.client !== "opencode-kimi") {
-    return undefined;
-  }
-  const ledger = new AppaProxyLedger({
-    ...params.session.getNativeWireScope(),
-    profileId: params.profileId,
-  });
-  return {
-    prepareSpawn: async (call) => {
-      let originalArguments: Record<string, unknown>;
-      try {
-        originalArguments = JSON.parse(call.emittedArguments) as Record<
-          string,
-          unknown
-        >;
-      } catch {
-        throw new AppaProxySessionProtocolError(
-          "Native spawn arguments must be a JSON object.",
-        );
-      }
-      if (
-        !originalArguments ||
-        Array.isArray(originalArguments) ||
-        typeof originalArguments.prompt !== "string"
-      ) {
-        throw new AppaProxySessionProtocolError(
-          "Native spawn requires a documented prompt argument.",
-        );
-      }
-      const prepared = await ledger.prepareChildCarrier({
-        callId: call.id,
-        originalArguments,
-      });
-      return {
-        ...call,
-        emittedArguments: JSON.stringify(prepared.rewrittenArguments),
-        emittedArgumentsCanonical: prepared.rewrittenArgumentsCanonical,
-        // OpenAPPA checks declared child contracts before it evaluates
-        // arguments. Only the server-signed Claude carrier may name this
-        // contract, so a client-authored Agent call cannot widen delegation.
-        targetName:
-          call.targetName === "Agent"
-            ? CLAUDE_NATIVE_CHILD_CONTRACT
-            : call.targetName,
-        targetArguments: prepared.rewrittenArguments,
-      };
-    },
-  };
 }
 
 /**
@@ -4196,17 +4411,14 @@ async function publishNativeChildSpawnAliases(params: {
   session: AppaProxyHookSession;
   frameId: string;
   calls: AccumulatedToolCall[];
-  client: AppaNativeClient;
+  adapter: AppaClientAdapter | undefined;
   clientParentTaskPath: string | null;
   logicalParentTaskPath: string | null;
 }): Promise<AccumulatedToolCall[]> {
   const spawnCalls = params.calls
     .map((call, position) => ({ call, position }))
-    .filter(({ call }) =>
-      isAppaNativeSpawnTool({
-        client: params.client,
-        toolName: call.name,
-      }),
+    .filter(
+      ({ call }) => params.adapter?.isNativeSpawnTool(call.name) === true,
     );
   if (spawnCalls.length === 0) return params.calls;
   if (!params.clientParentTaskPath || !params.logicalParentTaskPath) {
@@ -4664,12 +4876,46 @@ function isValidAppaSessionId(value: string | null): value is string {
   );
 }
 
+function resolveAppaNativeAdapter(params: {
+  plugin: ReturnType<typeof getAppaPluginArchestra>;
+  provider: string;
+  interactionType: string;
+  headers: Record<string, string | string[] | undefined>;
+  request: unknown;
+}): AppaClientAdapter | undefined {
+  const protocol = appaProtocolForInteraction(params.interactionType);
+  return protocol
+    ? params.plugin.resolveClientAdapter({
+        protocol,
+        provider: params.provider,
+        headers: params.headers,
+        requestBody: params.request,
+      })
+    : undefined;
+}
+
+function appaProtocolForInteraction(
+  interactionType: string,
+): AppaClientAdapter["protocol"] | undefined {
+  switch (interactionType) {
+    case "anthropic:messages":
+      return "anthropic";
+    case "openai:responses":
+      return "responses";
+    case "openai:chatCompletions":
+    case "kimi:chatCompletions":
+      return "chat_completions";
+    default:
+      return undefined;
+  }
+}
+
 function resolveAppaThreadContext(params: {
+  adapter: AppaClientAdapter | undefined;
   headers: Record<string, string | string[] | undefined>;
   request: unknown;
   sessionId: string | null;
   sessionSource: SessionSource;
-  nativeClient: AppaNativeClient;
 }):
   | {
       threadId: string;
@@ -4678,38 +4924,24 @@ function resolveAppaThreadContext(params: {
     }
   | { error: string }
   | null {
-  const headerThreadId = singleHeader(params.headers["thread-id"]);
-  if (params.nativeClient === "claude-code") {
-    const metadataUserId =
-      isJsonObject(params.request) && isJsonObject(params.request.metadata)
-        ? params.request.metadata.user_id
-        : undefined;
-    const nativeSessionId =
-      (typeof metadataUserId === "string"
-        ? utils.headers.sessionId.extractClaudeMetadataSessionId(metadataUserId)
-        : null) ??
-      singleHeader(params.headers["x-claude-code-session-id"]) ??
-      headerThreadId ??
-      params.sessionId;
-    if (!nativeSessionId) return null;
-    const nativeHeaderSessionId = singleHeader(
-      params.headers["x-claude-code-session-id"],
-    );
-    const alias =
-      params.sessionSource === "claude_metadata" ? undefined : params.sessionId;
-    if (
-      (nativeHeaderSessionId !== undefined &&
-        nativeHeaderSessionId !== nativeSessionId) ||
-      (headerThreadId !== undefined && headerThreadId !== nativeSessionId) ||
-      (alias !== undefined && alias !== nativeSessionId)
-    ) {
-      return {
-        error:
-          "OpenAPPA native Claude session metadata conflicts with a native or client session alias.",
-      };
-    }
-    return { threadId: nativeSessionId };
+  if (params.adapter) {
+    const identity = params.adapter.resolveSessionIdentity({
+      headers: params.headers,
+      requestBody: params.request,
+      sessionId: params.sessionId,
+      sessionSource: params.sessionSource,
+    });
+    if (identity && "error" in identity) return identity;
+    if (!identity?.threadId) return null;
+    return identity.parentSessionId
+      ? {
+          threadId: identity.threadId,
+          parentThreadId: identity.parentSessionId,
+          spawnBinding: identity.spawnBinding,
+        }
+      : { threadId: identity.threadId };
   }
+  const headerThreadId = singleHeader(params.headers["thread-id"]);
   const metadataSessionId =
     isJsonObject(params.request) && isJsonObject(params.request.client_metadata)
       ? params.request.client_metadata.session_id
@@ -4760,10 +4992,13 @@ function singleHeader(
  * ledger remains the source of authority for both values.
  */
 function collectAppaInboundToolResults(params: {
+  adapter: AppaClientAdapter | undefined;
   request: unknown;
   interactionType: string;
 }): AppaInboundToolResult[] {
-  const protocolResults = collectAppaProtocolToolResults(params);
+  const protocolResults =
+    params.adapter?.extractToolResults(params.request) ??
+    collectAppaProtocolToolResults(params);
   if (
     protocolResults.length > 0 ||
     params.interactionType === "anthropic:messages" ||
@@ -4910,33 +5145,35 @@ function applyAppaOutcomeNotices<T>(
 
 function toAppaHookApiError(error: unknown): ApiError {
   if (error instanceof ApiError) return error;
+  const underlyingError =
+    error instanceof LlmProxyPluginError ? error.cause : error;
   // The client gets a stable fail-closed error, but the original boundary
   // failure must remain available in backend logs for native wire diagnosis.
   logger.error(
-    { err: error, stage: "appa_hook_boundary" },
+    { err: underlyingError, stage: "appa_hook_boundary" },
     "OpenAPPA hook boundary failed",
   );
   if (
-    error instanceof Error &&
+    underlyingError instanceof Error &&
     [
       "AppaProxySessionProtocolError",
       "AppaProxySessionBusyError",
       "AppaProxySessionQuarantinedError",
-    ].includes(error.name)
+    ].includes(underlyingError.name)
   ) {
     return new ApiError(
       409,
-      `OpenAPPA conversation rejected: ${error.message}`,
+      `OpenAPPA conversation rejected: ${underlyingError.message}`,
     );
   }
-  if (error instanceof AppaProxyHookError) {
-    if (error.kind === "unavailable") {
+  if (underlyingError instanceof AppaProxyHookError) {
+    if (underlyingError.kind === "unavailable") {
       return new ApiError(
         503,
         "OpenAPPA remote hook did not authorize the request.",
       );
     }
-    if (error.kind === "denied") {
+    if (underlyingError.kind === "denied") {
       return new ApiError(403, "OpenAPPA remote hook denied the request.");
     }
   }

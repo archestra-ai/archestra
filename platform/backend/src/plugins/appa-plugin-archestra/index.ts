@@ -1,3 +1,4 @@
+import { registerLlmProxyPlugin } from "@/plugins/llm-proxy-plugin";
 import { AppaClaudeCodeAdapter } from "./adapters/claude-code";
 import { AppaCodexAdapter } from "./adapters/codex";
 import { AppaOpenCodeAdapter } from "./adapters/opencode";
@@ -14,6 +15,7 @@ export { AppaPluginArchestra } from "./plugin";
 export * from "./types";
 
 let pluginInstance: AppaPluginArchestra | null = null;
+let appaPluginRegistered = false;
 
 /**
  * Initializes and returns the foundational appa-plugin-archestra meta-plugin
@@ -27,4 +29,11 @@ export function getAppaPluginArchestra(): AppaPluginArchestra {
     pluginInstance.registerClientAdapter(new AppaOpenCodeAdapter());
   }
   return pluginInstance;
+}
+
+/** Registers APPA as one implementation of the generic proxy lifecycle. */
+export function registerAppaLlmProxyPlugin(): void {
+  if (appaPluginRegistered) return;
+  registerLlmProxyPlugin(getAppaPluginArchestra());
+  appaPluginRegistered = true;
 }

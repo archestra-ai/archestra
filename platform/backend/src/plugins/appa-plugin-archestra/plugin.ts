@@ -1,26 +1,21 @@
-import { randomUUID } from "node:crypto";
-import config from "@/config";
+import { AppaProxySessionProtocolError } from "@/models";
+import type {
+  LlmProxyPlugin,
+  LlmProxyPromptContext,
+  LlmProxyRequestContext,
+  LlmProxyToolCallsContext,
+  LlmProxyToolCallsOutcome,
+  LlmProxyToolResultsContext,
+  LlmProxyToolResultsOutcome,
+  LlmProxyTurnEndContext,
+} from "@/plugins/llm-proxy-plugin";
 import {
   type AppaOutboundToolCall,
   AppaProxyHookSession,
   canonicalJsonObject,
 } from "@/routes/proxy/appa-proxy-hook";
-import type { AppaHistoryProtocol } from "@/services/appa-history-codec";
-import type {
-  AppaChildContext,
-  AppaClientAdapter,
-  AppaLifecycleHookCallbacks,
-  AppaPromptContext,
-  AppaSessionHookInstance,
-  AppaSessionInitContext,
-  AppaToolCall,
-  AppaToolCallsContext,
-  AppaToolCallsDecision,
-  AppaToolResult,
-  AppaToolResultContext,
-  AppaToolResultOutcome,
-  AppaTurnEndContext,
-} from "./types";
+import { AppaProxyLedger } from "@/services/appa-proxy/ledger";
+import type { AppaClientAdapter } from "./types";
 
 /**
  * Foundational appa-plugin-archestra meta-plugin.
@@ -28,8 +23,18 @@ import type {
  * external actors and mediates communication between Archestra LLM-proxy
  * and OpenAPPA appa-runtime.
  */
-export class AppaPluginArchestra implements AppaLifecycleHookCallbacks {
-  private clientAdapters: Map<string, AppaClientAdapter> = new Map();
+export class AppaPluginArchestra implements LlmProxyPlugin {
+  readonly id = "archestra.appa";
+
+  private readonly clientAdapters = new Map<string, AppaClientAdapter>();
+  private readonly sessions = new Map<
+    string,
+    {
+      session: AppaProxyHookSession;
+      adapter?: AppaClientAdapter;
+      promptSent: boolean;
+    }
+  >();
 
   /**
    * Register a client-specific adapter (e.g. appa-plugin-archestra-claude-code,
@@ -44,7 +49,8 @@ export class AppaPluginArchestra implements AppaLifecycleHookCallbacks {
   }
 
   resolveClientAdapter(context: {
-    protocol: AppaSessionInitContext["protocol"];
+    protocol: "anthropic" | "responses" | "chat_completions";
+    provider?: string;
     headers: Record<string, string | string[] | undefined>;
     requestBody: unknown;
   }): AppaClientAdapter | undefined {
@@ -53,142 +59,67 @@ export class AppaPluginArchestra implements AppaLifecycleHookCallbacks {
         return adapter;
       }
     }
-    // Fallback by protocol
-    for (const adapter of this.clientAdapters.values()) {
-      if (adapter.protocol === context.protocol) {
-        return adapter;
-      }
-    }
     return undefined;
   }
 
-  /**
-   * Lifecycle Hook Point: onSessionInit
-   * Called during proxy pre-handling to initialize or resume an APPA session,
-   * binding trajectory lineage in the durable ledger.
-   */
-  async onSessionInit(
-    context: AppaSessionInitContext,
-  ): Promise<AppaSessionHookInstance | undefined> {
-    const hookConfig = config.llmProxy.appaHook;
-    if (!hookConfig) {
-      return undefined;
+  async onSessionInit(context: LlmProxyRequestContext): Promise<void> {
+    const binding = context.resources.get(this.id);
+    if (!isProxySessionBinding(binding)) return;
+    if (this.sessions.has(context.requestId)) {
+      throw new Error(`APPA session ${context.requestId} is already bound`);
     }
-
-    const adapter = this.resolveClientAdapter({
-      protocol: context.protocol,
-      headers: context.headers,
-      requestBody: context.requestBody,
-    });
-    if (!adapter) {
-      return undefined;
-    }
-
-    const identity = adapter.extractSessionIdentity({
-      headers: context.headers,
-      requestBody: context.requestBody,
-    });
-
-    const toolResults = adapter.extractToolResults(context.requestBody);
-
-    const protocolMap: Record<string, AppaHistoryProtocol> = {
-      anthropic: "anthropic-messages",
-      responses: "openai-responses",
-      chat_completions: "openai-chat-completions",
-    };
-
-    const session = await AppaProxyHookSession.acquire({
-      config: hookConfig,
-      profileId: context.profileId,
-      ownerScopeHash: context.userId || "anonymous",
-      clientSessionId: identity.clientSessionId ?? randomUUID(),
-      parentClientSessionId: identity.parentSessionId,
-      spawnBinding: identity.spawnBinding,
-      provider: context.provider,
-      protocol: protocolMap[context.protocol],
-      model: context.model || "unknown",
-      toolResults: toolResults.map((tr: AppaToolResult) => ({
-        id: tr.id,
-        content: tr.content,
-        isError: tr.isError,
-        claimedCall: tr.claimedCall
-          ? {
-              name: tr.claimedCall.name,
-              rawArguments: JSON.stringify(tr.claimedCall.rawArguments),
-            }
-          : undefined,
-      })),
-    });
-
-    return new AppaSessionHookWrapper({
-      session,
-      adapter,
-    });
-  }
-}
-
-/**
- * Session hook wrapper implementing AppaSessionHookInstance.
- * Encapsulates durable ledger mutations and runtime communication per turn.
- */
-class AppaSessionHookWrapper implements AppaSessionHookInstance {
-  readonly session: AppaProxyHookSession;
-  readonly adapter: AppaClientAdapter;
-
-  constructor(params: {
-    session: AppaProxyHookSession;
-    adapter: AppaClientAdapter;
-  }) {
-    this.session = params.session;
-    this.adapter = params.adapter;
+    this.sessions.set(context.requestId, { ...binding, promptSent: false });
   }
 
-  get sessionId(): string {
-    return this.session.getNativeWireScope().sessionId;
-  }
-
-  get rootId(): string {
-    return this.session.rootId;
-  }
-
-  async onPrompt(context: AppaPromptContext): Promise<void> {
-    await this.session.sendPrompt(context.requestBody);
+  async onPrompt(context: LlmProxyPromptContext): Promise<void> {
+    const state = this.sessions.get(context.requestId);
+    if (!state) return;
+    await state.session.sendPrompt(context.prompt);
+    state.promptSent = true;
   }
 
   async onToolCalls(
-    context: AppaToolCallsContext,
-  ): Promise<AppaToolCallsDecision> {
-    if (context.toolCalls.length === 0) {
-      return { decision: "allow", calls: [] };
-    }
+    context: LlmProxyToolCallsContext,
+  ): Promise<LlmProxyToolCallsOutcome | undefined> {
+    const state = this.sessions.get(context.requestId);
+    if (!state || context.toolCalls.length === 0) return;
 
     try {
-      const outboundCalls: AppaOutboundToolCall[] = context.toolCalls.map(
-        (tc: AppaToolCall) => {
-          const rawArgs = JSON.stringify(tc.arguments);
-          const targetName =
-            this.adapter.canonicalizeLocalToolName?.(tc.name) ?? tc.name;
-          return {
-            id: tc.id,
-            emittedName: tc.name,
-            emittedArguments: rawArgs,
-            emittedArgumentsCanonical: canonicalJsonObject(rawArgs),
-            targetName,
-            targetArguments: tc.arguments,
-            spawn: tc.spawn === true,
-          };
-        },
+      const calls: AppaOutboundToolCall[] = context.toolCalls.map((call) => {
+        const emittedArguments =
+          typeof call.arguments === "string"
+            ? call.arguments
+            : JSON.stringify(call.arguments);
+        return {
+          id: call.id,
+          emittedName: call.name,
+          emittedArguments,
+          emittedArgumentsCanonical: canonicalJsonObject(emittedArguments),
+          targetName:
+            call.target?.name ??
+            state.adapter?.canonicalizeLocalToolName?.(call.name) ??
+            call.name,
+          targetArguments: (call.target?.arguments ?? call.arguments) as Record<
+            string,
+            unknown
+          >,
+          spawn: call.isChildSpawn === true,
+        };
+      });
+      const authorized = await state.session.authorizeOutboundToolCalls(
+        calls,
+        this.nativeSpawnCarrierPreparation({
+          session: state.session,
+          profileId: context.profileId,
+          adapter: state.adapter,
+        }),
       );
-
-      const authorized =
-        await this.session.authorizeOutboundToolCalls(outboundCalls);
-
       return {
         decision: "allow",
-        calls: authorized.map((call) => ({
+        toolCalls: authorized.map((call) => ({
           id: call.id,
-          name: call.targetName,
-          arguments: call.targetArguments,
+          name: call.emittedName,
+          arguments: call.emittedArguments,
         })),
       };
     } catch (error) {
@@ -202,35 +133,113 @@ class AppaSessionHookWrapper implements AppaSessionHookInstance {
     }
   }
 
-  async onToolResult(
-    context: AppaToolResultContext,
-  ): Promise<AppaToolResultOutcome> {
-    const updates = this.session.getModelResultUpdates();
+  async onToolResults(
+    context: LlmProxyToolResultsContext,
+  ): Promise<LlmProxyToolResultsOutcome | undefined> {
+    const state = this.sessions.get(context.requestId);
+    if (!state) return;
     return {
-      status: "admitted",
-      admittedResults: context.results,
-      modelUpdates: updates,
+      toolResults: context.toolResults,
+      modelUpdates: state.session.getModelResultUpdates(),
     };
   }
 
-  async onTurnEnd(_context: AppaTurnEndContext): Promise<void> {
-    await this.session.finish();
+  async onTurnEnd(context: LlmProxyTurnEndContext): Promise<void> {
+    const state = this.sessions.get(context.requestId);
+    if (!state) return;
+    try {
+      if (context.deferCleanup) return;
+      if (state.promptSent) {
+        await state.session.finish({
+          childReturn: context.resultText,
+          awaitClientContinuation: context.awaitClientContinuation,
+          beforeRelease: context.beforeResponseRelease,
+        });
+      } else {
+        await state.session.releaseWithoutPrompt();
+      }
+    } finally {
+      this.sessions.delete(context.requestId);
+    }
   }
 
-  async onChildStart(_context: AppaChildContext): Promise<void> {
-    // Child start is automatically initiated during sendPrompt when parentClientSessionId is present
+  async onAbort(context: LlmProxyRequestContext): Promise<void> {
+    const state = this.sessions.get(context.requestId);
+    if (!state) return;
+    try {
+      if (state.promptSent) {
+        await state.session.abort();
+      } else {
+        await state.session.releaseWithoutPrompt();
+      }
+    } finally {
+      this.sessions.delete(context.requestId);
+    }
   }
 
-  async onChildEnd(context: AppaChildContext): Promise<void> {
-    await this.session.finish({
-      childReturn:
-        typeof context.result === "string"
-          ? context.result
-          : JSON.stringify(context.result),
+  private nativeSpawnCarrierPreparation(params: {
+    session: AppaProxyHookSession;
+    profileId: string;
+    adapter?: AppaClientAdapter;
+  }):
+    | {
+        prepareSpawn: (
+          call: AppaOutboundToolCall,
+        ) => Promise<AppaOutboundToolCall>;
+      }
+    | undefined {
+    const { adapter } = params;
+    if (!adapter?.usesSpawnCarrier) return undefined;
+    const ledger = new AppaProxyLedger({
+      ...params.session.getNativeWireScope(),
+      profileId: params.profileId,
     });
+    return {
+      prepareSpawn: async (call) => {
+        let originalArguments: Record<string, unknown>;
+        try {
+          originalArguments = JSON.parse(call.emittedArguments) as Record<
+            string,
+            unknown
+          >;
+        } catch {
+          throw new AppaProxySessionProtocolError(
+            "Native spawn arguments must be a JSON object.",
+          );
+        }
+        if (
+          !originalArguments ||
+          Array.isArray(originalArguments) ||
+          typeof originalArguments.prompt !== "string"
+        ) {
+          throw new AppaProxySessionProtocolError(
+            "Native spawn requires a documented prompt argument.",
+          );
+        }
+        const prepared = await ledger.prepareChildCarrier({
+          callId: call.id,
+          originalArguments,
+        });
+        return {
+          ...call,
+          emittedArguments: JSON.stringify(prepared.rewrittenArguments),
+          emittedArgumentsCanonical: prepared.rewrittenArgumentsCanonical,
+          targetName:
+            adapter.carrierSpawnTarget?.(call.targetName) ?? call.targetName,
+          targetArguments: prepared.rewrittenArguments,
+        };
+      },
+    };
   }
+}
 
-  async abort(): Promise<void> {
-    await this.session.abort();
-  }
+function isProxySessionBinding(
+  value: unknown,
+): value is { session: AppaProxyHookSession; adapter?: AppaClientAdapter } {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "session" in value &&
+    value.session instanceof AppaProxyHookSession
+  );
 }

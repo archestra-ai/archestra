@@ -15,7 +15,6 @@ import {
   serverCanAccessPage,
   serverHasPermissions,
 } from "@/lib/auth/auth.server";
-import { handleApiError } from "@/lib/utils";
 import { getServerApiHeaders } from "@/lib/utils/server";
 import AgentsPage from "./page.client";
 
@@ -23,7 +22,7 @@ export const dynamic = "force-dynamic";
 
 export default async function AgentsPageServer() {
   let initialData: {
-    agents: archestraApiTypes.GetAgentsResponses["200"] | null;
+    agents: archestraApiTypes.GetAgentCatalogResponses["200"] | null;
     teams: archestraApiTypes.GetTeamsResponses["200"]["data"];
   } = {
     agents: null,
@@ -40,17 +39,15 @@ export default async function AgentsPageServer() {
       data: { data: [] },
       error: undefined,
     };
-    const [agentsResponse, teamsResponse] = await Promise.all([
-      archestraApiSdk.getAgents({
+    const [agentsResult, teamsResult] = await Promise.allSettled([
+      archestraApiSdk.getAgentCatalog({
         headers,
         query: {
           limit: DEFAULT_TABLE_LIMIT,
           offset: 0,
           sortBy: DEFAULT_SORT_BY,
           sortDirection: DEFAULT_SORT_DIRECTION,
-          agentTypes: ["agent"],
           excludeOtherPersonalAgents: true,
-          includeActivationSkillsCount: true,
         },
       }),
       canReadTeams
@@ -60,15 +57,13 @@ export default async function AgentsPageServer() {
           })
         : Promise.resolve(emptyTeamsResponse),
     ]);
-    if (agentsResponse.error) {
-      handleApiError(agentsResponse.error);
-    }
-    if (teamsResponse.error) {
-      handleApiError(teamsResponse.error);
-    }
+    const agentsResponse =
+      agentsResult.status === "fulfilled" ? agentsResult.value : undefined;
+    const teamsResponse =
+      teamsResult.status === "fulfilled" ? teamsResult.value : undefined;
     initialData = {
-      agents: agentsResponse.data || null,
-      teams: teamsResponse.data?.data ?? [],
+      agents: agentsResponse?.data ?? null,
+      teams: teamsResponse?.data?.data ?? [],
     };
   } catch (error) {
     return <ServerErrorFallback error={error as ErrorExtended} />;

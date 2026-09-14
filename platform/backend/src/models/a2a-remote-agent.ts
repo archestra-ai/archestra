@@ -124,6 +124,7 @@ class A2aRemoteAgentModel {
       scope?: ResourceVisibilityScope;
       teamId?: string;
       authorId?: string;
+      ids?: string[];
     },
     id?: string,
   ): Promise<
@@ -141,6 +142,11 @@ class A2aRemoteAgentModel {
         : undefined,
       params.authorId
         ? eq(schema.a2aRemoteAgentsTable.authorId, params.authorId)
+        : undefined,
+      params.ids
+        ? params.ids.length > 0
+          ? inArray(schema.a2aRemoteAgentsTable.id, params.ids)
+          : sql<boolean>`false`
         : undefined,
       params.teamId
         ? exists(

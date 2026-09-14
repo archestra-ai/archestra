@@ -8,6 +8,7 @@ export type HandlerOverride = {
   status?: number;
   body?: unknown;
   once?: boolean;
+  delayMs?: number;
 };
 
 // Explicit switch (not `msw.http[o.method]`) so the static analyzer can see
@@ -17,8 +18,10 @@ export function buildHandler(
   url: string,
   o: HandlerOverride,
 ): HttpHandler {
-  const responder = () =>
-    msw.HttpResponse.json(o.body ?? null, { status: o.status ?? 200 });
+  const responder = async () => {
+    if (o.delayMs) await msw.delay(o.delayMs);
+    return msw.HttpResponse.json(o.body ?? null, { status: o.status ?? 200 });
+  };
   const options = { once: o.once === true };
   switch (o.method) {
     case "get":

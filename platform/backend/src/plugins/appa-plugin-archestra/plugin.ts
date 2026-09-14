@@ -1,8 +1,8 @@
 import type { PolicyBlockResult } from "@/guardrails/tool-invocation";
 import {
   checkToolCalls,
-  processProxyResults,
   type OpenAppaSession,
+  processProxyResults,
 } from "@/openappa/service";
 import type {
   LlmProxyPlugin,
@@ -15,7 +15,7 @@ export const APPA_PLUGIN_BINDING = "archestra.appa.binding";
 const APPA_PLUGIN_RESULT = "archestra.appa.result";
 const APPA_PLUGIN_REFUSAL = "archestra.appa.refusal";
 
-export type AppaPluginBinding = {
+type AppaPluginBinding = {
   session: OpenAppaSession;
   canonicalizeToolName: (name: string) => string;
 };

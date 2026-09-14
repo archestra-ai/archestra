@@ -40,7 +40,19 @@ export function RuntimeCredentialDefinitionDialog({
   onClose: () => void;
 }) {
   const create = useCreateRuntimeCredential();
-  const { data: credentials = [] } = useRuntimeCredentials();
+  const {
+    data: credentials = [],
+    isPending: loadingCredentials,
+    isError: credentialsFailed,
+  } = useRuntimeCredentials();
+  const githubApps = credentials.filter(
+    (entry) =>
+      entry.kind === "github_app" &&
+      entry.allowOrganization &&
+      entry.githubUrl === "https://api.github.com" &&
+      entry.githubClientId &&
+      entry.organizationConfigured,
+  );
   const update = useUpdateRuntimeCredential();
   const form = useForm<DefinitionFormValues>({
     resolver: zodResolver(DefinitionFormSchema),
@@ -247,6 +259,7 @@ export function RuntimeCredentialDefinitionDialog({
                   </SelectItem>
                   <SelectItem
                     value="github_app_user"
+                    disabled={githubApps.length === 0}
                     icon={
                       <RuntimeCredentialIcon
                         icon="logo:github"
@@ -258,6 +271,26 @@ export function RuntimeCredentialDefinitionDialog({
                   </SelectItem>
                 </SelectContent>
               </Select>
+              {!definition && githubApps.length === 0 && (
+                <FormDescription>
+                  {loadingCredentials ? (
+                    <span>Checking available GitHub Apps…</span>
+                  ) : credentialsFailed ? (
+                    <span>
+                      Couldn’t check GitHub Apps. Reopen this dialog to try
+                      again.
+                    </span>
+                  ) : (
+                    <span>
+                      GitHub user connections need an organization GitHub App
+                      first. Choose GitHub App, add its OAuth client ID, then
+                      save and connect its private key and client secret. Each
+                      user can then connect their GitHub account once for all
+                      agents.
+                    </span>
+                  )}
+                </FormDescription>
+              )}
               {field.value === "github_app" && (
                 <FormDescription>
                   Add the app details below, then connect its private key after
@@ -322,16 +355,11 @@ export function RuntimeCredentialDefinitionDialog({
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    {credentials
-                      .filter(
-                        (entry) =>
-                          entry.kind === "github_app" && entry.githubClientId,
-                      )
-                      .map((entry) => (
-                        <SelectItem key={entry.key} value={entry.key}>
-                          {entry.name}
-                        </SelectItem>
-                      ))}
+                    {githubApps.map((entry) => (
+                      <SelectItem key={entry.key} value={entry.key}>
+                        {entry.name}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
                 <FormMessage />

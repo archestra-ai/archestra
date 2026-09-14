@@ -433,7 +433,7 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
               {displayAgentName}
             </span>
             {runtimeEnabled && currentAgent?.runtime && (
-              <RuntimeCapableIndicator />
+              <RuntimeCapableIndicator runtime={currentAgent.runtime} />
             )}
             {/* In Auto mode the agent reaches everything dynamically,
                 so the per-server avatar group + its tool selector are
@@ -545,7 +545,9 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
                               {agent.name}
                             </span>
                             {runtimeEnabled && agent.runtime && (
-                              <RuntimeCapableIndicator />
+                              <RuntimeCapableIndicator
+                                runtime={agent.runtime}
+                              />
                             )}
                             <AgentBadge
                               type={agent.scope}

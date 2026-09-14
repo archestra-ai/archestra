@@ -743,19 +743,13 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
         key={getAgentListRowId(row)}
         icon={<AgentIcon icon={agent.icon} size={20} />}
         title={
-          // Wraps so the name keeps the first line: a pill that refuses to
-          // shrink beside a name that does left a phone-width card reading
-          // "M… [Runtime]" with the actions cluster taking the rest.
-          <span className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1">
+          <span className="flex min-w-0 items-center gap-1.5">
             <Link
               href={agentDetailHref("agent", agent.id)}
               className="truncate"
             >
               {agent.name}
             </Link>
-            {agent.runtime != null && (
-              <RuntimeCapableIndicator variant="pill" />
-            )}
             <LabelTags labels={agent.labels} />
           </span>
         }
@@ -780,6 +774,14 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
             currentUserId={currentUserId}
             showSelfAsMe
           />
+          {/* In the badge row rather than beside the name as the table has
+              it: a card title shares its line with the four-button action
+              cluster, and at phone width that left "Claude Code" clipped to
+              "Claude Cod". The row below has the card's full width and
+              already wraps. */}
+          {agent.runtime != null && (
+            <RuntimeCapableIndicator variant="pill" runtime={agent.runtime} />
+          )}
           {effectiveDefault?.agentId === agent.id ? (
             <DefaultAgentTag source={effectiveDefault.source} />
           ) : null}
@@ -856,7 +858,10 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
             extraBadges={
               <>
                 {agent.runtime != null && (
-                  <RuntimeCapableIndicator variant="pill" />
+                  <RuntimeCapableIndicator
+                    variant="pill"
+                    runtime={agent.runtime}
+                  />
                 )}
                 {effectiveDefault?.agentId === agent.id ? (
                   <DefaultAgentTag source={effectiveDefault.source} />

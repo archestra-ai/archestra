@@ -4,11 +4,13 @@ import {
   getDefaultAgentRuntimeImage,
   type SubscriptionCredentialKind,
 } from "@archestra/shared";
-import { Bot, Network } from "lucide-react";
-import Image from "next/image";
+import { Network } from "lucide-react";
 import type { AgentFormInitialValues } from "@/components/agent-form";
+import {
+  AGENT_CATALOG_TEMPLATE_NAMES,
+  CatalogAgentIcon,
+} from "@/components/agent-pages/agent-catalog-identity";
 import { CatalogSourceCard } from "@/components/catalog-source-card";
-import { ProviderIcon } from "@/components/provider-icon";
 import { Badge } from "@/components/ui/badge";
 import appConfig from "@/lib/config/config";
 import { useFeature } from "@/lib/config/config.query";
@@ -47,7 +49,7 @@ export function getAgentCatalogTemplates(
     }),
     template({
       id: "claude-code",
-      name: "Claude Code",
+      name: AGENT_CATALOG_TEMPLATE_NAMES["claude-code"],
       icon: "/model-logos/anthropic.svg",
       description: `Anthropic's coding agent with personal Claude sign-in or provider billing, connected to the ${appName} MCP gateway.`,
       platformName: appName,
@@ -58,7 +60,7 @@ export function getAgentCatalogTemplates(
     }),
     template({
       id: "codex",
-      name: "Codex",
+      name: AGENT_CATALOG_TEMPLATE_NAMES.codex,
       icon: "/model-logos/openai.svg",
       description: `OpenAI's coding agent, preconfigured to use the ${appName} LLM proxy and MCP gateway.`,
       platformName: appName,
@@ -70,7 +72,7 @@ export function getAgentCatalogTemplates(
     }),
     template({
       id: "opencode",
-      name: "OpenCode",
+      name: AGENT_CATALOG_TEMPLATE_NAMES.opencode,
       icon: "/agent-logos/opencode.svg",
       description: `The open source coding agent, preconfigured to use the ${appName} LLM proxy and MCP gateway.`,
       platformName: appName,
@@ -81,7 +83,7 @@ export function getAgentCatalogTemplates(
     }),
     template({
       id: "hermes",
-      name: "Hermes",
+      name: AGENT_CATALOG_TEMPLATE_NAMES.hermes,
       icon: "/agent-logos/hermes.png",
       description: `The Hermes coding agent with its model and remote MCP tools supplied by ${appName}.`,
       platformName: appName,
@@ -92,7 +94,7 @@ export function getAgentCatalogTemplates(
     }),
     template({
       id: "openclaw",
-      name: "OpenClaw",
+      name: AGENT_CATALOG_TEMPLATE_NAMES.openclaw,
       icon: "/agent-logos/openclaw.svg",
       description: `OpenClaw in an isolated task pod, with inference and MCP access kept behind ${appName}.`,
       platformName: appName,
@@ -195,65 +197,6 @@ export function AgentCatalog({
       </div>
     </div>
   );
-}
-
-function CatalogAgentIcon({
-  id,
-  appIconLogo,
-}: {
-  id: AgentCatalogTemplate["id"];
-  appIconLogo: string | null;
-}) {
-  switch (id) {
-    case "archestra":
-      return appIconLogo ? (
-        <Image
-          src={appIconLogo}
-          alt=""
-          width={22}
-          height={22}
-          className="size-[22px] rounded-sm object-contain"
-        />
-      ) : (
-        <Bot className="size-5" />
-      );
-    case "claude-code":
-      return <ProviderIcon provider="anthropic" size={22} />;
-    case "codex":
-      return <ProviderIcon provider="openai" size={22} />;
-    case "opencode":
-      return (
-        <Image
-          src="/agent-logos/opencode.svg"
-          alt=""
-          width={22}
-          height={22}
-          className="h-[22px] w-auto object-contain dark:invert"
-        />
-      );
-    case "hermes":
-      return (
-        <Image
-          src="/agent-logos/hermes.png"
-          alt=""
-          width={30}
-          height={30}
-          className="size-[30px] rounded-md object-contain"
-        />
-      );
-    case "openclaw":
-      return (
-        <Image
-          src="/agent-logos/openclaw.svg"
-          alt=""
-          width={22}
-          height={22}
-          className="size-[22px] object-contain"
-        />
-      );
-    default:
-      return <Bot className="size-5" />;
-  }
 }
 
 function template(params: {

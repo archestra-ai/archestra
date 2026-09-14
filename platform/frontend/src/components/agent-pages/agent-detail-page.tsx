@@ -473,6 +473,7 @@ function AgentDetails({
           {hasAgentRuntime && (
             <RuntimeCapableIndicator
               variant="pill"
+              runtime={agent.runtime}
               className="hidden font-normal sm:inline-flex"
             />
           )}

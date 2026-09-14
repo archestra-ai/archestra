@@ -3,7 +3,7 @@ title: Credentials
 category: Administration
 description: Save credentials once and reuse them across agents, MCP servers, skills, and knowledge
 order: 5
-lastUpdated: 2026-09-13
+lastUpdated: 2026-09-14
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -21,6 +21,12 @@ A **GitHub App** always belongs to the organization. It holds an API URL, app ID
 [Installation tokens expire after one hour](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-an-installation-access-token-for-a-github-app). Archestra renews them for managed runtimes. See [Token Refresh](#token-refresh) for process behavior.
 
 Install the GitHub App on the repositories it needs. Its installation permissions determine the token's access. Individual integrations describe their required permissions.
+
+A **GitHub user connection** links your account to an organization-managed App. Authorize once through GitHub. Every harness using that credential acts as your GitHub user. Access is limited to permissions held by both you and the App.
+
+The organization App needs an OAuth client ID and client secret for personal authorization. Register `<frontend URL>/settings/credentials/github/callback` as its callback URL. Keep expiring user authorization tokens enabled. Personal authorization requires writable secret storage.
+
+User connections and bot installation credentials have separate ownership policies. Interactive coding agents can use personal connections. Unattended agents can use the organization's installation credential.
 
 ## Ownership
 
@@ -54,7 +60,7 @@ GitHub skill and plugin imports accept saved secrets as tokens or saved GitHub A
 
 Replacing a value updates future resolutions wherever the credential is referenced. For static secrets, restart MCP processes or start a new Agent Runtime run.
 
-Skill and Knowledge operations resolve GitHub App tokens when they authenticate. Managed runtime tokens also renew during execution.
+Skill and Knowledge operations resolve GitHub App tokens when they authenticate. Managed runtime tokens also renew during execution. Personal GitHub connections refresh automatically while their authorization remains valid. Expired or revoked authorization requires reconnecting through GitHub.
 
 Disconnecting removes a saved value without removing its definition. Required bindings need a connected value before execution. Deleting a definition is blocked while a resource references it.
 
@@ -76,7 +82,7 @@ Save a GitHub token as an organization **Custom secret** named **Repository acce
 
 Select **Repository access** for a coding Agent's `GITHUB_TOKEN` environment variable. Select it again for a GitHub MCP server's `GITHUB_PERSONAL_ACCESS_TOKEN` variable. Use the same credential for private skill imports or a GitHub Knowledge connector.
 
-For personal repository access, create a credential provided by **Each user** instead. Each person connects their token and selects it for their own Agent runs and MCP installation.
+For personal repository access, create a **GitHub user connection** referencing the organization App. Each person authorizes GitHub once. Select that connection for each coding harness and personal MCP installation.
 
 A GitHub App follows the same reuse pattern. Save its installation details, connect the private key, and select the credential in each integration.
 

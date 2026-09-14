@@ -3,6 +3,7 @@ import {
   RuntimeCredentialConnectionModel,
   RuntimeCredentialDefinitionModel,
 } from "@/models";
+import { githubUserConnectionManager } from "@/services/github-user-connection";
 import { ApiError, type RuntimeCredentialConnectionScope } from "@/types";
 
 /** Resolve a reusable credential for its explicit owner at the point of use. */
@@ -35,6 +36,13 @@ export async function resolveCredential(params: {
       : !definition.allowOrganization
   ) {
     throw new ApiError(400, "Credential ownership does not match this binding");
+  }
+  if (definition.kind === "github_app_user") {
+    if (params.scope !== "personal" || !params.userId) return null;
+    return githubUserConnectionManager.resolve({
+      ...params,
+      userId: params.userId,
+    });
   }
   const value = await RuntimeCredentialConnectionModel.resolveValue(params);
   if (!value) return null;

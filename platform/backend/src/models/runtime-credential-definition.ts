@@ -8,6 +8,28 @@ import type {
 import CreatedByModel from "./created-by";
 
 export default class RuntimeCredentialDefinitionModel {
+  static async hasGitHubUserDefinitions(params: {
+    organizationId: string;
+    key: string;
+  }): Promise<boolean> {
+    const [row] = await db
+      .select({ id: schema.runtimeCredentialDefinitionsTable.id })
+      .from(schema.runtimeCredentialDefinitionsTable)
+      .where(
+        and(
+          eq(
+            schema.runtimeCredentialDefinitionsTable.organizationId,
+            params.organizationId,
+          ),
+          eq(
+            schema.runtimeCredentialDefinitionsTable.githubAppCredentialKey,
+            params.key,
+          ),
+        ),
+      )
+      .limit(1);
+    return Boolean(row);
+  }
   static async findById(params: { id: string; organizationId: string }) {
     const [definition] = await db
       .select()

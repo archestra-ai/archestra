@@ -25,6 +25,8 @@ const runtimeCredentialDefinitionsTable = pgTable(
     githubUrl: text("github_url"),
     appId: text("app_id"),
     installationId: text("installation_id"),
+    githubClientId: text("github_client_id"),
+    githubAppCredentialKey: text("github_app_credential_key"),
     description: text("description").notNull().default(""),
     icon: text("icon"),
     allowPersonal: boolean("allow_personal").notNull().default(true),

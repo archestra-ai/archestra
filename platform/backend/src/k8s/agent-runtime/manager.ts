@@ -514,10 +514,12 @@ class AgentRuntimeManager {
       const next = await resolveCredential({
         organizationId: session.organizationId,
         credentialId: current.credentialId,
-        scope: "organization",
+        scope: current.scope ?? "organization",
+        userId: session.actorUserId,
         minimumValidityMs: 55 * 60_000,
       });
       bundle.credentials[key] = {
+        ...current,
         credentialId: current.credentialId,
         value: next?.value ?? "",
         expiresAt: next?.expiresAt ?? 0,

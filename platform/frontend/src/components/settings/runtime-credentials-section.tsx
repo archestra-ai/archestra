@@ -138,7 +138,9 @@ export function RuntimeCredentialsSection() {
                     <span>
                       {definition.kind === "github_app"
                         ? "GitHub App"
-                        : "Custom secret"}{" "}
+                        : definition.kind === "github_app_user"
+                          ? "GitHub user connection"
+                          : "Custom secret"}{" "}
                       ·{" "}
                       {definition.allowOrganization
                         ? "Organization"

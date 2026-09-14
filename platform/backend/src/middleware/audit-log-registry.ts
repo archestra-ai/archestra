@@ -183,6 +183,17 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     action: "credential.updated",
     onlyWhenChanged: true,
   },
+  "/api/credentials/github/callback": {
+    resourceType: "credential",
+    action: "credential.updated",
+    onlyWhenChanged: true,
+  },
+  "/api/credentials/:key/personal": {
+    resourceType: "credential",
+    resourceIdParam: "key",
+    action: "credential.updated",
+    onlyWhenChanged: true,
+  },
   "/api/agents/:id/runs": {
     resourceType: "agentRun",
     action: "agentRun.created",

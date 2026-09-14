@@ -16,6 +16,18 @@ export class AppaClaudeCodeAdapter implements AppaClientAdapter {
     );
   }
 
+  getNativeSessionId(
+    context: Parameters<AppaClientAdapter["getNativeSessionId"]>[0],
+  ): string | undefined {
+    return readHeader(context.headers, "x-claude-code-session-id");
+  }
+
+  classifyToolName(name: string): "gateway" | "local" {
+    return name.startsWith("mcp/") || name.startsWith("mcp__")
+      ? "gateway"
+      : "local";
+  }
+
   normalizeLocalToolName(name: string): string {
     return name.startsWith("mcp/") ||
       name.startsWith("mcp__") ||

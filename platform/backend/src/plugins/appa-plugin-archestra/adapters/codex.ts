@@ -19,6 +19,17 @@ export class AppaCodexAdapter implements AppaClientAdapter {
     );
   }
 
+  getNativeSessionId(
+    context: Parameters<AppaClientAdapter["getNativeSessionId"]>[0],
+  ): string | undefined {
+    const metadata = readHeader(context.headers, "x-codex-turn-metadata");
+    return metadata && metadata.length <= 512 ? metadata : undefined;
+  }
+
+  classifyToolName(name: string): "gateway" | "local" {
+    return name.startsWith("mcp:") ? "gateway" : "local";
+  }
+
   normalizeLocalToolName(name: string): string {
     const stripped = name.startsWith("functions.")
       ? name.slice("functions.".length)

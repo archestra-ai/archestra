@@ -35,20 +35,26 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
 
   async onSessionInit(context: LlmProxyRequestContext): Promise<void> {
     const adapter = this.getClientAdapter(context);
-    if (adapter) context.resources.set(`${this.id}.adapter`, adapter);
+    if (adapter) {
+      context.resources.set(`${this.id}.adapter`, adapter);
+      const sessionId = adapter.getNativeSessionId(context);
+      if (sessionId)
+        context.resources.set(`${this.id}.native-session-id`, sessionId);
+    }
   }
 
   async onToolResults(
     context: LlmProxyRequestContext & {
       toolResults: readonly CommonToolResult[];
     },
-  ): Promise<void> {
+  ) {
     const binding = getBinding(context.resources);
     if (!binding) return;
-    context.resources.set(
-      APPA_PLUGIN_RESULT,
-      await processProxyResults(binding.session, [...context.toolResults]),
-    );
+    const result = await processProxyResults(binding.session, [
+      ...context.toolResults,
+    ]);
+    context.resources.set(APPA_PLUGIN_RESULT, result);
+    return { toolResultUpdates: result.toolResultUpdates };
   }
 
   async onToolCalls(
@@ -62,12 +68,18 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
   ) {
     const binding = getBinding(context.resources);
     if (!binding) return;
+    const adapter = context.resources.get(`${this.id}.adapter`) as
+      | AppaClientAdapter
+      | undefined;
     const refusal = await checkToolCalls(
       binding.session,
       [...context.toolCalls],
-      binding.canonicalizeToolName,
+      (name) =>
+        adapter?.classifyToolName(name) === "local"
+          ? binding.canonicalizeToolName(adapter.normalizeLocalToolName(name))
+          : binding.canonicalizeToolName(name),
     );
-    if (!refusal) return { decision: "allow" as const };
+    if (!refusal) return;
     context.resources.set(APPA_PLUGIN_REFUSAL, refusal);
     return { decision: "refuse" as const, message: refusal.refusalMessage };
   }

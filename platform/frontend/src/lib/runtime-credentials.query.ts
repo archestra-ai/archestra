@@ -192,10 +192,14 @@ export function useCompleteGitHubUserConnection() {
       body: archestraApiTypes.CompleteGitHubUserConnectionData["body"],
     ) => {
       const { data, error } =
-        await archestraApiSdk.completeGitHubUserConnection({ body });
+        await archestraApiSdk.completeGitHubUserConnection({
+          body,
+          signal: AbortSignal.timeout(45_000),
+        });
       if (error) throw reportApiError(error);
       return data;
     },
+    retry: false,
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: runtimeCredentialsQueryKey });
       toast.success(`Connected GitHub${data ? ` as ${data.login}` : ""}`);

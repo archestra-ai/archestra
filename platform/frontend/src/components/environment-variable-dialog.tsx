@@ -65,6 +65,8 @@ interface EnvironmentVariableDialogProps {
   targetLabel?: string;
   installationLabel?: string;
   staticLabel?: string;
+  installationDescription?: string;
+  staticDescription?: string;
   installationCalloutTitle?: string;
   requiredDescription?: string;
   deferStaticSecretValue?: boolean;
@@ -112,6 +114,8 @@ export function EnvironmentVariableDialog({
   targetLabel = "MCP server",
   installationLabel = "Installation",
   staticLabel = "Static",
+  installationDescription,
+  staticDescription,
   installationCalloutTitle = "The user enters this when installing",
   requiredDescription = "Block installation until the user supplies a value.",
   deferStaticSecretValue = false,
@@ -268,8 +272,13 @@ export function EnvironmentVariableDialog({
       <div className="space-y-5">
         <div className="space-y-2">
           <Label htmlFor="env-var-key">Key</Label>
+          <FieldDescription id="env-var-key-hint">
+            The environment variable name your application expects, such as
+            GITHUB_TOKEN.
+          </FieldDescription>
           <Input
             id="env-var-key"
+            aria-describedby="env-var-key-hint"
             value={draft.key}
             onChange={(e) => updateDraft({ key: normalizeKey(e.target.value) })}
             placeholder="API_KEY"
@@ -283,13 +292,25 @@ export function EnvironmentVariableDialog({
           )}
         </div>
 
-        {requiresCredentialBinding && (
-          <CredentialBindingEditor
-            draft={draft}
-            options={credentialBindingOptions}
-            onChange={updateDraft}
+        <div className="space-y-2">
+          <Label htmlFor="env-var-description">Description</Label>
+          {(draft.scope === "installation" ||
+            (allowRequiredStaticSecret &&
+              draft.scope === "static" &&
+              draft.type === "secret")) && (
+            <FieldDescription>
+              Shown as helper text when &quot;{trimmedKey || "KEY"}&quot; is
+              requested.
+            </FieldDescription>
+          )}
+          <Textarea
+            id="env-var-description"
+            value={draft.description}
+            onChange={(e) => updateDraft({ description: e.target.value })}
+            placeholder="What this variable is used for"
+            rows={2}
           />
-        )}
+        </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
@@ -324,12 +345,22 @@ export function EnvironmentVariableDialog({
               disabledReason={disableInstallationReason}
               installationLabel={installationLabel}
               staticLabel={staticLabel}
+              installationDescription={installationDescription}
+              staticDescription={staticDescription}
             />
             {draft.scope === "installation" && (
               <FieldDescription>{installationCalloutTitle}.</FieldDescription>
             )}
           </div>
         </div>
+
+        {requiresCredentialBinding && (
+          <CredentialBindingEditor
+            draft={draft}
+            options={credentialBindingOptions}
+            onChange={updateDraft}
+          />
+        )}
 
         {draft.scope === "static" && !draft.credentialId && (
           <StaticValueEditor
@@ -344,26 +375,6 @@ export function EnvironmentVariableDialog({
             deferSecretValue={deferStaticSecretValue}
           />
         )}
-
-        <div className="space-y-2">
-          <Label htmlFor="env-var-description">Description</Label>
-          {(draft.scope === "installation" ||
-            (allowRequiredStaticSecret &&
-              draft.scope === "static" &&
-              draft.type === "secret")) && (
-            <FieldDescription>
-              Shown as helper text when &quot;{trimmedKey || "KEY"}&quot; is
-              requested.
-            </FieldDescription>
-          )}
-          <Textarea
-            id="env-var-description"
-            value={draft.description}
-            onChange={(e) => updateDraft({ description: e.target.value })}
-            placeholder="What this variable is used for"
-            rows={2}
-          />
-        </div>
 
         {(draft.scope === "installation" || draft.credentialId) && (
           <RequiredToggleCard

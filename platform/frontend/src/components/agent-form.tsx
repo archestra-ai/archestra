@@ -4183,6 +4183,28 @@ export function AgentForm({
                 </SettingsSection>
               )}
 
+              {agentType === "agent" && agentRuntimeEnabled && (
+                <SettingsSection
+                  title="Agent Runtime"
+                  description="Whether this agent may run on its own, and the credentials it runs with."
+                >
+                  <AgentRuntimeFields
+                    value={runtime}
+                    onChange={setAgentRuntime}
+                  />
+                  {agent?.runtime && runtime && (
+                    <AgentRuntimeCredentialCard
+                      agentId={agent.id}
+                      credentials={(agent.runtime.credentials ?? []).filter(
+                        ({ key }) =>
+                          !isClaudeCodeRuntime ||
+                          key !== "CLAUDE_CODE_OAUTH_TOKEN",
+                      )}
+                    />
+                  )}
+                </SettingsSection>
+              )}
+
               {showsEnvironmentSelector && (
                 <SettingsSection
                   title="Environment"
@@ -4352,28 +4374,6 @@ export function AgentForm({
                       </CollapsibleContent>
                     </div>
                   </Collapsible>
-                </SettingsSection>
-              )}
-
-              {agentType === "agent" && agentRuntimeEnabled && (
-                <SettingsSection
-                  title="Agent Runtime"
-                  description="Whether this agent may run on its own, and the credentials it runs with."
-                >
-                  <AgentRuntimeFields
-                    value={runtime}
-                    onChange={setAgentRuntime}
-                  />
-                  {agent?.runtime && runtime && (
-                    <AgentRuntimeCredentialCard
-                      agentId={agent.id}
-                      credentials={(agent.runtime.credentials ?? []).filter(
-                        ({ key }) =>
-                          !isClaudeCodeRuntime ||
-                          key !== "CLAUDE_CODE_OAUTH_TOKEN",
-                      )}
-                    />
-                  )}
                 </SettingsSection>
               )}
 

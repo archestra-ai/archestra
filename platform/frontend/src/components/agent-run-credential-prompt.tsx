@@ -90,7 +90,7 @@ export function AgentRuntimeCredentialPrompt({
   if (missing.some(({ key }) => key === "CLAUDE_CODE_ACCOUNT")) {
     return (
       <div className="mt-2">
-        <ClaudeCodeAccount agentId={agentId} />
+        <ClaudeCodeAccount agentId={agentId} variant="compact" />
       </div>
     );
   }

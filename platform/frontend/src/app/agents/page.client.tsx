@@ -141,6 +141,7 @@ type AgentsInitialData = {
 type AgentListRow =
   archestraApiTypes.GetAgentCatalogResponses["200"]["data"][number];
 type AgentData = Extract<AgentListRow, { type: "agent" }>["value"];
+type ExternalAgentData = Extract<AgentListRow, { type: "external" }>["value"];
 
 function getAgentListRowId(row: AgentListRow) {
   return `${row.type}:${row.value.id}`;
@@ -151,6 +152,16 @@ function combineBulkOutcomes(outcomes: readonly BulkOutcome[]): BulkOutcome {
     succeeded: outcomes.flatMap((outcome) => outcome.succeeded),
     failed: outcomes.flatMap((outcome) => outcome.failed),
   };
+}
+
+function partitionAgentRows(rows: readonly AgentListRow[]) {
+  const agents: AgentData[] = [];
+  const externalAgents: ExternalAgentData[] = [];
+  for (const row of rows) {
+    if (row.type === "agent") agents.push(row.value);
+    else externalAgents.push(row.value);
+  }
+  return { agents, externalAgents };
 }
 
 export default function AgentsPage({
@@ -466,24 +477,19 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     allMatchingSelected && allMatching
       ? allMatching.filter(canSelectRow)
       : pageSelection;
-  const selectedRegularAgents = selectedRows.flatMap((row) =>
-    row.type === "agent" ? [row.value] : [],
-  );
-  const selectedExternalAgents = selectedRows.flatMap((row) =>
-    row.type === "external" ? [row.value] : [],
-  );
-  const selectedCount =
-    selectedRegularAgents.length + selectedExternalAgents.length;
+  const {
+    agents: selectedRegularAgents,
+    externalAgents: selectedExternalAgents,
+  } = partitionAgentRows(selectedRows);
+  const selectedCount = selectedRows.length;
   const bulkSelectionOverLimit = selectedCount > MAX_BULK_IDS;
   const allMatchingSelectionUnavailable =
     allMatchingSelected &&
     (isFetchingAllMatching || isAllMatchingError || bulkSelectionOverLimit);
-  const bulkVisibilityRegularAgents = bulkVisibilityRows.flatMap((row) =>
-    row.type === "agent" ? [row.value] : [],
-  );
-  const bulkVisibilityExternalAgents = bulkVisibilityRows.flatMap((row) =>
-    row.type === "external" ? [row.value] : [],
-  );
+  const {
+    agents: bulkVisibilityRegularAgents,
+    externalAgents: bulkVisibilityExternalAgents,
+  } = partitionAgentRows(bulkVisibilityRows);
   const openBulkVisibility = async () => {
     const requestedFilterSignature = filterSignature;
     const requestedAllMatching = allMatchingSelected;

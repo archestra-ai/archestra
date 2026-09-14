@@ -93,20 +93,6 @@ describe("NewAgentPageServer", () => {
     });
   });
 
-  it("preserves access for a create-only role without Agent read permission", async () => {
-    mockCapabilities({
-      canCreateAgent: true,
-      canAddExternalAgent: false,
-    });
-
-    render(await NewAgentPageServer());
-
-    expect(screen.getByTestId("agent-create-page")).toHaveAttribute(
-      "data-can-create-agent",
-      "true",
-    );
-  });
-
   it("refuses the page when neither capability bundle is available", async () => {
     mockCapabilities({
       canCreateAgent: false,

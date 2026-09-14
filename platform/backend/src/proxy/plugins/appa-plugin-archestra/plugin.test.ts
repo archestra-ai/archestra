@@ -32,7 +32,7 @@ describe("APPA client adapters", () => {
 
     expect(
       claudeCode.matches({
-        headers: { "user-agent": "Claude-Code/1" },
+        headers: { "User-Agent": "Claude-Code/1" },
         requestBody: {},
       }),
     ).toBe(true);

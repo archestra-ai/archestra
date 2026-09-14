@@ -37,7 +37,7 @@ test.describe("Skill page editing", () => {
       await expect(description).toHaveValue("Before the edit.");
       await expect(page.getByRole("link", { name: /^Edit$/ })).toBeHidden();
 
-      const save = page.getByRole("button", { name: "Save changes" });
+      const save = page.getByRole("button", { name: "Save" });
       await expect(save).toBeDisabled();
 
       await description.fill("After the edit.");

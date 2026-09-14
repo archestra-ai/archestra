@@ -3,7 +3,7 @@ title: Skills
 category: Agents
 order: 3
 description: Reusable SKILL.md instruction sets that agents load on demand
-lastUpdated: 2026-09-03
+lastUpdated: 2026-09-14
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -40,7 +40,7 @@ Typing `/` lists the available skills. Picking one, for example `/pdf-to-markdow
 
 **Add new skill** on the Skills page asks for a source, then opens the skill form: the name and description, the `SKILL.md` and any resource files, and who can use the skill. It is one page — everything a skill has, in the order you fill it in. Creating it takes you to the skill's own page. Picking a GitHub repo instead hands over to the import dialog described below.
 
-Every skill has a page of its own, and that page is the form you just filled in. Change the name, the instructions, the files, or who can use the skill, then **Save changes** — there is no separate edit screen to open. **Discard changes** puts the skill back the way you found it. **Usage** is a tab beside the settings; version history, chat, and delete sit in the page header.
+Every skill has a page of its own, and that page is the form you just filled in. Change the name, the instructions, the files, or who can use the skill, then **Save** — there is no separate edit screen to open. **Discard changes** puts the skill back the way you found it. **Usage** is a tab beside the settings; version history, chat, and delete sit in the page header.
 
 A skill is a `SKILL.md` plus optional resource files.
 

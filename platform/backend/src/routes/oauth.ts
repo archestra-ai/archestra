@@ -657,11 +657,13 @@ export async function refreshOAuthToken(
         oauthConfig.token_endpoint || `${oauthConfig.server_url}/token`;
     }
 
-    // Use client credentials from OAuth config first (source of truth),
-    // fall back to stored values (for dynamic client registration cases)
+    // A catalog secret belongs to its configured client ID. Without that ID,
+    // initiation registers a new client and refresh must use its stored secret.
+    // Keep catalog precedence for explicitly configured client secret rotation.
     const clientId = oauthConfig.client_id || currentTokens.client_id;
-    const clientSecret =
-      oauthConfig.client_secret || currentTokens.client_secret;
+    const clientSecret = oauthConfig.client_id
+      ? oauthConfig.client_secret || currentTokens.client_secret
+      : currentTokens.client_secret;
 
     if (!clientId) {
       logger.warn(

@@ -90,3 +90,11 @@ detached tool tasks. These restrictions do not apply with the flag off.
 Policy reload, general attachment/final-answer enforcement, child return
 integration, provider-hosted tools and operator recovery remain follow-up work.
 Start new conversations when enabling APPA: old tool results have no receipts.
+
+## Build and deployment
+
+The addon is compiled alongside Archestra's existing native addons and packaged
+inside the normal platform image. Cargo fetches OpenAPPA at the full commit
+pinned in `openappa-rs/Cargo.toml` and `archestra-rs/Cargo.lock`; neither a sibling
+checkout nor an extra Docker build context is required. Archestra's existing
+release workflow stays unchanged. There is no separate addon release.

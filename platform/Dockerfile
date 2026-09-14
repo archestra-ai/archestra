@@ -247,27 +247,9 @@ RUN set -eux; \
 FROM base AS rust-builder-base
 WORKDIR /app
 RUN apk add --no-cache build-base cargo rust openssl-dev pkgconf
-# Supply the matching OpenAPPA checkout with --build-context openappa=../../openappa.
-# Only source/manifests are copied; credentials, target/, and local runtime data
-# never enter the image. /openappa matches the native crate's relative paths.
-COPY --from=openappa Cargo.toml Cargo.lock /openappa/
-COPY --from=openappa appa-engine /openappa/appa-engine
-COPY --from=openappa appa-policy /openappa/appa-policy
-COPY --from=openappa appa-eventlog /openappa/appa-eventlog
-COPY --from=openappa appa-runtime-api /openappa/appa-runtime-api
-COPY --from=openappa appa-runtime /openappa/appa-runtime
-COPY --from=openappa appa-adapter-claude-code /openappa/appa-adapter-claude-code
-COPY --from=openappa appa-adapter-kagent /openappa/appa-adapter-kagent
-COPY --from=openappa appa-builtin /openappa/appa-builtin
-COPY --from=openappa appa-package /openappa/appa-package
-# OpenAPPA's existing runtime build script fingerprints its bundled plugin.
-COPY --from=openappa marketplace /openappa/marketplace
-COPY --from=openappa integrations/appa-guide /openappa/integrations/appa-guide
-COPY --from=openappa website/content/docs/contracts.md /openappa/website/content/docs/contracts.md
-# Public protocol constant, NOT a credential: receiver/appa-yell/README.md
-# states it ships in the repository and is compiled into every build;
-# appa-runtime/src/yell/client.rs:6 calls it "public by construction".
-COPY --from=openappa receiver/appa-yell/salt.txt /openappa/receiver/appa-yell/salt.txt
+# Cargo fetches OpenAPPA at the revision pinned in openappa-rs/Cargo.toml and
+# Cargo.lock, including the runtime's plugin fingerprint inputs. No sibling
+# checkout or additional Docker build context is required.
 
 FROM rust-builder-base AS rust-deps
 ARG TARGETARCH
@@ -377,7 +359,7 @@ FROM builder-base AS builder
 # https://docs.docker.com/build/building/secrets/#target
 # Native artifacts were built in builder-base before application source was
 # copied. Include shared's synthetic build task so its source remains in the
-# backend/frontend Turbo cache keys while excluding the three N-API tasks.
+# backend/frontend Turbo cache keys while excluding the four N-API tasks.
 RUN --mount=type=cache,target=/app/.turbo \
     --mount=type=cache,target=/app/frontend/.next/cache \
     --mount=type=secret,id=turbo_team,env=TURBO_TEAM \
@@ -390,7 +372,7 @@ RUN --mount=type=cache,target=/app/.turbo \
 # Assemble the production backend with `pnpm deploy` — pnpm's recommended
 # monorepo packaging step (https://pnpm.io/cli/deploy). It produces a
 # self-contained /prod/backend whose node_modules includes every workspace
-# dependency (the three NAPI crates, @archestra/napi-loader, @archestra/shared)
+# dependency (the four NAPI crates, @archestra/napi-loader, @archestra/shared)
 # alongside their transitive production deps, with each crate able to resolve
 # @archestra/napi-loader from a nested store. This replaces the old hand-rolled
 # COPY of each crate's *.node / index.cjs into a workspace-shaped, root-hoisted
@@ -618,7 +600,7 @@ RUN rm -rf /root/.cache/node/corepack /usr/local/bin/pnpm /usr/local/bin/pnpx
 # Copy the fully-assembled backend from the builder's `pnpm deploy` output.
 # /prod/backend contains backend/dist, scripts, drizzle.config.ts and the
 # migrations (scoped by the backend package's `files` field) plus a
-# self-contained node_modules — including the three NAPI crates with their
+# self-contained node_modules — including the four NAPI crates with their
 # compiled *.node addons and a resolvable @archestra/napi-loader. This single
 # tree replaces the previous per-crate .node/index.cjs copy choreography and
 # the runtime `pnpm install`.

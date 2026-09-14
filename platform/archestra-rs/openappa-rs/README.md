@@ -23,9 +23,10 @@ flowchart LR
 
 ## Build and run
 
-Keep the matching source trees as siblings named `archestra` and `openappa`.
-The Rust path dependencies are deliberate while these coordinated changes are
-reviewed; neither repository silently downloads an unpinned OpenAPPA version.
+Cargo fetches OpenAPPA from its public Git repository at commit
+`581124c212860713010522971afbd7ab4677cb8d`, pinned in this package's manifest and
+the workspace lockfile. A sibling checkout is not required. Update the revision
+and lockfile together when adopting a newer runtime.
 
 From `archestra/platform`:
 
@@ -68,19 +69,22 @@ After the successful identity read, restart the backend and ask Chat to run
 refuse because the session's trust is now suspicious. The paired `summary.md`
 records this complete live sequence with GPT-5.6 Terra.
 
-The existing platform Dockerfile builds and deploys the fourth native addon.
-Supply the paired source as a named BuildKit context:
+The existing platform Dockerfile builds and deploys the fourth native addon
+using the same pinned Cargo dependency. Build it through the normal image path:
 
 ```sh
-docker buildx build --build-context openappa=../../openappa --target unified-slim .
+docker buildx build --target unified-slim .
 ```
 
-The Docker source selection includes the existing runtime's plugin fingerprint
+Cargo fetches the full pinned repository, including the runtime's plugin fingerprint
 inputs. Its checked-in `receiver/appa-yell/salt.txt` is a public protocol constant
 already compiled into every OpenAPPA runtime, not a deployment credential.
 The production `pnpm deploy` includes `index.cjs`, declarations, the native
 binary, and the shared napi loader. Native builds are excluded from Turbo's
-cross-platform cache.
+cross-platform cache. The normal Archestra image and release workflows are
+unchanged; no separate addon release or binary download is introduced. The
+feature flag gates execution, so builds still compile/package the addon when
+the runtime feature is off.
 
 ## Identity and lifecycle
 
@@ -208,7 +212,7 @@ whole-response refusal, explicit protocol errors, replay, session headers, MCP
 remedy availability and human approvals. Chat tests verify that ordinary tools
 execute and return their original output without APPA callbacks in either mode.
 
-Use the paired `feat/archestra-native-postgres` OpenAPPA branch. Its embedded
-remedy implementation preserves the host ruling without an MCP request context.
+The pinned OpenAPPA revision includes the companion PostgreSQL and embedded-remedy
+changes. Its remedy implementation preserves the host ruling without an MCP request context.
 Previous demo/browser results do not qualify this proxy-only refactor; validation
 for this change is reported separately in the PR.

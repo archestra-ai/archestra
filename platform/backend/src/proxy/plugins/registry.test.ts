@@ -184,4 +184,28 @@ describe("LlmProxyPluginRegistry", () => {
     await registry.fail({ ...context, error: new Error("unavailable") });
     expect(events).toEqual(["broken-cleanup", "first-cleanup"]);
   });
+
+  test("removes a partial session when initialization cleanup fails", async () => {
+    const registry = new LlmProxyPluginRegistry();
+    const context = requestContext();
+    registry.register({
+      id: "cleanup-fails",
+      async onCleanup() {
+        throw new Error("cleanup unavailable");
+      },
+    });
+    registry.register({
+      id: "broken-init",
+      async onSessionInit() {
+        throw new Error("initialization unavailable");
+      },
+    });
+
+    await expect(registry.onSessionInit(context)).rejects.toThrow(
+      "LLM proxy plugin cleanup-fails failed during onCleanup",
+    );
+    await expect(registry.onSessionInit(context)).rejects.toThrow(
+      "LLM proxy plugin cleanup-fails failed during onCleanup",
+    );
+  });
 });

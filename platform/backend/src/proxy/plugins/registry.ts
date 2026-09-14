@@ -156,8 +156,11 @@ export class LlmProxyPluginRegistry {
         initialized.push(plugin);
       }
     } catch (error) {
-      await this.cleanup(context, initialized);
-      this.sessions.delete(context.requestId);
+      try {
+        await this.cleanup(context, initialized);
+      } finally {
+        this.sessions.delete(context.requestId);
+      }
       throw error;
     }
   }

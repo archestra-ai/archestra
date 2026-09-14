@@ -31,8 +31,12 @@ export async function listRuntimeCredentialDefinitions(params: {
       .map(({ credentialId }) => credentialId),
   );
   return [
-    ...BUILT_IN_DEFINITIONS,
     ...custom.map((definition) => ({
+      id: definition.id,
+      kind: definition.kind,
+      githubUrl: definition.githubUrl,
+      appId: definition.appId,
+      installationId: definition.installationId,
       key: definition.key,
       name: definition.name,
       description: definition.description,
@@ -59,6 +63,13 @@ export async function createRuntimeCredentialDefinition(params: {
   userId: string;
   definition: InsertRuntimeCredentialDefinition;
 }) {
+  if (params.definition.key === "claude-code") {
+    throw new ApiError(
+      400,
+      "Claude Code accounts connect through native sign-in on the Agent.",
+    );
+  }
+  assertProviderConfiguration(params.definition);
   assertExactlyOneScopeAllowed({
     allowPersonal: params.definition.allowPersonal ?? true,
     allowOrganization: params.definition.allowOrganization ?? false,
@@ -88,6 +99,7 @@ export async function getRuntimeCredentialUsage(params: {
   });
   return {
     agents: await RuntimeCredentialDefinitionModel.listAgentsUsing(params),
+    resources: await RuntimeCredentialDefinitionModel.listOtherUsage(params),
   };
 }
 
@@ -96,11 +108,9 @@ export async function updateRuntimeCredentialDefinition(params: {
   key: string;
   definition: UpdateRuntimeCredentialDefinition;
 }) {
-  if (isBuiltInDefinition(params.key)) {
-    throw new ApiError(400, "Built-in credentials cannot be edited");
-  }
   const current = await RuntimeCredentialDefinitionModel.find(params);
   if (!current) throw new ApiError(404, "Credential not found");
+  assertProviderConfiguration({ ...current, ...params.definition });
   const updated = await RuntimeCredentialDefinitionModel.update(params);
   if (!updated) throw new ApiError(404, "Credential not found");
   return updated;
@@ -110,13 +120,13 @@ export async function deleteRuntimeCredentialDefinition(params: {
   organizationId: string;
   key: string;
 }) {
-  if (isBuiltInDefinition(params.key)) {
-    throw new ApiError(400, "Built-in credentials cannot be deleted");
-  }
-  if (await RuntimeCredentialDefinitionModel.isUsedByAgent(params)) {
+  if (
+    (await RuntimeCredentialDefinitionModel.isUsedByAgent(params)) ||
+    (await RuntimeCredentialDefinitionModel.listOtherUsage(params)).length > 0
+  ) {
     throw new ApiError(
       409,
-      "Remove this credential from Agent bindings before deleting it",
+      "Remove this credential from its resources before deleting it",
     );
   }
   const deleted = await RuntimeCredentialDefinitionModel.delete(params);
@@ -202,43 +212,12 @@ type Definition = {
   allowOrganization: boolean;
 };
 
-const BUILT_IN_DEFINITIONS: readonly Definition[] = [
-  {
-    key: "github",
-    name: "GitHub PAT",
-    description:
-      "A GitHub personal access token for repository access. Create one in GitHub Developer settings.",
-    icon: "logo:github",
-    builtIn: true,
-    allowPersonal: true,
-    allowOrganization: false,
-  },
-  {
-    key: "claude-code",
-    name: "Claude Code subscription",
-    description:
-      "A personal subscription token created by the official Claude Code client. Run claude setup-token on your machine to get the value.",
-    icon: "logo:anthropic",
-    builtIn: true,
-    allowPersonal: true,
-    allowOrganization: false,
-  },
-] as const;
-
 async function findRuntimeCredentialDefinition(params: {
   organizationId: string;
   key: string;
 }): Promise<Definition | null> {
-  const builtIn = BUILT_IN_DEFINITIONS.find(
-    (definition) => definition.key === params.key,
-  );
-  if (builtIn) return builtIn;
   const custom = await RuntimeCredentialDefinitionModel.find(params);
   return custom ? { ...custom, builtIn: false } : null;
-}
-
-function isBuiltInDefinition(key: string): boolean {
-  return BUILT_IN_DEFINITIONS.some((definition) => definition.key === key);
 }
 
 function assertExactlyOneScopeAllowed(definition: {
@@ -275,6 +254,38 @@ function assertConnectionValue(value: string): void {
     throw new ApiError(
       400,
       "Readonly Vault credentials must select a secret and key",
+    );
+  }
+}
+
+function assertProviderConfiguration(definition: {
+  kind?: string;
+  allowPersonal?: boolean;
+  allowOrganization?: boolean;
+  githubUrl?: string | null;
+  appId?: string | null;
+  installationId?: string | null;
+}): void {
+  if (definition.kind !== "github_app") return;
+  if (definition.allowPersonal || !definition.allowOrganization)
+    throw new ApiError(400, "GitHub Apps must be provided by the organization");
+  if (!definition.appId?.trim() || !definition.installationId?.trim())
+    throw new ApiError(
+      400,
+      "GitHub App credentials require an app ID and installation ID",
+    );
+  try {
+    const url = new URL(definition.githubUrl ?? "");
+    if (
+      !["http:", "https:"].includes(url.protocol) ||
+      url.username ||
+      url.password
+    )
+      throw new Error();
+  } catch {
+    throw new ApiError(
+      400,
+      "GitHub API URL must use HTTP or HTTPS without embedded credentials",
     );
   }
 }

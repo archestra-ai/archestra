@@ -24,7 +24,11 @@ import {
   withK8sApiRetry,
 } from "@/k8s/shared";
 import logger from "@/logging";
-import { InternalMcpCatalogModel } from "@/models";
+import {
+  InternalMcpCatalogModel,
+  OrganizationModel,
+  RuntimeCredentialDefinitionModel,
+} from "@/models";
 import type {
   EffectiveNetworkPolicy,
   InternalMcpCatalog,
@@ -501,6 +505,7 @@ interface K8sDeploymentOptions {
   catalogItem?: InternalMcpCatalog | null;
   userConfigValues?: Record<string, string>;
   environmentValues?: Record<string, string>;
+  credentialExpiresAt?: number | null;
   effectiveNetworkPolicy?: EffectiveNetworkPolicy | null;
   networkPolicyCapabilities?: K8sNetworkPolicyCapabilities | null;
   k8sExec: Exec;
@@ -550,6 +555,8 @@ export default class K8sDeployment {
   private catalogItem?: InternalMcpCatalog | null;
   private userConfigValues?: Record<string, string>;
   private environmentValues?: Record<string, string>;
+  private credentialExpiresAt?: number | null;
+  private renewableBindingKnown?: boolean;
   private effectiveNetworkPolicy?: EffectiveNetworkPolicy | null;
   private networkPolicyCapabilities?: K8sNetworkPolicyCapabilities | null;
   private runtimeOwnerReferences?: k8s.V1OwnerReference[];
@@ -573,12 +580,85 @@ export default class K8sDeployment {
     this.catalogItem = options.catalogItem;
     this.userConfigValues = options.userConfigValues;
     this.environmentValues = options.environmentValues;
+    this.credentialExpiresAt = options.credentialExpiresAt;
     this.effectiveNetworkPolicy = options.effectiveNetworkPolicy;
     this.networkPolicyCapabilities = options.networkPolicyCapabilities;
     this.deploymentName = K8sDeployment.constructDeploymentName(
       options.mcpServer,
       options.catalogItem,
     );
+  }
+
+  get hasCredentialBindings(): boolean {
+    return Boolean(
+      this.catalogItem?.localConfig?.environment?.some(
+        (entry) => entry.credentialId,
+      ),
+    );
+  }
+
+  async usesRenewableCredentials(): Promise<boolean> {
+    if (!this.hasCredentialBindings) return false;
+    if (this.renewableBindingKnown === undefined) {
+      const organizationId =
+        this.catalogItem?.organizationId ??
+        (await OrganizationModel.getFirst())?.id;
+      if (!organizationId) return false;
+      const definitions =
+        await RuntimeCredentialDefinitionModel.list(organizationId);
+      const keys = new Set(
+        this.catalogItem?.localConfig?.environment?.map(
+          (entry) => entry.credentialId,
+        ),
+      );
+      this.renewableBindingKnown = definitions.some(
+        (definition) =>
+          definition.kind === "github_app" && keys.has(definition.key),
+      );
+    }
+    return this.renewableBindingKnown;
+  }
+
+  /** Persisted on the physical Deployment, shared by aliases and control-plane replicas. */
+  async getCredentialRenewal(options?: {
+    includeSleeping?: boolean;
+  }): Promise<{ expiresAt: number; refreshAt: number } | null> {
+    if (!(await this.usesRenewableCredentials())) return null;
+    const deployment = await this.k8sAppsApi
+      .readNamespacedDeployment({
+        namespace: this.namespace,
+        name: this.deploymentName,
+      })
+      .catch((error) => {
+        if (isK8sNotFoundError(error)) return null;
+        throw error;
+      });
+    if (
+      !deployment ||
+      (!options?.includeSleeping && deployment.spec?.replicas === 0)
+    )
+      return null;
+    const expiresAt = Number(
+      deployment.metadata?.annotations?.[CREDENTIAL_EXPIRY_ANNOTATION],
+    );
+    const refreshAt = Number(
+      deployment.metadata?.annotations?.[CREDENTIAL_REFRESH_ANNOTATION],
+    );
+    if (
+      Number.isFinite(expiresAt) &&
+      expiresAt > 0 &&
+      Number.isFinite(refreshAt) &&
+      refreshAt > 0
+    )
+      return { expiresAt, refreshAt };
+    // A newly resolved optional binding can legitimately have no connected value.
+    // Only deployments predating this marker need unknown-age bootstrapping.
+    if (
+      deployment.metadata?.annotations?.[CREDENTIALS_RESOLVED_ANNOTATION] ===
+      "true"
+    )
+      return null;
+    return { expiresAt: 0, refreshAt: 0 };
   }
 
   /**
@@ -2264,7 +2344,7 @@ export default class K8sDeployment {
         }
 
         let value: string | undefined;
-        if (envDef.promptOnInstallation) {
+        if (envDef.promptOnInstallation || envDef.credentialId) {
           const rawValue = this.environmentValues?.[envDef.key];
           value = rawValue != null ? String(rawValue) : undefined;
         } else {
@@ -2676,7 +2756,7 @@ export default class K8sDeployment {
         // Add env var value to envMap based on prompting behavior
         // Note: Values may be booleans/numbers at runtime despite type annotations, so we convert to string
         let value: string | undefined;
-        if (envDef.promptOnInstallation) {
+        if (envDef.promptOnInstallation || envDef.credentialId) {
           // Value supplied via the install request (install-time input) —
           // read from environmentValues.
           const rawValue = this.environmentValues?.[envDef.key];
@@ -3156,6 +3236,30 @@ export default class K8sDeployment {
           ),
         );
         await lifecycle?.assertOwned?.();
+        if (this.hasCredentialBindings) {
+          deploymentSpec.metadata ??= {};
+          deploymentSpec.metadata.annotations = {
+            ...deploymentSpec.metadata.annotations,
+            [CREDENTIALS_RESOLVED_ANNOTATION]: "true",
+          };
+        }
+        if (this.credentialExpiresAt) {
+          deploymentSpec.metadata ??= {};
+          deploymentSpec.metadata.annotations = {
+            ...deploymentSpec.metadata.annotations,
+            [CREDENTIAL_EXPIRY_ANNOTATION]: String(this.credentialExpiresAt),
+            [CREDENTIAL_REFRESH_ANNOTATION]: String(
+              Date.now() +
+                Math.max(
+                  0,
+                  Math.min(
+                    45 * 60_000,
+                    (this.credentialExpiresAt - Date.now()) * 0.75,
+                  ),
+                ),
+            ),
+          };
+        }
         await mutate(() =>
           this.k8sAppsApi.createNamespacedDeployment({
             namespace: this.namespace,
@@ -4592,6 +4696,9 @@ export default class K8sDeployment {
   async stopDeployment(options?: {
     assertOwned?: () => Promise<void>;
     uidPrecondition?: boolean | string;
+    /** Renewal cannot serve a terminating Pod with an expired startup token. */
+    awaitDeletion?: boolean;
+    runFencedMutation?: <T>(fn: () => Promise<T>) => Promise<T>;
   }): Promise<void> {
     try {
       logger.info(`Stopping deployment ${this.deploymentName}`);
@@ -4617,11 +4724,44 @@ export default class K8sDeployment {
         // replacement if ownership expires while the request is in flight.
         await options.assertOwned?.();
       }
-      await this.k8sAppsApi.deleteNamespacedDeployment({
-        name: this.deploymentName,
-        namespace: this.namespace,
-        ...(uid ? { body: { preconditions: { uid } } } : {}),
-      });
+      const remove = () =>
+        this.k8sAppsApi.deleteNamespacedDeployment({
+          name: this.deploymentName,
+          namespace: this.namespace,
+          ...(uid || options?.awaitDeletion
+            ? {
+                body: {
+                  ...(uid ? { preconditions: { uid } } : {}),
+                  ...(options?.awaitDeletion
+                    ? { propagationPolicy: "Foreground" }
+                    : {}),
+                },
+              }
+            : {}),
+        });
+      if (options?.runFencedMutation) await options.runFencedMutation(remove);
+      else await remove();
+      if (options?.awaitDeletion) {
+        const deadline = Date.now() + 120_000;
+        while (true) {
+          await options.assertOwned?.();
+          const live = await this.k8sAppsApi
+            .readNamespacedDeployment({
+              name: this.deploymentName,
+              namespace: this.namespace,
+            })
+            .catch((error) => {
+              if (isK8sNotFoundError(error)) return null;
+              throw error;
+            });
+          if (!live || (uid && live.metadata?.uid !== uid)) break;
+          if (Date.now() >= deadline)
+            throw new Error(
+              "MCP credential renewal is waiting for the previous process to stop",
+            );
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+        }
+      }
       logger.info(`Deployment ${this.deploymentName} deletion initiated`);
       this.observeState("not_created");
     } catch (error: unknown) {
@@ -5656,3 +5796,8 @@ function normalizeCiliumEndpointLabels(
     ]),
   );
 }
+
+const CREDENTIAL_EXPIRY_ANNOTATION = "archestra.ai/credential-expires-at";
+const CREDENTIAL_REFRESH_ANNOTATION = "archestra.ai/credential-refresh-at";
+
+const CREDENTIALS_RESOLVED_ANNOTATION = "archestra.ai/credentials-resolved";

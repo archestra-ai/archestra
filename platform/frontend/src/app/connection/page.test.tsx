@@ -42,23 +42,7 @@ describe("ConnectionPage", () => {
     } as ReturnType<typeof useLlmProxy>);
   });
 
-  it("shows only the prompt by default, without preparing a manual setup", () => {
-    vi.mocked(useSearchParams).mockReturnValue(
-      new URLSearchParams() as ReturnType<typeof useSearchParams>,
-    );
-    vi.mocked(useOrganization).mockReturnValue({
-      data: undefined,
-      refetch: refetchOrganizationMock,
-    } as unknown as ReturnType<typeof useOrganization>);
-    render(<ConnectionPage />);
-    expect(screen.getByRole("button", { name: "Copy prompt" })).toBeVisible();
-    expect(
-      screen.getByRole("button", { name: "Other ways to connect" }),
-    ).toBeVisible();
-    expect(connectionFlowMock).not.toHaveBeenCalled();
-  });
-
-  it("returns to the prompt after remounting a temporary manual setup", () => {
+  it("opens the client selection flow by default", () => {
     vi.mocked(useSearchParams).mockReturnValue(
       new URLSearchParams() as ReturnType<typeof useSearchParams>,
     );
@@ -69,18 +53,11 @@ describe("ConnectionPage", () => {
       isError: false,
       refetch: refetchOrganizationMock,
     } as unknown as ReturnType<typeof useOrganization>);
-    const view = render(<ConnectionPage />);
-    fireEvent.click(
-      screen.getByRole("button", { name: "Other ways to connect" }),
-    );
-    expect(screen.queryByRole("button", { name: "Copy prompt" })).toBeNull();
-    expect(
-      screen.queryByRole("link", { name: "Connect with your AI" }),
-    ).toBeNull();
-    expect(connectionFlowMock).toHaveBeenCalled();
-    view.unmount();
     render(<ConnectionPage />);
-    expect(screen.getByRole("button", { name: "Copy prompt" })).toBeVisible();
+    expect(screen.getByTestId("connection-flow")).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Other ways to connect" }),
+    ).toBeNull();
   });
 
   it.each([

@@ -23,6 +23,8 @@ import {
 import { CreditWarningNotice } from "@/components/connection/credit-warning-notice";
 import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
 import { GithubCopilotSignIn } from "@/components/github-copilot-sign-in";
+import { PROVIDER_CONFIG } from "@/components/llm-provider-api-key-form";
+import { LlmProviderSelectItems } from "@/components/llm-provider-select-items";
 import { ProviderIcon } from "@/components/provider-icon";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -123,19 +125,13 @@ export function isScriptClient(
  */
 const CONNECT_SKILLS_DEFER_MS = 750;
 
-function useConnectSkills(
-  llmProxyId: string | null,
-  enabled: boolean,
-): {
+function useConnectSkills(enabled: boolean): {
   eligible: boolean;
   skills: ConnectSkill[];
 } {
   const { data: canReadSkills } = useHasPermissions({ skill: ["read"] });
-  // Skills are environment-scoped: with a proxy selected, only skills in that
-  // proxy's environment are connectable.
   const { data: skills } = useAllSkills({
     enabled: enabled && canReadSkills === true,
-    forAgentId: llmProxyId,
     // Step 2's content, not step 1's: let the part of the page the user acts
     // on first render before walking the catalogue.
     deferMs: CONNECT_SKILLS_DEFER_MS,
@@ -197,10 +193,8 @@ export function ConnectCommandPanel({
   const [customizing, setCustomizing] = useState(false);
   const compact = !!connectRequest && !customizing;
   const requestedPlatform = searchParams.get("platform");
-  const { eligible: skillsEligible, skills: allSkills } = useConnectSkills(
-    llmProxyId,
-    skillsEnabled,
-  );
+  const { eligible: skillsEligible, skills: allSkills } =
+    useConnectSkills(skillsEnabled);
   // Providers are named the way this organization names them, so a renamed
   // provider reads the same here as in the model-provider settings.
   const providerCatalog = useModelProviderCatalog();
@@ -670,11 +664,13 @@ export function ConnectCommandPanel({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {providers.map((p) => (
-                <SelectItem key={p} value={p}>
-                  {providerCatalog.label(p)}
-                </SelectItem>
-              ))}
+              <LlmProviderSelectItems
+                options={providers.map((provider) => ({
+                  value: provider,
+                  name: providerCatalog.label(provider),
+                  icon: PROVIDER_CONFIG[provider].icon,
+                }))}
+              />
             </SelectContent>
           </Select>
         </EditorField>
@@ -690,7 +686,7 @@ export function ConnectCommandPanel({
             value={effectiveProxyAuth}
             onValueChange={handleProxyAuthChange}
           >
-            <TabsList>
+            <TabsList size="sm">
               <TabsTrigger value="provider-key">
                 {client.id === "claude-desktop"
                   ? "Claude subscription"
@@ -806,11 +802,6 @@ export function ConnectCommandPanel({
         />
         Install shared skills
       </label>
-      {llmProxyId !== null && (
-        <p className="pl-6 text-xs text-muted-foreground">
-          Only skills in the LLM Proxy's environment are listed.
-        </p>
-      )}
       <p className="pl-6 text-xs text-muted-foreground">
         Everything shared with you is installed, and stays current as skills are
         added or removed. To share a fixed subset instead, use a snapshot link.
@@ -1126,14 +1117,8 @@ export function ConnectCommandPanel({
         <div className="flex flex-col gap-3">
           {client.id === "claude-desktop" && (
             <p className="text-sm text-muted-foreground">
-              Install Claude Desktop, Node.js 18+, and Python 3.9+ first.
-              {hasProxy && effectiveProxyAuth === "provider-key" && (
-                <span>
-                  {" "}
-                  Subscription sign-in also requires the Claude Code CLI.
-                </span>
-              )}
-              <span> Finish active Desktop tasks before running setup.</span>
+              Only Claude Desktop is needed. Finish active Desktop tasks before
+              setup restarts the app.
             </p>
           )}
           <output
@@ -1159,7 +1144,7 @@ export function ConnectCommandPanel({
           <div
             className={cn(
               "overflow-hidden rounded-xl border",
-              connectRequest
+              connectRequest || client.id === "claude-desktop"
                 ? "bg-card"
                 : "border-[#1f2937] bg-[#0d1117] shadow-lg",
             )}
@@ -1205,22 +1190,26 @@ export function ConnectCommandPanel({
                 platform={setupPlatform}
               />
             ) : client.id === "claude-desktop" && result?.installerUrl ? (
-              <div className="space-y-3 p-4 text-zinc-100">
-                <Button asChild variant="outline" size="sm" className="text-xs">
+              <div className="space-y-3 p-5 text-foreground">
+                <Button asChild variant="outline" size="sm">
                   <a href={result.installerUrl} download>
                     <Download className="size-3.5" />
                     <span>Download installer</span>
                   </a>
                 </Button>
-                <p className="max-w-xl text-xs leading-relaxed text-zinc-400">
-                  Open in Claude Desktop and confirm Install. Setup runs in a
-                  terminal and restarts Desktop. Valid subscription tokens are
-                  reused automatically.
+                <p className="max-w-xl text-sm leading-relaxed text-muted-foreground">
+                  Open in Claude Desktop and confirm Install. Your browser
+                  guides you through subscription sign-in and restarting
+                  Desktop. No terminal or developer tools needed.
                 </p>
-                <details className="text-xs text-zinc-400">
+                <details className="text-xs text-muted-foreground">
                   <summary className="cursor-pointer">
-                    Use terminal instead
+                    Advanced: terminal setup
                   </summary>
+                  <p className="mt-2">
+                    The terminal option requires Python 3.9+ and Claude Code for
+                    subscription sign-in.
+                  </p>
                   <SetupCommandLine
                     command={result.command}
                     pending={false}

@@ -1,18 +1,27 @@
-import {
-  createInsertSchema,
-  createSelectSchema,
-  createUpdateSchema,
-} from "drizzle-zod";
+import { createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
 
-export const SelectGithubPatSchema = createSelectSchema(schema.githubPatsTable);
-export const InsertGithubPatSchema = createInsertSchema(
-  schema.githubPatsTable,
-).omit({ id: true, createdAt: true, updatedAt: true });
-export const UpdateGithubPatSchema = createUpdateSchema(
-  schema.githubPatsTable,
-).pick({ name: true, secretId: true });
+export const SelectGithubPatSchema = createSelectSchema(
+  schema.runtimeCredentialDefinitionsTable,
+)
+  .pick({
+    id: true,
+    organizationId: true,
+    name: true,
+    createdAt: true,
+    updatedAt: true,
+  })
+  .extend({ secretId: z.string().uuid().nullable() });
+export const InsertGithubPatSchema = SelectGithubPatSchema.omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({ secretId: z.string().uuid().nullable().optional() });
+export const UpdateGithubPatSchema = SelectGithubPatSchema.pick({
+  name: true,
+  secretId: true,
+}).partial();
 
 // API-facing shape: never exposes the secret reference
 export const PublicGithubPatSchema = SelectGithubPatSchema.omit({

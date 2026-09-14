@@ -237,13 +237,7 @@ describe("AgentCreatePage", () => {
           runtime: expect.objectContaining({
             command: ["archestra-codex"],
             image: "agent-codex:dev",
-            credentials: expect.arrayContaining([
-              expect.objectContaining({
-                key: "GITHUB_TOKEN",
-                credentialId: "github",
-                required: false,
-              }),
-            ]),
+            credentials: [],
           }),
         }),
       }),
@@ -366,7 +360,7 @@ describe("AgentCreatePage", () => {
   });
   // SPDX-SnippetEnd
 
-  it("prefills Claude Code with its runtime-scoped personal subscription token", async () => {
+  it("prefills Claude Code with native personal sign-in", async () => {
     const user = userEvent.setup();
     vi.mocked(useFeature).mockImplementation((feature) =>
       feature === "agentRuntime" ? true : undefined,
@@ -380,14 +374,8 @@ describe("AgentCreatePage", () => {
         initialValues: expect.objectContaining({
           runtime: expect.objectContaining({
             command: ["archestra-claude-code"],
-            credentials: expect.arrayContaining([
-              expect.objectContaining({
-                key: "CLAUDE_CODE_OAUTH_TOKEN",
-                credentialId: "claude-code",
-                scope: "per_user",
-                required: true,
-              }),
-            ]),
+            credentials: [],
+            claudeCode: { authentication: "subscription" },
           }),
         }),
       }),
@@ -453,6 +441,19 @@ describe("AgentCreatePage", () => {
     );
     await user.click(screen.getByRole("button", { name: "fire created" }));
     expect(push).toHaveBeenCalledWith("/agents/new-1?section=connect");
+  });
+
+  it("lands a new Claude Code agent where its personal account connection is shown", async () => {
+    const user = userEvent.setup();
+    vi.mocked(useFeature).mockImplementation((feature) =>
+      feature === "agentRuntime" ? true : undefined,
+    );
+    renderAgentCreatePage();
+
+    await user.click(screen.getByRole("button", { name: /claude code/i }));
+    await user.click(screen.getByRole("button", { name: "fire created" }));
+
+    expect(push).toHaveBeenCalledWith("/agents/new-1");
   });
 
   it("stays put with a success state when the creator may not read what it made", async () => {

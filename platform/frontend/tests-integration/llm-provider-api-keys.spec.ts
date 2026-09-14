@@ -2,10 +2,8 @@ import { makeLlmProviderApiKey } from "../src/mocks/data/llm-keys";
 import { expect, test } from "./fixtures";
 
 const PROVIDER = "anthropic" as const;
-// The picker lists its options as buttons in a searchable popover, and each
-// one's accessible name repeats the provider: the icon's alt text, then the
-// label.
-const PROVIDER_OPTION_NAME = "Anthropic Anthropic";
+// Provider icons are decorative; the visible label names each option once.
+const PROVIDER_OPTION_NAME = "Anthropic";
 const API_KEY_PLACEHOLDER = "sk-ant-test-key-12345";
 
 test.describe.configure({ mode: "serial" });

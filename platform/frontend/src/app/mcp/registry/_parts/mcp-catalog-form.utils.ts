@@ -449,7 +449,11 @@ export function transformCatalogItemToFormValues(
         };
 
         // If we have a secret and the secret contains a value for this env var key, use it
-        if (localConfigSecret?.secret && env.key in localConfigSecret.secret) {
+        if (
+          !env.credentialId &&
+          localConfigSecret?.secret &&
+          env.key in localConfigSecret.secret
+        ) {
           const secretValue = localConfigSecret.secret[env.key];
           // Convert the value to string if it's not already
           envVar.value =

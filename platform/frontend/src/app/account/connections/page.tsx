@@ -1,14 +1,16 @@
 "use client";
 
 import { Plug, RefreshCw, Unplug } from "lucide-react";
-import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import Link from "next/link";
+import { useState } from "react";
+import { ClaudeCodeAccount } from "@/components/claude-code-account";
 import { QueryLoadError } from "@/components/query-load-error";
 import { RuntimeCredentialConnectionDialog } from "@/components/runtime-credential-connection-dialog";
 import { RuntimeCredentialDisconnectDialog } from "@/components/runtime-credential-disconnect-dialog";
 import { RuntimeCredentialRowContent } from "@/components/runtime-credential-row-content";
 import { SettingsBlock } from "@/components/settings/settings-block";
 import { TableRowActions } from "@/components/table-row-actions";
+import { useInternalAgents } from "@/lib/agent.query";
 import { useFeature } from "@/lib/config/config.query";
 import {
   type RuntimeCredentialDefinition,
@@ -17,10 +19,13 @@ import {
 } from "@/lib/runtime-credentials.query";
 
 export default function AccountConnectionsPage() {
-  const router = useRouter();
   const runtimeEnabled = useFeature("agentRuntime");
   const byosEnabled = useFeature("byosEnabled");
-  const definitions = useRuntimeCredentials(runtimeEnabled === true);
+  const definitions = useRuntimeCredentials();
+  const agents = useInternalAgents({ enabled: runtimeEnabled === true });
+  const claudeAgent = agents.data?.find(
+    (agent) => agent.runtime?.command?.[0] === "archestra-claude-code",
+  );
   const [connecting, setConnecting] =
     useState<RuntimeCredentialDefinition | null>(null);
   const [disconnecting, setDisconnecting] =
@@ -30,26 +35,26 @@ export default function AccountConnectionsPage() {
     (definition) => definition.allowPersonal,
   );
 
-  useEffect(() => {
-    if (runtimeEnabled === false) router.replace("/account");
-  }, [runtimeEnabled, router]);
-
-  if (runtimeEnabled !== true) return null;
-
   return (
     <>
       <SettingsBlock
-        title="Agent connections"
-        description="Connect a credential once, then use it with every Agent that requests it. Connected values stay private to you."
+        title="Personal credentials"
+        description="Connect a credential once to reuse it with your agents and MCP connections. Values stay private to you."
         control={null}
       >
-        {definitions.isError ? (
+        {definitions.isError || agents.isError ? (
           <QueryLoadError
             title="Couldn't load Agent connections"
-            onRetry={() => definitions.refetch()}
+            onRetry={() => {
+              void definitions.refetch();
+              void agents.refetch();
+            }}
           />
         ) : (
           <div className="divide-y overflow-hidden rounded-lg border">
+            {claudeAgent && (
+              <ClaudeCodeAccount agentId={claudeAgent.id} variant="row" />
+            )}
             {personalDefinitions.map((definition) => (
               <div
                 key={definition.key}
@@ -91,11 +96,21 @@ export default function AccountConnectionsPage() {
                 </div>
               </div>
             ))}
-            {!definitions.isPending && personalDefinitions.length === 0 && (
-              <p className="p-5 text-sm text-muted-foreground">
-                No personal Agent connections are available.
-              </p>
-            )}
+            {!definitions.isPending &&
+              !agents.isPending &&
+              !claudeAgent &&
+              personalDefinitions.length === 0 && (
+                <p className="p-5 text-sm text-muted-foreground">
+                  An administrator can add a personal credential in{" "}
+                  <Link
+                    href="/settings/credentials"
+                    className="underline underline-offset-4 hover:text-foreground"
+                  >
+                    Credentials
+                  </Link>
+                  . Then connect it here.
+                </p>
+              )}
           </div>
         )}
       </SettingsBlock>

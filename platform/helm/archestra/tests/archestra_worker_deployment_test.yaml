@@ -4,6 +4,120 @@ templates:
 values:
   - ../ci/test-values.yaml
 tests:
+  - it: rejects bulk pool sourcing when every source is prefixed
+    set:
+      archestra.database.poolMaxFromEnvFrom: true
+      archestra.envFrom:
+        - configMapRef:
+            name: database-pool
+          prefix: DB_
+    asserts:
+      - failedTemplate:
+          errorMessage: "Configuration error: archestra.database.poolMaxFromEnvFrom requires an unprefixed envFrom source supplying ARCHESTRA_DATABASE_POOL_MAX."
+
+  - it: allows unrelated prefixed sources alongside an unprefixed pool source
+    set:
+      archestra.database.poolMaxFromEnvFrom: true
+      archestra.envFrom:
+        - configMapRef:
+            name: database-pool
+        - secretRef:
+            name: other-settings
+          prefix: OTHER_
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_DATABASE_POOL_MAX
+          any: true
+      - contains:
+          path: spec.template.spec.containers[0].envFrom
+          content:
+            configMapRef:
+              name: database-pool
+
+  - it: preserves a declared bulk database pool override in workers
+    set:
+      archestra.database.poolMaxFromEnvFrom: true
+      archestra.envFrom:
+        - secretRef:
+            name: database-pool
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_DATABASE_POOL_MAX
+          any: true
+      - contains:
+          path: spec.template.spec.containers[0].envFrom
+          content:
+            secretRef:
+              name: database-pool
+
+  - it: uses automatic sizing when explicitly chosen for unrelated bulk variables
+    set:
+      archestra.database.poolMaxFromEnvFrom: false
+      archestra.database.connectionBudget: 90
+      archestra.envFrom:
+        - configMapRef:
+            name: application-settings
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_DATABASE_POOL_MAX
+            value: "3"
+
+  - it: requires a bulk source when choosing a bulk pool override
+    set:
+      archestra.database.poolMaxFromEnvFrom: true
+    asserts:
+      - failedTemplate:
+          errorMessage: "Configuration error: archestra.database.poolMaxFromEnvFrom requires archestra.envFrom."
+
+  - it: rejects conflicting bulk and fixed pool overrides
+    set:
+      archestra.database.poolMaxFromEnvFrom: true
+      archestra.database.poolMax: 17
+      archestra.envFrom:
+        - secretRef:
+            name: database-pool
+    asserts:
+      - failedTemplate:
+          errorMessage: "Configuration error: archestra.database.poolMaxFromEnvFrom cannot be combined with an explicit pool override."
+
+  - it: preserves an explicit per-key override with unrelated bulk variables
+    set:
+      archestra.envWithValueFrom:
+        - name: ARCHESTRA_DATABASE_POOL_MAX
+          valueFrom:
+            configMapKeyRef:
+              name: database-pool
+              key: pool-max
+      archestra.envFrom:
+        - configMapRef:
+            name: application-settings
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_DATABASE_POOL_MAX
+            valueFrom:
+              configMapKeyRef:
+                name: database-pool
+                key: pool-max
+
+  - it: shares the web and worker aggregate connection budget
+    set:
+      archestra.replicaCount: 4
+      archestra.worker.replicaCount: 3
+      archestra.database.connectionBudget: 400
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_DATABASE_POOL_MAX
+            value: "13"
   - it: excludes workers from runtime API egress destinations
     asserts:
       - isNull:

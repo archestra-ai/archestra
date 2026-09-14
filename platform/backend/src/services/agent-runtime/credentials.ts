@@ -1,24 +1,22 @@
 import { isVaultReference } from "@archestra/shared";
 import logger from "@/logging";
-import {
-  AgentModel,
-  RuntimeCredentialConnectionModel,
-  SecretModel,
-  UserCredentialModel,
-} from "@/models";
+import { AgentModel, SecretModel, UserCredentialModel } from "@/models";
 import { isByosEnabled, secretManager } from "@/secrets-manager";
 import {
   deleteRuntimeCredentialConnection,
   setRuntimeCredentialConnection,
 } from "@/services/agent-runtime/runtime-credentials";
+import {
+  resolveCredential,
+  resolveCredentialValue,
+} from "@/services/credentials";
 import type {
   AgentRuntimeCredentialDeclaration,
   MissingAgentRuntimeCredential,
   ResolvedAgentRuntime,
 } from "@/types";
 import { ApiError } from "@/types";
-import { resolveConversationLlmSelectionForAgent } from "@/utils/llm-resolution";
-import { getClaudeCodeCloudProvider } from "./model-compatibility";
+import type { RenewableCredential } from "@/types/renewable-credential";
 
 /**
  * Outcome of resolving one Agent Runtime run's declared credentials for one user.
@@ -31,6 +29,7 @@ import { getClaudeCodeCloudProvider } from "./model-compatibility";
  */
 type AgentRuntimeCredentialResolution = {
   env: Record<string, string>;
+  renewableCredentials: Record<string, RenewableCredential>;
   missing: MissingAgentRuntimeCredential[];
   misconfigured: MissingAgentRuntimeCredential[];
 };
@@ -46,23 +45,33 @@ export async function resolveAgentRuntimeCredentials(params: {
   organizationId: string;
   userId: string | null;
 }): Promise<AgentRuntimeCredentialResolution> {
-  const { shared, perUser } = splitDeclarations(
-    await applicableCredentials(params),
-  );
+  const { shared, perUser } = splitDeclarations(applicableCredentials(params));
   const env: Record<string, string> = {};
+  const renewableCredentials: Record<string, RenewableCredential> = {};
   const missing: MissingAgentRuntimeCredential[] = [];
   const misconfigured: MissingAgentRuntimeCredential[] = [];
 
   if (shared.length > 0) {
     const bag = await readSharedBag(params.runtime.secretId);
     for (const declaration of shared) {
-      const value = declaration.credentialId
-        ? await RuntimeCredentialConnectionModel.resolveValue({
+      const credential = declaration.credentialId
+        ? await resolveCredential({
             organizationId: params.organizationId,
             scope: "organization",
             credentialId: declaration.credentialId,
+            minimumValidityMs: 50 * 60_000,
           })
+        : null;
+      const value = declaration.credentialId
+        ? credential?.value
         : bag[declaration.key];
+      if (credential?.expiresAt && declaration.credentialId) {
+        renewableCredentials[declaration.key] = {
+          credentialId: declaration.credentialId,
+          value: credential.value,
+          expiresAt: credential.expiresAt,
+        };
+      }
       if (typeof value === "string" && value.length > 0) {
         env[declaration.key] = value;
       } else if (declaration.required) {
@@ -75,6 +84,7 @@ export async function resolveAgentRuntimeCredentials(params: {
     if (!params.userId) {
       return {
         env,
+        renewableCredentials,
         missing: perUser.filter((entry) => entry.required).map(toMissing),
         misconfigured,
       };
@@ -91,7 +101,7 @@ export async function resolveAgentRuntimeCredentials(params: {
     Object.assign(env, resolved.values);
     for (const declaration of perUser) {
       const value = declaration.credentialId
-        ? await RuntimeCredentialConnectionModel.resolveValue({
+        ? await resolveCredentialValue({
             organizationId: params.organizationId,
             scope: "personal",
             userId: params.userId,
@@ -106,13 +116,12 @@ export async function resolveAgentRuntimeCredentials(params: {
     }
   }
 
-  return { env, missing, misconfigured };
+  return { env, renewableCredentials, missing, misconfigured };
 }
 
 /**
- * The same answer without reading any secret material: used to annotate the
- * UI before a user asks for an Agent Runtime run, so a start button can say what is needed
- * rather than failing on click.
+ * Check credential availability before launch without returning secret values
+ * to the UI. Saved GitHub Apps also validate the installation-token exchange.
  */
 export async function preflightAgentRuntimeCredentials(params: {
   runtime: Pick<ResolvedAgentRuntime, "agentId" | "credentials" | "secretId"> &
@@ -124,9 +133,7 @@ export async function preflightAgentRuntimeCredentials(params: {
   missing: MissingAgentRuntimeCredential[];
   misconfigured: MissingAgentRuntimeCredential[];
 }> {
-  const { shared, perUser } = splitDeclarations(
-    await applicableCredentials(params),
-  );
+  const { shared, perUser } = splitDeclarations(applicableCredentials(params));
   const configured: string[] = [];
   const missing: MissingAgentRuntimeCredential[] = [];
   const misconfigured: MissingAgentRuntimeCredential[] = [];
@@ -135,7 +142,7 @@ export async function preflightAgentRuntimeCredentials(params: {
     const bag = await readSharedBag(params.runtime.secretId);
     for (const declaration of shared) {
       const value = declaration.credentialId
-        ? await RuntimeCredentialConnectionModel.resolveValue({
+        ? await resolveCredentialValue({
             organizationId: params.organizationId,
             scope: "organization",
             credentialId: declaration.credentialId,
@@ -166,7 +173,7 @@ export async function preflightAgentRuntimeCredentials(params: {
     for (const declaration of perUser) {
       const connected = declaration.credentialId
         ? Boolean(
-            await RuntimeCredentialConnectionModel.resolveValue({
+            await resolveCredentialValue({
               organizationId: params.organizationId,
               scope: "personal",
               userId: params.userId,
@@ -197,6 +204,12 @@ export async function setAgentRuntimeCredential(params: {
   key: string;
   value: string;
 }): Promise<{ scope: AgentRuntimeCredentialDeclaration["scope"] }> {
+  if (params.key === "CLAUDE_CODE_OAUTH_TOKEN") {
+    throw new ApiError(
+      400,
+      "Use the native Claude Code sign-in instead of storing a subscription token.",
+    );
+  }
   const declaration = requireDeclaration(params.runtime, params.key);
   assertCredentialValue(params.value);
 
@@ -419,35 +432,16 @@ async function deleteSecretQuietly(secretId: string): Promise<void> {
   }
 }
 
-// Cloud-hosted Claude uses the selected provider credential; a saved subscription
-// declaration must neither block the run nor inject an unrelated OAuth token.
-async function applicableCredentials(params: {
+// Claude Code owns subscription authentication. Legacy pasted tokens must not
+// block native sign-in or override the selected provider's billing.
+function applicableCredentials(params: {
   runtime: Pick<ResolvedAgentRuntime, "agentId" | "credentials"> &
     Partial<Pick<ResolvedAgentRuntime, "command">>;
   organizationId: string;
   userId: string | null;
 }) {
-  if (
-    params.runtime.command?.[0] !== "archestra-claude-code" ||
-    !params.runtime.credentials?.some(
-      ({ key }) => key === "CLAUDE_CODE_OAUTH_TOKEN",
-    )
-  ) {
-    return params.runtime.credentials;
-  }
-  const agent = await AgentModel.findById(params.runtime.agentId);
-  if (!agent) return params.runtime.credentials;
-  const llm = await resolveConversationLlmSelectionForAgent({
-    agent,
-    organizationId: params.organizationId,
-    userId: params.userId ?? "system",
-    includeMemberChatDefault: false,
-  });
-  return getClaudeCodeCloudProvider({
-    runtime: params.runtime,
-    provider: llm.selectedProvider,
-  })
-    ? params.runtime.credentials.filter(
+  return params.runtime.command?.[0] === "archestra-claude-code"
+    ? params.runtime.credentials?.filter(
         ({ key }) => key !== "CLAUDE_CODE_OAUTH_TOKEN",
       )
     : params.runtime.credentials;

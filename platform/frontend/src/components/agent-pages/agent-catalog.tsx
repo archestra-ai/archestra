@@ -1,4 +1,9 @@
-import type { SubscriptionCredentialKind } from "@archestra/shared";
+import {
+  type AgentCatalogId,
+  getAgentCatalogImages,
+  getDefaultAgentRuntimeImage,
+  type SubscriptionCredentialKind,
+} from "@archestra/shared";
 import { Bot, Network } from "lucide-react";
 import Image from "next/image";
 import type { AgentFormInitialValues } from "@/components/agent-form";
@@ -14,13 +19,7 @@ import {
 } from "@/lib/hooks/use-app-name";
 
 export interface AgentCatalogTemplate {
-  id:
-    | "archestra"
-    | "claude-code"
-    | "codex"
-    | "opencode"
-    | "hermes"
-    | "openclaw";
+  id: AgentCatalogId;
   name: string;
   description: string;
   icon: string | null;
@@ -33,6 +32,7 @@ export function getAgentCatalogTemplates(
   appName = "Archestra",
   appIconLogo: string | null = "/logo-icon.svg",
 ): readonly AgentCatalogTemplate[] {
+  const images = getAgentCatalogImages(archestraImage);
   return [
     template({
       id: "archestra",
@@ -40,7 +40,7 @@ export function getAgentCatalogTemplates(
       icon: appIconLogo,
       description: `${appName}'s lightweight agent loop with model inference and MCP tools managed by the platform.`,
       platformName: appName,
-      image: image(archestraImage, "archestra"),
+      image: images.archestra,
       command: null,
       inferenceProtocol: "openai_responses",
       steerMode: "pipe",
@@ -49,23 +49,12 @@ export function getAgentCatalogTemplates(
       id: "claude-code",
       name: "Claude Code",
       icon: "/model-logos/anthropic.svg",
-      description: `Anthropic's coding agent, preconfigured to use the ${appName} LLM proxy and MCP gateway.`,
+      description: `Anthropic's coding agent with personal Claude sign-in or provider billing, connected to the ${appName} MCP gateway.`,
       platformName: appName,
-      image: image(archestraImage, "claude-code"),
+      image: images["claude-code"],
       command: ["archestra-claude-code"],
       inferenceProtocol: "anthropic",
       steerMode: "tmux_keys",
-      additionalCredentials: [
-        {
-          key: "CLAUDE_CODE_OAUTH_TOKEN",
-          credentialId: "claude-code",
-          scope: "per_user",
-          label: "Claude Code subscription token",
-          description:
-            "A personal Claude subscription token used only by Claude Code background tasks.",
-          required: true,
-        },
-      ],
     }),
     template({
       id: "codex",
@@ -73,7 +62,7 @@ export function getAgentCatalogTemplates(
       icon: "/model-logos/openai.svg",
       description: `OpenAI's coding agent, preconfigured to use the ${appName} LLM proxy and MCP gateway.`,
       platformName: appName,
-      image: image(archestraImage, "codex"),
+      image: images.codex,
       command: ["archestra-codex"],
       inferenceProtocol: "openai_responses",
       steerMode: "tmux_keys",
@@ -85,7 +74,7 @@ export function getAgentCatalogTemplates(
       icon: "/agent-logos/opencode.svg",
       description: `The open source coding agent, preconfigured to use the ${appName} LLM proxy and MCP gateway.`,
       platformName: appName,
-      image: image(archestraImage, "opencode"),
+      image: images.opencode,
       command: ["archestra-opencode"],
       inferenceProtocol: "openai_responses",
       steerMode: "tmux_keys",
@@ -96,7 +85,7 @@ export function getAgentCatalogTemplates(
       icon: "/agent-logos/hermes.png",
       description: `The Hermes coding agent with its model and remote MCP tools supplied by ${appName}.`,
       platformName: appName,
-      image: image(archestraImage, "hermes"),
+      image: images.hermes,
       command: ["archestra-hermes"],
       inferenceProtocol: "openai_chat",
       steerMode: "tmux_keys",
@@ -107,7 +96,7 @@ export function getAgentCatalogTemplates(
       icon: "/agent-logos/openclaw.svg",
       description: `OpenClaw in an isolated task pod, with inference and MCP access kept behind ${appName}.`,
       platformName: appName,
-      image: image(archestraImage, "openclaw"),
+      image: images.openclaw,
       command: ["archestra-openclaw"],
       inferenceProtocol: "openai_chat",
       steerMode: "tmux_keys",
@@ -145,7 +134,7 @@ export function AgentCatalog({
   const templates = getAgentCatalogTemplates(
     typeof configuredImage === "string"
       ? configuredImage
-      : DEFAULT_ARCHESTRA_AGENT_IMAGE,
+      : getDefaultAgentRuntimeImage("latest"),
     appName,
     appIconLogo,
   );
@@ -278,9 +267,6 @@ function template(params: {
   inferenceProtocol: "openai_responses" | "openai_chat" | "anthropic";
   steerMode: "pipe" | "tmux_keys";
   requiredSubscriptionKind?: SubscriptionCredentialKind;
-  additionalCredentials?: NonNullable<
-    NonNullable<AgentFormInitialValues["runtime"]>["credentials"]
-  >;
 }): AgentCatalogTemplate {
   return {
     id: params.id,
@@ -303,18 +289,10 @@ function template(params: {
         privileged: false,
         resources: null,
         environment: null,
-        credentials: [
-          {
-            key: "GITHUB_TOKEN",
-            credentialId: "github",
-            scope: "per_user",
-            label: "GitHub token",
-            description:
-              "Used to clone repositories and push changes from background tasks.",
-            required: false,
-          },
-          ...(params.additionalCredentials ?? []),
-        ],
+        credentials: [],
+        ...(params.id === "claude-code" && {
+          claudeCode: { authentication: "subscription" as const },
+        }),
         ttlHours: null,
         maxCostUsd: null,
         idleTimeoutMinutes: null,
@@ -322,21 +300,3 @@ function template(params: {
     },
   };
 }
-
-function image(
-  archestraImage: string,
-  name: AgentCatalogTemplate["id"],
-): string {
-  if (/agent-archestra(?=:[^/]+$|$)/.test(archestraImage)) {
-    return archestraImage.replace(
-      /agent-archestra(?=:[^/]+$|$)/,
-      `agent-${name}`,
-    );
-  }
-  return name === "archestra"
-    ? archestraImage
-    : DEFAULT_ARCHESTRA_AGENT_IMAGE.replace("agent-archestra", `agent-${name}`);
-}
-
-const DEFAULT_ARCHESTRA_AGENT_IMAGE =
-  "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/agent-archestra:latest";

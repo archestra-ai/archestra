@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, ChevronDown, X } from "lucide-react";
+import { Check, ChevronDown, ExternalLink, X } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { AgentIcon } from "@/components/agent-icon";
 import { RuntimeCapableIndicator } from "@/components/chat/runtime-capable-indicator";
@@ -100,6 +100,16 @@ type AgentSelectorProps =
       disabled?: boolean;
       disabledLabel?: string;
       className?: string;
+      /**
+       * Show a compact dropdown trigger instead of rendering selected values
+       * inside the control. Useful when selections are already displayed by
+       * the surrounding editor.
+       */
+      triggerLabel?: string;
+      createAction?: {
+        label: string;
+        href: string;
+      };
       /**
        * Render every agent in one ungrouped list regardless of `agentType`,
        * instead of the default "Agents"/"MCP Gateways" group headings. Use this
@@ -265,12 +275,15 @@ function MultiAgentSelector({
   disabled,
   disabledLabel,
   className,
+  triggerLabel,
+  createAction,
   flat,
   allOption,
 }: Extract<AgentSelectorProps, { mode: "multiple" }>) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const anchorRef = useRef<HTMLDivElement>(null);
+  const restoreFocusRef = useRef(false);
   const dialogContainer = dialogPortalContainer(anchorRef.current);
   const selectedAgents = agents.filter((agent) => value.includes(agent.id));
   const groupedAgents = useGroupedAgents(agents, search);
@@ -307,11 +320,14 @@ function MultiAgentSelector({
         <div
           ref={anchorRef}
           role="combobox"
+          aria-label={triggerLabel}
           aria-expanded={open}
           aria-disabled={disabled}
-          tabIndex={disabled ? undefined : -1}
+          tabIndex={disabled ? undefined : triggerLabel ? 0 : -1}
           className={cn(
             "flex min-h-9 w-full flex-wrap items-center gap-1.5 rounded-md border border-input bg-background px-3 py-1.5 text-sm ring-offset-background focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2",
+            triggerLabel &&
+              "h-8 min-h-8 w-fit cursor-pointer justify-between py-1 text-xs shadow-xs hover:bg-accent hover:text-accent-foreground",
             disabled && "cursor-not-allowed opacity-60",
             className,
           )}
@@ -321,11 +337,17 @@ function MultiAgentSelector({
           onKeyDown={(event) => {
             if (disabled) return;
             if (event.key === "Enter" || event.key === " ") {
+              if (triggerLabel) event.preventDefault();
               setOpen(true);
             }
           }}
         >
-          {disabled && disabledLabel ? (
+          {triggerLabel ? (
+            <>
+              <span>{triggerLabel}</span>
+              <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-50" />
+            </>
+          ) : disabled && disabledLabel ? (
             <span className="text-muted-foreground">{disabledLabel}</span>
           ) : allSelected && allOption ? (
             <span>{allOption.label}</span>
@@ -365,7 +387,19 @@ function MultiAgentSelector({
         // control — capped to the viewport so it can't overflow a phone.
         className="flex max-h-[var(--radix-popover-content-available-height)] w-[var(--radix-popover-trigger-width)] min-w-[min(20rem,calc(100vw-2rem))] flex-col p-0"
         align="start"
-        onOpenAutoFocus={(event) => event.preventDefault()}
+        onOpenAutoFocus={(event) => {
+          if (!triggerLabel) event.preventDefault();
+        }}
+        onEscapeKeyDown={() => {
+          restoreFocusRef.current = true;
+        }}
+        onCloseAutoFocus={(event) => {
+          if (triggerLabel && restoreFocusRef.current) {
+            event.preventDefault();
+            anchorRef.current?.focus();
+          }
+          restoreFocusRef.current = false;
+        }}
         portalContainer={dialogContainer}
         collisionBoundary={dialogContainer ?? undefined}
         collisionPadding={8}
@@ -430,6 +464,25 @@ function MultiAgentSelector({
             )}
           </CommandList>
         </Command>
+        {createAction && (
+          <div className="border-t p-1">
+            <Button
+              asChild
+              variant="ghost"
+              className="h-8 w-full justify-between px-2 text-sm font-normal"
+            >
+              <a
+                href={createAction.href}
+                target="_blank"
+                rel="noopener"
+                onClick={() => setOpen(false)}
+              >
+                <span>{createAction.label}</span>
+                <ExternalLink className="h-3 w-3" />
+              </a>
+            </Button>
+          </div>
+        )}
       </PopoverContent>
     </Popover>
   );

@@ -4,6 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { AgentIconPicker } from "@/components/agent-icon-picker";
+import { RuntimeCredentialIcon } from "@/components/runtime-credential-icon";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
 import {
@@ -43,6 +44,10 @@ export function RuntimeCredentialDefinitionDialog({
     resolver: zodResolver(DefinitionFormSchema),
     defaultValues: {
       name: definition?.name ?? "",
+      kind: definition?.kind ?? "secret",
+      githubUrl: definition?.githubUrl ?? "https://api.github.com",
+      appId: definition?.appId ?? "",
+      installationId: definition?.installationId ?? "",
       description: definition?.description ?? "",
       icon: definition?.icon ?? null,
       scope: definition?.allowOrganization ? "organization" : "personal",
@@ -57,6 +62,11 @@ export function RuntimeCredentialDefinitionDialog({
           key: definition.key,
           name: definition.name,
           body: {
+            name: values.name.trim(),
+            githubUrl: values.kind === "github_app" ? values.githubUrl : null,
+            appId: values.kind === "github_app" ? values.appId : null,
+            installationId:
+              values.kind === "github_app" ? values.installationId : null,
             description: values.description.trim(),
             icon: values.icon,
           },
@@ -69,6 +79,11 @@ export function RuntimeCredentialDefinitionDialog({
     create.mutate(
       {
         key: slugifyCredentialKey(values.name),
+        kind: values.kind,
+        githubUrl: values.kind === "github_app" ? values.githubUrl : null,
+        appId: values.kind === "github_app" ? values.appId : null,
+        installationId:
+          values.kind === "github_app" ? values.installationId : null,
         name: values.name.trim(),
         description: values.description.trim(),
         icon: values.icon,
@@ -86,7 +101,7 @@ export function RuntimeCredentialDefinitionDialog({
         if (!open) onClose();
       }}
       title={definition ? `Edit ${definition.name}` : "Add credential"}
-      description="Define a reusable secret that Agents can request at runtime."
+      description="Choose the credential type and who provides its value. Use it across the platform."
       size="small"
       onSubmit={form.handleSubmit(save)}
       bodyClassName="space-y-4"
@@ -109,9 +124,7 @@ export function RuntimeCredentialDefinitionDialog({
             <FormItem>
               <FormLabel>Name</FormLabel>
               <FormDescription>
-                {definition
-                  ? "The name is fixed because Agents may already reference this credential."
-                  : "Use the name people will recognize when connecting the credential."}
+                Use a name people will recognize when selecting this credential.
               </FormDescription>
               <div className="flex items-center gap-3">
                 <FormField
@@ -131,7 +144,6 @@ export function RuntimeCredentialDefinitionDialog({
                     {...field}
                     autoFocus={!definition}
                     placeholder="GitLab access token"
-                    disabled={Boolean(definition)}
                   />
                 </FormControl>
               </div>
@@ -161,6 +173,97 @@ export function RuntimeCredentialDefinitionDialog({
           )}
         />
 
+        <FormField
+          control={form.control}
+          name="kind"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Credential type</FormLabel>
+              <Select
+                value={field.value}
+                onValueChange={(value) => {
+                  field.onChange(value);
+                  if (value === "github_app")
+                    form.setValue("scope", "organization", {
+                      shouldDirty: true,
+                    });
+                }}
+                disabled={Boolean(definition)}
+              >
+                <FormControl>
+                  <SelectTrigger className="w-full">
+                    <span className="flex items-center gap-2">
+                      {field.value && (
+                        <RuntimeCredentialIcon
+                          icon={
+                            field.value === "github_app" ? "logo:github" : null
+                          }
+                          className="size-4 text-muted-foreground"
+                        />
+                      )}
+                      <SelectValue placeholder="Select credential type" />
+                    </span>
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent position="popper">
+                  <SelectItem
+                    value="secret"
+                    icon={
+                      <RuntimeCredentialIcon icon={null} className="size-4" />
+                    }
+                  >
+                    Custom secret
+                  </SelectItem>
+                  <SelectItem
+                    value="github_app"
+                    icon={
+                      <RuntimeCredentialIcon
+                        icon="logo:github"
+                        className="size-4"
+                      />
+                    }
+                  >
+                    GitHub App
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+              {field.value === "github_app" && (
+                <FormDescription>
+                  Add the app details below, then connect its private key after
+                  saving. Integrations use an installation token; the private
+                  key stays in the secrets manager.
+                </FormDescription>
+              )}
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        {form.watch("kind") === "github_app" && (
+          <div className="space-y-4">
+            {(["githubUrl", "appId", "installationId"] as const).map((name) => (
+              <FormField
+                key={name}
+                control={form.control}
+                name={name}
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>
+                      {name === "githubUrl"
+                        ? "GitHub API URL"
+                        : name === "appId"
+                          ? "App ID"
+                          : "Installation ID"}
+                    </FormLabel>
+                    <FormControl>
+                      <Input {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            ))}
+          </div>
+        )}
         {!definition && (
           <FormField
             control={form.control}
@@ -168,7 +271,17 @@ export function RuntimeCredentialDefinitionDialog({
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Provided by</FormLabel>
-                <Select value={field.value} onValueChange={field.onChange}>
+                {form.watch("kind") === "github_app" && (
+                  <FormDescription>
+                    GitHub Apps use an organization-managed installation and
+                    private key.
+                  </FormDescription>
+                )}
+                <Select
+                  value={field.value}
+                  onValueChange={field.onChange}
+                  disabled={form.watch("kind") === "github_app"}
+                >
                   <FormControl>
                     <SelectTrigger className="w-full">
                       <SelectValue />
@@ -199,25 +312,51 @@ export function RuntimeCredentialDefinitionDialog({
   );
 }
 
-const DefinitionFormSchema = z.object({
-  name: z
-    .string()
-    .trim()
-    .min(1, "Name is required")
-    .max(128)
-    .regex(/[a-z0-9]/i, "Name must include a letter or number"),
-  description: z.string().max(500),
-  icon: z.string().nullable(),
-  scope: z.enum(["personal", "organization"]),
-});
+const DefinitionFormSchema = z
+  .object({
+    name: z
+      .string()
+      .trim()
+      .min(1, "Name is required")
+      .max(128)
+      .regex(/[a-z0-9]/i, "Name must include a letter or number"),
+    description: z.string().max(500),
+    icon: z.string().nullable(),
+    scope: z.enum(["personal", "organization"]),
+    kind: z.enum(["secret", "github_app"]),
+    githubUrl: z.string(),
+    appId: z.string(),
+    installationId: z.string(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.kind !== "github_app") return;
+    if (value.scope !== "organization")
+      ctx.addIssue({
+        code: "custom",
+        path: ["scope"],
+        message: "GitHub Apps are provided by the organization",
+      });
+    for (const field of ["appId", "installationId"] as const) {
+      if (!value[field].trim())
+        ctx.addIssue({ code: "custom", path: [field], message: "Required" });
+    }
+    if (!/^https?:\/\//.test(value.githubUrl))
+      ctx.addIssue({
+        code: "custom",
+        path: ["githubUrl"],
+        message: "Enter an HTTP(S) API URL",
+      });
+  });
 
 type DefinitionFormValues = z.infer<typeof DefinitionFormSchema>;
 
 function slugifyCredentialKey(value: string): string {
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 128);
+  return (
+    "credential-" +
+    value
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+  ).slice(0, 128);
 }

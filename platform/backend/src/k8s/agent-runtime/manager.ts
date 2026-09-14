@@ -34,8 +34,10 @@ import type { AgentRunLaunchSpec } from "@/services/agent-runtime/backends";
 import {
   AGENT_RUNTIME_ATTACH_SCRIPT,
   AGENT_RUNTIME_ATTACHMENTS_MANIFEST,
+  AGENT_RUNTIME_CREDENTIALS_SECRET_KEY,
   AGENT_RUNTIME_INPUTS_READY_FILE,
 } from "@/services/agent-runtime/runtime-contract";
+import { resolveCredential } from "@/services/credentials";
 import { resolveEffectiveNetworkPolicy } from "@/services/environments/network-policy";
 import type {
   AgentRunInput,
@@ -48,6 +50,7 @@ import {
   AgentWorkspaceFileRequestSchema,
   AgentWorkspaceFileResultSchema,
 } from "@/types/agent-workspace-file";
+import { RenewableCredentialBundleSchema } from "@/types/renewable-credential";
 import {
   AgentRuntimeCommandTransportError,
   execAgentRuntimeCommand,
@@ -83,6 +86,7 @@ import {
   describeAgentRuntimeStartupProgress,
   isSameAgentRuntimeStartupProgress,
 } from "./startup-phase";
+import { buildTmuxSteerCommand } from "./steering";
 import { withTranscriptRecoveryPod } from "./transcript-recovery";
 
 /** `K8sClients` is internal to the shared module, so it is derived here. */
@@ -322,6 +326,21 @@ class AgentRuntimeManager {
       );
     }
     await this.refreshWorkspaceEgress({ sandbox, spec: params.spec });
+    await clients.coreApi.patchNamespacedSecret(
+      {
+        namespace: params.session.runtimeScope,
+        name: agentRuntimeNames(params.session.workloadName).secret,
+        body: {
+          stringData: {
+            [AGENT_RUNTIME_CREDENTIALS_SECRET_KEY]: JSON.stringify({
+              taskId: params.spec.taskId,
+              credentials: params.spec.renewableCredentials ?? {},
+            }),
+          },
+        },
+      },
+      setHeaderOptions("Content-Type", PatchStrategy.MergePatch),
+    );
     // Keep the pending handoff outside this process before waiting for compute.
     // It contains credentials, so use a Secret, not annotations or task logs.
     const initialSecretName = agentRuntimeNames(
@@ -472,6 +491,60 @@ class AgentRuntimeManager {
     });
   }
 
+  /** CAS against release/continuation: a stale refresher cannot restore revoked values. */
+  async refreshCredentials(session: AgentRunRecord): Promise<void> {
+    const clients = this.requireClients();
+    const name = agentRuntimeNames(session.workloadName).secret;
+    const secret = await clients.coreApi
+      .readNamespacedSecret({ namespace: session.runtimeScope, name })
+      .catch((error) => {
+        if (isK8sNotFoundError(error)) return null;
+        throw error;
+      });
+    const encoded = secret?.data?.[AGENT_RUNTIME_CREDENTIALS_SECRET_KEY];
+    if (!encoded) return;
+    const parsed = RenewableCredentialBundleSchema.safeParse(
+      JSON.parse(Buffer.from(encoded, "base64").toString("utf8")),
+    );
+    if (!parsed.success || parsed.data.taskId !== session.taskId) return;
+    const bundle = parsed.data;
+    let changed = false;
+    for (const [key, current] of Object.entries(bundle.credentials)) {
+      if (current.expiresAt - Date.now() > 15 * 60_000) continue;
+      const next = await resolveCredential({
+        organizationId: session.organizationId,
+        credentialId: current.credentialId,
+        scope: "organization",
+        minimumValidityMs: 55 * 60_000,
+      });
+      bundle.credentials[key] = {
+        credentialId: current.credentialId,
+        value: next?.value ?? "",
+        expiresAt: next?.expiresAt ?? 0,
+      };
+      changed = true;
+    }
+    if (!changed) return;
+    await clients.coreApi
+      .patchNamespacedSecret(
+        {
+          namespace: session.runtimeScope,
+          name,
+          body: {
+            metadata: { resourceVersion: secret?.metadata?.resourceVersion },
+            stringData: {
+              [AGENT_RUNTIME_CREDENTIALS_SECRET_KEY]: JSON.stringify(bundle),
+            },
+          },
+        },
+        setHeaderOptions("Content-Type", PatchStrategy.MergePatch),
+      )
+      .catch((error) => {
+        if (!isK8sConflictError(error) && !isK8sNotFoundError(error))
+          throw error;
+      });
+  }
+
   async hasRetainedTerminal(
     session: Pick<AgentRunRecord, "taskId" | "runtimeScope" | "workloadName">,
   ): Promise<boolean> {
@@ -498,10 +571,11 @@ class AgentRuntimeManager {
     session: AgentRunRecord,
     options?: { retainInteractiveSession?: boolean },
   ): Promise<void> {
-    if (
-      !options?.retainInteractiveSession ||
-      !(await this.hasRetainedTerminal(session))
-    ) {
+    const retainCredentials = Boolean(
+      options?.retainInteractiveSession &&
+        (await this.hasRetainedTerminal(session)),
+    );
+    if (!retainCredentials) {
       await this.revokeVirtualKey(session);
     }
     const clients = this.requireClients();
@@ -522,7 +596,13 @@ class AgentRuntimeManager {
             body: {
               metadata: { resourceVersion: secret.metadata?.resourceVersion },
               data: Object.fromEntries(
-                Object.keys(secret.data ?? {}).map((key) => [key, ""]),
+                Object.entries(secret.data ?? {}).map(([key, value]) => [
+                  key,
+                  retainCredentials &&
+                  key === AGENT_RUNTIME_CREDENTIALS_SECRET_KEY
+                    ? value
+                    : "",
+                ]),
               ),
             },
           },
@@ -604,7 +684,7 @@ class AgentRuntimeManager {
   }
 
   getWorkspaceConnection(
-    session: Pick<AgentRunRecord, "workloadName" | "runtimeScope">,
+    session: Pick<AgentRunRecord, "workloadName" | "runtimeScope" | "taskId">,
   ) {
     return {
       hostname: `${session.workloadName}.${session.runtimeScope}`,
@@ -620,6 +700,7 @@ class AgentRuntimeManager {
         "--",
         "env",
         "ARCHESTRA_AGENT_RUNTIME_AUTO_ATTACH=0",
+        `ARCHESTRA_AGENT_RUNTIME_TASK_ID=${session.taskId}`,
         "/bin/sh",
       ]
         .map(shellDisplayArgument)
@@ -713,7 +794,10 @@ class AgentRuntimeManager {
             "-c",
             // `--` stops tmux reading a message beginning with a dash as its
             // own options; Enter is sent separately as the submit.
-            `tmux send-keys -t ${AGENT_RUNTIME_TMUX_SESSION} -l -- ${shellQuote(message)} && tmux send-keys -t ${AGENT_RUNTIME_TMUX_SESSION} Enter`,
+            buildTmuxSteerCommand({
+              session: AGENT_RUNTIME_TMUX_SESSION,
+              message,
+            }),
           ]
         : [
             "/bin/sh",

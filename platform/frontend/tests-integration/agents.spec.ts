@@ -185,6 +185,27 @@ test.describe("Agents", () => {
     await expect(bulkCount).toBeHidden();
   });
 
+  test("shows filtered empty views without waiting for external agents", async ({
+    page,
+    agentsPage,
+    mswControl,
+  }) => {
+    await mswControl.use({
+      method: "get",
+      url: "/api/agents",
+      body: makeAgentsList({ agents: [] }),
+    });
+
+    for (const [query, emptyMessage] of [
+      ["status=deleted", "No deleted agents found."],
+      ["labels=department%3Aresearch", "No agents match your filters"],
+      ["providerApiKeyId=organization-default", "No agents match your filters"],
+    ]) {
+      await page.goto(`/agents?${query}`);
+      await expect(agentsPage.table.getByText(emptyMessage)).toBeVisible();
+    }
+  });
+
   test("can create and delete an agent", async ({
     page,
     agentsPage,

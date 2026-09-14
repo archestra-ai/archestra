@@ -2389,6 +2389,7 @@ describe("McpClient", () => {
     describe("Streamable HTTP Transport (Local Servers)", () => {
       let localMcpServerId: string;
       let localCatalogId: string;
+      let localOwner: { id: string; name: string };
 
       beforeEach(async ({ makeUser, makeOrganization }) => {
         // SPDX-SnippetBegin
@@ -2407,6 +2408,7 @@ describe("McpClient", () => {
         const testUser = await makeUser({
           email: "test-local-mcp@example.com",
         });
+        localOwner = testUser;
 
         // Create catalog entry for local streamable-http server
         const localCatalog = await InternalMcpCatalogModel.create({
@@ -2498,7 +2500,11 @@ describe("McpClient", () => {
           name: "local-streamable-http-server__test_tool",
           structuredContent: undefined,
           _meta: {
-            [MCP_EXECUTED_AS_META_KEY]: OWNERLESS_PERSONAL_CONNECTION,
+            [MCP_EXECUTED_AS_META_KEY]: {
+              kind: "personal",
+              ownerUserId: localOwner.id,
+              ownerName: localOwner.name,
+            },
           },
         });
       });
@@ -3100,7 +3106,11 @@ describe("McpClient", () => {
               type: "generic",
               message: expect.stringContaining("No HTTP endpoint URL found"),
             },
-            [MCP_EXECUTED_AS_META_KEY]: OWNERLESS_PERSONAL_CONNECTION,
+            [MCP_EXECUTED_AS_META_KEY]: {
+              kind: "personal",
+              ownerUserId: localOwner.id,
+              ownerName: localOwner.name,
+            },
           },
           structuredContent: {
             archestraError: {

@@ -18,7 +18,7 @@ export default class RuntimeCredentialConnectionModel {
     const existing = await RuntimeCredentialConnectionModel.find(params);
     const secret = await secretManager().createSecret(
       { [SECRET_VALUE_FIELD]: params.value },
-      `runtime-credential-${params.scope}-${params.credentialId}`,
+      `credential-${params.scope}-${params.credentialId}`,
     );
 
     try {
@@ -27,6 +27,7 @@ export default class RuntimeCredentialConnectionModel {
           .update(schema.runtimeCredentialConnectionsTable)
           .set({
             secretId: secret.id,
+            secretKey: SECRET_VALUE_FIELD,
             updatedAt: new Date(),
           })
           .where(eq(schema.runtimeCredentialConnectionsTable.id, existing.id))
@@ -60,8 +61,10 @@ export default class RuntimeCredentialConnectionModel {
   }): Promise<string | null> {
     const connection = await RuntimeCredentialConnectionModel.find(params);
     if (!connection) return null;
-    const secret = await secretManager().getSecret(connection.secretId);
-    const value = secret?.secret?.[SECRET_VALUE_FIELD];
+    const secret = await secretManager().getSecret(connection.secretId, {
+      skipCache: true,
+    });
+    const value = secret?.secret?.[connection.secretKey];
     return typeof value === "string" && value.length > 0 ? value : null;
   }
 
@@ -101,7 +104,7 @@ export default class RuntimeCredentialConnectionModel {
             schema.runtimeCredentialConnectionsTable.organizationId,
             params.organizationId,
           ),
-          sql`${schema.runtimeCredentialConnectionsTable.scope} = 'organization' OR ${schema.runtimeCredentialConnectionsTable.userId} = ${params.userId}`,
+          sql`(${schema.runtimeCredentialConnectionsTable.scope} = 'organization' OR ${schema.runtimeCredentialConnectionsTable.userId} = ${params.userId})`,
         ),
       );
   }
@@ -192,7 +195,7 @@ async function deleteSecretQuietly(secretId: string): Promise<void> {
   } catch (error) {
     logger.warn(
       { error, secretId },
-      "Failed to delete replaced runtime credential secret",
+      "Failed to delete replaced credential secret",
     );
   }
 }

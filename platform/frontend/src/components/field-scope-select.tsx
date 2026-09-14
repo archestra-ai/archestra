@@ -27,6 +27,8 @@ interface FieldScopeSelectProps {
   disabledReason?: string;
   installationLabel?: string;
   staticLabel?: string;
+  installationDescription?: string;
+  staticDescription?: string;
 }
 
 export function FieldScopeSelect({
@@ -38,9 +40,12 @@ export function FieldScopeSelect({
   disabledReason,
   installationLabel = "Installation",
   staticLabel = "Static",
+  installationDescription = "Provided separately for each installation.",
+  staticDescription = "The same value is used for every installation.",
 }: FieldScopeSelectProps) {
   const installationItem = (
     <SelectItem
+      description={installationDescription}
       value="installation"
       disabled={disableInstallation}
       className={
@@ -74,7 +79,9 @@ export function FieldScopeSelect({
         ) : (
           installationItem
         )}
-        <SelectItem value="static">{staticLabel}</SelectItem>
+        <SelectItem value="static" description={staticDescription}>
+          {staticLabel}
+        </SelectItem>
       </SelectContent>
     </Select>
   );

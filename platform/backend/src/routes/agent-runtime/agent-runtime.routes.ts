@@ -27,6 +27,7 @@ import {
   isAnyAgentRuntimeBackendDriverEnabled,
   resolveAgentRuntimeBackendDriver,
 } from "@/services/agent-runtime/backends";
+import { claudeCodeAccountManager } from "@/services/agent-runtime/claude-code-account";
 import {
   deleteAgentRuntimeCredential,
   preflightAgentRuntimeCredentials,
@@ -50,7 +51,7 @@ import {
   GetAgentRunResponseSchema,
   MissingAgentRuntimeCredentialSchema,
   type ResolvedAgentRuntime,
-  SelectAgentRunSchema,
+  SelectAgentRunListItemSchema,
   SelectAgentRunSessionSchema,
   SelectAgentRunShareWithTargetsSchema,
   StartAgentRunResponseSchema,
@@ -60,6 +61,10 @@ import {
   AgentWorkspaceFileRequestSchema,
   AgentWorkspaceFileResultSchema,
 } from "@/types/agent-workspace-file";
+import {
+  ClaudeCodeAccountSchema,
+  ClaudeCodeModelsSchema,
+} from "@/types/claude-code-account";
 
 const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.addHook("preHandler", async () => {
@@ -200,6 +205,21 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
           organizationId: request.organizationId,
           userId: request.user.id,
         });
+      if (modelCompatibility.usesClaudeCodeSubscription) {
+        const account = await claudeCodeAccountManager.status({
+          runtime,
+          userId: request.user.id,
+        });
+        if (account.state === "connected")
+          preflight.configured.push("CLAUDE_CODE_ACCOUNT");
+        else
+          preflight.missing.push({
+            key: "CLAUDE_CODE_ACCOUNT",
+            label: "Claude Code account",
+            description:
+              "Sign in with your own Claude account in the native runtime.",
+          });
+      }
       return reply.send({
         ready:
           preflight.missing.length === 0 &&
@@ -209,6 +229,152 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
           ? null
           : modelCompatibility.compatibility.message,
         ...preflight,
+      });
+    },
+  );
+
+  fastify.get(
+    "/api/agents/:id/runtime/claude-code/account",
+    {
+      schema: {
+        operationId: RouteId.GetClaudeCodeAccount,
+        tags: ["Agents"],
+        params: z.object({ id: z.string().uuid() }),
+        response: constructResponseSchema(ClaudeCodeAccountSchema),
+      },
+    },
+    async (request) => {
+      const { runtime } = await requireReadableAgentRuntime(request);
+      return claudeCodeAccountManager.status({
+        runtime,
+        userId: request.user.id,
+      });
+    },
+  );
+
+  fastify.post(
+    "/api/agents/:id/runtime/claude-code/account",
+    {
+      schema: {
+        operationId: RouteId.StartClaudeCodeSignIn,
+        body: z
+          .object({
+            vaultReference: z.string().trim().min(1).max(2048).optional(),
+          })
+          .nullish(),
+        tags: ["Agents"],
+        params: z.object({ id: z.string().uuid() }),
+        response: constructResponseSchema(ClaudeCodeAccountSchema),
+      },
+    },
+    async (request) => {
+      const { runtime } = await requireReadableAgentRuntime(request);
+      const owner = { runtime, userId: request.user.id };
+      const before = await claudeCodeAccountManager.status({
+        ...owner,
+        inspectFlow: false,
+      });
+      const after = await claudeCodeAccountManager.start({
+        ...owner,
+        ...request.body,
+      });
+      request.auditBefore = {
+        claudeCodeAccount: {
+          state: before.state,
+          flowId: before.flowId ?? null,
+        },
+      };
+      request.auditAfter = {
+        claudeCodeAccount: { state: after.state, flowId: after.flowId ?? null },
+      };
+      return after;
+    },
+  );
+
+  fastify.post(
+    "/api/agents/:id/runtime/claude-code/account/complete",
+    {
+      schema: {
+        operationId: RouteId.CompleteClaudeCodeSignIn,
+        tags: ["Agents"],
+        params: z.object({ id: z.string().uuid() }),
+        body: z.object({
+          flowId: z.string().uuid(),
+          code: z.string().trim().min(1).max(4096).optional(),
+        }),
+        response: constructResponseSchema(ClaudeCodeAccountSchema),
+      },
+    },
+    async (request) => {
+      const { runtime } = await requireReadableAgentRuntime(request);
+      const result = await claudeCodeAccountManager.complete({
+        runtime,
+        userId: request.user.id,
+        ...request.body,
+      });
+      if (result.state === "connected") {
+        request.auditBefore = { claudeCodeAccount: { state: "connecting" } };
+        request.auditAfter = { claudeCodeAccount: { state: "connected" } };
+      } else if (request.body.code) {
+        request.auditBefore = {
+          claudeCodeAccount: { authorizationSubmitted: false },
+        };
+        request.auditAfter = {
+          claudeCodeAccount: { authorizationSubmitted: true },
+        };
+      } else {
+        request.auditSkip = true;
+      }
+      return result;
+    },
+  );
+
+  fastify.delete(
+    "/api/agents/:id/runtime/claude-code/account",
+    {
+      schema: {
+        operationId: RouteId.DisconnectClaudeCodeAccount,
+        tags: ["Agents"],
+        params: z.object({ id: z.string().uuid() }),
+        response: constructResponseSchema(ClaudeCodeAccountSchema),
+      },
+    },
+    async (request) => {
+      const { runtime } = await requireReadableAgentRuntime(request);
+      const owner = { runtime, userId: request.user.id };
+      const before = await claudeCodeAccountManager.status({
+        ...owner,
+        inspectFlow: false,
+      });
+      const after = await claudeCodeAccountManager.disconnect(owner);
+      request.auditBefore = {
+        claudeCodeAccount: {
+          state: before.state,
+          flowId: before.flowId ?? null,
+        },
+      };
+      request.auditAfter = {
+        claudeCodeAccount: { state: after.state, flowId: after.flowId ?? null },
+      };
+      return after;
+    },
+  );
+
+  fastify.get(
+    "/api/agents/:id/runtime/claude-code/models",
+    {
+      schema: {
+        operationId: RouteId.GetClaudeCodeModels,
+        tags: ["Agents"],
+        params: z.object({ id: z.string().uuid() }),
+        response: constructResponseSchema(ClaudeCodeModelsSchema),
+      },
+    },
+    async (request) => {
+      const { runtime } = await requireReadableAgentRuntime(request);
+      return claudeCodeAccountManager.models({
+        runtime,
+        userId: request.user.id,
       });
     },
   );
@@ -338,16 +504,25 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "List Agent Runtime runs created by delegated tasks for this Agent",
         tags: ["Agents"],
         params: z.object({ id: z.string().uuid() }),
-        response: constructResponseSchema(z.array(SelectAgentRunSchema)),
+        response: constructResponseSchema(
+          z.array(SelectAgentRunListItemSchema),
+        ),
       },
     },
     async (request, reply) => {
       await requireReadableAgent(request);
+      const runs = await AgentRunModel.listForAgent({
+        agentId: request.params.id,
+        organizationId: request.organizationId,
+      });
       return reply.send(
-        await AgentRunModel.listForAgent({
-          agentId: request.params.id,
-          organizationId: request.organizationId,
-        }),
+        runs.map((run) => ({
+          ...run,
+          shareTeamNames:
+            run.actorUserId === request.user.id ? run.shareTeamNames : null,
+          shareUserNames:
+            run.actorUserId === request.user.id ? run.shareUserNames : null,
+        })),
       );
     },
   );
@@ -396,6 +571,28 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
           `An Agent administrator must configure: ${preflight.misconfigured
             .map((entry) => entry.label)
             .join(", ")}`,
+        );
+      }
+
+      const modelCompatibility =
+        await getResolvedAgentRuntimeModelCompatibility({
+          runtime,
+          agent,
+          organizationId: request.organizationId,
+          userId: request.user.id,
+        });
+      if (
+        modelCompatibility.usesClaudeCodeSubscription &&
+        (
+          await claudeCodeAccountManager.status({
+            runtime,
+            userId: request.user.id,
+          })
+        ).state !== "connected"
+      ) {
+        throw new ApiError(
+          409,
+          "Sign in to Claude Code before starting this Agent.",
         );
       }
 

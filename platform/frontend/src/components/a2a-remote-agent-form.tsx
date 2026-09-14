@@ -8,6 +8,8 @@ import { CheckCircle2, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { A2aRemoteAgentScopeSelector } from "@/components/a2a-remote-agent-scope-selector";
+import { createdByFact } from "@/components/created-by-cell";
+import { DetailFacts } from "@/components/detail-facts";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { FloatingActionBar } from "@/components/settings/settings-block";
 import {
@@ -372,6 +374,9 @@ export function A2aRemoteAgentForm({
 
   return (
     <>
+      {agent?.createdBy && (
+        <DetailFacts facts={[createdByFact(agent.createdBy)]} />
+      )}
       <form id={formId} className="flex flex-col" onSubmit={submit}>
         <SettingsSectionGroup>
           <SettingsSection
@@ -688,6 +693,7 @@ function ReadOnlySummary({
 }) {
   return (
     <div className="space-y-6">
+      <DetailFacts facts={[createdByFact(agent.createdBy)]} />
       <Alert>
         <AlertDescription>
           You can view this external agent, but you do not have permission to

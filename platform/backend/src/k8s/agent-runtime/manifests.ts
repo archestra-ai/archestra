@@ -5,6 +5,9 @@ import {
   AGENT_RUNTIME_ATTACH_SCRIPT,
   AGENT_RUNTIME_ATTACHMENTS_DIR,
   AGENT_RUNTIME_ATTACHMENTS_MANIFEST,
+  AGENT_RUNTIME_CREDENTIALS_DIR,
+  AGENT_RUNTIME_CREDENTIALS_FILE,
+  AGENT_RUNTIME_CREDENTIALS_SECRET_KEY,
   AGENT_RUNTIME_DIR,
   AGENT_RUNTIME_INPUTS_READY_FILE,
   AGENT_RUNTIME_SHELL_INIT_SCRIPT,
@@ -81,6 +84,7 @@ export function buildAgentRuntimeTurnScript(
     ...spec.env,
     ...spec.secretEnv,
     ARCHESTRA_AGENT_RUNTIME_CONTINUE: "1",
+    ARCHESTRA_AGENT_RUNTIME_CREDENTIALS_FILE: AGENT_RUNTIME_CREDENTIALS_FILE,
   };
   return [
     "set -eu",
@@ -96,6 +100,9 @@ export function buildAgentRuntimeTurnScript(
         throw new Error("Invalid runtime environment variable name");
       return `export ${name}=${shellQuote(value)}`;
     }),
+    ...(spec.renewableCredentials
+      ? [waitForCredentialProjection(spec.taskId)]
+      : []),
     resolveEntrypoint(spec.command),
   ].join("\n");
 }
@@ -230,7 +237,9 @@ export function buildAgentRuntimeSandbox(
           }
         : {}),
       podTemplate: {
-        metadata: { labels },
+        metadata: {
+          labels,
+        },
         spec: {
           restartPolicy: "Never",
           // A dedicated Agent Runtime pool keeps heavy privileged runs from
@@ -289,7 +298,6 @@ export function buildAgentRuntimeSandbox(
               ],
             },
           ],
-          volumes: [],
           containers: [
             {
               name: AGENT_RUNTIME_CONTAINER_NAME,
@@ -310,10 +318,14 @@ export function buildAgentRuntimeSandbox(
                   PROMPT_COMMAND: `. ${AGENT_RUNTIME_SHELL_INIT_SCRIPT}`,
                   ARCHESTRA_AGENT_RUNTIME_AUTO_ATTACH: "1",
                   ...spec.env,
+                  ARCHESTRA_AGENT_RUNTIME_CREDENTIALS_FILE:
+                    AGENT_RUNTIME_CREDENTIALS_FILE,
                 }).map(([name, value]) => ({ name, value })),
                 {
                   name: "ARCHESTRA_AGENT_RUNTIME_ENTRYPOINT",
-                  value: resolveEntrypoint(spec.command),
+                  value: spec.renewableCredentials
+                    ? `${waitForCredentialProjection(spec.taskId)}\n${resolveEntrypoint(spec.command)}`
+                    : resolveEntrypoint(spec.command),
                 },
                 {
                   name: "ARCHESTRA_AGENT_RUNTIME_INPUT_FILE_COUNT",
@@ -336,6 +348,11 @@ export function buildAgentRuntimeSandbox(
               resources: buildResourceRequirements(spec.resources),
               volumeMounts: [
                 {
+                  name: "renewable-credentials",
+                  mountPath: AGENT_RUNTIME_CREDENTIALS_DIR,
+                  readOnly: true,
+                },
+                {
                   name: "workspace",
                   mountPath: AGENT_RUNTIME_DIR,
                   subPath: "runtime",
@@ -357,6 +374,21 @@ export function buildAgentRuntimeSandbox(
               ...(spec.privileged
                 ? { securityContext: { privileged: true } }
                 : { securityContext: { allowPrivilegeEscalation: false } }),
+            },
+          ],
+          volumes: [
+            {
+              name: "renewable-credentials",
+              secret: {
+                secretName: names.secret,
+                defaultMode: 0o440,
+                items: [
+                  {
+                    key: AGENT_RUNTIME_CREDENTIALS_SECRET_KEY,
+                    path: "current.json",
+                  },
+                ],
+              },
             },
           ],
         },
@@ -383,7 +415,13 @@ export function buildAgentRuntimeSecret(
     },
     type: "Opaque",
     data: Object.fromEntries(
-      Object.entries(spec.secretEnv).map(([key, value]) => [
+      Object.entries({
+        ...spec.secretEnv,
+        [AGENT_RUNTIME_CREDENTIALS_SECRET_KEY]: JSON.stringify({
+          taskId: spec.taskId,
+          credentials: spec.renewableCredentials ?? {},
+        }),
+      }).map(([key, value]) => [
         key,
         Buffer.from(value, "utf8").toString("base64"),
       ]),
@@ -528,4 +566,16 @@ function buildResourceRequirements(
     ...(Object.keys(requests).length > 0 ? { requests } : {}),
     ...(Object.keys(limits).length > 0 ? { limits } : {}),
   };
+}
+
+/** A continuation must not launch against the previous turn's projected Secret. */
+function waitForCredentialProjection(taskId: string): string {
+  return [
+    "credential_polls=0",
+    `until grep -qF ${shellQuote(`{"taskId":"${taskId}",`)} ${AGENT_RUNTIME_CREDENTIALS_FILE} 2>/dev/null; do`,
+    "  credential_polls=$((credential_polls + 1))",
+    "  if [ \"$credential_polls\" -ge 180 ]; then echo 'Credential projection unavailable' >&2; exit 75; fi",
+    "  sleep 1",
+    "done",
+  ].join("\n");
 }

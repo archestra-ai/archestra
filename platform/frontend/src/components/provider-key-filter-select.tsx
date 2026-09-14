@@ -31,7 +31,9 @@ const providerApiKeyIdSchema = z.string().uuid();
 
 /**
  * The "Filter by provider key" control used by the Virtual Keys and OAuth
- * Clients tables. `value` is an LLM provider API key id, or `undefined` for
+ * Clients tables, plus Agents. Agents can opt into an organization-default
+ * selection for records with no pinned key or model.
+ * `value` is an LLM provider API key id, or `undefined` for
  * "not filtered"; `onValueChange` reports `null` when the filter is cleared,
  * which is what the query-param helpers already treat as "drop it".
  *
@@ -50,8 +52,10 @@ const providerApiKeyIdSchema = z.string().uuid();
 export function ProviderKeyFilterSelect({
   value,
   onValueChange,
+  allowOrganizationDefault = false,
 }: {
   value: string | undefined;
+  allowOrganizationDefault?: boolean;
   onValueChange: (value: string | null) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -62,10 +66,18 @@ export function ProviderKeyFilterSelect({
     toastOnError: false,
   });
 
+  const organizationDefaultSelected =
+    allowOrganizationDefault && value === "organization-default";
   const selectedIsListed = providerApiKeys.some((key) => key.id === value);
 
   return (
     <LlmProviderApiKeyDropdown
+      allowOrganizationDefault={allowOrganizationDefault}
+      organizationDefaultSelected={organizationDefaultSelected}
+      onSelectOrganizationDefault={() => {
+        onValueChange("organization-default");
+        setOpen(false);
+      }}
       availableKeys={providerApiKeys}
       selectedApiKeyId={value ?? null}
       open={open}
@@ -86,7 +98,7 @@ export function ProviderKeyFilterSelect({
       // table quietly is. Left undefined otherwise, so the "all" label and a
       // resolved key's own name both still win.
       emptyTriggerLabel={
-        value !== undefined && !selectedIsListed
+        value !== undefined && !selectedIsListed && !organizationDefaultSelected
           ? isPending
             ? "Loading provider key..."
             : "Unknown provider key"

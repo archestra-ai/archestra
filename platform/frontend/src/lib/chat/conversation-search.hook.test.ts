@@ -213,6 +213,40 @@ describe("useConversationSearch", () => {
     expect(mockRouterPush).toHaveBeenCalledWith("/chat?lockedChat=1");
   });
 
+  it.each([
+    { platform: "MacIntel", key: "Dead", metaKey: true, ctrlKey: false },
+    { platform: "MacIntel", key: "i", metaKey: true, ctrlKey: false },
+    { platform: "Win32", key: "i", metaKey: false, ctrlKey: true },
+  ])("leaves modified Alt+I available to the browser: %j", (shortcut) => {
+    mockPlatform(shortcut.platform);
+    renderHook(() => useConversationSearch());
+    const lockedChatShortcut = vi.fn();
+    window.addEventListener(
+      LOCKED_CHAT_DRAFT_SHORTCUT_EVENT,
+      lockedChatShortcut,
+    );
+
+    let event: KeyboardEvent;
+    try {
+      event = dispatchKeydown({
+        key: shortcut.key,
+        code: "KeyI",
+        altKey: true,
+        metaKey: shortcut.metaKey,
+        ctrlKey: shortcut.ctrlKey,
+      });
+    } finally {
+      window.removeEventListener(
+        LOCKED_CHAT_DRAFT_SHORTCUT_EVENT,
+        lockedChatShortcut,
+      );
+    }
+
+    expect(event.defaultPrevented).toBe(false);
+    expect(lockedChatShortcut).not.toHaveBeenCalled();
+    expect(mockRouterPush).not.toHaveBeenCalled();
+  });
+
   it("blurs the focused editable while handling Alt+I, then restores focus", async () => {
     // macOS Option+I is a dead key whose composition Chromium starts even on
     // a preventDefault'ed keydown — the handler blurs the editable so the

@@ -1,0 +1,49 @@
+suite: staging database pool sizing
+templates:
+  - archestra-platform.yaml
+  - archestra-worker.yaml
+values:
+  - ../../../../.github/values-staging.yaml
+set:
+  postgresql.external_database_url: postgresql://example:example@database.invalid/archestra
+tests:
+  - it: preserves web query capacity within the staging rollout budget
+    template: archestra-platform.yaml
+    documentIndex: 1
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_DATABASE_POOL_MAX
+            value: "20"
+  - it: reduces web query capacity when the web tier scales out
+    template: archestra-platform.yaml
+    documentIndex: 1
+    set:
+      archestra.replicaCount: 6
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_DATABASE_POOL_MAX
+            value: "13"
+  - it: preserves worker query capacity within the staging rollout budget
+    template: archestra-worker.yaml
+    documentIndex: 0
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_DATABASE_POOL_MAX
+            value: "20"
+  - it: reduces worker query capacity when the web tier scales out
+    template: archestra-worker.yaml
+    documentIndex: 0
+    set:
+      archestra.replicaCount: 6
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_DATABASE_POOL_MAX
+            value: "13"

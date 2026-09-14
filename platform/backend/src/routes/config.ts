@@ -132,6 +132,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
               azureOpenAiEntraIdEnabled: z.boolean(),
               anthropicWifEnabled: z.boolean(),
               anthropicKeylessAuthEnabled: z.boolean(),
+              anthropicVertexAiEnabled: z.boolean(),
               bedrockIamAuthEnabled: z.boolean(),
               geminiVertexAiEnabled: z.boolean(),
               incomingEmail: z.object({
@@ -272,6 +273,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           azureOpenAiEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
           anthropicWifEnabled: anthropicWorkloadIdentity.isEnabled(),
           anthropicKeylessAuthEnabled: isAnthropicKeylessAuthEnabled(),
+          anthropicVertexAiEnabled: config.llm.anthropic.vertexAi.enabled,
           bedrockIamAuthEnabled: isBedrockIamAuthEnabled(),
           geminiVertexAiEnabled: isVertexAiEnabled(),
           incomingEmail: getEmailProviderInfo(),

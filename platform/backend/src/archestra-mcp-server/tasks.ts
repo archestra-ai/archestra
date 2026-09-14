@@ -11,8 +11,9 @@ import {
   TOOL_WRITE_WORKSPACE_FILE_SHORT_NAME,
 } from "@archestra/shared";
 import { z } from "zod";
-import type { A2AActor } from "@/agents/a2a/a2a-base";
+import { type A2AActor, A2AError, A2AErrorKind } from "@/agents/a2a/a2a-base";
 import { watchChatOpsTask } from "@/agents/chatops/chatops-task-watcher";
+import { watchTaskCompletion } from "@/agents/task-completion-watcher";
 import { userHasPermission } from "@/auth/utils";
 import config from "@/config";
 import logger from "@/logging";
@@ -666,7 +667,7 @@ const registry = defineArchestraTools([
         }
         const agent = await AgentModel.findById(session.agentId);
         const runtime = agent ? resolveAgentRuntime(agent) : null;
-        if (!runtime) {
+        if (!agent || !runtime) {
           return errorResult(
             "The Agent no longer has Agent Runtime configured.",
           );
@@ -686,15 +687,27 @@ const registry = defineArchestraTools([
               projectId: session.projectId ?? undefined,
             },
           });
-          return structuredSuccessResult(
-            {
-              success: true,
-              task_id: continuation.id,
-              previous_task_id: session.taskId,
-              session_id: workspace?.id ?? session.taskId,
-            },
-            "Continuation started in the retained workspace using the same Agent.",
-          );
+          if (session.completionTarget) {
+            void watchTaskCompletion({
+              taskId: continuation.id,
+              target: session.completionTarget,
+              agentName: agent.name,
+            }).catch((error) => {
+              logger.warn(
+                { error, taskId: continuation.id },
+                "Failed to watch Agent continuation for completion",
+              );
+            });
+          }
+          return structuredSuccessResult({
+            success: true,
+            status: "accepted",
+            task_id: continuation.id,
+            previous_task_id: session.taskId,
+            session_id: workspace?.id ?? session.taskId,
+            message:
+              "Continuation accepted in the retained workspace. Poll get_run with task_id to verify startup and report any failure.",
+          });
         }
 
         await resolveAgentRuntimeBackendDriver(session.backend).steer({
@@ -711,6 +724,10 @@ const registry = defineArchestraTools([
           "Steer delivered. It lands at the loop's next turn boundary (pipe) or is typed into the session (tmux keys).",
         );
       } catch (error) {
+        const needed = missingCredentialsFrom(error);
+        if (needed) {
+          return credentialsNeededResult(needed.agentId, needed.missing);
+        }
         return catchError(error, "steering the run");
       }
     },
@@ -737,11 +754,28 @@ const registry = defineArchestraTools([
           return errorResult("This run has no agent to cancel against.");
         }
 
-        const canceled = await cancelDetachedAgentTask({
-          actor,
-          agentId: task.row.agentId,
-          taskId: task.row.id,
-        });
+        let canceled: Awaited<ReturnType<typeof cancelDetachedAgentTask>>;
+        try {
+          canceled = await cancelDetachedAgentTask({
+            actor,
+            agentId: task.row.agentId,
+            taskId: task.row.id,
+          });
+        } catch (error) {
+          if (
+            error instanceof A2AError &&
+            error.kind === A2AErrorKind.TaskNotCancelable
+          ) {
+            // Completion can win after the access check or during cancellation.
+            // Report the same turn's persisted outcome; never cancel a newer turn.
+            const current = await A2ATaskModel.findById(task.row.id);
+            if (!current) throw error;
+            return errorResult(
+              `Run ${current.id} cannot be canceled because it is already terminal (${current.state}). No cancellation was performed. Its workspace and history are retained.`,
+            );
+          }
+          throw error;
+        }
         const canceledRow = await A2ATaskModel.findById(task.row.id);
         if (!canceledRow) {
           throw new Error("Canceled run was not persisted");

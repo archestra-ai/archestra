@@ -349,6 +349,8 @@ export const SelectAgentSchema = AgentRowSchema.extend({
    * on read paths (list/get); absent on mutation responses (clients re-fetch).
    */
   resolvedLlmProvider: SupportedProvidersSchema.nullable().optional(),
+  /** Human-facing name of the configured provider key. */
+  resolvedLlmProviderKeyName: z.string().nullable().optional(),
   /**
    * The human-facing name of the agent's configured model (e.g. "gpt-4"),
    * resolved server-side from `modelId` so a viewer who can't access the
@@ -416,6 +418,7 @@ export const InsertAgentSchemaBase = createInsertSchema(
     createdAt: true,
     updatedAt: true,
     authorId: true,
+    createdByServiceAccountId: true,
     isPersonalGateway: true,
     runtimeSecretId: true,
     // Which skills a gateway publishes over skill:// is decided by the
@@ -459,6 +462,7 @@ export const UpdateAgentSchemaBase = createUpdateSchema(
     createdAt: true,
     updatedAt: true,
     authorId: true,
+    createdByServiceAccountId: true,
     isPersonalGateway: true,
     runtimeSecretId: true,
     // Which skills a gateway publishes over skill:// is decided by the

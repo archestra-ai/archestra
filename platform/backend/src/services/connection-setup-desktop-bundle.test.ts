@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import JSZip from "jszip";
@@ -21,20 +21,18 @@ test("native MCP startup launches a reviewed setup only once across duplicate pr
     for (const [name, entry] of Object.entries(bundle.files)) {
       await writeFile(join(directory, name), await entry.async("nodebuffer"));
     }
-    const bin = join(directory, "bin");
-    await mkdir(bin);
-    // Only the OS launch boundary is replaced. Both packaged MCP servers run normally.
+    // Replace only the launched installer boundary. Desktop's MCP startup runs
+    // normally using the absolute runtime path with an otherwise empty PATH.
     await writeFile(
-      join(bin, "node"),
-      '#!/bin/sh\nprintf x >> "$TMPDIR/launches"\n',
-      { mode: 0o700 },
+      join(directory, "connect.cjs"),
+      "module.exports = class {async start() {require('node:fs').appendFileSync(require('node:path').join(process.env.TMPDIR,'launches'),'x');}}",
     );
     const env = {
       ...process.env,
       TMPDIR: directory,
       TMP: directory,
       TEMP: directory,
-      PATH: bin,
+      PATH: "",
     };
     const run = () =>
       new Promise<string>((resolve, reject) => {
@@ -55,10 +53,14 @@ test("native MCP startup launches a reviewed setup only once across duplicate pr
         result: { capabilities: { tools: {} } },
       });
     }
-    expect(await readFile(join(directory, "launches"), "utf8")).toBe("x");
+    await expect
+      .poll(async () => readFile(join(directory, "launches"), "utf8"))
+      .toBe("x");
     // Installation startup must not turn into a retry whenever Desktop reconnects.
     await run();
-    expect(await readFile(join(directory, "launches"), "utf8")).toBe("x");
+    await expect
+      .poll(async () => readFile(join(directory, "launches"), "utf8"))
+      .toBe("x");
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

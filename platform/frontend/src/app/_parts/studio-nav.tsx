@@ -324,7 +324,7 @@ export const contentNavGroups: NavGroup[] = [
           "/settings/users",
           "/settings/teams",
           "/settings/roles",
-          "/settings/github",
+          "/settings/credentials",
           "/settings/identity-providers",
           "/settings/secrets",
         ],

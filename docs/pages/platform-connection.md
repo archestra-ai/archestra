@@ -3,19 +3,16 @@ title: Connect Your Agents
 category: Archestra Platform
 order: 8
 description: How the one-command setup script connects your AI tools, and how to audit or undo it
-lastUpdated: 2026-09-10
+lastUpdated: 2026-09-11
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
 ![The Connection page with a copyable coding-agent prompt](/docs/automated_screenshots/platform-connection_connect-with-ai.webp)
 
-The Connection page provides a prompt for your coding agent.
-Your agent prepares the connection; you review and approve it in your browser.
+Select your client on the Connection page. Claude Code, Cursor, Codex, and Copilot CLI show a setup prompt. Your agent prepares the connection; you review and approve it in your browser.
 
-**Other ways to connect** opens manual setup for Claude Desktop, Cursor, n8n, and other clients.
-Refreshing returns to the prompt.
-Client-specific links still open their setup instructions directly.
+Claude Desktop, n8n, and other clients show their setup instructions. Your selected client stays in the URL when you refresh or share the page.
 
 On macOS and Linux the command is `curl -fsSL <url> | bash`. On Windows it is `irm <url> | iex`. Running it configures the client in place. Plugins declare whether they support macOS/Linux, Windows, or both; the review includes only plugins compatible with the selected operating system and names incompatible plugins that were skipped.
 
@@ -152,7 +149,7 @@ Set the disable variable to turn the guard off without uninstalling. To remove e
 
 ## Supported Clients
 
-Four clients get the one-command script: Claude Code, Codex, Cursor, and Copilot CLI. Claude Desktop, n8n, and Any Client get copy-paste instructions you apply in the app yourself. Each section lists what changes and how to undo it. To also cut off access on the server, delete the virtual key on the **LLM Proxy** page and revoke any skills share link on the Skills page.
+Four clients get the one-command script: Claude Code, Codex, Cursor, and Copilot CLI. Claude Desktop gets a downloadable installer. n8n and Any Client get instructions you apply in the app yourself. Each section lists what changes and how to undo it. To also cut off access on the server, delete the virtual key on the **LLM Proxy** page and revoke any skills share link on the Skills page.
 
 ### Claude Code
 
@@ -209,7 +206,7 @@ Download the setup helper and open it in normal Claude Desktop. Confirm its nati
 
 Subscription setup obtains a token locally through the official Claude Code CLI. API-key setup uses a personal virtual key backed by your configured Anthropic key. The download requires Node.js 18+ and Python 3.9 or newer.
 
-Authorize the MCP connector in Desktop's **Settings → Connectors**. Install your shared-skills marketplace under **Settings → Plugins**. To switch back, rerun the previous deployment’s installer or select a manually created inference profile.
+Authorize the MCP connector in Desktop's **Settings → Connectors**. The selected shared skills install automatically after restart. Rerun Connect to install an updated snapshot. To switch back, rerun the previous deployment’s installer or select a manually created inference profile.
 
 See [Using Claude Desktop (Cowork)](/docs/platform-claude-desktop-example) for requirements and authentication details.
 ### n8n

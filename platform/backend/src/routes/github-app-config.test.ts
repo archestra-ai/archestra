@@ -154,15 +154,15 @@ describe("github app config routes", () => {
     await settleAuditWrites();
     const { data: auditRows } = await AuditLogModel.findPaginated({
       organizationId: organization.id,
-      resourceType: "githubAppConfig",
+      resourceType: "credential",
       sortDirection: "asc",
       limit: 50,
       offset: 0,
     });
     expect(auditRows.map((row) => row.action)).toEqual([
-      "githubAppConfig.created",
-      "githubAppConfig.updated",
-      "githubAppConfig.deleted",
+      "credential.created",
+      "credential.updated",
+      "credential.deleted",
     ]);
   });
 
@@ -204,7 +204,7 @@ describe("github app config routes", () => {
       method: "GET",
       url: "/api/github-app-configs",
     });
-    expect(listed.statusCode).toBe(403);
+    expect(listed.statusCode).toBe(200);
   });
 
   test("cannot delete a config that connectors still reference", async ({

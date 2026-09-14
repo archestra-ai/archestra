@@ -65,6 +65,21 @@ describe("AgentRuntimeFields", () => {
       if (flag === "agentRuntimeBaseImage") {
         return "registry.example.com/coding-agent:1.2.3";
       }
+      if (flag === "agentRuntimeBackend") {
+        return {
+          name: "kubernetes",
+          available: true,
+          defaultImage: "",
+          defaultTtlHours: 36,
+          defaultIdleTimeoutMinutes: 45,
+          allowPrivileged: false,
+          resources: {
+            cpuRequest: "750m",
+            memoryRequest: "2Gi",
+            memoryLimit: "6Gi",
+          },
+        };
+      }
       return undefined;
     });
     const user = userEvent.setup();
@@ -74,6 +89,28 @@ describe("AgentRuntimeFields", () => {
 
     expect(screen.getByLabelText("Container image")).toHaveValue(
       "registry.example.com/coding-agent:1.2.3",
+    );
+    expect(screen.getByLabelText("Inference API")).toBeVisible();
+    expect(screen.getByLabelText("Steering")).toBeVisible();
+    expect(
+      screen.queryByLabelText("Maximum duration (hours)"),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /^Advanced$/ }));
+    expect(screen.getByLabelText("Maximum duration (hours)")).toHaveAttribute(
+      "placeholder",
+      "36 (Installation Default)",
+    );
+    expect(screen.getByLabelText("Idle timeout (minutes)")).toHaveAttribute(
+      "placeholder",
+      "45 (Installation Default)",
+    );
+    expect(screen.getByLabelText("Memory limit")).toHaveAttribute(
+      "placeholder",
+      "6Gi (Installation Default)",
+    );
+    expect(screen.getByLabelText("Metered LLM budget (USD)")).toHaveAttribute(
+      "placeholder",
+      "No limit (Installation Default)",
     );
     expect(
       screen.getByText(/delivers follow-up instructions between Agent turns/i),

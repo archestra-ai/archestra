@@ -131,7 +131,9 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
             userId: request.user.id,
           }),
           KbFileModel.findTeamIdsForFiles(fileIds),
-          CreatedByModel.resolve(items.map((file) => file.uploadedBy)),
+          CreatedByModel.resolve(
+            items.map((file) => CreatedByModel.id(file, file.uploadedBy)),
+          ),
           KbFileLabelModel.getLabelsForMany(fileIds),
         ]);
 
@@ -145,7 +147,10 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
             ...file
           }) => ({
             ...file,
-            createdBy: lookupCreator(creators, uploadedBy),
+            createdBy: lookupCreator(
+              creators,
+              CreatedByModel.id(file, uploadedBy),
+            ),
             knowledgeBases: knowledgeBases.get(file.id) ?? [],
             teamIds: teamIds.get(file.id) ?? [],
             labels: labelsByFile.get(file.id) ?? [],
@@ -254,7 +259,9 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
       } = file;
       return {
         ...rest,
-        createdBy: await CreatedByModel.resolveOne(uploadedBy),
+        createdBy: await CreatedByModel.resolveOne(
+          CreatedByModel.id(file, uploadedBy),
+        ),
         knowledgeBases: [],
         teamIds: body.teamIds,
         labels: await KbFileLabelModel.getLabelsFor(file.id),
@@ -463,7 +470,9 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
       } = file;
       return {
         ...rest,
-        createdBy: await CreatedByModel.resolveOne(uploadedBy),
+        createdBy: await CreatedByModel.resolveOne(
+          CreatedByModel.id(file, uploadedBy),
+        ),
         knowledgeBases,
         teamIds: body.teamIds,
         labels: [],
@@ -602,7 +611,9 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
       } = file;
       return {
         ...rest,
-        createdBy: await CreatedByModel.resolveOne(uploadedBy),
+        createdBy: await CreatedByModel.resolveOne(
+          CreatedByModel.id(file, uploadedBy),
+        ),
         knowledgeBases: knowledgeBases.get(file.id) ?? [],
         teamIds: await KbFileModel.findTeamIds(file.id),
         labels: await KbFileLabelModel.getLabelsFor(file.id),
@@ -894,7 +905,9 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
       return {
         ...directory,
-        createdBy: await CreatedByModel.resolveOne(directory.createdBy),
+        createdBy: await CreatedByModel.resolveOne(
+          CreatedByModel.id(directory, directory.createdBy),
+        ),
         teamIds: body.teamIds,
         fileCount: 0,
       };
@@ -934,7 +947,9 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
       ]);
       return {
         ...directory,
-        createdBy: await CreatedByModel.resolveOne(directory.createdBy),
+        createdBy: await CreatedByModel.resolveOne(
+          CreatedByModel.id(directory, directory.createdBy),
+        ),
         teamIds,
         fileCount,
       };

@@ -1,4 +1,4 @@
-import { AGENT_RUN_ATTACH_PHASES } from "@archestra/shared";
+import { AGENT_RUN_ATTACH_PHASES, ApiError } from "@archestra/shared";
 import {
   createInsertSchema,
   createSelectSchema,
@@ -7,6 +7,7 @@ import {
 import { z } from "zod";
 import { schema } from "@/database";
 import { A2ATaskStateSchema } from "./a2a-task";
+import { AgentRunShareVisibilitySchema } from "./agent-run-share";
 
 /**
  * Runtime backends an Agent Runtime configuration can name. The enum is the
@@ -156,6 +157,29 @@ export type MissingAgentRuntimeCredential = z.infer<
 export const AGENT_RUNTIME_CREDENTIALS_REQUIRED_CODE =
   "AGENT_RUNTIME_CREDENTIALS_REQUIRED";
 
+/**
+ * Raised when a session cannot start only because the person it would act as
+ * has not supplied credentials the Agent declares. Carries the list so every
+ * surface can name exactly what to add instead of reporting an opaque failure.
+ */
+export class AgentRuntimeCredentialsRequiredError extends ApiError {
+  readonly code = AGENT_RUNTIME_CREDENTIALS_REQUIRED_CODE;
+  readonly agentId: string;
+  readonly missing: MissingAgentRuntimeCredential[];
+
+  constructor(agentId: string, missing: MissingAgentRuntimeCredential[]) {
+    super(
+      409,
+      `This Agent's Agent Runtime needs credentials you have not set up yet: ${missing
+        .map((entry) => entry.label)
+        .join(", ")}`,
+    );
+    this.name = "AgentRuntimeCredentialsRequiredError";
+    this.agentId = agentId;
+    this.missing = missing;
+  }
+}
+
 // ===================== Agent Runtime configuration =====================
 
 export const AgentRuntimeEnvironmentEntrySchema = z.object({
@@ -178,6 +202,13 @@ export const AgentRuntimeSchema = z.object({
   resources: AgentRuntimeResourcesSchema.nullable(),
   environment: z.array(AgentRuntimeEnvironmentEntrySchema).nullable(),
   credentials: z.array(AgentRuntimeCredentialDeclarationSchema).nullable(),
+  /** Native Claude account authentication and its CLI-published model alias. */
+  claudeCode: z
+    .object({
+      authentication: z.enum(["provider", "subscription"]),
+      model: z.string().trim().min(1).max(256).optional(),
+    })
+    .optional(),
   ttlHours: z
     .number()
     .int()
@@ -238,6 +269,20 @@ export const SelectAgentRunSchema = SelectAgentRunRecordSchema.omit({
   hardDeadlineAt: z.date(),
   /** Most recent model-router request attributed to this run. */
   lastModelActivityAt: z.date().nullable(),
+});
+
+/** Run metadata shown to Agent managers alongside the runtime state. */
+export const SelectAgentRunListItemSchema = SelectAgentRunSchema.extend({
+  initiatorName: z.string().nullable(),
+  shareVisibility: z.union([AgentRunShareVisibilitySchema, z.null()]),
+  shareTeamNames: z
+    .array(z.string())
+    .nullable()
+    .describe("Share recipient teams; null unless the viewer owns the run"),
+  shareUserNames: z
+    .array(z.string())
+    .nullable()
+    .describe("Share recipient users; null unless the viewer owns the run"),
 });
 
 /** A user's durable run session as rendered in Chat and its sidebar. */
@@ -317,6 +362,7 @@ export const StartAgentRunResponseSchema = z.object({
 export type AgentRunRecord = z.infer<typeof SelectAgentRunRecordSchema>;
 export type InsertAgentRunRecord = z.infer<typeof InsertAgentRunRecordSchema>;
 export type AgentRun = z.infer<typeof SelectAgentRunSchema>;
+export type AgentRunListItem = z.infer<typeof SelectAgentRunListItemSchema>;
 export type AgentRunSession = z.infer<typeof SelectAgentRunSessionSchema>;
 export type AgentRunViewerRole = z.infer<typeof AgentRunViewerRoleSchema>;
 export type GetAgentRunResponse = z.infer<typeof GetAgentRunResponseSchema>;

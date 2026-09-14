@@ -1,4 +1,14 @@
-import { and, desc, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
+import {
+  and,
+  desc,
+  eq,
+  inArray,
+  isNull,
+  lt,
+  notExists,
+  or,
+  sql,
+} from "drizzle-orm";
 import type {
   A2AProtocolPart,
   A2AProtocolStreamResponse,
@@ -491,17 +501,54 @@ class A2ATaskModel {
         and(
           inArray(schema.a2aTasksTable.state, ACTIVE_RUN_STATES),
           lt(schema.a2aTasksTable.lastHeartbeatAt, cutoff),
+          // Runtime workloads outlive the server that launched them. Their
+          // reconciler must inspect/adopt the workload and settle its result;
+          // a missing server heartbeat cannot establish that it failed.
+          notExists(
+            db
+              .select({ id: schema.agentRunsTable.id })
+              .from(schema.agentRunsTable)
+              .where(eq(schema.agentRunsTable.taskId, schema.a2aTasksTable.id)),
+          ),
         ),
       );
 
     let reaped = 0;
     for (const task of stale) {
-      const transitioned = await A2ATaskModel.transitionStateWithEvent({
-        id: task.id,
-        to: "TASK_STATE_FAILED",
-        allowedFrom: ACTIVE_RUN_STATES,
-        statusReason: params.statusReason,
-        eventPayload: params.buildEventPayload(task),
+      const transitioned = await db.transaction(async (tx) => {
+        // Recheck under the row lock: a heartbeat may have arrived since the
+        // candidate query, or another server may already be settling it.
+        const [current] = await tx
+          .select()
+          .from(schema.a2aTasksTable)
+          .where(
+            and(
+              eq(schema.a2aTasksTable.id, task.id),
+              inArray(schema.a2aTasksTable.state, ACTIVE_RUN_STATES),
+              lt(schema.a2aTasksTable.lastHeartbeatAt, cutoff),
+              notExists(
+                tx
+                  .select({ id: schema.agentRunsTable.id })
+                  .from(schema.agentRunsTable)
+                  .where(eq(schema.agentRunsTable.taskId, task.id)),
+              ),
+            ),
+          )
+          .for("update", { skipLocked: true });
+        if (!current) return null;
+        const updated = await A2ATaskModel.transitionInTx(tx, {
+          id: current.id,
+          to: "TASK_STATE_FAILED",
+          allowedFrom: ACTIVE_RUN_STATES,
+          statusReason: params.statusReason,
+        });
+        if (updated)
+          await A2ATaskModel.appendEventInTx(
+            tx,
+            current.id,
+            params.buildEventPayload(current),
+          );
+        return updated;
       });
       if (transitioned) {
         reaped += 1;

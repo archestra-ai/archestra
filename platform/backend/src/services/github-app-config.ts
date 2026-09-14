@@ -1,8 +1,10 @@
 import GithubAppConfigModel from "@/models/github-app-config";
 import KnowledgeBaseConnectorModel from "@/models/knowledge-base-connector";
 import PluginModel from "@/models/plugin";
+import RuntimeCredentialDefinitionModel from "@/models/runtime-credential-definition";
 import SkillModel from "@/models/skill";
 import { secretManager } from "@/secrets-manager";
+import { deleteRuntimeCredentialDefinition } from "@/services/agent-runtime/runtime-credentials";
 import {
   ApiError,
   type CreateGithubAppConfigRequest,
@@ -10,7 +12,6 @@ import {
   type PublicGithubAppConfig,
   type UpdateGithubAppConfigRequest,
 } from "@/types";
-import { isForeignKeyConstraintError } from "@/utils/db";
 
 const DEFAULT_GITHUB_URL = "https://api.github.com";
 
@@ -78,7 +79,7 @@ export async function updateGithubAppConfig(params: {
     githubUrl: data.githubUrl,
     appId: data.appId,
     installationId: data.installationId,
-    secretId,
+    secretId: data.privateKey ? secretId : undefined,
   });
   if (!updated) {
     throw new ApiError(404, "GitHub App configuration not found");
@@ -125,25 +126,15 @@ export async function deleteGithubAppConfig(params: {
     );
   }
 
-  try {
-    await GithubAppConfigModel.delete(existing.id);
-  } catch (error) {
-    if (isForeignKeyConstraintError(error)) {
-      throw new ApiError(
-        409,
-        "GitHub App configuration became referenced by a synced resource; disconnect it and retry",
-      );
-    }
-    throw error;
-  }
-  if (existing.secretId) {
-    try {
-      await secretManager().deleteSecret(existing.secretId);
-    } catch (error) {
-      await GithubAppConfigModel.restore(existing);
-      throw error;
-    }
-  }
+  const definition = await RuntimeCredentialDefinitionModel.findById({
+    id: existing.id,
+    organizationId: params.organizationId,
+  });
+  if (!definition) throw new ApiError(404, "Credential not found");
+  await deleteRuntimeCredentialDefinition({
+    organizationId: params.organizationId,
+    key: definition.key,
+  });
 }
 
 // ===== Internal helpers =====

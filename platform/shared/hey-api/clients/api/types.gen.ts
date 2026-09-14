@@ -12981,6 +12981,7 @@ export type ListA2aRemoteAgentsResponses = {
         };
         cardHash: string;
         lastDiscoveredAt: string;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         connection: {
@@ -13009,6 +13010,12 @@ export type ListA2aRemoteAgentsResponses = {
         assignmentCount: number;
         lastUsedAt: string | null;
         authorName: string | null;
+        createdBy: {
+            id: string;
+            type?: 'user' | 'service_account';
+            name: string | null;
+            email: string | null;
+        } | null;
         teams: Array<{
             id: string;
             name: string;
@@ -13141,6 +13148,7 @@ export type CreateA2aRemoteAgentResponses = {
         };
         cardHash: string;
         lastDiscoveredAt: string;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         connection: {
@@ -13169,6 +13177,12 @@ export type CreateA2aRemoteAgentResponses = {
         assignmentCount: number;
         lastUsedAt: string | null;
         authorName: string | null;
+        createdBy: {
+            id: string;
+            type?: 'user' | 'service_account';
+            name: string | null;
+            email: string | null;
+        } | null;
         teams: Array<{
             id: string;
             name: string;
@@ -13360,6 +13374,7 @@ export type GetA2aRemoteAgentResponses = {
         };
         cardHash: string;
         lastDiscoveredAt: string;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         connection: {
@@ -13388,6 +13403,12 @@ export type GetA2aRemoteAgentResponses = {
         assignmentCount: number;
         lastUsedAt: string | null;
         authorName: string | null;
+        createdBy: {
+            id: string;
+            type?: 'user' | 'service_account';
+            name: string | null;
+            email: string | null;
+        } | null;
         teams: Array<{
             id: string;
             name: string;
@@ -13523,6 +13544,7 @@ export type UpdateA2aRemoteAgentResponses = {
         };
         cardHash: string;
         lastDiscoveredAt: string;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         connection: {
@@ -13551,6 +13573,12 @@ export type UpdateA2aRemoteAgentResponses = {
         assignmentCount: number;
         lastUsedAt: string | null;
         authorName: string | null;
+        createdBy: {
+            id: string;
+            type?: 'user' | 'service_account';
+            name: string | null;
+            email: string | null;
+        } | null;
         teams: Array<{
             id: string;
             name: string;
@@ -13960,6 +13988,10 @@ export type GetAgentsData = {
          * Include the caller-relative activation skill count used by internal-agent cards. Omitted when the caller lacks skill:read.
          */
         includeActivationSkillsCount?: boolean;
+        /**
+         * Filter by a configured provider key, or organization-default for agents with no pinned key or model.
+         */
+        providerApiKeyId?: string | 'organization-default';
         limit?: number;
         offset?: number;
         sortBy?: 'name' | 'createdAt' | 'toolsCount' | 'subagentsCount' | 'knowledgeSourcesCount' | 'team' | 'lastUsedAt';
@@ -14086,6 +14118,10 @@ export type GetAgentsResponses = {
                     description?: string;
                     required: boolean;
                 }> | null;
+                claudeCode?: {
+                    authentication: 'provider' | 'subscription';
+                    model?: string;
+                };
                 ttlHours: number | null;
                 maxCostUsd?: number | null;
                 idleTimeoutMinutes: number | null;
@@ -14118,6 +14154,7 @@ export type GetAgentsResponses = {
             } | null;
             builtIn: boolean | null;
             latestVersion: number;
+            createdByServiceAccountId: string | null;
             createdAt: string;
             updatedAt: string;
             deletedAt: string | null;
@@ -14150,6 +14187,7 @@ export type GetAgentsResponses = {
             authorEmail?: string | null;
             createdBy?: {
                 id: string;
+                type?: 'user' | 'service_account';
                 name: string | null;
                 email: string | null;
             } | null;
@@ -14160,6 +14198,7 @@ export type GetAgentsResponses = {
                 prompt: string;
             }>;
             resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+            resolvedLlmProviderKeyName?: string | null;
             resolvedLlmModelName?: string | null;
             llmProviderRequiresPerUserCredential?: boolean;
             sandboxAvailable?: boolean;
@@ -14224,6 +14263,10 @@ export type CreateAgentData = {
                 description?: string;
                 required: boolean;
             }> | null;
+            claudeCode?: {
+                authentication: 'provider' | 'subscription';
+                model?: string;
+            };
             ttlHours: number | null;
             maxCostUsd?: number | null;
             idleTimeoutMinutes: number | null;
@@ -14469,6 +14512,10 @@ export type CreateAgentResponses = {
                 description?: string;
                 required: boolean;
             }> | null;
+            claudeCode?: {
+                authentication: 'provider' | 'subscription';
+                model?: string;
+            };
             ttlHours: number | null;
             maxCostUsd?: number | null;
             idleTimeoutMinutes: number | null;
@@ -14501,6 +14548,7 @@ export type CreateAgentResponses = {
         } | null;
         builtIn: boolean | null;
         latestVersion: number;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -14533,6 +14581,7 @@ export type CreateAgentResponses = {
         authorEmail?: string | null;
         createdBy?: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -14543,6 +14592,7 @@ export type CreateAgentResponses = {
             prompt: string;
         }>;
         resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        resolvedLlmProviderKeyName?: string | null;
         resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
@@ -14714,6 +14764,10 @@ export type GetAllAgentsResponses = {
                 description?: string;
                 required: boolean;
             }> | null;
+            claudeCode?: {
+                authentication: 'provider' | 'subscription';
+                model?: string;
+            };
             ttlHours: number | null;
             maxCostUsd?: number | null;
             idleTimeoutMinutes: number | null;
@@ -14746,6 +14800,7 @@ export type GetAllAgentsResponses = {
         } | null;
         builtIn: boolean | null;
         latestVersion: number;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -14778,6 +14833,7 @@ export type GetAllAgentsResponses = {
         authorEmail?: string | null;
         createdBy?: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -14788,6 +14844,7 @@ export type GetAllAgentsResponses = {
             prompt: string;
         }>;
         resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        resolvedLlmProviderKeyName?: string | null;
         resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
@@ -15010,6 +15067,10 @@ export type GetDefaultMcpGatewayResponses = {
                 description?: string;
                 required: boolean;
             }> | null;
+            claudeCode?: {
+                authentication: 'provider' | 'subscription';
+                model?: string;
+            };
             ttlHours: number | null;
             maxCostUsd?: number | null;
             idleTimeoutMinutes: number | null;
@@ -15042,6 +15103,7 @@ export type GetDefaultMcpGatewayResponses = {
         } | null;
         builtIn: boolean | null;
         latestVersion: number;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -15074,6 +15136,7 @@ export type GetDefaultMcpGatewayResponses = {
         authorEmail?: string | null;
         createdBy?: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -15084,6 +15147,7 @@ export type GetDefaultMcpGatewayResponses = {
             prompt: string;
         }>;
         resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        resolvedLlmProviderKeyName?: string | null;
         resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
@@ -15298,6 +15362,10 @@ export type ImportAgentResponses = {
                     description?: string;
                     required: boolean;
                 }> | null;
+                claudeCode?: {
+                    authentication: 'provider' | 'subscription';
+                    model?: string;
+                };
                 ttlHours: number | null;
                 maxCostUsd?: number | null;
                 idleTimeoutMinutes: number | null;
@@ -15330,6 +15398,7 @@ export type ImportAgentResponses = {
             } | null;
             builtIn: boolean | null;
             latestVersion: number;
+            createdByServiceAccountId: string | null;
             createdAt: string;
             updatedAt: string;
             deletedAt: string | null;
@@ -15362,6 +15431,7 @@ export type ImportAgentResponses = {
             authorEmail?: string | null;
             createdBy?: {
                 id: string;
+                type?: 'user' | 'service_account';
                 name: string | null;
                 email: string | null;
             } | null;
@@ -15372,6 +15442,7 @@ export type ImportAgentResponses = {
                 prompt: string;
             }>;
             resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+            resolvedLlmProviderKeyName?: string | null;
             resolvedLlmModelName?: string | null;
             llmProviderRequiresPerUserCredential?: boolean;
             sandboxAvailable?: boolean;
@@ -15599,6 +15670,10 @@ export type GetAgentResponses = {
                 description?: string;
                 required: boolean;
             }> | null;
+            claudeCode?: {
+                authentication: 'provider' | 'subscription';
+                model?: string;
+            };
             ttlHours: number | null;
             maxCostUsd?: number | null;
             idleTimeoutMinutes: number | null;
@@ -15631,6 +15706,7 @@ export type GetAgentResponses = {
         } | null;
         builtIn: boolean | null;
         latestVersion: number;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -15663,6 +15739,7 @@ export type GetAgentResponses = {
         authorEmail?: string | null;
         createdBy?: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -15673,6 +15750,7 @@ export type GetAgentResponses = {
             prompt: string;
         }>;
         resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        resolvedLlmProviderKeyName?: string | null;
         resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
@@ -15728,6 +15806,10 @@ export type UpdateAgentData = {
                 description?: string;
                 required: boolean;
             }> | null;
+            claudeCode?: {
+                authentication: 'provider' | 'subscription';
+                model?: string;
+            };
             ttlHours: number | null;
             maxCostUsd?: number | null;
             idleTimeoutMinutes: number | null;
@@ -15894,6 +15976,10 @@ export type UpdateAgentResponses = {
                 description?: string;
                 required: boolean;
             }> | null;
+            claudeCode?: {
+                authentication: 'provider' | 'subscription';
+                model?: string;
+            };
             ttlHours: number | null;
             maxCostUsd?: number | null;
             idleTimeoutMinutes: number | null;
@@ -15926,6 +16012,7 @@ export type UpdateAgentResponses = {
         } | null;
         builtIn: boolean | null;
         latestVersion: number;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -15958,6 +16045,7 @@ export type UpdateAgentResponses = {
         authorEmail?: string | null;
         createdBy?: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -15968,6 +16056,7 @@ export type UpdateAgentResponses = {
             prompt: string;
         }>;
         resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        resolvedLlmProviderKeyName?: string | null;
         resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
@@ -16370,6 +16459,10 @@ export type RestoreAgentVersionResponses = {
                 description?: string;
                 required: boolean;
             }> | null;
+            claudeCode?: {
+                authentication: 'provider' | 'subscription';
+                model?: string;
+            };
             ttlHours: number | null;
             maxCostUsd?: number | null;
             idleTimeoutMinutes: number | null;
@@ -16402,6 +16495,7 @@ export type RestoreAgentVersionResponses = {
         } | null;
         builtIn: boolean | null;
         latestVersion: number;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -16434,6 +16528,7 @@ export type RestoreAgentVersionResponses = {
         authorEmail?: string | null;
         createdBy?: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -16444,6 +16539,7 @@ export type RestoreAgentVersionResponses = {
             prompt: string;
         }>;
         resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        resolvedLlmProviderKeyName?: string | null;
         resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
@@ -16589,6 +16685,10 @@ export type CloneAgentResponses = {
                 description?: string;
                 required: boolean;
             }> | null;
+            claudeCode?: {
+                authentication: 'provider' | 'subscription';
+                model?: string;
+            };
             ttlHours: number | null;
             maxCostUsd?: number | null;
             idleTimeoutMinutes: number | null;
@@ -16621,6 +16721,7 @@ export type CloneAgentResponses = {
         } | null;
         builtIn: boolean | null;
         latestVersion: number;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -16653,6 +16754,7 @@ export type CloneAgentResponses = {
         authorEmail?: string | null;
         createdBy?: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -16663,6 +16765,7 @@ export type CloneAgentResponses = {
             prompt: string;
         }>;
         resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        resolvedLlmProviderKeyName?: string | null;
         resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
@@ -18932,6 +19035,10 @@ export type RestoreAgentResponses = {
                 description?: string;
                 required: boolean;
             }> | null;
+            claudeCode?: {
+                authentication: 'provider' | 'subscription';
+                model?: string;
+            };
             ttlHours: number | null;
             maxCostUsd?: number | null;
             idleTimeoutMinutes: number | null;
@@ -18964,6 +19071,7 @@ export type RestoreAgentResponses = {
         } | null;
         builtIn: boolean | null;
         latestVersion: number;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -18996,6 +19104,7 @@ export type RestoreAgentResponses = {
         authorEmail?: string | null;
         createdBy?: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -19006,6 +19115,7 @@ export type RestoreAgentResponses = {
             prompt: string;
         }>;
         resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        resolvedLlmProviderKeyName?: string | null;
         resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
@@ -19973,6 +20083,464 @@ export type GetAgentRuntimePreflightResponses = {
 
 export type GetAgentRuntimePreflightResponse = GetAgentRuntimePreflightResponses[keyof GetAgentRuntimePreflightResponses];
 
+export type DisconnectClaudeCodeAccountData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/agents/{id}/runtime/claude-code/account';
+};
+
+export type DisconnectClaudeCodeAccountErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type DisconnectClaudeCodeAccountError = DisconnectClaudeCodeAccountErrors[keyof DisconnectClaudeCodeAccountErrors];
+
+export type DisconnectClaudeCodeAccountResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        state: 'disconnected' | 'starting' | 'awaiting_code' | 'connecting' | 'connected' | 'failed' | 'expired';
+        startupPhase?: 'scheduling' | 'pulling' | 'starting';
+        startupIssue?: 'image_pull' | 'capacity' | 'container';
+        requiresVaultReference?: boolean;
+        expiresAt?: string | null;
+        flowId?: string;
+        authorizationUrl?: string;
+    };
+};
+
+export type DisconnectClaudeCodeAccountResponse = DisconnectClaudeCodeAccountResponses[keyof DisconnectClaudeCodeAccountResponses];
+
+export type GetClaudeCodeAccountData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/agents/{id}/runtime/claude-code/account';
+};
+
+export type GetClaudeCodeAccountErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetClaudeCodeAccountError = GetClaudeCodeAccountErrors[keyof GetClaudeCodeAccountErrors];
+
+export type GetClaudeCodeAccountResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        state: 'disconnected' | 'starting' | 'awaiting_code' | 'connecting' | 'connected' | 'failed' | 'expired';
+        startupPhase?: 'scheduling' | 'pulling' | 'starting';
+        startupIssue?: 'image_pull' | 'capacity' | 'container';
+        requiresVaultReference?: boolean;
+        expiresAt?: string | null;
+        flowId?: string;
+        authorizationUrl?: string;
+    };
+};
+
+export type GetClaudeCodeAccountResponse = GetClaudeCodeAccountResponses[keyof GetClaudeCodeAccountResponses];
+
+export type StartClaudeCodeSignInData = {
+    body: {
+        vaultReference?: string;
+    } | null;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/agents/{id}/runtime/claude-code/account';
+};
+
+export type StartClaudeCodeSignInErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type StartClaudeCodeSignInError = StartClaudeCodeSignInErrors[keyof StartClaudeCodeSignInErrors];
+
+export type StartClaudeCodeSignInResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        state: 'disconnected' | 'starting' | 'awaiting_code' | 'connecting' | 'connected' | 'failed' | 'expired';
+        startupPhase?: 'scheduling' | 'pulling' | 'starting';
+        startupIssue?: 'image_pull' | 'capacity' | 'container';
+        requiresVaultReference?: boolean;
+        expiresAt?: string | null;
+        flowId?: string;
+        authorizationUrl?: string;
+    };
+};
+
+export type StartClaudeCodeSignInResponse = StartClaudeCodeSignInResponses[keyof StartClaudeCodeSignInResponses];
+
+export type CompleteClaudeCodeSignInData = {
+    body: {
+        flowId: string;
+        code?: string;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/agents/{id}/runtime/claude-code/account/complete';
+};
+
+export type CompleteClaudeCodeSignInErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type CompleteClaudeCodeSignInError = CompleteClaudeCodeSignInErrors[keyof CompleteClaudeCodeSignInErrors];
+
+export type CompleteClaudeCodeSignInResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        state: 'disconnected' | 'starting' | 'awaiting_code' | 'connecting' | 'connected' | 'failed' | 'expired';
+        startupPhase?: 'scheduling' | 'pulling' | 'starting';
+        startupIssue?: 'image_pull' | 'capacity' | 'container';
+        requiresVaultReference?: boolean;
+        expiresAt?: string | null;
+        flowId?: string;
+        authorizationUrl?: string;
+    };
+};
+
+export type CompleteClaudeCodeSignInResponse = CompleteClaudeCodeSignInResponses[keyof CompleteClaudeCodeSignInResponses];
+
+export type GetClaudeCodeModelsData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/agents/{id}/runtime/claude-code/models';
+};
+
+export type GetClaudeCodeModelsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetClaudeCodeModelsError = GetClaudeCodeModelsErrors[keyof GetClaudeCodeModelsErrors];
+
+export type GetClaudeCodeModelsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        models: Array<{
+            value: string;
+            displayName: string;
+            description: string;
+        }>;
+    };
+};
+
+export type GetClaudeCodeModelsResponse = GetClaudeCodeModelsResponses[keyof GetClaudeCodeModelsResponses];
+
 export type DeleteAgentRuntimeCredentialData = {
     body?: never;
     path: {
@@ -20248,6 +20816,16 @@ export type GetAgentRunsResponses = {
         stateChangedAt: string | null;
         hardDeadlineAt: string;
         lastModelActivityAt: string | null;
+        initiatorName: string | null;
+        shareVisibility: 'organization' | 'team' | 'user' | null;
+        /**
+         * Share recipient teams; null unless the viewer owns the run
+         */
+        shareTeamNames: Array<string> | null;
+        /**
+         * Share recipient users; null unless the viewer owns the run
+         */
+        shareUserNames: Array<string> | null;
     }>;
 };
 
@@ -24071,6 +24649,7 @@ export type GetAppsResponses = {
             icon: string | null;
             createdBy: {
                 id: string;
+                type?: 'user' | 'service_account';
                 name: string | null;
                 email: string | null;
             } | null;
@@ -24107,6 +24686,7 @@ export type GetAppsResponses = {
             icon: string | null;
             createdBy: {
                 id: string;
+                type?: 'user' | 'service_account';
                 name: string | null;
                 email: string | null;
             } | null;
@@ -24272,6 +24852,7 @@ export type CreateAppResponses = {
         enabled: boolean;
         openInFullscreen: boolean;
         locked: boolean;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -24284,6 +24865,12 @@ export type CreateAppResponses = {
             keyId?: string;
             valueId?: string;
         }>;
+        createdBy?: {
+            id: string;
+            type?: 'user' | 'service_account';
+            name: string | null;
+            email: string | null;
+        } | null;
         warnings?: Array<string>;
         conversationId?: string;
     };
@@ -25365,6 +25952,7 @@ export type GetAppResponses = {
         enabled: boolean;
         openInFullscreen: boolean;
         locked: boolean;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -25377,6 +25965,12 @@ export type GetAppResponses = {
             keyId?: string;
             valueId?: string;
         }>;
+        createdBy: {
+            id: string;
+            type?: 'user' | 'service_account';
+            name: string | null;
+            email: string | null;
+        } | null;
         teams: Array<{
             id: string;
             name: string;
@@ -25388,11 +25982,6 @@ export type GetAppResponses = {
         }>;
         viewerRole: 'owner' | 'shared' | 'admin';
         authorName: string | null;
-        createdBy: {
-            id: string;
-            name: string | null;
-            email: string | null;
-        } | null;
     };
 };
 
@@ -25542,6 +26131,7 @@ export type UpdateAppResponses = {
         enabled: boolean;
         openInFullscreen: boolean;
         locked: boolean;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -25554,6 +26144,12 @@ export type UpdateAppResponses = {
             keyId?: string;
             valueId?: string;
         }>;
+        createdBy?: {
+            id: string;
+            type?: 'user' | 'service_account';
+            name: string | null;
+            email: string | null;
+        } | null;
         warnings?: Array<string>;
     };
 };
@@ -25879,6 +26475,7 @@ export type EnableAppResponses = {
         enabled: boolean;
         openInFullscreen: boolean;
         locked: boolean;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -25891,6 +26488,12 @@ export type EnableAppResponses = {
             keyId?: string;
             valueId?: string;
         }>;
+        createdBy: {
+            id: string;
+            type?: 'user' | 'service_account';
+            name: string | null;
+            email: string | null;
+        } | null;
         teams: Array<{
             id: string;
             name: string;
@@ -25902,11 +26505,6 @@ export type EnableAppResponses = {
         }>;
         viewerRole: 'owner' | 'shared' | 'admin';
         authorName: string | null;
-        createdBy: {
-            id: string;
-            name: string | null;
-            email: string | null;
-        } | null;
     };
 };
 
@@ -26025,6 +26623,7 @@ export type DisableAppResponses = {
         enabled: boolean;
         openInFullscreen: boolean;
         locked: boolean;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -26037,6 +26636,12 @@ export type DisableAppResponses = {
             keyId?: string;
             valueId?: string;
         }>;
+        createdBy: {
+            id: string;
+            type?: 'user' | 'service_account';
+            name: string | null;
+            email: string | null;
+        } | null;
         teams: Array<{
             id: string;
             name: string;
@@ -26048,11 +26653,6 @@ export type DisableAppResponses = {
         }>;
         viewerRole: 'owner' | 'shared' | 'admin';
         authorName: string | null;
-        createdBy: {
-            id: string;
-            name: string | null;
-            email: string | null;
-        } | null;
     };
 };
 
@@ -26171,6 +26771,7 @@ export type LockAppResponses = {
         enabled: boolean;
         openInFullscreen: boolean;
         locked: boolean;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -26183,6 +26784,12 @@ export type LockAppResponses = {
             keyId?: string;
             valueId?: string;
         }>;
+        createdBy: {
+            id: string;
+            type?: 'user' | 'service_account';
+            name: string | null;
+            email: string | null;
+        } | null;
         teams: Array<{
             id: string;
             name: string;
@@ -26194,11 +26801,6 @@ export type LockAppResponses = {
         }>;
         viewerRole: 'owner' | 'shared' | 'admin';
         authorName: string | null;
-        createdBy: {
-            id: string;
-            name: string | null;
-            email: string | null;
-        } | null;
     };
 };
 
@@ -26317,6 +26919,7 @@ export type UnlockAppResponses = {
         enabled: boolean;
         openInFullscreen: boolean;
         locked: boolean;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -26329,6 +26932,12 @@ export type UnlockAppResponses = {
             keyId?: string;
             valueId?: string;
         }>;
+        createdBy: {
+            id: string;
+            type?: 'user' | 'service_account';
+            name: string | null;
+            email: string | null;
+        } | null;
         teams: Array<{
             id: string;
             name: string;
@@ -26340,11 +26949,6 @@ export type UnlockAppResponses = {
         }>;
         viewerRole: 'owner' | 'shared' | 'admin';
         authorName: string | null;
-        createdBy: {
-            id: string;
-            name: string | null;
-            email: string | null;
-        } | null;
     };
 };
 
@@ -26807,6 +27411,7 @@ export type RestoreAppVersionResponses = {
         enabled: boolean;
         openInFullscreen: boolean;
         locked: boolean;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -26819,6 +27424,12 @@ export type RestoreAppVersionResponses = {
             keyId?: string;
             valueId?: string;
         }>;
+        createdBy?: {
+            id: string;
+            type?: 'user' | 'service_account';
+            name: string | null;
+            email: string | null;
+        } | null;
         warnings?: Array<string>;
     };
 };
@@ -27500,7 +28111,7 @@ export type GetAuditLogsData = {
         /**
          * Filter by action type (dotted name, e.g. agent.created)
          */
-        action?: 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_updated' | 'agent.bulk_deleted' | 'agentRun.created' | 'agentRun.canceled' | 'agentRun.updated' | 'agentRun.deleted' | 'agentRun.shared' | 'agentRun.unshared' | 'runtimeCredential.created' | 'runtimeCredential.updated' | 'runtimeCredential.deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_updated' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'clientConnection.updated' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_updated' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.content_upserted' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_updated' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'limit.bulk_deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmOauthClient.bulk_deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.updated' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'llmProviderApiKey.bulk_deleted' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'member.bulk_deleted' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_updated' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'serviceAccount.bulk_updated' | 'skill.created' | 'skill.updated' | 'skill.bulk_updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'teamToken.rotated' | 'tool.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'user.password_reset' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'auth.sessions_revoked' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted';
+        action?: 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_updated' | 'agent.bulk_deleted' | 'agentRun.created' | 'agentRun.canceled' | 'agentRun.updated' | 'agentRun.deleted' | 'agentRun.shared' | 'agentRun.unshared' | 'credential.created' | 'credential.updated' | 'credential.deleted' | 'runtimeCredential.created' | 'runtimeCredential.updated' | 'runtimeCredential.deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_updated' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'clientConnection.updated' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_updated' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.content_upserted' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_updated' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'limit.bulk_deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmOauthClient.bulk_deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.updated' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'llmProviderApiKey.bulk_deleted' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'member.bulk_deleted' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_updated' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'serviceAccount.bulk_updated' | 'skill.created' | 'skill.updated' | 'skill.bulk_updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'teamToken.rotated' | 'tool.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'user.password_reset' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'auth.sessions_revoked' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted';
         /**
          * Filter by outcome (success, failure, or denied)
          */
@@ -27604,7 +28215,7 @@ export type GetAuditLogsResponses = {
             actorName: string | null;
             actorEmail: string | null;
             impersonatedBy: string | null;
-            action: 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_updated' | 'agent.bulk_deleted' | 'agentRun.created' | 'agentRun.canceled' | 'agentRun.updated' | 'agentRun.deleted' | 'agentRun.shared' | 'agentRun.unshared' | 'runtimeCredential.created' | 'runtimeCredential.updated' | 'runtimeCredential.deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_updated' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'clientConnection.updated' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_updated' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.content_upserted' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_updated' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'limit.bulk_deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmOauthClient.bulk_deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.updated' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'llmProviderApiKey.bulk_deleted' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'member.bulk_deleted' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_updated' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'serviceAccount.bulk_updated' | 'skill.created' | 'skill.updated' | 'skill.bulk_updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'teamToken.rotated' | 'tool.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'user.password_reset' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'auth.sessions_revoked' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted' | string;
+            action: 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_updated' | 'agent.bulk_deleted' | 'agentRun.created' | 'agentRun.canceled' | 'agentRun.updated' | 'agentRun.deleted' | 'agentRun.shared' | 'agentRun.unshared' | 'credential.created' | 'credential.updated' | 'credential.deleted' | 'runtimeCredential.created' | 'runtimeCredential.updated' | 'runtimeCredential.deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_updated' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'clientConnection.updated' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_updated' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.content_upserted' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_updated' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'limit.bulk_deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmOauthClient.bulk_deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.updated' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'llmProviderApiKey.bulk_deleted' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'member.bulk_deleted' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_updated' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'serviceAccount.bulk_updated' | 'skill.created' | 'skill.updated' | 'skill.bulk_updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'teamToken.rotated' | 'tool.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'user.password_reset' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'auth.sessions_revoked' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted' | string;
             outcome: 'success' | 'failure' | 'denied';
             resourceType: string | null;
             resourceId: string | null;
@@ -27723,7 +28334,7 @@ export type GetAuditLogResponses = {
         actorName: string | null;
         actorEmail: string | null;
         impersonatedBy: string | null;
-        action: 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_updated' | 'agent.bulk_deleted' | 'agentRun.created' | 'agentRun.canceled' | 'agentRun.updated' | 'agentRun.deleted' | 'agentRun.shared' | 'agentRun.unshared' | 'runtimeCredential.created' | 'runtimeCredential.updated' | 'runtimeCredential.deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_updated' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'clientConnection.updated' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_updated' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.content_upserted' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_updated' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'limit.bulk_deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmOauthClient.bulk_deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.updated' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'llmProviderApiKey.bulk_deleted' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'member.bulk_deleted' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_updated' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'serviceAccount.bulk_updated' | 'skill.created' | 'skill.updated' | 'skill.bulk_updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'teamToken.rotated' | 'tool.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'user.password_reset' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'auth.sessions_revoked' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted' | string;
+        action: 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_updated' | 'agent.bulk_deleted' | 'agentRun.created' | 'agentRun.canceled' | 'agentRun.updated' | 'agentRun.deleted' | 'agentRun.shared' | 'agentRun.unshared' | 'credential.created' | 'credential.updated' | 'credential.deleted' | 'runtimeCredential.created' | 'runtimeCredential.updated' | 'runtimeCredential.deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_updated' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'clientConnection.updated' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_updated' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.content_upserted' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_updated' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'limit.bulk_deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmOauthClient.bulk_deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.updated' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'llmProviderApiKey.bulk_deleted' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'member.bulk_deleted' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_updated' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'serviceAccount.bulk_updated' | 'skill.created' | 'skill.updated' | 'skill.bulk_updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'teamToken.rotated' | 'tool.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'user.password_reset' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'auth.sessions_revoked' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted' | string;
         outcome: 'success' | 'failure' | 'denied';
         resourceType: string | null;
         resourceId: string | null;
@@ -39503,6 +40114,7 @@ export type GetConfigResponses = {
             azureOpenAiEntraIdEnabled: boolean;
             anthropicWifEnabled: boolean;
             anthropicKeylessAuthEnabled: boolean;
+            anthropicVertexAiEnabled: boolean;
             bedrockIamAuthEnabled: boolean;
             geminiVertexAiEnabled: boolean;
             incomingEmail: {
@@ -42269,11 +42881,11 @@ export type ListGithubAppConfigsResponses = {
         id: string;
         organizationId: string;
         name: string;
+        createdAt: string;
+        updatedAt: string;
         githubUrl: string;
         appId: string;
         installationId: string;
-        createdAt: string;
-        updatedAt: string;
     }>;
 };
 
@@ -42368,11 +42980,11 @@ export type CreateGithubAppConfigResponses = {
         id: string;
         organizationId: string;
         name: string;
+        createdAt: string;
+        updatedAt: string;
         githubUrl: string;
         appId: string;
         installationId: string;
-        createdAt: string;
-        updatedAt: string;
     };
 };
 
@@ -42545,11 +43157,11 @@ export type GetGithubAppConfigResponses = {
         id: string;
         organizationId: string;
         name: string;
+        createdAt: string;
+        updatedAt: string;
         githubUrl: string;
         appId: string;
         installationId: string;
-        createdAt: string;
-        updatedAt: string;
     };
 };
 
@@ -42646,11 +43258,11 @@ export type UpdateGithubAppConfigResponses = {
         id: string;
         organizationId: string;
         name: string;
+        createdAt: string;
+        updatedAt: string;
         githubUrl: string;
         appId: string;
         installationId: string;
-        createdAt: string;
-        updatedAt: string;
     };
 };
 
@@ -59876,6 +60488,8 @@ export type GetInternalMcpCatalogResponses = {
                 key: string;
                 type: 'plain_text' | 'secret' | 'boolean' | 'number';
                 value?: string;
+                credentialId?: string;
+                credentialScope?: 'personal' | 'organization';
                 promptOnInstallation: boolean;
                 required?: boolean;
                 description?: string;
@@ -59965,6 +60579,7 @@ export type GetInternalMcpCatalogResponses = {
         catalogItemApprovalReason: string | null;
         catalogItemApprovalReviewedBy: string | null;
         catalogItemApprovalReviewedAt: string | null;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -59980,6 +60595,7 @@ export type GetInternalMcpCatalogResponses = {
         authorName?: string | null;
         createdBy?: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -60035,6 +60651,8 @@ export type CreateInternalMcpCatalogItemData = {
                 key: string;
                 type: 'plain_text' | 'secret' | 'boolean' | 'number';
                 value?: string;
+                credentialId?: string;
+                credentialScope?: 'personal' | 'organization';
                 promptOnInstallation: boolean;
                 required?: boolean;
                 description?: string;
@@ -60237,6 +60855,8 @@ export type CreateInternalMcpCatalogItemResponses = {
                 key: string;
                 type: 'plain_text' | 'secret' | 'boolean' | 'number';
                 value?: string;
+                credentialId?: string;
+                credentialScope?: 'personal' | 'organization';
                 promptOnInstallation: boolean;
                 required?: boolean;
                 description?: string;
@@ -60326,6 +60946,7 @@ export type CreateInternalMcpCatalogItemResponses = {
         catalogItemApprovalReason: string | null;
         catalogItemApprovalReviewedBy: string | null;
         catalogItemApprovalReviewedAt: string | null;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -60341,6 +60962,7 @@ export type CreateInternalMcpCatalogItemResponses = {
         authorName?: string | null;
         createdBy?: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -60726,6 +61348,8 @@ export type GetInternalMcpCatalogItemResponses = {
                 key: string;
                 type: 'plain_text' | 'secret' | 'boolean' | 'number';
                 value?: string;
+                credentialId?: string;
+                credentialScope?: 'personal' | 'organization';
                 promptOnInstallation: boolean;
                 required?: boolean;
                 description?: string;
@@ -60815,6 +61439,7 @@ export type GetInternalMcpCatalogItemResponses = {
         catalogItemApprovalReason: string | null;
         catalogItemApprovalReviewedBy: string | null;
         catalogItemApprovalReviewedAt: string | null;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -60830,6 +61455,7 @@ export type GetInternalMcpCatalogItemResponses = {
         authorName?: string | null;
         createdBy?: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -60868,6 +61494,8 @@ export type UpdateInternalMcpCatalogItemData = {
                 key: string;
                 type: 'plain_text' | 'secret' | 'boolean' | 'number';
                 value?: string;
+                credentialId?: string;
+                credentialScope?: 'personal' | 'organization';
                 promptOnInstallation: boolean;
                 required?: boolean;
                 description?: string;
@@ -61072,6 +61700,8 @@ export type UpdateInternalMcpCatalogItemResponses = {
                 key: string;
                 type: 'plain_text' | 'secret' | 'boolean' | 'number';
                 value?: string;
+                credentialId?: string;
+                credentialScope?: 'personal' | 'organization';
                 promptOnInstallation: boolean;
                 required?: boolean;
                 description?: string;
@@ -61161,6 +61791,7 @@ export type UpdateInternalMcpCatalogItemResponses = {
         catalogItemApprovalReason: string | null;
         catalogItemApprovalReviewedBy: string | null;
         catalogItemApprovalReviewedAt: string | null;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -61176,6 +61807,7 @@ export type UpdateInternalMcpCatalogItemResponses = {
         authorName?: string | null;
         createdBy?: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -61644,6 +62276,8 @@ export type ListPendingImageApprovalCatalogItemsResponses = {
                 key: string;
                 type: 'plain_text' | 'secret' | 'boolean' | 'number';
                 value?: string;
+                credentialId?: string;
+                credentialScope?: 'personal' | 'organization';
                 promptOnInstallation: boolean;
                 required?: boolean;
                 description?: string;
@@ -61733,6 +62367,7 @@ export type ListPendingImageApprovalCatalogItemsResponses = {
         catalogItemApprovalReason: string | null;
         catalogItemApprovalReviewedBy: string | null;
         catalogItemApprovalReviewedAt: string | null;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -61748,6 +62383,7 @@ export type ListPendingImageApprovalCatalogItemsResponses = {
         authorName?: string | null;
         createdBy?: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -61866,6 +62502,8 @@ export type ApproveCatalogItemImageResponses = {
                 key: string;
                 type: 'plain_text' | 'secret' | 'boolean' | 'number';
                 value?: string;
+                credentialId?: string;
+                credentialScope?: 'personal' | 'organization';
                 promptOnInstallation: boolean;
                 required?: boolean;
                 description?: string;
@@ -61955,6 +62593,7 @@ export type ApproveCatalogItemImageResponses = {
         catalogItemApprovalReason: string | null;
         catalogItemApprovalReviewedBy: string | null;
         catalogItemApprovalReviewedAt: string | null;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -61970,6 +62609,7 @@ export type ApproveCatalogItemImageResponses = {
         authorName?: string | null;
         createdBy?: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -64246,11 +64886,13 @@ export type GetKnowledgeBasesResponses = {
             visibility: 'private' | 'org-wide' | 'team-scoped';
             teamIds: Array<string>;
             status: string;
+            createdByServiceAccountId: string | null;
             createdAt: string;
             updatedAt: string;
             deletedAt: string | null;
             createdBy: {
                 id: string;
+                type?: 'user' | 'service_account';
                 name: string | null;
                 email: string | null;
             } | null;
@@ -64380,11 +65022,13 @@ export type CreateKnowledgeBaseResponses = {
         visibility: 'private' | 'org-wide' | 'team-scoped';
         teamIds: Array<string>;
         status: string;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -64564,11 +65208,13 @@ export type GetKnowledgeBaseResponses = {
         visibility: 'private' | 'org-wide' | 'team-scoped';
         teamIds: Array<string>;
         status: string;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -64674,11 +65320,13 @@ export type UpdateKnowledgeBaseResponses = {
         visibility: 'private' | 'org-wide' | 'team-scoped';
         teamIds: Array<string>;
         status: string;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -65156,7 +65804,8 @@ export type GetConnectorsResponses = {
                 type: 'github';
                 githubUrl: unknown;
                 owner: string;
-                authMethod?: 'pat' | 'github_app';
+                authMethod?: 'pat' | 'github_app' | 'credential';
+                credentialId?: string;
                 githubAppConfigId?: string | '';
                 repos?: Array<string>;
                 includeIssues?: boolean;
@@ -65318,11 +65967,13 @@ export type GetConnectorsResponses = {
                 [key: string]: unknown;
             } | Array<unknown> | null;
             aclConfigEpoch: number;
+            createdByServiceAccountId: string | null;
             createdAt: string;
             updatedAt: string;
             deletedAt: string | null;
             createdBy: {
                 id: string;
+                type?: 'user' | 'service_account';
                 name: string | null;
                 email: string | null;
             } | null;
@@ -65379,7 +66030,8 @@ export type CreateConnectorData = {
             type: 'github';
             githubUrl: string;
             owner: string;
-            authMethod?: 'pat' | 'github_app';
+            authMethod?: 'pat' | 'github_app' | 'credential';
+            credentialId?: string;
             githubAppConfigId?: string | '';
             repos?: Array<string>;
             includeIssues?: boolean;
@@ -65658,7 +66310,8 @@ export type CreateConnectorResponses = {
             type: 'github';
             githubUrl: unknown;
             owner: string;
-            authMethod?: 'pat' | 'github_app';
+            authMethod?: 'pat' | 'github_app' | 'credential';
+            credentialId?: string;
             githubAppConfigId?: string | '';
             repos?: Array<string>;
             includeIssues?: boolean;
@@ -65818,11 +66471,13 @@ export type CreateConnectorResponses = {
             [key: string]: unknown;
         } | Array<unknown> | null;
         aclConfigEpoch: number;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -66029,7 +66684,8 @@ export type GetConnectorResponses = {
             type: 'github';
             githubUrl: unknown;
             owner: string;
-            authMethod?: 'pat' | 'github_app';
+            authMethod?: 'pat' | 'github_app' | 'credential';
+            credentialId?: string;
             githubAppConfigId?: string | '';
             repos?: Array<string>;
             includeIssues?: boolean;
@@ -66191,11 +66847,13 @@ export type GetConnectorResponses = {
             [key: string]: unknown;
         } | Array<unknown> | null;
         aclConfigEpoch: number;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -66238,7 +66896,8 @@ export type UpdateConnectorData = {
             type: 'github';
             githubUrl: string;
             owner: string;
-            authMethod?: 'pat' | 'github_app';
+            authMethod?: 'pat' | 'github_app' | 'credential';
+            credentialId?: string;
             githubAppConfigId?: string | '';
             repos?: Array<string>;
             includeIssues?: boolean;
@@ -66518,7 +67177,8 @@ export type UpdateConnectorResponses = {
             type: 'github';
             githubUrl: unknown;
             owner: string;
-            authMethod?: 'pat' | 'github_app';
+            authMethod?: 'pat' | 'github_app' | 'credential';
+            credentialId?: string;
             githubAppConfigId?: string | '';
             repos?: Array<string>;
             includeIssues?: boolean;
@@ -66678,11 +67338,13 @@ export type UpdateConnectorResponses = {
             [key: string]: unknown;
         } | Array<unknown> | null;
         aclConfigEpoch: number;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -68391,6 +69053,7 @@ export type GetConnectorKnowledgeBasesResponses = {
             teamIds: Array<string>;
             status: string;
             createdBy: string | null;
+            createdByServiceAccountId: string | null;
             createdAt: string;
             updatedAt: string;
             deletedAt: string | null;
@@ -69188,9 +69851,11 @@ export type GetKnowledgeFilesResponses = {
             mimeType: string;
             sizeBytes: number;
             contentHash: string;
+            createdByServiceAccountId: string | null;
             createdAt: string;
             createdBy: {
                 id: string;
+                type?: 'user' | 'service_account';
                 name: string | null;
                 email: string | null;
             } | null;
@@ -69317,9 +69982,11 @@ export type UploadKnowledgeFileResponses = {
         mimeType: string;
         sizeBytes: number;
         contentHash: string;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -69548,9 +70215,11 @@ export type PromoteAttachmentToKnowledgeFileResponses = {
         mimeType: string;
         sizeBytes: number;
         contentHash: string;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -69756,9 +70425,11 @@ export type UpdateKnowledgeFileResponses = {
         mimeType: string;
         sizeBytes: number;
         contentHash: string;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -70154,10 +70825,12 @@ export type GetKnowledgeDirectoriesResponses = {
         organizationId: string;
         name: string;
         visibility: string;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -70253,10 +70926,12 @@ export type CreateKnowledgeDirectoryResponses = {
         organizationId: string;
         name: string;
         visibility: string;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -70439,10 +71114,12 @@ export type UpdateKnowledgeDirectoryResponses = {
         organizationId: string;
         name: string;
         visibility: string;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -72504,6 +73181,7 @@ export type GetLlmOauthClientsResponses = {
             authorName: string | null;
             createdBy: {
                 id: string;
+                type?: 'user' | 'service_account';
                 name: string | null;
                 email: string | null;
             } | null;
@@ -72646,6 +73324,7 @@ export type CreateLlmOauthClientResponses = {
         authorName: string | null;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -72867,6 +73546,7 @@ export type UpdateLlmOauthClientResponses = {
         authorName: string | null;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -72983,6 +73663,7 @@ export type RotateLlmOauthClientSecretResponses = {
         authorName: string | null;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -73368,10 +74049,12 @@ export type GetLlmProviderApiKeysResponses = {
         isSystem: boolean;
         isPrimary: boolean;
         requiresReauthentication?: boolean;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -73505,7 +74188,6 @@ export type CreateLlmProviderApiKeyResponses = {
         scope: 'personal' | 'team' | 'org';
         userId: string | null;
         teamId: string | null;
-        createdBy: string | null;
         baseUrl: string | null;
         inferenceBaseUrl: string | null;
         extraHeaders: {
@@ -73514,8 +74196,29 @@ export type CreateLlmProviderApiKeyResponses = {
         isSystem: boolean;
         isPrimary: boolean;
         requiresReauthentication?: boolean;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
+        createdBy: {
+            id: string;
+            type?: 'user' | 'service_account';
+            name: string | null;
+            email: string | null;
+        } | null;
+        teamName?: string | null;
+        userName?: string | null;
+        vaultSecretPath?: string | null;
+        vaultSecretKey?: string | null;
+        secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
+        bestModelId?: string | null;
+        isAgentKey?: boolean;
+        subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
+        labels?: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
     };
 };
 
@@ -73617,10 +74320,12 @@ export type GetAvailableLlmProviderApiKeysResponses = {
         isSystem: boolean;
         isPrimary: boolean;
         requiresReauthentication?: boolean;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -73823,10 +74528,12 @@ export type GetLlmProviderApiKeyResponses = {
         isSystem: boolean;
         isPrimary: boolean;
         requiresReauthentication?: boolean;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -73961,7 +74668,6 @@ export type UpdateLlmProviderApiKeyResponses = {
         scope: 'personal' | 'team' | 'org';
         userId: string | null;
         teamId: string | null;
-        createdBy: string | null;
         baseUrl: string | null;
         inferenceBaseUrl: string | null;
         extraHeaders: {
@@ -73970,8 +74676,29 @@ export type UpdateLlmProviderApiKeyResponses = {
         isSystem: boolean;
         isPrimary: boolean;
         requiresReauthentication?: boolean;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
+        createdBy: {
+            id: string;
+            type?: 'user' | 'service_account';
+            name: string | null;
+            email: string | null;
+        } | null;
+        teamName?: string | null;
+        userName?: string | null;
+        vaultSecretPath?: string | null;
+        vaultSecretKey?: string | null;
+        secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
+        bestModelId?: string | null;
+        isAgentKey?: boolean;
+        subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
+        labels?: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
     };
 };
 
@@ -74066,7 +74793,6 @@ export type ReconnectLlmProviderApiKeyResponses = {
         scope: 'personal' | 'team' | 'org';
         userId: string | null;
         teamId: string | null;
-        createdBy: string | null;
         baseUrl: string | null;
         inferenceBaseUrl: string | null;
         extraHeaders: {
@@ -74075,8 +74801,29 @@ export type ReconnectLlmProviderApiKeyResponses = {
         isSystem: boolean;
         isPrimary: boolean;
         requiresReauthentication?: boolean;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
+        createdBy: {
+            id: string;
+            type?: 'user' | 'service_account';
+            name: string | null;
+            email: string | null;
+        } | null;
+        teamName?: string | null;
+        userName?: string | null;
+        vaultSecretPath?: string | null;
+        vaultSecretKey?: string | null;
+        secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
+        bestModelId?: string | null;
+        isAgentKey?: boolean;
+        subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
+        labels?: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
     };
 };
 
@@ -74779,6 +75526,7 @@ export type GetMcpOauthClientsResponses = {
         authorName: string | null;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -74905,6 +75653,7 @@ export type CreateMcpOauthClientResponses = {
         authorName: string | null;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -75119,6 +75868,7 @@ export type UpdateMcpOauthClientResponses = {
         authorName: string | null;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -75231,6 +75981,7 @@ export type RotateMcpOauthClientSecretResponses = {
         authorName: string | null;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -75470,6 +76221,7 @@ export type GetMcpServersResponses = {
         environmentValues: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown>;
+        createdByServiceAccountId: string | null;
         ownerId: string | null;
         teamId: string | null;
         scope: 'personal' | 'team' | 'org';
@@ -75533,6 +76285,7 @@ export type InstallMcpServerData = {
         environmentValues?: {
             [key: string]: string;
         };
+        createdByServiceAccountId?: string | null;
         ownerId?: string | null;
         teamId?: string | null;
         scope?: 'personal' | 'team' | 'org';
@@ -75632,6 +76385,7 @@ export type InstallMcpServerResponses = {
         environmentValues: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown>;
+        createdByServiceAccountId: string | null;
         ownerId: string | null;
         teamId: string | null;
         scope: 'personal' | 'team' | 'org';
@@ -75848,6 +76602,7 @@ export type GetMcpServerResponses = {
         environmentValues: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown>;
+        createdByServiceAccountId: string | null;
         ownerId: string | null;
         teamId: string | null;
         scope: 'personal' | 'team' | 'org';
@@ -75989,6 +76744,7 @@ export type ReauthenticateMcpServerResponses = {
         environmentValues: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown>;
+        createdByServiceAccountId: string | null;
         ownerId: string | null;
         teamId: string | null;
         scope: 'personal' | 'team' | 'org';
@@ -76217,6 +76973,7 @@ export type RestoreMcpServerResponses = {
         environmentValues: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown>;
+        createdByServiceAccountId: string | null;
         ownerId: string | null;
         teamId: string | null;
         scope: 'personal' | 'team' | 'org';
@@ -76814,6 +77571,7 @@ export type ReinstallMcpServerResponses = {
         environmentValues: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown>;
+        createdByServiceAccountId: string | null;
         ownerId: string | null;
         teamId: string | null;
         scope: 'personal' | 'team' | 'org';
@@ -88032,6 +88790,7 @@ export type GetPluginsResponses = {
         approvedAt: string | null;
         approvedBy: string | null;
         enabled: boolean;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -88050,6 +88809,12 @@ export type GetPluginsResponses = {
             keyId?: string;
             valueId?: string;
         }>;
+        createdBy: {
+            id: string;
+            type?: 'user' | 'service_account';
+            name: string | null;
+            email: string | null;
+        } | null;
         fileCount: number;
     }>;
 };
@@ -88186,6 +88951,7 @@ export type CreatePluginResponses = {
         approvedAt: string | null;
         approvedBy: string | null;
         enabled: boolean;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -88206,6 +88972,7 @@ export type CreatePluginResponses = {
         }>;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -88469,6 +89236,7 @@ export type ImportGithubPluginMarketplaceResponses = {
             approvedAt: string | null;
             approvedBy: string | null;
             enabled: boolean;
+            createdByServiceAccountId: string | null;
             createdAt: string;
             updatedAt: string;
             deletedAt: string | null;
@@ -88489,6 +89257,7 @@ export type ImportGithubPluginMarketplaceResponses = {
             }>;
             createdBy: {
                 id: string;
+                type?: 'user' | 'service_account';
                 name: string | null;
                 email: string | null;
             } | null;
@@ -88740,6 +89509,7 @@ export type ImportGithubPluginResponses = {
         approvedAt: string | null;
         approvedBy: string | null;
         enabled: boolean;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -88760,6 +89530,7 @@ export type ImportGithubPluginResponses = {
         }>;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -88994,6 +89765,7 @@ export type ApplyGithubPluginUpdateResponses = {
         approvedAt: string | null;
         approvedBy: string | null;
         enabled: boolean;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -89014,6 +89786,7 @@ export type ApplyGithubPluginUpdateResponses = {
         }>;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -89145,6 +89918,7 @@ export type UpdatePluginGithubSyncResponses = {
         approvedAt: string | null;
         approvedBy: string | null;
         enabled: boolean;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -89165,6 +89939,7 @@ export type UpdatePluginGithubSyncResponses = {
         }>;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -89464,6 +90239,7 @@ export type GetPluginResponses = {
         approvedAt: string | null;
         approvedBy: string | null;
         enabled: boolean;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -89484,6 +90260,7 @@ export type GetPluginResponses = {
         }>;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -89642,6 +90419,7 @@ export type UpdatePluginResponses = {
         approvedAt: string | null;
         approvedBy: string | null;
         enabled: boolean;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -89662,6 +90440,7 @@ export type UpdatePluginResponses = {
         }>;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -90268,6 +91047,7 @@ export type GetProjectsResponses = {
         ownerName: string | null;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -90385,6 +91165,7 @@ export type CreateProjectResponses = {
         ownerName: string | null;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -90502,6 +91283,7 @@ export type CreateProjectFromConversationResponses = {
         ownerName: string | null;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -90695,6 +91477,7 @@ export type GetProjectResponses = {
         ownerName: string | null;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -91199,6 +91982,7 @@ export type RestoreProjectResponses = {
         ownerName: string | null;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -92068,7 +92852,7 @@ export type ListRuntimeCredentialsData = {
     body?: never;
     path?: never;
     query?: never;
-    url: '/api/runtime-credentials';
+    url: '/api/credentials';
 };
 
 export type ListRuntimeCredentialsErrors = {
@@ -92141,6 +92925,11 @@ export type ListRuntimeCredentialsResponses = {
      * Default Response
      */
     200: Array<{
+        id: string;
+        kind: 'secret' | 'github_app';
+        githubUrl: string | null;
+        appId: string | null;
+        installationId: string | null;
         key: string;
         name: string;
         description: string;
@@ -92159,6 +92948,10 @@ export type CreateRuntimeCredentialData = {
     body: {
         key: string;
         name: string;
+        kind?: 'secret' | 'github_app';
+        githubUrl?: string | null;
+        appId?: string | null;
+        installationId?: string | null;
         description?: string;
         icon?: string | null;
         allowPersonal?: boolean;
@@ -92166,7 +92959,7 @@ export type CreateRuntimeCredentialData = {
     };
     path?: never;
     query?: never;
-    url: '/api/runtime-credentials';
+    url: '/api/credentials';
 };
 
 export type CreateRuntimeCredentialErrors = {
@@ -92243,11 +93036,16 @@ export type CreateRuntimeCredentialResponses = {
         organizationId: string;
         key: string;
         name: string;
+        kind: 'secret' | 'github_app';
+        githubUrl: string | null;
+        appId: string | null;
+        installationId: string | null;
         description: string;
         icon: string | null;
         allowPersonal: boolean;
         allowOrganization: boolean;
         createdBy: string | null;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
     };
@@ -92261,7 +93059,7 @@ export type GetRuntimeCredentialUsageData = {
         key: string;
     };
     query?: never;
-    url: '/api/runtime-credentials/{key}/usage';
+    url: '/api/credentials/{key}/usage';
 };
 
 export type GetRuntimeCredentialUsageErrors = {
@@ -92334,6 +93132,11 @@ export type GetRuntimeCredentialUsageResponses = {
      * Default Response
      */
     200: {
+        resources: Array<{
+            id: string;
+            name: string;
+            kind: 'mcp' | 'skill' | 'plugin' | 'knowledge';
+        }>;
         agents: Array<{
             id: string;
             name: string;
@@ -92349,7 +93152,7 @@ export type DeleteRuntimeCredentialData = {
         key: string;
     };
     query?: never;
-    url: '/api/runtime-credentials/{key}';
+    url: '/api/credentials/{key}';
 };
 
 export type DeleteRuntimeCredentialErrors = {
@@ -92430,6 +93233,10 @@ export type DeleteRuntimeCredentialResponse = DeleteRuntimeCredentialResponses[k
 
 export type UpdateRuntimeCredentialData = {
     body: {
+        name?: string;
+        githubUrl?: string | null;
+        appId?: string | null;
+        installationId?: string | null;
         description?: string;
         icon?: string | null;
     };
@@ -92437,7 +93244,7 @@ export type UpdateRuntimeCredentialData = {
         key: string;
     };
     query?: never;
-    url: '/api/runtime-credentials/{key}';
+    url: '/api/credentials/{key}';
 };
 
 export type UpdateRuntimeCredentialErrors = {
@@ -92514,11 +93321,16 @@ export type UpdateRuntimeCredentialResponses = {
         organizationId: string;
         key: string;
         name: string;
+        kind: 'secret' | 'github_app';
+        githubUrl: string | null;
+        appId: string | null;
+        installationId: string | null;
         description: string;
         icon: string | null;
         allowPersonal: boolean;
         allowOrganization: boolean;
         createdBy: string | null;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
     };
@@ -92532,7 +93344,7 @@ export type DeletePersonalRuntimeCredentialConnectionData = {
         key: string;
     };
     query?: never;
-    url: '/api/runtime-credentials/{key}/personal';
+    url: '/api/credentials/{key}/personal';
 };
 
 export type DeletePersonalRuntimeCredentialConnectionErrors = {
@@ -92619,7 +93431,7 @@ export type SetPersonalRuntimeCredentialConnectionData = {
         key: string;
     };
     query?: never;
-    url: '/api/runtime-credentials/{key}/personal';
+    url: '/api/credentials/{key}/personal';
 };
 
 export type SetPersonalRuntimeCredentialConnectionErrors = {
@@ -92704,7 +93516,7 @@ export type DeleteOrganizationRuntimeCredentialConnectionData = {
         key: string;
     };
     query?: never;
-    url: '/api/runtime-credentials/{key}/organization';
+    url: '/api/credentials/{key}/organization';
 };
 
 export type DeleteOrganizationRuntimeCredentialConnectionErrors = {
@@ -92791,7 +93603,7 @@ export type SetOrganizationRuntimeCredentialConnectionData = {
         key: string;
     };
     query?: never;
-    url: '/api/runtime-credentials/{key}/organization';
+    url: '/api/credentials/{key}/organization';
 };
 
 export type SetOrganizationRuntimeCredentialConnectionErrors = {
@@ -94604,6 +95416,7 @@ export type GetServiceAccountsResponses = {
         id: string;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -94717,6 +95530,7 @@ export type CreateServiceAccountResponses = {
         id: string;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -94917,6 +95731,7 @@ export type GetServiceAccountResponses = {
         id: string;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -95042,6 +95857,7 @@ export type UpdateServiceAccountResponses = {
         id: string;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -96491,11 +97307,13 @@ export type GetSkillsResponses = {
             lastSyncError: string | null;
             usageCount: number;
             lastUsedAt: string | null;
+            createdByServiceAccountId: string | null;
             createdAt: string;
             updatedAt: string;
             deletedAt: string | null;
             createdBy: {
                 id: string;
+                type?: 'user' | 'service_account';
                 name: string | null;
                 email: string | null;
             } | null;
@@ -96676,6 +97494,7 @@ export type CreateSkillResponses = {
         lastSyncError: string | null;
         usageCount: number;
         lastUsedAt: string | null;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -96691,6 +97510,7 @@ export type CreateSkillResponses = {
         }>;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -96829,6 +97649,7 @@ export type ConvertAgentToSkillResponses = {
             lastSyncError: string | null;
             usageCount: number;
             lastUsedAt: string | null;
+            createdByServiceAccountId: string | null;
             createdAt: string;
             updatedAt: string;
             deletedAt: string | null;
@@ -96844,6 +97665,7 @@ export type ConvertAgentToSkillResponses = {
             }>;
             createdBy: {
                 id: string;
+                type?: 'user' | 'service_account';
                 name: string | null;
                 email: string | null;
             } | null;
@@ -97160,6 +97982,7 @@ export type GetSkillResponses = {
         lastSyncError: string | null;
         usageCount: number;
         lastUsedAt: string | null;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -97175,6 +97998,7 @@ export type GetSkillResponses = {
         }>;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -97349,6 +98173,7 @@ export type UpdateSkillResponses = {
         lastSyncError: string | null;
         usageCount: number;
         lastUsedAt: string | null;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -97364,6 +98189,7 @@ export type UpdateSkillResponses = {
         }>;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -98082,6 +98908,7 @@ export type RestoreSkillResponses = {
         lastSyncError: string | null;
         usageCount: number;
         lastUsedAt: string | null;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -98097,6 +98924,7 @@ export type RestoreSkillResponses = {
         }>;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -98316,6 +99144,7 @@ export type ResetSkillResponses = {
         lastSyncError: string | null;
         usageCount: number;
         lastUsedAt: string | null;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -98331,6 +99160,7 @@ export type ResetSkillResponses = {
         }>;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -98478,6 +99308,7 @@ export type UpdateSkillGithubSyncResponses = {
         lastSyncError: string | null;
         usageCount: number;
         lastUsedAt: string | null;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -98493,6 +99324,7 @@ export type UpdateSkillGithubSyncResponses = {
         }>;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -99032,6 +99864,7 @@ export type ImportGithubSkillsResponses = {
             lastSyncError: string | null;
             usageCount: number;
             lastUsedAt: string | null;
+            createdByServiceAccountId: string | null;
             createdAt: string;
             updatedAt: string;
             deletedAt: string | null;
@@ -101062,7 +101895,8 @@ export type GetTeamsResponses = {
             roles: Array<string>;
             organizationId: string;
             parentId: string | null;
-            createdBy: string;
+            createdBy: string | null;
+            createdByServiceAccountId: string | null;
             createdAt: string;
             updatedAt: string;
             convertToolResultsToToon: boolean;
@@ -101194,7 +102028,8 @@ export type CreateTeamResponses = {
         roles: Array<string>;
         organizationId: string;
         parentId: string | null;
-        createdBy: string;
+        createdBy: string | null;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         convertToolResultsToToon: boolean;
@@ -101392,7 +102227,8 @@ export type GetTeamResponses = {
         roles: Array<string>;
         organizationId: string;
         parentId: string | null;
-        createdBy: string;
+        createdBy: string | null;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         convertToolResultsToToon: boolean;
@@ -101517,7 +102353,8 @@ export type UpdateTeamResponses = {
         roles: Array<string>;
         organizationId: string;
         parentId: string | null;
-        createdBy: string;
+        createdBy: string | null;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         convertToolResultsToToon: boolean;
@@ -104084,6 +104921,7 @@ export type GetAllVirtualApiKeysResponses = {
             scope: 'personal' | 'team' | 'org';
             authorId: string | null;
             expiresAt: string | null;
+            createdByServiceAccountId: string | null;
             createdAt: string;
             lastUsedAt: string | null;
             teams: Array<{
@@ -104093,6 +104931,7 @@ export type GetAllVirtualApiKeysResponses = {
             authorName: string | null;
             createdBy: {
                 id: string;
+                type?: 'user' | 'service_account';
                 name: string | null;
                 email: string | null;
             } | null;
@@ -104224,6 +105063,7 @@ export type CreateVirtualApiKeyResponses = {
         scope: 'personal' | 'team' | 'org';
         authorId: string | null;
         expiresAt: string | null;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         lastUsedAt: string | null;
         value: string;
@@ -104234,6 +105074,7 @@ export type CreateVirtualApiKeyResponses = {
         authorName: string | null;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -104426,6 +105267,7 @@ export type GetVirtualApiKeyResponses = {
         scope: 'personal' | 'team' | 'org';
         authorId: string | null;
         expiresAt: string | null;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         lastUsedAt: string | null;
         teams: Array<{
@@ -104435,6 +105277,7 @@ export type GetVirtualApiKeyResponses = {
         authorName: string | null;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -104558,6 +105401,7 @@ export type UpdateVirtualApiKeyResponses = {
         scope: 'personal' | 'team' | 'org';
         authorId: string | null;
         expiresAt: string | null;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         lastUsedAt: string | null;
         teams: Array<{
@@ -104567,6 +105411,7 @@ export type UpdateVirtualApiKeyResponses = {
         authorName: string | null;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;

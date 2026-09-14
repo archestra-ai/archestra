@@ -11,6 +11,7 @@ import {
 } from "drizzle-orm/pg-core";
 import type { AppSpec } from "@/types/app-spec";
 import mcpServerTable from "./mcp-server";
+import serviceAccountsTable from "./service-account";
 import { softDeletablePgTable } from "./soft-deletable-table";
 import usersTable from "./user";
 
@@ -148,6 +149,11 @@ const appsTable = softDeletablePgTable(
      * build session is shared with).
      */
     authoringSessionId: text("authoring_session_id"),
+    /** Service account creator; separate from human ownership. */
+    createdByServiceAccountId: uuid("created_by_service_account_id").references(
+      () => serviceAccountsTable.id,
+      { onDelete: "set null" },
+    ),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .notNull()

@@ -39,10 +39,10 @@ const PAGE_CONFIG: Record<string, { title: string; description: ReactNode }> = {
     description:
       "Organization-wide security defaults for tools your agents use.",
   },
-  "/settings/github": {
-    title: "GitHub",
+  "/settings/credentials": {
+    title: "Credentials",
     description:
-      "Manage organization GitHub credentials for connectors, skill and plugin imports, recurring skill sync, and scheduled plugin checks.",
+      "Reusable credentials for agents, MCP servers, skills, and knowledge. Connect a personal account or share a credential with your organization.",
   },
   "/settings/environments": {
     title: "Environments",

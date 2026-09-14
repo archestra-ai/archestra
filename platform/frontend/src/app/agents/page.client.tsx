@@ -40,6 +40,7 @@ import {
   RowClickShield,
 } from "@/components/agent-pages/row-click-shield";
 import { computeCanModifyAgent } from "@/components/agent-pages/use-agent-access";
+import { AgentProviderIndicator } from "@/components/agent-provider-indicator";
 import { AgentVersionHistoryDialog } from "@/components/agent-version-history-dialog";
 import { BulkVisibilityDialog } from "@/components/bulk-visibility-dialog";
 import { CloneAgentDialog } from "@/components/clone-agent-dialog";
@@ -59,6 +60,10 @@ import { LabelTags } from "@/components/label-tags";
 import { PageLayout } from "@/components/page-layout";
 import { PERMANENT_DELETE_LABEL } from "@/components/permanent-delete";
 import { PermissionRequirementHint } from "@/components/permission-requirement-hint";
+import {
+  isProviderApiKeyId,
+  ProviderKeyFilterSelect,
+} from "@/components/provider-key-filter-select";
 import { QueryLoadError } from "@/components/query-load-error";
 import {
   ActiveFilterBadges,
@@ -220,17 +225,25 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     | "active"
     | "deleted"
     | null;
+  const providerApiKeyIdFromUrl = searchParams.get("providerApiKeyId");
+  const providerApiKeyIdFilter =
+    providerApiKeyIdFromUrl === "organization-default" ||
+    isProviderApiKeyId(providerApiKeyIdFromUrl)
+      ? providerApiKeyIdFromUrl
+      : undefined;
 
   // Default sorting
   const sortBy = sortByFromUrl || DEFAULT_SORT_BY;
   const sortDirection = sortDirectionFromUrl || DEFAULT_SORT_DIRECTION;
   const isDeletedView = statusFromUrl === "deleted";
+  const includeExternalAgents =
+    !isDeletedView && !labelsFromUrl && !providerApiKeyIdFilter;
 
   const externalAgentsQuery = useA2aRemoteAgents({
-    enabled: !isDeletedView && !labelsFromUrl,
+    enabled: includeExternalAgents,
   });
   const filteredExternalAgents = useMemo(() => {
-    if (isDeletedView || labelsFromUrl) return [];
+    if (!includeExternalAgents) return [];
 
     const normalizedName = nameFilter.trim().toLocaleLowerCase();
     const filtered = (externalAgentsQuery.data ?? []).filter((agent) => {
@@ -280,8 +293,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   }, [
     currentUserId,
     externalAgentsQuery.data,
-    isDeletedView,
-    labelsFromUrl,
+    includeExternalAgents,
     nameFilter,
     scopeFilter,
     sortBy,
@@ -314,6 +326,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     excludeOtherPersonalAgents: scopeFilter.excludeOtherPersonal,
     labels: labelsFromUrl || undefined,
     status: statusFromUrl || undefined,
+    providerApiKeyId: providerApiKeyIdFilter,
   } satisfies Omit<
     NonNullable<archestraApiTypes.GetAgentsData["query"]>,
     "limit" | "offset"
@@ -454,7 +467,9 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     total: filteredExternalAgents.length + regularTotal,
   };
   const showLoading =
-    (isPending || isFetching || externalAgentsQuery.isPending) &&
+    (isPending ||
+      isFetching ||
+      (includeExternalAgents && externalAgentsQuery.isPending)) &&
     rows.length === 0;
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
@@ -563,7 +578,8 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     nameFilter ||
     scopeFilter.hasActiveScopeFilters ||
     labelsFromUrl ||
-    isDeletedView
+    isDeletedView ||
+    providerApiKeyIdFilter
   );
 
   const clearFilters = useCallback(() => {
@@ -576,6 +592,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
       excludeAuthorIds: null,
       labels: null,
       status: null,
+      providerApiKeyId: null,
     });
   }, [updateQueryParams]);
 
@@ -750,6 +767,14 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
             <DefaultAgentTag source={effectiveDefault.source} />
           ) : null}
           <AgentAccessBadges agent={agent} />
+          <span className="ml-auto">
+            <AgentProviderIndicator
+              usesOrganizationDefault={!agent.llmApiKeyId && !agent.modelId}
+              provider={agent.resolvedLlmProvider}
+              keyName={agent.resolvedLlmProviderKeyName}
+              modelName={agent.resolvedLlmModelName}
+            />
+          </span>
         </div>
       </TableCard>
     );
@@ -824,6 +849,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
       id: "team",
       header: "Accessible to",
       enableSorting: false,
+      size: 160,
       cell: ({ row }) => (
         <RowClickShield>
           <ResourceVisibilityBadge
@@ -837,6 +863,25 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
           />
         </RowClickShield>
       ),
+    },
+    {
+      id: "provider",
+      header: "Provider",
+      enableSorting: false,
+      size: 80,
+      cell: ({ row }) =>
+        row.original.type === "external" ? (
+          <span className="text-muted-foreground">—</span>
+        ) : (
+          <AgentProviderIndicator
+            usesOrganizationDefault={
+              !row.original.value.llmApiKeyId && !row.original.value.modelId
+            }
+            provider={row.original.value.resolvedLlmProvider}
+            keyName={row.original.value.resolvedLlmProviderKeyName}
+            modelName={row.original.value.resolvedLlmModelName}
+          />
+        ),
     },
     ...(showEnvironmentColumn
       ? [
@@ -914,12 +959,13 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
         </div>
       }
     >
-      {isAgentsLoadError || externalAgentsQuery.isLoadingError ? (
+      {isAgentsLoadError ||
+      (includeExternalAgents && externalAgentsQuery.isLoadingError) ? (
         <QueryLoadError
           title="Couldn't load your agents"
           onRetry={() => {
             void refetchAgents();
-            void externalAgentsQuery.refetch();
+            if (includeExternalAgents) void externalAgentsQuery.refetch();
           }}
         />
       ) : (
@@ -929,10 +975,15 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
               <CollectionFilters>
                 <FilterBar
                   leading
+                  onClearFilters={hasActiveFilters ? clearFilters : undefined}
                   actions={!isDeletedView ? <TableCardViewToggle /> : undefined}
                   search={
                     <SearchInput
-                      isLoading={isFetching || externalAgentsQuery.isFetching}
+                      isLoading={
+                        isFetching ||
+                        (includeExternalAgents &&
+                          externalAgentsQuery.isFetching)
+                      }
                       objectNamePlural="agents"
                       searchFields={["name"]}
                       paramName="name"
@@ -947,6 +998,13 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                     ownerLabelPlural="agents"
                     adminPermission={{ agent: ["admin"] }}
                     queryParamsAdapter={queryParamsAdapter}
+                  />
+                  <ProviderKeyFilterSelect
+                    allowOrganizationDefault
+                    value={providerApiKeyIdFilter}
+                    onValueChange={(providerApiKeyId) =>
+                      updateQueryParams({ page: "1", providerApiKeyId })
+                    }
                   />
                   <ResourceDeletedStatusFilter
                     deletePermission={{ agent: ["delete"] }}
@@ -1027,6 +1085,9 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                   table={
                     <DataTable
                       columns={columns}
+                      tableClassName="table-fixed"
+                      fixedWidthColumnIds={["team", "provider", "environment"]}
+                      flexibleColumnIds={["name"]}
                       data={rows}
                       isLoading={showLoading}
                       getRowId={getAgentListRowId}

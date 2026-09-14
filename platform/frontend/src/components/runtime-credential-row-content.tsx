@@ -15,7 +15,12 @@ export function RuntimeCredentialRowContent({
   return (
     <div className="flex min-w-0 flex-1 items-start gap-3">
       <div className="flex size-9 shrink-0 items-center justify-center rounded-md border bg-background">
-        <RuntimeCredentialIcon icon={definition.icon} />
+        <RuntimeCredentialIcon
+          icon={
+            definition.icon ??
+            (definition.kind === "github_app" ? "logo:github" : null)
+          }
+        />
       </div>
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
@@ -52,24 +57,6 @@ export function RuntimeCredentialDescription({
         <code className="rounded bg-muted px-1 py-0.5 font-mono text-[0.9em] text-foreground">
           claude setup-token
         </code>
-        .
-      </p>
-    );
-  }
-
-  if (definition.key === "github") {
-    return (
-      <p className={`${className} text-xs text-muted-foreground`}>
-        Use a GitHub personal access token with access to the repositories this
-        Agent needs. Create one in{" "}
-        <a
-          href="https://github.com/settings/personal-access-tokens/new"
-          target="_blank"
-          rel="noreferrer"
-          className="underline underline-offset-2"
-        >
-          GitHub Developer settings
-        </a>
         .
       </p>
     );

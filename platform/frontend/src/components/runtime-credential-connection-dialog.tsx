@@ -16,7 +16,7 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
-import { SecretInput } from "@/components/ui/secret-input";
+import { SecretInput, SecretTextarea } from "@/components/ui/secret-input";
 import {
   type RuntimeCredentialDefinition,
   useSetRuntimeCredentialConnection,
@@ -84,8 +84,8 @@ export function RuntimeCredentialConnectionDialog({
       }
       description={
         scope === "personal"
-          ? "This value is private to you and works with every Agent that requests this credential."
-          : "This value is available to everyone who runs an Agent bound to this organization connection."
+          ? "This value is private to you. Your agents and personal MCP connections reuse it."
+          : "This value is shared by resources using this organization credential."
       }
       onSubmit={form.handleSubmit(({ value }) => save(value))}
       footer={
@@ -105,19 +105,31 @@ export function RuntimeCredentialConnectionDialog({
           name="value"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Secret value</FormLabel>
+              <FormLabel>
+                {definition.kind === "github_app"
+                  ? "Private key (PEM)"
+                  : "Secret value"}
+              </FormLabel>
               <RuntimeCredentialDescription
                 definition={definition}
                 className=""
               />
               <FormControl>
-                <SecretInput
-                  {...field}
-                  autoFocus
-                  revealable
-                  autoComplete="off"
-                  placeholder="Paste secret"
-                />
+                {definition.kind === "github_app" ? (
+                  <SecretTextarea
+                    {...field}
+                    autoComplete="off"
+                    placeholder="Paste private key"
+                  />
+                ) : (
+                  <SecretInput
+                    {...field}
+                    autoFocus
+                    revealable
+                    autoComplete="off"
+                    placeholder="Paste secret"
+                  />
+                )}
               </FormControl>
               <FormMessage />
             </FormItem>

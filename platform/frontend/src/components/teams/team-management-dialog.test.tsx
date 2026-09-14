@@ -117,6 +117,7 @@ function makeTeam(): Team {
     organizationId: "org-1",
     parentId: null,
     createdBy: "user-1",
+    createdByServiceAccountId: null,
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
     roles: [],

@@ -1,7 +1,6 @@
 import { RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { isAnyAgentRuntimeBackendDriverEnabled } from "@/services/agent-runtime/backends";
 import {
   createRuntimeCredentialDefinition,
   deleteRuntimeCredentialConnection,
@@ -13,7 +12,6 @@ import {
   updateRuntimeCredentialDefinition,
 } from "@/services/agent-runtime/runtime-credentials";
 import {
-  ApiError,
   constructResponseSchema,
   InsertRuntimeCredentialDefinitionSchema,
   RuntimeCredentialDefinitionViewSchema,
@@ -23,18 +21,14 @@ import {
 } from "@/types";
 
 const runtimeCredentialRoutes: FastifyPluginAsyncZod = async (fastify) => {
-  fastify.addHook("preHandler", async () => {
-    if (!isAnyAgentRuntimeBackendDriverEnabled())
-      throw new ApiError(404, "Not found");
-  });
-
   fastify.get(
-    "/api/runtime-credentials",
+    "/api/credentials",
     {
       schema: {
         operationId: RouteId.ListRuntimeCredentials,
-        description: "List runtime credentials available to Agents",
-        tags: ["Agents"],
+        description:
+          "List reusable credentials available to platform integrations",
+        tags: ["Credentials"],
         response: constructResponseSchema(
           z.array(RuntimeCredentialDefinitionViewSchema),
         ),
@@ -50,12 +44,12 @@ const runtimeCredentialRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.post(
-    "/api/runtime-credentials",
+    "/api/credentials",
     {
       schema: {
         operationId: RouteId.CreateRuntimeCredential,
-        description: "Create an runtime credential definition",
-        tags: ["Agents"],
+        description: "Create a credential definition",
+        tags: ["Credentials"],
         body: InsertRuntimeCredentialDefinitionSchema,
         response: constructResponseSchema(
           SelectRuntimeCredentialDefinitionSchema,
@@ -73,12 +67,12 @@ const runtimeCredentialRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.get(
-    "/api/runtime-credentials/:key/usage",
+    "/api/credentials/:key/usage",
     {
       schema: {
         operationId: RouteId.GetRuntimeCredentialUsage,
-        description: "List Agents using an runtime credential",
-        tags: ["Agents"],
+        description: "List resources using a saved credential",
+        tags: ["Credentials"],
         params: CredentialKeyParamsSchema,
         response: constructResponseSchema(RuntimeCredentialUsageSchema),
       },
@@ -93,12 +87,12 @@ const runtimeCredentialRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.patch(
-    "/api/runtime-credentials/:key",
+    "/api/credentials/:key",
     {
       schema: {
         operationId: RouteId.UpdateRuntimeCredential,
-        description: "Update an runtime credential definition",
-        tags: ["Agents"],
+        description: "Update a credential definition",
+        tags: ["Credentials"],
         params: CredentialKeyParamsSchema,
         body: UpdateRuntimeCredentialDefinitionSchema,
         response: constructResponseSchema(
@@ -117,12 +111,12 @@ const runtimeCredentialRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.delete(
-    "/api/runtime-credentials/:key",
+    "/api/credentials/:key",
     {
       schema: {
         operationId: RouteId.DeleteRuntimeCredential,
-        description: "Delete an runtime credential definition",
-        tags: ["Agents"],
+        description: "Delete a credential definition",
+        tags: ["Credentials"],
         params: CredentialKeyParamsSchema,
         response: constructResponseSchema(
           z.object({ deleted: z.literal(true) }),
@@ -139,12 +133,12 @@ const runtimeCredentialRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.put(
-    "/api/runtime-credentials/:key/personal",
+    "/api/credentials/:key/personal",
     {
       schema: {
         operationId: RouteId.SetPersonalRuntimeCredentialConnection,
-        description: "Connect a personal runtime credential",
-        tags: ["Agents"],
+        description: "Connect a personal credential",
+        tags: ["Credentials"],
         params: CredentialKeyParamsSchema,
         body: ConnectionValueSchema,
         response: constructResponseSchema(
@@ -166,12 +160,12 @@ const runtimeCredentialRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.delete(
-    "/api/runtime-credentials/:key/personal",
+    "/api/credentials/:key/personal",
     {
       schema: {
         operationId: RouteId.DeletePersonalRuntimeCredentialConnection,
-        description: "Disconnect a personal runtime credential",
-        tags: ["Agents"],
+        description: "Disconnect a personal credential",
+        tags: ["Credentials"],
         params: CredentialKeyParamsSchema,
         response: constructResponseSchema(z.object({ deleted: z.boolean() })),
       },
@@ -189,12 +183,12 @@ const runtimeCredentialRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.put(
-    "/api/runtime-credentials/:key/organization",
+    "/api/credentials/:key/organization",
     {
       schema: {
         operationId: RouteId.SetOrganizationRuntimeCredentialConnection,
-        description: "Connect an organization runtime credential",
-        tags: ["Agents"],
+        description: "Connect an organization credential",
+        tags: ["Credentials"],
         params: CredentialKeyParamsSchema,
         body: ConnectionValueSchema,
         response: constructResponseSchema(
@@ -226,12 +220,12 @@ const runtimeCredentialRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.delete(
-    "/api/runtime-credentials/:key/organization",
+    "/api/credentials/:key/organization",
     {
       schema: {
         operationId: RouteId.DeleteOrganizationRuntimeCredentialConnection,
-        description: "Disconnect an organization runtime credential",
-        tags: ["Agents"],
+        description: "Disconnect an organization credential",
+        tags: ["Credentials"],
         params: CredentialKeyParamsSchema,
         response: constructResponseSchema(z.object({ deleted: z.boolean() })),
       },

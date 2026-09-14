@@ -22,7 +22,12 @@ const {
   updateAgentRun,
 } = archestraApiSdk;
 
-export type AgentRun = archestraApiTypes.GetAgentRunsResponses["200"][number];
+export type AgentRunListItem =
+  archestraApiTypes.GetAgentRunsResponses["200"][number];
+export type AgentRun = Omit<
+  AgentRunListItem,
+  "initiatorName" | "shareVisibility" | "shareTeamNames" | "shareUserNames"
+>;
 export type AgentRunSession =
   archestraApiTypes.GetMyAgentRunsResponses["200"]["data"][number];
 
@@ -278,9 +283,13 @@ export function useShareAgentRun() {
       if (error) throw reportApiError(error);
       return data;
     },
-    onSuccess: (data, { taskId, suppressSuccessToast }) => {
+    onSuccess: async (data, { taskId, suppressSuccessToast }) => {
       if (!data) return;
       queryClient.setQueryData(["agent-runs", taskId, "share"], data);
+      await queryClient.invalidateQueries({
+        predicate: ({ queryKey }) =>
+          queryKey[0] === "agents" && queryKey[2] === "runs",
+      });
       if (!suppressSuccessToast) {
         toast.success("Run visibility updated");
       }
@@ -296,8 +305,12 @@ export function useUnshareAgentRun() {
       if (error) throw reportApiError(error);
       return data;
     },
-    onSuccess: (_data, taskId) => {
+    onSuccess: async (_data, taskId) => {
       queryClient.setQueryData(["agent-runs", taskId, "share"], null);
+      await queryClient.invalidateQueries({
+        predicate: ({ queryKey }) =>
+          queryKey[0] === "agents" && queryKey[2] === "runs",
+      });
       toast.success("Run sharing removed");
     },
   });

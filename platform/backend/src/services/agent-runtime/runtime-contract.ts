@@ -1,5 +1,10 @@
 /** Filesystem contract shared by maintained Agent Runtime images and backends. */
 export const AGENT_RUNTIME_DIR = "/var/run/archestra";
+/** Full Secret-volume mount: subPath mounts would never receive token updates. */
+export const AGENT_RUNTIME_CREDENTIALS_DIR = `${AGENT_RUNTIME_DIR}/credentials`;
+export const AGENT_RUNTIME_CREDENTIALS_FILE = `${AGENT_RUNTIME_CREDENTIALS_DIR}/current.json`;
+export const AGENT_RUNTIME_CREDENTIALS_SECRET_KEY =
+  "ARCHESTRA_AGENT_RUNTIME_RENEWABLE_CREDENTIALS";
 export const AGENT_RUNTIME_STEER_FIFO = `${AGENT_RUNTIME_DIR}/steer`;
 /** Stable command that joins the interactive session from any exec client. */
 export const AGENT_RUNTIME_ATTACH_SCRIPT = `${AGENT_RUNTIME_DIR}/attach`;

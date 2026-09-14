@@ -17,7 +17,7 @@ import config from "@/config";
 import db, { schema } from "@/database";
 import { createPaginatedResult } from "@/database/utils/pagination";
 import type {
-  AgentRun,
+  AgentRunListItem,
   AgentRunRecord,
   AgentRunSession,
   InsertAgentRunRecord,
@@ -30,6 +30,27 @@ import A2AMessageModel from "./a2a/message";
  * task's state machine is the record of how the work is going.
  */
 class AgentRunModel {
+  /** Closed turns can retain an interactive process until workspace cleanup. */
+  static async listRetainedForCredentialRefresh(): Promise<AgentRunRecord[]> {
+    return db
+      .select(getTableColumns(schema.agentRunsTable))
+      .from(schema.agentRunsTable)
+      .innerJoin(
+        schema.agentWorkspacesTable,
+        eq(
+          schema.agentWorkspacesTable.lastTaskId,
+          schema.agentRunsTable.taskId,
+        ),
+      )
+      .where(
+        and(
+          isNotNull(schema.agentRunsTable.endedAt),
+          inArray(schema.agentWorkspacesTable.state, ["idle", "active"]),
+          sql`${schema.agentWorkspacesTable.expiresAt} > now()`,
+        ),
+      );
+  }
+
   static async create(
     run: InsertAgentRunRecord & { id?: AgentRunRecord["id"] },
   ): Promise<AgentRunRecord> {
@@ -184,10 +205,26 @@ class AgentRunModel {
 
   /** Sessions whose pod should still exist, across every organization. */
   static async listOpen(): Promise<AgentRunRecord[]> {
-    return db
-      .select()
-      .from(schema.agentRunsTable)
-      .where(isNull(schema.agentRunsTable.endedAt));
+    return (
+      db
+        .select(getTableColumns(schema.agentRunsTable))
+        .from(schema.agentRunsTable)
+        .innerJoin(
+          schema.a2aTasksTable,
+          eq(schema.agentRunsTable.taskId, schema.a2aTasksTable.id),
+        )
+        // Capturing the runtime's end and settling its task are separate writes.
+        // Recover a crash between them instead of abandoning an active task.
+        .where(
+          or(
+            isNull(schema.agentRunsTable.endedAt),
+            inArray(schema.a2aTasksTable.state, [
+              "TASK_STATE_SUBMITTED",
+              "TASK_STATE_WORKING",
+            ]),
+          ),
+        )
+    );
   }
 
   /** Terminal runs whose channel completion reply is still pending. */
@@ -211,7 +248,7 @@ class AgentRunModel {
   static async listForAgent(params: {
     agentId: string;
     organizationId: string;
-  }): Promise<AgentRun[]> {
+  }): Promise<AgentRunListItem[]> {
     const {
       logs: _logs,
       completionTarget: _completionTarget,
@@ -228,6 +265,24 @@ class AgentRunModel {
         stateChangedAt: schema.a2aTasksTable.stateChangedAt,
         hardDeadlineAt: hardDeadlineAtExpression(),
         lastModelActivityAt: lastModelActivityAtExpression(),
+        initiatorName: schema.usersTable.name,
+        shareVisibility: schema.agentRunSharesTable.visibility,
+        shareTeamNames: sql<string[]>`coalesce(array(
+          select ${schema.teamsTable.name}
+          from ${schema.agentRunShareTeamsTable}
+          inner join ${schema.teamsTable}
+            on ${schema.teamsTable.id} = ${schema.agentRunShareTeamsTable.teamId}
+          where ${schema.agentRunShareTeamsTable.shareId} = ${schema.agentRunSharesTable.id}
+          order by ${schema.teamsTable.name}
+        ), array[]::text[])`,
+        shareUserNames: sql<string[]>`coalesce(array(
+          select ${schema.usersTable.name}
+          from ${schema.agentRunShareUsersTable}
+          inner join ${schema.usersTable}
+            on ${schema.usersTable.id} = ${schema.agentRunShareUsersTable.userId}
+          where ${schema.agentRunShareUsersTable.shareId} = ${schema.agentRunSharesTable.id}
+          order by ${schema.usersTable.name}
+        ), array[]::text[])`,
       })
       .from(schema.agentRunsTable)
       .innerJoin(
@@ -237,6 +292,14 @@ class AgentRunModel {
       .innerJoin(
         schema.agentsTable,
         eq(schema.agentRunsTable.agentId, schema.agentsTable.id),
+      )
+      .leftJoin(
+        schema.usersTable,
+        eq(schema.agentRunsTable.actorUserId, schema.usersTable.id),
+      )
+      .leftJoin(
+        schema.agentRunSharesTable,
+        eq(schema.agentRunsTable.taskId, schema.agentRunSharesTable.taskId),
       )
       .where(
         and(

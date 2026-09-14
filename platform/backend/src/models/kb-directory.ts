@@ -48,12 +48,17 @@ class KbDirectoryModel {
     );
 
     const creators = await CreatedByModel.resolve(
-      directories.map((directory) => directory.createdBy),
+      directories.map((directory) =>
+        CreatedByModel.id(directory, directory.createdBy),
+      ),
     );
 
     return directories.map((directory) => ({
       ...directory,
-      createdBy: lookupCreator(creators, directory.createdBy),
+      createdBy: lookupCreator(
+        creators,
+        CreatedByModel.id(directory, directory.createdBy),
+      ),
       teamIds: teamsByDirectory.get(directory.id) ?? [],
       fileCount: countByDirectory.get(directory.id) ?? 0,
     }));
@@ -103,12 +108,18 @@ class KbDirectoryModel {
     return db.transaction(async (tx) => {
       const [directory] = await tx
         .insert(schema.kbDirectoriesTable)
-        .values({
-          organizationId: params.organizationId,
-          name: params.name,
-          visibility: params.visibility,
-          createdBy: params.createdBy,
-        })
+        .values(
+          await CreatedByModel.forInsert({
+            data: {
+              organizationId: params.organizationId,
+              name: params.name,
+              visibility: params.visibility,
+              createdBy: params.createdBy,
+            },
+            userIdField: "createdBy",
+            transaction: tx,
+          }),
+        )
         .returning();
 
       if (params.visibility === "team-scoped" && params.teamIds.length > 0) {

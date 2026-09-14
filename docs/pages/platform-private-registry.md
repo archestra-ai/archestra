@@ -3,7 +3,7 @@ title: Private MCP Registry
 category: MCP
 order: 2
 description: Managing your organization's MCP servers in a private registry
-lastUpdated: 2026-08-27
+lastUpdated: 2026-09-13
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -54,6 +54,8 @@ Self-hosted servers support two transports:
 - **streamable-http**: runs the server as an HTTP service inside the cluster. Use this when the server needs concurrent requests, HTTP headers, or per-request credential injection.
 
 ## Credentials
+
+Self-hosted environment variables can reference saved [Credentials](/docs/platform-credentials). Select a secret source once instead of entering its value for each resource. Personal credentials require personal installations; organization credentials support shared installations.
 
 The registry entry defines what credential model an installation uses. The installation stores the actual secret, OAuth token, or enterprise credential configuration.
 

@@ -6,7 +6,6 @@ import {
   Boxes,
   Brain,
   Fingerprint,
-  Github,
   KeyRound,
   Library,
   Lock,
@@ -22,7 +21,6 @@ import {
   UsersRound,
 } from "lucide-react";
 import { usePermissionMap } from "@/lib/auth/auth.query";
-
 import { useSecretsType } from "@/lib/secrets.query";
 
 export function useSettingsTabs() {
@@ -98,8 +96,14 @@ export function useSettingsTabs() {
     ...(permissionMap?.["/settings/roles"]
       ? [{ label: "Roles", href: "/settings/roles", Icon: UserCog }]
       : []),
-    ...(permissionMap?.["/settings/github"]
-      ? [{ label: "GitHub", href: "/settings/github", Icon: Github }]
+    ...(permissionMap?.["/settings/credentials"]
+      ? [
+          {
+            label: "Credentials",
+            href: "/settings/credentials",
+            Icon: KeyRound,
+          },
+        ]
       : []),
     // Always render the Identity Providers tab when the user has the
     // permission — the destination page handles dimming when the enterprise

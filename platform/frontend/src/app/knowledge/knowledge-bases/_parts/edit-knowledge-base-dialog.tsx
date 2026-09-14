@@ -5,6 +5,8 @@ import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
 import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
+import { createdByFact } from "@/components/created-by-cell";
+import { DetailFacts } from "@/components/detail-facts";
 import { FormDialog } from "@/components/form-dialog";
 import { Button } from "@/components/ui/button";
 import { DialogForm, DialogStickyFooter } from "@/components/ui/dialog";
@@ -27,6 +29,7 @@ type KnowledgeBaseItem = Pick<
   archestraApiTypes.GetKnowledgeBasesResponses["200"]["data"][number],
   "id" | "name" | "description" | "visibility" | "teamIds"
 > & {
+  createdBy?: archestraApiTypes.GetKnowledgeBasesResponses["200"]["data"][number]["createdBy"];
   labels?: archestraApiTypes.GetKnowledgeBasesResponses["200"]["data"][number]["labels"];
 };
 
@@ -98,6 +101,7 @@ export function EditKnowledgeBaseDialog({
           className="flex min-h-0 flex-1 flex-col"
         >
           <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4">
+            <DetailFacts facts={[createdByFact(knowledgeBase.createdBy)]} />
             <FormField
               control={form.control}
               name="name"

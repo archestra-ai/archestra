@@ -13,6 +13,7 @@ import {
 import type { KnowledgeFileVisibility } from "@/types/knowledge-file";
 import type { SkillSandboxFileStorageProvider } from "@/types/skill-sandbox";
 import kbDirectoriesTable from "./kb-directory";
+import serviceAccountsTable from "./service-account";
 import usersTable from "./user";
 
 const bytea = customType<{ data: Buffer; driverParam: Buffer }>({
@@ -69,6 +70,11 @@ const kbFilesTable = pgTable(
     uploadedBy: text("uploaded_by").references(() => usersTable.id, {
       onDelete: "set null",
     }),
+    /** Service account creator; separate from human ownership. */
+    createdByServiceAccountId: uuid("created_by_service_account_id").references(
+      () => serviceAccountsTable.id,
+      { onDelete: "set null" },
+    ),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   },
   (table) => [

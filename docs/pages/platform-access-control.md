@@ -3,7 +3,7 @@ title: "Access Control"
 category: Administration
 description: "Role-based access control (RBAC) system for managing user permissions in Archestra"
 order: 1
-lastUpdated: 2026-09-08
+lastUpdated: 2026-09-13
 ---
 <!--
 GENERATED FILE — edit codegen-access-control-docs.ts, not this page.
@@ -62,7 +62,7 @@ Full access to core resources and settings, but cannot manage users, roles, or i
 | MCP Registry | `read`, `create`, `update`, `delete`, `team-admin`, `deploy-to-restricted` |
 | MCP Server Installations | `read`, `create`, `update`, `delete` |
 | Environments | `read`, `create`, `update`, `delete` |
-| GitHub App Configurations | `read`, `create`, `update`, `delete` |
+| Credentials | `read`, `create`, `update`, `delete` |
 | Knowledge Sources | `read`, `create`, `update`, `delete`, `query`, `deploy-to-restricted` |
 | Chats | `read`, `create`, `update`, `delete` |
 | Projects | `read`, `create`, `update`, `delete`, `share-org` |
@@ -107,6 +107,7 @@ Can manage agents, tools, and chat, with read-only access to most other resource
 | MCP Registry | `read`, `update` |
 | MCP Server Installations | `read`, `create`, `delete` |
 | Environments | `read` |
+| Credentials | `read` |
 | Knowledge Sources | `read`, `query` |
 | Chats | `read`, `create`, `update`, `delete` |
 | Projects | `read`, `create`, `update`, `delete`, `share-org` |
@@ -123,6 +124,12 @@ Can manage agents, tools, and chat, with read-only access to most other resource
 ## Custom Roles
 
 Users with `ac:create` permission can create custom roles by selecting specific permission combinations. Custom roles allow fine-grained access control tailored to your needs.
+
+### Service Account Creators
+
+Service accounts can create organization and team resources within their assigned permissions. Creator attribution records the service account separately from human ownership. Attribution does not grant additional access or team membership.
+
+Resources with personal user ownership require a human account. Projects start as personal resources and require a user account.
 
 ### Multiple Roles And Team Grants
 
@@ -187,15 +194,15 @@ The following table lists all available permissions that can be assigned to cust
 | `chatAgentPicker:enable` | Show agent picker in chat |
 | `chatExpandToolCalls:enable` | Allow expanding tool call details in chat |
 | `chatProviderSettings:enable` | Show model and API key selectors in chat |
+| `credential:read` | View saved credentials |
+| `credential:create` | Create saved credentials |
+| `credential:update` | Modify saved credentials |
+| `credential:delete` | Delete saved credentials |
 | `environment:read` | View and list deployment environments |
 | `environment:create` | Create deployment environments |
 | `environment:update` | Modify deployment environments, including the org default environment |
 | `environment:delete` | Delete deployment environments |
 | `file:manage` | List, read, write, and delete files in chats and projects |
-| `githubAppConfig:read` | View GitHub App configurations |
-| `githubAppConfig:create` | Create GitHub App configurations |
-| `githubAppConfig:update` | Modify GitHub App configurations |
-| `githubAppConfig:delete` | Delete GitHub App configurations |
 | `identityProvider:read` | View identity provider configurations (SSO) |
 | `identityProvider:create` | Set up new identity providers |
 | `identityProvider:update` | Modify identity provider settings |

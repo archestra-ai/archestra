@@ -14,6 +14,7 @@ import {
   AgentExcludedSubagentModel,
   AgentModel,
   AgentToolModel,
+  LlmProviderApiKeyModel,
   LlmProviderApiKeyModelLinkModel,
   ModelModel,
   OrganizationModel,
@@ -61,6 +62,91 @@ describe("agent routes", () => {
   afterEach(async () => {
     vi.restoreAllMocks();
     await app.close();
+  });
+
+  test("lists configured provider names and filters before pagination", async () => {
+    const selectedKey = await LlmProviderApiKeyModel.create({
+      name: "Operations provider",
+      provider: "openai",
+      organizationId,
+      userId: user.id,
+      scope: "org",
+      isPrimary: true,
+    });
+    const model = await ModelModel.create({
+      externalId: "openai/gpt-4o",
+      provider: "openai",
+      modelId: "gpt-4o",
+      inputModalities: null,
+      outputModalities: null,
+    });
+    for (const name of ["Alpha assistant", "Beta assistant"]) {
+      await AgentModel.create({
+        name,
+        organizationId,
+        scope: "org",
+        teams: [],
+        llmApiKeyId: selectedKey.id,
+        modelId: model.id,
+      });
+    }
+    const unconfigured = await AgentModel.create({
+      name: "Default assistant",
+      organizationId,
+      scope: "org",
+      teams: [],
+    });
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/agents?providerApiKeyId=${selectedKey.id}&limit=1&offset=1&sortBy=name&sortDirection=asc`,
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().pagination.total).toBe(2);
+    expect(response.json().data).toMatchObject([
+      {
+        name: "Beta assistant",
+        resolvedLlmProviderKeyName: "Operations provider",
+        resolvedLlmModelName: "gpt-4o",
+      },
+    ]);
+    expect(response.json().data[0]).not.toHaveProperty("apiKey");
+    expect(response.json().data[0]).not.toHaveProperty("secretId");
+
+    const defaultResponse = await app.inject({
+      method: "GET",
+      url: `/api/agents/${unconfigured.id}`,
+    });
+    expect(defaultResponse.statusCode).toBe(200);
+    expect(defaultResponse.json()).toMatchObject({
+      resolvedLlmProviderKeyName: null,
+      resolvedLlmModelName: null,
+    });
+
+    await OrganizationModel.patch(organizationId, { defaultModelId: model.id });
+    await AgentModel.create({
+      name: "Legacy model-only assistant",
+      organizationId,
+      scope: "org",
+      teams: [],
+      modelId: model.id,
+    });
+    const inheritedResponse = await app.inject({
+      method: "GET",
+      url: "/api/agents?providerApiKeyId=organization-default",
+    });
+    expect(inheritedResponse.statusCode).toBe(200);
+    expect(
+      inheritedResponse.json().data.map((agent: { id: string }) => agent.id),
+    ).toEqual([unconfigured.id]);
+    expect(inheritedResponse.json().pagination.total).toBe(1);
+
+    const emptyResponse = await app.inject({
+      method: "GET",
+      url: "/api/agents?providerApiKeyId=00000000-0000-4000-8000-000000000000",
+    });
+    expect(emptyResponse.statusCode).toBe(200);
+    expect(emptyResponse.json().data).toEqual([]);
+    expect(emptyResponse.json().pagination.total).toBe(0);
   });
 
   async function expectAgentTypeSoftDelete(

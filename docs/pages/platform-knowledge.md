@@ -533,14 +533,13 @@ Sync issues, pull request discussions, and repository files from GitHub.
 
 **Indexed:** issues, pull requests, comments, and selected text files from GitHub.com or GitHub Enterprise Server. Repository file indexing defaults to Markdown and YAML files.
 
-**Authentication:** a [personal access token](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens) or a GitHub App. GitHub App credentials (App ID, installation ID, and private key) are stored once as an organization-level configuration under **Settings -> GitHub**; the connector references a saved configuration instead of holding its own credentials, so one App can back many connectors and skill imports.
+**Authentication:** an organization [credential](/docs/platform-credentials), or a token entered for this connector. A saved custom secret supplies a token. A saved GitHub App supplies installation credentials.
 
 | Field                 | Description                                                                                     |
 | --------------------- | ----------------------------------------------------------------------------------------------- |
 | GitHub API URL        | API endpoint (e.g., `https://api.github.com` for GitHub.com, or your GHE API URL)               |
 | Owner                 | GitHub organization or username that owns the repositories                                      |
-| Authentication Method | Personal access token or GitHub App                                                            |
-| GitHub App Configuration | Saved configuration to authenticate with when using GitHub App auth (managed in **Settings -> GitHub**) |
+| Credential | Saved organization secret or GitHub App from **Settings → Credentials** |
 | Repositories          | Comma-separated repository names to sync (optional -- leave blank to sync all org repositories) |
 | Include Issues        | Toggle to sync issues and their comments (default: on)                                          |
 | Include Pull Requests | Toggle to sync pull requests and their comments (default: on)                                   |
@@ -559,7 +558,7 @@ A GitHub App is the preferred credential. Create one under **Settings > Develope
 | Repository, when files are indexed | Contents |
 | Organization | Members |
 
-Install the App on every target repository. Generate a private key and copy its PEM value. Save the App ID, installation ID, API URL, and private key under **Settings > GitHub**, then select that configuration in the connector.
+Install the App on every target repository. Generate a private key and copy its PEM value. Save the App ID, installation ID, API URL, and private key under **Settings → Credentials**, then select that configuration in the connector.
 
 A fine-grained personal access token needs the same repository and organization permissions. Select every target repository. Its owner also needs write, maintain, or admin access to list collaborators. A classic token needs `repo` and `read:org`; authorize it for SAML SSO when the organization requires SSO.
 

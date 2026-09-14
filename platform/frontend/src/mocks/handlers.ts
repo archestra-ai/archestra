@@ -150,6 +150,7 @@ export const handlers: HttpHandler[] = [
       permissions: adminPermissionsSeed,
     },
   ]),
+  ...getJson("/api/credentials", []),
   ...getJson("/api/config", configSeed),
   ...getJson("/api/config/public", publicConfigSeed),
   ...getJson("/health", healthSeed),

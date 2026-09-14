@@ -29,7 +29,7 @@ import {
   lockedChatRequestHeaders,
   storeLockedChatKey,
 } from "@/lib/chat/locked-chat";
-import { handleApiError } from "@/lib/utils";
+import { handleApiError, toApiError } from "@/lib/utils";
 import websocketService from "@/lib/websocket/websocket";
 
 const {
@@ -779,8 +779,16 @@ export function useDeleteConversation() {
 
 export function useStopChatStream() {
   return useMutation({
-    mutationFn: (conversationId: string) =>
-      callApi(() => stopChatStream({ path: { id: conversationId } }), null),
+    mutationFn: async (conversationId: string) => {
+      const { data, error } = await stopChatStream({
+        path: { id: conversationId },
+      });
+      if (error) {
+        handleApiError(error);
+        throw toApiError(error);
+      }
+      return data;
+    },
   });
 }
 

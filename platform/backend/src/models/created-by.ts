@@ -1,6 +1,7 @@
 import type { CreatedBy } from "@archestra/shared";
-import { inArray } from "drizzle-orm";
-import db, { schema } from "@/database";
+import { and, eq, inArray } from "drizzle-orm";
+import db, { schema, type Transaction } from "@/database";
+import { ApiError } from "@/types";
 
 /**
  * Resolves creator user ids into the uniform `CreatedBy` shape the "Created by"
@@ -20,6 +21,78 @@ import db, { schema } from "@/database";
  * between the two queries reads as "no creator" instead of failing the request.
  */
 class CreatedByModel {
+  /** Normalize an authenticated principal before writing a human-only FK. */
+  static async forInsert<
+    K extends "authorId" | "createdBy" | "uploadedBy" | "ownerId",
+    const T extends {
+      organizationId?: string;
+      scope?: string;
+      visibility?: string;
+    } & Partial<Record<K, string | null>>,
+  >({
+    data,
+    userIdField,
+    transaction,
+  }: {
+    data: T;
+    userIdField: K;
+    transaction?: Transaction;
+  }): Promise<
+    Omit<T, K | "createdByServiceAccountId"> &
+      Record<K, string | null | undefined> & {
+        createdByServiceAccountId: string | null;
+      }
+  > {
+    const actorId = data[userIdField];
+    if (!actorId?.startsWith(SERVICE_ACCOUNT_PREFIX)) {
+      return {
+        ...data,
+        [userIdField]: actorId,
+        createdByServiceAccountId: null,
+      };
+    }
+    if (data.scope === "personal" || data.visibility === "private") {
+      throw new ApiError(
+        400,
+        "Service accounts cannot create personal resources. Use org or team scope.",
+      );
+    }
+    const serviceAccountId = actorId.slice(SERVICE_ACCOUNT_PREFIX.length);
+    const [account] = await (transaction ?? db)
+      .select({ id: schema.serviceAccountsTable.id })
+      .from(schema.serviceAccountsTable)
+      .where(
+        and(
+          eq(schema.serviceAccountsTable.id, serviceAccountId),
+          eq(
+            schema.serviceAccountsTable.organizationId,
+            data.organizationId ?? "",
+          ),
+        ),
+      );
+    if (!account)
+      throw new ApiError(
+        403,
+        "The creator must belong to the resource organization",
+      );
+    return {
+      ...data,
+      [userIdField]: null,
+      createdByServiceAccountId: account.id,
+    };
+  }
+
+  /** A stable principal id for batch resolution; it confers no ownership. */
+  static id(
+    row: object,
+    humanId: string | null | undefined,
+  ): string | null | undefined {
+    return "createdByServiceAccountId" in row &&
+      typeof row.createdByServiceAccountId === "string"
+      ? `${SERVICE_ACCOUNT_PREFIX}${row.createdByServiceAccountId}`
+      : humanId;
+  }
+
   static async resolve(
     userIds: readonly (string | null | undefined)[],
   ): Promise<Map<string, CreatedBy>> {
@@ -28,16 +101,31 @@ class CreatedByModel {
       return new Map();
     }
 
-    const rows = await db
-      .select({
-        id: schema.usersTable.id,
-        name: schema.usersTable.name,
-        email: schema.usersTable.email,
-      })
-      .from(schema.usersTable)
-      .where(inArray(schema.usersTable.id, ids));
+    const humanIds = ids.filter((id) => !id.startsWith(SERVICE_ACCOUNT_PREFIX));
+    const serviceAccountIds = ids
+      .filter((id) => id.startsWith(SERVICE_ACCOUNT_PREFIX))
+      .map((id) => id.slice(SERVICE_ACCOUNT_PREFIX.length));
+    const accounts = serviceAccountIds.length
+      ? await db
+          .select({
+            id: schema.serviceAccountsTable.id,
+            name: schema.serviceAccountsTable.name,
+          })
+          .from(schema.serviceAccountsTable)
+          .where(inArray(schema.serviceAccountsTable.id, serviceAccountIds))
+      : [];
+    const rows = humanIds.length
+      ? await db
+          .select({
+            id: schema.usersTable.id,
+            name: schema.usersTable.name,
+            email: schema.usersTable.email,
+          })
+          .from(schema.usersTable)
+          .where(inArray(schema.usersTable.id, humanIds))
+      : [];
 
-    return new Map(
+    const creators = new Map<string, CreatedBy>(
       rows.map((row) => [
         row.id,
         // The columns are `notNull` in the schema but empty strings happen
@@ -47,6 +135,16 @@ class CreatedByModel {
         { id: row.id, name: row.name || null, email: row.email || null },
       ]),
     );
+    for (const account of accounts) {
+      const id = `${SERVICE_ACCOUNT_PREFIX}${account.id}`;
+      creators.set(id, {
+        id,
+        name: account.name,
+        email: null,
+        type: "service_account",
+      });
+    }
+    return creators;
   }
 
   /**
@@ -58,14 +156,19 @@ class CreatedByModel {
    * already called `createdBy`, the resolved object replaces the bare id in
    * place, so nothing has to strip the id afterwards.
    */
-  static async attach<T>(
+  static async attach<T extends object>(
     rows: T[],
     creatorIdOf: (row: T) => string | null | undefined,
   ): Promise<(Omit<T, "createdBy"> & { createdBy: CreatedBy | null })[]> {
-    const creators = await CreatedByModel.resolve(rows.map(creatorIdOf));
+    const creators = await CreatedByModel.resolve(
+      rows.map((row) => CreatedByModel.id(row, creatorIdOf(row))),
+    );
     return rows.map((row) => ({
       ...row,
-      createdBy: lookupCreator(creators, creatorIdOf(row)),
+      createdBy: lookupCreator(
+        creators,
+        CreatedByModel.id(row, creatorIdOf(row)),
+      ),
     }));
   }
 
@@ -90,3 +193,5 @@ export function lookupCreator(
 ): CreatedBy | null {
   return (userId && creators.get(userId)) || null;
 }
+
+const SERVICE_ACCOUNT_PREFIX = "service-account:";

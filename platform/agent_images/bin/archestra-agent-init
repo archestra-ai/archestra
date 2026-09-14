@@ -30,15 +30,33 @@ fi
 # never by printing credential state during startup.
 if [ -n "${GH_TOKEN:-${GITHUB_TOKEN:-}}" ] && command -v gh >/dev/null 2>&1; then
   github_token="${GH_TOKEN:-${GITHUB_TOKEN}}"
+  renewable_github=false
+  if [ -n "${ARCHESTRA_AGENT_RUNTIME_CREDENTIALS_FILE:-}" ] && \
+    jq -e '.credentials | has("GITHUB_TOKEN") or has("GH_TOKEN")' "$ARCHESTRA_AGENT_RUNTIME_CREDENTIALS_FILE" >/dev/null 2>&1; then
+    renewable_github=true
+  fi
   # Persist the credential inside this ephemeral pod before the native Agent
   # starts. Some clients deliberately scrub token-shaped environment variables
   # from their shell tools; Git and gh can still use the user-supplied token
   # through their normal 0600 auth store without putting it in the workspace.
-  printf '%s\n' "${github_token}" |
+  if [ "$renewable_github" != true ]; then
+    printf '%s\n' "${github_token}" |
     env -u GH_TOKEN -u GITHUB_TOKEN gh auth login \
       --hostname github.com \
       --with-token >/dev/null 2>&1
+  fi
   gh auth setup-git >/dev/null 2>&1
+  # gh records its resolved executable, which bypasses our script wrapper.
+  # Redirect each configured host back through the renewable credential reader.
+  git config --global --get-regexp '^credential\..*\.helper$' |
+    while read -r helper_key helper_command; do
+      case "$helper_command" in
+        *'/usr/bin/gh auth git-credential'*)
+          git config --global --replace-all "$helper_key" \
+            '!/usr/local/bin/gh auth git-credential' '.*gh auth git-credential.*'
+          ;;
+      esac
+    done
   # Coding agents commonly prefer the SSH clone URL shown by GitHub. The
   # catalog credential is an HTTPS token, so normalize either SSH spelling to
   # the authenticated HTTPS transport instead of requiring a second SSH key.

@@ -14,6 +14,10 @@ import {
   sql,
 } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
+import {
+  isServiceAccountUserId,
+  SERVICE_ACCOUNT_USER_ID_PREFIX,
+} from "@/auth/utils";
 import db, { schema } from "@/database";
 import {
   type CursorPaginatedResult,
@@ -275,7 +279,17 @@ class AuditLogModel {
       conditions.push(lte(schema.auditLogsTable.createdAt, opts.endDate));
     }
     if (opts.actorId) {
-      conditions.push(eq(schema.auditLogsTable.actorId, opts.actorId));
+      if (isServiceAccountUserId(opts.actorId)) {
+        conditions.push(
+          eq(schema.auditLogsTable.actorType, "service_account"),
+          eq(
+            schema.auditLogsTable.actorEmail,
+            `${opts.actorId.slice(SERVICE_ACCOUNT_USER_ID_PREFIX.length)}@service-account.local`,
+          ),
+        );
+      } else {
+        conditions.push(eq(schema.auditLogsTable.actorId, opts.actorId));
+      }
     }
     if (opts.action) {
       conditions.push(eq(schema.auditLogsTable.action, opts.action));

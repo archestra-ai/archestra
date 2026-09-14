@@ -24,7 +24,7 @@ export const SETTINGS_TAB_HREFS = [
   "/settings/users",
   "/settings/teams",
   "/settings/roles",
-  "/settings/github",
+  "/settings/credentials",
   "/settings/identity-providers",
   "/settings/secrets",
 ] as const;

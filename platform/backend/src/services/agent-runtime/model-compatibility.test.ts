@@ -242,6 +242,53 @@ test("accepts an inherited compatible organization default model", async ({
   });
 });
 
+test("uses provider credentials after switching away from the Claude Code runtime", async ({
+  makeAgent,
+  makeAdmin,
+  makeLlmProviderApiKey,
+  makeMember,
+  makeOrganization,
+  makeSecret,
+}) => {
+  const organization = await makeOrganization();
+  const user = await makeAdmin();
+  await makeMember(user.id, organization.id, { role: "admin" });
+  const { model, providerKey } = await createModelSelection({
+    organizationId: organization.id,
+    provider: "anthropic",
+    modelId: "claude-preflight-test",
+    makeSecret,
+    makeLlmProviderApiKey,
+  });
+  const agent = await makeAgent({
+    organizationId: organization.id,
+    authorId: user.id,
+    agentType: "agent",
+    modelId: model.id,
+    llmApiKeyId: providerKey.id,
+  });
+
+  await expect(
+    preflightAgentRuntimeModelCompatibility({
+      runtime: {
+        command: ["custom-runtime"],
+        inferenceProtocol: "anthropic",
+        claudeCode: { authentication: "subscription", model: "sonnet" },
+      },
+      agent,
+      organizationId: organization.id,
+      userId: user.id,
+    }),
+  ).resolves.toMatchObject({
+    usesClaudeCodeSubscription: false,
+    llm: {
+      chatApiKeyId: providerKey.id,
+      selectedProvider: "anthropic",
+      selectedModel: model.modelId,
+    },
+  });
+});
+
 async function createModelSelection(params: {
   organizationId: string;
   provider: SupportedProvider;

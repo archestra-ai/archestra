@@ -17,6 +17,118 @@ const COMPACT_ROUTE = "**/api/chat/conversations/*/compact";
 test.describe("Chat message queue", () => {
   test.setTimeout(120_000);
 
+  for (const queueTiming of ["before", "during"] as const) {
+    test(`interrupts once and delivers messages queued ${queueTiming} the stop request in order`, async ({
+      page,
+      request,
+      makeApiRequest,
+      syncModels,
+    }) => {
+      await expectWireMockReady();
+
+      const { apiKeyId, runtimeModel } =
+        await ensureWireMockAnthropicChatProvider({
+          request,
+          makeApiRequest,
+          syncModels,
+        });
+
+      await goToChat(page);
+      await expectChatReady(page);
+      await selectApiKeyById(page, apiKeyId);
+
+      const modelSelectorTrigger = page
+        .getByTestId(E2eTestId.ChatModelSelectorTrigger)
+        .or(page.getByRole("button", { name: /select model/i }))
+        .first();
+      await modelSelectorTrigger.click();
+      await selectRuntimeModelFromDialog(page, runtimeModel);
+
+      const textarea = page.getByTestId(E2eTestId.ChatPromptTextarea);
+      const sentTexts: string[] = [];
+      let stopRequests = 0;
+      page.on("request", (request) => {
+        if (request.method() !== "POST") return;
+        if (new URL(request.url()).pathname.endsWith("/stop")) stopRequests++;
+        if (new URL(request.url()).pathname === "/api/chat") {
+          const messages = request.postDataJSON().messages;
+          const latestUserMessage = messages.findLast(
+            (message: { role: string }) => message.role === "user",
+          );
+          sentTexts.push(latestUserMessage.parts[0].text);
+        }
+      });
+      await textarea.fill("Start a slow response chat-reconnect-e2e-test");
+      await page.keyboard.press("Enter");
+      await expect(
+        page.getByText(/Reconnect stream part one/).first(),
+      ).toBeVisible({ timeout: 30_000 });
+
+      let releaseStop: (() => void) | undefined;
+      if (queueTiming === "during") {
+        const pendingStop = new Promise<void>((resolve) => {
+          releaseStop = resolve;
+        });
+        await page.route("**/api/chat/conversations/*/stop", async (route) => {
+          await pendingStop;
+          await route.continue();
+        });
+        const stopRequested = page.waitForRequest(
+          "**/api/chat/conversations/*/stop",
+        );
+        await textarea.press("Escape");
+        await stopRequested;
+      }
+
+      const queuedText = `change direction ${Math.random().toString(36).slice(2, 10)}`;
+      await textarea.fill(queuedText);
+      await page.keyboard.press("Enter");
+
+      const queuedItem = page
+        .getByTestId(E2eTestId.ChatMessageQueueItem)
+        .filter({ hasText: queuedText });
+      await expect(queuedItem).toBeVisible();
+
+      const secondQueuedText = "Then summarize the revised plan";
+      await textarea.fill(secondQueuedText);
+      await textarea.press("Enter");
+      await expect(
+        page.getByTestId(E2eTestId.ChatMessageQueueItem),
+      ).toHaveCount(2);
+
+      await textarea.evaluate((element) => {
+        for (const _attempt of [1, 2, 3]) {
+          element.dispatchEvent(
+            new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+          );
+        }
+      });
+      releaseStop?.();
+
+      await expect(queuedItem).toHaveCount(0, { timeout: 30_000 });
+      expect(stopRequests).toBe(1);
+      await expect(
+        page.getByText(/part three part four part five/),
+      ).toHaveCount(0);
+      await expect(page.getByText(queuedText).first()).toBeVisible({
+        timeout: 30_000,
+      });
+      await expect(
+        page.getByText(/part three part four part five/),
+      ).toHaveCount(2, {
+        timeout: 90_000,
+      });
+      await expect(
+        page.getByTestId(E2eTestId.ChatMessageQueueItem),
+      ).toHaveCount(0);
+      expect(sentTexts).toEqual([
+        "Start a slow response chat-reconnect-e2e-test",
+        queuedText,
+        secondQueuedText,
+      ]);
+    });
+  }
+
   // A manual /compact rewrites the thread over REST while the chat stream sits
   // idle, so nothing about it is "in flight" from the composer's point of view.
   // The composer still has to stay usable, park the message in the queue rather

@@ -22,6 +22,7 @@ export class AgentRuntimeOutputCapture {
   private retainedLogsValue = "";
   private readableTranscriptValue: string | null = null;
   private recoveredSnapshot = false;
+  private streamedPreviewBytes = 0;
 
   constructor(
     private readonly params: {
@@ -179,7 +180,22 @@ export class AgentRuntimeOutputCapture {
     if (!chunk) return;
     this.fullTranscript.append(chunk);
     this.retainedLogsValue = retainLogTail(this.retainedLogsValue, chunk);
-    this.params.onTextDelta?.(chunk);
+    // The terminal has its own live stream and retained transcript. A2A deltas
+    // repeatedly rewrite the response artifact; forwarding every TUI repaint
+    // builds a database queue that can outlive the completed runtime by minutes.
+    // Keep a bounded startup preview. Task settlement supplies the final answer.
+    const remaining = STREAMED_PREVIEW_BYTES - this.streamedPreviewBytes;
+    if (remaining > 0 && this.params.onTextDelta) {
+      const bytes = Buffer.from(chunk);
+      let end = Math.min(bytes.length, remaining);
+      // Do not emit half of a UTF-8 code point at the preview boundary.
+      if (end < bytes.length) {
+        while (end > 0 && (bytes[end] & 0xc0) === 0x80) end--;
+      }
+      const preview = bytes.subarray(0, end).toString("utf8");
+      this.streamedPreviewBytes += Math.min(bytes.length, remaining);
+      if (preview) this.params.onTextDelta(preview);
+    }
   }
 
   private finishLiveProtocol(): void {
@@ -190,6 +206,8 @@ export class AgentRuntimeOutputCapture {
 }
 
 // ===================== internals =====================
+
+const STREAMED_PREVIEW_BYTES = 64 * 1024;
 
 class AgentRuntimeOutputProtocolParser {
   private mode: "terminal" | "readable" = "terminal";

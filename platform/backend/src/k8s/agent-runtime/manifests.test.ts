@@ -234,7 +234,11 @@ describe("buildAgentRuntimeSandbox", () => {
 
   it("retains privileged development storage on the workspace volume", () => {
     const unprivileged = buildAgentRuntimeSandbox(SPEC).spec?.podTemplate.spec;
-    expect(unprivileged?.volumes).toEqual([]);
+    expect(
+      unprivileged?.containers[0]?.volumeMounts?.some(
+        (mount) => mount.mountPath === "/var/lib/docker",
+      ),
+    ).toBe(false);
 
     const privileged = buildAgentRuntimeSandbox({ ...SPEC, privileged: true })
       .spec?.podTemplate.spec;

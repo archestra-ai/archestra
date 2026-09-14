@@ -82,7 +82,7 @@ A skill created from chat is **personal** to its author — sharing it with a te
 
 ![The Add a new skill screen, importing from a GitHub repo, with the skill index searched for ML skills](/docs/automated_screenshots/platform-agent-skills_import-from-github.webp)
 
-Paste a repository URL. Any of these work: `owner/repo`, a full https URL, or a `tree/<branch>/<path>` deep link. For private repos, use a saved token or GitHub App from **Settings → GitHub**, or paste a token — it is saved there on import.
+Paste a repository URL. Any of these work: `owner/repo`, a full https URL, or a `tree/<branch>/<path>` deep link. For private repos, use a saved token or GitHub App from **Settings → Credentials**, or paste a token — it is saved there on import.
 
 For anything bigger than a small repo, narrow the scan with the `path` field and supply a GitHub token. Archestra walks the whole tree by default, and anonymous GitHub calls share a 60-requests/hour limit — discovery on a large monorepo is slow without a path and will rate-limit without a token.
 
@@ -98,7 +98,7 @@ Every import stays synced with the repository. **Keep in sync** in the dialog pi
 
 **Stop syncing** in the skill editor breaks the link: the skill keeps its current content, becomes editable, and stops updating. **Sync now** pulls immediately instead of waiting for the schedule.
 
-Sync authenticates with a saved personal access token or a GitHub App configuration — both managed under **Settings → GitHub** — or not at all (public repos). A token pasted in the import dialog is saved there on import, so scheduled pulls stay authenticated.
+Sync authenticates with a saved personal access token or a GitHub App configuration — both managed under **Settings → Credentials** — or not at all (public repos). A token pasted in the import dialog is saved there on import, so scheduled pulls stay authenticated.
 
 A few behaviors worth knowing:
 
@@ -155,7 +155,7 @@ Global admins can also delete a skill from the trash for good, with **Delete per
 
 Deleting a built-in skill is a lasting opt-out — it stays gone across restarts. You can still restore it from the trash. Built-in skills cannot be deleted for good, since the trash record is what keeps them from coming back.
 
-A synced skill can lose its GitHub token while it sits in the trash. It still restores, but the next pull runs unauthenticated — for a now-private repo that fails with a sync error. Re-attach a token under **Settings → GitHub** to fix it.
+A synced skill can lose its GitHub token while it sits in the trash. It still restores, but the next pull runs unauthenticated — for a now-private repo that fails with a sync error. Re-attach a token under **Settings → Credentials** to fix it.
 
 ## Version History
 

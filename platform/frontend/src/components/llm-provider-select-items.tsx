@@ -23,7 +23,7 @@ export function LlmProviderOptionLabel({
     <div className="flex items-center gap-2">
       <Image
         src={icon}
-        alt={name}
+        alt=""
         width={16}
         height={16}
         className="rounded dark:invert"

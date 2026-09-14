@@ -1,4 +1,5 @@
 import { getArchestraAppResourceUri } from "@archestra/shared";
+import { isServiceAccountUserId } from "@/auth/utils";
 import logger from "@/logging";
 import {
   AgentModel,
@@ -91,15 +92,17 @@ export async function createAppBacking(params: {
     // and see it immediately (mirrors the install auto-assign). Dynamic mode: the
     // call short-circuits in-process, but dynamic is the only mode that fits an
     // org-shared, viewer-scoped app.
-    const personalGateway = await AgentModel.ensurePersonalMcpGateway({
-      userId,
-      organizationId,
-    });
-    await AgentToolModel.bulkCreateForAgentsAndTools(
-      [personalGateway.id],
-      [tool.id],
-      { mcpServerId: server.id, credentialResolutionMode: "dynamic" },
-    );
+    if (!isServiceAccountUserId(userId)) {
+      const personalGateway = await AgentModel.ensurePersonalMcpGateway({
+        userId,
+        organizationId,
+      });
+      await AgentToolModel.bulkCreateForAgentsAndTools(
+        [personalGateway.id],
+        [tool.id],
+        { mcpServerId: server.id, credentialResolutionMode: "dynamic" },
+      );
+    }
 
     await AppModel.setMcpServerId(app.id, server.id);
     logger.info(

@@ -1,26 +1,38 @@
-import {
-  createInsertSchema,
-  createSelectSchema,
-  createUpdateSchema,
-} from "drizzle-zod";
+import { createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
 
 export const SelectGithubAppConfigSchema = createSelectSchema(
-  schema.githubAppConfigsTable,
-);
-export const InsertGithubAppConfigSchema = createInsertSchema(
-  schema.githubAppConfigsTable,
-).omit({ id: true, createdAt: true, updatedAt: true });
-export const UpdateGithubAppConfigSchema = createUpdateSchema(
-  schema.githubAppConfigsTable,
-).pick({
+  schema.runtimeCredentialDefinitionsTable,
+)
+  .pick({
+    id: true,
+    organizationId: true,
+    name: true,
+    createdAt: true,
+    updatedAt: true,
+  })
+  .extend({
+    secretId: z.string().uuid().nullable(),
+    githubUrl: z.string(),
+    appId: z.string(),
+    installationId: z.string(),
+  });
+export const InsertGithubAppConfigSchema = SelectGithubAppConfigSchema.omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  secretId: z.string().uuid().nullable().optional(),
+  githubUrl: z.string().optional(),
+});
+export const UpdateGithubAppConfigSchema = SelectGithubAppConfigSchema.pick({
   name: true,
+  secretId: true,
   githubUrl: true,
   appId: true,
   installationId: true,
-  secretId: true,
-});
+}).partial();
 
 // API-facing shape: never exposes the secret reference
 export const PublicGithubAppConfigSchema = SelectGithubAppConfigSchema.omit({

@@ -12,6 +12,7 @@ function makeOrgSkill(id: string, name: string): OrgSkill {
     id,
     organizationId: "test-org",
     authorId: "test-user-admin",
+    createdByServiceAccountId: null,
     createdBy: null,
     scope: "org",
     environments: [],

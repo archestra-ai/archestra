@@ -478,7 +478,9 @@ async function createVirtualApiKey(params: {
     value,
     teams,
     authorName,
-    createdBy: await CreatedByModel.resolveOne(virtualKey.authorId),
+    createdBy: await CreatedByModel.resolveOne(
+      CreatedByModel.id(virtualKey, virtualKey.authorId),
+    ),
     providerApiKeys,
     labels: await syncAndReadLabels(virtualKey.id, body.labels),
   };
@@ -570,7 +572,9 @@ async function updateVirtualApiKey(params: {
     ...updatedVirtualKey,
     teams: visibilityMetadata.teams.get(id) ?? [],
     authorName: visibilityMetadata.authorName.get(id) ?? null,
-    createdBy: await CreatedByModel.resolveOne(updatedVirtualKey.authorId),
+    createdBy: await CreatedByModel.resolveOne(
+      CreatedByModel.id(updatedVirtualKey, updatedVirtualKey.authorId),
+    ),
     providerApiKeys,
     labels: await syncAndReadLabels(id, body.labels),
   };

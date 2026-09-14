@@ -13,6 +13,7 @@ import {
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { RuntimeCredentialDefinitionModel } from "@/models";
 import {
   canAccessKnowledgeBase,
   findAccessibleKnowledgeBase,
@@ -379,14 +380,17 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Resolved for the trash view too: "who made this" is exactly what you
       // want when deciding whether a deleted knowledge base should come back.
       const creators = await CreatedByModel.resolve(
-        knowledgeBases.map((kb) => kb.createdBy),
+        knowledgeBases.map((kb) => CreatedByModel.id(kb, kb.createdBy)),
       );
 
       if (status === "deleted") {
         return reply.send({
           data: knowledgeBases.map((kb) => ({
             ...kb,
-            createdBy: lookupCreator(creators, kb.createdBy),
+            createdBy: lookupCreator(
+              creators,
+              CreatedByModel.id(kb, kb.createdBy),
+            ),
             connectors: [],
             totalDocsIndexed: 0,
             assignedAgents: [],
@@ -444,7 +448,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       const data = knowledgeBases.map((kb) => ({
         ...kb,
-        createdBy: lookupCreator(creators, kb.createdBy),
+        createdBy: lookupCreator(creators, CreatedByModel.id(kb, kb.createdBy)),
         labels: labelsByKbId.get(kb.id) ?? [],
         connectors: connectorsByKbId.get(kb.id) ?? [],
         totalDocsIndexed: docsIndexedByKbId.get(kb.id) ?? 0,
@@ -505,7 +509,9 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       return reply.send({
         ...kg,
-        createdBy: await CreatedByModel.resolveOne(kg.createdBy),
+        createdBy: await CreatedByModel.resolveOne(
+          CreatedByModel.id(kg, kg.createdBy),
+        ),
       });
     },
   );
@@ -529,7 +535,9 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
       return reply.send({
         ...kg,
-        createdBy: await CreatedByModel.resolveOne(kg.createdBy),
+        createdBy: await CreatedByModel.resolveOne(
+          CreatedByModel.id(kg, kg.createdBy),
+        ),
       });
     },
   );
@@ -582,7 +590,9 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       return reply.send({
         ...updated,
-        createdBy: await CreatedByModel.resolveOne(updated.createdBy),
+        createdBy: await CreatedByModel.resolveOne(
+          CreatedByModel.id(updated, updated.createdBy),
+        ),
       });
     },
   );
@@ -923,12 +933,17 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // in the endpoint description, not silently narrowed.
       if (status === "deleted") {
         const trashCreators = await CreatedByModel.resolve(
-          data.map((connector) => connector.createdBy),
+          data.map((connector) =>
+            CreatedByModel.id(connector, connector.createdBy),
+          ),
         );
         return reply.send({
           data: data.map((connector) => ({
             ...connector,
-            createdBy: lookupCreator(trashCreators, connector.createdBy),
+            createdBy: lookupCreator(
+              trashCreators,
+              CreatedByModel.id(connector, connector.createdBy),
+            ),
             assignedAgents: [],
             labels: [],
           })),
@@ -1000,13 +1015,18 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // which still declares `createdBy` as the raw user id. Swapping in the
       // resolved object first would fail every row and empty the list.
       const creators = await CreatedByModel.resolve(
-        validatedData.map((connector) => connector.createdBy),
+        validatedData.map((connector) =>
+          CreatedByModel.id(connector, connector.createdBy),
+        ),
       );
 
       return reply.send({
         data: validatedData.map((connector) => ({
           ...connector,
-          createdBy: lookupCreator(creators, connector.createdBy),
+          createdBy: lookupCreator(
+            creators,
+            CreatedByModel.id(connector, connector.createdBy),
+          ),
         })),
         pagination: calculatePaginationMeta(total, { limit, offset }),
       });
@@ -1709,7 +1729,9 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
       const wasGithubApp =
         connector.config.type === "github" &&
-        connector.config.authMethod === "github_app";
+        ["github_app", "credential"].includes(
+          connector.config.authMethod ?? "",
+        );
       if (
         wasGithubApp &&
         !usesGithubAppConfig &&
@@ -3598,6 +3620,35 @@ async function resolveGithubAppConfigReference(params: {
   userId: string;
 }): Promise<{ id: string; githubUrl: string } | null> {
   const { config, organizationId, userId } = params;
+  if (config.type === "github" && config.credentialId) {
+    if (
+      !(await userHasPermission(userId, organizationId, "credential", "read"))
+    )
+      throw new ApiError(403, "You do not have permission to use credentials");
+    const credential = await RuntimeCredentialDefinitionModel.find({
+      organizationId,
+      key: config.credentialId,
+    });
+    if (
+      !credential ||
+      !credential.allowOrganization ||
+      !["secret", "github_app"].includes(credential.kind)
+    )
+      throw new ApiError(400, "Select an organization GitHub credential");
+    if (credential.kind === "github_app") {
+      config.authMethod = "github_app";
+      config.githubAppConfigId = credential.id;
+    } else {
+      config.authMethod = "credential";
+      config.githubAppConfigId = undefined;
+    }
+    return {
+      id: credential.id,
+      githubUrl: credential.githubUrl ?? config.githubUrl,
+    };
+  }
+  if (config.type === "github" && config.authMethod === "credential")
+    throw new ApiError(400, "Select a credential");
   if (config.type !== "github" || config.authMethod !== "github_app") {
     return null;
   }
@@ -3613,7 +3664,7 @@ async function resolveGithubAppConfigReference(params: {
   const canUseAppConfig = await userHasPermission(
     userId,
     organizationId,
-    "githubAppConfig",
+    "credential",
     "read",
   );
   if (!canUseAppConfig) {
@@ -3645,7 +3696,9 @@ async function withConnectorDetails<
 >(connector: T) {
   const [labels, createdBy] = await Promise.all([
     KnowledgeBaseConnectorLabelModel.getLabelsFor(connector.id),
-    CreatedByModel.resolveOne(connector.createdBy),
+    CreatedByModel.resolveOne(
+      CreatedByModel.id(connector, connector.createdBy),
+    ),
   ]);
   return { ...connector, labels, createdBy };
 }

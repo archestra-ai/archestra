@@ -15,6 +15,7 @@ import type { LlmProviderApiKeyFormValues } from "@/components/llm-provider-api-
 import { useLlmProviderApiKeyCreateDialog } from "@/components/use-llm-provider-api-key-create-dialog";
 import { useSession } from "@/lib/auth/auth.query";
 import { useUpdateConversation } from "@/lib/chat/chat.query";
+import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import {
   type LlmProviderApiKey,
   useAvailableLlmProviderApiKeys,
@@ -118,13 +119,19 @@ export function LlmProviderApiKeySelector({
       ),
     [fetchedAvailableKeys, session?.user.id],
   );
+  // A subscription whose provider the admins turned off is not connectable:
+  // the sign-in dialog refuses a hidden provider, so offering it here would
+  // only lead to a dead end. An already-connected credential keeps its entry
+  // below — existing keys go on working when a provider is switched off.
+  const providerCatalog = useModelProviderCatalog();
   const subscriptionOptions = useMemo(
     () =>
       SUBSCRIPTION_CONNECT_OPTIONS.filter(
         (option) =>
+          !providerCatalog.isHidden(option.provider) &&
           !availableKeys.some((key) => subscriptionMatchesKey(option, key)),
       ),
-    [availableKeys],
+    [availableKeys, providerCatalog],
   );
   const displayedKeys = useMemo(
     () => [...availableKeys, ...subscriptionOptions],
@@ -406,7 +413,11 @@ export function LlmProviderApiKeySelector({
         open={open}
         onOpenChange={handleOpenChange}
         onSelectKey={handleSelectKey}
-        onAddApiKey={onAddApiKey}
+        // With every provider switched off there is no key left to add, and
+        // the create dialog would open on an empty picker.
+        onAddApiKey={
+          providerCatalog.visibleIds.length > 0 ? onAddApiKey : undefined
+        }
         currentProvider={currentProvider}
         searchPlaceholder="Search credentials..."
         showChatTestIds

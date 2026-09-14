@@ -3,7 +3,7 @@ title: Chat
 category: Agents
 order: 2
 description: Built-in Chat interface for working with agents and MCP tools
-lastUpdated: 2026-09-07
+lastUpdated: 2026-09-12
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -49,7 +49,7 @@ Press Enter while a response is streaming to queue your message. Queued messages
 
 Queueing works during [context compaction](#context-compaction) too. A message you send while the conversation is being compacted waits in the queue, then sends once compaction finishes — so a long chat never drops what you typed.
 
-While a response streams, the send button becomes Stop. Clicking it or pressing Esc stops the response and discards any queued messages for that conversation. Nothing else is sent until you submit a new message.
+While a response streams, the send button becomes Stop. Clicking it or pressing Esc stops the response. If messages are queued, the oldest sends immediately and the rest continue in order. With an empty queue, stopping sends nothing else.
 
 ### MCP Elicitation
 

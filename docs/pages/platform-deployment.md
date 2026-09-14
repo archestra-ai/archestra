@@ -2,7 +2,7 @@
 title: Deployment
 category: Archestra Platform
 order: 3
-lastUpdated: 2026-09-11
+lastUpdated: 2026-09-12
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -124,7 +124,7 @@ Helm deployment is our recommended approach for deploying Archestra Platform to 
 Install Archestra Platform using the Helm chart from our OCI registry:
 
 ```bash
-export ARCHESTRA_VERSION="1.4.0-beta.7" # x-release-please-version
+export ARCHESTRA_VERSION="1.4.0-beta.8" # x-release-please-version
 helm upgrade archestra-platform \
   oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts/archestra-platform \
   --version "$ARCHESTRA_VERSION" \
@@ -802,7 +802,13 @@ The following environment variables can be used to configure Archestra Platform.
 - **`ARCHESTRA_DATABASE_POOL_MAX`** - Maximum number of PostgreSQL connections per backend pod.
   - Default: `50`
   - Range: `1`–`500`
-  - Tune this when you have many concurrent users or long-running chat streams. The backend opens at most `ARCHESTRA_DATABASE_POOL_MAX` connections per pod, so coordinate with PostgreSQL `max_connections` to ensure `pods × ARCHESTRA_DATABASE_POOL_MAX < max_connections` with headroom for admin sessions. On managed Postgres (e.g. AWS RDS, Cloud SQL) the server limit is typically several thousand and rarely the binding constraint.
+  - Helm divides `archestra.database.connectionBudget` (default `200`) across peak backend pods, then subtracts 12 per pod. Those 12 connections cover the cache pool and two notification listeners. The query pool is capped at `500`.
+  - Peak pods include web/HPA maximum replicas, worker replicas, rollout surge, and one terminating old revision. Recreate deployments count only their target replicas. Each peak pod needs at least 13 budgeted connections; Helm rejects smaller budgets.
+  - For example, four web and three worker replicas with default surge budget for 16 peak pods. A `400`-connection budget gives each pod 13 query connections: `16 × (13 + 12) = 400`.
+  - Keep the budget below PostgreSQL `max_connections`, after subtracting reserved slots and other clients. The bundled database allows `250` connections, leaving `50` outside the default budget. External databases and multiple releases need explicitly allocated budgets.
+  - Finish one rollout before starting another. Before increasing replicas, roll out a smaller `archestra.database.poolMax` at the existing replica count. Then scale and clear the override. Old pods keep their previous limits until replaced; Helm cannot resize existing pools.
+  - Fixed overrides (`archestra.database.poolMax` or this environment variable) bypass automatic budgeting. Operators must budget their aggregate use separately.
+  - Unprefixed `archestra.envFrom` imports preserve their existing pool configuration by default. Helm omits its explicit pool variable so it cannot override a value from the Secret or ConfigMap; if neither supplies a pool limit, the backend default applies. Set `archestra.database.poolMaxFromEnvFrom: false` to opt into chart-managed sizing, or `true` to explicitly require an unprefixed bulk source. Exclusively prefixed sources cannot supply `ARCHESTRA_DATABASE_POOL_MAX`, so they use chart sizing by default.
 
 - **`ARCHESTRA_DATABASE_STATEMENT_TIMEOUT_MILLIS`** - Per-connection PostgreSQL `statement_timeout` (in milliseconds) applied to every pooled connection.
   - Default: `30000` (30s)
@@ -919,14 +925,80 @@ Upgrading from a chart that ran the included engine leaves its cache volume behi
 
 ### Agent Runtime
 
-Agent Runtime runs delegated Agent tasks in dedicated Kubernetes pods. You can view logs, open a shell, and steer a run while it is active. It needs the Kubernetes runtime configured (see `ARCHESTRA_ORCHESTRATOR_*`); without it the capability stays unavailable.
+#### Cluster Prerequisites
+
+Agent Runtime requires Kubernetes configuration through `ARCHESTRA_ORCHESTRATOR_*` and `ARCHESTRA_AGENT_RUNTIME_ENABLED=true`. Your cluster needs:
+
+- Linux nodes with enough CPU, memory, and disk for your runtime images.
+- The upstream [Agent Sandbox controller](https://agent-sandbox.sigs.k8s.io/docs/) and permission to install its custom resources.
+- A storage class with dynamic volume provisioning.
+- The Helm chart's runtime permissions in each execution namespace.
+- Outbound access from runtime workloads to your image registry, DNS, and Archestra's API, proxy, and gateway.
+
+Install the tested controller version before enabling the feature:
+
+```sh
+kubectl apply --server-side -f https://github.com/kubernetes-sigs/agent-sandbox/releases/download/v1.0.1/sandbox.yaml
+kubectl wait --for=condition=Established crd/sandboxes.agents.x-k8s.io --timeout=60s
+kubectl rollout status deployment/agent-sandbox-controller -n agent-sandbox-system --timeout=120s
+```
+
+The controller does not install a container isolation runtime. Check your cluster's admission policies and image architecture before enabling workloads.
+
+#### Provider Setup
+
+| Cluster | Setup |
+| --- | --- |
+| GKE | Use Linux node pools and the Persistent Disk CSI driver. Check Autopilot restrictions; arbitrary privileged images require a compatible Standard pool. GKE Sandbox does not support privileged containers. |
+| AKS | Use Linux agent pools and Azure Disk CSI. Review Pod Security and Azure Policy restrictions. |
+| EKS With EC2 Nodes | Install EBS CSI with its required IAM permissions. Cluster admission must permit your workload. |
+| EKS Auto Mode | Use an Auto Mode storage class with `ebs.csi.eks.amazonaws.com`. Check your NodePool and image compatibility. |
+| Self-Managed Kubernetes | Configure a compatible OCI runtime, CSI driver, and dynamically provisioned storage class. |
+
+For zonal disks, use `WaitForFirstConsumer` binding and compatible node zones. Node-local storage cannot preserve a workspace after node loss. Use the storage and node-selector settings below to select compatible resources.
+
+#### Startup Troubleshooting
+
+Check **Settings → Agents → Runtime Backend** if the runtime is unavailable. Confirm the controller is installed and healthy. For runs waiting on storage, check the storage class and available capacity. For image-pull failures, check the image name, registry access, and pull credentials. Chat shows the reported startup failure.
+
+<!-- SPDX-SnippetBegin -->
+<!-- SPDX-SnippetCopyrightText: 2026 Archestra Inc. -->
+<!-- SPDX-License-Identifier: LicenseRef-Archestra-Enterprise -->
+#### Runtime Image Cache
+
+Archestra automatically prefetches the six popular catalog images when Agent Runtime starts. Downloads run in the background without delaying API readiness. Kubernetes skips images already cached on the node.
+
+Each image has a DaemonSet covering the runtime node pool, including newly added nodes. Placement follows `ARCHESTRA_AGENT_RUNTIME_NODE_SELECTOR`. Catalog image versions follow `ARCHESTRA_AGENT_RUNTIME_BASE_IMAGE`. Changes replace the previous prefetch DaemonSets. Custom Agent images are downloaded when their runtimes start.
+
+The prefetch uses the runtime namespace's default ServiceAccount image pull secrets. Bootstrap image, registry secrets, resources, and priority reuse the MCP image pre-pull settings below. Each image consumes disk on every matching node.
+
+Fresh nodes still need their first download. An unavailable image does not block other images or Agent launches.
+<!-- SPDX-SnippetEnd -->
+
+#### Privileged Containers
+
+Ordinary coding clients do not require privilege. Docker-in-Docker and nested Kubernetes development environments may require it. Privileged containers have broad access to the node, so use a dedicated namespace and node pool.
+
+Privilege requires all three settings:
+
+1. `ARCHESTRA_AGENT_RUNTIME_ALLOW_PRIVILEGED=true` in the deployment.
+2. Elevated permissions enabled on the Agent.
+3. A node runtime and cluster admission policy that allow privileged containers.
+
+The deployment setting does not override cloud-provider restrictions. Images running nested Docker must also prepare the node's cgroup setup. After workspace resumption, restart Docker and any development services.
+
+#### Runtime Configuration
+
+Configure deployment defaults below; individual Agents can override supported run settings. For agent setup and everyday use, see [Agent Runtime](/docs/platform-agent-runtime).
+
+On GKE, custom Sandbox controllers can produce a “not backed by a controller” scale-down warning. Active runs must finish before their nodes can be removed safely. Idle workspace suspension releases pods through the runtime lifecycle. Setting `safe-to-evict: "true"` permits interruptions; persisted files do not preserve running processes.
 
 - **`ARCHESTRA_AGENT_RUNTIME_ENABLED`** - Enables Agent Runtime. A run can carry the credentials of the person who started it, so this gate is independent of `ARCHESTRA_BETA` and never turns on by implication.
   - Default: `false`
   - Values: `true`, `false`
 
 - **`ARCHESTRA_AGENT_RUNTIME_BASE_IMAGE`** - Container image prefilled when Agent Runtime is enabled on an Agent. The built-in image supplies the default Agent loop. Custom images can replace it and set their own command.
-  - Default: `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/agent-archestra:1.4.0-beta.7` <!-- x-release-please-version -->
+  - Default: `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/agent-archestra:1.4.0-beta.8` <!-- x-release-please-version -->
 
 - **`ARCHESTRA_AGENT_RUNTIME_ALLOW_PRIVILEGED`** - Allows Agent administrators to configure privileged Agent Runtime pods. Privileged containers have node-level access.
   - Default: `false`
@@ -947,7 +1019,7 @@ Agent Runtime runs delegated Agent tasks in dedicated Kubernetes pods. You can v
 - **`ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_SIZE`** - Persistent volume capacity for each Agent Sandbox workspace. Stores runtime state, client sessions, and working files under `/home/node`. Privileged workspaces also store `/var/lib/docker` on this volume.
   - Default: `20Gi`
 
-- **`ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_CLASS`** - Storage class for workspace volumes. Use a CSI-backed class with `WaitForFirstConsumer` when nodes span zones. See [Agent Runtime prerequisites](/docs/platform-agent-runtime#prerequisites).
+- **`ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_CLASS`** - Storage class for workspace volumes. Use a CSI-backed class with `WaitForFirstConsumer` when nodes span zones. See [Agent Runtime setup](#agent-runtime).
   - Default: the cluster's default storage class
 
 - **`ARCHESTRA_AGENT_RUNTIME_POD_START_TIMEOUT_SECONDS`** - How long a launched run may stay pending before it is declared failed. Raise it when runs land on an autoscaled node pool — node creation plus a large image pull can pass the default.

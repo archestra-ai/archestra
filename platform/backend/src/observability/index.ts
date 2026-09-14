@@ -1,5 +1,6 @@
 import AgentLabelModel from "@/models/agent-label";
 import * as metrics from "./metrics";
+import { agentRuntimeHealthMetrics } from "./metrics/agent-runtime-health";
 
 export async function initializeObservabilityMetrics(params?: {
   includeMcpMetrics?: boolean;
@@ -28,6 +29,7 @@ export async function initializeObservabilityMetrics(params?: {
   metrics.audit.initializeAuditMetrics();
   metrics.chat.initializeChatMetrics();
   metrics.agentRuntime.initializeAgentRuntimeMetrics();
+  agentRuntimeHealthMetrics.initialize();
   metrics.skill.initializeSkillMetrics();
   metrics.activeUsers.initializeActiveUsersMetrics();
 

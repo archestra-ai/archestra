@@ -25,6 +25,7 @@ import { z } from "zod";
  */
 export const CreatedBySchema = z.object({
   id: z.string(),
+  type: z.enum(["user", "service_account"]).optional(),
   name: z.string().nullable(),
   email: z.string().nullable(),
 });

@@ -2159,16 +2159,11 @@ export function ChatPageContent({
     });
   }, []);
 
-  // Stop the in-flight response and discard its pending follow-ups. Wired to
-  // the submit button's Stop face in the prompt input.
   const handleStopStreaming = () => {
     if (conversationId) {
-      // Clear synchronously so no status transition can drain a queued turn
-      // while the separate Stop request is in flight. onFinish repeats this
-      // idempotently for any abort path that did not originate on this page.
-      chatMessageQueue.clear(conversationId);
-      void stopChatStreamMutation.mutateAsync(conversationId).finally(() => {
-        stop?.();
+      stop?.({
+        preserveQueuedMessages: true,
+        stopServer: () => stopChatStreamMutation.mutateAsync(conversationId),
       });
     } else {
       stop?.();

@@ -87,6 +87,8 @@ export const EnvironmentVariableSchema = z.object({
   key: z.string().min(1, "Key is required"),
   type: z.enum(["plain_text", "secret", "boolean", "number"]),
   value: z.string().optional(),
+  credentialId: z.string().min(1).max(128).optional(),
+  credentialScope: z.enum(["personal", "organization"]).optional(),
   promptOnInstallation: z.boolean(),
   required: z.boolean().optional(),
   description: z.string().optional(),

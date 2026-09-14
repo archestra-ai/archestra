@@ -66,6 +66,7 @@ describe("AgentModel", () => {
 
       const fetched = await AgentModel.findById(agent.id);
       expect(fetched?.resolvedLlmProvider).toBe("github-copilot");
+      expect(fetched?.resolvedLlmProviderKeyName).toBe("GitHub Copilot");
       expect(fetched?.llmProviderRequiresPerUserCredential).toBe(true);
       // The model's human name, so a viewer without key access sees "gpt-4"
       // rather than the model row's UUID.
@@ -76,6 +77,7 @@ describe("AgentModel", () => {
         (a) => a.id === agent.id,
       );
       expect(listed?.resolvedLlmProvider).toBe("github-copilot");
+      expect(listed?.resolvedLlmProviderKeyName).toBe("GitHub Copilot");
       expect(listed?.llmProviderRequiresPerUserCredential).toBe(true);
     });
 
@@ -120,6 +122,53 @@ describe("AgentModel", () => {
         false,
       );
     });
+  });
+
+  test("filters paginated agents by configured provider key", async ({
+    makeOrganization,
+    makeUser,
+  }) => {
+    const organization = await makeOrganization();
+    const user = await makeUser();
+    const selectedKey = await LlmProviderApiKeyModel.create({
+      organizationId: organization.id,
+      userId: user.id,
+      name: "Selected key",
+      provider: "openai",
+      scope: "org",
+    });
+    const otherKey = await LlmProviderApiKeyModel.create({
+      organizationId: organization.id,
+      userId: user.id,
+      name: "Other key",
+      provider: "anthropic",
+      scope: "org",
+    });
+    await AgentModel.create({
+      name: "Selected agent",
+      organizationId: organization.id,
+      teams: [],
+      scope: "org",
+      llmApiKeyId: selectedKey.id,
+    });
+    await AgentModel.create({
+      name: "Other agent",
+      organizationId: organization.id,
+      teams: [],
+      scope: "org",
+      llmApiKeyId: otherKey.id,
+    });
+
+    const result = await AgentModel.findAllPaginated(
+      { limit: 20, offset: 0 },
+      undefined,
+      { organizationId: organization.id, providerApiKeyId: selectedKey.id },
+      user.id,
+      true,
+    );
+
+    expect(result.data.map((agent) => agent.name)).toEqual(["Selected agent"]);
+    expect(result.pagination.total).toBe(1);
   });
 
   describe("sandboxAvailable", () => {

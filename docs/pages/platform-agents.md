@@ -3,7 +3,7 @@ title: Overview
 category: Agents
 order: 1
 description: Agent overview, invocation paths, knowledge sources, and prompt templating
-lastUpdated: 2026-09-12
+lastUpdated: 2026-09-14
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -29,9 +29,9 @@ Hover or focus an agent's provider logo to see its configured key name and model
 
 ## Creating and Editing an Agent
 
-**Add Agent** opens a catalog. Start from scratch to open the setup wizard. When the Agent runtime is enabled, popular agents can prefill that wizard. **Configuration** asks for the name, visibility, instructions, and model. **Tools, Skills & Knowledge** picks the tools, knowledge sources, subagents, skills, and hooks. **Advanced** holds labels, security, and the identity provider. Nothing is saved until you press **Create** on the last step — the agent then opens on its page's **Connect** tab, which shows how to reach it.
+**Add Agent** opens a catalog. Start from scratch to open the setup wizard. When dedicated runtimes are enabled, popular agents can prefill that wizard. **Configuration** includes the name, visibility, instructions, model, and optional dedicated runtime settings. Nothing is saved until you press **Create** on the last step. The agent then opens on its **A2A** tab, unless it needs a personal Claude sign-in.
 
-Every agent has its own page, and that page is where you change it. The same three groups are its tabs, edited in place: **Configuration**, **Tools, Skills & Knowledge**, and **Advanced**. **Save changes** writes the tab you are on and leaves you there, so a rename is one save rather than a walk through the rest. **Connect** holds the endpoint, authentication options, and examples.
+Each agent has its own page for editing. When dedicated runtimes are enabled, **Agent Runtime** follows **Tools, Skills & Knowledge**. It controls the runtime configuration and credentials. **Save changes** saves the current tab and keeps it open. **A2A** holds the endpoint, authentication options, and connection examples.
 
 Switching tabs with unsaved edits asks before it discards them. If you cannot change an agent, its configuration still opens — read-only, with the reason.
 

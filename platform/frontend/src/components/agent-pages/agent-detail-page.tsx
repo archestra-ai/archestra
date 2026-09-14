@@ -300,6 +300,9 @@ function AgentDetails({
           ...(steps.some((step) => step.id === "tools")
             ? (["tools"] as const)
             : []),
+          ...(runtimeEnabled && kind === "agent" && !isBuiltIn
+            ? (["runtime"] as const)
+            : []),
           ...(hasMessagingChannels ? (["messaging"] as const) : []),
           ...(steps.some((step) => step.id === "advanced")
             ? (["advanced"] as const)
@@ -821,6 +824,7 @@ const AGENT_SECTION_LABELS: Record<AgentDetailSection, string> = {
   general: "General",
   tools: "Tools, Skills & Knowledge",
   messaging: "Messaging Channels",
+  runtime: "Agent Runtime",
   advanced: "Advanced",
   connect: "Connect",
   runs: "Runs",

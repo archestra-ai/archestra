@@ -412,11 +412,27 @@ describe("AgentDetailPage", () => {
     ).toBe(true);
   });
 
+  it("opens runtime settings in their own tab after tools, even before a runtime is enabled", () => {
+    vi.mocked(useFeature).mockReturnValue(true);
+    mockSection("runtime");
+    render(<AgentDetailPage kind="agent" id="a1" />);
+    const runtimeLink = screen.getAllByRole("link", {
+      name: "Agent Runtime",
+    })[0];
+    expect(runtimeLink).toHaveAttribute("href", "/agents/a1?section=runtime");
+    const links = screen.getAllByRole("link");
+    expect(links[links.indexOf(runtimeLink) - 1]).toHaveTextContent(
+      "Tools, Skills & Knowledge",
+    );
+    expect(screen.getByText("form section: runtime")).toBeVisible();
+  });
+
   it("keeps run UI invisible when its feature flag is disabled", () => {
     mockAgent({ ...baseAgent, runtime: {} });
     render(<AgentDetailPage kind="agent" id="a1" />);
 
     expect(screen.queryByRole("link", { name: "Runs" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Agent Runtime" })).toBeNull();
     expect(screen.queryByText("run history")).toBeNull();
   });
 });

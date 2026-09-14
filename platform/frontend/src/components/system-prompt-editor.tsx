@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  BUILT_IN_AGENT_IDS,
   DocsPage,
   getSystemPromptTemplateExpressions,
 } from "@archestra/shared";
@@ -10,6 +11,16 @@ import { useRef, useState } from "react";
 
 import { Editor } from "@/components/editor";
 import { ExternalDocsLink } from "@/components/external-docs-link";
+import { StandardDialog } from "@/components/standard-dialog";
+import { Button } from "@/components/ui/button";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import {
   computeHandlebarsReplaceOffsets,
@@ -19,6 +30,8 @@ import { useUnparseableExpressions } from "@/lib/utils/handlebars-validation";
 
 export function SystemPromptEditor({
   title = "Instruction",
+  description,
+  templating = true,
   value,
   onChange,
   readOnly,
@@ -30,6 +43,9 @@ export function SystemPromptEditor({
   builtInAgentId,
 }: {
   title?: string;
+  description?: string;
+  /** Disable for instruction fields that are sent as literal text. */
+  templating?: boolean;
   value: string;
   onChange: (value: string) => void;
   readOnly?: boolean;
@@ -71,31 +87,13 @@ export function SystemPromptEditor({
     Math.max(contentHeight, floor),
     Math.max(maxHeight, floor),
   );
-  const unparseableExpressions = useUnparseableExpressions(value);
+  const unparseableExpressions = useUnparseableExpressions(
+    templating ? value : "",
+  );
   const templateExpressions = getSystemPromptTemplateExpressions({
     builtInAgentId,
   });
-  // One line, and one link — ours. What the field is for is already said by
-  // the label above it, and sending a reader to handlebarsjs.com answered a
-  // question the variables list answers better.
-  const description = (
-    <>
-      <span>Supports Handlebars templating.</span>
-      {docsUrl && (
-        <>
-          <span> See </span>
-          <ExternalDocsLink
-            href={docsUrl}
-            className="underline hover:text-foreground"
-            showIcon={false}
-          >
-            docs
-          </ExternalDocsLink>
-          <span> for variables.</span>
-        </>
-      )}
-    </>
-  );
+  const [templatingInfoOpen, setTemplatingInfoOpen] = useState(false);
 
   return (
     <div className="space-y-2">
@@ -115,15 +113,31 @@ export function SystemPromptEditor({
             ) : (
               <p className="text-sm font-medium">{title}</p>
             ))}
-          <p
-            className={
-              variant === "detail-card"
-                ? "text-sm text-muted-foreground"
-                : "text-xs text-muted-foreground"
-            }
-          >
-            {description}
-          </p>
+          {(description || templating) && (
+            <p
+              className={
+                variant === "detail-card"
+                  ? "text-sm text-muted-foreground"
+                  : "text-xs text-muted-foreground"
+              }
+            >
+              {description && <span className="mb-1 block">{description}</span>}
+              {templating && (
+                <>
+                  <span>Supports Handlebars templating.</span>{" "}
+                  <Button
+                    type="button"
+                    variant="link"
+                    className="h-auto p-0 text-xs"
+                    aria-haspopup="dialog"
+                    onClick={() => setTemplatingInfoOpen(true)}
+                  >
+                    More info
+                  </Button>
+                </>
+              )}
+            </p>
+          )}
         </div>
         {headerExtra && (
           <div className="flex shrink-0 items-center gap-2">{headerExtra}</div>
@@ -133,11 +147,12 @@ export function SystemPromptEditor({
         <div style={{ height: editorHeight }}>
           <Editor
             height="100%"
-            defaultLanguage="handlebars"
+            language={templating ? "handlebars" : "plaintext"}
             value={value}
             onChange={(v) => onChange(v || "")}
             beforeMount={(monaco) => {
-              registerSystemPromptCompletions(monaco, templateExpressions);
+              if (templating)
+                registerSystemPromptCompletions(monaco, templateExpressions);
             }}
             onMount={(editor) => {
               // Monaco reports the height its content wants; the box follows
@@ -210,6 +225,96 @@ export function SystemPromptEditor({
         </div>
       </div>
       <UnparseableExpressionsWarning expressions={unparseableExpressions} />
+      {templating && (
+        <StandardDialog
+          open={templatingInfoOpen}
+          onOpenChange={setTemplatingInfoOpen}
+          title="Templating Cheat Sheet"
+          description={
+            <>
+              <span>Instructions use </span>
+              <ExternalDocsLink
+                href="https://handlebarsjs.com/"
+                showIcon={false}
+              >
+                Handlebars
+              </ExternalDocsLink>
+              <span> to fill in variables when the agent runs.</span>
+            </>
+          }
+          size="medium"
+        >
+          <div className="space-y-6 text-sm">
+            <section className="space-y-3" aria-label="Available variables">
+              <h3 className="font-medium">Available variables</h3>
+              <div className="overflow-hidden rounded-md border">
+                <Table aria-label="Template variables and helpers">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-[45%] sm:w-44">
+                        Expression
+                      </TableHead>
+                      <TableHead>Value</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {templateExpressions.map(({ expression, description }) => (
+                      <TableRow key={expression}>
+                        <TableCell className="align-top">
+                          <code className="break-all text-xs">
+                            {expression}
+                          </code>
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {description}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </section>
+            <section className="space-y-3" aria-label="Examples">
+              <h3 className="font-medium">Examples</h3>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <p className="text-xs text-muted-foreground">
+                    {builtInAgentId === BUILT_IN_AGENT_IDS.POLICY_CONFIG
+                      ? "Use the tool context"
+                      : "Personalize a response"}
+                  </p>
+                  <pre className="whitespace-pre-wrap break-words rounded-md bg-muted/50 p-3 text-xs leading-relaxed">
+                    <code>
+                      {builtInAgentId === BUILT_IN_AGENT_IDS.POLICY_CONFIG
+                        ? "Evaluate {{tool.name}} from {{mcpServerName}}."
+                        : "You are helping {{user.name}}. Today is {{currentDate}}."}
+                    </code>
+                  </pre>
+                </div>
+                <div className="space-y-2">
+                  <p className="text-xs text-muted-foreground">
+                    {builtInAgentId === BUILT_IN_AGENT_IDS.POLICY_CONFIG
+                      ? "Include details when available"
+                      : "Tailor instructions to a team"}
+                  </p>
+                  <pre className="whitespace-pre-wrap break-words rounded-md bg-muted/50 p-3 text-xs leading-relaxed">
+                    <code>
+                      {builtInAgentId === BUILT_IN_AGENT_IDS.POLICY_CONFIG
+                        ? "{{#if tool.description}}\nConsider: {{tool.description}}\n{{/if}}"
+                        : '{{#includes user.teams "Engineering"}}\nUse technical detail and code examples.\n{{/includes}}'}
+                    </code>
+                  </pre>
+                </div>
+              </div>
+            </section>
+            {docsUrl && (
+              <ExternalDocsLink href={docsUrl}>
+                Templating documentation
+              </ExternalDocsLink>
+            )}
+          </div>
+        </StandardDialog>
+      )}
     </div>
   );
 }

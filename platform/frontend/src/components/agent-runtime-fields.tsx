@@ -98,7 +98,7 @@ export function AgentRuntimeFields({
     <div className="space-y-4" data-testid="agent-runtime">
       <div className="flex items-start justify-between gap-4">
         <div className="space-y-1">
-          <Label htmlFor={enabledId}>Dedicated runtime</Label>
+          <Label htmlFor={enabledId}>Dedicated Agent runtime</Label>
           <FieldDescription>
             Give this Agent an isolated environment for interactive, delegated,
             and long-running work. Selecting it in Chat starts a run instead of

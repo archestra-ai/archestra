@@ -417,7 +417,7 @@ describe("AgentDetailPage", () => {
     mockSection("runtime");
     render(<AgentDetailPage kind="agent" id="a1" />);
     const runtimeLink = screen.getAllByRole("link", {
-      name: "Agent runtime",
+      name: "Agent Runtime",
     })[0];
     expect(runtimeLink).toHaveAttribute("href", "/agents/a1?section=runtime");
     const links = screen.getAllByRole("link");
@@ -432,7 +432,7 @@ describe("AgentDetailPage", () => {
     render(<AgentDetailPage kind="agent" id="a1" />);
 
     expect(screen.queryByRole("link", { name: "Runs" })).toBeNull();
-    expect(screen.queryByRole("link", { name: "Agent runtime" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Agent Runtime" })).toBeNull();
     expect(screen.queryByText("run history")).toBeNull();
   });
 });

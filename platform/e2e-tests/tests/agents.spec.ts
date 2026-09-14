@@ -191,7 +191,7 @@ test("can create and delete an agent", {
   await selectAgentTableView(page);
   const agentLocator = page
     .getByTestId(E2eTestId.AgentsTable)
-    .getByTitle(AGENT_NAME);
+    .getByRole("link", { name: AGENT_NAME, exact: true });
   await waitForElementWithReload(page, agentLocator, {
     timeout: 30_000,
     intervals: [2000, 3000, 5000],
@@ -202,12 +202,13 @@ test("can create and delete an agent", {
   // navigation. Retry until the URL changes for the same pre-hydration
   // reason as the wizard steps above.
   const agentDetailUrl = new RegExp(`/agents/${agentId}$`);
-  // The name cell truncates long names in the DOM and carries the full
-  // name as its title, so find the row by that title, not by text.
+  // Locate the name cell through its accessible link, including long names.
   const rowNameCell = page
     .getByTestId(E2eTestId.AgentsTable)
     .getByRole("cell")
-    .filter({ has: page.getByTitle(AGENT_NAME) });
+    .filter({
+      has: page.getByRole("link", { name: AGENT_NAME, exact: true }),
+    });
   await expect(async () => {
     if (!page.url().match(agentDetailUrl)) {
       await rowNameCell.click({ position: { x: 4, y: 4 } });

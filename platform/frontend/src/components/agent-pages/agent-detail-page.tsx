@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ConvertToSkillDialog } from "@/app/agents/convert-to-skill-dialog";
 import { AgentBadge } from "@/components/agent-badge";
@@ -30,6 +30,7 @@ import { CloneAgentDialog } from "@/components/clone-agent-dialog";
 import { CreatedByCell } from "@/components/created-by-cell";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ExternalDocsLink } from "@/components/external-docs-link";
+import { KebabItem } from "@/components/kebab-item";
 import { PageBackLink } from "@/components/page-back-link";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
@@ -40,7 +41,6 @@ import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -787,56 +787,6 @@ function AgentDetails({
  * reason out of reach of exactly the users it is written for. The refusal is
  * enforced by preventing the select and the click instead.
  */
-function KebabItem({
-  icon,
-  label,
-  reason,
-  isBusy,
-  variant,
-  onSelect,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  reason?: string;
-  /** Permitted, but already running: taking it again would export twice. */
-  isBusy?: boolean;
-  variant?: "destructive";
-  onSelect: () => void;
-}) {
-  const reasonId = useId();
-  const isDisabled = !!reason || !!isBusy;
-
-  return (
-    <DropdownMenuItem
-      variant={variant}
-      aria-disabled={isDisabled || undefined}
-      aria-describedby={reason ? reasonId : undefined}
-      className={isDisabled ? "cursor-not-allowed opacity-50" : undefined}
-      onSelect={(event) => {
-        if (isDisabled) event.preventDefault();
-      }}
-      onClick={(event) => {
-        if (isDisabled) {
-          event.preventDefault();
-          return;
-        }
-        onSelect();
-      }}
-    >
-      {icon}
-      {label}
-      {/* The reason as text, not only as a tooltip: a menu item reached by
-          keyboard never opens one. `aria-hidden` keeps it out of the accessible
-          name, where it would duplicate the description a screen reader already
-          reads from `aria-describedby`. */}
-      {reason && (
-        <span id={reasonId} aria-hidden="true" className="sr-only">
-          {reason}
-        </span>
-      )}
-    </DropdownMenuItem>
-  );
-}
 
 /**
  * What a section is called on this record's page. Connect is the exception:

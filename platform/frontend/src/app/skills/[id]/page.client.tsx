@@ -32,6 +32,7 @@ import {
   useGuardedInAppNavigation,
   useUnsavedChangesGuard,
 } from "@/components/unsaved-changes-guard";
+import { useResourceOwnershipTransfer } from "@/components/use-resource-ownership-transfer";
 import { WizardFooter } from "@/components/wizard-footer";
 import { formatPermissionConstraint } from "@/lib/auth/auth.utils";
 import {
@@ -202,6 +203,12 @@ function SkillDetailView({
   });
   const labelsRef = useRef<ProfileLabelsRef>(null);
   const isDirty = isSkillDraftDirty(draft, base.draft);
+  const ownership = useResourceOwnershipTransfer({
+    kind: "skill",
+    resource: skill,
+    disabledReason: isDirty ? "Save or discard your changes first" : undefined,
+    onTransferred: () => router.push("/skills"),
+  });
 
   // Adopt a read only when there is nothing to lose and it is not older than
   // what this page has already written. Both guards earn their keep:
@@ -367,6 +374,7 @@ function SkillDetailView({
                 <History className="h-4 w-4" />
                 {historyAction.label}
               </DropdownMenuItem>
+              {ownership.menuItem}
               <DropdownMenuSeparator />
               {/* `aria-disabled` rather than Radix's `disabled`, so the item
                   keeps its place in the menu's roving focus and the reason
@@ -408,6 +416,7 @@ function SkillDetailView({
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          {ownership.dialog}
         </div>
       }
     >

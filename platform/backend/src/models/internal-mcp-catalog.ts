@@ -62,6 +62,41 @@ type CatalogListOptions = {
  * alongside their parent on delete.
  */
 class InternalMcpCatalogModel {
+  static async transferOwnership(params: {
+    id: string;
+    organizationId: string;
+    previousOwnerId: string | null;
+    updatedAt: Date;
+    ownerId: string;
+  }): Promise<boolean> {
+    const rows = await db
+      .update(schema.internalMcpCatalogTable)
+      .set({
+        authorId: params.ownerId,
+        createdByServiceAccountId: null,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(schema.internalMcpCatalogTable.id, params.id),
+          eq(
+            schema.internalMcpCatalogTable.organizationId,
+            params.organizationId,
+          ),
+          params.previousOwnerId === null
+            ? isNull(schema.internalMcpCatalogTable.authorId)
+            : eq(
+                schema.internalMcpCatalogTable.authorId,
+                params.previousOwnerId,
+              ),
+          sql`date_trunc('milliseconds', ${schema.internalMcpCatalogTable.updatedAt}) = ${params.updatedAt.toISOString()}::timestamp`,
+          notDeleted(schema.internalMcpCatalogTable),
+        ),
+      )
+      .returning({ id: schema.internalMcpCatalogTable.id });
+    return rows.length === 1;
+  }
+
   static async create(
     catalogItem: InsertInternalMcpCatalog,
     context?: { organizationId: string; authorId?: string },

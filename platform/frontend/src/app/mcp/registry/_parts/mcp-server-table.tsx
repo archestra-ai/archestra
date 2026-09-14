@@ -28,11 +28,9 @@ import { useRouter } from "next/navigation";
 import { memo, useState } from "react";
 import { RowClickShield } from "@/components/agent-pages/row-click-shield";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
+import { ResourceTableRowActions } from "@/components/resource-table-row-actions";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
-import {
-  type TableRowAction,
-  TableRowActions,
-} from "@/components/table-row-actions";
+import type { TableRowAction } from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { DataTable } from "@/components/ui/data-table";
@@ -713,7 +711,9 @@ const McpServerRowActions = memo(function McpServerRowActions({
   return (
     <>
       <div className="flex justify-end">
-        <TableRowActions
+        <ResourceTableRowActions
+          kind="catalog"
+          resource={item}
           itemName={item.name}
           actions={inlineActions}
           dropdownActions={dropdownActions}

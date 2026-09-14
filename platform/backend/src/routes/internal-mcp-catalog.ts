@@ -73,6 +73,7 @@ import {
   reinstallMultitenantCatalog,
   requiresNewUserInputForReinstall,
 } from "@/services/mcp-reinstall";
+import { transferResourceOwnership } from "@/services/resource-ownership";
 import {
   ApiError,
   type CatalogTeamAssignment,
@@ -132,6 +133,30 @@ const CatalogToolReferenceSchema = z.object({
 });
 
 const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  fastify.post(
+    "/api/internal_mcp_catalog/:id/transfer-ownership",
+    {
+      schema: {
+        operationId: RouteId.TransferMcpCatalogOwnership,
+        description: "Transfer ownership to another organization member",
+        tags: ["Ownership"],
+        params: z.object({ id: z.string().uuid() }),
+        body: z.object({ ownerId: z.string().min(1) }),
+        response: constructResponseSchema(z.object({ success: z.boolean() })),
+      },
+    },
+    async ({ params, body, user, organizationId }) => {
+      await transferResourceOwnership({
+        kind: "catalog",
+        id: params.id,
+        ownerId: body.ownerId,
+        userId: user.id,
+        organizationId,
+      });
+      return { success: true };
+    },
+  );
+
   fastify.get(
     "/api/internal_mcp_catalog",
     {

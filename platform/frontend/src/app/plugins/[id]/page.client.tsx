@@ -41,6 +41,7 @@ import {
   useGuardedInAppNavigation,
   useUnsavedChangesGuard,
 } from "@/components/unsaved-changes-guard";
+import { useResourceOwnershipTransfer } from "@/components/use-resource-ownership-transfer";
 import { WizardFooter } from "@/components/wizard-footer";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { formatPermissionConstraint } from "@/lib/auth/auth.utils";
@@ -205,6 +206,12 @@ function PluginDetailView({
   const [base, setBase] = useState<PluginDraft>(seed);
   const labelsRef = useRef<ProfileLabelsRef>(null);
   const isDirty = isPluginDraftDirty(draft, base);
+  const ownership = useResourceOwnershipTransfer({
+    kind: "plugin",
+    resource: { ...plugin, name: plugin.displayName },
+    disabledReason: isDirty ? "Save or discard your changes first" : undefined,
+    onTransferred: () => router.push("/plugins"),
+  });
 
   useEffect(() => {
     if (isDirty) return;
@@ -441,6 +448,7 @@ function PluginDetailView({
                   )}
                 </DropdownMenuItem>
               )}
+              {ownership.menuItem}
               {isGithubPlugin && <DropdownMenuSeparator />}
               <DropdownMenuItem
                 variant="destructive"
@@ -476,6 +484,7 @@ function PluginDetailView({
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          {ownership.dialog}
         </div>
       }
     >

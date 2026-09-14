@@ -12586,6 +12586,93 @@ export type InteractionVirtualKey = {
     createdByUserName: string | null;
 };
 
+export type TransferRemoteAgentOwnershipData = {
+    body: {
+        ownerId: string;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/a2a/remote-agents/{id}/transfer-ownership';
+};
+
+export type TransferRemoteAgentOwnershipErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type TransferRemoteAgentOwnershipError = TransferRemoteAgentOwnershipErrors[keyof TransferRemoteAgentOwnershipErrors];
+
+export type TransferRemoteAgentOwnershipResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type TransferRemoteAgentOwnershipResponse = TransferRemoteAgentOwnershipResponses[keyof TransferRemoteAgentOwnershipResponses];
+
 export type GetAgentA2aDelegationsData = {
     body?: never;
     path: {
@@ -25123,6 +25210,93 @@ export type ReviewAppRecordingResponses = {
      */
     200: unknown;
 };
+
+export type TransferAppOwnershipData = {
+    body: {
+        ownerId: string;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/apps/{id}/transfer-ownership';
+};
+
+export type TransferAppOwnershipErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type TransferAppOwnershipError = TransferAppOwnershipErrors[keyof TransferAppOwnershipErrors];
+
+export type TransferAppOwnershipResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type TransferAppOwnershipResponse = TransferAppOwnershipResponses[keyof TransferAppOwnershipResponses];
 
 export type GetAppsData = {
     body?: never;
@@ -60952,6 +61126,93 @@ export type GetInteractionResponses = {
 
 export type GetInteractionResponse = GetInteractionResponses[keyof GetInteractionResponses];
 
+export type TransferMcpCatalogOwnershipData = {
+    body: {
+        ownerId: string;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/internal_mcp_catalog/{id}/transfer-ownership';
+};
+
+export type TransferMcpCatalogOwnershipErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type TransferMcpCatalogOwnershipError = TransferMcpCatalogOwnershipErrors[keyof TransferMcpCatalogOwnershipErrors];
+
+export type TransferMcpCatalogOwnershipResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type TransferMcpCatalogOwnershipResponse = TransferMcpCatalogOwnershipResponses[keyof TransferMcpCatalogOwnershipResponses];
+
 export type GetInternalMcpCatalogData = {
     body?: never;
     path?: never;
@@ -89089,6 +89350,93 @@ export type PerplexityResponsesWithAgentResponses = {
 
 export type PerplexityResponsesWithAgentResponse = PerplexityResponsesWithAgentResponses[keyof PerplexityResponsesWithAgentResponses];
 
+export type TransferPluginOwnershipData = {
+    body: {
+        ownerId: string;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/plugins/{id}/transfer-ownership';
+};
+
+export type TransferPluginOwnershipErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type TransferPluginOwnershipError = TransferPluginOwnershipErrors[keyof TransferPluginOwnershipErrors];
+
+export type TransferPluginOwnershipResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type TransferPluginOwnershipResponse = TransferPluginOwnershipResponses[keyof TransferPluginOwnershipResponses];
+
 export type PluginLabelKeysData = {
     body?: never;
     path?: never;
@@ -91349,6 +91697,93 @@ export type GetPluginSkillResponses = {
 };
 
 export type GetPluginSkillResponse = GetPluginSkillResponses[keyof GetPluginSkillResponses];
+
+export type TransferProjectOwnershipData = {
+    body: {
+        ownerId: string;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/projects/{id}/transfer-ownership';
+};
+
+export type TransferProjectOwnershipErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type TransferProjectOwnershipError = TransferProjectOwnershipErrors[keyof TransferProjectOwnershipErrors];
+
+export type TransferProjectOwnershipResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type TransferProjectOwnershipResponse = TransferProjectOwnershipResponses[keyof TransferProjectOwnershipResponses];
 
 export type ProjectLabelKeysData = {
     body?: never;
@@ -97747,6 +98182,93 @@ export type GetSkillMarketplaceResponses = {
 };
 
 export type GetSkillMarketplaceResponse = GetSkillMarketplaceResponses[keyof GetSkillMarketplaceResponses];
+
+export type TransferSkillOwnershipData = {
+    body: {
+        ownerId: string;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/skills/{id}/transfer-ownership';
+};
+
+export type TransferSkillOwnershipErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type TransferSkillOwnershipError = TransferSkillOwnershipErrors[keyof TransferSkillOwnershipErrors];
+
+export type TransferSkillOwnershipResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type TransferSkillOwnershipResponse = TransferSkillOwnershipResponses[keyof TransferSkillOwnershipResponses];
 
 export type SkillLabelKeysData = {
     body?: never;

@@ -19,6 +19,7 @@ import { AgentIcon } from "@/components/agent-icon";
 import { LabelTags } from "@/components/label-tags";
 import { permanentDeleteRowAction } from "@/components/permanent-delete";
 import { projectVisibilityToScope } from "@/components/projects/project-visibility";
+import { ResourceTableRowActions } from "@/components/resource-table-row-actions";
 import { ScopeBadge } from "@/components/scope-badge";
 import {
   type TableRowAction,
@@ -77,7 +78,7 @@ export function ProjectsTable({
       id: "name",
       accessorKey: "name",
       header: "Project",
-      size: 700,
+      size: 360,
       cell: ({ row }) => {
         const project = row.original;
         return (
@@ -104,7 +105,7 @@ export function ProjectsTable({
     },
     {
       id: "sharing",
-      size: 200,
+      size: 160,
       header: "Sharing",
       cell: ({ row }) => {
         const project = row.original;
@@ -128,7 +129,7 @@ export function ProjectsTable({
     },
     {
       id: "actions",
-      size: 140,
+      size: 112,
       header: () => <div className="text-right">Actions</div>,
       cell: ({ row }) => {
         const project = row.original;
@@ -177,10 +178,9 @@ export function ProjectsTable({
               ]
             : []),
         ];
-        if (actions.length === 0) return null;
         return (
           <div className="flex justify-end">
-            <TableRowActions actions={actions} />
+            <ProjectTableActions project={project} actions={actions} />
           </div>
         );
       },
@@ -201,6 +201,8 @@ export function ProjectsTable({
       emptyIcon={FolderKanban}
       emptyMessage="No projects yet"
       hidePaginationWhenSinglePage
+      fixedWidthColumnIds={["sharing"]}
+      flexibleColumnIds={["name"]}
     />
   );
 }
@@ -298,6 +300,31 @@ export function DeletedProjectsTable({
       data={projects}
       getRowId={(row) => row.id}
       hidePaginationWhenSinglePage
+    />
+  );
+}
+
+function ProjectTableActions({
+  project,
+  actions,
+}: {
+  project: ProjectListItem;
+  actions: TableRowAction[];
+}) {
+  return (
+    <ResourceTableRowActions
+      kind="project"
+      resource={{
+        id: project.id,
+        name: project.name,
+        authorId: project.createdBy?.id ?? null,
+        scope: projectVisibilityToScope(project.visibility),
+      }}
+      itemName={project.name}
+      actions={actions.filter((action) => action.variant !== "destructive")}
+      dropdownActions={actions.filter(
+        (action) => action.variant === "destructive",
+      )}
     />
   );
 }

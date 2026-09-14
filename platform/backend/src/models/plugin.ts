@@ -8,6 +8,7 @@ import {
   eq,
   inArray,
   isNotNull,
+  isNull,
   like,
   or,
   sql,
@@ -32,6 +33,35 @@ import PluginTeamModel from "./plugin-team";
 import PluginUserModel from "./plugin-user";
 
 class PluginModel {
+  static async transferOwnership(params: {
+    id: string;
+    organizationId: string;
+    previousOwnerId: string | null;
+    updatedAt: Date;
+    ownerId: string;
+  }): Promise<boolean> {
+    const rows = await db
+      .update(schema.pluginsTable)
+      .set({
+        authorId: params.ownerId,
+        createdByServiceAccountId: null,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(schema.pluginsTable.id, params.id),
+          eq(schema.pluginsTable.organizationId, params.organizationId),
+          params.previousOwnerId === null
+            ? isNull(schema.pluginsTable.authorId)
+            : eq(schema.pluginsTable.authorId, params.previousOwnerId),
+          sql`date_trunc('milliseconds', ${schema.pluginsTable.updatedAt}) = ${params.updatedAt.toISOString()}::timestamp`,
+          notDeleted(schema.pluginsTable),
+        ),
+      )
+      .returning({ id: schema.pluginsTable.id });
+    return rows.length === 1;
+  }
+
   static async findByOrganization(params: {
     organizationId: string;
     accessiblePluginIds?: string[];

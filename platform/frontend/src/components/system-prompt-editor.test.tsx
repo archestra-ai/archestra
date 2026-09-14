@@ -96,7 +96,29 @@ describe("SystemPromptEditor", () => {
     );
     expect(within(table).getByText("{{tool.name}}")).toBeVisible();
     expect(within(table).getByText("{{mcpServerName}}")).toBeVisible();
-    expect(within(table).getByText("{{user.name}}")).toBeVisible();
+    expect(within(table).queryByText("{{user.name}}")).not.toBeInTheDocument();
+    expect(within(table).getByText("{{currentDate}}")).toBeVisible();
+  });
+
+  it("keeps literal instructions editable without advertising or validating templates", async () => {
+    const onChange = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <SystemPromptEditor
+        value="Use {{user.*}} literally."
+        onChange={onChange}
+        templating={false}
+      />,
+    );
+    expect(
+      screen.queryByRole("button", { name: "More info" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/Supports Handlebars/)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/isn't valid Handlebars/),
+    ).not.toBeInTheDocument();
+    await user.type(screen.getByTestId("editor"), "!");
+    expect(onChange).toHaveBeenLastCalledWith("Use {{user.*}} literally.!");
   });
 
   it("grows the box to fit the text, between its floor and its ceiling", () => {

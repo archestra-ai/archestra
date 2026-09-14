@@ -2899,6 +2899,24 @@ describe("AgentForm save payload and failure handling", () => {
     });
   });
 
+  it("hides existing runtime settings when another form panel is active", () => {
+    vi.mocked(useFeature).mockImplementation((flag) => flag === "agentRuntime");
+    const { rerender } = render(
+      <AgentForm
+        agentType="agent"
+        agent={baseAgent}
+        activeSection="configuration"
+      />,
+    );
+    expect(panelOf(screen.getByTestId("agent-runtime"))).toHaveClass("hidden");
+    rerender(
+      <AgentForm agentType="agent" agent={baseAgent} activeSection="runtime" />,
+    );
+    expect(panelOf(screen.getByTestId("agent-runtime"))).not.toHaveClass(
+      "hidden",
+    );
+  });
+
   it("opens the shared provider-key dialog from the agent picker", async () => {
     const user = userEvent.setup();
     renderConfiguration();

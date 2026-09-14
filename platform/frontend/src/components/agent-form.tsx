@@ -4093,25 +4093,29 @@ export function AgentForm({
             agentType === "agent" &&
             agentRuntimeEnabled &&
             !isBuiltIn && (
-              <SettingsSection
-                title="Agent runtime"
-                description="Whether this agent may run on its own, and the credentials it runs with."
+              <SettingsSectionGroup
+                className={cn(!isActiveSection("runtime") && "hidden")}
               >
-                <AgentRuntimeFields
-                  value={runtime}
-                  onChange={setAgentRuntime}
-                />
-                {agent?.runtime && runtime && (
-                  <AgentRuntimeCredentialCard
-                    agentId={agent.id}
-                    credentials={(agent.runtime.credentials ?? []).filter(
-                      ({ key }) =>
-                        !isClaudeCodeRuntime ||
-                        key !== "CLAUDE_CODE_OAUTH_TOKEN",
-                    )}
+                <SettingsSection
+                  title="Agent runtime"
+                  description="Whether this agent may run on its own, and the credentials it runs with."
+                >
+                  <AgentRuntimeFields
+                    value={runtime}
+                    onChange={setAgentRuntime}
                   />
-                )}
-              </SettingsSection>
+                  {agent?.runtime && runtime && (
+                    <AgentRuntimeCredentialCard
+                      agentId={agent.id}
+                      credentials={(agent.runtime.credentials ?? []).filter(
+                        ({ key }) =>
+                          !isClaudeCodeRuntime ||
+                          key !== "CLAUDE_CODE_OAUTH_TOKEN",
+                      )}
+                    />
+                  )}
+                </SettingsSection>
+              </SettingsSectionGroup>
             )}
 
           {/* The Advanced step: security, passthrough

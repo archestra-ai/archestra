@@ -30,6 +30,7 @@ import { useUnparseableExpressions } from "@/lib/utils/handlebars-validation";
 export function SystemPromptEditor({
   title = "Instruction",
   description,
+  templating = true,
   value,
   onChange,
   readOnly,
@@ -42,6 +43,8 @@ export function SystemPromptEditor({
 }: {
   title?: string;
   description?: string;
+  /** Disable for instruction fields that are sent as literal text. */
+  templating?: boolean;
   value: string;
   onChange: (value: string) => void;
   readOnly?: boolean;
@@ -83,7 +86,9 @@ export function SystemPromptEditor({
     Math.max(contentHeight, floor),
     Math.max(maxHeight, floor),
   );
-  const unparseableExpressions = useUnparseableExpressions(value);
+  const unparseableExpressions = useUnparseableExpressions(
+    templating ? value : "",
+  );
   const templateExpressions = getSystemPromptTemplateExpressions({
     builtInAgentId,
   });
@@ -107,25 +112,31 @@ export function SystemPromptEditor({
             ) : (
               <p className="text-sm font-medium">{title}</p>
             ))}
-          <p
-            className={
-              variant === "detail-card"
-                ? "text-sm text-muted-foreground"
-                : "text-xs text-muted-foreground"
-            }
-          >
-            {description && <span className="mb-1 block">{description}</span>}
-            <span>Supports Handlebars templating.</span>{" "}
-            <Button
-              type="button"
-              variant="link"
-              className="h-auto p-0 text-xs"
-              aria-haspopup="dialog"
-              onClick={() => setTemplatingInfoOpen(true)}
+          {(description || templating) && (
+            <p
+              className={
+                variant === "detail-card"
+                  ? "text-sm text-muted-foreground"
+                  : "text-xs text-muted-foreground"
+              }
             >
-              More info
-            </Button>
-          </p>
+              {description && <span className="mb-1 block">{description}</span>}
+              {templating && (
+                <>
+                  <span>Supports Handlebars templating.</span>{" "}
+                  <Button
+                    type="button"
+                    variant="link"
+                    className="h-auto p-0 text-xs"
+                    aria-haspopup="dialog"
+                    onClick={() => setTemplatingInfoOpen(true)}
+                  >
+                    More info
+                  </Button>
+                </>
+              )}
+            </p>
+          )}
         </div>
         {headerExtra && (
           <div className="flex shrink-0 items-center gap-2">{headerExtra}</div>
@@ -135,11 +146,12 @@ export function SystemPromptEditor({
         <div style={{ height: editorHeight }}>
           <Editor
             height="100%"
-            defaultLanguage="handlebars"
+            language={templating ? "handlebars" : "plaintext"}
             value={value}
             onChange={(v) => onChange(v || "")}
             beforeMount={(monaco) => {
-              registerSystemPromptCompletions(monaco, templateExpressions);
+              if (templating)
+                registerSystemPromptCompletions(monaco, templateExpressions);
             }}
             onMount={(editor) => {
               // Monaco reports the height its content wants; the box follows
@@ -212,41 +224,43 @@ export function SystemPromptEditor({
         </div>
       </div>
       <UnparseableExpressionsWarning expressions={unparseableExpressions} />
-      <StandardDialog
-        open={templatingInfoOpen}
-        onOpenChange={setTemplatingInfoOpen}
-        title="Handlebars templating"
-        description="Variables and helpers available in your instructions."
-        size="medium"
-      >
-        <div className="space-y-4 text-sm">
-          <Table aria-label="Template variables and helpers">
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-[45%] sm:w-44">Expression</TableHead>
-                <TableHead>Value</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {templateExpressions.map(({ expression, description }) => (
-                <TableRow key={expression}>
-                  <TableCell className="align-top">
-                    <code className="break-all text-xs">{expression}</code>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {description}
-                  </TableCell>
+      {templating && (
+        <StandardDialog
+          open={templatingInfoOpen}
+          onOpenChange={setTemplatingInfoOpen}
+          title="Handlebars templating"
+          description="Variables and helpers available in your instructions."
+          size="medium"
+        >
+          <div className="space-y-4 text-sm">
+            <Table aria-label="Template variables and helpers">
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-[45%] sm:w-44">Expression</TableHead>
+                  <TableHead>Value</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-          {docsUrl && (
-            <ExternalDocsLink href={docsUrl}>
-              Templating documentation
-            </ExternalDocsLink>
-          )}
-        </div>
-      </StandardDialog>
+              </TableHeader>
+              <TableBody>
+                {templateExpressions.map(({ expression, description }) => (
+                  <TableRow key={expression}>
+                    <TableCell className="align-top">
+                      <code className="break-all text-xs">{expression}</code>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {description}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+            {docsUrl && (
+              <ExternalDocsLink href={docsUrl}>
+                Templating documentation
+              </ExternalDocsLink>
+            )}
+          </div>
+        </StandardDialog>
+      )}
     </div>
   );
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useId } from "react";
 import { ContainerDeploymentFields } from "@/components/container-deployment-fields";
 import { DeploymentEnvironmentVariablesEditor } from "@/components/deployment-environment-variables-editor";
@@ -162,7 +163,20 @@ export function AgentRuntimeFields({
           <DeploymentEnvironmentVariablesEditor
             value={toEnvironmentDrafts(config)}
             onChange={(drafts) => update(fromEnvironmentDrafts(config, drafts))}
-            description="Add plain configuration and declare secrets in one place. Secret values are provided after the Agent is saved."
+            description={
+              <>
+                Add plain configuration or declare static secrets for this
+                Agent. Secret values are provided after saving. Manage reusable
+                organization or per-user credentials on the{" "}
+                <Link
+                  href="/settings/credentials"
+                  className="font-medium text-foreground underline underline-offset-4"
+                >
+                  Credentials
+                </Link>{" "}
+                page, then select them as a secret source.
+              </>
+            }
             targetLabel="dedicated runtime"
             installationLabel="Per user"
             staticLabel="Shared"
@@ -179,7 +193,18 @@ export function AgentRuntimeFields({
               (definition) => ({
                 id: definition.key,
                 label: definition.name,
-                icon: definition.icon,
+                icon:
+                  definition.icon ??
+                  (definition.kind === "github_app_user" ||
+                  definition.kind === "github_app"
+                    ? "logo:github"
+                    : null),
+                sourceLabel:
+                  definition.kind === "github_app_user"
+                    ? "GitHub connection"
+                    : definition.kind === "github_app"
+                      ? "GitHub App connection"
+                      : undefined,
                 defaultKey: defaultCredentialEnvironmentKey(definition.key),
                 description: definition.description,
                 allowedScopes: [

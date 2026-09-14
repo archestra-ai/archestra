@@ -5,10 +5,12 @@ import { cn } from "@/lib/utils";
 export function RuntimeCredentialIcon({
   icon,
   className,
+  size = 20,
 }: {
   icon: string | null;
   className?: string;
+  size?: number;
 }) {
   if (!icon) return <KeyRound className={cn("size-5 shrink-0", className)} />;
-  return <AgentIcon icon={icon} className={className} size={20} />;
+  return <AgentIcon icon={icon} className={className} size={size} />;
 }

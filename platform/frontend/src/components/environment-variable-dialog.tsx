@@ -47,6 +47,7 @@ export interface CredentialBindingOption {
   label: string;
   description: string;
   icon?: string | null;
+  sourceLabel?: string;
   defaultKey: string;
   allowedScopes: readonly FieldScopeValue[];
 }
@@ -461,9 +462,12 @@ function CredentialBindingEditor({
               value={option.id}
               description={
                 <span className="line-clamp-2 whitespace-normal">
-                  {option.allowedScopes.includes("static")
-                    ? "Organization credential"
-                    : "Personal credential"}
+                  <span>
+                    {option.sourceLabel ??
+                      (option.allowedScopes.includes("static")
+                        ? "Organization credential"
+                        : "Personal credential")}
+                  </span>
                   {option.description && (
                     <span>{` · ${option.description}`}</span>
                   )}

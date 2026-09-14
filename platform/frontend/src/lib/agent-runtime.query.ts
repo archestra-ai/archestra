@@ -9,7 +9,6 @@ const {
   continueAgentRun,
   deleteAgentRun,
   deleteAgentWorkspace,
-  deleteAgentRuntimeCredential,
   getAgentRuntimePreflight,
   getAgentRunShare,
   getAgentRuns,
@@ -332,24 +331,6 @@ function runAttachmentFromFile(file: FileUIPart): {
   };
 }
 
-export function useSetAgentRuntimeCredential(agentId: string) {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async ({ key, value }: { key: string; value: string }) => {
-      const { data, error } = await setAgentRuntimeCredential({
-        path: { id: agentId, key },
-        body: { value },
-      });
-      if (error) throw reportApiError(error);
-      return data;
-    },
-    onSuccess: () =>
-      queryClient.invalidateQueries({
-        queryKey: ["agents", agentId, "runtime", "preflight"],
-      }),
-  });
-}
-
 /** Save independently so a failed connection does not discard successful ones. */
 export function useSetMissingAgentRuntimeCredentials(agentId: string) {
   const queryClient = useQueryClient();
@@ -392,23 +373,6 @@ export function useSetMissingAgentRuntimeCredentials(agentId: string) {
         }),
       ]);
     },
-  });
-}
-
-export function useDeleteAgentRuntimeCredential(agentId: string) {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (key: string) => {
-      const { data, error } = await deleteAgentRuntimeCredential({
-        path: { id: agentId, key },
-      });
-      if (error) throw reportApiError(error);
-      return data;
-    },
-    onSuccess: () =>
-      queryClient.invalidateQueries({
-        queryKey: ["agents", agentId, "runtime", "preflight"],
-      }),
   });
 }
 

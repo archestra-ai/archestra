@@ -59,7 +59,6 @@ import {
   LlmProviderApiKeyWithScopeInfoSchema,
   type ResourceVisibilityScope,
   ResourceVisibilityScopeSchema,
-  SelectLlmProviderApiKeySchema,
   type SelectSecret,
 } from "@/types";
 import { isUniqueConstraintError } from "@/utils/db";
@@ -398,7 +397,9 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               agentKey.scope === "personal" && agentKey.userId !== user.id
                 ? undefined
                 : agentKey.requiresReauthentication,
-            createdBy: await CreatedByModel.resolveOne(agentKey.createdBy),
+            createdBy: await CreatedByModel.resolveOne(
+              CreatedByModel.id(agentKey, agentKey.createdBy),
+            ),
             teamName: null,
             userName: null,
             isAgentKey: true,
@@ -479,7 +480,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 "Either apiKey, both vaultSecretPath and vaultSecretKey, or AWS SigV4 credentials (Bedrock only) must be provided",
             },
           ),
-        response: constructResponseSchema(SelectLlmProviderApiKeySchema),
+        response: constructResponseSchema(LlmProviderApiKeyWithScopeInfoSchema),
       },
     },
     async ({ body, organizationId, user, headers }, reply) => {
@@ -694,6 +695,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       try {
         createdApiKey = await LlmProviderApiKeyModel.create({
           organizationId,
+          createdBy: user.id,
           name: body.name,
           provider: body.provider,
           secretId: secret?.id ?? null,
@@ -775,7 +777,12 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      return reply.send(createdApiKey);
+      return reply.send({
+        ...createdApiKey,
+        createdBy: await CreatedByModel.resolveOne(
+          CreatedByModel.id(createdApiKey, createdApiKey.createdBy),
+        ),
+      });
     },
   );
 
@@ -843,7 +850,9 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       return reply.send({
         ...apiKey,
-        createdBy: await CreatedByModel.resolveOne(apiKey.createdBy),
+        createdBy: await CreatedByModel.resolveOne(
+          CreatedByModel.id(apiKey, apiKey.createdBy),
+        ),
       });
     },
   );
@@ -916,7 +925,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 "Either apiKey, both vaultSecretPath and vaultSecretKey, or AWS SigV4 credentials must be provided",
             },
           ),
-        response: constructResponseSchema(SelectLlmProviderApiKeySchema),
+        response: constructResponseSchema(LlmProviderApiKeyWithScopeInfoSchema),
       },
     },
     async ({ params, body, organizationId, user, headers }, reply) => {
@@ -1244,7 +1253,12 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!updated) {
         throw new ApiError(404, "LLM provider API key not found");
       }
-      return reply.send(updated);
+      return reply.send({
+        ...updated,
+        createdBy: await CreatedByModel.resolveOne(
+          CreatedByModel.id(updated, updated.createdBy),
+        ),
+      });
     },
   );
 
@@ -1269,7 +1283,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           /** The fresh device-flow credential for the same subscription. */
           apiKey: z.string().min(1),
         }),
-        response: constructResponseSchema(SelectLlmProviderApiKeySchema),
+        response: constructResponseSchema(LlmProviderApiKeyWithScopeInfoSchema),
       },
     },
     async ({ params, body, organizationId, user }, reply) => {
@@ -1369,7 +1383,12 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!updated) {
         throw new ApiError(404, "LLM provider API key not found");
       }
-      return reply.send(updated);
+      return reply.send({
+        ...updated,
+        createdBy: await CreatedByModel.resolveOne(
+          CreatedByModel.id(updated, updated.createdBy),
+        ),
+      });
     },
   );
 

@@ -57,11 +57,17 @@ export function AgentRuntimeCredentialCard({
   credentials,
   readOnly = false,
   editHref,
+  title = "Runtime credentials",
+  description,
+  sectionId = "runtime-credentials",
 }: {
   agentId: string;
   credentials: CredentialDeclaration[];
   readOnly?: boolean;
   editHref?: string;
+  title?: string;
+  description?: string;
+  sectionId?: string;
 }) {
   const { data: preflight, refetch: refetchPreflight } =
     useAgentRuntimePreflight(agentId);
@@ -83,16 +89,17 @@ export function AgentRuntimeCredentialCard({
 
   return (
     <section
-      id="runtime-credentials"
+      id={sectionId}
       className="scroll-mt-24 overflow-hidden rounded-lg border bg-card"
     >
       <div className="flex items-start justify-between gap-3 p-4">
         <div className="space-y-1">
-          <h2 className="text-sm font-semibold">Runtime credentials</h2>
+          <h2 className="text-sm font-semibold">{title}</h2>
           <p className="text-sm text-muted-foreground">
-            {readOnly
-              ? "Credential requirements and setup status for this Agent's runs."
-              : "Manage the credentials this Agent can use in its dedicated runtime."}
+            {description ??
+              (readOnly
+                ? "Credential requirements and setup status for this Agent's runs."
+                : "Manage the credentials this Agent can use in its dedicated runtime.")}
           </p>
         </div>
         {readOnly && editHref && (

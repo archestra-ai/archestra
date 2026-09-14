@@ -102,11 +102,11 @@ cmd_up() {
   # 3000/9000 too — if anything still answers, the health checks below and
   # the tests would silently talk to THAT app instead of this stack.
   local port
-  for port in 3000 9000 9050 9092 30081; do
+  for port in 3000 9000 9050 9092 9191 30081; do
     if curl -sf --max-time 1 -o /dev/null "http://127.0.0.1:${port}/" 2> /dev/null \
       || nc -z 127.0.0.1 "${port}" > /dev/null 2>&1; then
       echo "ERROR: something is already listening on 127.0.0.1:${port} (a dev stack?)." >&2
-      echo "Stop it first — the lite e2e stack needs ports 3000, 9000, 9050, 9092, 30081." >&2
+      echo "Stop it first — the lite e2e stack needs ports 3000, 9000, 9050, 9092, 9191, 30081." >&2
       exit 1
     fi
   done
@@ -150,12 +150,25 @@ cmd_up() {
     -p 127.0.0.1:3000:3000 \
     -p 127.0.0.1:9000:9000 \
     -p 127.0.0.1:9050:9050 \
+    -p 127.0.0.1:9191:9191 \
     --env-file "${SCRIPT_DIR}/e2e-lite-platform.env" \
     -e "ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE=${MCP_SERVER_BASE_IMAGE}" \
     -v /var/run/docker.sock:/var/run/docker.sock \
+    -v "${PLATFORM_DIR}/e2e-tests/fixtures/a2a-test-agent:/opt/archestra-e2e/a2a-test-agent:ro" \
     "${image}" > /dev/null
 
+  # The backend's outbound guard permits loopback in e2e, but correctly
+  # rejects Docker-network private addresses. Run the fixture in the platform
+  # container so both discovery and invocation stay on its own loopback; the
+  # published port lets Playwright reset and inspect the same fixture.
+  docker exec -d \
+    -e A2A_FIXTURE_HOST=0.0.0.0 \
+    -e A2A_FIXTURE_PORT=9191 \
+    "${PLATFORM_CONTAINER}" \
+    node /opt/archestra-e2e/a2a-test-agent/server.mjs
+
   wait_for WireMock "http://127.0.0.1:9092/__admin/health" 15
+  wait_for "A2A fixture" "http://127.0.0.1:9191/health" 15
   wait_for backend "http://127.0.0.1:9000/health" 120
   wait_for frontend "http://127.0.0.1:3000/" 30
   # Keycloak last: its ~40-60s realm import overlaps the platform boot.
@@ -175,6 +188,7 @@ cmd_test() {
   export E2E_WIREMOCK_BASE_URL="http://127.0.0.1:9092"
   export E2E_WIREMOCK_INTERNAL_URL="http://${WIREMOCK_CONTAINER}:8080"
   export E2E_KEYCLOAK_BACKEND_URL="http://${KEYCLOAK_CONTAINER}:8080"
+  export E2E_A2A_FIXTURE_BASE_URL="http://127.0.0.1:9191"
   if [[ $# -gt 0 ]]; then
     pnpm exec playwright test "$@"
     return

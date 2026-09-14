@@ -20,6 +20,68 @@ const ENTRYPOINT = path.resolve(
 
 describe("Claude Code image entrypoint", () => {
   test.each([
+    "subscription",
+    "provider",
+  ])("isolates %s authentication at CLI startup", async (authentication) => {
+    const root = await mkdtemp(path.join(tmpdir(), "claude-auth-env-"));
+    try {
+      const bin = path.join(root, "bin");
+      const runtime = path.join(root, "runtime");
+      await mkdir(bin);
+      await mkdir(runtime);
+      await writeExecutable(
+        path.join(bin, "claude"),
+        `#!/usr/bin/env python3
+import json, os
+from pathlib import Path
+Path(os.environ["ARCHESTRA_AGENT_RUNTIME_DIR"], "captured-env").write_text(json.dumps(dict(os.environ)))
+`,
+      );
+      await execFileAsync("bash", [ENTRYPOINT], {
+        cwd: root,
+        env: {
+          PATH: `${bin}:${process.env.PATH}`,
+          HOME: root,
+          ARCHESTRA_AGENT_RUNTIME_DIR: runtime,
+          ARCHESTRA_AGENT_RUNTIME_MODE: "interactive",
+          ARCHESTRA_AGENT_RUNTIME_CLAUDE_AUTH: authentication,
+          ARCHESTRA_LLM_PROXY_PROTOCOL: "anthropic",
+          ARCHESTRA_AGENT_RUNTIME_TASK: "Example task",
+          ARCHESTRA_AGENT_RUNTIME_TASK_ID: "test-task",
+          ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL: "test-model",
+          ARCHESTRA_MCP_GATEWAY_URL: "http://localhost:9000/v1/mcp/example",
+          ARCHESTRA_MCP_GATEWAY_TOKEN: "example-gateway-token",
+          CLAUDE_CODE_OAUTH_TOKEN: "example-subscription-token",
+          ANTHROPIC_AUTH_TOKEN: "example-proxy-token",
+          ANTHROPIC_API_KEY: "example-api-key",
+          ANTHROPIC_BASE_URL: "http://localhost:9000/example",
+          CLAUDE_CODE_USE_VERTEX: "1",
+        },
+      });
+      const captured = JSON.parse(
+        await readFile(path.join(runtime, "captured-env"), "utf8"),
+      );
+      if (authentication === "subscription") {
+        expect(captured.CLAUDE_CODE_OAUTH_TOKEN).toBe(
+          "example-subscription-token",
+        );
+        for (const key of [
+          "ANTHROPIC_API_KEY",
+          "ANTHROPIC_AUTH_TOKEN",
+          "ANTHROPIC_BASE_URL",
+          "CLAUDE_CODE_USE_VERTEX",
+        ])
+          expect(captured).not.toHaveProperty(key);
+      } else {
+        expect(captured).not.toHaveProperty("CLAUDE_CODE_OAUTH_TOKEN");
+        expect(captured.ANTHROPIC_AUTH_TOKEN).toBe("example-proxy-token");
+      }
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test.each([
     "one_shot",
     "interactive",
   ] as const)("configures and starts %s run in the native TUI", async (mode) => {

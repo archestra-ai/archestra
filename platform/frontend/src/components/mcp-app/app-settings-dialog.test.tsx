@@ -38,6 +38,7 @@ const app = {
   id: APP_ID,
   organizationId: "org-1",
   authorId: "user-1",
+  createdByServiceAccountId: null,
   name: "Test App",
   slug: "test-app",
   description: null,
@@ -125,12 +126,14 @@ describe("AppSettingsDialog", () => {
     expect(
       await screen.findByRole("status", { name: "Loading app settings…" }),
     ).toBeInTheDocument();
+    const pendingDialog = screen.getByRole("dialog");
     expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
 
     await act(async () => releaseRequest());
     expect(
       await screen.findByRole("textbox", { name: "Name *" }),
     ).toBeInTheDocument();
+    expect(screen.getByRole("dialog")).toBe(pendingDialog);
   });
 
   it("retries an initial query failure without showing Save", async () => {

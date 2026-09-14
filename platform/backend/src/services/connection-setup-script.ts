@@ -18,6 +18,7 @@ import type {
   ConnectionSetupProxyAuth,
 } from "@/types";
 import { archestraMarkWithText } from "./archestra-mark";
+import { renderClaudeDesktopSetupScript } from "./connection-setup-script.claude-desktop";
 import { renderWindowsSetupScript } from "./connection-setup-script.windows";
 import { describeMarketplaceContents } from "./marketplace-copy";
 import {
@@ -177,6 +178,9 @@ export function claudeCodeOAuthNextStep(serverName: string): string {
 }
 
 export function renderSetupScript(rawCtx: SetupScriptContext): string {
+  if (rawCtx.clientId === "claude-desktop") {
+    return renderClaudeDesktopSetupScript(rawCtx);
+  }
   // appName is white-label, admin-controlled text that lands in script comments
   // and bare echo strings. Collapse control characters (newlines, NUL, …) to
   // spaces so it can never break out of a comment line and execute.
@@ -216,6 +220,7 @@ export function renderSetupScript(rawCtx: SetupScriptContext): string {
 // ===================================================================
 
 const CLIENT_LABELS: Record<ConnectionSetupClientId, string> = {
+  "claude-desktop": "Claude Desktop",
   "claude-code": "Claude Code",
   codex: "Codex",
   "copilot-cli": "Copilot CLI",
@@ -544,8 +549,6 @@ function indent(block: string, prefix: string): string {
 function claudeCodeSections(ctx: SetupScriptContext): string[] {
   const sections: string[] = [];
 
-  startupGuardUnshadowSection(ctx, CLAUDE_CODE_GUARD_CLIENT, sections);
-
   if (ctx.mcp) {
     // Register at USER scope so the gateway is visible in every directory for
     // this user. `claude mcp add` defaults to `local` (per-directory) scope,
@@ -592,9 +595,7 @@ ${claudeMarketplaceRegistration(ctx.skills.marketplaceName, ctx.skills.cloneUrl)
 ${installs.join("\n")}`);
   }
 
-  startupGuardSection(ctx, CLAUDE_CODE_GUARD_CLIENT, sections);
-
-  return sections;
+  return withStartupGuard(ctx, CLAUDE_CODE_GUARD_CLIENT, sections);
 }
 
 /**
@@ -724,41 +725,22 @@ esac`;
 }
 
 /**
- * Prepend the guard-unshadow step, gated exactly like the install so the two
- * always come as a pair. It runs before the connect steps invoke the client CLI
- * so a guard wrapper installed by an earlier connect can never splash over this
- * run. It is non-destructive (see {@link buildStartupGuardUnshadowSection}): the
- * install section at the end is what refreshes the on-disk guard, and leaving
- * the guard in place until then means a connect step failing under `set -e`
- * never strands the user without a startup screen. Call this FIRST in a client's
- * builder.
+ * Wrap a CLI client's setup steps with the same startup-guard lifecycle. The
+ * old guard is unshadowed before any client command runs and the refreshed
+ * guard is installed only after setup succeeds.
  */
-function startupGuardUnshadowSection(
+function withStartupGuard(
   ctx: SetupScriptContext,
   client: StartupGuardClient,
   sections: string[],
-): void {
-  if (ctx.mcp || ctx.proxy || ctx.skills) {
-    sections.push(buildStartupGuardUnshadowSection(client));
-  }
-}
-
-/**
- * Append the startup-guard install to a client's script when connect wired at
- * least one remote — the guard's whole job is to check those before launch, so
- * a script that configured nothing has nothing to guard. Shared by every CLI
- * client that gets a guard (Claude Code, Codex, Copilot CLI).
- */
-function startupGuardSection(
-  ctx: SetupScriptContext,
-  client: StartupGuardClient,
-  sections: string[],
-): void {
-  if (ctx.mcp || ctx.proxy || ctx.skills) {
-    sections.push(
-      buildStartupGuardInstallSection(buildStartupGuardContext(ctx), client),
-    );
-  }
+): string[] {
+  return ctx.mcp || ctx.proxy || ctx.skills
+    ? [
+        buildStartupGuardUnshadowSection(client),
+        ...sections,
+        buildStartupGuardInstallSection(buildStartupGuardContext(ctx), client),
+      ]
+    : sections;
 }
 
 // One shared source for the proxy env keys connect writes into
@@ -930,8 +912,6 @@ export function codexAttributionHeaderLines(
 function codexSections(ctx: SetupScriptContext): string[] {
   const sections: string[] = [];
 
-  startupGuardUnshadowSection(ctx, CODEX_GUARD_CLIENT, sections);
-
   if (ctx.mcp || ctx.proxy || ctx.skills) {
     // Codex owns config.toml wherever CODEX_HOME points (default ~/.codex),
     // and every action below edits that file — the mcp/skills registrations
@@ -1004,9 +984,7 @@ fi
 ${installs.join("\n")}`);
   }
 
-  startupGuardSection(ctx, CODEX_GUARD_CLIENT, sections);
-
-  return sections;
+  return withStartupGuard(ctx, CODEX_GUARD_CLIENT, sections);
 }
 
 // ===================================================================
@@ -1015,8 +993,6 @@ ${installs.join("\n")}`);
 
 function copilotSections(ctx: SetupScriptContext): string[] {
   const sections: string[] = [];
-
-  startupGuardUnshadowSection(ctx, COPILOT_GUARD_CLIENT, sections);
 
   if (ctx.mcp) {
     sections.push(`say ${sh(`Registering MCP gateway "${ctx.mcp.serverName}" (OAuth)`)}
@@ -1061,9 +1037,7 @@ fi
 ${installs.join("\n")}`);
   }
 
-  startupGuardSection(ctx, COPILOT_GUARD_CLIENT, sections);
-
-  return sections;
+  return withStartupGuard(ctx, COPILOT_GUARD_CLIENT, sections);
 }
 
 /**

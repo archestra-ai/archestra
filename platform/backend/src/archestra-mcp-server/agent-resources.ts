@@ -1,4 +1,7 @@
-import { TOOL_LIST_AGENTS_SHORT_NAME } from "@archestra/shared";
+import {
+  TOOL_LIST_AGENTS_SHORT_NAME,
+  TOOL_LOAD_SKILL_SHORT_NAME,
+} from "@archestra/shared";
 import { z } from "zod";
 import {
   assertAgentTeams,
@@ -7,6 +10,7 @@ import {
   isAgentTypeAdmin,
   requireAgentModifyPermission,
 } from "@/auth/agent-type-permissions";
+import { getSkillPermissionChecker } from "@/auth/skill-permissions";
 import { userHasPermission } from "@/auth/utils";
 import config from "@/config";
 import { knowledgeSourceAccessControlService } from "@/knowledge-base/source-access-control";
@@ -17,11 +21,14 @@ import {
   KnowledgeBaseModel,
   TeamModel,
 } from "@/models";
+import { getAgentActivationSkills } from "@/services/agent-activation-skills";
 import { agentSubagentExclusionsService } from "@/services/agent-subagent-exclusions";
 import { assertNoStaticPinsBrokenByTargetChange } from "@/services/agent-tool-assignment";
 import { resolveDefaultEnvironmentForNewResource } from "@/services/environments/environment";
+import { SKILL_CATALOG_UNTRUSTED_NOTE } from "@/skills/skill-catalog-prompt";
 import type { Agent, AgentScope, ToolExposureMode } from "@/types";
 import {
+  AgentActivationSkillSchema,
   AgentScopeSchema,
   AgentToolAssignmentInputSchema,
   ApiError,
@@ -32,6 +39,7 @@ import {
   UuidIdSchema,
 } from "@/types";
 import { archestraMcpBranding } from "./branding";
+import { isArchestraToolAvailableToAgent } from "./dynamic-tools";
 import {
   assignSubAgentDelegations,
   assignToolAssignments,
@@ -157,7 +165,7 @@ const AgentSuggestedPromptOutputSchema = z.object({
   prompt: z.string().describe("The suggested prompt text."),
 });
 
-export const AgentDetailOutputSchema = z.object({
+const ResourceDetailOutputSchema = z.object({
   id: z.string().describe("The resource ID."),
   name: z.string().describe("The resource name."),
   description: z
@@ -195,6 +203,29 @@ export const AgentDetailOutputSchema = z.object({
   suggestedPrompts: z
     .array(AgentSuggestedPromptOutputSchema)
     .describe("Configured suggested prompts."),
+});
+
+export const McpGatewayDetailOutputSchema = ResourceDetailOutputSchema;
+
+export const AgentDetailOutputSchema = ResourceDetailOutputSchema.extend({
+  skillsEnabled: z
+    .boolean()
+    .optional()
+    .describe(
+      "Present for an internal agent when the current user has skill:read; whether load_skill is executable for it.",
+    ),
+  skillsNotice: z
+    .string()
+    .optional()
+    .describe(
+      "Trust boundary for the catalog-supplied skill names and descriptions in skills.",
+    ),
+  skills: z
+    .array(AgentActivationSkillSchema)
+    .optional()
+    .describe(
+      "Present for an internal agent when the current user has skill:read; caller-relative skills it can activate.",
+    ),
 });
 
 export const KnowledgeSourceOutputSchema = z.object({
@@ -460,6 +491,7 @@ export async function handleGetResource<
         { limit: 1, offset: 0 },
         undefined,
         {
+          organizationId: context.organizationId,
           name: args.name,
           agentType: expectedType,
           // Hide other users' personal agents from MCP tools. Only the
@@ -476,6 +508,14 @@ export async function handleGetResource<
       }
     }
 
+    if (
+      record &&
+      (!context.organizationId ||
+        record.organizationId !== context.organizationId)
+    ) {
+      record = null;
+    }
+
     if (!record) {
       // only agents have a discovery tool; proxies/gateways have no list tool.
       const steer =
@@ -488,6 +528,41 @@ export async function handleGetResource<
     if (record.agentType !== expectedType) {
       return errorResult(
         `The requested entity is a ${record.agentType}, not a ${expectedType}.`,
+      );
+    }
+
+    const canReadSkills =
+      expectedType === "agent" && context.organizationId && context.userId
+        ? (
+            await getSkillPermissionChecker({
+              organizationId: context.organizationId,
+              userId: context.userId,
+            })
+          ).canRead
+        : false;
+    if (expectedType === "agent" && context.organizationId && canReadSkills) {
+      const activationSkills = await getAgentActivationSkills({
+        enabled: await isArchestraToolAvailableToAgent({
+          toolName: archestraMcpBranding.getToolName(
+            TOOL_LOAD_SKILL_SHORT_NAME,
+          ),
+          agentId: record.id,
+          organizationId: context.organizationId,
+          userId: context.userId,
+        }),
+        organizationId: context.organizationId,
+        userId: context.userId,
+        agentId: record.id,
+      });
+      const agentWithSkills = {
+        ...record,
+        skillsEnabled: activationSkills.enabled,
+        skillsNotice: SKILL_CATALOG_UNTRUSTED_NOTE,
+        skills: activationSkills.skills,
+      };
+      return structuredSuccessResult(
+        agentWithSkills,
+        JSON.stringify(agentWithSkills, null, 2),
       );
     }
 

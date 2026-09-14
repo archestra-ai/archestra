@@ -1,12 +1,13 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { useIsAuthenticated } from "@/lib/auth/auth.hook";
-import { useHasPermissions } from "@/lib/auth/auth.query";
+import {
+  runtimeCredentialsQueryKey,
+  useRuntimeCredentials,
+} from "@/lib/runtime-credentials.query";
 import { handleApiError, throwOnApiError } from "@/lib/utils";
 
 const {
-  listGithubAppConfigs,
   getGithubAppConfig,
   createGithubAppConfig,
   updateGithubAppConfig,
@@ -21,23 +22,16 @@ export const githubAppConfigKeys = {
   lists: () => [...githubAppConfigKeys.all, "list"] as const,
 };
 
-/**
- * List the organization's GitHub App configurations. Gated on read permission
- * so callers without access (e.g. the connector dialog for a plain member)
- * don't fire a request that would 403.
- */
+/** GitHub consumers select from the shared organization credential list. */
 export function useGithubAppConfigs() {
-  const isAuthenticated = useIsAuthenticated();
-  const { data: canRead } = useHasPermissions({ githubAppConfig: ["read"] });
-  return useQuery({
-    queryKey: githubAppConfigKeys.lists(),
-    queryFn: async () => {
-      const response = await listGithubAppConfigs();
-      throwOnApiError(response.error, { toastOnError: false });
-      return response.data ?? [];
-    },
-    enabled: isAuthenticated && !!canRead,
-  });
+  const query = useRuntimeCredentials();
+  return {
+    ...query,
+    data: query.data?.filter(
+      (credential) =>
+        credential.allowOrganization && credential.kind === "github_app",
+    ),
+  };
 }
 
 export function useGithubAppConfig(id: string | undefined) {
@@ -71,6 +65,7 @@ export function useCreateGithubAppConfig() {
     },
     onSuccess: (data) => {
       if (!data) return;
+      queryClient.invalidateQueries({ queryKey: runtimeCredentialsQueryKey });
       queryClient.invalidateQueries({ queryKey: githubAppConfigKeys.lists() });
       toast.success("GitHub App configuration created");
     },
@@ -99,6 +94,7 @@ export function useUpdateGithubAppConfig() {
     },
     onSuccess: (data) => {
       if (!data) return;
+      queryClient.invalidateQueries({ queryKey: runtimeCredentialsQueryKey });
       queryClient.invalidateQueries({ queryKey: githubAppConfigKeys.all });
       toast.success("GitHub App configuration updated");
     },
@@ -118,6 +114,7 @@ export function useDeleteGithubAppConfig() {
     },
     onSuccess: (data) => {
       if (!data) return;
+      queryClient.invalidateQueries({ queryKey: runtimeCredentialsQueryKey });
       queryClient.invalidateQueries({ queryKey: githubAppConfigKeys.all });
       toast.success("GitHub App configuration deleted");
     },

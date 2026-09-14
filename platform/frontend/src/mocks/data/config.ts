@@ -48,6 +48,7 @@ export function makeConfig(
       azureOpenAiEntraIdEnabled: false,
       anthropicWifEnabled: false,
       anthropicKeylessAuthEnabled: false,
+      anthropicVertexAiEnabled: false,
       bedrockIamAuthEnabled: false,
       geminiVertexAiEnabled: false,
       incomingEmail: { enabled: false },

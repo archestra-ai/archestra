@@ -3,19 +3,16 @@ title: Connect Your Agents
 category: Archestra Platform
 order: 8
 description: How the one-command setup script connects your AI tools, and how to audit or undo it
-lastUpdated: 2026-09-09
+lastUpdated: 2026-09-11
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
 ![The Connection page with a copyable coding-agent prompt](/docs/automated_screenshots/platform-connection_connect-with-ai.webp)
 
-The Connection page provides a prompt for your coding agent.
-Your agent prepares the connection; you review and approve it in your browser.
+Select your client on the Connection page. Claude Code, Cursor, Codex, and Copilot CLI show a setup prompt. Your agent prepares the connection; you review and approve it in your browser.
 
-**Other ways to connect** opens manual setup for Claude Desktop, Cursor, n8n, and other clients.
-Refreshing returns to the prompt.
-Client-specific links still open their setup instructions directly.
+Claude Desktop, n8n, and other clients show their setup instructions. Your selected client stays in the URL when you refresh or share the page.
 
 On macOS and Linux the command is `curl -fsSL <url> | bash`. On Windows it is `irm <url> | iex`. Running it configures the client in place. Plugins declare whether they support macOS/Linux, Windows, or both; the review includes only plugins compatible with the selected operating system and names incompatible plugins that were skipped.
 
@@ -152,7 +149,7 @@ Set the disable variable to turn the guard off without uninstalling. To remove e
 
 ## Supported Clients
 
-Four clients get the one-command script: Claude Code, Codex, Cursor, and Copilot CLI. Claude Desktop, n8n, and Any Client get copy-paste instructions you apply in the app yourself. Each section lists what changes and how to undo it. To also cut off access on the server, delete the virtual key on the **LLM Proxy** page and revoke any skills share link on the Skills page.
+Four clients get the one-command script: Claude Code, Codex, Cursor, and Copilot CLI. Claude Desktop gets a downloadable installer. n8n and Any Client get instructions you apply in the app yourself. Each section lists what changes and how to undo it. To also cut off access on the server, delete the virtual key on the **LLM Proxy** page and revoke any skills share link on the Skills page.
 
 ### Claude Code
 
@@ -205,22 +202,13 @@ The `copilot` CLI must be on your `PATH`.
 
 ### Claude Desktop
 
-For a full walkthrough, see [Using Claude Desktop (Cowork)](/docs/platform-claude-desktop-example).
+Download the setup helper and open it in normal Claude Desktop. Confirm its native installation prompt to start the reviewed setup. For an existing third-party profile, use the terminal option. The setup script supports macOS, Windows, and Linux. Choose subscription authentication or an API key in the review step. The script checks inference, saves a gateway profile, and restarts Desktop. It preserves manually created profiles and backs up changed files. Rerunning setup replaces the managed connection; a different deployment takes precedence over the previous one.
 
-> **Note:** Claude Desktop's third-party inference cannot reuse a Claude Pro or Max subscription. To keep paying through a subscription, connect Claude Code in passthrough mode instead.
+Subscription setup obtains a token locally through the official Claude Code CLI. API-key setup uses a personal virtual key backed by your configured Anthropic key. The download requires Node.js 18+ and Python 3.9 or newer.
 
-Download the configuration profile from the Connection page and import it into Claude Desktop.
-Remote endpoints require HTTPS. Local development also supports HTTP on `localhost`, `127.0.0.1`, and `[::1]`.
-This applies to the gateway and shared-skills marketplace. Other HTTP hostnames remain unsupported.
+Authorize the MCP connector in Desktop's **Settings → Connectors**. The selected shared skills install automatically after restart. Rerun Connect to install an updated snapshot. To switch back, rerun the previous deployment’s installer or select a manually created inference profile.
 
-Import the file through **Developer → Configure Third-Party Inference → Import configuration**.
-The profile contains credentials. Keep it private and delete it after importing.
-
-- **MCP gateway** — enable Developer Mode, open Developer → Configure Third-Party Inference, add a blank managed MCP server, and paste the gateway URL. Sign in once in your browser.
-- **LLM proxy** — in the same form, paste the gateway base URL and your API key, then add the Archestra attribution headers under Custom headers.
-- **Skills** — in **Settings → Plugins → Browse plugins**, install your shared-skills marketplace.
-- **Revert** — remove the connector and clear the inference credential in the app.
-
+See [Using Claude Desktop (Cowork)](/docs/platform-claude-desktop-example) for requirements and authentication details.
 ### n8n
 
 n8n is a workflow tool, so you configure nodes inside n8n — there is no script and nothing on disk to back up.

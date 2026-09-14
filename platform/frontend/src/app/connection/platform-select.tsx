@@ -95,7 +95,7 @@ export function ConnectionPlatformToggle({
       value={value}
       onValueChange={(next) => onValueChange(next as ConnectPlatformOption)}
     >
-      <TabsList aria-label={ariaLabel} data-testid={dataTestId}>
+      <TabsList size="sm" aria-label={ariaLabel} data-testid={dataTestId}>
         {options.map((platform) => (
           <TabsTrigger key={platform} value={platform}>
             <OsLogos platform={platform} />

@@ -391,7 +391,10 @@ async function hydrateOauthClients(
         authorName: metadata.authorId
           ? (authorNames.get(metadata.authorId) ?? null)
           : null,
-        createdBy: lookupCreator(creators, metadata.authorId),
+        createdBy: lookupCreator(
+          creators,
+          CreatedByModel.id(metadata, metadata.authorId),
+        ),
         teams: teamsMap.get(client.id) ?? [],
         labels: labelsByClient.get(client.id) ?? [],
         createdAt: client.createdAt,

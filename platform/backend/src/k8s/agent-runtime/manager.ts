@@ -13,6 +13,7 @@ import {
   getK8sNamespace,
   isK8sConflictError,
   isK8sNotFoundError,
+  isTransientK8sApiError,
   loadKubeConfig,
   withK8sApiRetry,
 } from "@/k8s/shared";
@@ -33,8 +34,10 @@ import type { AgentRunLaunchSpec } from "@/services/agent-runtime/backends";
 import {
   AGENT_RUNTIME_ATTACH_SCRIPT,
   AGENT_RUNTIME_ATTACHMENTS_MANIFEST,
+  AGENT_RUNTIME_CREDENTIALS_SECRET_KEY,
   AGENT_RUNTIME_INPUTS_READY_FILE,
 } from "@/services/agent-runtime/runtime-contract";
+import { resolveCredential } from "@/services/credentials";
 import { resolveEffectiveNetworkPolicy } from "@/services/environments/network-policy";
 import type {
   AgentRunInput,
@@ -47,7 +50,11 @@ import {
   AgentWorkspaceFileRequestSchema,
   AgentWorkspaceFileResultSchema,
 } from "@/types/agent-workspace-file";
-import { execAgentRuntimeCommand } from "./exec";
+import { RenewableCredentialBundleSchema } from "@/types/renewable-credential";
+import {
+  AgentRuntimeCommandTransportError,
+  execAgentRuntimeCommand,
+} from "./exec";
 import {
   AGENT_RUNTIME_CONTAINER_NAME,
   AGENT_RUNTIME_TMUX_SESSION,
@@ -71,6 +78,7 @@ import {
   type AgentRuntimeEgressPolicyObject,
   buildAgentRuntimeEnvironmentEgressPolicies,
 } from "./network-policy";
+import { resolvePlatformServiceDestination } from "./platform-service";
 import {
   type AgentRuntimeStartupProgress,
   type AgentRuntimeStartupProgressReporter,
@@ -78,6 +86,7 @@ import {
   describeAgentRuntimeStartupProgress,
   isSameAgentRuntimeStartupProgress,
 } from "./startup-phase";
+import { buildTmuxSteerCommand } from "./steering";
 import { withTranscriptRecoveryPod } from "./transcript-recovery";
 
 /** `K8sClients` is internal to the shared module, so it is derived here. */
@@ -169,6 +178,12 @@ class AgentRuntimeManager {
         platformNamespace: process.env.POD_NAMESPACE || getK8sNamespace(),
         platformPodLabels: config.agentRuntime.platformPodSelector,
         platformPorts: [config.api.port],
+        platformService: await resolvePlatformServiceDestination({
+          coreApi: clients.coreApi,
+          baseUrl: config.agentRuntime.platformBaseUrl,
+          runtimeNamespace: withOwner.namespace,
+          platformNamespace: process.env.POD_NAMESPACE || getK8sNamespace(),
+        }),
       }),
     );
 
@@ -311,6 +326,21 @@ class AgentRuntimeManager {
       );
     }
     await this.refreshWorkspaceEgress({ sandbox, spec: params.spec });
+    await clients.coreApi.patchNamespacedSecret(
+      {
+        namespace: params.session.runtimeScope,
+        name: agentRuntimeNames(params.session.workloadName).secret,
+        body: {
+          stringData: {
+            [AGENT_RUNTIME_CREDENTIALS_SECRET_KEY]: JSON.stringify({
+              taskId: params.spec.taskId,
+              credentials: params.spec.renewableCredentials ?? {},
+            }),
+          },
+        },
+      },
+      setHeaderOptions("Content-Type", PatchStrategy.MergePatch),
+    );
     // Keep the pending handoff outside this process before waiting for compute.
     // It contains credentials, so use a Secret, not annotations or task logs.
     const initialSecretName = agentRuntimeNames(
@@ -461,6 +491,60 @@ class AgentRuntimeManager {
     });
   }
 
+  /** CAS against release/continuation: a stale refresher cannot restore revoked values. */
+  async refreshCredentials(session: AgentRunRecord): Promise<void> {
+    const clients = this.requireClients();
+    const name = agentRuntimeNames(session.workloadName).secret;
+    const secret = await clients.coreApi
+      .readNamespacedSecret({ namespace: session.runtimeScope, name })
+      .catch((error) => {
+        if (isK8sNotFoundError(error)) return null;
+        throw error;
+      });
+    const encoded = secret?.data?.[AGENT_RUNTIME_CREDENTIALS_SECRET_KEY];
+    if (!encoded) return;
+    const parsed = RenewableCredentialBundleSchema.safeParse(
+      JSON.parse(Buffer.from(encoded, "base64").toString("utf8")),
+    );
+    if (!parsed.success || parsed.data.taskId !== session.taskId) return;
+    const bundle = parsed.data;
+    let changed = false;
+    for (const [key, current] of Object.entries(bundle.credentials)) {
+      if (current.expiresAt - Date.now() > 15 * 60_000) continue;
+      const next = await resolveCredential({
+        organizationId: session.organizationId,
+        credentialId: current.credentialId,
+        scope: "organization",
+        minimumValidityMs: 55 * 60_000,
+      });
+      bundle.credentials[key] = {
+        credentialId: current.credentialId,
+        value: next?.value ?? "",
+        expiresAt: next?.expiresAt ?? 0,
+      };
+      changed = true;
+    }
+    if (!changed) return;
+    await clients.coreApi
+      .patchNamespacedSecret(
+        {
+          namespace: session.runtimeScope,
+          name,
+          body: {
+            metadata: { resourceVersion: secret?.metadata?.resourceVersion },
+            stringData: {
+              [AGENT_RUNTIME_CREDENTIALS_SECRET_KEY]: JSON.stringify(bundle),
+            },
+          },
+        },
+        setHeaderOptions("Content-Type", PatchStrategy.MergePatch),
+      )
+      .catch((error) => {
+        if (!isK8sConflictError(error) && !isK8sNotFoundError(error))
+          throw error;
+      });
+  }
+
   async hasRetainedTerminal(
     session: Pick<AgentRunRecord, "taskId" | "runtimeScope" | "workloadName">,
   ): Promise<boolean> {
@@ -487,10 +571,11 @@ class AgentRuntimeManager {
     session: AgentRunRecord,
     options?: { retainInteractiveSession?: boolean },
   ): Promise<void> {
-    if (
-      !options?.retainInteractiveSession ||
-      !(await this.hasRetainedTerminal(session))
-    ) {
+    const retainCredentials = Boolean(
+      options?.retainInteractiveSession &&
+        (await this.hasRetainedTerminal(session)),
+    );
+    if (!retainCredentials) {
       await this.revokeVirtualKey(session);
     }
     const clients = this.requireClients();
@@ -511,7 +596,13 @@ class AgentRuntimeManager {
             body: {
               metadata: { resourceVersion: secret.metadata?.resourceVersion },
               data: Object.fromEntries(
-                Object.keys(secret.data ?? {}).map((key) => [key, ""]),
+                Object.entries(secret.data ?? {}).map(([key, value]) => [
+                  key,
+                  retainCredentials &&
+                  key === AGENT_RUNTIME_CREDENTIALS_SECRET_KEY
+                    ? value
+                    : "",
+                ]),
               ),
             },
           },
@@ -593,7 +684,7 @@ class AgentRuntimeManager {
   }
 
   getWorkspaceConnection(
-    session: Pick<AgentRunRecord, "workloadName" | "runtimeScope">,
+    session: Pick<AgentRunRecord, "workloadName" | "runtimeScope" | "taskId">,
   ) {
     return {
       hostname: `${session.workloadName}.${session.runtimeScope}`,
@@ -609,6 +700,7 @@ class AgentRuntimeManager {
         "--",
         "env",
         "ARCHESTRA_AGENT_RUNTIME_AUTO_ATTACH=0",
+        `ARCHESTRA_AGENT_RUNTIME_TASK_ID=${session.taskId}`,
         "/bin/sh",
       ]
         .map(shellDisplayArgument)
@@ -702,7 +794,10 @@ class AgentRuntimeManager {
             "-c",
             // `--` stops tmux reading a message beginning with a dash as its
             // own options; Enter is sent separately as the submit.
-            `tmux send-keys -t ${AGENT_RUNTIME_TMUX_SESSION} -l -- ${shellQuote(message)} && tmux send-keys -t ${AGENT_RUNTIME_TMUX_SESSION} Enter`,
+            buildTmuxSteerCommand({
+              session: AGENT_RUNTIME_TMUX_SESSION,
+              message,
+            }),
           ]
         : [
             "/bin/sh",
@@ -917,66 +1012,85 @@ class AgentRuntimeManager {
     );
     const interval = params.pollIntervalMs ?? AGENT_RUNTIME_COMPLETION_POLL_MS;
 
+    let retryDelayMs = interval;
     while (!params.abortSignal?.aborted) {
-      const sandbox = await clients.customObjectsApi
-        .getNamespacedCustomObjectStatus({
-          ...AGENT_SANDBOX_API,
-          name: sandboxName,
-          namespace: params.session.runtimeScope,
-        })
-        .then((value) => value as AgentSandbox)
-        .catch((error) => {
-          if (isK8sNotFoundError(error)) return null;
-          throw error;
-        });
+      try {
+        const sandbox = await clients.customObjectsApi
+          .getNamespacedCustomObjectStatus({
+            ...AGENT_SANDBOX_API,
+            name: sandboxName,
+            namespace: params.session.runtimeScope,
+          })
+          .then((value) => value as AgentSandbox)
+          .catch((error) => {
+            if (isK8sNotFoundError(error)) return null;
+            throw error;
+          });
 
-      if (!sandbox) {
-        // The workspace is gone: either torn down under us, or it never landed.
-        // Either way there is no outcome left to wait for.
-        return {
-          outcome: "failed",
-          reason: "The Agent Sandbox no longer exists",
-        };
-      }
-      const pod = await this.findPod(params.session);
-      if (pod?.status?.phase === "Running" && pod.metadata?.name) {
-        const result = await this.execInPod({
-          session: params.session,
-          podName: pod.metadata.name,
-          command: [
-            "/bin/sh",
-            "-c",
-            'file="/var/run/archestra/turns/$1.exit"; if [ -f "$file" ]; then cat "$file"; fi',
-            "read-turn-result",
-            params.session.taskId,
-          ],
-        });
-        if (result.trim()) {
-          return result.trim() === "0"
-            ? { outcome: "succeeded" }
-            : {
-                outcome: "failed",
-                reason: `The Agent Runtime turn exited with status ${result.trim()}`,
-              };
+        if (params.abortSignal?.aborted) break;
+        if (!sandbox) {
+          // The workspace is gone: either torn down under us, or it never landed.
+          // Either way there is no outcome left to wait for.
+          return {
+            outcome: "failed",
+            reason: "The Agent Sandbox no longer exists",
+          };
         }
+        const pod = await this.findPod(params.session);
+        if (params.abortSignal?.aborted) break;
+        if (pod?.status?.phase === "Running" && pod.metadata?.name) {
+          const result = await this.execInPod({
+            session: params.session,
+            podName: pod.metadata.name,
+            command: [
+              "/bin/sh",
+              "-c",
+              'file="/var/run/archestra/turns/$1.exit"; if [ -f "$file" ]; then cat "$file"; fi',
+              "read-turn-result",
+              params.session.taskId,
+            ],
+          });
+          if (params.abortSignal?.aborted) break;
+          if (result.trim()) {
+            return result.trim() === "0"
+              ? { outcome: "succeeded" }
+              : {
+                  outcome: "failed",
+                  reason: `The Agent Runtime turn exited with status ${result.trim()}`,
+                };
+          }
+        }
+        const finished = sandbox.status?.conditions?.find(
+          (entry) => entry.type === "Finished" && entry.status === "True",
+        );
+        const expired = sandbox.status?.conditions?.find(
+          (entry) => entry.reason === "SandboxExpired",
+        );
+        if (finished || expired) {
+          const condition = finished ?? expired;
+          return {
+            outcome: "failed",
+            reason:
+              condition?.message ??
+              condition?.reason ??
+              "The Agent Runtime run exited without completing",
+          };
+        }
+        retryDelayMs = interval;
+      } catch (error) {
+        if (params.abortSignal?.aborted) break;
+        if (!isTransientObservationError(error)) throw error;
+        // A failed read says nothing about the worker's outcome. Keep ownership
+        // and heartbeats alive until we can observe it again or are canceled.
+        // Do not apply this policy to launch/steer or other mutating commands.
+        logger.warn(
+          { error, taskId: params.session.taskId, retryDelayMs },
+          "Could not observe Agent Runtime completion; retrying",
+        );
+        await delay(retryDelayMs, params.abortSignal);
+        retryDelayMs = Math.min(retryDelayMs * 2, 30_000);
+        continue;
       }
-      const finished = sandbox.status?.conditions?.find(
-        (entry) => entry.type === "Finished" && entry.status === "True",
-      );
-      const expired = sandbox.status?.conditions?.find(
-        (entry) => entry.reason === "SandboxExpired",
-      );
-      if (finished || expired) {
-        const condition = finished ?? expired;
-        return {
-          outcome: "failed",
-          reason:
-            condition?.message ??
-            condition?.reason ??
-            "The Agent Runtime run exited without completing",
-        };
-      }
-
       await delay(interval, params.abortSignal);
     }
 
@@ -1137,6 +1251,12 @@ class AgentRuntimeManager {
         platformNamespace: process.env.POD_NAMESPACE || getK8sNamespace(),
         platformPodLabels: config.agentRuntime.platformPodSelector,
         platformPorts: [config.api.port],
+        platformService: await resolvePlatformServiceDestination({
+          coreApi: clients.coreApi,
+          baseUrl: config.agentRuntime.platformBaseUrl,
+          runtimeNamespace: spec.namespace,
+          platformNamespace: process.env.POD_NAMESPACE || getK8sNamespace(),
+        }),
       }),
     );
     // Policies are additive. Leaving an old allow policy of a different kind
@@ -1492,6 +1612,31 @@ done`
 export default new AgentRuntimeManager();
 
 // ===================== helpers =====================
+
+/** Only used for read-only completion observations, never workload mutations. */
+function isTransientObservationError(error: unknown): boolean {
+  if (isTransientK8sApiError(error)) return true;
+  if (error instanceof AgentRuntimeCommandTransportError) return true;
+  if (!error || typeof error !== "object") return false;
+  if (
+    "name" in error &&
+    ["AbortError", "TimeoutError"].includes(String(error.name))
+  ) {
+    return true;
+  }
+  return (
+    "code" in error &&
+    [
+      "ECONNRESET",
+      "ECONNREFUSED",
+      "ETIMEDOUT",
+      "EPIPE",
+      "EAI_AGAIN",
+      "ENETUNREACH",
+      "EHOSTUNREACH",
+    ].includes(String(error.code))
+  );
+}
 
 function pendingTurnSecretName(
   session: Pick<AgentRunRecord, "taskId">,

@@ -1,4 +1,5 @@
 import {
+  TOOL_CANCEL_RUN_FULL_NAME,
   TOOL_GET_RUN_FULL_NAME,
   TOOL_LIST_AGENT_RUNS_FULL_NAME,
   TOOL_POST_RUN_FILE_FULL_NAME,
@@ -229,6 +230,7 @@ describe("run tools", () => {
     actorUserId: string;
     withTarget: boolean;
     bindingId?: string;
+    threadId?: string;
     prompt?: string;
   }) {
     const a2aContext = await A2AContextModel.create({
@@ -268,12 +270,164 @@ describe("run tools", () => {
             type: "chatops",
             bindingId:
               params.bindingId ?? "9c2b1f60-0000-4000-8000-000000000001",
-            threadId: "1788208728.803109",
+            threadId: params.threadId ?? "1788208728.803109",
           }
         : null,
     });
     return task;
   }
+
+  test.each([
+    "TASK_STATE_COMPLETED",
+    "TASK_STATE_FAILED",
+    "TASK_STATE_CANCELED",
+    "TASK_STATE_REJECTED",
+  ] as const)("cancel_run explains a terminal %s outcome", async (state) => {
+    const task = await seedChatopsTask({
+      actorUserId: actorId,
+      withTarget: false,
+    });
+    await A2ATaskModel.updateState(task.id, state);
+    const result = await executeArchestraTool(
+      TOOL_CANCEL_RUN_FULL_NAME,
+      { task_id: task.id },
+      context,
+    );
+    expect(result.isError).toBe(true);
+    expect(result.content).toEqual([
+      { type: "text", text: expect.stringContaining(state) },
+    ]);
+    expect(JSON.stringify(result.content)).toContain(
+      "No cancellation was performed",
+    );
+    expect((await A2ATaskModel.findById(task.id))?.state).toBe(state);
+    expect(await AgentRunModel.findByTaskId(task.id)).not.toBeNull();
+  });
+
+  test("concurrent cancellations report the persisted outcome without an internal error", async () => {
+    const task = await seedChatopsTask({
+      actorUserId: actorId,
+      withTarget: false,
+    });
+    const results = await Promise.all(
+      [0, 1].map(() =>
+        executeArchestraTool(
+          TOOL_CANCEL_RUN_FULL_NAME,
+          { task_id: task.id },
+          context,
+        ),
+      ),
+    );
+    expect(results.filter((result) => !result.isError)).toHaveLength(1);
+    const refused = results.find((result) => result.isError);
+    expect(JSON.stringify(refused?.content)).toContain("TASK_STATE_CANCELED");
+    expect((await A2ATaskModel.findById(task.id))?.state).toBe(
+      "TASK_STATE_CANCELED",
+    );
+  });
+
+  test("completion racing cancel_run preserves completion and explains the refusal", async () => {
+    const task = await seedChatopsTask({
+      actorUserId: actorId,
+      withTarget: false,
+    });
+    // Both operations use the real database. Completion starts while the tool
+    // resolves access, reproducing a run finishing after the caller's lookup.
+    const [result, completed] = await Promise.all([
+      executeArchestraTool(
+        TOOL_CANCEL_RUN_FULL_NAME,
+        { task_id: task.id },
+        context,
+      ),
+      A2ATaskModel.transitionStateWithEvent({
+        id: task.id,
+        to: "TASK_STATE_COMPLETED",
+        allowedFrom: ["TASK_STATE_WORKING"],
+        eventPayload: {
+          statusUpdate: {
+            taskId: task.id,
+            contextId: task.contextId,
+            status: { state: "TASK_STATE_COMPLETED" },
+          },
+        },
+      }),
+    ]);
+    expect(completed?.state).toBe("TASK_STATE_COMPLETED");
+    expect(result.isError).toBe(true);
+    expect(JSON.stringify(result.content)).toContain("TASK_STATE_COMPLETED");
+    expect((await A2ATaskModel.findById(task.id))?.state).toBe(
+      "TASK_STATE_COMPLETED",
+    );
+  });
+
+  test("cancel_run does not reveal another actor's terminal outcome", async ({
+    makeUser,
+  }) => {
+    const owner = await makeUser();
+    const task = await seedChatopsTask({
+      actorUserId: owner.id,
+      withTarget: false,
+    });
+    await A2ATaskModel.updateState(task.id, "TASK_STATE_COMPLETED");
+    const result = await executeArchestraTool(
+      TOOL_CANCEL_RUN_FULL_NAME,
+      { task_id: task.id },
+      context,
+    );
+    expect(result.isError).toBe(true);
+    expect(result.content).toEqual([
+      { type: "text", text: "Error: Run not found" },
+    ]);
+  });
+
+  test("get_run resolves the current turn from the original session ID", async () => {
+    const first = await seedChatopsTask({
+      actorUserId: actorId,
+      withTarget: false,
+    });
+    const firstRun = await AgentRunModel.findByTaskId(first.id);
+    if (!firstRun) throw new Error("Run fixture missing");
+    await AgentRunModel.close({ id: firstRun.id, logs: "first answer" });
+    const next = await A2ATaskModel.create({
+      contextId: first.contextId,
+      agentId: callingAgent.id,
+      state: "TASK_STATE_WORKING",
+    });
+    await AgentRunModel.create({
+      organizationId,
+      taskId: next.id,
+      agentId: callingAgent.id,
+      actorKind: "user",
+      actorId,
+      actorUserId: actorId,
+      workloadName: firstRun.workloadName,
+      backend: "kubernetes",
+      runtimeScope: "test",
+    });
+    await AgentWorkspaceModel.create({
+      id: first.id,
+      organizationId,
+      agentId: callingAgent.id,
+      actorKind: "user",
+      actorId,
+      backend: "kubernetes",
+      runtimeScope: "test",
+      workloadName: firstRun.workloadName,
+      state: "active",
+      lastTaskId: next.id,
+      activeTaskId: next.id,
+      expiresAt: new Date(Date.now() + 3600_000),
+    });
+    const result = await executeArchestraTool(
+      TOOL_GET_RUN_FULL_NAME,
+      { task_id: first.id },
+      context,
+    );
+    expect(result.isError).not.toBe(true);
+    expect(result.structuredContent).toMatchObject({
+      run: { task_id: next.id, state: "working" },
+    });
+  });
 
   test("workspace file tools accept the task ID and enforce original ownership", async ({
     makeUser,
@@ -391,6 +545,107 @@ describe("run tools", () => {
     ).toMatch(new RegExp(`/chat/runs/${task.id}$`));
   });
 
+  test("recovers an older run only from the trusted current thread before limiting", async () => {
+    const bindingId = crypto.randomUUID();
+    const threadId = "thread-original";
+    const original = await seedChatopsTask({
+      actorUserId: actorId,
+      withTarget: true,
+      bindingId,
+      threadId,
+    });
+    await seedChatopsTask({
+      actorUserId: actorId,
+      withTarget: true,
+      bindingId,
+      threadId: "another-thread",
+    });
+    await seedChatopsTask({
+      actorUserId: actorId,
+      withTarget: true,
+      bindingId: crypto.randomUUID(),
+      threadId,
+    });
+    await seedChatopsTask({ actorUserId: actorId, withTarget: false });
+    const result = await executeArchestraTool(
+      TOOL_LIST_AGENT_RUNS_FULL_NAME,
+      { agent_ids: [callingAgent.id], current_thread_only: true, limit: 1 },
+      { ...context, chatOpsBindingId: bindingId, chatOpsThreadId: threadId },
+    );
+    expect(result.isError).toBeFalsy();
+    expect(result.structuredContent).toMatchObject({
+      runs: [{ task_id: original.id }],
+      summary: { total: 1 },
+    });
+    // Chat sends MCP text content to the model. Structured data alone is not
+    // enough for the model to recover the ID and steer the matching run.
+    const modelText = result.content
+      .filter((item) => item.type === "text")
+      .map((item) => item.text)
+      .join("\n");
+    expect(JSON.parse(modelText)).toEqual(result.structuredContent);
+
+    expect(
+      await AgentRunModel.listDashboard({
+        agentIds: [callingAgent.id],
+        organizationId: crypto.randomUUID(),
+        limit: 100,
+        thread: { bindingId, threadId },
+      }),
+    ).toEqual([]);
+    expect(
+      await AgentRunModel.listDashboard({
+        agentIds: [crypto.randomUUID()],
+        organizationId,
+        limit: 100,
+        thread: { bindingId, threadId },
+      }),
+    ).toEqual([]);
+    const second = await seedChatopsTask({
+      actorUserId: actorId,
+      withTarget: true,
+      bindingId,
+      threadId,
+    });
+    const multiple = await executeArchestraTool(
+      TOOL_LIST_AGENT_RUNS_FULL_NAME,
+      { agent_ids: [callingAgent.id], current_thread_only: true },
+      { ...context, chatOpsBindingId: bindingId, chatOpsThreadId: threadId },
+    );
+    expect(multiple.structuredContent).toMatchObject({
+      summary: { total: 2 },
+      runs: [{ task_id: second.id }, { task_id: original.id }],
+    });
+    const empty = await executeArchestraTool(
+      TOOL_LIST_AGENT_RUNS_FULL_NAME,
+      { agent_ids: [callingAgent.id], current_thread_only: true },
+      { ...context, chatOpsBindingId: bindingId, chatOpsThreadId: "no-runs" },
+    );
+    expect(empty.structuredContent).toMatchObject({
+      runs: [],
+      summary: { total: 0 },
+    });
+  });
+
+  test("thread recovery fails closed when either trusted context field is missing", async () => {
+    await seedChatopsTask({ actorUserId: actorId, withTarget: true });
+    for (const messagingContext of [
+      {},
+      { chatOpsBindingId: crypto.randomUUID() },
+      { chatOpsThreadId: "thread" },
+    ]) {
+      const result = await executeArchestraTool(
+        TOOL_LIST_AGENT_RUNS_FULL_NAME,
+        { agent_ids: [callingAgent.id], current_thread_only: true },
+        { ...context, ...messagingContext },
+      );
+      expect(result.isError).toBe(true);
+      expect(JSON.stringify(result.content)).toContain(
+        "Current messaging thread context is unavailable",
+      );
+    }
+  });
+
   test("does not reveal runs for an inaccessible Agent", async ({
     makeAgent,
     makeUser,
@@ -405,8 +660,12 @@ describe("run tools", () => {
 
     const result = await executeArchestraTool(
       TOOL_LIST_AGENT_RUNS_FULL_NAME,
-      { agent_ids: [privateAgent.id] },
-      context,
+      { agent_ids: [privateAgent.id], current_thread_only: true },
+      {
+        ...context,
+        chatOpsBindingId: crypto.randomUUID(),
+        chatOpsThreadId: "thread",
+      },
     );
 
     expect(result.isError).toBe(true);

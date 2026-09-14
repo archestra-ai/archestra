@@ -579,7 +579,7 @@ export function AutoSyncCredentialRequirement({
  * - `credential` — the dialog's shared credential input, the usual case.
  * - `connector-fields` — the connector's own fields, when the chosen
  *   authentication mode pastes no credential here at all: a GitHub App's
- *   credentials live in Settings → GitHub, and an individually authorized
+ *   credentials live in Settings → Credentials, and an individually authorized
  *   Google account is granted through Google.
  * - `permission-sync-fields` — Perforce, whose shared field holds the
  *   *content* identity's login ticket while permission sync signs in as the
@@ -595,7 +595,10 @@ export function autoSyncRequirementSlot({
   authMode?: string;
 }): "credential" | "connector-fields" | "permission-sync-fields" {
   if (type === "perforce") return "permission-sync-fields";
-  if (type === "github" && authMethod === "github_app")
+  if (
+    type === "github" &&
+    ["github_app", "credential"].includes(authMethod ?? "")
+  )
     return "connector-fields";
   if (type === "gdrive" && authMode === "oauth") return "connector-fields";
   return "credential";
@@ -750,7 +753,8 @@ export function getConnectorCredentialConfig(params: {
     : "API token or personal access token is required";
 
   const githubUsesApp =
-    params.type === "github" && params.authMethod === "github_app";
+    params.type === "github" &&
+    ["github_app", "credential"].includes(params.authMethod ?? "");
   // Absent authMethod means the legacy password-token mode, matching the
   // backend default.
   const mfilesUsesOAuth =

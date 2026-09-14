@@ -2,6 +2,7 @@ import type { IncomingEmailSecurityMode } from "@archestra/shared";
 import { type SQL, sql } from "drizzle-orm";
 import {
   boolean,
+  check,
   index,
   integer,
   jsonb,
@@ -17,12 +18,14 @@ import type {
   MissingCredentialBehavior,
   ToolExposureMode,
 } from "@/types/agent";
+import type { AgentActivationSkillMode } from "@/types/agent-activation-skill-policy";
 import type { AgentRuntime } from "@/types/agent-runtime";
 import environmentsTable from "./environment";
 import identityProvidersTable from "./identity-provider";
 import llmProviderApiKeysTable from "./llm-provider-api-key";
 import modelsTable from "./model";
 import secretsTable from "./secret";
+import serviceAccountsTable from "./service-account";
 import { softDeletablePgTable } from "./soft-deletable-table";
 import usersTable from "./user";
 
@@ -185,6 +188,23 @@ const agentsTable = softDeletablePgTable(
     accessAllSkills: boolean("access_all_skills").notNull().default(false),
 
     /**
+     * Which caller-visible skills an internal agent may activate. `all`
+     * preserves the historical behavior and applies exact-reference
+     * exclusions; `manual` permits only exact-reference allow rules. This is
+     * deliberately separate from `accessAllSkills`, which controls gateway
+     * publication rather than internal-agent activation.
+     */
+    activationSkillMode: text("activation_skill_mode")
+      .$type<AgentActivationSkillMode>()
+      .notNull()
+      .default("all"),
+
+    /** Compare-and-set revision for activation-skill policy edits. */
+    activationSkillPolicyRevision: integer("activation_skill_policy_revision")
+      .notNull()
+      .default(0),
+
+    /**
      * "Auto" subagent mode (vs "Custom"): whether this agent may delegate to
      * any internal agent the *calling user* can access (team/scope visibility),
      * beyond the explicitly-configured delegation targets. Mirrors
@@ -216,6 +236,11 @@ const agentsTable = softDeletablePgTable(
      */
     latestVersion: integer("latest_version").notNull().default(0),
 
+    /** Service account creator; separate from human ownership. */
+    createdByServiceAccountId: uuid("created_by_service_account_id").references(
+      () => serviceAccountsTable.id,
+      { onDelete: "set null" },
+    ),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .notNull()
@@ -232,6 +257,10 @@ const agentsTable = softDeletablePgTable(
     index("agents_environment_id_idx").on(table.environmentId),
     index("agents_author_id_idx").on(table.authorId),
     index("agents_scope_idx").on(table.scope),
+    check(
+      "agents_activation_skill_mode_check",
+      sql`${table.activationSkillMode} IN ('all', 'manual')`,
+    ),
     uniqueIndex("agents_personal_gateway_per_member_idx")
       .on(table.organizationId, table.authorId)
       .where(

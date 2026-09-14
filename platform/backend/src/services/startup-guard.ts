@@ -1193,6 +1193,20 @@ ${client.binary}() {
   ${refreshBlock ? `${refreshFunctionName} "$@" || true` : ":"}
   return "$archestra_client_status"
 }
+# Terminal integrations may replace CLI functions at the first prompt, after
+# .zshrc has loaded. Restore the guard before the first command. The wrapper
+# still resolves the CLI through PATH, including terminal-provided shims.
+if [ -n "\${ZSH_VERSION:-}" ]; then
+  functions[archestra_launch_${client.binary}]="$functions[${client.binary}]"
+  archestra_restore_${client.binary}_guard() {
+    if [ -x "$HOME/${client.scriptRelpath}" ]; then
+      functions[${client.binary}]="$functions[archestra_launch_${client.binary}]"
+    fi
+    add-zsh-hook -d preexec archestra_restore_${client.binary}_guard
+  }
+  autoload -Uz add-zsh-hook
+  add-zsh-hook preexec archestra_restore_${client.binary}_guard
+fi
 ${client.markerEnd}
 ${GUARD_PROFILE_EOF}
   echo "Updated $1"

@@ -5,6 +5,20 @@ import { ResourceVisibilityBadge } from "./resource-visibility-badge";
 const ME = "user-me";
 
 describe("ResourceVisibilityBadge", () => {
+  it("renders scope-only badges when ownership details are unavailable", () => {
+    const { rerender } = render(
+      <ResourceVisibilityBadge scope="personal" scopeOnly />,
+    );
+
+    expect(screen.getByText("Personal")).toBeInTheDocument();
+
+    rerender(<ResourceVisibilityBadge scope="team" scopeOnly />);
+    expect(screen.getByText("Team")).toBeInTheDocument();
+
+    rerender(<ResourceVisibilityBadge scope="org" scopeOnly />);
+    expect(screen.getByText("Organization")).toBeInTheDocument();
+  });
+
   it("renders nothing rather than guessing when the scope is unknown", () => {
     const { container } = render(
       <ResourceVisibilityBadge

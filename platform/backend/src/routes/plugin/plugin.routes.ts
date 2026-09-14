@@ -832,7 +832,7 @@ async function resolveGithubToken(params: {
   const allowed = await userHasPermission(
     params.userId,
     params.organizationId,
-    "githubAppConfig",
+    "credential",
     "read",
   );
   if (!allowed) {
@@ -915,7 +915,7 @@ async function importExistingGithubPlugin(params: {
     const allowed = await userHasPermission(
       params.userId,
       params.organizationId,
-      "githubAppConfig",
+      "credential",
       "read",
     );
     if (!allowed) {

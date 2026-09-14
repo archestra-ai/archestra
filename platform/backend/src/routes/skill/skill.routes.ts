@@ -14,6 +14,7 @@ import { z } from "zod";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import {
   getAgentTypePermissionChecker,
+  getResourceForAgentType,
   requireAgentModifyPermission,
 } from "@/auth/agent-type-permissions";
 import {
@@ -25,7 +26,10 @@ import { isGlobalAdmin, userHasPermission } from "@/auth/utils";
 import { withDbTransaction } from "@/database";
 import logger from "@/logging";
 import {
+  AgentActivationSkillRuleModel,
+  AgentExcludedSkillModel,
   AgentModel,
+  AgentSkillModel,
   CreatedByModel,
   lookupCreator,
   MemberModel,
@@ -43,6 +47,7 @@ import {
   ToolModel,
   UserModel,
 } from "@/models";
+import { publishesSkills } from "@/services/agent-skill-resolution";
 import { assertCanAssignEnvironment } from "@/services/environments/environment";
 import { agentToSkill, SCOPE_FIELD } from "@/skills/agent-migration";
 import {
@@ -104,7 +109,7 @@ import { registerEntityLabelRoutes } from "../entity-labels";
  * Shared fields identifying a GitHub skill source. Authentication is optional
  * and at most one method may be supplied: a transient one-time PAT
  * (`githubToken`, never stored), a stored PAT (`githubPatId`, managed at
- * /settings/github), or a stored GitHub App config (`githubAppConfigId`).
+ * /settings/credentials), or a stored GitHub App config (`githubAppConfigId`).
  */
 const githubSkillSourceShape = {
   repoUrl: z.string().min(1),
@@ -366,10 +371,22 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           search: z.string().optional(),
           sourceRepo: z.string().optional(),
           forAgentId: UuidIdSchema.optional().describe(
-            "Restrict results to skills visible from this agent's " +
-              "environment (skills with no environment assignments and " +
-              "built-in skills are visible everywhere).",
+            "Restrict results to native skills available through this internal " +
+              "agent or eligible for publication by this saved MCP gateway.",
           ),
+          mcpGatewayEnvironment: z
+            .union([UuidIdSchema, z.literal("default")])
+            .optional()
+            .describe(
+              "Preview skills eligible for MCP Gateway All mode using this " +
+                "form environment. Use `default` for the Default environment.",
+            ),
+          agentSkillView: z
+            .enum(["effective", "eligible"])
+            .default("effective")
+            .describe(
+              "Effective applies the saved skill policy. Eligible previews the skills that All mode can include before its exclusions.",
+            ),
           scope: ResourceVisibilityScopeSchema.optional().describe(
             "Filter by visibility scope: personal, team, or org.",
           ),
@@ -419,6 +436,8 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           search,
           sourceRepo,
           forAgentId,
+          mcpGatewayEnvironment,
+          agentSkillView,
           scope,
           teamIds,
           authorIds,
@@ -446,27 +465,145 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       // Skills are environment-scoped; `forAgentId` narrows the list to what
-      // that agent can actually see (used by the chat slash-command menu).
+      // that agent can actually use (used by the chat slash-command menu).
       let environmentId: string | null | undefined;
-      if (forAgentId !== undefined) {
-        const agent = await AgentModel.findById(forAgentId);
+      let allowedSkillIds: string[] | undefined;
+      let excludedSkillIds: string[] | undefined;
+      let effectiveScope = scope;
+      let publishableOverMcp = false;
+      if (forAgentId === undefined && mcpGatewayEnvironment !== undefined) {
+        const agentChecker = await getAgentTypePermissionChecker({
+          userId: user.id,
+          organizationId,
+        });
+        agentChecker.require("mcp_gateway", "create");
+        environmentId =
+          mcpGatewayEnvironment === "default" ? null : mcpGatewayEnvironment;
+        await assertCanAssignEnvironment({
+          environmentId,
+          organizationId,
+          canDeployToRestricted: await userHasPermission(
+            user.id,
+            organizationId,
+            "mcpGateway",
+            "deploy-to-restricted",
+          ),
+        });
+        effectiveScope = "org";
+        publishableOverMcp = true;
+      } else if (forAgentId !== undefined) {
+        const agent = await AgentModel.findById(forAgentId, user.id, true);
         if (!agent || agent.organizationId !== organizationId) {
           throw new ApiError(404, "Agent not found");
         }
+        const agentChecker = await getAgentTypePermissionChecker({
+          userId: user.id,
+          organizationId,
+        });
+        try {
+          agentChecker.require(agent.agentType, "read");
+        } catch {
+          throw new ApiError(404, "Agent not found");
+        }
+        if (
+          !agentChecker.isAdmin(agent.agentType) &&
+          !(await AgentModel.findById(forAgentId, user.id, false))
+        ) {
+          throw new ApiError(404, "Agent not found");
+        }
         environmentId = agent.environmentId ?? null;
+        if (publishesSkills(agent.agentType)) {
+          publishableOverMcp = true;
+          if (
+            mcpGatewayEnvironment !== undefined &&
+            agentSkillView !== "eligible"
+          ) {
+            throw new ApiError(
+              400,
+              "mcpGatewayEnvironment requires agentSkillView=eligible",
+            );
+          }
+          if (agentSkillView === "eligible") {
+            effectiveScope = "org";
+            if (mcpGatewayEnvironment !== undefined) {
+              agentChecker.require(agent.agentType, "update");
+              environmentId =
+                mcpGatewayEnvironment === "default"
+                  ? null
+                  : mcpGatewayEnvironment;
+              await assertCanAssignEnvironment({
+                environmentId,
+                organizationId,
+                canDeployToRestricted: await userHasPermission(
+                  user.id,
+                  organizationId,
+                  getResourceForAgentType(agent.agentType),
+                  "deploy-to-restricted",
+                ),
+              });
+            }
+          } else if (agent.accessAllSkills) {
+            effectiveScope = "org";
+            excludedSkillIds =
+              await AgentExcludedSkillModel.findSkillIdsByAgent(forAgentId);
+          } else {
+            allowedSkillIds =
+              await AgentSkillModel.findSkillIdsByAgent(forAgentId);
+          }
+        } else if (agent.agentType === "agent") {
+          if (mcpGatewayEnvironment !== undefined) {
+            throw new ApiError(
+              400,
+              "mcpGatewayEnvironment is available only for MCP gateways",
+            );
+          }
+          const policy =
+            await AgentActivationSkillRuleModel.findPolicySnapshot(forAgentId);
+          if (!policy) {
+            throw new ApiError(404, "Agent not found");
+          }
+          // The generic Skills table is native-only. For the eligible view,
+          // activation-skills supplies the editor's complete cross-source set.
+          if (agentSkillView !== "eligible") {
+            if (policy.mode === "manual") {
+              allowedSkillIds = policy.rules.flatMap((rule) =>
+                rule.disposition === "allow" &&
+                rule.reference.source === "native"
+                  ? [rule.reference.skillId]
+                  : [],
+              );
+            } else {
+              excludedSkillIds = policy.rules.flatMap((rule) =>
+                rule.disposition === "exclude" &&
+                rule.reference.source === "native"
+                  ? [rule.reference.skillId]
+                  : [],
+              );
+            }
+          }
+        } else {
+          throw new ApiError(400, "This agent type does not expose skills");
+        }
       }
       // Non-admins see only skills within their scope; admins see all.
-      const accessibleSkillIds = checker.isAdmin
+      let accessibleSkillIds = checker.isAdmin
         ? undefined
         : await SkillTeamModel.getUserAccessibleSkillIds({
             organizationId,
             userId: user.id,
           });
+      if (allowedSkillIds !== undefined) {
+        const accessibleSet =
+          accessibleSkillIds === undefined ? null : new Set(accessibleSkillIds);
+        accessibleSkillIds = accessibleSet
+          ? allowedSkillIds.filter((id) => accessibleSet.has(id))
+          : allowedSkillIds;
+      }
 
       // Author filters are an admin oversight surface (mirrors the agents
       // list); non-admins are already restricted to their own scope.
       const scopeFilters = {
-        scope,
+        scope: effectiveScope,
         teamIds,
         authorIds: checker.isAdmin ? authorIds : undefined,
         excludeAuthorIds: checker.isAdmin ? excludeAuthorIds : undefined,
@@ -490,6 +627,8 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           search,
           sourceRepo,
           accessibleSkillIds,
+          excludedSkillIds,
+          publishableOverMcp,
           environmentId,
           labelFilteredIds,
           ...scopeFilters,
@@ -500,6 +639,8 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           search,
           sourceRepo,
           accessibleSkillIds,
+          excludedSkillIds,
+          publishableOverMcp,
           environmentId,
           labelFilteredIds,
           ...scopeFilters,
@@ -510,7 +651,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const skillAuthorIds = [
         ...new Set(
           skills
-            .map((skill) => skill.authorId)
+            .map((skill) => CreatedByModel.id(skill, skill.authorId))
             .filter((id): id is string => id !== null),
         ),
       ];
@@ -546,7 +687,10 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           authorName: skill.authorId
             ? (authorNames.get(skill.authorId) ?? null)
             : null,
-          createdBy: lookupCreator(creators, skill.authorId),
+          createdBy: lookupCreator(
+            creators,
+            CreatedByModel.id(skill, skill.authorId),
+          ),
           usageUserCount: usageUserCounts.get(skill.id) ?? 0,
           labels: labelsBySkill.get(skill.id) ?? [],
         })),
@@ -2071,7 +2215,7 @@ async function resolveGithubImportToken(params: {
   const allowed = await userHasPermission(
     userId,
     organizationId,
-    "githubAppConfig",
+    "credential",
     "read",
   );
   if (!allowed) {
@@ -2177,7 +2321,7 @@ async function loadSkillDetail(skill: Skill) {
     SkillTeamModel.getTeamDetailsForSkills([skill.id]),
     SkillUserModel.getUserDetailsForSkills([skill.id]),
     SkillEnvironmentModel.getEnvironmentDetailsForSkills([skill.id]),
-    CreatedByModel.resolveOne(skill.authorId),
+    CreatedByModel.resolveOne(CreatedByModel.id(skill, skill.authorId)),
     SkillLabelModel.getLabelsFor(skill.id),
   ]);
   return {

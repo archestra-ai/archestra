@@ -161,6 +161,46 @@ beforeEach(() => {
   } as unknown as ReturnType<typeof useOrganization>);
 });
 
+it("selects runtime models without falling back to the provider catalog", () => {
+  setQuery({
+    modelsByProvider: { openai: [model()] },
+    isLoading: true,
+    isPlaceholderData: true,
+  });
+  const onModelChange = vi.fn();
+  const { rerender } = render(
+    <ModelSelector
+      selectedModel=""
+      onModelChange={onModelChange}
+      suppressAutoSelect
+      models={[
+        {
+          id: "runtime-model",
+          dbId: "runtime-model",
+          displayName: "Runtime model",
+          provider: "anthropic",
+          isFree: false,
+        },
+      ]}
+    />,
+  );
+  fireEvent.click(screen.getByTestId("dialog-toggle"));
+  fireEvent.click(screen.getByTestId("model-option"));
+  expect(onModelChange).toHaveBeenCalledWith("runtime-model");
+  expect(screen.queryByText("GPT-4o")).not.toBeInTheDocument();
+
+  rerender(
+    <ModelSelector
+      selectedModel=""
+      onModelChange={onModelChange}
+      suppressAutoSelect
+      models={[]}
+    />,
+  );
+  expect(screen.getByText("No models available")).toBeVisible();
+  expect(screen.queryByText("GPT-4o")).not.toBeInTheDocument();
+});
+
 describe("clear control", () => {
   // The trigger is itself a <button>. A clear control nested inside it is
   // invalid HTML: React reports it, hydration breaks, and keyboard users

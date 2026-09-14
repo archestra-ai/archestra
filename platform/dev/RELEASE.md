@@ -6,26 +6,122 @@ Archestra uses two release pipelines:
 
 [Release-please](https://github.com/googleapis/release-please-action#supporting-multiple-release-branches) manages versions and changelogs. GitHub Actions builds the artifacts. Only approved stable releases update `latest`.
 
+```mermaid
+gitGraph
+   commit id: "1.3 cut point"
+   branch release/1.3
+   checkout main
+   commit id: "fix B"
+   commit id: "feat C"
+   commit id: "beta" tag: "v1.4.0-beta.1"
+   checkout release/1.3
+   cherry-pick id: "fix B" tag: ""
+   commit id: "patch" tag: "v1.3.52"
+   checkout main
+   commit id: "beta again" tag: "v1.4.0-beta.2"
+   branch release/1.4
+   commit id: "stable cut" tag: "v1.4.0"
+   checkout main
+   commit id: "Feat" tag: "v1.5.0-beta.1"
+```
+
 ## Release A Beta
 
 1. [ ] Open the release-please PR on `main` (for example, `1.4.0-beta.2`).
-2. [ ] Review the changelog and confirm checks pass.
+2. [ ] Review the changelog and confirm checks pass, including migration upgrades from the active stable line.
 3. [ ] Merge the PR and confirm the **Release Please** workflow publishes the beta release.
 
 ## Ship A Stable Fix
 
 1. [ ] Land the fix on `main` first. The fix ships automatically in the next beta.
-2. [ ] Create a backport branch from the active stable branch (`release/X.Y`):
-   ```bash
-   git checkout -b backport/fix-name origin/release/X.Y
-   git cherry-pick -x <main-commit-sha>
-   ```
-3. [ ] Open a PR targeting `release/X.Y`. Confirm tests pass and merge.
+2. [ ] Add the label `backport release/X.Y` for each configured target (for example, `backport release/1.3`).
+   - Add the label before or after the main PR merges.
+   - Pushes to `main` and backport labels added after merge trigger processing without waiting for the scheduled scan.
+   - A five-minute schedule retries outstanding requests. GitHub can delay scheduled runs; the interval is not a delivery guarantee.
+   - **Open Backport PRs** cherry-picks the merged commit with `-x` and opens a separate PR per target.
+   - The automation opens PRs; it never merges them or approves stable publication.
+3. [ ] Review each generated backport PR, confirm its checks pass, then add it to that branch's merge queue.
    - Only include necessary bug fixes. Do not include new features, refactors, or schema migrations.
-   - If an unreleased candidate branch (such as `release/1.4`) also needs the fix, repeat step 2 for that candidate branch.
+   - Conflicts and schema changes produce a manual-action comment instead of a pushed backport.
    - Never merge `main` into a release branch.
+   - Review the migration compatibility check. A green result does not permit schema migrations in a stable fix.
+   - A migration backport is only permissible under the prefix rule below; in practice stable fixes ship without migrations.
 4. [ ] Merge the generated release-please patch PR on `release/X.Y` (for example, `1.3.52`).
 5. [ ] Complete **Test And Approve Stable** below.
+
+### Backport Targets And Recovery
+
+`.github/backport-targets.json` is the explicit list of branches that accept automatic backport requests.
+Add each new stable or candidate branch there, and create its `backport release/X.Y` label.
+Remove retired branches from that list when making them read-only.
+The workflow always runs trusted automation from the default branch, including manual retries.
+Automatic backports only accept merged PRs from branches in this repository targeting the default branch.
+PRs from forks are ineligible, including through scheduled scans and manual retries.
+Each automatic run scans all outstanding labels, so overlapping triggers can share one job.
+
+Use **Open Backport PRs → Run workflow** to retry a merged main PR.
+Supply its number and, optionally, one configured target branch.
+An existing backport PR, including a closed PR, is not duplicated or reopened.
+Label requests remain discoverable after workflow outages. Remove the request label when abandoning a backport.
+An existing backport branch is never force-pushed or reset.
+A push that succeeded before PR creation failed can resume if its source provenance matches.
+
+For conflicts, create a manual branch from the release target and resolve the cherry-pick:
+
+```bash
+git checkout -b backport/fix-name origin/release/X.Y
+git cherry-pick -x <main-commit-sha>
+```
+
+Open a PR against `release/X.Y` and complete the same review and release checks.
+A schema migration is not eligible for automatic backporting; prepare a stable fix without it.
+
+The workflow uses the existing release GitHub App token so generated PRs trigger CI.
+Backport PRs receive the usual reviewer assignment and run checks even though the release App authored them.
+
+## Migration Compatibility Across Release Tracks
+
+A higher application version does not guarantee a compatible migration history.
+Drizzle runs migrations newer than the database's latest recorded journal timestamp.
+A stable backport can advance that timestamp past beta-only migrations.
+The next beta upgrade can then report success while required columns remain missing.
+
+Every deployed stable version must upgrade cleanly to the next stable patch, to
+any later beta, and to the next stable line. The rule that guarantees this is
+the **prefix rule**: a stable branch's migration history must remain a prefix
+of main's, matching migrations by SQL content so renamed backports count.
+Backport a migration only when every earlier main migration is already on the
+stable branch. While the rule holds, upgrading any stable release applies
+exactly the remaining suffix of main's history in canonical order, so schema
+and data migrations converge with every other upgrade path.
+
+PR validation checks upgrades within a release line and from stable to main.
+Backport PRs also check their resulting stable history against main.
+Release creation repeats the check against the current branch refs.
+Keep these guards on both main and the active stable branch.
+
+PR validation also replays the real upgrade. Backend `test:migration-upgrades`
+migrates a database with each active stable line's latest released migration
+history, upgrades it to the PR's history with the real Drizzle migrator, and
+requires the schema to match a fresh install, no migration to apply twice, and
+pre-existing data to survive.
+
+The checker recognizes identical SQL under different backport filenames.
+It rejects migrations that would be skipped or replayed, and missing source SQL.
+It does not validate SQL semantics, dependency order, or database lock safety.
+Continue testing the actual upgrade against the saved release artifacts.
+
+If a published release already created a gap:
+
+1. Add a new idempotent repair on main, newer than both migration histories.
+2. Cover every skipped change and preserve values on already-migrated databases.
+3. Register the reviewed SQL hashes in `backend/src/database/migrations/upgrade-repairs.json`.
+4. Test with the real Drizzle migrator, including a database whose ledger already advanced past the gap.
+5. Publish the repaired beta before directing affected stable installations to that beta.
+
+Do not edit shipped migration SQL, renumber its timestamps, or rewind a database's migration ledger.
+The ordinary backend test snapshot executes SQL directly and cannot detect timestamp-based skips.
+See [migration upgrade checks](../backend/src/database/migrations/README.md) for commands and repair coverage rules.
 
 ## Cut A New Stable Feature Line
 

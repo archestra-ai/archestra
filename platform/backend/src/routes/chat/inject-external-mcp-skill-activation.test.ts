@@ -1,7 +1,7 @@
 import type { ChatMessage } from "@archestra/shared";
 import * as chatMcpClient from "@/clients/chat-mcp-client";
 import config from "@/config";
-import { ExternalMcpSkillUsageEventModel } from "@/models";
+import { AgentModel, ExternalMcpSkillUsageEventModel } from "@/models";
 import * as externalMcpSkills from "@/services/external-mcp-skills";
 import { afterEach, expect, test, vi } from "@/test";
 import { drainBackgroundWork } from "@/utils/background-work";
@@ -112,6 +112,23 @@ test("injects an attached external Skill without changing visible user text", as
       { mcpServerId: serverId, uri },
     ]);
     expect(usage.get(serverId)?.get(uri)?.usageCount).toBe(1);
+
+    await AgentModel.setActivationSkillPolicyState({
+      id: agent.id,
+      mode: "manual",
+      revision: 1,
+    });
+    expect(
+      await injectExternalMcpSkillActivation({
+        messages,
+        organizationId: organization.id,
+        userId: user.id,
+        agentId: agent.id,
+        conversationId: "conversation-1",
+        provider: "openai",
+        model: "gpt-5",
+      }),
+    ).toBe(messages);
   } finally {
     config.mcpGateway.skillsEnabled = originalEnabled;
   }

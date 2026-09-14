@@ -49,7 +49,7 @@ source as `<env>/<task>__<lane>/trajectory.md`. The structured triage records ar
 `<run-dir>/trajectory_rubrics_<ts>.jsonl` (one record per line, failures first; rollouts whose map
 call failed are absent) and the markdown rendered from them to `<run-dir>/trajectory_analyses_<ts>.md`,
 both before the reduce phase starts, so a reduce failure never discards the per-rollout triages.
-The Claude-skill pipeline (`.claude/skills/archestra-dev-bench-analysis`) emits the same record shape
+The Claude-skill pipeline (`.agents/skills/archestra-dev-bench-analysis`) emits the same record shape
 as `trajectory_rubrics_claude_<ts>.jsonl`; a golden fixture under `tests/fixtures/triage_golden/`
 pins the two renderers to byte-identical output.
 

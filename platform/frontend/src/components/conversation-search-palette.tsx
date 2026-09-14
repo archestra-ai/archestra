@@ -571,7 +571,7 @@ export function ConversationSearchPalette({
       key={`exec-${run.taskId}`}
       value={`exec-${run.taskId}`}
       onSelect={() => {
-        router.push(`/chat/runs/${run.taskId}`);
+        router.push(`/chat/runs/${run.sessionId ?? run.taskId}`);
         onOpenChange(false);
       }}
       className="flex items-center gap-2 px-3 py-2.5 cursor-pointer aria-selected:bg-accent rounded-sm w-full"

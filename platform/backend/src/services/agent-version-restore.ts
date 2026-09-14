@@ -7,6 +7,7 @@ import { clearChatMcpClient } from "@/clients/chat-mcp-client";
 import { knowledgeSourceAccessControlService } from "@/knowledge-base";
 import logger from "@/logging";
 import {
+  AgentActivationSkillRuleModel,
   AgentExcludedConnectorModel,
   AgentExcludedSubagentModel,
   AgentExcludedToolModel,
@@ -20,6 +21,8 @@ import {
   ModelModel,
   ToolModel,
 } from "@/models";
+import type { AgentActivationSkillPolicyRule } from "@/models/agent-activation-skill-rule";
+import { agentActivationSkillPolicyService } from "@/services/agent-activation-skill-policy";
 import { agentKnowledgeSourceExclusionsService } from "@/services/agent-knowledge-source-exclusions";
 import { agentSubagentExclusionsService } from "@/services/agent-subagent-exclusions";
 import {
@@ -28,8 +31,14 @@ import {
 } from "@/services/agent-tool-assignment";
 import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
 import { assertCanAssignEnvironment } from "@/services/environments/environment";
-import type { Agent, CredentialResolutionMode, UpdateAgent } from "@/types";
+import type {
+  Agent,
+  AgentActivationSkillMode,
+  CredentialResolutionMode,
+  UpdateAgent,
+} from "@/types";
 import {
+  AgentActivationSkillModeSchema,
   ApiError,
   CredentialResolutionModeSchema,
   ToolExposureModeSchema,
@@ -175,6 +184,10 @@ type RestorePlan = {
   excludedSubagentIds: string[] | null;
   excludedConnectorIds: string[] | null;
   knowledge: { knowledgeBaseIds: string[]; connectorIds: string[] } | null;
+  activationSkillPolicy: {
+    mode: AgentActivationSkillMode;
+    rules: AgentActivationSkillPolicyRule[];
+  } | null;
 };
 
 async function buildRestorePlan(params: {
@@ -196,12 +209,14 @@ async function buildRestorePlan(params: {
     currentExcludedToolIds,
     currentExcludedSubagentIds,
     currentExcludedConnectorIds,
+    currentActivationSkillRules,
   ] = await Promise.all([
     AgentToolModel.findAssignmentsByAgent(agentId),
     HookFileModel.listByAgent(agentId, organizationId),
     AgentExcludedToolModel.findToolIdsByAgent(agentId),
     AgentExcludedSubagentModel.findTargetAgentIdsByAgent(agentId),
     AgentExcludedConnectorModel.findConnectorIdsByAgent(agentId),
+    AgentActivationSkillRuleModel.findByAgent(agentId),
   ]);
 
   const { toolsToAssign, toolIdsToUnassign } = diffTools(snapshot, assignments);
@@ -235,6 +250,17 @@ async function buildRestorePlan(params: {
       current,
       userId,
       organizationId,
+    }),
+    activationSkillPolicy: await planActivationSkillPolicy({
+      agentId,
+      organizationId,
+      userId,
+      environmentId: snapshot.environmentId,
+      snapshot,
+      currentMode: AgentActivationSkillModeSchema.parse(
+        current.activationSkillMode,
+      ),
+      currentRules: currentActivationSkillRules,
     }),
   };
 }
@@ -299,6 +325,13 @@ async function applyRestorePlan(plan: RestorePlan): Promise<void> {
     });
   }
 
+  if (plan.activationSkillPolicy !== null) {
+    await agentActivationSkillPolicyService.replacePolicyForRestore({
+      agentId: plan.agentId,
+      ...plan.activationSkillPolicy,
+    });
+  }
+
   if (plan.excludedSubagentIds !== null) {
     await agentSubagentExclusionsService.replaceExclusions({
       agentId: plan.agentId,
@@ -321,6 +354,48 @@ async function applyRestorePlan(plan: RestorePlan): Promise<void> {
   // this service bypasses them. Without this a live chat keeps serving the
   // pre-restore tool list.
   clearChatMcpClient(plan.agentId);
+}
+
+async function planActivationSkillPolicy(params: {
+  agentId: string;
+  organizationId: string;
+  userId: string;
+  environmentId: string | null;
+  snapshot: AgentConfigSnapshot;
+  currentMode: AgentActivationSkillMode;
+  currentRules: AgentActivationSkillPolicyRule[];
+}): Promise<RestorePlan["activationSkillPolicy"]> {
+  const targetRules = params.snapshot.activationSkillRules;
+  const canonical = (rules: AgentActivationSkillPolicyRule[]) =>
+    rules
+      .map((rule) => JSON.stringify(rule))
+      .sort()
+      .join("\n");
+  if (
+    params.currentMode === params.snapshot.activationSkillMode &&
+    canonical(params.currentRules) === canonical(targetRules)
+  ) {
+    return null;
+  }
+
+  await agentActivationSkillPolicyService.validatePolicyForDraft({
+    organizationId: params.organizationId,
+    userId: params.userId,
+    environmentId: params.environmentId,
+    policy: {
+      mode: params.snapshot.activationSkillMode,
+      allowedReferences: targetRules
+        .filter((rule) => rule.disposition === "allow")
+        .map((rule) => rule.reference),
+      excludedReferences: targetRules
+        .filter((rule) => rule.disposition === "exclude")
+        .map((rule) => rule.reference),
+    },
+  });
+  return {
+    mode: params.snapshot.activationSkillMode,
+    rules: targetRules,
+  };
 }
 
 /**

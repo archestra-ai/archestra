@@ -55,6 +55,37 @@ class AgentExcludedToolModel {
       .orderBy(asc(schema.agentExcludedToolsTable.toolId));
   }
 
+  /** Batched counterpart used by list projections to avoid one read per agent. */
+  static async findExcludedToolRowsByAgents(agentIds: string[]): Promise<
+    Array<{
+      agentId: string;
+      toolId: string;
+      name: string;
+      catalogId: string | null;
+      meta: Record<string, unknown> | null;
+    }>
+  > {
+    if (agentIds.length === 0) return [];
+    return db
+      .select({
+        agentId: schema.agentExcludedToolsTable.agentId,
+        toolId: schema.agentExcludedToolsTable.toolId,
+        name: schema.toolsTable.name,
+        catalogId: schema.toolsTable.catalogId,
+        meta: schema.toolsTable.meta,
+      })
+      .from(schema.agentExcludedToolsTable)
+      .innerJoin(
+        schema.toolsTable,
+        eq(schema.agentExcludedToolsTable.toolId, schema.toolsTable.id),
+      )
+      .where(inArray(schema.agentExcludedToolsTable.agentId, agentIds))
+      .orderBy(
+        asc(schema.agentExcludedToolsTable.agentId),
+        asc(schema.agentExcludedToolsTable.toolId),
+      );
+  }
+
   /**
    * Full replace of the agent's excluded tool set. Accepts an optional
    * transaction handle so the service can replace both exclusion tables

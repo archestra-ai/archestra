@@ -3,7 +3,7 @@ title: Webhook (A2A)
 category: Agents
 order: 10
 description: Invoke agents over HTTP using the A2A protocol
-lastUpdated: 2026-09-03
+lastUpdated: 2026-09-08
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -59,9 +59,11 @@ Only platform tokens work with the registry. An identity provider JWT or an OAut
 | SDK | A2A 1.0 support | Works with `/v2/a2a` |
 |-----|-----------------|----------------------|
 | [a2a-python](https://github.com/a2aproject/a2a-python) | Yes | Yes — use directly |
-| [a2a-js](https://github.com/a2aproject/a2a-js) (TypeScript) | Not yet — tracked in [a2a-js#321](https://github.com/a2aproject/a2a-js/issues/321) | No — speak JSON-RPC directly, or translate `role` / `state` enums between 0.3 and 1.0 |
+| [a2a-js](https://github.com/a2aproject/a2a-js) (TypeScript) | Yes in the 1.x SDK | Yes |
 
 Other languages can call the JSON-RPC endpoint directly using the request shapes below.
+
+To configure Archestra as the caller instead of the receiving agent, see [External A2A Agents](/docs/platform-outbound-a2a-agents).
 
 ## Authentication
 

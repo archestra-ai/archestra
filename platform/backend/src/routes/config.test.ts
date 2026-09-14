@@ -83,6 +83,21 @@ describe("config routes", () => {
     expect(getAnalyticsStateSpy).toHaveBeenCalledTimes(1);
   });
 
+  test.for([
+    false,
+    true,
+  ])("exposes Anthropic Vertex routing to the inference selector: %s", async (enabled) => {
+    const original = config.llm.anthropic.vertexAi.enabled;
+    try {
+      config.llm.anthropic.vertexAi.enabled = enabled;
+      const response = await app.inject({ method: "GET", url: "/api/config" });
+      expect(response.statusCode).toBe(200);
+      expect(response.json().features.anthropicVertexAiEnabled).toBe(enabled);
+    } finally {
+      config.llm.anthropic.vertexAi.enabled = original;
+    }
+  });
+
   test("returns authenticated config with feature flags and provider base URLs", async () => {
     const response = await app.inject({
       method: "GET",

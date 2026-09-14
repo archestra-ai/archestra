@@ -1,6 +1,7 @@
 export { default as browserStreamRoutes } from "@/features/browser-stream/routes/browser-stream.routes";
 export { default as a2aRoutes } from "./a2a/v1";
 export { default as a2aV2Routes } from "./a2a/v2";
+export { default as a2aRemoteAgentRoutes } from "./a2a-remote-agent/a2a-remote-agent.routes";
 export { default as agentRoutes } from "./agent";
 export { default as agentRuntimeRoutes } from "./agent-runtime/agent-runtime.routes";
 export { default as agentToolRoutes } from "./agent-tool";

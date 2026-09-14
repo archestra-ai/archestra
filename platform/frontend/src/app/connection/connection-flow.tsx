@@ -12,7 +12,7 @@ import config from "@/lib/config/config";
 import { ClientPicker } from "./client-grid";
 import { CONNECT_CLIENTS } from "./clients";
 import { ConnectCommandPanel, isScriptClient } from "./connect-command-panel";
-import { ConnectConfigPanel, isConfigClient } from "./connect-config-panel";
+import { ConnectWithAi } from "./connect-with-ai";
 import {
   type ConnectionBaseUrl,
   resolveAdminDefaultBaseUrl,
@@ -100,10 +100,8 @@ export function ConnectionFlow({
   const selectClient = (id: string) => {
     setClientId(id);
     // Providers vary per client, so clear any bookmarked provider on switch.
-    // Keep ordinary manual setup transient so refresh returns to the prompt.
-    // Explicit client links retain their bookmarkable selection.
     updateUrlParams({
-      ...(urlClientId ? { clientId: id } : {}),
+      clientId: id,
       providerId: null,
     });
   };
@@ -158,15 +156,19 @@ export function ConnectionFlow({
   const urlProvider: SupportedProvider | null =
     urlProviderId && isSupportedProvider(urlProviderId) ? urlProviderId : null;
 
+  const promptClient =
+    !searchParams.get("connectRequest") &&
+    (client?.id === "claude-code" ||
+      client?.id === "cursor" ||
+      client?.id === "codex" ||
+      client?.id === "copilot-cli");
+
   const marketplaceVisible = useSkillsMarketplaceVisible(client);
   const skillsVisible = skillsEnabled && marketplaceVisible;
 
   // Manual flow (n8n / Any client): one wizard-rail entry per instruction
   // block, numbered after the client step.
-  const manualClient =
-    client && !isScriptClient(client.id) && !isConfigClient(client.id)
-      ? client
-      : null;
+  const manualClient = client && !isScriptClient(client.id) ? client : null;
   const manualSteps: {
     key: string;
     title: string;
@@ -257,8 +259,14 @@ export function ConnectionFlow({
         </WizardStep>
       )}
 
+      {client && promptClient && (
+        <WizardStep n={2} title={`Connect ${client.label}`} last>
+          <ConnectWithAi client={client} />
+        </WizardStep>
+      )}
+
       {/* Steps 2-3 (script clients) — review, then run the command */}
-      {client && isScriptClient(client.id) && (
+      {client && !promptClient && isScriptClient(client.id) && (
         <ConnectCommandPanel
           client={client}
           mcpGateways={canReadMcpGateway ? (mcpGateways ?? []) : null}
@@ -276,25 +284,6 @@ export function ConnectionFlow({
           onBaseUrlChange={setUserBaseUrl}
           skillsEnabled={skillsEnabled}
           pluginsEnabled={pluginsEnabled}
-        />
-      )}
-
-      {/* Steps 2-6 (Claude Desktop) — review, download, import, install skills, sign in */}
-      {client && isConfigClient(client.id) && (
-        <ConnectConfigPanel
-          mcpGateways={canReadMcpGateway ? (mcpGateways ?? []) : null}
-          mcpGatewayId={effectiveMcpId}
-          onMcpGatewaySelect={handleMcpSelect}
-          gatewaySlug={selectedMcp?.slug ?? effectiveMcpId}
-          llmProxyId={
-            llmProxyEnabled && canReadLlmProxy ? (llmProxyId ?? null) : null
-          }
-          baseUrl={baseUrl}
-          candidateBaseUrls={candidateBaseUrls}
-          baseUrlMetadata={connectionBaseUrls}
-          onBaseUrlChange={setUserBaseUrl}
-          skillsEnabled={skillsEnabled}
-          llmProxyEnabled={llmProxyEnabled}
         />
       )}
 

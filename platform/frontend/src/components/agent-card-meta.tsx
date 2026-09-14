@@ -12,6 +12,7 @@ import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 type AgentCardAccess = {
   accessAllTools: boolean;
   accessAllSubagents: boolean;
+  activationSkillsCount?: number;
   tools: Array<{ delegateToAgentId?: string | null }>;
 };
 
@@ -42,6 +43,11 @@ export function AgentAccessBadges({ agent }: { agent: AgentCardAccess }) {
           ? "All subagents"
           : countLabel(subagentCount, "subagent")}
       </Badge>
+      {agent.activationSkillsCount !== undefined && (
+        <Badge variant="outline">
+          {countLabel(agent.activationSkillsCount, "skill")}
+        </Badge>
+      )}
     </>
   );
 }

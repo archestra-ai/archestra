@@ -48,6 +48,8 @@ import { registerProcessLocalCache } from "@/process-local-cache-registry";
 import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
 import {
   type Agent,
+  type AgentActivationSkillMode,
+  AgentActivationSkillModeSchema,
   type AgentScope,
   type AgentScopeFilter,
   type AgentToolRef,
@@ -62,6 +64,7 @@ import {
 } from "@/types";
 import { isUniqueConstraintError } from "@/utils/db";
 import { isUuid } from "@/utils/uuid";
+import AgentActivationSkillRuleModel from "./agent-activation-skill-rule";
 import AgentConnectorAssignmentModel from "./agent-connector-assignment";
 import AgentExcludedConnectorModel from "./agent-excluded-connector";
 import AgentExcludedSkillModel from "./agent-excluded-skill";
@@ -75,6 +78,7 @@ import AgentTeamModel from "./agent-team";
 import AgentToolModel from "./agent-tool";
 import AgentUserModel from "./agent-user";
 import AgentVersionModel from "./agent-version";
+import CreatedByModel from "./created-by";
 import McpToolCallModel from "./mcp-tool-call";
 import OrganizationModel from "./organization";
 import TeamModel from "./team";
@@ -143,6 +147,7 @@ class AgentModel {
         agentType: schema.agentsTable.agentType,
         scope: schema.agentsTable.scope,
         authorId: schema.agentsTable.authorId,
+        createdByServiceAccountId: schema.agentsTable.createdByServiceAccountId,
         isPersonalGateway: schema.agentsTable.isPersonalGateway,
         isBuiltIn: schema.agentsTable.builtIn,
       })
@@ -349,37 +354,15 @@ class AgentModel {
    * Populate author identity on agents by looking up users in one batch.
    */
   private static async populateAuthorNames(agents: Agent[]): Promise<void> {
-    const authorIds = [
-      ...new Set(
-        agents.map((a) => a.authorId).filter((id): id is string => id !== null),
-      ),
-    ];
-    if (authorIds.length === 0) return;
-
-    const users = await db
-      .select({
-        id: schema.usersTable.id,
-        name: schema.usersTable.name,
-        email: schema.usersTable.email,
-      })
-      .from(schema.usersTable)
-      .where(inArray(schema.usersTable.id, authorIds));
-
-    const authorMap = new Map(users.map((user) => [user.id, user]));
+    const creators = await CreatedByModel.resolve(
+      agents.map((agent) => CreatedByModel.id(agent, agent.authorId)),
+    );
     for (const agent of agents) {
-      const author = agent.authorId ? authorMap.get(agent.authorId) : null;
+      const id = CreatedByModel.id(agent, agent.authorId);
+      const author = id ? creators.get(id) : null;
       agent.authorName = author?.name ?? null;
       agent.authorEmail = author?.email ?? null;
-      // The same three fields in the shape every "Created by" column reads.
-      // Assembled here rather than resolved again: this batch already holds
-      // them, so uniformity costs no extra query.
-      agent.createdBy = author
-        ? {
-            id: author.id,
-            name: author.name || null,
-            email: author.email || null,
-          }
-        : null;
+      agent.createdBy = author ?? null;
     }
   }
 
@@ -503,6 +486,7 @@ class AgentModel {
         ? db
             .select({
               id: schema.llmProviderApiKeysTable.id,
+              name: schema.llmProviderApiKeysTable.name,
               provider: schema.llmProviderApiKeysTable.provider,
             })
             .from(schema.llmProviderApiKeysTable)
@@ -523,6 +507,7 @@ class AgentModel {
     ]);
 
     const keyProviderMap = new Map(keyRows.map((r) => [r.id, r.provider]));
+    const keyNameMap = new Map(keyRows.map((r) => [r.id, r.name]));
     const modelProviderMap = new Map(modelRows.map((r) => [r.id, r.provider]));
     const modelNameMap = new Map(modelRows.map((r) => [r.id, r.modelName]));
 
@@ -532,6 +517,9 @@ class AgentModel {
         (agent.modelId ? modelProviderMap.get(agent.modelId) : null) ??
         null;
       agent.resolvedLlmProvider = provider;
+      agent.resolvedLlmProviderKeyName = agent.llmApiKeyId
+        ? (keyNameMap.get(agent.llmApiKeyId) ?? null)
+        : null;
       agent.llmProviderRequiresPerUserCredential = provider
         ? providerRequiresPerUserCredential(provider)
         : false;
@@ -589,8 +577,10 @@ class AgentModel {
       knowledgeBaseIds,
       connectorIds,
       suggestedPrompts,
+      activationSkillPolicy,
       ...agent
     }: InsertAgent & {
+      activationSkillMode?: AgentActivationSkillMode;
       isPersonalGateway?: boolean;
       // Server-owned like isPersonalGateway: omitted from the request schemas
       // (the skill-assignment routes are the only client-facing write path)
@@ -625,6 +615,8 @@ class AgentModel {
        * `agentSubagentExclusionsService.getCreationDefaultExclusions`.
        */
       defaultExcludedSubagentIds?: string[];
+      /** Caller will fork version 1 after completing a staged create policy. */
+      deferInitialVersionFork?: boolean;
     },
   ): Promise<Agent> {
     // Auto-assign organizationId if not provided
@@ -658,6 +650,10 @@ class AgentModel {
 
     const [createdAgent] = await AgentModel.insertWithSlugRetry({
       ...agent,
+      // A staged policy is always inserted fail-closed. The policy service
+      // installs its exact rules and flips to the requested mode before the
+      // create route returns.
+      ...(activationSkillPolicy && { activationSkillMode: "manual" as const }),
       ...(enableAccessAllTools && { accessAllTools: false }),
       organizationId,
       ...(slug && { slug }),
@@ -802,14 +798,18 @@ class AgentModel {
       }
     }
 
-    // Fork version 1 now that the full config of this create (row, junctions,
-    // auto-assigned tools, exclusion pre-fill) is in place. Best-effort: a
-    // versioning failure must never fail the create itself.
-    const fork = await AgentVersionModel.forkIfChangedBestEffort(
-      createdAgent.id,
-    );
-    if (fork) {
-      createdAgent.latestVersion = fork.version;
+    // Fork version 1 once the full config of this create (row, junctions,
+    // auto-assigned tools, exclusion pre-fill) is in place. A caller that
+    // defers this fork must capture version 1 after it finishes its remaining
+    // initialization. Best-effort: a versioning failure must never fail the
+    // create itself.
+    if (!options?.deferInitialVersionFork) {
+      const fork = await AgentVersionModel.forkIfChangedBestEffort(
+        createdAgent.id,
+      );
+      if (fork) {
+        createdAgent.latestVersion = fork.version;
+      }
     }
 
     // Get team details and tools for the created agent
@@ -1278,6 +1278,7 @@ class AgentModel {
         name: schema.agentsTable.name,
         scope: schema.agentsTable.scope,
         authorId: schema.agentsTable.authorId,
+        createdByServiceAccountId: schema.agentsTable.createdByServiceAccountId,
       })
       .from(schema.agentsTable)
       .where(
@@ -1306,6 +1307,7 @@ class AgentModel {
         name: schema.agentsTable.name,
         scope: schema.agentsTable.scope,
         authorId: schema.agentsTable.authorId,
+        createdByServiceAccountId: schema.agentsTable.createdByServiceAccountId,
       })
       .from(schema.agentsTable)
       .where(
@@ -1334,6 +1336,7 @@ class AgentModel {
     pagination: PaginationQuery,
     sorting?: SortingQuery,
     filters?: {
+      organizationId?: string;
       name?: string;
       agentType?: AgentType;
       agentTypes?: AgentType[];
@@ -1344,6 +1347,7 @@ class AgentModel {
       excludeOtherPersonalAgents?: boolean;
       labels?: Record<string, string[]>;
       status?: AgentRecordStatus;
+      providerApiKeyId?: string;
     },
     userId?: string,
     isAgentAdmin?: boolean,
@@ -1358,9 +1362,26 @@ class AgentModel {
       getAgentStatusCondition(filters?.status ?? "active"),
     ];
 
+    if (filters?.organizationId) {
+      whereConditions.push(
+        eq(schema.agentsTable.organizationId, filters.organizationId),
+      );
+    }
+
     // Add name filter if provided
     if (filters?.name) {
       whereConditions.push(ilike(schema.agentsTable.name, `%${filters.name}%`));
+    }
+
+    if (filters?.providerApiKeyId === "organization-default") {
+      whereConditions.push(
+        isNull(schema.agentsTable.llmApiKeyId),
+        isNull(schema.agentsTable.modelId),
+      );
+    } else if (filters?.providerApiKeyId) {
+      whereConditions.push(
+        eq(schema.agentsTable.llmApiKeyId, filters.providerApiKeyId),
+      );
     }
 
     // Add agentTypes filter if provided (array of types)
@@ -1863,6 +1884,44 @@ class AgentModel {
       );
   }
 
+  static async setActivationSkillPolicyState(params: {
+    id: string;
+    mode: AgentActivationSkillMode;
+    revision: number;
+    tx?: Transaction;
+  }): Promise<void> {
+    await (params.tx ?? db)
+      .update(schema.agentsTable)
+      .set({
+        activationSkillMode: params.mode,
+        activationSkillPolicyRevision: params.revision,
+      })
+      .where(
+        and(
+          eq(schema.agentsTable.id, params.id),
+          notDeleted(schema.agentsTable),
+        ),
+      );
+  }
+
+  static async findActivationSkillPolicyState(
+    id: string,
+    tx?: Transaction,
+  ): Promise<{
+    mode: AgentActivationSkillMode;
+    revision: number;
+  } | null> {
+    const [row] = await (tx ?? db)
+      .select({
+        mode: schema.agentsTable.activationSkillMode,
+        revision: schema.agentsTable.activationSkillPolicyRevision,
+      })
+      .from(schema.agentsTable)
+      .where(and(eq(schema.agentsTable.id, id), notDeleted(schema.agentsTable)))
+      .limit(1);
+    return row ?? null;
+  }
+
   static async findEnvironmentId(id: string): Promise<string | null> {
     const [result] = await db
       .select({ environmentId: schema.agentsTable.environmentId })
@@ -2239,6 +2298,7 @@ class AgentModel {
         organizationId: schema.agentsTable.organizationId,
         scope: schema.agentsTable.scope,
         authorId: schema.agentsTable.authorId,
+        createdByServiceAccountId: schema.agentsTable.createdByServiceAccountId,
       })
       .from(schema.agentsTable)
       .where(and(eq(schema.agentsTable.id, id), notDeleted(schema.agentsTable)))
@@ -2289,6 +2349,8 @@ class AgentModel {
           agentType: schema.agentsTable.agentType,
           scope: schema.agentsTable.scope,
           authorId: schema.agentsTable.authorId,
+          createdByServiceAccountId:
+            schema.agentsTable.createdByServiceAccountId,
           environmentId: schema.agentsTable.environmentId,
         })
         .from(schema.agentsTable)
@@ -2461,13 +2523,18 @@ class AgentModel {
 
     await db
       .insert(schema.agentsTable)
-      .values({
-        organizationId,
-        name: DEFAULT_LLM_PROXY_NAME,
-        agentType: "llm_proxy",
-        isDefault: true,
-        scope: "org",
-      })
+      .values(
+        await CreatedByModel.forInsert({
+          data: {
+            organizationId,
+            name: DEFAULT_LLM_PROXY_NAME,
+            agentType: "llm_proxy",
+            isDefault: true,
+            scope: "org",
+          },
+          userIdField: "authorId",
+        }),
+      )
       .onConflictDoNothing({
         target: [schema.agentsTable.organizationId],
         where: sql`${schema.agentsTable.agentType} = 'llm_proxy' AND ${schema.agentsTable.isDefault} = true AND ${schema.agentsTable.deletedAt} IS NULL`,
@@ -3670,6 +3737,9 @@ class AgentModel {
           // exclusions are copied can only leave a fail-closed (assigned-tools-
           // only) clone, never one wide open in Auto mode with no exclusions.
           accessAllTools: false,
+          // Skill policy rules are copied below. Start closed so a partial
+          // clone can never transiently widen a Manual source to All.
+          activationSkillMode: "manual",
           considerContextUntrusted: sourceAgent.considerContextUntrusted,
           incomingEmailEnabled: sourceAgent.incomingEmailEnabled,
           incomingEmailSecurityMode: sourceAgent.incomingEmailSecurityMode,
@@ -3709,6 +3779,20 @@ class AgentModel {
         created.id,
         excludedConnectorIds,
       );
+
+      const activationSkillRules =
+        await AgentActivationSkillRuleModel.findByAgent(sourceAgent.id);
+      await AgentActivationSkillRuleModel.addRules({
+        agentId: created.id,
+        rules: activationSkillRules,
+      });
+      await AgentModel.setActivationSkillPolicyState({
+        id: created.id,
+        mode: AgentActivationSkillModeSchema.parse(
+          sourceAgent.activationSkillMode,
+        ),
+        revision: activationSkillRules.length > 0 ? 1 : 0,
+      });
 
       // Now that the verbatim exclusions exist, flip an All-tools source's
       // clone on. Skip the pre-fill: the copy above is the authoritative set,
@@ -3775,7 +3859,15 @@ class AgentModel {
     const maxRetries = 3;
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
-        return await db.insert(schema.agentsTable).values(values).returning();
+        return await db
+          .insert(schema.agentsTable)
+          .values(
+            await CreatedByModel.forInsert({
+              data: { ...values, scope: values.scope ?? "personal" },
+              userIdField: "authorId",
+            }),
+          )
+          .returning();
       } catch (error: unknown) {
         const isSlugConflict =
           error instanceof Error && error.message.includes("agents_slug_idx");
@@ -3853,6 +3945,7 @@ class AgentModel {
       excludedSubagentIds,
       skillIds,
       excludedSkillIds,
+      activationSkillRules,
       excludedToolIds,
       hookRows,
       suggestedPrompts,
@@ -3873,6 +3966,7 @@ class AgentModel {
       // exactly the change the log exists to show.
       AgentSkillModel.findSkillIdsByAgent(id),
       AgentExcludedSkillModel.findSkillIdsByAgent(id),
+      AgentActivationSkillRuleModel.findByAgent(id),
       AgentExcludedToolModel.findToolIdsByAgent(id),
       // Hook IDENTITY only, never `content`: a hook edit must produce a
       // non-empty diff, but script bodies would ride along on every unrelated
@@ -3943,6 +4037,19 @@ class AgentModel {
       accessAllTools: row.accessAllTools,
       accessAllSubagents: row.accessAllSubagents,
       accessAllSkills: row.accessAllSkills,
+      activationSkillMode: row.activationSkillMode,
+      activationSkillPolicyRevision: row.activationSkillPolicyRevision,
+      // Audit readers may not have access to every skill named by a saved
+      // policy. Counts make the policy change visible without disclosing an
+      // unavailable native id, external URI, or plugin path.
+      activationSkillRuleCounts: {
+        allowed: activationSkillRules.filter(
+          (rule) => rule.disposition === "allow",
+        ).length,
+        excluded: activationSkillRules.filter(
+          (rule) => rule.disposition === "exclude",
+        ).length,
+      },
       // passthrough_headers is a text[] of header NAMES (no values), so it is
       // safe to capture verbatim.
       passthroughHeaders: [...(row.passthroughHeaders ?? [])].sort(),
@@ -4058,6 +4165,7 @@ const agentToolRefColumns = {
   agentId: schema.toolsTable.agentId,
   catalogId: schema.toolsTable.catalogId,
   delegateToAgentId: schema.toolsTable.delegateToAgentId,
+  delegateToA2aConnectionId: schema.toolsTable.delegateToA2aConnectionId,
   name: schema.toolsTable.name,
   rawName: schema.toolsTable.rawName,
   description: schema.toolsTable.description,

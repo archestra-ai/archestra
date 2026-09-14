@@ -26,6 +26,7 @@ export function AgentPageShell({
   /** Structured header rendered by the same PageLayout as agent details. */
   header: {
     title: ReactNode;
+    documentTitle?: string;
     description?: ReactNode;
     action?: ReactNode;
   };
@@ -36,6 +37,7 @@ export function AgentPageShell({
       maxWidth="wizard"
       minWidth="phone"
       title={header.title}
+      documentTitle={header.documentTitle}
       description={header.description}
       actionButton={header.action}
       backLink={

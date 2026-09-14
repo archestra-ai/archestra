@@ -416,6 +416,7 @@ interface JsonSchema {
   required?: string[];
   description?: string;
   enum?: string[];
+  const?: string | number | boolean;
   anyOf?: JsonSchema[];
   oneOf?: JsonSchema[];
 }
@@ -527,8 +528,13 @@ function renderProperties(
     });
 
     // Recurse into nested object properties
+    const nestedObjectVariants = getObjectUnionVariants(prop);
     const nestedObjectSchema = getObjectSchema(prop);
-    if (nestedObjectSchema?.properties) {
+    if (nestedObjectVariants) {
+      rows.push(
+        ...renderUnionObjectProperties(nestedObjectVariants, qualifiedName),
+      );
+    } else if (nestedObjectSchema?.properties) {
       const nestedRequired = new Set(nestedObjectSchema.required ?? []);
       rows.push(
         ...renderProperties(
@@ -540,8 +546,16 @@ function renderProperties(
     }
 
     // Recurse into array item properties
+    const itemObjectVariants = getObjectUnionVariants(prop.items);
     const itemObjectSchema = getObjectSchema(prop.items);
-    if (prop.type === "array" && itemObjectSchema?.properties) {
+    if (prop.type === "array" && itemObjectVariants) {
+      rows.push(
+        ...renderUnionObjectProperties(
+          itemObjectVariants,
+          `${qualifiedName}[]`,
+        ),
+      );
+    } else if (prop.type === "array" && itemObjectSchema?.properties) {
       const itemRequired = new Set(itemObjectSchema.required ?? []);
       rows.push(
         ...renderProperties(
@@ -556,13 +570,99 @@ function renderProperties(
   return rows;
 }
 
+function renderUnionObjectProperties(
+  variants: JsonSchema[],
+  prefix: string,
+): { name: string; type: string; required: string; description: string }[] {
+  const keys = new Map<
+    string,
+    Array<{ schema: JsonSchema; required: boolean; variant: JsonSchema }>
+  >();
+  for (const variant of variants) {
+    const required = new Set(variant.required ?? []);
+    for (const [key, schema] of Object.entries(variant.properties ?? {})) {
+      const entries = keys.get(key) ?? [];
+      entries.push({ schema, required: required.has(key), variant });
+      keys.set(key, entries);
+    }
+  }
+
+  return Array.from(keys.entries()).map(([key, entries]) => {
+    const types = Array.from(
+      new Set(entries.map(({ schema }) => formatType(schema))),
+    );
+    const requiredEverywhere =
+      entries.length === variants.length &&
+      entries.every(({ required }) => required);
+    const variantConditions = entries
+      .filter(({ required }) => required)
+      .map(({ variant }) => formatVariantCondition(variant))
+      .filter((value): value is string => value !== null);
+    const descriptions = Array.from(
+      new Set(entries.map(({ schema }) => schema.description).filter(Boolean)),
+    );
+    const isDiscriminator = entries.every(
+      ({ schema }) => schema.const !== undefined,
+    );
+    const description = isDiscriminator
+      ? entries
+          .filter(({ schema }) => schema.description)
+          .map(
+            ({ schema }) =>
+              `${JSON.stringify(schema.const)}: ${schema.description}`,
+          )
+          .join(" ")
+      : descriptions.length <= 1
+        ? (descriptions[0] ?? "")
+        : Array.from(
+            new Set(
+              entries.flatMap(({ schema, variant }) => {
+                if (!schema.description) return [];
+                const condition = formatVariantCondition(variant);
+                return [
+                  condition
+                    ? `When ${condition}: ${schema.description}`
+                    : schema.description,
+                ];
+              }),
+            ),
+          ).join(" ");
+
+    return {
+      name: `\`${prefix}.${key}\``,
+      type: `\`${types.join(" \\| ")}\``,
+      required: requiredEverywhere
+        ? "Yes"
+        : variantConditions.length > 0
+          ? `When ${variantConditions.join(" or ")}`
+          : "No",
+      description,
+    };
+  });
+}
+
+function formatVariantCondition(variant: JsonSchema): string | null {
+  for (const [key, schema] of Object.entries(variant.properties ?? {})) {
+    if (schema.const !== undefined) {
+      return `\`${key}=${JSON.stringify(schema.const)}\``;
+    }
+  }
+  return null;
+}
+
 export function formatType(schema: JsonSchema): string {
+  if (schema.const !== undefined) {
+    return JSON.stringify(schema.const);
+  }
   if (schema.enum) {
     return schema.enum.map((v) => `"${v}"`).join(" \\| ");
   }
 
   const variants = getUnionVariants(schema);
   if (variants) {
+    if (variants.every((variant) => variant.type === "object")) {
+      return "object";
+    }
     return variants.map(formatType).join(" \\| ");
   }
 
@@ -577,6 +677,14 @@ export function formatType(schema: JsonSchema): string {
   }
 
   return schema.type ?? "any";
+}
+
+function getObjectUnionVariants(schema?: JsonSchema): JsonSchema[] | undefined {
+  if (!schema) return undefined;
+  const variants = getUnionVariants(schema)?.filter(
+    (variant) => variant.type === "object" && variant.properties,
+  );
+  return variants && variants.length > 1 ? variants : undefined;
 }
 
 function getObjectSchema(schema?: JsonSchema): JsonSchema | undefined {

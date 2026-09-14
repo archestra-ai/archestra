@@ -18,6 +18,10 @@ import {
 } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
+import {
+  AgentActivationSkillModeSchema,
+  CreateAgentActivationSkillPolicySchema,
+} from "./agent-activation-skill-policy";
 import { AgentRuntimeSchema } from "./agent-runtime";
 import { SuggestedPromptInputSchema } from "./agent-suggested-prompt";
 import { LabelWithDetailsSchema } from "./label";
@@ -212,6 +216,7 @@ const selectExtendedFields = {
   builtInAgentConfig: BuiltInAgentConfigSchema.nullable(),
   passthroughHeaders: z.array(z.string()).nullable(),
   runtime: AgentRuntimeSchema.nullable(),
+  activationSkillMode: AgentActivationSkillModeSchema,
 };
 
 const insertExtendedFields = {
@@ -223,6 +228,7 @@ const insertExtendedFields = {
   builtInAgentConfig: BuiltInAgentConfigSchema.nullable().optional(),
   passthroughHeaders: PassthroughHeadersSchema,
   runtime: AgentRuntimeSchema.nullable().optional(),
+  activationSkillMode: AgentActivationSkillModeSchema.optional(),
 };
 
 /**
@@ -302,6 +308,7 @@ export const AgentToolRefSchema = SelectToolSchema.pick({
   agentId: true,
   catalogId: true,
   delegateToAgentId: true,
+  delegateToA2aConnectionId: true,
   name: true,
   rawName: true,
   description: true,
@@ -342,6 +349,8 @@ export const SelectAgentSchema = AgentRowSchema.extend({
    * on read paths (list/get); absent on mutation responses (clients re-fetch).
    */
   resolvedLlmProvider: SupportedProvidersSchema.nullable().optional(),
+  /** Human-facing name of the configured provider key. */
+  resolvedLlmProviderKeyName: z.string().nullable().optional(),
   /**
    * The human-facing name of the agent's configured model (e.g. "gpt-4"),
    * resolved server-side from `modelId` so a viewer who can't access the
@@ -364,6 +373,14 @@ export const SelectAgentSchema = AgentRowSchema.extend({
    * Populated on read paths (list/get); absent on mutation responses.
    */
   sandboxAvailable: z.boolean().optional(),
+  /**
+   * Number of skills the requesting user can activate through this agent.
+   * Populated only on paginated agent-list reads that request
+   * `includeActivationSkillsCount=true`, for internal agents when the caller
+   * may read skills; absent on other reads, unauthorized reads, and non-agent
+   * rows.
+   */
+  activationSkillsCount: z.number().int().nonnegative().optional(),
   /**
    * Timestamp of the most recent MCP request (any JSON-RPC method) routed
    * through this agent, from the mcp_tool_calls log. Null when nothing was
@@ -393,6 +410,7 @@ export const InsertAgentSchemaBase = createInsertSchema(
       .array(SuggestedPromptInputSchema)
       .max(MAX_SUGGESTED_PROMPTS)
       .optional(),
+    activationSkillPolicy: CreateAgentActivationSkillPolicySchema.optional(),
   })
   .omit({
     id: true,
@@ -400,6 +418,7 @@ export const InsertAgentSchemaBase = createInsertSchema(
     createdAt: true,
     updatedAt: true,
     authorId: true,
+    createdByServiceAccountId: true,
     isPersonalGateway: true,
     runtimeSecretId: true,
     // Which skills a gateway publishes over skill:// is decided by the
@@ -407,6 +426,8 @@ export const InsertAgentSchemaBase = createInsertSchema(
     // flag in the generic agent body would let a caller without that
     // permission flip a gateway to publish-all.
     accessAllSkills: true,
+    activationSkillMode: true,
+    activationSkillPolicyRevision: true,
     // Server-managed head pointer into agent_versions — forked by
     // AgentVersionModel, never client-settable (a supplied value would corrupt
     // the version counter and can collide on the (agent_id, version) index).
@@ -441,6 +462,7 @@ export const UpdateAgentSchemaBase = createUpdateSchema(
     createdAt: true,
     updatedAt: true,
     authorId: true,
+    createdByServiceAccountId: true,
     isPersonalGateway: true,
     runtimeSecretId: true,
     // Which skills a gateway publishes over skill:// is decided by the
@@ -448,6 +470,8 @@ export const UpdateAgentSchemaBase = createUpdateSchema(
     // flag in the generic agent body would let a caller without that
     // permission flip a gateway to publish-all.
     accessAllSkills: true,
+    activationSkillMode: true,
+    activationSkillPolicyRevision: true,
     // Server-managed head pointer into agent_versions — forked by
     // AgentVersionModel, never client-settable (a supplied value would corrupt
     // the version counter and can collide on the (agent_id, version) index).

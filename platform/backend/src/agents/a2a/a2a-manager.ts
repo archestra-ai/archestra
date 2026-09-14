@@ -23,12 +23,12 @@ import {
 } from "@/models";
 import { RouteCategory, startActiveChatSpan } from "@/observability/tracing";
 import { validateMCPGatewayToken } from "@/routes/mcp-gateway/utils";
-import { preflightAgentRuntimeModelCompatibility } from "@/services/agent-runtime/model-compatibility";
 import {
   resolveAgentRuntime,
   resumeAgentRun,
   runTaskInAgentRuntime,
 } from "@/services/agent-runtime/pod-run";
+import { preflightAgentRuntimeLaunch } from "@/services/agent-runtime/preflight";
 import type {
   A2AContext,
   A2AMessage,
@@ -71,7 +71,6 @@ import {
   type A2AProtocolListTasksRequest,
   type A2AProtocolListTasksResponse,
   type A2AProtocolMessage,
-  type A2AProtocolPart,
   A2AProtocolRole,
   type A2AProtocolSendMessageRequest,
   type A2AProtocolSendMessageResponse,
@@ -81,6 +80,7 @@ import {
   type A2AProtocolTaskPushNotificationConfig,
   A2AProtocolTaskState,
 } from "./a2a-protocol";
+import { extractProtocolPartsFromUIMessage } from "./a2a-response-parts";
 import { a2aTaskRunService } from "./a2a-task-run-service";
 
 /** Wire name of the single text artifact carrying a tasked run's answer. */
@@ -448,11 +448,10 @@ export class A2AManager {
         !task &&
         runtime
       ) {
-        await preflightAgentRuntimeModelCompatibility({
+        await preflightAgentRuntimeLaunch({
           runtime,
           agent,
-          organizationId: actor.organizationId,
-          userId: actor.kind === "user" ? actor.id : "system",
+          actor,
         });
       }
 
@@ -1804,6 +1803,7 @@ function decodeListTasksPageToken(token: string): {
 const PUSH_URL_REJECTION_DETAIL: Record<OutboundUrlRejection, string> = {
   not_a_url: "the url is not a valid absolute URL",
   scheme_not_https: "the url must use https",
+  userinfo_not_allowed: "the url must not contain embedded user credentials",
   private_or_loopback_host:
     "the url must not point at a private or loopback address",
 };
@@ -1842,19 +1842,6 @@ function buildStatusReasonMessage(params: {
     role: A2AProtocolRole.Agent,
     parts: [{ text: params.reason }],
   };
-}
-
-function extractProtocolPartsFromUIMessage(
-  uiMessage: UIMessage,
-): A2AProtocolPart[] {
-  const protocolParts: A2AProtocolPart[] = [];
-  const parts = uiMessage.parts;
-  for (const part of parts) {
-    if (part.type === "text") {
-      protocolParts.push({ text: part.text });
-    }
-  }
-  return protocolParts;
 }
 
 function extractApprovalRequestsFromUiMessage(

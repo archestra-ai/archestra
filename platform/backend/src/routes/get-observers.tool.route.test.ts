@@ -64,7 +64,7 @@ describe("tool observation filters", () => {
     expect(body.users.map((u: { id: string }) => u.id).sort()).toEqual(
       [user.id, otherUser.id].sort(),
     );
-    expect([...body.clients].sort()).toEqual(["claude", "codex"]);
+    expect([...body.clients].sort()).toEqual(["claude-code", "codex"]);
   });
 
   test("with-assignments narrows to one user's tools from one client", async ({

@@ -1,6 +1,7 @@
 "use client";
 
 import { Check } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { ClientIcon } from "./client-icon";
 import type { ConnectClient } from "./clients";
@@ -39,28 +40,30 @@ interface ClientTileProps {
 
 function ClientTile({ client, selected, onSelect }: ClientTileProps) {
   return (
-    <button
+    <Button
       type="button"
+      variant="outline"
+      aria-pressed={selected}
       onClick={onSelect}
       className={cn(
-        "relative flex items-center gap-3 rounded-lg border bg-card p-3 text-left shadow-sm transition-all hover:border-primary/50",
+        "relative flex h-auto w-full flex-col items-start justify-start gap-2 whitespace-normal rounded-lg border bg-card p-3 text-left shadow-sm transition-colors hover:border-primary/50 sm:flex-row sm:items-center sm:gap-3",
         selected && "border-primary ring-4 ring-primary/5",
       )}
     >
       <ClientIcon client={client} size={36} />
       <div className="min-w-0 flex-1">
-        <div className="truncate text-sm font-semibold tracking-tight text-foreground">
+        <div className="text-sm font-semibold tracking-tight text-foreground">
           {client.label}
         </div>
-        <div className="mt-0.5 truncate text-xs text-muted-foreground">
+        <div className="mt-0.5 hidden text-xs text-muted-foreground sm:block">
           {client.sub}
         </div>
       </div>
       {selected && (
-        <div className="flex size-[18px] shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
+        <div className="absolute right-2 top-2 flex size-[18px] shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground sm:static">
           <Check className="size-2.5" strokeWidth={3} />
         </div>
       )}
-    </button>
+    </Button>
   );
 }

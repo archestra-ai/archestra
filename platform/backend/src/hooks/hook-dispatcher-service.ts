@@ -85,6 +85,7 @@ class HookDispatcherService {
         caller: {
           userId: params.userId,
           organizationId: params.organizationId,
+          agentId: params.agentId,
         },
         hookFile,
         payload,

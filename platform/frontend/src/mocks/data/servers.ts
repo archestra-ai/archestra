@@ -15,6 +15,7 @@ export function makeInstalledServer(
     secretId: null,
     environmentValues: null,
     ownerId: "test-user-admin",
+    createdByServiceAccountId: null,
     teamId: null,
     scope: "personal",
     alertMutes: [],

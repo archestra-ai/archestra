@@ -632,17 +632,19 @@ class SkillSandboxRuntimeService {
 
   /**
    * Fail-closed before materializing: every mounted skill must still be readable
-   * by the caller. A revoked or deleted skill stops the run before any bytes
-   * execute (see {@link assertMountedSkillsReadable}).
+   * by the caller and allowed by the current agent policy. A revoked, blocked,
+   * or deleted skill stops the run before any bytes execute (see
+   * {@link assertMountedSkillsReadable}).
    */
   private async assertMountsReadable(
     sandboxId: SandboxId,
-    caller: { userId: string; organizationId: string },
+    caller: SandboxCaller,
   ): Promise<void> {
     const result = await assertMountedSkillsReadable({
       sandboxId,
       userId: caller.userId,
       organizationId: caller.organizationId,
+      agentId: caller.agentId,
     });
     if (!result.ok) {
       logger.warn(

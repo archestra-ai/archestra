@@ -150,6 +150,7 @@ export const handlers: HttpHandler[] = [
       permissions: adminPermissionsSeed,
     },
   ]),
+  ...getJson("/api/credentials", []),
   ...getJson("/api/config", configSeed),
   ...getJson("/api/config/public", publicConfigSeed),
   ...getJson("/health", healthSeed),
@@ -279,10 +280,26 @@ export const handlers: HttpHandler[] = [
   // Agents
   ...getJson("/api/agents", agentsSeed),
   ...getJson("/api/agents/all", []),
+  // Keep literal agent routes before `:id`, or MSW treats the literal segment
+  // as an id and returns an agent-shaped response to the activation editor.
+  ...getJson("/api/agents/activation-skills", {
+    enabled: true,
+    data: [],
+    pagination: {
+      currentPage: 1,
+      limit: 100,
+      total: 0,
+      totalPages: 0,
+      hasNext: false,
+      hasPrev: false,
+    },
+  }),
   ...getJson("/api/agents/:id", makeAgent()),
   ...getJson("/api/agents/:id/export", {}),
   ...getJson("/api/agents/:id/tools", []),
   ...getJson("/api/agents/:id/delegations", []),
+  ...getJson("/api/agents/:id/a2a-delegations", []),
+  ...getJson("/api/a2a/remote-agents", []),
   ...getJson("/api/agents/default-mcp-gateway", null),
   // The agents list asks which of the caller's agents is their personal
   // default; unmocked, it reaches the real backend and trips the leak guard.

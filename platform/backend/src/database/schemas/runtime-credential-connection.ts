@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import {
   check,
   index,
+  jsonb,
   pgTable,
   text,
   timestamp,
@@ -20,7 +21,7 @@ import usersTable from "./user";
  * identifier. An organization row does the same for shared credentials.
  */
 const runtimeCredentialConnectionsTable = pgTable(
-  "runtime_credential_connections",
+  "credential_connections",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     organizationId: text("organization_id").notNull(),
@@ -33,6 +34,12 @@ const runtimeCredentialConnectionsTable = pgTable(
     secretId: uuid("secret_id")
       .notNull()
       .references(() => secretsTable.id, { onDelete: "cascade" }),
+    secretKey: text("secret_key").notNull().default("value"),
+    /** Non-secret native account expiry and model discovery. */
+    metadata: jsonb("metadata")
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default({}),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .notNull()
@@ -41,19 +48,19 @@ const runtimeCredentialConnectionsTable = pgTable(
   },
   (table) => [
     check(
-      "runtime_credential_connections_scope_check",
+      "credential_connections_scope_check",
       sql`${table.scope} in ('personal', 'organization')`,
     ),
     check(
-      "runtime_credential_connections_owner_check",
+      "credential_connections_owner_check",
       sql`(${table.scope} = 'personal' and ${table.userId} is not null) or (${table.scope} = 'organization' and ${table.userId} is null)`,
     ),
-    index("runtime_credential_connections_org_idx").on(table.organizationId),
-    index("runtime_credential_connections_user_idx").on(table.userId),
-    uniqueIndex("runtime_credential_connections_personal_uidx")
+    index("credential_connections_org_idx").on(table.organizationId),
+    index("credential_connections_user_idx").on(table.userId),
+    uniqueIndex("credential_connections_personal_uidx")
       .on(table.organizationId, table.userId, table.credentialId)
       .where(sql`${table.scope} = 'personal'`),
-    uniqueIndex("runtime_credential_connections_organization_uidx")
+    uniqueIndex("credential_connections_organization_uidx")
       .on(table.organizationId, table.credentialId)
       .where(sql`${table.scope} = 'organization'`),
   ],

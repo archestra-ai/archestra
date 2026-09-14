@@ -17,6 +17,8 @@ import { vi } from "vitest";
 import mcpClient from "@/clients/mcp-client";
 import config from "@/config";
 import {
+  AgentActivationSkillRuleModel,
+  AgentModel,
   EnvironmentModel,
   ExternalMcpSkillUsageEventModel,
   McpCatalogSkillModel,
@@ -27,6 +29,7 @@ import {
   SkillModel,
   SkillVersionModel,
 } from "@/models";
+import { getAgentActivationSkills } from "@/services/agent-activation-skills";
 import { formatPluginSkillName } from "@/skills/plugin-skill-activation";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type {
@@ -191,6 +194,177 @@ describe("skill tool execution", () => {
     expect(result.isError).toBe(false);
     expect(textOf(result)).toContain("<available_skills>");
     expect(textOf(result)).toContain("pdf-processing");
+  });
+
+  test("manual policy hides unselected skills from discovery and direct loading", async () => {
+    await seedSkill();
+    await AgentModel.setActivationSkillPolicyState({
+      id: agent.id,
+      mode: "manual",
+      revision: 1,
+    });
+
+    const catalog = await executeArchestraTool(
+      TOOL_LIST_SKILLS_FULL_NAME,
+      {},
+      context,
+    );
+    const directLoad = await executeArchestraTool(
+      TOOL_LOAD_SKILL_FULL_NAME,
+      { name: "pdf-processing" },
+      context,
+    );
+
+    expect(textOf(catalog)).not.toContain('name="pdf-processing"');
+    expect(textOf(catalog)).toContain("skill policy");
+    expect(directLoad.isError).toBe(true);
+    expect(textOf(directLoad)).toContain(
+      'No skill named "pdf-processing" exists',
+    );
+
+    const created = await executeArchestraTool(
+      TOOL_CREATE_SKILL_FULL_NAME,
+      { content: manifest("new-personal-skill") },
+      context,
+    );
+    expect(created.isError).toBe(false);
+    expect(textOf(created)).toContain("skill policy does not allow it");
+  });
+
+  test("policy filtering happens before native same-name precedence", async () => {
+    const organizationSkill = await seedSkill({
+      skill: {
+        name: "shared-name",
+        description: "Allowed organization version",
+        content: "Use the organization procedure.",
+      },
+    });
+    await seedSkill({
+      skill: {
+        name: "shared-name",
+        description: "Unselected personal version",
+        content: "Use the personal procedure.",
+        scope: "personal",
+        authorId: userId,
+      },
+    });
+    if (!organizationSkill) throw new Error("skill seed failed");
+    await AgentModel.setActivationSkillPolicyState({
+      id: agent.id,
+      mode: "manual",
+      revision: 1,
+    });
+    await AgentActivationSkillRuleModel.addRules({
+      agentId: agent.id,
+      rules: [
+        {
+          disposition: "allow",
+          reference: { source: "native", skillId: organizationSkill.id },
+        },
+      ],
+    });
+
+    const catalog = await getAgentActivationSkills({
+      enabled: true,
+      organizationId,
+      userId,
+      agentId: agent.id,
+    });
+    const activation = await executeArchestraTool(
+      TOOL_LOAD_SKILL_FULL_NAME,
+      { name: "shared-name" },
+      context,
+    );
+
+    expect(catalog.skills).toContainEqual(
+      expect.objectContaining({
+        reference: { source: "native", skillId: organizationSkill.id },
+      }),
+    );
+    expect(textOf(activation)).toContain("Use the organization procedure.");
+    expect(textOf(activation)).not.toContain("Use the personal procedure.");
+  });
+
+  test("the structured catalog keeps only the native skill load_skill would choose", async () => {
+    await seedSkill({
+      skill: { name: "shared-name", description: "Organization version" },
+    });
+    const personal = await seedSkill({
+      skill: {
+        name: "shared-name",
+        description: "My version",
+        scope: "personal",
+        authorId: userId,
+      },
+    });
+    if (!personal) throw new Error("personal skill seed failed");
+
+    const catalog = await getAgentActivationSkills({
+      enabled: true,
+      organizationId,
+      userId,
+      agentId: agent.id,
+    });
+
+    expect(
+      catalog.skills.filter((skill) => skill.name === "shared-name"),
+    ).toEqual([
+      expect.objectContaining({
+        reference: { source: "native", skillId: personal.id },
+        activationName: "shared-name",
+        description: "My version",
+      }),
+    ]);
+  });
+
+  test("the structured catalog and load_skill share the newest tie break", async ({
+    makeUser,
+  }) => {
+    const firstAuthor = await makeUser();
+    const secondAuthor = await makeUser();
+    await seedSkill({
+      skill: {
+        name: "admin-visible-copy",
+        description: "First copy",
+        content: "# First copy",
+        scope: "personal",
+        authorId: firstAuthor.id,
+      },
+    });
+    await seedSkill({
+      skill: {
+        name: "admin-visible-copy",
+        description: "Second copy",
+        content: "# Second copy",
+        scope: "personal",
+        authorId: secondAuthor.id,
+      },
+    });
+    const [winner] = await SkillModel.findAllByName(
+      organizationId,
+      "admin-visible-copy",
+    );
+    if (!winner) throw new Error("Expected a duplicate-name winner");
+
+    const catalog = await getAgentActivationSkills({
+      enabled: true,
+      organizationId,
+      userId,
+      agentId: agent.id,
+    });
+    const activation = await executeArchestraTool(
+      TOOL_LOAD_SKILL_FULL_NAME,
+      { name: "admin-visible-copy" },
+      context,
+    );
+
+    expect(catalog.skills).toContainEqual(
+      expect.objectContaining({
+        reference: { source: "native", skillId: winner.id },
+        description: winner.description,
+      }),
+    );
+    expect(textOf(activation)).toContain(winner.content);
   });
 
   test("list_skills projects metadata from accessible MCP installations", async ({
@@ -623,6 +797,19 @@ describe("skill tool execution", () => {
       context,
     );
     expect(textOf(catalog)).toContain('name="release &amp; verify"');
+
+    const structuredCatalog = await getAgentActivationSkills({
+      enabled: true,
+      organizationId,
+      userId,
+      agentId: agent.id,
+    });
+    expect(structuredCatalog.skills).toContainEqual(
+      expect.objectContaining({
+        name: "release & verify",
+        activationName: "release &amp; verify",
+      }),
+    );
 
     const activation = await executeArchestraTool(
       TOOL_LOAD_SKILL_FULL_NAME,

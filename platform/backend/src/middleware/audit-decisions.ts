@@ -1,5 +1,6 @@
 import config from "@/config";
 import type { schema } from "@/database";
+import A2aRemoteAgentModel from "@/models/a2a-remote-agent";
 import AgentModel from "@/models/agent";
 import AgentToolModel from "@/models/agent-tool";
 import ApiKeyModel from "@/models/api-key";
@@ -8,8 +9,6 @@ import ChatOpsChannelBindingModel from "@/models/chatops-channel-binding";
 import EnvironmentModel from "@/models/environment";
 import EnvironmentDefaultUserLimitModel from "@/models/environment-default-user-limit";
 import EnvironmentResourceDefaultModel from "@/models/environment-resource-default";
-import GithubAppConfigModel from "@/models/github-app-config";
-import GithubPatModel from "@/models/github-pat";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import KbDirectoryModel from "@/models/kb-directory";
 import KbFileModel from "@/models/kb-file";
@@ -86,6 +85,24 @@ export const AUDIT_DECISIONS = {
   // Audited resources — mutations captured via AUDITABLE_ROUTES
   // =========================================================================
   agentsTable: { audited: true, model: AgentModel },
+  a2aRemoteAgentsTable: { audited: true, model: A2aRemoteAgentModel },
+  a2aRemoteAgentTeamsTable: {
+    audited: false,
+    reason: "Association changes are captured on the parent outbound A2A agent",
+  },
+  a2aRemoteAgentUsersTable: {
+    audited: false,
+    reason: "Association changes are captured on the parent outbound A2A agent",
+  },
+  a2aConnectionsTable: {
+    audited: false,
+    reason:
+      "credential-bearing child configuration audited through its remote agent resource",
+  },
+  a2aOutboundRunsTable: {
+    audited: false,
+    reason: "A2A execution state recorded by the outbound run ledger",
+  },
   runtimeCredentialDefinitionsTable: {
     audited: true,
     model: RuntimeCredentialDefinitionModel,
@@ -107,8 +124,6 @@ export const AUDIT_DECISIONS = {
     audited: true,
     model: EnvironmentResourceDefaultModel,
   },
-  githubAppConfigsTable: { audited: true, model: GithubAppConfigModel },
-  githubPatsTable: { audited: true, model: GithubPatModel },
   internalMcpCatalogTable: { audited: true, model: InternalMcpCatalogModel },
   mcpCatalogSkillsTable: {
     audited: false,
@@ -353,6 +368,10 @@ export const AUDIT_DECISIONS = {
   agentExcludedSkillsTable: {
     audited: false,
     reason: "join: agent × skill exclusion; parent (agent) audited",
+  },
+  agentActivationSkillRulesTable: {
+    audited: false,
+    reason: "join: agent × activation-skill policy; parent (agent) audited",
   },
   agentExcludedSubagentsTable: {
     audited: false,

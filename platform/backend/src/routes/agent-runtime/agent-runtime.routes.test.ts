@@ -1,15 +1,17 @@
 import { and, eq } from "drizzle-orm";
-import { vi } from "vitest";
+import { assert, vi } from "vitest";
 import { A2AProtocolRole } from "@/agents/a2a/a2a-protocol";
 import config from "@/config";
 import db, { schema } from "@/database";
 import { agentRuntimeManager } from "@/k8s/agent-runtime";
+import { claudeCodeAccountRuntime } from "@/k8s/agent-runtime/claude-code-account";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import {
   A2AContextModel,
   A2AMessageModel,
   A2ATaskModel,
   AgentRunModel,
+  AgentRunShareModel,
   AgentWorkspaceModel,
   InteractionModel,
   LlmProviderApiKeyModelLinkModel,
@@ -17,6 +19,7 @@ import {
 } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
+import { claudeCodeAccountManager } from "@/services/agent-runtime/claude-code-account";
 import { createRuntimeCredentialDefinition } from "@/services/agent-runtime/runtime-credentials";
 import {
   cancelDetachedAgentTask,
@@ -45,6 +48,18 @@ describe("Agent Runtime routes", () => {
     organizationId = organization.id;
     user = await makeAdmin();
     await makeMember(user.id, organizationId, { role: "admin" });
+    await createRuntimeCredentialDefinition({
+      organizationId,
+      userId: user.id,
+      definition: {
+        key: "github",
+        name: "GitHub PAT",
+        description: "Repository access",
+        icon: "logo:github",
+        allowPersonal: true,
+        allowOrganization: false,
+      },
+    });
     await createRuntimeCredentialDefinition({
       organizationId,
       userId: user.id,
@@ -127,8 +142,207 @@ describe("Agent Runtime routes", () => {
     await app.close();
   });
 
-  test("lists only runs belonging to the selected Agent with their task outcome", async ({
+  test("audits native sign-in without retaining the authorization code and gates an unsigned user's run", async ({
     makeAgent,
+    makeUser,
+    makeMember,
+  }) => {
+    assert(agent.runtime);
+    agent = await makeAgent({
+      organizationId,
+      authorId: user.id,
+      agentType: "agent",
+      scope: "org",
+      runtime: {
+        ...agent.runtime,
+        command: ["archestra-claude-code"],
+        inferenceProtocol: "anthropic",
+        credentials: [],
+        claudeCode: { authentication: "subscription" },
+      },
+    });
+    vi.spyOn(claudeCodeAccountRuntime, "create").mockResolvedValue(undefined);
+    vi.spyOn(claudeCodeAccountRuntime, "delete").mockResolvedValue(undefined);
+    vi.spyOn(claudeCodeAccountRuntime, "status").mockResolvedValue({
+      state: "connecting",
+    });
+    vi.spyOn(claudeCodeAccountRuntime, "complete")
+      .mockResolvedValueOnce({ state: "connecting" })
+      .mockResolvedValueOnce({ state: "connecting" })
+      .mockResolvedValue({
+        state: "connected",
+        token: `sk-ant-oat01-${"example".repeat(8)}`,
+        models: [],
+      });
+    const url = `/api/agents/${agent.id}/runtime/claude-code/account`;
+    const started = await app.inject({ method: "POST", url });
+    expect(started.statusCode, started.body).toBe(200);
+    const { flowId } = started.json();
+    for (const status of [
+      { state: "starting", startupPhase: "pulling" },
+      {
+        state: "starting",
+        startupPhase: "scheduling",
+        startupIssue: "capacity",
+      },
+      { state: "failed", startupIssue: "image_pull" },
+    ]) {
+      vi.mocked(claudeCodeAccountRuntime.status).mockResolvedValue(status);
+      const response = await app.inject({ method: "GET", url });
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({ ...status, flowId });
+    }
+    vi.mocked(claudeCodeAccountRuntime.status).mockResolvedValue({
+      state: "connecting",
+    });
+
+    expect(
+      (
+        await app.inject({
+          method: "POST",
+          url: `${url}/complete`,
+          payload: { flowId, code: "never-record-native-code" },
+        })
+      ).statusCode,
+    ).toBe(200);
+    // A pending poll does not produce an empty or misleading audit mutation.
+    expect(
+      (
+        await app.inject({
+          method: "POST",
+          url: `${url}/complete`,
+          payload: { flowId },
+        })
+      ).json(),
+    ).toMatchObject({ state: "connecting" });
+    expect(
+      (
+        await app.inject({
+          method: "POST",
+          url: `${url}/complete`,
+          payload: { flowId },
+        })
+      ).json(),
+    ).toMatchObject({ state: "connected" });
+    expect((await app.inject({ method: "GET", url })).json()).toMatchObject({
+      state: "connected",
+    });
+    expect(
+      (
+        await app.inject({
+          method: "GET",
+          url: `/api/agents/${agent.id}/runtime/preflight`,
+        })
+      ).json(),
+    ).toMatchObject({ ready: true, configured: ["CLAUDE_CODE_ACCOUNT"] });
+    assert(agent.runtime);
+    const secondAgent = await makeAgent({
+      organizationId,
+      authorId: user.id,
+      agentType: "agent",
+      scope: "org",
+      runtime: { ...agent.runtime, image: "example.test/custom-claude:v2" },
+    });
+    const secondUrl = `/api/agents/${secondAgent.id}/runtime/claude-code/account`;
+    expect(
+      (await app.inject({ method: "GET", url: secondUrl })).json(),
+    ).toMatchObject({ state: "connected" });
+    expect(
+      (
+        await app.inject({
+          method: "GET",
+          url: `/api/agents/${secondAgent.id}/runtime/preflight`,
+        })
+      ).json(),
+    ).toMatchObject({ ready: true, configured: ["CLAUDE_CODE_ACCOUNT"] });
+    const owner = user;
+    user = await makeUser();
+    await makeMember(user.id, organizationId);
+    expect((await app.inject({ method: "GET", url })).json()).toMatchObject({
+      state: "disconnected",
+    });
+    expect(
+      (
+        await app.inject({
+          method: "GET",
+          url: `/api/agents/${agent.id}/runtime/preflight`,
+        })
+      ).json(),
+    ).toMatchObject({
+      ready: false,
+      missing: [{ key: "CLAUDE_CODE_ACCOUNT" }],
+    });
+    expect(
+      (
+        await app.inject({
+          method: "POST",
+          url: `/api/agents/${agent.id}/runs`,
+          payload: { message: "Hello" },
+        })
+      ).statusCode,
+    ).toBe(409);
+    user = owner;
+    expect((await app.inject({ method: "DELETE", url })).statusCode).toBe(200);
+    expect(
+      (await app.inject({ method: "GET", url: secondUrl })).json(),
+    ).toMatchObject({ state: "disconnected" });
+    const audits = await db
+      .select()
+      .from(schema.auditLogsTable)
+      .where(
+        and(
+          eq(schema.auditLogsTable.resourceId, agent.id),
+          eq(schema.auditLogsTable.action, "agent.updated"),
+        ),
+      );
+    expect(audits).toHaveLength(4);
+    for (const audit of audits) {
+      expect(audit.action).toBe("agent.updated");
+      expect(audit.before).not.toEqual(audit.after);
+    }
+    expect(JSON.stringify(audits)).not.toContain("never-record-native-code");
+    expect(JSON.stringify(audits)).not.toContain("sk-ant-oat");
+  });
+
+  test("does not expose another organization or private Agent's native account", async ({
+    makeAgent,
+    makeUser,
+    makeOrganization,
+  }) => {
+    const privateOwner = await makeUser();
+    const privateAgent = await makeAgent({
+      organizationId,
+      authorId: privateOwner.id,
+      agentType: "agent",
+      scope: "personal",
+      runtime: agent.runtime,
+    });
+    const otherOrganization = await makeOrganization();
+    const outsideAgent = await makeAgent({
+      organizationId: otherOrganization.id,
+      authorId: privateOwner.id,
+      agentType: "agent",
+      scope: "org",
+      runtime: agent.runtime,
+    });
+    user = await makeUser();
+    const status = vi.spyOn(claudeCodeAccountManager, "status");
+    for (const id of [privateAgent.id, outsideAgent.id]) {
+      expect(
+        (
+          await app.inject({
+            method: "GET",
+            url: `/api/agents/${id}/runtime/claude-code/account`,
+          })
+        ).statusCode,
+      ).toBe(404);
+    }
+    expect(status).not.toHaveBeenCalled();
+  });
+
+  test("lists runs with their initiator and visibility", async ({
+    makeAgent,
+    makeTeam,
   }) => {
     const otherAgent = await makeAgent({
       organizationId,
@@ -150,6 +364,17 @@ describe("Agent Runtime routes", () => {
       runtimeScope: "archestra-dev",
       activeDeadlineSeconds: 3_600,
       virtualApiKeyId: null,
+    });
+    const visibleTeam = await makeTeam(organizationId, user.id, {
+      name: "Runtime reviewers",
+    });
+    await AgentRunShareModel.upsert({
+      taskId: selectedTask.id,
+      organizationId,
+      createdByUserId: user.id,
+      visibility: "team",
+      teamIds: [visibleTeam.id],
+      userIds: [],
     });
     const latestInteraction = await InteractionModel.create({
       profileId: agent.id,
@@ -217,7 +442,7 @@ describe("Agent Runtime routes", () => {
       url: `/api/agents/${agent.id}/runs`,
     });
 
-    expect(response.statusCode).toBe(200);
+    expect(response.statusCode, response.body).toBe(200);
     const [listedRun] = response.json();
     expect(listedRun).toEqual(
       expect.objectContaining({
@@ -225,6 +450,10 @@ describe("Agent Runtime routes", () => {
         agentId: agent.id,
         state: "TASK_STATE_FAILED",
         statusReason: "The run process exited with status 1",
+        initiatorName: user.name,
+        shareVisibility: "team",
+        shareTeamNames: ["Runtime reviewers"],
+        shareUserNames: [],
       }),
     );
     expect(
@@ -233,6 +462,143 @@ describe("Agent Runtime routes", () => {
     expect(listedRun.lastModelActivityAt).toBe(
       latestInteraction.createdAt.toISOString(),
     );
+  });
+
+  test("keeps the initiating user distinct from the Agent creator and follows current sharing", async ({
+    makeAdmin,
+    makeMember,
+  }) => {
+    const creator = user;
+    const owner = await makeAdmin({ name: "Alex Rivera" });
+    await makeMember(owner.id, organizationId, { role: "member" });
+    const recipient = await makeAdmin({ name: "Sam Chen" });
+    await makeMember(recipient.id, organizationId, { role: "member" });
+    const task = await createTask(agent.id);
+    await createRun({ taskId: task.id, actorUserId: owner.id });
+
+    const readRun = async () => {
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/agents/${agent.id}/runs`,
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toHaveLength(1);
+      return response.json()[0];
+    };
+    expect(await readRun()).toMatchObject({
+      actorUserId: owner.id,
+      initiatorName: owner.name,
+      shareVisibility: null,
+      shareTeamNames: null,
+      shareUserNames: null,
+    });
+    user = owner;
+    for (const visibility of ["user", "organization"] as const) {
+      const response = await app.inject({
+        method: "PUT",
+        url: `/api/agent-runs/${task.id}/share`,
+        payload: {
+          visibility,
+          ...(visibility === "user" ? { userIds: [recipient.id] } : {}),
+        },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(await readRun()).toMatchObject({
+        shareUserNames: visibility === "user" ? [recipient.name] : [],
+        shareTeamNames: [],
+      });
+      user = creator;
+      expect(await readRun()).toMatchObject({
+        initiatorName: owner.name,
+        shareVisibility: visibility,
+        shareUserNames: null,
+        shareTeamNames: null,
+      });
+      user = owner;
+    }
+    const response = await app.inject({
+      method: "DELETE",
+      url: `/api/agent-runs/${task.id}/share`,
+    });
+    expect(response.statusCode).toBe(200);
+    user = creator;
+    expect(await readRun()).toMatchObject({
+      initiatorName: owner.name,
+      shareVisibility: null,
+      shareUserNames: null,
+    });
+  });
+
+  test("preserves Agent history but restricts recipient membership to the run owner", async ({
+    makeAdmin,
+    makeMember,
+    makeTeam,
+    makeTeamMember,
+  }) => {
+    const owner = user;
+    const recipient = await makeAdmin({ name: "Release reviewer" });
+    await makeMember(recipient.id, organizationId, { role: "member" });
+    const outsider = await makeAdmin({ name: "Agent reader" });
+    await makeMember(outsider.id, organizationId, { role: "member" });
+    const administrator = await makeAdmin();
+    await makeMember(administrator.id, organizationId, { role: "admin" });
+    const team = await makeTeam(organizationId, owner.id, {
+      name: "Private reviewers",
+    });
+    await makeTeamMember(team.id, recipient.id);
+    const task = await createTask(agent.id);
+    await createRun({ taskId: task.id, actorUserId: owner.id });
+
+    for (const visibility of ["user", "team"] as const) {
+      await AgentRunShareModel.upsert({
+        taskId: task.id,
+        organizationId,
+        createdByUserId: owner.id,
+        visibility,
+        teamIds: visibility === "team" ? [team.id] : [],
+        userIds: visibility === "user" ? [recipient.id] : [],
+      });
+      for (const viewer of [owner, recipient, outsider, administrator]) {
+        user = viewer;
+        const history = await app.inject({
+          method: "GET",
+          url: `/api/agents/${agent.id}/runs`,
+        });
+        expect(history.statusCode).toBe(200);
+        expect(history.json()).toEqual([
+          expect.objectContaining({
+            taskId: task.id,
+            actorUserId: owner.id,
+            initiatorName: owner.name,
+            shareVisibility: visibility,
+            shareTeamNames:
+              viewer === owner
+                ? visibility === "team"
+                  ? [team.name]
+                  : []
+                : null,
+            shareUserNames:
+              viewer === owner
+                ? visibility === "user"
+                  ? [recipient.name]
+                  : []
+                : null,
+          }),
+        ]);
+        const settings = await app.inject({
+          method: "GET",
+          url: `/api/agent-runs/${task.id}/share`,
+        });
+        expect(settings.statusCode).toBe(viewer === owner ? 200 : 404);
+        const details = await app.inject({
+          method: "GET",
+          url: `/api/agent-runs/${task.id}`,
+        });
+        expect(details.statusCode).toBe(
+          viewer === owner || viewer === recipient ? 200 : 404,
+        );
+      }
+    }
   });
 
   test("keeps every run endpoint unavailable when no run backend is enabled", async () => {

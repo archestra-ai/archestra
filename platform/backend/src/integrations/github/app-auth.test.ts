@@ -23,9 +23,15 @@ describe("resolveInstallationToken", () => {
     const calls: string[] = [];
     const fetchImpl = (async (url: string | URL | Request) => {
       calls.push(String(url));
-      return new Response(JSON.stringify({ token: "installation-token" }), {
-        status: 200,
-      });
+      return new Response(
+        JSON.stringify({
+          token: "installation-token",
+          expires_at: new Date(Date.now() + 3_600_000).toISOString(),
+        }),
+        {
+          status: 200,
+        },
+      );
     }) as typeof fetch;
 
     const token = await resolveInstallationToken(
@@ -43,9 +49,15 @@ describe("resolveInstallationToken", () => {
     let hits = 0;
     const fetchImpl = (async () => {
       hits += 1;
-      return new Response(JSON.stringify({ token: "cached-token" }), {
-        status: 200,
-      });
+      return new Response(
+        JSON.stringify({
+          token: "cached-token",
+          expires_at: new Date(Date.now() + 3_600_000).toISOString(),
+        }),
+        {
+          status: 200,
+        },
+      );
     }) as typeof fetch;
 
     const first = await resolveInstallationToken(
@@ -86,4 +98,71 @@ describe("resolveInstallationToken", () => {
       ),
     ).rejects.toThrow("requires app ID, installation ID, and private key");
   });
+  test("refreshes a cached installation token before the required lifetime", async () => {
+    let calls = 0;
+    const fetchImpl = (async () => {
+      calls += 1;
+      return new Response(
+        JSON.stringify({
+          token: `token-${calls}`,
+          expires_at: new Date(
+            Date.now() + (calls === 1 ? 10 : 60) * 60_000,
+          ).toISOString(),
+        }),
+      );
+    }) as typeof fetch;
+    const credentials = makeCredentials("expiry-test");
+    expect(await resolveInstallationToken(credentials, fetchImpl)).toBe(
+      "token-1",
+    );
+    expect(
+      await resolveInstallationToken(
+        { ...credentials, minimumValidityMs: 50 * 60_000 },
+        fetchImpl,
+      ),
+    ).toBe("token-2");
+    expect(calls).toBe(2);
+  });
+
+  test("private key rotation invalidates the cached installation token", async () => {
+    let calls = 0;
+    const fetchImpl = (async () =>
+      new Response(
+        JSON.stringify({
+          token: `token-${++calls}`,
+          expires_at: new Date(Date.now() + 3_600_000).toISOString(),
+        }),
+      )) as typeof fetch;
+    const credentials = makeCredentials("rotation-test");
+    expect(await resolveInstallationToken(credentials, fetchImpl)).toBe(
+      "token-1",
+    );
+    const rotated = generateKeyPairSync("rsa", {
+      modulusLength: 2048,
+      privateKeyEncoding: { type: "pkcs8", format: "pem" },
+      publicKeyEncoding: { type: "spki", format: "pem" },
+    });
+    expect(
+      await resolveInstallationToken(
+        { ...credentials, privateKey: rotated.privateKey },
+        fetchImpl,
+      ),
+    ).toBe("token-2");
+  });
+});
+
+test("refuses installation tokens without a trustworthy future expiry", async () => {
+  for (const expires_at of [
+    undefined,
+    "not-a-date",
+    new Date(Date.now() - 1).toISOString(),
+  ]) {
+    await expect(
+      resolveInstallationToken(
+        makeCredentials(`invalid-${String(expires_at)}`),
+        async () =>
+          new Response(JSON.stringify({ token: "unusable-token", expires_at })),
+      ),
+    ).rejects.toThrow("invalid or expired lifetime");
+  }
 });

@@ -2,7 +2,7 @@
 title: Observability
 category: Archestra Platform
 order: 4
-lastUpdated: 2026-09-07
+lastUpdated: 2026-09-10
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -30,7 +30,8 @@ Combined, these endpoints expose metrics including:
 - `llm_cache_cost_total` - Estimated cost in USD attributable to prompt-cache tokens (reads plus writes, including the higher 1-hour-TTL write surcharge), by provider, model, agent_id, agent_name, agent_type, and source. Lets you chart caching spend separately from total cost.
 - `llm_cache_savings_total` - Gross estimated USD saved by cache reads being billed at a discount versus the full input price, by provider, model, agent_id, agent_name, agent_type, and source. Read-side only (always non-negative); the signed net-of-write-surcharge savings is persisted per interaction rather than as a counter.
 - `llm_blocked_tools_total` - Counter of tool calls blocked by tool invocation policies, grouped by provider, model, agent_id, agent_name, agent_type, and source
-- `llm_time_to_first_token_seconds` - Time to first token (TTFT) for streaming requests, by provider, agent_id, agent_name, agent_type, source, and model. Helps developers choose models with lower initial response latency.
+- `llm_time_to_first_token_seconds` - Time from the upstream call to the first chunk the provider returns, by provider, agent_id, agent_name, agent_type, source, and model. Helps developers choose models with lower initial response latency. Buckets run to 300 seconds, so a stalled upstream is visible rather than folded into the top bucket.
+- `llm_time_to_first_byte_seconds` - Time from receiving a streaming request to the first byte written to the client, by the same labels. Includes everything before the upstream call — agent lookup, authentication, guardrails, tool policies. Compare it with `llm_time_to_first_token_seconds` to see how much of the client's wait is Archestra's own preflight.
 - `llm_tokens_per_second` - Output tokens per second throughput, by provider, agent_id, agent_name, agent_type, source, and model. Allows comparing model response speeds for latency-sensitive applications.
 - `llm_active_users` - Distinct users who made at least one attributed LLM request, by `window` (`24h` or `7d`). An org-wide adoption signal. The value is read from the database, so every replica reports the same number — aggregate it with `max()`, not `sum()`. Set `ARCHESTRA_METRICS_ACTIVE_USERS_REFRESH_INTERVAL_MS` to change how often it refreshes, or to `0` to turn it off.
 
@@ -323,6 +324,10 @@ chat {agentName}                       ← parent span (SpanKind.SERVER)
 
 The parent span (`route.category=chat`) carries the agent identity and session ID. LLM proxy calls from chat are linked via W3C `traceparent` header propagation, so the LLM spans appear as children rather than independent root traces. MCP tool executions run within the same async context and are automatically parented.
 
+Context compaction emits `context_compaction auto` or `context_compaction manual` spans, including skipped decisions.
+These spans inherit the invoking agent span’s `route.category`, keeping them visible in filtered traces.
+Standalone manual compaction uses `route.category=chat`.
+
 This same unified tracing applies to all agent invocation paths:
 
 | Invocation Path | `route.category` | `archestra.trigger.source` |
@@ -342,6 +347,39 @@ deliveries by the closed `interface` label (`chatops` or `email`). Task IDs are
 kept out of Prometheus labels.
 
 External LLM proxy calls produce independent root traces.
+
+### Agent Runtime Health
+
+Runtime metrics cover every Agent Runtime client and backend. Existing `/metrics` scraping collects them; runtime containers need no additional environment variables.
+
+| Metric | Meaning |
+| --- | --- |
+| `agent_runtime_runs_started_total` | Runs that reached a running backend. |
+| `agent_runtime_runs_terminated_total` | Observed run outcomes, labeled by `outcome`. |
+| `agent_runtime_provision_duration_seconds` | Startup duration, including scheduling and image pulls. |
+| `agent_runtime_steers_total` | Delivered steering messages, labeled by `steer_mode`. |
+| `agent_runtime_completion_deliveries_total` | Completion delivery attempts, labeled by `interface` and `outcome`. |
+| `agent_runtime_health_tasks` | Current health counts, labeled by `agent_id`, `backend`, and `condition`. |
+| `agent_runtime_health_age_seconds` | Oldest relevant task age, with the same labels. |
+| `agent_runtime_health_collection_timestamp_seconds` | Last successful health snapshot, even when no tasks exist. |
+
+Health counts include `working`, `submitted`, `input_required`, `auth_required`, `failed_recent`, and `completion_pending`. Conditions overlap: an authentication wait also counts as working. `failed_recent` covers the last 15 minutes. A completion remains pending until its external delivery succeeds.
+
+Age conditions are `heartbeat`, `submitted`, and `completion_pending`. Heartbeat age measures orchestration liveness, not model progress. An active heartbeat alone does not prove that an agent is making progress. Input requests can require legitimate human action.
+
+Health gauges read shared database state at scrape time. Use `max`, not `sum`, across platform replicas. They survive process restarts and remove settled conditions on the next scrape. Scrape failures must also alert; missing samples do not prove healthy operation. Lifecycle counters are process-local observations and can include recovery attempts.
+
+For example, detect runs whose orchestration heartbeat is over two minutes old:
+
+```promql
+max by (agent_id, backend) (
+  agent_runtime_health_age_seconds{condition="heartbeat"}
+) > 120
+```
+
+Filter `agent_id` to monitor selected agents. Apply a pending period to avoid transient alerts. Other useful alerts include sustained submitted tasks, authentication waits, recent failures, and aging completion replies. Link notifications to the agent's Runs tab for investigation. Keep task IDs, prompts, credentials, and raw error messages out of metric labels.
+
+Container CPU, memory, scheduling failures, and restarts come from Kubernetes monitoring. Client-specific traces require that client's OpenTelemetry configuration. These signals complement platform health metrics.
 
 ### Custom Agent Labels
 

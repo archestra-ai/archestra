@@ -1,11 +1,13 @@
-import { resolveInstallationToken } from "@/integrations/github/app-auth";
-import { GithubAppConfigModel, GithubPatModel } from "@/models";
-import { secretManager } from "@/secrets-manager";
+import {
+  GithubAppConfigModel,
+  RuntimeCredentialDefinitionModel,
+} from "@/models";
+import { resolveCredentialValue } from "@/services/credentials";
 import { ApiError } from "@/types";
 
 /**
  * Read a stored GitHub personal access token (org-scoped, managed at
- * /settings/github). Shared by the interactive import route (which layers a
+ * /settings/credentials). Shared by the interactive import route (which layers a
  * per-user RBAC check on top) and the background skill sync worker. Throws
  * `ApiError` when the token is missing; callers surface or record the message.
  */
@@ -13,24 +15,18 @@ export async function resolveGithubPatToken(params: {
   githubPatId: string;
   organizationId: string;
 }): Promise<string> {
-  const pat = await GithubPatModel.findByIdForOrganization({
+  const definition = await RuntimeCredentialDefinitionModel.findById({
     id: params.githubPatId,
     organizationId: params.organizationId,
   });
-  if (!pat) {
+  if (!definition || definition.kind !== "secret")
     throw new ApiError(404, "GitHub token not found");
-  }
-  if (!pat.secretId) {
-    throw new ApiError(400, "GitHub token has no stored value");
-  }
-  const secret = await secretManager().getSecret(pat.secretId);
-  if (!secret) {
-    throw new ApiError(404, "GitHub token value not found");
-  }
-  const token = (secret.secret as Record<string, unknown>).apiToken;
-  if (typeof token !== "string" || token.length === 0) {
-    throw new ApiError(400, "GitHub token has no stored value");
-  }
+  const token = await resolveCredentialValue({
+    organizationId: params.organizationId,
+    credentialId: definition.key,
+    scope: "organization",
+  });
+  if (!token) throw new ApiError(400, "GitHub token has no stored value");
   return token;
 }
 
@@ -59,25 +55,19 @@ export async function resolveGithubAppInstallationToken(params: {
     );
   }
 
-  if (!appConfig.secretId) {
-    throw new ApiError(
-      400,
-      "GitHub App configuration has no stored private key",
-    );
-  }
-  const secret = await secretManager().getSecret(appConfig.secretId);
-  if (!secret) {
-    throw new ApiError(404, "GitHub App private key not found");
-  }
-  const privateKey =
-    ((secret.secret as Record<string, unknown>).apiToken as string) || "";
-
-  return resolveInstallationToken({
-    githubUrl: appConfig.githubUrl,
-    appId: appConfig.appId,
-    installationId: appConfig.installationId,
-    privateKey,
+  const definition = await RuntimeCredentialDefinitionModel.findById({
+    id: params.githubAppConfigId,
+    organizationId: params.organizationId,
   });
+  if (!definition) throw new ApiError(404, "GitHub App credential not found");
+  const token = await resolveCredentialValue({
+    organizationId: params.organizationId,
+    credentialId: definition.key,
+    scope: "organization",
+  });
+  if (!token)
+    throw new ApiError(400, "GitHub App credential has no private key");
+  return token;
 }
 
 function isGithubDotComUrl(url: string): boolean {

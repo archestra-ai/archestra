@@ -5,8 +5,8 @@ import type { archestraApiTypes } from "@archestra/shared";
 // rejects. `client.ts` depends only on zod. The `archestraApiTypes` import above
 // is type-only, so it is erased and safe.
 import {
-  CLAUDE_CLIENT_ID,
   CLAUDE_CODE_CLIENT_ID,
+  CLAUDE_DESKTOP_CLIENT_ID,
   CODEX_CLIENT_ID,
 } from "@archestra/shared/interactions/client";
 
@@ -158,7 +158,7 @@ export const llmLogsSessionsSeed = [
   makeSessionSummary({
     sessionId: "cd-session",
     sessionSource: "claude_metadata",
-    externalAgentIds: [CLAUDE_CLIENT_ID],
+    externalAgentIds: [CLAUDE_DESKTOP_CLIENT_ID],
     // Non-api source so the Source + Client filter combo can isolate cc-session.
     source: "chat",
     sources: ["chat"],

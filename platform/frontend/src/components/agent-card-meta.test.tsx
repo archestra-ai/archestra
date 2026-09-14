@@ -73,6 +73,17 @@ describe("AgentAccessBadges", () => {
     expect(screen.getByText("All tools")).toBeInTheDocument();
     expect(screen.getByText("1 subagent")).toBeInTheDocument();
   });
+
+  it("shows the caller-visible activation skill count when the list supplies it", () => {
+    renderBadges({
+      accessAllTools: true,
+      accessAllSubagents: true,
+      activationSkillsCount: 2,
+      tools: [],
+    });
+
+    expect(screen.getByText("2 skills")).toBeInTheDocument();
+  });
 });
 
 describe("AgentLastUsedFooter", () => {

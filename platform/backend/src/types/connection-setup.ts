@@ -16,6 +16,7 @@ export const CONNECTION_SETUP_MAX_SKILLS = 500;
  */
 export const ConnectionSetupClientIdSchema = z.enum([
   "claude-code",
+  "claude-desktop",
   "codex",
   "copilot-cli",
   "cursor",

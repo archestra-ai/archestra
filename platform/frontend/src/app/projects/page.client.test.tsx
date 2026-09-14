@@ -39,6 +39,8 @@ type ProjectFixture = {
   ownerName: string | null;
   conversationCount: number;
   visibility: "organization" | "team" | null;
+  shareTeamNames?: string[] | null;
+  shareUserNames?: string[] | null;
   pinnedAt: string | null;
   createdAt: string;
   deletedAt: string | null;
@@ -416,6 +418,31 @@ describe("ProjectsPageClient", () => {
     expect(screen.queryByText("All projects")).not.toBeInTheDocument();
     expect(screen.getByText("Plain project")).toBeInTheDocument();
     expect(screen.getByText("Other project")).toBeInTheDocument();
+  });
+
+  it("shows visibility labels on project cards", () => {
+    mockProjects = [
+      makeProject({ id: "personal", name: "Personal project" }),
+      makeProject({
+        id: "team",
+        name: "Team project",
+        visibility: "team",
+        shareTeamNames: ["Design"],
+      }),
+      makeProject({
+        id: "organization",
+        name: "Organization project",
+        visibility: "organization",
+      }),
+    ];
+
+    render(<ProjectsPageClient />);
+
+    expect(screen.getByText("Personal", { selector: "span" })).toBeVisible();
+    expect(screen.getByText("Team", { selector: "span" })).toBeVisible();
+    expect(
+      screen.getByText("Organization", { selector: "span" }),
+    ).toBeVisible();
   });
 
   it("shows pin, edit details, and delete in owner card menus", () => {

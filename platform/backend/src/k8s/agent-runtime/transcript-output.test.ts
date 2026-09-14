@@ -10,6 +10,7 @@ import {
   AgentRunModel,
   VirtualApiKeyModel,
 } from "@/models";
+import { AGENT_RUNTIME_CREDENTIALS_SECRET_KEY } from "@/services/agent-runtime/runtime-contract";
 import { expect, test } from "@/test";
 import manager from "./manager";
 
@@ -167,9 +168,19 @@ test("retains access only for the same live CLI and revokes it on workspace clea
         { metadata: { name: run.workloadName }, status: { phase: "Running" } },
       ],
     });
-  vi.spyOn(CoreV1Api.prototype, "readNamespacedSecret").mockResolvedValue({
-    data: {},
-  });
+  const credentialData = {
+    [AGENT_RUNTIME_CREDENTIALS_SECRET_KEY]: "renewable-bundle",
+    GITHUB_TOKEN: "startup-token",
+  };
+  vi.spyOn(CoreV1Api.prototype, "readNamespacedSecret").mockImplementation(
+    async () => ({ data: { ...credentialData } }),
+  );
+  vi.spyOn(CoreV1Api.prototype, "patchNamespacedSecret").mockImplementation(
+    async ({ body }) => {
+      Object.assign(credentialData, body.data);
+      return {};
+    },
+  );
   vi.spyOn(CoreV1Api.prototype, "deleteNamespacedSecret").mockResolvedValue({});
   let pane = `0:${run.taskId}`;
   vi.spyOn(Exec.prototype, "exec").mockImplementation(async (...args) => {
@@ -190,10 +201,15 @@ test("retains access only for the same live CLI and revokes it on workspace clea
   expect((await AgentRunModel.findByTaskId(run.taskId))?.virtualApiKeyId).toBe(
     key.virtualKey.id,
   );
+  expect(credentialData).toEqual({
+    [AGENT_RUNTIME_CREDENTIALS_SECRET_KEY]: "renewable-bundle",
+    GITHUB_TOKEN: "",
+  });
   pods.mockResolvedValue({ items: [] });
   await expect(manager.hasRetainedTerminal(run)).resolves.toBe(false);
   await manager.releaseRun(run, { retainInteractiveSession: true });
   expect(
     (await AgentRunModel.findByTaskId(run.taskId))?.virtualApiKeyId,
   ).toBeNull();
+  expect(credentialData[AGENT_RUNTIME_CREDENTIALS_SECRET_KEY]).toBe("");
 });

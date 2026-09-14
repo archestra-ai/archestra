@@ -131,6 +131,7 @@ async function createModelRouterVirtualKey(params: {
     },
   ) => Promise<{ id: string; provider: SupportedProvider }>;
   makeUser?: () => Promise<{ id: string }>;
+  virtualKeyScope?: "personal" | "org";
   apiKeyValue?: string;
   expiresAt?: Date | null;
 }) {
@@ -140,8 +141,9 @@ async function createModelRouterVirtualKey(params: {
     provider: params.provider,
     apiKey: apiKeyValue,
   });
-  const owner = requiresPerUser ? await params.makeUser?.() : undefined;
-  if (requiresPerUser && !owner) {
+  const needsOwner = requiresPerUser || params.virtualKeyScope === "personal";
+  const owner = needsOwner ? await params.makeUser?.() : undefined;
+  if (needsOwner && !owner) {
     throw new Error("Per-user Model Router fixtures require makeUser");
   }
   const chatApiKey = await params.makeLlmProviderApiKey(
@@ -242,14 +244,18 @@ function createResponsesTestClient() {
 
   return {
     responses: {
-      create: async (params: { stream?: boolean }) => {
+      create: async (params: { stream?: boolean; model?: string }) => {
+        const response = {
+          ...completedResponse,
+          model: params.model ?? completedResponse.model,
+        };
         if (params.stream) {
           return {
             [Symbol.asyncIterator]: async function* () {
               yield {
                 type: "response.created",
                 response: {
-                  ...completedResponse,
+                  ...response,
                   status: "in_progress",
                   output: [],
                 },
@@ -258,11 +264,11 @@ function createResponsesTestClient() {
                 type: "response.output_text.delta",
                 delta: "Hello from Copilot Responses",
               };
-              yield { type: "response.completed", response: completedResponse };
+              yield { type: "response.completed", response };
             },
           };
         }
-        return completedResponse;
+        return response;
       },
     },
   };
@@ -608,7 +614,7 @@ describe("model router proxy routes", () => {
       expect(response.statusCode).toBe(200);
       expect(response.json()).toMatchObject({
         object: "response",
-        model: `${provider}:${modelId}`,
+        model: provider === "openai" ? modelId : `${provider}:${modelId}`,
       });
     });
 
@@ -723,7 +729,7 @@ describe("model router proxy routes", () => {
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({
       object: "response",
-      model: "openai:gpt-5.4",
+      model: "gpt-5.4",
     });
   });
 
@@ -982,9 +988,10 @@ describe("model router proxy routes", () => {
     expect(githubCopilotAdapterFactory.createClient).not.toHaveBeenCalled();
   });
 
-  test("records model router requests with a model router interaction source", async ({
+  test("records model router source and virtual key attribution", async ({
     makeAgent,
     makeOrganization,
+    makeUser,
     makeSecret,
     makeLlmProviderApiKey,
   }) => {
@@ -994,33 +1001,38 @@ describe("model router proxy routes", () => {
     const modelId = "gpt-5.4";
     await upsertModel({ provider, modelId });
     const organization = await makeOrganization();
-    const { value } = await createModelRouterVirtualKey({
-      organizationId: organization.id,
-      provider,
-      makeSecret,
-      makeLlmProviderApiKey,
-    });
     const agent = await makeAgent({
       organizationId: organization.id,
       name: "Model Router Source Agent",
       agentType: "llm_proxy",
     });
+    const virtualKeys = [];
+    for (const virtualKeyScope of ["org", "personal"] as const) {
+      const virtualKeyResult = await createModelRouterVirtualKey({
+        organizationId: organization.id,
+        provider,
+        makeUser,
+        makeSecret,
+        makeLlmProviderApiKey,
+        virtualKeyScope,
+      });
+      virtualKeys.push(virtualKeyResult.virtualKey);
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/model-router/${agent.id}/chat/completions`,
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${virtualKeyResult.value}`,
+          [SOURCE_HEADER]: "chat",
+        },
+        payload: {
+          model: `${provider}:${modelId}`,
+          messages: [{ role: "user", content: "Hello" }],
+        },
+      });
+      expect(response.statusCode, response.body).toBe(200);
+    }
 
-    const response = await app.inject({
-      method: "POST",
-      url: `/v1/model-router/${agent.id}/chat/completions`,
-      headers: {
-        "content-type": "application/json",
-        authorization: `Bearer ${value}`,
-        [SOURCE_HEADER]: "chat",
-      },
-      payload: {
-        model: `${provider}:${modelId}`,
-        messages: [{ role: "user", content: "Hello" }],
-      },
-    });
-
-    expect(response.statusCode, response.body).toBe(200);
     const interactions = await InteractionModel.findAllPaginated(
       { limit: 10, offset: 0 },
       undefined,
@@ -1028,8 +1040,23 @@ describe("model router proxy routes", () => {
       undefined,
       { profileId: (await AgentModel.getOrgLlmProxy(agent.organizationId)).id },
     );
-    expect(interactions.data).toHaveLength(1);
-    expect(interactions.data[0].source).toBe("model_router");
+    expect(interactions.data).toHaveLength(2);
+    expect(interactions.data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          source: "model_router",
+          authMethod: "virtual_key",
+          virtualKeyId: virtualKeys[0].id,
+          userId: null,
+        }),
+        expect.objectContaining({
+          source: "model_router",
+          authMethod: "virtual_key",
+          virtualKeyId: virtualKeys[1].id,
+          userId: virtualKeys[1].authorId,
+        }),
+      ]),
+    );
   });
 
   test("routes OpenAI embedding models through embeddings", async ({

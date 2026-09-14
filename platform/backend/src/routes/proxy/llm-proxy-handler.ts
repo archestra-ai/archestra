@@ -130,6 +130,7 @@ import {
   toToolCallBlock,
   withSessionContext,
 } from "./llm-proxy-helpers";
+import { StreamKeepAlive } from "./stream-keepalive";
 import * as utils from "./utils";
 import type { SessionSource } from "./utils/headers/session-id";
 import {
@@ -209,6 +210,18 @@ export interface LLMProxyContext<TRequest> {
   teamIds?: string[];
   teams?: SpanTeamInfo[];
   userTeams?: SpanTeamInfo[];
+  /**
+   * Client-visible latency clock. `requestReceivedAt` is stamped on entry to
+   * the handler; `firstByteAt` is set by `ensureStreamHeaders` the moment the
+   * response is committed — which, on a lazily committed stream, is also the
+   * first byte the client sees, wherever in preflight or streaming it happens.
+   */
+  streamTiming: StreamTiming;
+}
+
+export interface StreamTiming {
+  requestReceivedAt: number;
+  firstByteAt?: number;
 }
 
 export type LLMProxyAuthOverride = {
@@ -219,6 +232,8 @@ export type LLMProxyAuthOverride = {
   authenticated: boolean;
   source?: InteractionSource;
   authMethod?: InteractionAuthMethod;
+  /** Model Router virtual key ID, preserved for usage limits and interaction attribution. */
+  virtualKeyId?: string;
   authenticatedApp?: {
     id: string;
     name: string;
@@ -273,6 +288,7 @@ export async function handleLLMProxy<
   reply: FastifyReply,
   provider: LLMProvider<TRequest, TResponse, TMessages, TChunk, THeaders>,
 ): Promise<FastifyReply> {
+  const streamTiming: StreamTiming = { requestReceivedAt: Date.now() };
   const headers = request.headers as unknown as THeaders;
   const agentId = (request.params as { agentId?: string }).agentId;
   const providerName = provider.provider;
@@ -310,7 +326,7 @@ export async function handleLLMProxy<
   let userId = (await utils.headers.userId.getUser(headersForExtraction))
     ?.userId;
   let resolvedUser = userId ? await UserModel.getById(userId) : null;
-  let virtualKeyId: string | undefined;
+  let virtualKeyId = authOverride?.virtualKeyId;
   let passthroughVirtualKeyId: string | undefined;
   // Authenticated user identities, tracked per source for the consistency check.
   let passthroughUserId: string | undefined;
@@ -889,6 +905,7 @@ export async function handleLLMProxy<
     const ensureStreamHeaders = () => {
       if (sseHeaders && !reply.raw.headersSent) {
         reply.raw.writeHead(200, sseHeaders);
+        streamTiming.firstByteAt = Date.now();
       }
     };
 
@@ -1354,6 +1371,7 @@ export async function handleLLMProxy<
       teamIds,
       teams,
       userTeams,
+      streamTiming,
     };
 
     // handleStreaming is self-contained: it persists its own failed-interaction
@@ -1487,6 +1505,7 @@ async function handleStreaming<
     teamIds,
     teams,
     userTeams,
+    streamTiming,
   } = ctx;
 
   const providerName = provider.provider;
@@ -1494,6 +1513,26 @@ async function handleStreaming<
   const streamStartTime = Date.now();
   let firstChunkTime: number | undefined;
   let streamCompleted = false;
+
+  // Every byte to the client goes through here so the keep-alive knows when
+  // the stream last spoke. The keep-alive itself only ever writes to a stream
+  // that is already committed and idle (see StreamKeepAlive) — it is armed
+  // now, before the upstream call, so it also covers a stream the dual-LLM
+  // keep-alive committed during preflight and a slow post-stream policy
+  // evaluation, but it cannot itself turn a pending upstream error into a 200.
+  const keepAlive = new StreamKeepAlive(
+    reply.raw,
+    config.llmProxy.streamKeepAliveIntervalMs,
+    streamAdapter
+      .getSSEHeaders()
+      ["Content-Type"]?.startsWith("text/event-stream") ?? false,
+  );
+  keepAlive.start();
+  const writeToClient = (data: string | Uint8Array) => {
+    ensureStreamHeaders();
+    reply.raw.write(data);
+    keepAlive.touch();
+  };
   // Providers whose transport can't self-instrument duration (Bedrock) rely on
   // us to record llm_request_duration_seconds. Guard against a second (error-path)
   // observation once the stream has been established.
@@ -1636,8 +1675,7 @@ async function handleStreaming<
           // branch still do; zhipuai.ts guards it), as does one whose terminal
           // frame echoes the turn's calls (the Responses adapters).
           if (result.sseData) {
-            ensureStreamHeaders();
-            reply.raw.write(result.sseData);
+            writeToClient(result.sseData);
           }
 
           if (result.isFinal) {
@@ -1807,11 +1845,11 @@ async function handleStreaming<
       const { contentMessage, reason, allToolCallNames } =
         toolInvocationRefusal;
 
-      // Use the existing refusal envelope; its text comes from APPA when enabled.
-      ensureStreamHeaders();
+      // Drop the held tool-call events and use the existing refusal format.
+      // Its text comes from APPA when enabled.
       const refusalEvents = streamAdapter.formatCompleteTextSSE(contentMessage);
       for (const event of refusalEvents) {
-        reply.raw.write(event);
+        writeToClient(event);
       }
 
       recordBlockedToolCallMetrics({
@@ -1853,18 +1891,14 @@ async function handleStreaming<
             ...rewrittenToolCalls,
           );
         }
-        if (allEvents.length > 0) {
-          ensureStreamHeaders();
-          for (const event of allEvents) {
-            reply.raw.write(event);
-          }
+        for (const event of allEvents) {
+          writeToClient(event);
         }
       }
     }
 
     // Stream end events
-    ensureStreamHeaders();
-    reply.raw.write(streamAdapter.formatEndSSE());
+    writeToClient(streamAdapter.formatEndSSE());
     reply.raw.end();
 
     streamCompleted = true;
@@ -1907,10 +1941,25 @@ async function handleStreaming<
       provider.formatStreamErrorFrame,
     );
   } finally {
+    keepAlive.stop();
+
     // Always record interaction (whether stream completed or was aborted)
     if (!streamCompleted) {
       logger.info(
         "Stream was aborted before completion, recording partial interaction",
+      );
+    }
+
+    // Client-visible first byte, preflight included. Observed here rather
+    // than at commit time because the commit can happen during preflight
+    // (dual-LLM keep-alive), before the handler has the labels in hand.
+    if (streamTiming.firstByteAt !== undefined) {
+      metrics.llm.reportTimeToFirstByte(
+        providerName,
+        agent,
+        actualModel,
+        (streamTiming.firstByteAt - streamTiming.requestReceivedAt) / 1000,
+        source,
       );
     }
 

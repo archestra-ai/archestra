@@ -19,6 +19,7 @@ import {
   useKeepViewedConversationRead,
   useMarkConversationRead,
   useMemberDefaultModel,
+  useStopChatStream,
   useUpdateConversation,
 } from "./chat.query";
 
@@ -34,6 +35,7 @@ vi.mock("@archestra/shared", () => ({
     clearChatConversationErrors: vi.fn(),
     updateChatConversation: vi.fn(),
     createChatConversation: vi.fn(),
+    stopChatStream: vi.fn(),
   },
   PLAYWRIGHT_MCP_CATALOG_ID: "playwright-catalog-id",
   PLAYWRIGHT_MCP_SERVER_NAME: "playwright-mcp",
@@ -637,6 +639,31 @@ describe("useDeleteConversation project-list invalidation", () => {
       ([arg]) => Array.isArray(arg?.queryKey) && arg.queryKey[0] === "projects",
     );
     expect(touchedProjects).toBe(false);
+  });
+});
+
+describe("useStopChatStream", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it.each([
+    500,
+    undefined,
+  ])("rejects a failed stop with status %s", async (status) => {
+    vi.mocked(archestraApiSdk.stopChatStream).mockResolvedValue(
+      errorResult(status) as Awaited<
+        ReturnType<typeof archestraApiSdk.stopChatStream>
+      >,
+    );
+    const { result } = renderHook(() => useStopChatStream(), {
+      wrapper: createWrapper(),
+    });
+
+    await act(async () => {
+      await expect(result.current.mutateAsync("c1")).rejects.toThrow("boom");
+    });
+    expect(mockedHandleApiError).toHaveBeenCalledWith({ message: "boom" });
   });
 });
 

@@ -293,6 +293,7 @@ function makeTeam(overrides: Partial<Team> = {}): Team {
     organizationId: "org-1",
     parentId: null,
     createdBy: "user-2",
+    createdByServiceAccountId: null,
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
     roles: [],

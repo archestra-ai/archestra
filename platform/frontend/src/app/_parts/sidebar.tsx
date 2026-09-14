@@ -8,6 +8,7 @@ import {
   GITHUB_REPO_URL,
 } from "@archestra/shared";
 import { requiredPagePermissionsMap } from "@archestra/shared/access-control";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   AppWindow,
   BookOpen,
@@ -73,6 +74,7 @@ import {
   SidebarMenuSubItem,
   useSidebar,
 } from "@/components/ui/sidebar";
+import { prefetchApps } from "@/lib/app.query";
 import { useIsAuthenticated } from "@/lib/auth/auth.hook";
 import { useHasPermissions, usePermissionMap } from "@/lib/auth/auth.query";
 import config from "@/lib/config/config";
@@ -694,19 +696,27 @@ function SidebarPrefetchLink({
   ...props
 }: React.ComponentProps<typeof Link>) {
   const router = useRouter();
+  const queryClient = useQueryClient();
+
+  const prefetch = () => {
+    const prefetchHref = getPrefetchHref(href);
+    if (!prefetchHref) return;
+    router.prefetch(prefetchHref);
+    // Route prefetch doesn't mount client query hooks. Start the matching
+    // first page alongside it, not after the destination's JavaScript loads.
+    if (prefetchHref === "/apps") void prefetchApps(queryClient);
+  };
 
   return (
     <Link
       href={href}
       prefetch={false}
       onFocus={(event) => {
-        const prefetchHref = getPrefetchHref(href);
-        if (prefetchHref) router.prefetch(prefetchHref);
+        prefetch();
         onFocus?.(event);
       }}
       onMouseEnter={(event) => {
-        const prefetchHref = getPrefetchHref(href);
-        if (prefetchHref) router.prefetch(prefetchHref);
+        prefetch();
         onMouseEnter?.(event);
       }}
       {...props}

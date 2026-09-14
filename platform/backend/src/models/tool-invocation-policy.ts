@@ -430,13 +430,16 @@ class ToolInvocationPolicyModel {
     isContextTrusted: boolean,
     resolvedToolIdByName?: Map<string, string>,
   ): Promise<EvaluationResult & { toolCallName?: string; toolId?: string }> {
-    // Filter out policy-bypassing Archestra tools and agent delegation tools
-    // (always allowed). Policy-evaluated built-ins like
-    // query_knowledge_sources are kept and evaluated like external tools.
+    // Filter out policy-bypassing Archestra tools and local agent delegation
+    // tools. A caller-provided resolved ID means the name identifies an exact
+    // policy-bearing row (for example an outbound A2A delegation), so it must
+    // remain in the evaluation set even though it uses the agent__ namespace.
+    // Policy-evaluated built-ins like query_knowledge_sources are also kept.
     const externalToolCalls = toolCalls.filter(
       (tc) =>
         !archestraMcpBranding.isPolicyBypassedToolName(tc.toolCallName) &&
-        !isAgentTool(tc.toolCallName),
+        (!isAgentTool(tc.toolCallName) ||
+          resolvedToolIdByName?.has(tc.toolCallName)),
     );
 
     if (externalToolCalls.length === 0) {

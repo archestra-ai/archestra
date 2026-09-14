@@ -1,6 +1,11 @@
 "use client";
 
-import { DocsPage, getDocsUrl, type Permissions } from "@archestra/shared";
+import {
+  DocsPage,
+  getDocsUrl,
+  type Permissions,
+  SecretsManagerType,
+} from "@archestra/shared";
 import {
   AlertTriangle,
   Pencil,
@@ -32,12 +37,15 @@ import {
   useRuntimeCredentialUsage,
 } from "@/lib/runtime-credentials.query";
 
+import { useSecretsType } from "@/lib/secrets.query";
+
 const MANAGE_CREDENTIALS_PERMISSION: Permissions = {
-  agentSettings: ["update"],
+  credential: ["update"],
 };
 
 export function RuntimeCredentialsSection() {
   const definitions = useRuntimeCredentials();
+  const { data: secretsType } = useSecretsType();
   const byosEnabled = useFeature("byosEnabled");
   const [definitionDialog, setDefinitionDialog] = useState<
     RuntimeCredentialDefinition | "new" | null
@@ -55,14 +63,14 @@ export function RuntimeCredentialsSection() {
   return (
     <>
       <SettingsBlock
-        id="runtime-credentials"
-        title="Runtime credentials"
+        id="credentials"
+        title="Saved credentials"
         description={
           <>
-            Reusable secrets for Agent Runtime. Users connect personal values;
-            administrators can connect organization values.{" "}
+            Connect a value once and select it wherever it is needed. Personal
+            values belong to each user; organization values are shared.{" "}
             <ExternalDocsLink
-              href={getDocsUrl(DocsPage.PlatformRuntimeCredentials)}
+              href={getDocsUrl(DocsPage.PlatformCredentials)}
               className="whitespace-nowrap"
             >
               Learn more
@@ -71,7 +79,7 @@ export function RuntimeCredentialsSection() {
         }
         control={
           <WithPermissions
-            permissions={MANAGE_CREDENTIALS_PERMISSION}
+            permissions={{ credential: ["create"] }}
             noPermissionHandle="tooltip"
           >
             {({ hasPermission }) => (
@@ -88,13 +96,32 @@ export function RuntimeCredentialsSection() {
           </WithPermissions>
         }
       >
+        {secretsType && (
+          <p className="mb-3 text-xs text-muted-foreground">
+            {secretsType.type === SecretsManagerType.BYOS_VAULT
+              ? "Values reference your external Vault."
+              : secretsType.type === SecretsManagerType.Vault
+                ? "Values are stored in Vault."
+                : "Values are encrypted in the database."}
+          </p>
+        )}
         {definitions.isError ? (
           <QueryLoadError
-            title="Couldn't load runtime credentials"
+            title="Couldn't load credentials"
             onRetry={() => definitions.refetch()}
           />
         ) : (
           <div className="divide-y overflow-hidden rounded-lg border">
+            {definitions.isPending ? (
+              <p className="p-4 text-sm text-muted-foreground">
+                Loading credentials…
+              </p>
+            ) : definitions.data?.length === 0 ? (
+              <p className="p-4 text-sm text-muted-foreground">
+                Add a credential to make it available to agents, MCP servers,
+                skills, and knowledge.
+              </p>
+            ) : null}
             {(definitions.data ?? []).map((definition) => (
               <div
                 key={definition.key}
@@ -102,11 +129,21 @@ export function RuntimeCredentialsSection() {
               >
                 <RuntimeCredentialRowContent
                   definition={definition}
-                  configured={definition.organizationConfigured}
-                  meta={
+                  configured={
                     definition.allowOrganization
-                      ? "Provided once for the organization"
-                      : "Provided privately by each user"
+                      ? definition.organizationConfigured
+                      : definition.personalConfigured
+                  }
+                  meta={
+                    <span>
+                      {definition.kind === "github_app"
+                        ? "GitHub App"
+                        : "Custom secret"}{" "}
+                      ·{" "}
+                      {definition.allowOrganization
+                        ? "Organization"
+                        : "Personal"}
+                    </span>
                   }
                 />
                 <CredentialActions
@@ -118,11 +155,6 @@ export function RuntimeCredentialsSection() {
                 />
               </div>
             ))}
-            {!definitions.isPending && definitions.data?.length === 0 && (
-              <p className="p-5 text-sm text-muted-foreground">
-                No runtime credentials are available.
-              </p>
-            )}
           </div>
         )}
       </SettingsBlock>
@@ -136,14 +168,14 @@ export function RuntimeCredentialsSection() {
       {connecting && (
         <RuntimeCredentialConnectionDialog
           definition={connecting}
-          scope="organization"
+          scope={connecting.allowOrganization ? "organization" : "personal"}
           useExternalSecretsManager={byosEnabled}
           onClose={() => setConnecting(null)}
         />
       )}
       <RuntimeCredentialDisconnectDialog
         definition={disconnecting}
-        scope="organization"
+        scope={disconnecting?.allowOrganization ? "organization" : "personal"}
         open={disconnecting !== null}
         isPending={disconnect.isPending}
         onOpenChange={(open) => {
@@ -155,7 +187,9 @@ export function RuntimeCredentialsSection() {
             {
               key: disconnecting.key,
               name: disconnecting.name,
-              scope: "organization",
+              scope: disconnecting.allowOrganization
+                ? "organization"
+                : "personal",
             },
             { onSuccess: () => setDisconnecting(null) },
           );
@@ -192,28 +226,33 @@ function CredentialActions({
   onEdit: () => void;
   onDelete: () => void;
 }) {
-  const primaryActions = definition.allowOrganization
-    ? [
-        {
-          icon: definition.organizationConfigured ? (
-            <RefreshCw className="size-4" />
-          ) : (
-            <Plug className="size-4" />
-          ),
-          label: definition.organizationConfigured ? "Replace" : "Connect",
-          onClick: onConnect,
-          permissions: MANAGE_CREDENTIALS_PERMISSION,
-        },
-      ]
-    : [];
+  const connected = definition.allowOrganization
+    ? definition.organizationConfigured
+    : definition.personalConfigured;
+  const primaryActions = [
+    {
+      icon: connected ? (
+        <RefreshCw className="size-4" />
+      ) : (
+        <Plug className="size-4" />
+      ),
+      label: connected ? "Replace" : "Connect",
+      onClick: onConnect,
+      permissions: definition.allowOrganization
+        ? MANAGE_CREDENTIALS_PERMISSION
+        : ({ credential: ["read"] } as Permissions),
+    },
+  ];
   const dropdownActions = [
-    ...(definition.organizationConfigured
+    ...(connected
       ? [
           {
             icon: <Unplug className="size-4" />,
             label: "Disconnect",
             onClick: onDisconnect,
-            permissions: MANAGE_CREDENTIALS_PERMISSION,
+            permissions: definition.allowOrganization
+              ? MANAGE_CREDENTIALS_PERMISSION
+              : ({ credential: ["read"] } as Permissions),
             variant: "destructive" as const,
           },
         ]
@@ -230,7 +269,7 @@ function CredentialActions({
             icon: <Trash2 className="size-4" />,
             label: "Delete",
             onClick: onDelete,
-            permissions: MANAGE_CREDENTIALS_PERMISSION,
+            permissions: { credential: ["delete"] } as Permissions,
             variant: "destructive" as const,
           },
         ]
@@ -264,7 +303,10 @@ function DeleteCredentialDialog({
     definition?.key ?? null,
     definition !== null,
   );
-  const agents = usage.data?.agents ?? [];
+  const agents = [
+    ...(usage.data?.agents ?? []),
+    ...(usage.data?.resources ?? []),
+  ];
   const hasBlockingAgents = agents.length > 0;
   const confirmDisabled =
     usage.isPending || usage.isError || hasBlockingAgents || isPending;
@@ -279,15 +321,25 @@ function DeleteCredentialDialog({
           {usage.isPending ? (
             <p>Checking where this credential is used...</p>
           ) : usage.isError ? (
-            <p>Could not check Agent usage. Try again before deleting.</p>
+            <p>Could not check credential usage. Try again before deleting.</p>
           ) : hasBlockingAgents ? (
             <>
-              <p>Remove this credential from these Agents first:</p>
+              <p>Remove this credential from these resources first:</p>
               <div className="rounded-md border bg-muted/30 p-2">
                 {agents.map((agent) => (
                   <Link
                     key={agent.id}
-                    href={`/agents/${agent.id}`}
+                    href={
+                      "kind" in agent
+                        ? agent.kind === "mcp"
+                          ? "/mcp/registry"
+                          : agent.kind === "knowledge"
+                            ? "/knowledge/knowledge-bases"
+                            : agent.kind === "skill"
+                              ? "/skills"
+                              : "/plugins"
+                        : `/agents/${agent.id}`
+                    }
                     className="block truncate rounded px-2 py-1 text-sm text-foreground hover:bg-muted"
                   >
                     {agent.name}

@@ -11,8 +11,9 @@ import {
   TOOL_WRITE_WORKSPACE_FILE_SHORT_NAME,
 } from "@archestra/shared";
 import { z } from "zod";
-import type { A2AActor } from "@/agents/a2a/a2a-base";
+import { type A2AActor, A2AError, A2AErrorKind } from "@/agents/a2a/a2a-base";
 import { watchChatOpsTask } from "@/agents/chatops/chatops-task-watcher";
+import { watchTaskCompletion } from "@/agents/task-completion-watcher";
 import { userHasPermission } from "@/auth/utils";
 import config from "@/config";
 import logger from "@/logging";
@@ -421,7 +422,11 @@ const registry = defineArchestraTools([
     handler: async ({ args, context }) => {
       try {
         const actor = requireActor(context);
-        const task = await requireAccessibleTask(args.task_id, actor);
+        const task = await requireAccessibleTask({
+          taskId: args.task_id,
+          actor,
+          currentSession: true,
+        });
         if ("error" in task) return errorResult(task.error);
 
         const artifacts = await A2AArtifactModel.findByTaskId(task.row.id);
@@ -528,15 +533,32 @@ const registry = defineArchestraTools([
     title: "List Agent Runs",
     description:
       "List recent runs across one or more accessible Agents for a read-only operations dashboard. " +
-      "Returns status, requester, run links, and originating messaging threads when present.",
+      "Returns status, requester, run links, and originating messaging threads when present. Use current_thread_only to recover runs from the current messaging thread even when no run link was posted.",
     schema: z.object({
       agent_ids: z.array(z.string().uuid()).min(1).max(20),
+      current_thread_only: z
+        .boolean()
+        .default(false)
+        .describe(
+          "Only runs originating in the current messaging thread. Requires messaging context; never falls back to an unfiltered list.",
+        ),
       limit: z.number().int().min(1).max(100).default(50),
     }),
     outputSchema: ListAgentRunsOutputSchema,
     handler: async ({ args, context }) => {
       try {
         const actor = requireActor(context);
+        const thread = args.current_thread_only
+          ? context.chatOpsBindingId && context.chatOpsThreadId
+            ? {
+                bindingId: context.chatOpsBindingId,
+                threadId: context.chatOpsThreadId,
+              }
+            : null
+          : undefined;
+        if (thread === null) {
+          return errorResult("Current messaging thread context is unavailable");
+        }
         const requestedAgentIds = [...new Set(args.agent_ids)];
         const isAgentAdmin = await userHasPermission(
           actor.id,
@@ -563,6 +585,7 @@ const registry = defineArchestraTools([
           agentIds: requestedAgentIds,
           organizationId: actor.organizationId,
           limit: args.limit,
+          thread,
         });
         const runs = rows.map((row) => ({
           task_id: row.taskId,
@@ -595,18 +618,15 @@ const registry = defineArchestraTools([
           return counts;
         }, {});
 
-        return structuredSuccessResult(
-          {
-            runs,
-            summary: {
-              total: runs.length,
-              active: runs.filter((run) => ACTIVE_TASK_STATES.has(run.state))
-                .length,
-              by_state: byState,
-            },
+        return structuredSuccessResult({
+          runs,
+          summary: {
+            total: runs.length,
+            active: runs.filter((run) => ACTIVE_TASK_STATES.has(run.state))
+              .length,
+            by_state: byState,
           },
-          `${runs.length} run(s)`,
-        );
+        });
       } catch (error) {
         return catchError(error, "listing Agent runs");
       }
@@ -627,7 +647,11 @@ const registry = defineArchestraTools([
     handler: async ({ args, context }) => {
       try {
         const actor = requireActor(context);
-        const task = await requireAccessibleTask(args.task_id, actor);
+        const task = await requireAccessibleTask({
+          taskId: args.task_id,
+          actor,
+          currentSession: true,
+        });
         if ("error" in task) return errorResult(task.error);
 
         const session = await AgentRunModel.findByTaskId(task.row.id);
@@ -643,12 +667,15 @@ const registry = defineArchestraTools([
         }
         const agent = await AgentModel.findById(session.agentId);
         const runtime = agent ? resolveAgentRuntime(agent) : null;
-        if (!runtime) {
+        if (!agent || !runtime) {
           return errorResult(
             "The Agent no longer has Agent Runtime configured.",
           );
         }
 
+        const workspace = await AgentWorkspaceModel.findByWorkloadName(
+          session.workloadName,
+        );
         if (session.endedAt) {
           const continuation = await startDetachedAgentTask({
             actor,
@@ -660,14 +687,27 @@ const registry = defineArchestraTools([
               projectId: session.projectId ?? undefined,
             },
           });
-          return structuredSuccessResult(
-            {
-              success: true,
-              task_id: continuation.id,
-              previous_task_id: session.taskId,
-            },
-            "Continuation started in the retained workspace using the same Agent.",
-          );
+          if (session.completionTarget) {
+            void watchTaskCompletion({
+              taskId: continuation.id,
+              target: session.completionTarget,
+              agentName: agent.name,
+            }).catch((error) => {
+              logger.warn(
+                { error, taskId: continuation.id },
+                "Failed to watch Agent continuation for completion",
+              );
+            });
+          }
+          return structuredSuccessResult({
+            success: true,
+            status: "accepted",
+            task_id: continuation.id,
+            previous_task_id: session.taskId,
+            session_id: workspace?.id ?? session.taskId,
+            message:
+              "Continuation accepted in the retained workspace. Poll get_run with task_id to verify startup and report any failure.",
+          });
         }
 
         await resolveAgentRuntimeBackendDriver(session.backend).steer({
@@ -676,10 +716,18 @@ const registry = defineArchestraTools([
           message: args.message,
         });
         return structuredSuccessResult(
-          { success: true, task_id: task.row.id },
+          {
+            success: true,
+            task_id: task.row.id,
+            session_id: workspace?.id ?? session.taskId,
+          },
           "Steer delivered. It lands at the loop's next turn boundary (pipe) or is typed into the session (tmux keys).",
         );
       } catch (error) {
+        const needed = missingCredentialsFrom(error);
+        if (needed) {
+          return credentialsNeededResult(needed.agentId, needed.missing);
+        }
         return catchError(error, "steering the run");
       }
     },
@@ -696,17 +744,38 @@ const registry = defineArchestraTools([
     handler: async ({ args, context }) => {
       try {
         const actor = requireActor(context);
-        const task = await requireAccessibleTask(args.task_id, actor);
+        const task = await requireAccessibleTask({
+          taskId: args.task_id,
+          actor,
+          currentSession: true,
+        });
         if ("error" in task) return errorResult(task.error);
         if (!task.row.agentId) {
           return errorResult("This run has no agent to cancel against.");
         }
 
-        const canceled = await cancelDetachedAgentTask({
-          actor,
-          agentId: task.row.agentId,
-          taskId: task.row.id,
-        });
+        let canceled: Awaited<ReturnType<typeof cancelDetachedAgentTask>>;
+        try {
+          canceled = await cancelDetachedAgentTask({
+            actor,
+            agentId: task.row.agentId,
+            taskId: task.row.id,
+          });
+        } catch (error) {
+          if (
+            error instanceof A2AError &&
+            error.kind === A2AErrorKind.TaskNotCancelable
+          ) {
+            // Completion can win after the access check or during cancellation.
+            // Report the same turn's persisted outcome; never cancel a newer turn.
+            const current = await A2ATaskModel.findById(task.row.id);
+            if (!current) throw error;
+            return errorResult(
+              `Run ${current.id} cannot be canceled because it is already terminal (${current.state}). No cancellation was performed. Its workspace and history are retained.`,
+            );
+          }
+          throw error;
+        }
         const canceledRow = await A2ATaskModel.findById(task.row.id);
         if (!canceledRow) {
           throw new Error("Canceled run was not persisted");
@@ -747,7 +816,10 @@ const registry = defineArchestraTools([
     handler: async ({ args, context }) => {
       try {
         const actor = requireActor(context);
-        const task = await requireAccessibleTask(args.task_id, actor);
+        const task = await requireAccessibleTask({
+          taskId: args.task_id,
+          actor,
+        });
         if ("error" in task) return errorResult(task.error);
 
         const session = await AgentRunModel.findByTaskId(task.row.id);
@@ -894,15 +966,28 @@ function requireActor(context: ArchestraContext): A2AActor {
  * hold agent:admin. Missing and inaccessible return the same message so run
  * ids cannot be probed.
  */
-async function requireAccessibleTask(
-  taskId: string,
-  actor: A2AActor,
-): Promise<
+async function requireAccessibleTask({
+  taskId,
+  actor,
+  currentSession = false,
+}: {
+  taskId: string;
+  actor: A2AActor;
+  currentSession?: boolean;
+}): Promise<
   | { row: Awaited<ReturnType<typeof A2ATaskModel.findById>> & object }
   | { error: string }
 > {
   const notFound = { error: "Run not found" };
-  const row = await A2ATaskModel.findById(taskId);
+  const current = currentSession
+    ? await AgentRunModel.findCurrentSessionForActor({
+        taskId,
+        actorUserId: actor.id,
+        organizationId: actor.organizationId,
+      })
+    : null;
+  const resolvedTaskId = current?.taskId ?? taskId;
+  const row = await A2ATaskModel.findById(resolvedTaskId);
   if (!row) return notFound;
 
   // Contexts carry no organization; the task's agent does. A task without an
@@ -914,7 +999,7 @@ async function requireAccessibleTask(
     }
   }
 
-  const context = await A2ATaskModel.findActorForTask(taskId);
+  const context = await A2ATaskModel.findActorForTask(resolvedTaskId);
   const isOwn =
     context !== null &&
     context.actorKind === actor.kind &&

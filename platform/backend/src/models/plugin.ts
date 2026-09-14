@@ -12,6 +12,7 @@ import {
   or,
   sql,
 } from "drizzle-orm";
+import { isServiceAccountUserId } from "@/auth/utils";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import {
@@ -345,36 +346,45 @@ class PluginModel {
       const now = new Date();
       const [plugin] = await tx
         .insert(schema.pluginsTable)
-        .values({
-          id,
-          organizationId: params.organizationId,
-          authorId: params.userId,
-          scope: params.input.scope ?? (params.sourceId ? "org" : "personal"),
-          clientType: params.input.clientType,
-          supportedPlatforms: params.input.supportedPlatforms ?? ["posix"],
-          pluginSlug,
-          displayName: params.input.displayName,
-          description: params.input.description,
-          contentHash,
-          sourceKind: params.source ? "github" : "manual",
-          sourceRepo: params.source?.repo,
-          sourceRef: params.source?.ref,
-          sourceSha: params.source?.sha,
-          sourceSubdir: params.source?.subdir,
-          sourceExclude: params.source?.exclude,
-          sourceMarketplaceRepo: params.source?.marketplaceRepo,
-          sourceMarketplacePath: params.source?.marketplacePath,
-          sourceMarketplacePluginName: params.source?.marketplacePluginName,
-          githubSyncInterval: params.source?.syncInterval,
-          githubSyncRef: params.source?.syncRef,
-          githubAppConfigId: params.source?.githubAppConfigId,
-          githubPatId: params.source?.githubPatId,
-          lastSyncedAt: params.source?.syncInterval ? now : null,
-          sourceId: params.sourceId,
-          approvedContentHash: contentHash,
-          approvedAt: now,
-          approvedBy: params.userId,
-        })
+        .values(
+          await CreatedByModel.forInsert({
+            data: {
+              id,
+              organizationId: params.organizationId,
+              authorId: params.userId,
+              scope:
+                params.input.scope ?? (params.sourceId ? "org" : "personal"),
+              clientType: params.input.clientType,
+              supportedPlatforms: params.input.supportedPlatforms ?? ["posix"],
+              pluginSlug,
+              displayName: params.input.displayName,
+              description: params.input.description,
+              contentHash,
+              sourceKind: params.source ? "github" : "manual",
+              sourceRepo: params.source?.repo,
+              sourceRef: params.source?.ref,
+              sourceSha: params.source?.sha,
+              sourceSubdir: params.source?.subdir,
+              sourceExclude: params.source?.exclude,
+              sourceMarketplaceRepo: params.source?.marketplaceRepo,
+              sourceMarketplacePath: params.source?.marketplacePath,
+              sourceMarketplacePluginName: params.source?.marketplacePluginName,
+              githubSyncInterval: params.source?.syncInterval,
+              githubSyncRef: params.source?.syncRef,
+              githubAppConfigId: params.source?.githubAppConfigId,
+              githubPatId: params.source?.githubPatId,
+              lastSyncedAt: params.source?.syncInterval ? now : null,
+              sourceId: params.sourceId,
+              approvedContentHash: contentHash,
+              approvedAt: now,
+              approvedBy: isServiceAccountUserId(params.userId)
+                ? null
+                : params.userId,
+            },
+            userIdField: "authorId",
+            transaction: tx,
+          }),
+        )
         .onConflictDoNothing()
         .returning();
       if (!plugin) return null;
@@ -447,7 +457,9 @@ class PluginModel {
             contentHash,
             approvedContentHash: contentHash,
             approvedAt: new Date(),
-            approvedBy: params.userId,
+            approvedBy: isServiceAccountUserId(params.userId)
+              ? null
+              : params.userId,
           }
         : {};
       const sourceUpdate = params.source
@@ -623,7 +635,9 @@ class PluginModel {
           contentHash,
           approvedContentHash: contentHash,
           approvedAt: new Date(),
-          approvedBy: params.userId,
+          approvedBy: isServiceAccountUserId(params.userId)
+            ? null
+            : params.userId,
           sourceSha: params.expectedPendingSha,
           pendingSourceSha: null,
           pendingContentHash: null,
@@ -1005,14 +1019,19 @@ async function attachVisibility(plugins: Plugin[]) {
     await Promise.all([
       PluginTeamModel.getTeamDetailsForPlugins(ids),
       PluginUserModel.getUserDetailsForPlugins(ids),
-      CreatedByModel.resolve(plugins.map((plugin) => plugin.authorId)),
+      CreatedByModel.resolve(
+        plugins.map((plugin) => CreatedByModel.id(plugin, plugin.authorId)),
+      ),
       PluginLabelModel.getLabelsForMany(ids),
     ]);
   return plugins.map((plugin) => ({
     ...plugin,
     teams: teamsByPlugin.get(plugin.id) ?? [],
     users: usersByPlugin.get(plugin.id) ?? [],
-    createdBy: lookupCreator(creators, plugin.authorId),
+    createdBy: lookupCreator(
+      creators,
+      CreatedByModel.id(plugin, plugin.authorId),
+    ),
     labels: labelsByPlugin.get(plugin.id) ?? [],
   }));
 }

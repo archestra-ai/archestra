@@ -174,7 +174,9 @@ export function EditConnectorDialog({
   // App-auth GitHub connectors inherit their host from the App config, so the
   // connector's own URL field is hidden to avoid a misleading second host
   const usesGithubApp =
-    connectorType === "github" && authMethod === "github_app";
+    connectorType === "github" &&
+    authMethod !== "pat" &&
+    authMethod !== undefined;
   const urlConfig = usesGithubApp ? null : getConnectorUrlConfig(connectorType);
   const emailRequired = needsEmail && isCloud !== false;
   // Only the auto-sync visibility mirrors the source's access control, so the

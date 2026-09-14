@@ -51,6 +51,11 @@ import {
   useState,
 } from "react";
 import { toast } from "sonner";
+import {
+  AgentActivationSkillsEditor,
+  type AgentActivationSkillsEditorRef,
+} from "@/components/agent-activation-skills-editor";
+import { AgentActivationSkillsTable } from "@/components/agent-activation-skills-table";
 import { AgentChatAppsEditor } from "@/components/agent-chat-apps";
 import {
   AgentHooksEditor,
@@ -67,6 +72,7 @@ import {
   type AgentRuntimeConfig,
   AgentRuntimeFields,
 } from "@/components/agent-runtime-fields";
+import { AgentSelector } from "@/components/agent-selector";
 import {
   AgentSkillsEditor,
   type EditableSkill,
@@ -82,7 +88,9 @@ import {
   type AgentToolsEditorRef,
   type McpEnvConflict,
 } from "@/components/agent-tools-editor";
+import { AvailableSkillsDialog } from "@/components/available-skills-dialog";
 import { ModelSelector } from "@/components/chat/model-selector";
+import { ClaudeCodeInferenceSettings } from "@/components/claude-code-inference-settings";
 import { EnvironmentSelector } from "@/components/environment-selector";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { IdentityFields } from "@/components/identity-fields";
@@ -102,6 +110,7 @@ import {
   SettingsSection,
   SettingsSectionGroup,
 } from "@/components/settings-section";
+import { SkillAccessModeEditor } from "@/components/skill-access-mode-editor";
 import { SystemPromptEditor } from "@/components/system-prompt-editor";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
@@ -163,6 +172,11 @@ import {
  */
 type AgentVisibilityChoice = AgentScope | "user";
 
+import {
+  useA2aRemoteAgents,
+  useAgentA2aDelegations,
+  useSyncAgentA2aDelegations,
+} from "@/lib/a2a-remote-agents.query";
 import {
   useCreateProfile,
   useDelegationTargetAgents,
@@ -230,6 +244,16 @@ import { AgentRuntimeCredentialCard } from "./agent-pages/agent-runtime-credenti
 type Agent = archestraApiTypes.GetAllAgentsResponses["200"][number];
 type ToolExposureMode = Agent["toolExposureMode"];
 type MissingCredentialBehavior = Agent["missingCredentialBehavior"];
+type A2aRemoteAgent =
+  archestraApiTypes.ListA2aRemoteAgentsResponses["200"][number];
+type A2aDelegation =
+  archestraApiTypes.GetAgentA2aDelegationsResponses["200"][number];
+type A2aSubagentTarget = {
+  connectionId: string;
+  name: string;
+  description?: string;
+  enabled: boolean;
+};
 
 /** The API caps `limit` at 100, which is as much as the skill picker can load. */
 const SKILL_PICKER_PAGE_SIZE = 100;
@@ -378,6 +402,7 @@ interface SubagentPillProps {
   agent: Agent;
   isSelected: boolean;
   onToggle: (agentId: string) => void;
+  readOnly?: boolean;
   // "delegate" pills read as an active delegation target (green); "exclude"
   // pills read as a target removed from the Auto surface (red).
   tone?: "delegate" | "exclude";
@@ -387,6 +412,7 @@ function SubagentPill({
   agent,
   isSelected,
   onToggle,
+  readOnly = false,
   tone = "delegate",
 }: SubagentPillProps) {
   const [open, setOpen] = useState(false);
@@ -413,17 +439,22 @@ function SubagentPill({
             )}
             <Bot className="h-3 w-3 shrink-0" />
             <span className="font-medium truncate">{agent.name}</span>
+            <span className="rounded border px-1 text-[9px] uppercase tracking-wide text-muted-foreground">
+              Local
+            </span>
           </Button>
         </PopoverTrigger>
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-8 w-7 p-0 rounded-l-none text-muted-foreground hover:text-destructive"
-          onClick={() => onToggle(agent.id)}
-          aria-label="Remove agent"
-        >
-          <X className="h-3 w-3" />
-        </Button>
+        {!readOnly && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 w-7 p-0 rounded-l-none text-muted-foreground hover:text-destructive"
+            onClick={() => onToggle(agent.id)}
+            aria-label={`Remove agent ${agent.name}`}
+          >
+            <X className="h-3 w-3" />
+          </Button>
+        )}
       </div>
       <PopoverContent
         className="w-[350px] p-0"
@@ -462,108 +493,374 @@ function SubagentPill({
   );
 }
 
-// Component to edit subagents (delegations)
+// Component to display and edit local delegation targets.
 interface SubagentsEditorProps {
+  agentId?: string;
+  readOnly: boolean;
+  localMode: "all" | "selected";
   availableAgents: Agent[];
   selectedAgentIds: string[];
   onSelectionChange: (ids: string[]) => void;
-  currentAgentId?: string;
-  placeholder?: string;
-  // The "delegate" role offers a shortcut to create a new agent; the "exclude"
-  // (disabled-subagents) role only narrows an existing set, so it omits it.
-  showCreateAction?: boolean;
-  tone?: "delegate" | "exclude";
-  /**
-   * What an empty delegation set means for this record. An agent runs the task
-   * itself; a gateway simply advertises no delegation tool, and never had a
-   * task of its own to hand on.
-   */
+  disabledAgentIds: string[];
+  onDisabledSelectionChange: (ids: string[]) => void;
   emptyDescription?: string;
 }
 
 function SubagentsEditor({
+  agentId,
+  readOnly,
+  localMode,
   availableAgents,
   selectedAgentIds,
   onSelectionChange,
-  currentAgentId,
-  placeholder = "Search agents...",
-  showCreateAction = true,
-  tone = "delegate",
+  disabledAgentIds,
+  onDisabledSelectionChange,
   emptyDescription = "Every task is handled here, with nothing handed on.",
 }: SubagentsEditorProps) {
-  // Filter out the current agent, and the advisor: its own switch below owns
-  // that decision, and listing it here would offer a second way to change the
-  // same thing — one that reads as the opposite in Auto mode, where this list
-  // is what an agent may *not* delegate to.
+  // The advisor has a dedicated switch below. Keeping it out of both the
+  // local list and the switch prevents two controls from changing one grant.
   const filteredAgents = availableAgents.filter(
-    (a) =>
-      a.id !== currentAgentId &&
-      a.builtInAgentConfig?.name !== BUILT_IN_AGENT_IDS.ADVISOR,
+    (agent) =>
+      agent.id !== agentId &&
+      agent.builtInAgentConfig?.name !== BUILT_IN_AGENT_IDS.ADVISOR,
   );
 
-  const handleToggle = (agentId: string) => {
-    if (selectedAgentIds.includes(agentId)) {
-      onSelectionChange(selectedAgentIds.filter((id) => id !== agentId));
-    } else {
-      onSelectionChange([...selectedAgentIds, agentId]);
-    }
+  const selectedIds = localMode === "all" ? disabledAgentIds : selectedAgentIds;
+  const handleSelectionChange = (ids: string[]) => {
+    const setIds =
+      localMode === "all" ? onDisabledSelectionChange : onSelectionChange;
+    setIds(ids);
   };
 
-  const comboboxItems: AssignmentComboboxItem[] = filteredAgents.map((a) => ({
-    id: a.id,
-    name: a.name,
-    description: a.description || undefined,
-  }));
-
-  const selectedAgents = filteredAgents.filter((a) =>
-    selectedAgentIds.includes(a.id),
+  const selectedLocalAgents = filteredAgents.filter((agent) =>
+    selectedAgentIds.includes(agent.id),
   );
-
-  // Same rule as the knowledge editor: nothing excluded is a complete answer,
-  // nothing delegated is a state worth naming.
-  const isEmpty = tone === "delegate" && selectedAgents.length === 0;
+  const excludedLocalAgents = filteredAgents.filter((agent) =>
+    disabledAgentIds.includes(agent.id),
+  );
+  const hasSelectedTargets = selectedLocalAgents.length > 0;
 
   return (
-    <div
-      className={cn(
-        "flex flex-wrap gap-2",
-        isEmpty &&
-          "flex-col items-center rounded-md border border-dashed px-4 py-6 text-center",
-      )}
-    >
-      {isEmpty && (
-        <div className="space-y-0.5">
+    <div className="space-y-3">
+      <p className="text-sm font-medium">Assigned</p>
+      {localMode === "all" ? (
+        <div className="rounded-md border bg-muted/20 px-3 py-2.5">
+          <div className="flex items-center gap-2">
+            <Bot className="h-4 w-4 shrink-0 text-muted-foreground" />
+            <span className="text-sm font-medium">All local agents</span>
+            <Badge variant="outline" className="px-1.5 py-0 text-[10px]">
+              Local
+            </Badge>
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {excludedLocalAgents.length === 0
+              ? "Every local agent you can access may be delegated to."
+              : `${excludedLocalAgents.length} local ${excludedLocalAgents.length === 1 ? "agent is" : "agents are"} excluded below.`}
+          </p>
+        </div>
+      ) : !hasSelectedTargets ? (
+        <div className="flex flex-col items-center rounded-md border border-dashed px-4 py-6 text-center">
           <p className="text-sm font-medium">No subagents assigned</p>
           <p className="text-xs text-muted-foreground">{emptyDescription}</p>
         </div>
+      ) : null}
+
+      {localMode === "all" && excludedLocalAgents.length > 0 && (
+        <div className="space-y-1.5">
+          <p className="text-xs font-medium text-muted-foreground">
+            Local exceptions
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {excludedLocalAgents.map((agent) => (
+              <SubagentPill
+                key={agent.id}
+                agent={agent}
+                isSelected={true}
+                readOnly={readOnly}
+                onToggle={() =>
+                  onDisabledSelectionChange(
+                    disabledAgentIds.filter((id) => id !== agent.id),
+                  )
+                }
+                tone="exclude"
+              />
+            ))}
+          </div>
+        </div>
       )}
-      {selectedAgents.map((agent) => (
-        <SubagentPill
-          key={agent.id}
-          agent={agent}
-          isSelected={true}
-          onToggle={handleToggle}
-          tone={tone}
-        />
-      ))}
-      <AssignmentCombobox
-        items={comboboxItems}
-        selectedIds={selectedAgentIds}
-        onToggle={handleToggle}
-        // Without this the exclude side inherited the default "Add", so Auto
-        // mode offered to add an agent and then disabled whichever was picked.
-        label={tone === "exclude" ? "Disable subagents" : "Add"}
-        placeholder={placeholder}
-        emptyMessage="No agents found."
-        createAction={
-          showCreateAction
-            ? {
-                label: "Create a New Agent",
-                href: "/agents/new",
+
+      {localMode === "selected" && selectedLocalAgents.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {selectedLocalAgents.map((agent) => (
+            <SubagentPill
+              key={agent.id}
+              agent={agent}
+              isSelected={true}
+              readOnly={readOnly}
+              onToggle={() =>
+                onSelectionChange(
+                  selectedAgentIds.filter((id) => id !== agent.id),
+                )
               }
-            : undefined
-        }
-      />
+            />
+          ))}
+        </div>
+      )}
+
+      {!readOnly && (
+        <AgentSelector
+          mode="multiple"
+          agents={filteredAgents}
+          value={selectedIds}
+          onValueChange={handleSelectionChange}
+          triggerLabel="Add subagent"
+          searchPlaceholder={
+            localMode === "all"
+              ? "Search agents to exclude..."
+              : "Search agents..."
+          }
+          emptyMessage="No agents found."
+          createAction={
+            localMode === "selected"
+              ? { label: "Create a New Agent", href: "/agents/new" }
+              : undefined
+          }
+        />
+      )}
+    </div>
+  );
+}
+
+function OutboundAgentPill({
+  target,
+  readOnly,
+  onRemove,
+}: {
+  target: A2aSubagentTarget;
+  readOnly: boolean;
+  onRemove: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen} modal>
+      <div className="flex items-center">
+        <PopoverTrigger asChild>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 max-w-[200px] gap-1.5 rounded-r-none border-r-0 px-3 text-xs"
+          >
+            <span className="h-2 w-2 shrink-0 rounded-full bg-green-500" />
+            <Globe className="h-3 w-3 shrink-0" />
+            <span className="truncate font-medium">{target.name}</span>
+            <span className="rounded border px-1 text-[9px] uppercase tracking-wide text-muted-foreground">
+              A2A
+            </span>
+          </Button>
+        </PopoverTrigger>
+        {!readOnly && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-8 w-7 rounded-l-none p-0 text-muted-foreground hover:text-destructive"
+            aria-label={`Remove ${target.name}`}
+            onClick={onRemove}
+          >
+            <X className="h-3 w-3" />
+          </Button>
+        )}
+      </div>
+      <PopoverContent
+        className="w-[350px] p-0"
+        side="bottom"
+        align="start"
+        sideOffset={8}
+        avoidCollisions
+      >
+        <div className="flex items-start justify-between gap-2 border-b p-4">
+          <div className="min-w-0 flex-1">
+            <h4 className="truncate font-semibold">{target.name}</h4>
+            {target.description && (
+              <ExpandableText
+                text={target.description}
+                maxLines={2}
+                className="mt-1 text-sm text-muted-foreground"
+              />
+            )}
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 w-6 shrink-0 p-0"
+            onClick={() => setOpen(false)}
+            aria-label="Close"
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+        <div className="p-4">
+          <p className="text-sm text-muted-foreground">External A2A agent</p>
+          {!target.enabled && (
+            <p className="mt-1 text-sm text-destructive">Connection disabled</p>
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function OutboundAgentsEditor({
+  agentId,
+  readOnly,
+  availableA2aAgents,
+  currentA2aDelegations,
+  selectedConnectionIds,
+  onSelectionChange,
+  assignmentsLoaded,
+  assignmentsError,
+  agentsPending,
+  agentsError,
+}: {
+  agentId?: string;
+  readOnly: boolean;
+  availableA2aAgents: A2aRemoteAgent[];
+  currentA2aDelegations: A2aDelegation[];
+  selectedConnectionIds: string[];
+  onSelectionChange: (ids: string[]) => void;
+  assignmentsLoaded: boolean;
+  assignmentsError: boolean;
+  agentsPending: boolean;
+  agentsError: boolean;
+}) {
+  // Preserve assigned rows even if the registry response is briefly behind the
+  // assignment response. This also keeps a disabled or removed connection
+  // visible and removable instead of turning it into an invisible id.
+  const targets = useMemo(() => {
+    const byConnectionId = new Map<string, A2aSubagentTarget>();
+    for (const remoteAgent of availableA2aAgents) {
+      byConnectionId.set(remoteAgent.connection.id, {
+        connectionId: remoteAgent.connection.id,
+        name: remoteAgent.name,
+        description: remoteAgent.description ?? undefined,
+        enabled: remoteAgent.connection.enabled,
+      });
+    }
+    for (const delegation of currentA2aDelegations) {
+      if (byConnectionId.has(delegation.connectionId)) continue;
+      byConnectionId.set(delegation.connectionId, {
+        connectionId: delegation.connectionId,
+        name: delegation.name,
+        description: delegation.description ?? undefined,
+        enabled: delegation.enabled,
+      });
+    }
+    return [...byConnectionId.values()].sort((a, b) =>
+      a.name.localeCompare(b.name),
+    );
+  }, [availableA2aAgents, currentA2aDelegations]);
+
+  const selectedTargets = targets.filter((target) =>
+    selectedConnectionIds.includes(target.connectionId),
+  );
+  const canEditAssignments =
+    Boolean(agentId) &&
+    assignmentsLoaded &&
+    !assignmentsError &&
+    !agentsPending &&
+    !agentsError;
+  const items: AssignmentComboboxItem[] = targets.map((target) => ({
+    id: target.connectionId,
+    name: target.name,
+    description: target.description,
+    badge: "A2A",
+    disabled: !target.enabled,
+    disabledReason: !target.enabled ? "Connection disabled" : undefined,
+    icon: <Globe className="h-4 w-4" />,
+  }));
+  const handleToggle = (connectionId: string) => {
+    if (readOnly || !canEditAssignments) return;
+    onSelectionChange(
+      selectedConnectionIds.includes(connectionId)
+        ? selectedConnectionIds.filter((id) => id !== connectionId)
+        : [...selectedConnectionIds, connectionId],
+    );
+  };
+
+  return (
+    <div className="flex items-start gap-3 border-t pt-4">
+      <SettingIcon tone={selectedTargets.length > 0 ? "on" : "off"}>
+        <Globe className="h-4 w-4" />
+      </SettingIcon>
+      <div className="min-w-0 flex-1 space-y-1.5">
+        <div className="flex items-center gap-2">
+          <Label>External Agents</Label>
+          <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">
+            Beta
+          </Badge>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          External A2A agents this one may delegate work to. They are always
+          assigned explicitly.
+        </p>
+        {selectedTargets.length > 0 && (
+          <div className="flex flex-wrap gap-2 pt-1">
+            {selectedTargets.map((target) => (
+              <OutboundAgentPill
+                key={target.connectionId}
+                target={target}
+                readOnly={readOnly || !canEditAssignments}
+                onRemove={() =>
+                  onSelectionChange(
+                    selectedConnectionIds.filter(
+                      (id) => id !== target.connectionId,
+                    ),
+                  )
+                }
+              />
+            ))}
+          </div>
+        )}
+        {!agentId && (
+          <p className="pt-1 text-xs text-muted-foreground">
+            Save this agent before assigning an outbound A2A agent.
+          </p>
+        )}
+        {agentId && (assignmentsError || agentsError) && (
+          <p role="alert" className="pt-1 text-xs text-destructive">
+            Outbound A2A agents could not be loaded. Reload before changing
+            them.
+          </p>
+        )}
+        {agentId &&
+          !assignmentsError &&
+          !agentsError &&
+          (agentsPending || !assignmentsLoaded) && (
+            <p className="pt-1 text-xs text-muted-foreground">
+              Loading outbound agents…
+            </p>
+          )}
+        {agentId && canEditAssignments && selectedTargets.length === 0 && (
+          <p className="pt-1 text-xs text-muted-foreground">
+            No outbound agents assigned.
+          </p>
+        )}
+        {!readOnly && canEditAssignments && (
+          <AssignmentCombobox
+            items={items}
+            selectedIds={selectedConnectionIds}
+            onToggle={handleToggle}
+            label="Add outbound agent"
+            placeholder="Search outbound agents..."
+            emptyMessage="No external A2A agents connected."
+            createAction={{
+              label: "Manage external agents",
+              href: "/a2a/agents",
+            }}
+          />
+        )}
+      </div>
     </div>
   );
 }
@@ -629,6 +926,7 @@ export function AccessLevelSelector({
   assignedTeamIds,
   assignedUserIds = [],
   onUserIdsChange,
+  onChoiceChange,
   onTeamIdsChange,
   hasNoAvailableTeams,
   showTeamRequired,
@@ -649,6 +947,7 @@ export function AccessLevelSelector({
    */
   assignedUserIds?: string[];
   onUserIdsChange?: (ids: string[]) => void;
+  onChoiceChange?: (choice: AgentVisibilityChoice) => void;
   onTeamIdsChange: (ids: string[]) => void;
   hasNoAvailableTeams: boolean;
   showTeamRequired: boolean;
@@ -752,7 +1051,10 @@ export function AccessLevelSelector({
       label="Visibility"
       value={choice}
       options={options}
-      onValueChange={selectChoice}
+      onValueChange={(nextChoice) => {
+        onChoiceChange?.(nextChoice);
+        selectChoice(nextChoice);
+      }}
     >
       {choice === "user" && onUserIdsChange && (
         <UserShareField
@@ -800,12 +1102,11 @@ export function AccessLevelSelector({
  * - `configuration`: identity (name, icon, description, environment), who can
  *   use it, and the instruction, suggested prompts and model of an internal
  *   agent.
- * - `tools`: everything the agent reaches — tools and knowledge sources,
- *   subagents, published skills, and hooks.
+ * - `tools`: everything the agent reaches — tools, activation skills,
+ *   knowledge sources, subagents, and hooks.
  * - `advanced`: Agent Runtime, security, passthrough headers, identity
  *   provider, and labels.
- */
-/**
+ *
  * The groups a host can mount independently. `messaging` is a section of its
  * own rather than part of `configuration`: channel assignments save through
  * their own endpoint, so a surface showing only them must not also re-send the
@@ -997,6 +1298,16 @@ export function AgentForm({
   // turns a single failed GET into a save that deletes what it could not read.
   const { data: currentDelegations = [], isSuccess: delegationsLoaded } =
     useAgentDelegations(supportsSubagents ? agent?.id : undefined);
+  const {
+    data: currentA2aDelegations = [],
+    isSuccess: a2aDelegationsLoaded,
+    isError: a2aDelegationsError,
+  } = useAgentA2aDelegations(supportsSubagents ? agent?.id : undefined);
+  const a2aRemoteAgents = useA2aRemoteAgents({
+    enabled: supportsSubagents && Boolean(agent?.id) && !agent?.builtIn,
+    accessibleOnly: true,
+  });
+  const syncA2aDelegations = useSyncAgentA2aDelegations();
   const syncSubagentExclusions = useUpdateAgentSubagentExclusions();
   const syncKnowledgeSourceExclusions =
     useUpdateAgentKnowledgeSourceExclusions();
@@ -1167,6 +1478,8 @@ export function AgentForm({
   const agentToolExclusionsEditorRef =
     useRef<AgentToolExclusionsEditorRef>(null);
   const agentHooksEditorRef = useRef<AgentHooksEditorRef>(null);
+  const agentActivationSkillsEditorRef =
+    useRef<AgentActivationSkillsEditorRef>(null);
   // Snapshot of the form's pristine values, captured whenever the form
   // (re)populates from the loaded agent, so we can detect unsaved edits.
   const initialSnapshotRef = useRef<Record<string, unknown> | null>(null);
@@ -1182,6 +1495,9 @@ export function AgentForm({
   const [suggestedPromptsOpen, setSuggestedPromptsOpen] = useState(false);
   const [selectedDelegationTargetIds, setSelectedDelegationTargetIds] =
     useState<string[]>([]);
+  const [selectedA2aConnectionIds, setSelectedA2aConnectionIds] = useState<
+    string[]
+  >([]);
   const [assignedTeamIds, setAssignedTeamIds] = useState<string[]>([]);
   // People the agent is shared with by name. Stored beside the `personal`
   // scope, so the control below reads (scope, userIds) as a fourth choice.
@@ -1234,6 +1550,8 @@ export function AgentForm({
   const [passthroughHeaders, setPassthroughHeaders] = useState<string[]>([]);
   const [runtime, setAgentRuntime] = useState<AgentRuntimeConfig | null>(null);
   const [channelAssignmentsDirty, setChannelAssignmentsDirty] = useState(false);
+  const [activationSkillsDirty, setActivationSkillsDirty] = useState(false);
+  const [activationSkillsReady, setActivationSkillsReady] = useState(false);
   // Takes the id to write against: on create it is the one the record was just
   // given, which does not exist when the handler is registered.
   const channelAssignmentsSaveRef = useRef<
@@ -1372,7 +1690,12 @@ export function AgentForm({
       ? "The environment this gateway belongs to, controlling which tools and knowledge it can expose to consumers."
       : "The environment for this agent's code sandbox (runtime and network egress) and the tools and knowledge sources it can use.";
   const isBuiltIn = !!agent?.builtIn;
+  const showActivationSkills =
+    showToolsSections && isInternalAgent && !isBuiltIn && !!canReadSkills;
   const agentHooksEnabled = useFeature("agentHooksEnabled");
+  const anthropicVertexAiEnabled =
+    useFeature("anthropicVertexAiEnabled") === true;
+  const isClaudeCodeRuntime = runtime?.command?.[0] === "archestra-claude-code";
   const agentRuntimeEnabled = useFeature("agentRuntime") === true;
   const runtimePreflight = useAgentRuntimePreflight(
     agent?.id ?? "",
@@ -1479,8 +1802,6 @@ export function AgentForm({
   const showsHooks = agentHooksEnabled && isInternalAgent && !isBuiltIn;
   // The tools panel is mounted only when it has a section to show: an empty
   // bordered panel would read as broken.
-  // Skills moved to Advanced, so they no longer keep this panel alive: a record
-  // with only skills would otherwise mount an empty Tools & Knowledge tab.
   const toolsPanelHasContent = showTools || showsHooks;
   // The environment comes from the form rather than the stored agent: the
   // agent update lands before the skills PUT, so a pending environment change
@@ -1669,6 +1990,7 @@ export function AgentForm({
         // from its own request, and clearing here would instead wipe pending
         // edits on every agent refetch.
         setSelectedDelegationTargetIds([]);
+        setSelectedA2aConnectionIds([]);
         setDisabledSubagentIds([]);
         // A new gateway publishes nothing until an admin opts in, so Custom
         // with an empty set is the default rather than Auto.
@@ -1710,6 +2032,18 @@ export function AgentForm({
       );
     }
   }, [agentId, currentDelegationIds, delegationsLoaded]);
+
+  const currentA2aConnectionIds = currentA2aDelegations
+    .map((assignment) => assignment.connectionId)
+    .join(",");
+
+  useEffect(() => {
+    if (agentId && a2aDelegationsLoaded) {
+      setSelectedA2aConnectionIds(
+        currentA2aConnectionIds.split(",").filter(Boolean),
+      );
+    }
+  }, [agentId, currentA2aConnectionIds, a2aDelegationsLoaded]);
 
   // Seed the Auto-mode disabled-subagents set once the exclusions load. Kept out
   // of the agent reset path (same reasoning as delegations above) so a refetch
@@ -1918,6 +2252,13 @@ export function AgentForm({
   // that effective model locally before allowing a create or runtime change.
   const effectiveLlmModelRow =
     selectedLlmModelRow ?? organizationDefaultModel.model;
+  const usesClaudeSubscription =
+    isClaudeCodeRuntime &&
+    (runtime?.claudeCode?.authentication === "subscription" ||
+      (!runtime?.claudeCode &&
+        (selectedApiKey?.provider ?? effectiveLlmModelRow?.provider) !==
+          "bedrock" &&
+        !anthropicVertexAiEnabled));
   const effectiveRuntimeModelCompatibility =
     runtime && effectiveLlmModelRow
       ? getAgentRuntimeModelCompatibility({
@@ -1931,15 +2272,16 @@ export function AgentForm({
       : null;
   const runtimeHasLocalChanges =
     JSON.stringify(runtime) !== JSON.stringify(agent?.runtime ?? null);
-  const runtimeModelIncompatibility = !runtime
-    ? null
-    : effectiveRuntimeModelCompatibility
-      ? effectiveRuntimeModelCompatibility.compatible
-        ? null
-        : effectiveRuntimeModelCompatibility.message
-      : !runtimeHasLocalChanges
-        ? (runtimePreflight.data?.incompatible ?? null)
-        : null;
+  const runtimeModelIncompatibility =
+    !runtime || usesClaudeSubscription
+      ? null
+      : effectiveRuntimeModelCompatibility
+        ? effectiveRuntimeModelCompatibility.compatible
+          ? null
+          : effectiveRuntimeModelCompatibility.message
+        : !runtimeHasLocalChanges
+          ? (runtimePreflight.data?.incompatible ?? null)
+          : null;
 
   // Pairing a no-tools model (e.g. Microsoft 365 Copilot) with a tooled
   // agent is allowed — chat omits the tools for that model — but the user
@@ -2152,6 +2494,13 @@ export function AgentForm({
       ? description.trim() || null
       : undefined;
 
+    // Create carries the staged policy in the same request as the new agent,
+    // so a Manual agent never exists briefly in the default All mode.
+    const activationSkillPolicy =
+      !agent && showActivationSkills
+        ? agentActivationSkillsEditorRef.current?.getCreatePolicy()
+        : undefined;
+
     setIsSaving(true);
 
     // Persist the published-skill sets, each only when it changed (same
@@ -2244,6 +2593,8 @@ export function AgentForm({
               }),
               ...(isInternalAgent && {
                 systemPrompt: trimmedSystemPrompt || null,
+                ...(isClaudeCodeRuntime &&
+                  runtimeHasLocalChanges && { runtime }),
                 ...(llmSelectionChanged && {
                   llmApiKeyId: llmApiKeyId || null,
                   modelId: llmModel || null,
@@ -2313,6 +2664,7 @@ export function AgentForm({
             llmApiKeyId: llmApiKeyId || null,
             modelId: llmModel || null,
             suggestedPrompts: validSuggestedPrompts,
+            ...(activationSkillPolicy && { activationSkillPolicy }),
           }),
           // Omitted, not null, while the field holds no value: the selector
           // hides itself when the org offers no choice, and null would pin the
@@ -2443,6 +2795,28 @@ export function AgentForm({
         });
       }
 
+      // External agents follow the same Save/Cancel lifecycle as local
+      // subagents. The successful read is required because this endpoint is a
+      // full replace; a failed GET must never turn into an empty write.
+      if (
+        agent &&
+        supportsSubagents &&
+        !isBuiltIn &&
+        savedAgentId &&
+        a2aDelegationsLoaded &&
+        hasUnsavedChanges(
+          currentA2aDelegations
+            .map((assignment) => assignment.connectionId)
+            .sort(),
+          [...selectedA2aConnectionIds].sort(),
+        )
+      ) {
+        await syncA2aDelegations.mutateAsync({
+          agentId: savedAgentId,
+          connectionIds: selectedA2aConnectionIds,
+        });
+      }
+
       // Persist the Auto-mode disabled-subagents set only when it changed (same
       // no-op-audit reasoning as delegations, and edit-mode-only for the same
       // reason). Skipped for built-ins.
@@ -2483,8 +2857,12 @@ export function AgentForm({
         });
       }
 
-      // Edit mode only: the create step does not mount the skills editors.
+      // Existing agents save policy changes through the revisioned endpoint.
+      // Create carries the staged policy in the initial agent request above.
       if (agent) {
+        if (showActivationSkills && !readOnly) {
+          await agentActivationSkillsEditorRef.current?.saveChanges();
+        }
         await savePublishedSkills(savedAgentId);
         // Last, so it is true of the whole save: the delegation, subagent and
         // skill writes above can each still be refused, and a toast before
@@ -2551,17 +2929,23 @@ export function AgentForm({
     deleteAgent,
     delegationTargetIdsToSave,
     currentDelegations,
+    currentA2aDelegations,
+    selectedA2aConnectionIds,
+    a2aDelegationsLoaded,
     currentSubagentExclusions,
     disabledSubagentIdsToSave,
     updateAgent,
     createAgent,
     syncDelegations,
+    syncA2aDelegations,
     syncSubagentExclusions,
     currentKnowledgeSourceExclusions,
     disabledKnowledgeSourceIds,
     knowledgeSourceExclusionsLoaded,
     syncKnowledgeSourceExclusions,
     showSkills,
+    showActivationSkills,
+    readOnly,
     skillsLoaded,
     accessAllSkills,
     assignedSkillIds,
@@ -2583,6 +2967,8 @@ export function AgentForm({
     agentRuntimeEnabled,
     runtime,
     channelAssignmentsDirty,
+    isClaudeCodeRuntime,
+    runtimeHasLocalChanges,
   ]);
 
   const handleSave = useCallback(async () => {
@@ -2687,10 +3073,18 @@ export function AgentForm({
     (hasUnsavedChanges(initialSnapshotRef.current, currentSnapshot) ||
       channelAssignmentsDirty ||
       hasPendingToolChanges ||
+      activationSkillsDirty ||
       hasUnsavedChanges(
         [...currentDelegations.map((delegate) => delegate.id)].sort(),
         [...selectedDelegationTargetIds].sort(),
       ) ||
+      (a2aDelegationsLoaded &&
+        hasUnsavedChanges(
+          currentA2aDelegations
+            .map((assignment) => assignment.connectionId)
+            .sort(),
+          [...selectedA2aConnectionIds].sort(),
+        )) ||
       // Disabled subagents load async, so they're diffed against the fetched
       // baseline (same pattern as delegations above).
       hasUnsavedChanges(
@@ -2737,6 +3131,7 @@ export function AgentForm({
     !isSaving &&
     !createAgent.isPending &&
     !updateAgent.isPending &&
+    (!showActivationSkills || readOnly || activationSkillsReady) &&
     !requiresTeamSelection &&
     requiredSubscriptionSatisfied &&
     hasCompleteLlmSelection &&
@@ -2752,6 +3147,87 @@ export function AgentForm({
     canSubmit,
     readOnly,
   };
+  const providerKeyControl = (
+    <>
+      <LlmProviderApiKeyDropdown
+        availableKeys={availableApiKeys}
+        selectedApiKeyId={llmApiKeyId}
+        open={apiKeySelectorOpen}
+        onOpenChange={setApiKeySelectorOpen}
+        onSelectKey={(keyId) => {
+          cancelPendingCreatedKeySelection();
+          handleLlmApiKeyChange(keyId);
+          setApiKeySelectorOpen(false);
+        }}
+        onAddApiKey={onAddApiKey}
+        currentProvider={currentLlmProvider ?? undefined}
+        providerFilter={runtime ? runtimeProviderFilter : undefined}
+        triggerVariant="button"
+        triggerClassName="h-8 max-w-[250px] text-xs"
+        popoverClassName="w-96"
+        popoverPortal={false}
+        searchPlaceholder="Search API keys..."
+        allowOrganizationDefault
+        organizationDefaultSelected={!llmApiKeyId}
+        onSelectOrganizationDefault={() => {
+          cancelPendingCreatedKeySelection();
+          setLlmApiKeyId(null);
+          setLlmModel(null);
+          lastAutoSelectedProviderRef.current = null;
+          setApiKeySelectorOpen(false);
+        }}
+      />
+      {createApiKeyDialog}
+    </>
+  );
+  const modelControl = (
+    <>
+      {!llmApiKeyId ? (
+        <TooltipProvider delayDuration={300}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div>
+                <ModelSelector
+                  selectedModel=""
+                  onModelChange={() => {}}
+                  disabled
+                  variant="outline"
+                  enabled={false}
+                  // The model the organization default
+                  // resolves to today; the runtime's own
+                  // fallback when no default is set.
+                  placeholder={organizationDefaultModel.label ?? undefined}
+                />
+              </div>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="text-xs">
+              Select a provider API key first
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      ) : (
+        <ModelSelector
+          selectedModel={llmModel || ""}
+          onModelChange={(modelId) => handleLlmModelChange(modelId)}
+          onClear={() => {
+            setLlmModel(null);
+            setLlmApiKeyId(null);
+            lastAutoSelectedProviderRef.current = null;
+          }}
+          variant="outline"
+          apiKeyId={llmApiKeyId}
+          enabled={!!canReadLlmModels}
+          modelFilter={runtime ? runtimeModelFilter : undefined}
+          suppressAutoSelect={!!agent}
+          fallbackModelName={selectedLlmModelRow?.displayName}
+          unavailableModelHeading={
+            runtime ? "Current model (unavailable)" : undefined
+          }
+        />
+      )}
+    </>
+  );
+
   return (
     <form
       id={formId}
@@ -2818,8 +3294,10 @@ export function AgentForm({
                       it needs the field label the others have. */}
                   {showsModelControl && (
                     <div className="space-y-2">
-                      <Label>Model</Label>
-                      {cannotReadLlmConfiguration ? (
+                      <Label>
+                        {isClaudeCodeRuntime ? "Authentication" : "Model"}
+                      </Label>
+                      {cannotReadLlmConfiguration && !isClaudeCodeRuntime ? (
                         <Alert>
                           <AlertDescription className="text-sm text-muted-foreground">
                             You do not have permission to view LLM API keys or
@@ -2863,116 +3341,83 @@ export function AgentForm({
                                 </AlertDescription>
                               </Alert>
                             )}
-                          {selectedApiKeyIsSubscription ? (
-                            <Alert>
-                              <InfoIcon className="h-4 w-4" />
-                              <AlertDescription>
-                                Each person using this agent must connect their
-                                own subscription account. No credential is
-                                shared.
-                              </AlertDescription>
-                            </Alert>
-                          ) : (
-                            <p className="text-sm text-muted-foreground">
-                              {selectedApiKey &&
-                              selectedApiKey.scope !== "org" ? (
-                                <span>
-                                  Selected key will be available to everyone who
-                                  has access to this agent.
-                                </span>
-                              ) : null}
-                            </p>
-                          )}
-                          <div className="flex flex-wrap items-center gap-2">
-                            <LlmProviderApiKeyDropdown
-                              availableKeys={availableApiKeys}
-                              selectedApiKeyId={llmApiKeyId}
-                              open={apiKeySelectorOpen}
-                              onOpenChange={setApiKeySelectorOpen}
-                              onSelectKey={(keyId) => {
-                                cancelPendingCreatedKeySelection();
-                                handleLlmApiKeyChange(keyId);
-                                setApiKeySelectorOpen(false);
-                              }}
-                              onAddApiKey={onAddApiKey}
-                              currentProvider={currentLlmProvider ?? undefined}
-                              providerFilter={
-                                runtime ? runtimeProviderFilter : undefined
-                              }
-                              triggerVariant="button"
-                              triggerClassName="h-8 max-w-[250px] text-xs"
-                              popoverClassName="w-96"
-                              popoverPortal={false}
-                              searchPlaceholder="Search API keys..."
-                              allowOrganizationDefault
-                              organizationDefaultSelected={!llmApiKeyId}
-                              onSelectOrganizationDefault={() => {
-                                cancelPendingCreatedKeySelection();
-                                setLlmApiKeyId(null);
-                                setLlmModel(null);
-                                lastAutoSelectedProviderRef.current = null;
-                                setApiKeySelectorOpen(false);
-                              }}
-                            />
-                            {createApiKeyDialog}
-                            {!llmApiKeyId ? (
-                              <TooltipProvider delayDuration={300}>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <div>
-                                      <ModelSelector
-                                        selectedModel=""
-                                        onModelChange={() => {}}
-                                        disabled
-                                        variant="outline"
-                                        enabled={false}
-                                        // The model the organization default
-                                        // resolves to today; the runtime's own
-                                        // fallback when no default is set.
-                                        placeholder={
-                                          organizationDefaultModel.label ??
-                                          undefined
-                                        }
-                                      />
-                                    </div>
-                                  </TooltipTrigger>
-                                  <TooltipContent
-                                    side="bottom"
-                                    className="text-xs"
-                                  >
-                                    Select a provider API key first
-                                  </TooltipContent>
-                                </Tooltip>
-                              </TooltipProvider>
+                          {!isClaudeCodeRuntime &&
+                            (selectedApiKeyIsSubscription ? (
+                              <Alert>
+                                <InfoIcon className="h-4 w-4" />
+                                <AlertDescription>
+                                  Each person using this agent must connect
+                                  their own subscription account. No credential
+                                  is shared.
+                                </AlertDescription>
+                              </Alert>
                             ) : (
-                              <ModelSelector
-                                selectedModel={llmModel || ""}
-                                onModelChange={(modelId) =>
-                                  handleLlmModelChange(modelId)
-                                }
-                                onClear={() => {
-                                  setLlmModel(null);
-                                  setLlmApiKeyId(null);
-                                  lastAutoSelectedProviderRef.current = null;
-                                }}
-                                variant="outline"
-                                apiKeyId={llmApiKeyId}
-                                enabled={!!canReadLlmModels}
-                                modelFilter={
-                                  runtime ? runtimeModelFilter : undefined
-                                }
-                                suppressAutoSelect={!!agent}
-                                fallbackModelName={
-                                  selectedLlmModelRow?.displayName
-                                }
-                                unavailableModelHeading={
-                                  runtime
-                                    ? "Current model (unavailable)"
-                                    : undefined
-                                }
-                              />
-                            )}
-                          </div>
+                              <p className="text-sm text-muted-foreground">
+                                {selectedApiKey &&
+                                selectedApiKey.scope !== "org" ? (
+                                  <span>
+                                    Selected key will be available to everyone
+                                    who has access to this agent.
+                                  </span>
+                                ) : null}
+                              </p>
+                            ))}
+                          {isClaudeCodeRuntime ? (
+                            <ClaudeCodeInferenceSettings
+                              agentId={agent?.id ?? ""}
+                              authentication={
+                                usesClaudeSubscription
+                                  ? "subscription"
+                                  : "provider"
+                              }
+                              onAuthenticationChange={(authentication) => {
+                                if (!runtime) return;
+                                setAgentRuntime({
+                                  ...runtime,
+                                  claudeCode: {
+                                    ...runtime.claudeCode,
+                                    authentication,
+                                  },
+                                  credentials:
+                                    runtime.credentials?.filter(
+                                      ({ key }) =>
+                                        key !== "CLAUDE_CODE_OAUTH_TOKEN",
+                                    ) ?? null,
+                                });
+                                if (authentication === "subscription")
+                                  handleLlmApiKeyChange(null);
+                              }}
+                              model={runtime?.claudeCode?.model}
+                              onModelChange={(model) => {
+                                if (!runtime) return;
+                                setAgentRuntime({
+                                  ...runtime,
+                                  claudeCode: {
+                                    authentication: "subscription",
+                                    model,
+                                  },
+                                  credentials:
+                                    runtime.credentials?.filter(
+                                      ({ key }) =>
+                                        key !== "CLAUDE_CODE_OAUTH_TOKEN",
+                                    ) ?? null,
+                                });
+                              }}
+                              provider={
+                                selectedApiKey?.provider ??
+                                effectiveLlmModelRow?.provider ??
+                                null
+                              }
+                              vertexEnabled={anthropicVertexAiEnabled}
+                              apiKeySelector={providerKeyControl}
+                              modelSelector={modelControl}
+                            />
+                          ) : (
+                            <div className="flex flex-wrap items-center gap-2">
+                              {providerKeyControl}
+                              {modelControl}
+                            </div>
+                          )}
                           {runtimeModelIncompatibility && (
                             <output
                               aria-live="polite"
@@ -3424,6 +3869,33 @@ export function AgentForm({
                 </SettingsSection>
               )}
 
+              {showActivationSkills && (
+                <SettingsSection
+                  title="Skills"
+                  description={
+                    readOnly
+                      ? "Skills available to you through this agent. Visibility shows how each skill is shared."
+                      : "Choose which available skills this agent may load. Skill access for each person is still enforced."
+                  }
+                >
+                  {readOnly ? (
+                    <AgentActivationSkillsTable
+                      key={`${agent?.id ?? "draft"}:${environmentId ?? "default"}`}
+                      agentId={agent?.id}
+                      environmentId={environmentId}
+                    />
+                  ) : (
+                    <AgentActivationSkillsEditor
+                      ref={agentActivationSkillsEditorRef}
+                      agentId={agent?.id}
+                      environmentId={environmentId}
+                      onDirtyChange={setActivationSkillsDirty}
+                      onReadyChange={setActivationSkillsReady}
+                    />
+                  )}
+                </SettingsSection>
+              )}
+
               {/* Section 4: Subagents */}
               {showSubagents && (
                 <SettingsSection
@@ -3434,7 +3906,7 @@ export function AgentForm({
                   // "hands a task over" would describe the wrong actor.
                   description={
                     isInternalAgent
-                      ? "Other agents this one may hand a task to."
+                      ? "Agents this one may delegate work to, locally or over A2A."
                       : `Agents this ${agentTypeDisplayName[agentType] || "agent"} offers its clients as delegation tools.`
                   }
                 >
@@ -3460,33 +3932,33 @@ export function AgentForm({
                           </TabsList>
                         </Tabs>
                       </div>
-                      {accessAllSubagents ? (
-                        <div className="space-y-1.5">
-                          <SubagentsEditor
-                            availableAgents={allInternalAgents}
-                            selectedAgentIds={disabledSubagentIds}
-                            onSelectionChange={setDisabledSubagentIds}
-                            currentAgentId={agent?.id}
-                            placeholder="Search agents to disable..."
-                            showCreateAction={false}
-                            tone="exclude"
-                          />
-                        </div>
-                      ) : (
-                        <div className="space-y-1.5">
-                          <SubagentsEditor
-                            availableAgents={allInternalAgents}
-                            selectedAgentIds={selectedDelegationTargetIds}
-                            onSelectionChange={setSelectedDelegationTargetIds}
-                            currentAgentId={agent?.id}
-                            emptyDescription={
-                              isInternalAgent
-                                ? undefined
-                                : "No delegation tools appear in this gateway's tool list."
-                            }
-                          />
-                        </div>
-                      )}
+                      <SubagentsEditor
+                        agentId={agent?.id}
+                        readOnly={readOnly}
+                        localMode={accessAllSubagents ? "all" : "selected"}
+                        availableAgents={allInternalAgents}
+                        selectedAgentIds={selectedDelegationTargetIds}
+                        onSelectionChange={setSelectedDelegationTargetIds}
+                        disabledAgentIds={disabledSubagentIds}
+                        onDisabledSelectionChange={setDisabledSubagentIds}
+                        emptyDescription={
+                          isInternalAgent
+                            ? undefined
+                            : "No delegation tools appear in this gateway's tool list."
+                        }
+                      />
+                      <OutboundAgentsEditor
+                        agentId={agent?.id}
+                        readOnly={readOnly}
+                        availableA2aAgents={a2aRemoteAgents.data ?? []}
+                        currentA2aDelegations={currentA2aDelegations}
+                        selectedConnectionIds={selectedA2aConnectionIds}
+                        onSelectionChange={setSelectedA2aConnectionIds}
+                        assignmentsLoaded={a2aDelegationsLoaded}
+                        assignmentsError={a2aDelegationsError}
+                        agentsPending={a2aRemoteAgents.isPending}
+                        agentsError={!!a2aRemoteAgents.isError}
+                      />
                       {/* Outside the Auto/Custom split on purpose: whether this
                         agent can consult the advisor is one decision, even
                         though the two modes record it differently. */}
@@ -3637,28 +4109,26 @@ export function AgentForm({
                       <span>Loading published skills…</span>
                     </p>
                   ) : (
-                    <div className="space-y-3">
-                      <div className="flex flex-wrap items-center justify-between gap-3">
-                        <p className="text-sm text-muted-foreground">
-                          {publishedSkillsSummary({
-                            publishesAll: accessAllSkills,
-                            excludedCount: excludedSkillIds.length,
-                            assignedCount: assignedSkillIds.length,
-                          })}
-                        </p>
-                        <Tabs
-                          value={accessAllSkills ? "auto" : "custom"}
-                          onValueChange={(value) =>
-                            setAccessAllSkills(value === "auto")
-                          }
-                        >
-                          <TabsList>
-                            <TabsTrigger value="auto">All</TabsTrigger>
-                            <TabsTrigger value="custom">Manual</TabsTrigger>
-                          </TabsList>
-                        </Tabs>
-                      </div>
-                      {accessAllSkills ? (
+                    <SkillAccessModeEditor
+                      mode={accessAllSkills ? "all" : "manual"}
+                      onModeChange={(mode) =>
+                        setAccessAllSkills(mode === "all")
+                      }
+                      summary={publishedSkillsSummary({
+                        publishesAll: accessAllSkills,
+                        excludedCount: excludedSkillIds.length,
+                        assignedCount: assignedSkillIds.length,
+                      })}
+                      availableSkillsView={
+                        <AvailableSkillsDialog
+                          source={{
+                            kind: "gateway",
+                            skills: orgScopedSkills,
+                            excludedIds: excludedSkillIds,
+                          }}
+                        />
+                      }
+                      allEditor={
                         <div className="space-y-2">
                           <ul className="space-y-1.5 pt-1 text-xs text-muted-foreground">
                             <li className="flex gap-2">
@@ -3670,7 +4140,7 @@ export function AgentForm({
                             <li className="flex gap-2">
                               <CheckIcon className="mt-px size-3.5 shrink-0" />
                               Team and personal skills are never published
-                              automatically; assign them in Custom instead
+                              automatically; assign them in Manual instead
                             </li>
                           </ul>
                           <div className="space-y-1.5">
@@ -3687,7 +4157,8 @@ export function AgentForm({
                             />
                           </div>
                         </div>
-                      ) : (
+                      }
+                      manualEditor={
                         <div className="space-y-1.5">
                           <p className="pt-1 text-xs text-muted-foreground">
                             Only the skills you assign below are published.
@@ -3706,8 +4177,30 @@ export function AgentForm({
                             isSearching={skillSearchPending}
                           />
                         </div>
+                      }
+                    />
+                  )}
+                </SettingsSection>
+              )}
+
+              {agentType === "agent" && agentRuntimeEnabled && (
+                <SettingsSection
+                  title="Agent Runtime"
+                  description="Whether this agent may run on its own, and the credentials it runs with."
+                >
+                  <AgentRuntimeFields
+                    value={runtime}
+                    onChange={setAgentRuntime}
+                  />
+                  {agent?.runtime && runtime && (
+                    <AgentRuntimeCredentialCard
+                      agentId={agent.id}
+                      credentials={(agent.runtime.credentials ?? []).filter(
+                        ({ key }) =>
+                          !isClaudeCodeRuntime ||
+                          key !== "CLAUDE_CODE_OAUTH_TOKEN",
                       )}
-                    </div>
+                    />
                   )}
                 </SettingsSection>
               )}
@@ -3881,24 +4374,6 @@ export function AgentForm({
                       </CollapsibleContent>
                     </div>
                   </Collapsible>
-                </SettingsSection>
-              )}
-
-              {agentType === "agent" && agentRuntimeEnabled && (
-                <SettingsSection
-                  title="Agent Runtime"
-                  description="Whether this agent may run on its own, and the credentials it runs with."
-                >
-                  <AgentRuntimeFields
-                    value={runtime}
-                    onChange={setAgentRuntime}
-                  />
-                  {agent?.runtime && runtime && (
-                    <AgentRuntimeCredentialCard
-                      agentId={agent.id}
-                      credentials={agent.runtime.credentials ?? []}
-                    />
-                  )}
                 </SettingsSection>
               )}
 

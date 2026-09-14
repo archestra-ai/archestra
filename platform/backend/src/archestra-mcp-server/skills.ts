@@ -13,7 +13,6 @@ import {
   getSkillPermissionChecker,
   requireSkillModifyPermission,
 } from "@/auth/skill-permissions";
-import config from "@/config";
 import logger from "@/logging";
 import {
   AgentModel,
@@ -26,12 +25,18 @@ import {
   TeamModel,
 } from "@/models";
 import { reportSkillActivation } from "@/observability/metrics/skill";
-import { getPluginSkill, listPluginSkills } from "@/plugins/plugin-skills";
-import { skillVisibleInEnvironment } from "@/services/environments/environment-isolation";
+import { getPluginSkill } from "@/plugins/plugin-skills";
+import { getAvailableAgentSkillReference } from "@/services/agent-activation-skill-candidates";
+import { agentActivationSkillPolicyService } from "@/services/agent-activation-skill-policy";
 import {
-  getExternalMcpSkill,
-  listExternalMcpSkills,
-} from "@/services/external-mcp-skills";
+  type AvailableAgentSkill,
+  listAvailableAgentSkills,
+  type ProjectedExternalSkill,
+  type ProjectedPluginSkill,
+  selectEffectiveNativeSkills,
+} from "@/services/agent-activation-skills";
+import { skillVisibleInEnvironment } from "@/services/environments/environment-isolation";
+import { getExternalMcpSkill } from "@/services/external-mcp-skills";
 import {
   formatExternalSkillActivation,
   formatExternalSkillName,
@@ -52,10 +57,7 @@ import {
   formatSkillActivation,
   neutralizeFrameTags,
 } from "@/skills/skill-activation";
-import {
-  buildSkillCatalogPrompt,
-  listAccessibleCatalogSkills,
-} from "@/skills/skill-catalog-prompt";
+import { buildSkillCatalogPrompt } from "@/skills/skill-catalog-prompt";
 import { measureSkillContextTokens } from "@/skills/skill-context-tokens";
 import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
 import { resolveActivationVersion } from "@/skills/skill-version-resolution";
@@ -71,10 +73,8 @@ import {
   ApiError,
   agentOwner,
   type ExternalMcpSkillDetail,
-  type ExternalMcpSkillListItem,
   type InsertSkillFile,
   type PluginSkillDetail,
-  type PluginSkillListItem,
   type Skill,
   type SkillVersion,
 } from "@/types";
@@ -344,6 +344,18 @@ const registry = defineArchestraTools([
           tokenAuth: context.tokenAuth,
         });
         if (!live) return unknownSkillError(args.name);
+        if (
+          !(await agentActivationSkillPolicyService.isReferenceAllowed({
+            agentId: context.agent.id,
+            reference: {
+              source: "external_mcp",
+              mcpServerId: live.mcpServerId,
+              uri: live.uri,
+            },
+          }))
+        ) {
+          return unknownSkillError(args.name);
+        }
         if (args.path !== undefined && args.path !== "") {
           return readExternalSkillFile(
             live,
@@ -504,9 +516,19 @@ const registry = defineArchestraTools([
         return errorResult(`A skill named "${parsed.name}" already exists.`);
       }
 
+      const availableThroughAgent =
+        context.agent.id === undefined ||
+        (await agentActivationSkillPolicyService.isReferenceAllowed({
+          agentId: context.agent.id,
+          reference: { source: "native", skillId: skill.id },
+        }));
       return successResult(
-        `Created skill "${skill.name}". It is a personal skill, now ` +
-          "available to you via list_skills and as a chat slash-command.",
+        availableThroughAgent
+          ? `Created skill "${skill.name}". It is a personal skill, now ` +
+              "available to you via list_skills and as a chat slash-command."
+          : `Created skill "${skill.name}". It is a personal skill, but this ` +
+              "agent's skill policy does not allow it. Add it to the agent's " +
+              "Manual skill list before using it here.",
       );
     },
   }),
@@ -923,31 +945,7 @@ async function findAccessibleSkill(
   }
   if (accessible.length === 0) return null;
 
-  accessible.sort(
-    (a, b) => scopePrecedence(a, ctx.userId) - scopePrecedence(b, ctx.userId),
-  );
-  return accessible[0];
-}
-
-/**
- * Lower wins: a caller's *own* personal skill shadows a shared one of the same
- * name. A personal skill authored by someone else (visible only because the
- * caller is a skill-admin) must never shadow a shared skill, so it ranks last.
- */
-function scopePrecedence(
-  skill: Pick<Skill, "scope" | "authorId">,
-  userId: string | undefined,
-): number {
-  switch (skill.scope) {
-    case "personal":
-      return skill.authorId === userId ? 0 : 3;
-    case "team":
-      return 1;
-    case "org":
-      return 2;
-    default:
-      return 4;
-  }
+  return selectEffectiveNativeSkills(accessible, ctx.userId)[0] ?? null;
 }
 
 /**
@@ -1027,20 +1025,17 @@ async function listSkillCatalog(
   ctx: SkillReadContext,
   agentId: string | undefined,
 ) {
-  const [nativeSkills, externalSkills, pluginSkills] = await Promise.all([
-    listAccessibleCatalogSkills({
-      organizationId: ctx.organizationId,
-      userId: ctx.userId,
-      agentId,
-    }),
-    listExternalSkillsForContext(ctx, agentId),
-    listPluginSkillsForContext(ctx),
-  ]);
-  const projectedSkills = projectLiveSkillNames({
-    nativeNames: nativeSkills.map((skill) => skill.name),
-    pluginSkills,
-    externalSkills,
+  const availableSkills = await listAvailableAgentSkills({
+    organizationId: ctx.organizationId,
+    userId: ctx.userId,
+    agentId,
   });
+  const nativeSkills = availableSkills
+    .filter((available) => available.source === "native")
+    .map((available) => available.skill);
+  const projectedSkills = availableSkills.filter(
+    (available) => available.source !== "native",
+  );
   const catalog = await buildSkillCatalogPrompt({
     organizationId: ctx.organizationId,
     userId: ctx.userId,
@@ -1055,7 +1050,7 @@ async function listSkillCatalog(
     .map((projected) => {
       const { skill } = projected;
       const description = escapeXmlAttr(skill.description || "No description");
-      return `- name="${projected.name}" description="${description}"`;
+      return `- name="${projected.wireName}" description="${description}"`;
     })
     .join("\n");
   const externalBlock = externalCatalog
@@ -1074,7 +1069,7 @@ async function listSkillCatalog(
     .map((projected) => {
       const { skill } = projected;
       const description = escapeXmlAttr(skill.description || "No description");
-      return `- name="${projected.name}" description="${description}"`;
+      return `- name="${projected.wireName}" description="${description}"`;
     })
     .join("\n");
   const pluginBlock = pluginCatalog
@@ -1087,7 +1082,9 @@ async function listSkillCatalog(
     : "";
   if (catalog === null && externalCatalog === "" && pluginCatalog === "") {
     return successResult(
-      "No skills are available in this organization. Skills can be added under Agents → Skills.",
+      agentId
+        ? "No skills are available through this agent. Check its skill policy and environment, and verify that you can access the skill you need."
+        : "No skills are available in this organization. Skills can be added under Agents → Skills.",
     );
   }
   return successResult(
@@ -1097,56 +1094,40 @@ async function listSkillCatalog(
   );
 }
 
-async function listPluginSkillsForContext(
-  ctx: SkillReadContext,
-): Promise<PluginSkillListItem[]> {
-  if (!config.plugins.enabled) return [];
-  return listPluginSkills({
-    organizationId: ctx.organizationId,
-    userId: ctx.userId,
-  });
-}
-
-type SkillReferenceResolution =
-  | ProjectedPluginSkill
-  | ProjectedExternalSkill
-  | { source: "native"; skill: Skill };
-
-type ProjectedPluginSkill = {
-  source: "plugin";
-  name: string;
-  activationName: string;
-  skill: PluginSkillListItem;
-};
-
-type ProjectedExternalSkill = {
-  source: "external";
-  name: string;
-  activationName: string;
-  skill: ExternalMcpSkillListItem;
-};
-
-type ProjectedLiveSkill = ProjectedPluginSkill | ProjectedExternalSkill;
-
 async function resolveSkillReference(
   ctx: SkillReadContext,
   name: string,
   agentId?: string,
-): Promise<SkillReferenceResolution | null> {
+): Promise<AvailableAgentSkill | null> {
   if (!looksLikeLegacySkillReference(name)) {
     const nativeSkill = await findAccessibleSkill(ctx, name, agentId);
-    if (nativeSkill) return { source: "native", skill: nativeSkill };
+    if (nativeSkill) {
+      const resolved: AvailableAgentSkill = {
+        source: "native",
+        activationName: nativeSkill.name,
+        skill: nativeSkill,
+      };
+      if (await isResolvedSkillAllowed(agentId, resolved)) return resolved;
+    }
   }
 
-  const [nativeSkills, pluginSkills, externalSkills] = await Promise.all([
-    listAccessibleCatalogSkills({
-      organizationId: ctx.organizationId,
-      userId: ctx.userId,
-      agentId,
-    }),
-    listPluginSkillsForContext(ctx),
-    listExternalSkillsForContext(ctx, agentId),
-  ]);
+  const availableSkills = await listAvailableAgentSkills({
+    organizationId: ctx.organizationId,
+    userId: ctx.userId,
+    agentId,
+  });
+  const pluginSkills = availableSkills
+    .filter(
+      (available): available is ProjectedPluginSkill =>
+        available.source === "plugin",
+    )
+    .map((available) => available.skill);
+  const externalSkills = availableSkills
+    .filter(
+      (available): available is ProjectedExternalSkill =>
+        available.source === "external",
+    )
+    .map((available) => available.skill);
   // Keep the former qualified references readable for callers that received
   // them before projected short names became the public list/load contract.
   const legacyPlugin = pluginSkills.find(
@@ -1155,7 +1136,7 @@ async function resolveSkillReference(
   if (legacyPlugin) {
     return {
       source: "plugin",
-      name,
+      wireName: name,
       activationName: name,
       skill: legacyPlugin,
     };
@@ -1166,135 +1147,34 @@ async function resolveSkillReference(
   if (legacyExternal) {
     return {
       source: "external",
-      name,
+      wireName: name,
       activationName: name,
       skill: legacyExternal,
     };
   }
 
-  const projectedSkills = projectLiveSkillNames({
-    nativeNames: nativeSkills.map((skill) => skill.name),
-    pluginSkills,
-    externalSkills,
-  });
-  const projected = projectedSkills.find((skill) => skill.name === name);
+  const projected = availableSkills.find(
+    (skill) => skill.source !== "native" && skill.wireName === name,
+  );
   if (projected) return projected;
 
-  const nativeSkill = await findAccessibleSkill(ctx, name, agentId);
-  if (nativeSkill) return { source: "native", skill: nativeSkill };
-  return null;
-}
-
-async function listExternalSkillsForContext(
-  ctx: SkillReadContext,
-  agentId?: string,
-): Promise<ExternalMcpSkillListItem[]> {
-  if (!config.mcpGateway.skillsEnabled) return [];
-  return listExternalMcpSkills({
-    organizationId: ctx.organizationId,
-    userId: ctx.userId,
-    isMcpServerAdmin: await isMcpServerAdmin(ctx),
-    environmentId:
-      agentId === undefined
-        ? undefined
-        : await AgentModel.findEnvironmentId(agentId),
-  });
-}
-
-function projectLiveSkillNames(params: {
-  nativeNames: string[];
-  pluginSkills: PluginSkillListItem[];
-  externalSkills: ExternalMcpSkillListItem[];
-}): ProjectedLiveSkill[] {
-  const liveSkills: ProjectedLiveSkill[] = [
-    ...params.pluginSkills.map((skill) => ({
-      source: "plugin" as const,
-      name: skill.name,
-      activationName: skill.name,
-      skill,
-    })),
-    ...params.externalSkills.map((skill) => ({
-      source: "external" as const,
-      name: skill.name,
-      activationName: skill.name,
-      skill,
-    })),
-  ];
-  const legacyNames = new Set([
-    ...params.pluginSkills.map(formatPluginSkillName),
-    ...params.externalSkills.map(formatExternalSkillName),
-  ]);
-  const reservedWireNames = new Set([
-    ...params.nativeNames.map(escapeXmlAttr),
-    ...liveSkills.map((projected) => escapeXmlAttr(projected.skill.name)),
-    ...legacyNames,
-  ]);
-  const nameCounts = new Map<string, number>();
-  for (const name of params.nativeNames) nameCounts.set(name, 1);
-  for (const projected of liveSkills) {
-    nameCounts.set(
-      projected.skill.name,
-      (nameCounts.get(projected.skill.name) ?? 0) + 1,
-    );
-  }
-
-  const assignedWireNames = new Set<string>();
-  const namesBySkillKey = new Map<
-    string,
-    { wireName: string; activationName: string }
-  >();
-  const skillsByStableIdentity = [...liveSkills].sort((left, right) =>
-    projectedSkillKey(left).localeCompare(projectedSkillKey(right)),
+  return (
+    availableSkills.find(
+      (skill) => skill.source === "native" && skill.activationName === name,
+    ) ?? null
   );
-  for (const projected of skillsByStableIdentity) {
-    const declaredName = projected.skill.name;
-    const declaredWireName = escapeXmlAttr(declaredName);
-    if (
-      nameCounts.get(declaredName) === 1 &&
-      !legacyNames.has(declaredWireName)
-    ) {
-      assignedWireNames.add(declaredWireName);
-      namesBySkillKey.set(projectedSkillKey(projected), {
-        wireName: declaredWireName,
-        activationName: declaredName,
-      });
-      continue;
-    }
-
-    const suffix = projected.source === "plugin" ? "plugin" : "mcp";
-    const baseName = `${declaredName}-from-${suffix}`;
-    let name = baseName;
-    let index = 2;
-    while (
-      reservedWireNames.has(escapeXmlAttr(name)) ||
-      assignedWireNames.has(escapeXmlAttr(name))
-    ) {
-      name = `${baseName}-${index}`;
-      index += 1;
-    }
-    const wireName = escapeXmlAttr(name);
-    assignedWireNames.add(wireName);
-    namesBySkillKey.set(projectedSkillKey(projected), {
-      wireName,
-      activationName: name,
-    });
-  }
-
-  return liveSkills.map((projected) => {
-    const names = namesBySkillKey.get(projectedSkillKey(projected));
-    if (names === undefined) throw new Error("Projected skill name is missing");
-    return {
-      ...projected,
-      name: names.wireName,
-      activationName: names.activationName,
-    };
-  });
 }
 
-function projectedSkillKey(skill: ProjectedLiveSkill): string {
-  return skill.source === "plugin"
-    ? `plugin:${skill.skill.pluginId}:${skill.skill.skillPath}`
-    : `external:${skill.skill.mcpServerId}:${skill.skill.id}`;
+async function isResolvedSkillAllowed(
+  agentId: string | undefined,
+  resolved: AvailableAgentSkill,
+): Promise<boolean> {
+  return agentId === undefined
+    ? true
+    : agentActivationSkillPolicyService.isReferenceAllowed({
+        agentId,
+        reference: getAvailableAgentSkillReference(resolved),
+      });
 }
 
 function looksLikeLegacySkillReference(name: string): boolean {

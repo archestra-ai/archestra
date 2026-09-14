@@ -21,6 +21,7 @@ import {
 } from "@/models";
 import { reportSkillActivation } from "@/observability/metrics/skill";
 import { getPluginSkill } from "@/plugins/plugin-skills";
+import { agentActivationSkillPolicyService } from "@/services/agent-activation-skill-policy";
 import { skillVisibleInEnvironment } from "@/services/environments/environment-isolation";
 import { getExternalMcpSkill } from "@/services/external-mcp-skills";
 import { formatExternalSkillActivation } from "@/skills/external-skill-activation";
@@ -63,7 +64,7 @@ export async function injectSkillActivation({
   organizationId: string;
   userId: string;
   /** The conversation's agent — gates the sandbox hint on tool assignment. */
-  agentId: string | undefined;
+  agentId?: string;
   /** Conversation the skill is activated in — pins/reads the mounted version. */
   conversationId: string | undefined;
   /** Resolved turn provider/model, so the injected block is measured on this model's tokenizer. */
@@ -136,6 +137,14 @@ export async function injectSkillActivation({
         { organizationId, agentId, skillId: skill.id },
         "[Skills] Slash-command skill is outside the agent's environment; sending message unchanged",
       );
+      return messages;
+    }
+    if (
+      !(await agentActivationSkillPolicyService.isReferenceAllowed({
+        agentId,
+        reference: { source: "native", skillId: skill.id },
+      }))
+    ) {
       return messages;
     }
   }
@@ -303,6 +312,18 @@ export async function injectExternalMcpSkillActivation({
         : undefined,
     });
     if (!live || live.uri !== skillRef.uri) return messages;
+    if (
+      !(await agentActivationSkillPolicyService.isReferenceAllowed({
+        agentId,
+        reference: {
+          source: "external_mcp",
+          mcpServerId: live.mcpServerId,
+          uri: live.uri,
+        },
+      }))
+    ) {
+      return messages;
+    }
 
     const activationBlock = formatExternalSkillActivation(live);
     const contextTokens = measureSkillContextTokens({
@@ -338,6 +359,7 @@ export async function injectPluginSkillActivation({
   messages,
   organizationId,
   userId,
+  agentId,
   conversationId,
   provider,
   model,
@@ -345,6 +367,7 @@ export async function injectPluginSkillActivation({
   messages: ChatMessage[];
   organizationId: string;
   userId: string;
+  agentId?: string;
   conversationId: string | undefined;
   provider: SupportedProvider;
   model: string;
@@ -373,6 +396,19 @@ export async function injectPluginSkillActivation({
       organizationId,
     });
     if (!live || live.name !== skillRef.name) return messages;
+    if (
+      agentId !== undefined &&
+      !(await agentActivationSkillPolicyService.isReferenceAllowed({
+        agentId,
+        reference: {
+          source: "plugin",
+          pluginId: live.pluginId,
+          skillPath: live.skillPath,
+        },
+      }))
+    ) {
+      return messages;
+    }
     const activationBlock = formatPluginSkillActivation(live);
     const contextTokens = measureSkillContextTokens({
       block: activationBlock,

@@ -5,6 +5,7 @@ import {
 } from "@archestra/shared";
 import { sql } from "drizzle-orm";
 import { isGlobalAdmin, userHasPermission } from "@/auth";
+import { isServiceAccountUserId } from "@/auth/utils";
 import { withDbTransaction } from "@/database";
 import logger from "@/logging";
 import {
@@ -69,6 +70,9 @@ class ProjectService {
     defaultAgentId?: string | null;
     labels?: LabelWithDetails[];
   }): Promise<Project> {
+    if (isServiceAccountUserId(params.userId)) {
+      throw new ApiError(400, "Projects require a personal user account.");
+    }
     const name = params.name.trim();
     const invalid = validateProjectName(name);
     if (invalid) {

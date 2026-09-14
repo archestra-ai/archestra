@@ -4,7 +4,16 @@ import {
   clientForExternalAgentIds,
   DynamicInteraction,
 } from "@archestra/shared";
-import { Bot, Download, Layers, Loader2, User } from "lucide-react";
+import {
+  ArrowLeft,
+  Bot,
+  Download,
+  Layers,
+  Loader2,
+  LockKeyhole,
+  User,
+} from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { use } from "react";
 import { BilledCost } from "@/components/billed-cost";
@@ -13,9 +22,17 @@ import { type DetailFact, DetailFacts } from "@/components/detail-facts";
 import MessageThread from "@/components/message-thread";
 import { PageBackLink } from "@/components/page-back-link";
 import { PageLayout } from "@/components/page-layout";
+import { QueryLoadError } from "@/components/query-load-error";
 import { SourceBadge } from "@/components/source-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+} from "@/components/ui/empty";
 import {
   Table,
   TableBody,
@@ -29,6 +46,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { UnattributedUserBadge } from "@/components/unattributed-user-badge";
 import { VirtualKeyBadge } from "@/components/virtual-key-badge";
 import { typeRole } from "@/lib/design/type-scale";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import {
   useExportSessionInteractions,
@@ -46,6 +64,7 @@ export default function SessionDetailPage({
   const rawParams = use(paramsPromise);
   const sessionId = decodeURIComponent(rawParams.sessionId);
   const router = useRouter();
+  const appName = useAppName();
   const { pageIndex, pageSize, offset, setPagination } =
     useDataTableQueryParams();
 
@@ -59,9 +78,14 @@ export default function SessionDetailPage({
     });
 
   // Fetch session metadata (profile name, user names, etc.)
-  const { data: sessionResponse } = useInteractionSessions({
+  const {
+    data: sessionResponse,
+    isLoadingError: sessionLoadingError,
+    refetch: refetchSession,
+  } = useInteractionSessions({
     sessionId: sessionId,
     limit: 1,
+    toastOnError: false,
   });
 
   const interactions = interactionsResponse?.data ?? [];
@@ -130,6 +154,61 @@ export default function SessionDetailPage({
       )
     : [];
   const conversationChatErrors = lastMainRequest?.chatErrors ?? [];
+
+  const unavailableSession =
+    sessionResponse !== undefined && sessionResponse.data.length === 0;
+
+  if (sessionLoadingError) {
+    return (
+      <PageLayout
+        title="Session"
+        backLink={
+          <PageBackLink href="/llm/logs">Back to Sessions</PageBackLink>
+        }
+      >
+        <QueryLoadError
+          title="Couldn't load this session"
+          onRetry={() => refetchSession()}
+        />
+      </PageLayout>
+    );
+  }
+
+  if (unavailableSession) {
+    return (
+      <div className="flex h-full min-h-0 w-full items-center justify-center overflow-y-auto p-6">
+        <title>{`Session unavailable - ${appName}`}</title>
+        <Empty className="flex-none py-12 md:py-12">
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <LockKeyhole aria-hidden="true" />
+            </EmptyMedia>
+            <div role="alert" className="space-y-2">
+              <h1 className="text-lg font-medium tracking-tight">
+                Session unavailable
+              </h1>
+              <EmptyDescription>
+                You may not have permission to view this session, or it may no
+                longer exist.
+              </EmptyDescription>
+            </div>
+          </EmptyHeader>
+          <EmptyContent>
+            <p className="text-sm text-muted-foreground">
+              If someone shared this link with you, ask an administrator to
+              check your log access.
+            </p>
+            <Button variant="outline" asChild>
+              <Link href="/llm/logs">
+                <ArrowLeft aria-hidden="true" />
+                <span>Back to Sessions</span>
+              </Link>
+            </Button>
+          </EmptyContent>
+        </Empty>
+      </div>
+    );
+  }
 
   // The session's own numbers, as one wrapping row under the header. Labels
   // drop the "Total" every one of them used to carry: the page is a single

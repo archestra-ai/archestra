@@ -15,10 +15,14 @@ import websocketService from "@/lib/websocket/websocket";
 export function AgentRunLogs({
   run,
   title = "Output",
+  sessionId,
 }: {
   run: AgentRun;
   title?: string;
+  sessionId?: string;
 }) {
+  const includeSessionHistory = Boolean(sessionId);
+  const logId = sessionId ?? run.taskId;
   const [terminalContent, setTerminalContent] = useState("");
   const [error, setError] = useState<string>();
   const [isStreaming, setIsStreaming] = useState(!run.endedAt);
@@ -34,7 +38,10 @@ export function AgentRunLogs({
     const subscribeToLogs = () => {
       websocketService.send({
         type: "subscribe_agent_run_logs",
-        payload: { runId: run.taskId },
+        payload: {
+          runId: logId,
+          ...(includeSessionHistory ? { includeSessionHistory: true } : {}),
+        },
       });
     };
     setTerminalContent("");
@@ -47,7 +54,7 @@ export function AgentRunLogs({
         "agent_run_logs",
         (message: AgentRunLogsMessage) => {
           if (
-            message.payload.runId === run.taskId &&
+            message.payload.runId === logId &&
             message.payload.channel !== "readable"
           ) {
             receivedOutput = true;
@@ -58,7 +65,7 @@ export function AgentRunLogs({
       websocketService.subscribe(
         "agent_run_logs_error",
         (message: AgentRunLogsErrorMessage) => {
-          if (message.payload.runId === run.taskId) {
+          if (message.payload.runId === logId) {
             setError(message.payload.error);
             setIsStreaming(false);
           }
@@ -67,7 +74,7 @@ export function AgentRunLogs({
       websocketService.subscribe(
         "agent_run_logs_ended",
         (message: AgentRunLogsEndedMessage) => {
-          if (message.payload.runId === run.taskId) {
+          if (message.payload.runId === logId) {
             if (!receivedOutput && emptyRetryCount < EMPTY_LOG_RETRY_LIMIT) {
               emptyRetryCount += 1;
               setIsStreaming(true);
@@ -94,10 +101,10 @@ export function AgentRunLogs({
       for (const unsubscribe of subscriptions) unsubscribe();
       websocketService.send({
         type: "unsubscribe_agent_run_logs",
-        payload: { runId: run.taskId },
+        payload: { runId: logId },
       });
     };
-  }, [run.endedAt, run.taskId]);
+  }, [run.endedAt, logId, includeSessionHistory]);
 
   return (
     <DeploymentLogPanel

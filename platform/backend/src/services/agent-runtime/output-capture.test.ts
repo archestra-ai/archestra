@@ -12,6 +12,28 @@ import {
 } from "./runtime-contract";
 
 describe("AgentRuntimeOutputCapture", () => {
+  test("bounds response previews while retaining terminal output and the final answer", async () => {
+    const onTextDelta = vi.fn();
+    const prefix = "x".repeat(64 * 1024 - 1);
+    const final =
+      "\n===ARCHESTRA-FINAL-ANSWER===\nThe workflow passed.\n===ARCHESTRA-FINAL-ANSWER-END===\n";
+    const chunks = [prefix, "🦞".repeat(20_000), "later repaint", final];
+    const transcript = chunks.join("");
+    const capture = new AgentRuntimeOutputCapture({
+      backend: outputBackend({ liveChunks: chunks, snapshot: transcript }),
+      session,
+      onTextDelta,
+    });
+
+    await capture.follow();
+    expect(onTextDelta.mock.calls.flat().join("")).toBe(prefix);
+    expect(capture.completeTranscript).toBe(transcript);
+    await capture.recoverSnapshot();
+    expect(capture.completeTranscript).toBe(transcript);
+    expect(capture.retainedLogs).toContain("The workflow passed.");
+    expect(onTextDelta).toHaveBeenCalledOnce();
+  });
+
   test("a late live-stream close cannot overwrite the final readable snapshot", async () => {
     const readable = JSON.stringify({
       version: 1,

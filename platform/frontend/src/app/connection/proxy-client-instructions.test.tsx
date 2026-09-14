@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -45,6 +45,7 @@ vi.mock("next/navigation");
 vi.mock("@/lib/hooks/use-app-name");
 
 beforeEach(() => {
+  Element.prototype.scrollIntoView = vi.fn();
   vi.mocked(useAppName).mockReturnValue("Archestra");
   vi.mocked(useSearchParams).mockReturnValue(
     new URLSearchParams("providerId=anthropic") as unknown as ReturnType<
@@ -96,7 +97,12 @@ describe("ProxyClientInstructions — Any Client step 4", () => {
     availableKeysMock.mockReturnValue({ data: [{ provider: "anthropic" }] });
   });
 
-  it("renders the Model Router as the first tab of the endpoint card", () => {
+  it("switches from a provider endpoint to Model Router through the provider dropdown", async () => {
+    const user = userEvent.setup();
+    const replace = vi.fn();
+    vi.mocked(useRouter).mockReturnValue({ replace } as unknown as ReturnType<
+      typeof useRouter
+    >);
     renderInstructions();
 
     // A selected provider keeps its per-provider URL (id-less)…
@@ -104,13 +110,14 @@ describe("ProxyClientInstructions — Any Client step 4", () => {
       screen.getByText("http://localhost:9000/v1/anthropic"),
     ).toBeInTheDocument();
 
-    // …while the router is the first tab of the toggler, ahead of providers.
-    const routerTab = screen.getByRole("button", { name: "Model Router" });
-    const firstProviderTab = screen.getByRole("button", { name: "OpenAI" });
-    expect(
-      routerTab.compareDocumentPosition(firstProviderTab) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
+    fireEvent.keyDown(screen.getByRole("combobox", { name: "Provider" }), {
+      key: "ArrowDown",
+    });
+    await user.click(screen.getByRole("option", { name: "Model Router" }));
+    expect(replace).toHaveBeenCalledWith(
+      expect.stringContaining("providerId=model-router"),
+      { scroll: false },
+    );
   });
 
   it("selecting the Model Router tab shows the unified /model-router/ endpoint", async () => {

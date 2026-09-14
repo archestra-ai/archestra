@@ -2,7 +2,11 @@
 
 import type { ResourceVisibilityScope } from "@archestra/shared";
 import { UserRoundCheck } from "lucide-react";
-import { SCOPE_META, scopeStyles } from "@/components/scope-vocabulary";
+import {
+  SCOPE_META,
+  scopeLabel,
+  scopeStyles,
+} from "@/components/scope-vocabulary";
 import { Badge } from "@/components/ui/badge";
 import {
   Tooltip,
@@ -11,6 +15,50 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+
+type ResourceVisibilityBadgeProps = {
+  scope: ResourceVisibilityScope | undefined;
+  teams?: TeamInfo[];
+  /**
+   * People the resource is shared with individually. Such a resource is stored
+   * as `personal` plus grants, so reading the scope literally would attribute
+   * it to its author alone — which is what this column is meant to answer.
+   * Resources without per-user grants omit it and render exactly as before.
+   */
+  users?: UserInfo[] | null;
+  /**
+   * Name the scope rather than enumerate it: one "Team" / "N teams" pill in
+   * place of a pill per team. For surfaces where the badge is one item among
+   * many competing for a single line — a card's metadata row — and the point is
+   * which kind of resource this is, not the roster. The names stay reachable in
+   * the tooltip. Columns headed "Accessible to" want the roster; leave it off.
+   */
+  compact?: boolean;
+} & (
+  | {
+      /** Render only the visibility scope when ownership details are absent. */
+      scopeOnly: true;
+      authorId?: never;
+      authorName?: never;
+      currentUserId?: never;
+      showSelfAsMe?: never;
+    }
+  | {
+      scopeOnly?: false;
+      authorId: string | null | undefined;
+      authorName: string | null | undefined;
+      currentUserId: string | undefined;
+      /**
+       * How to label a personal resource the current user owns. Required,
+       * with no default, because either answer is silently invisible if you
+       * guess wrong and the wrong one renders an empty cell.
+       *
+       * Pass `true` when one column mixes personal, team and organization
+       * rows. Pass `false` when the surface already segregates owners.
+       */
+      showSelfAsMe: boolean;
+    }
+);
 
 export function ResourceVisibilityBadge({
   scope,
@@ -21,48 +69,32 @@ export function ResourceVisibilityBadge({
   currentUserId,
   showSelfAsMe,
   compact = false,
-}: {
-  scope: ResourceVisibilityScope | undefined;
-  teams: TeamInfo[] | undefined;
-  /**
-   * People the resource is shared with individually. Such a resource is stored
-   * as `personal` plus grants, so reading the scope literally would attribute
-   * it to its author alone — which is what this column is meant to answer.
-   * Resources without per-user grants omit it and render exactly as before.
-   */
-  users?: UserInfo[] | null;
-  authorId: string | null | undefined;
-  authorName: string | null | undefined;
-  currentUserId: string | undefined;
-  /**
-   * How to label a personal resource the current user owns. Required, with no
-   * default, because either answer is silently invisible if you guess wrong and
-   * the wrong one renders an empty cell — which is exactly how two shipped bugs
-   * got in. Deciding is one line; noticing a blank cell in review is not.
-   *
-   * Pass `true` when one column mixes personal, team and organization rows: a
-   * blank cell on the viewer's own row among labelled ones reads as missing
-   * data, so "Me" keeps every row attributed.
-   *
-   * Pass `false` when the surface already segregates owners — a grid split
-   * under "Personal" and "Shared" headings, or a list scoped to one user —
-   * where a "Me" pill on every row is noise.
-   */
-  showSelfAsMe: boolean;
-  /**
-   * Name the scope rather than enumerate it: one "Team" / "N teams" pill in
-   * place of a pill per team. For surfaces where the badge is one item among
-   * many competing for a single line — a card's metadata row — and the point is
-   * which kind of resource this is, not the roster. The names stay reachable in
-   * the tooltip. Columns headed "Accessible to" want the roster; leave it off.
-   */
-  compact?: boolean;
-}) {
+  scopeOnly = false,
+}: ResourceVisibilityBadgeProps) {
   // An unknown scope says nothing rather than guessing. Falling through to the
   // team branch would label a resource "Team" on no evidence, which is worse
   // than an empty cell: a wrong badge is believed, a missing one is queried.
   if (!scope) {
     return null;
+  }
+
+  if (scopeOnly) {
+    const { icon: Icon } = SCOPE_META[scope];
+    const label = scopeLabel(scope);
+    return (
+      <Badge
+        variant="outline"
+        title={label}
+        className={cn(
+          scopeStyles[scope],
+          BADGE_WIDTH,
+          "inline-flex items-center gap-1 overflow-hidden text-xs",
+        )}
+      >
+        <Icon className="h-3 w-3 shrink-0" />
+        <span className="truncate">{label}</span>
+      </Badge>
+    );
   }
 
   if (scope === "org") {

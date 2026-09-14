@@ -218,10 +218,13 @@ export function useSuggestSkillDescription() {
 export function useProfilesPaginated(
   params?: archestraApiTypes.GetAgentsData["query"] & {
     initialData?: archestraApiTypes.GetAgentsResponses["200"];
+    /** Scope of the server seed; never reuse it for a different visibility filter. */
+    initialDataExcludeOtherPersonalAgents?: boolean;
   },
 ) {
   const {
     initialData,
+    initialDataExcludeOtherPersonalAgents,
     limit,
     offset,
     sortBy,
@@ -235,6 +238,8 @@ export function useProfilesPaginated(
     excludeOtherPersonalAgents,
     labels,
     status,
+    includeActivationSkillsCount,
+    providerApiKeyId,
   } = params || {};
 
   // Check if we can use initialData (server-side fetched data)
@@ -250,9 +255,10 @@ export function useProfilesPaginated(
     teamIds === undefined &&
     authorIds === undefined &&
     excludeAuthorIds === undefined &&
-    excludeOtherPersonalAgents === undefined &&
+    excludeOtherPersonalAgents === initialDataExcludeOtherPersonalAgents &&
     labels === undefined &&
     status === undefined &&
+    providerApiKeyId === undefined &&
     (limit === undefined || limit === DEFAULT_TABLE_LIMIT);
 
   return useQuery({
@@ -272,6 +278,8 @@ export function useProfilesPaginated(
         excludeOtherPersonalAgents,
         labels,
         status,
+        includeActivationSkillsCount,
+        providerApiKeyId,
       },
     ],
     queryFn: async () => {
@@ -290,6 +298,8 @@ export function useProfilesPaginated(
           excludeOtherPersonalAgents,
           labels,
           status,
+          includeActivationSkillsCount,
+          providerApiKeyId,
         },
       });
       throwOnApiError(error, { toastOnError: false });

@@ -35,7 +35,7 @@ export function ProgressRing({
   size = "sm",
   className,
   arcClassName,
-  trackClassName = "stroke-muted",
+  trackClassName = "stroke-muted-foreground/80",
   children,
 }: {
   /** Fill, 0–100. Clamped. */
@@ -44,8 +44,7 @@ export function ProgressRing({
   className?: string;
   /** Stroke color class for the filled arc. */
   arcClassName?: string;
-  /** Stroke color class for the unfilled track. Override on tinted surfaces,
-   *  where the default disappears into the background. */
+  /** Stroke color class for the unfilled track. */
   trackClassName?: string;
   children?: ReactNode;
 }) {

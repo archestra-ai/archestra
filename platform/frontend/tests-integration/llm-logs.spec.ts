@@ -48,21 +48,23 @@ test.describe("LLM logs — Client filter", () => {
   // selecting a Client option narrows the list only because the frontend sends
   // `?client=...` and the handler filters the seed by external_agent_id. A
   // frontend that fails to send the param would show all sessions and fail these.
-  // Every Claude client (Code, Desktop, auto-discovered) is one "Claude" option.
+  // Code and Desktop must remain independently selectable.
 
-  test("exposes a single Claude option", async ({ page, llmLogsPage }) => {
+  test("exposes separate Claude Code and Claude Desktop options", async ({
+    page,
+    llmLogsPage,
+  }) => {
     await llmLogsPage.goto();
     await llmLogsPage.clientFilter.click();
 
     // Options render as buttons (not role="option") and carry the Anthropic
     // logo's alt text alongside the label, so match the label as a substring.
-    await expect(page.getByRole("button", { name: "Claude" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Claude Code" })).toHaveCount(
-      0,
-    );
+    await expect(
+      page.getByRole("button", { name: "Claude Code" }),
+    ).toBeVisible();
     await expect(
       page.getByRole("button", { name: "Claude Desktop" }),
-    ).toHaveCount(0);
+    ).toBeVisible();
   });
 
   test("narrows the list to Claude clients and reflects it in the URL, then clears", async ({
@@ -73,14 +75,18 @@ test.describe("LLM logs — Client filter", () => {
     await expect(llmLogsPage.rowForText(API_TITLE)).toBeVisible();
     await expect(llmLogsPage.rowForText(CLAUDE_CODE_TITLE)).toBeVisible();
 
-    await llmLogsPage.selectClient("Claude");
+    await llmLogsPage.selectClient("Claude Code");
 
-    await expect(page).toHaveURL(/client=claude/);
-    // Both Claude sessions (header-set "claude code" and auto-discovered
-    // "claude") remain; the plain API session drops out.
+    await expect(page).toHaveURL(/client=claude-code/);
+    // Only Code remains; Desktop and plain API traffic are excluded.
     await expect(llmLogsPage.rowForText(CLAUDE_CODE_TITLE)).toBeVisible();
-    await expect(llmLogsPage.rowForText(CLAUDE_DESKTOP_TITLE)).toBeVisible();
+    await expect(llmLogsPage.rowForText(CLAUDE_DESKTOP_TITLE)).toHaveCount(0);
     await expect(llmLogsPage.rowForText(API_TITLE)).toHaveCount(0);
+
+    await llmLogsPage.selectClient("Claude Desktop");
+    await expect(page).toHaveURL(/client=claude-desktop/);
+    await expect(llmLogsPage.rowForText(CLAUDE_DESKTOP_TITLE)).toBeVisible();
+    await expect(llmLogsPage.rowForText(CLAUDE_CODE_TITLE)).toHaveCount(0);
 
     // Clearing back to "All Clients" drops the param and restores the list.
     await llmLogsPage.selectClient("All Clients");
@@ -100,10 +106,10 @@ test.describe("LLM logs — Client filter", () => {
     await page.getByRole("button", { name: "API", exact: true }).click();
     await expect(page).toHaveURL(/source=api/);
 
-    await llmLogsPage.selectClient("Claude");
+    await llmLogsPage.selectClient("Claude Code");
 
     await expect(page).toHaveURL(/source=api/);
-    await expect(page).toHaveURL(/client=claude/);
+    await expect(page).toHaveURL(/client=claude-code/);
     // Both filters applied: only the Claude session whose source is API remains
     // (the Desktop seed uses a non-api source, the API seed is not a Claude client).
     await expect(llmLogsPage.rowForText(CLAUDE_CODE_TITLE)).toBeVisible();

@@ -112,7 +112,8 @@ const PROXY_SERVABLE_ENDPOINTS: readonly SupportedProviderEndpoint[] = [
  * `input` on responses (verified live). No tokens are generated and no model is
  * ever invoked, so the probe cannot consume a premium request.
  *
- * Only a definite `model_not_supported` drops a model. Anything inconclusive
+ * Only a definite model rejection drops a model, including Copilot's
+ * integrator-specific `api_validation_error`. Anything inconclusive
  * (429, 5xx, network failure — or a validation-order change upstream) keeps
  * it, so an outage degrades to an unverified catalog instead of an empty one.
  */
@@ -154,7 +155,7 @@ async function dropModelsRejectedUpstream(params: {
   if (dropped.length > 0) {
     logger.info(
       { droppedModelIds: dropped.map((model) => model.id) },
-      "Dropped GitHub Copilot models the chat/completions endpoint rejects",
+      "Dropped GitHub Copilot models their declared endpoint rejects",
     );
   }
   return candidates.filter((_, index) => invocable[index]);
@@ -192,8 +193,24 @@ async function isModelInvocable(params: {
     }
     const errorText = await response.text();
     try {
-      const parsed = JSON.parse(errorText) as { error?: { code?: string } };
-      return parsed.error?.code !== GithubCopilot.API.MODEL_NOT_SUPPORTED_CODE;
+      const parsed = JSON.parse(errorText) as {
+        error?: { code?: string; type?: string; message?: string };
+      };
+      const error = parsed.error;
+      if (error?.code === GithubCopilot.API.MODEL_NOT_SUPPORTED_CODE) {
+        return false;
+      }
+      // CAPI also reports model entitlement failures without a `code`. The
+      // type alone is not enough: valid models answer the empty-input probe
+      // with the same type, so only the model-specific message is definitive.
+      return !(
+        response.status === 400 &&
+        error?.type === "api_validation_error" &&
+        typeof error.message === "string" &&
+        /^The requested model is not (?:available for integrator\b|supported\.)/.test(
+          error.message,
+        )
+      );
     } catch {
       return true;
     }

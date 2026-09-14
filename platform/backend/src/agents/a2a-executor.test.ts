@@ -20,12 +20,14 @@ const {
   mockCreateLLMModelForAgent,
   mockResolveConversationLlmSelectionForAgent,
   mockBuildSkillCatalogPrompt,
+  mockListAccessibleCatalogSkills,
 } = vi.hoisted(() => ({
   mockStreamText: vi.fn(),
   mockGetChatMcpTools: vi.fn(),
   mockCreateLLMModelForAgent: vi.fn(),
   mockResolveConversationLlmSelectionForAgent: vi.fn(),
   mockBuildSkillCatalogPrompt: vi.fn(),
+  mockListAccessibleCatalogSkills: vi.fn(),
 }));
 
 vi.mock("ai", async () => {
@@ -72,6 +74,8 @@ vi.mock("@/clients/mcp-client", () => ({
 vi.mock("@/skills/skill-catalog-prompt", () => ({
   buildSkillCatalogPrompt: (...args: unknown[]) =>
     mockBuildSkillCatalogPrompt(...args),
+  listAccessibleCatalogSkills: (...args: unknown[]) =>
+    mockListAccessibleCatalogSkills(...args),
 }));
 
 // Base64 string large enough to pass the MIN_IMAGE_ATTACHMENT_SIZE (2KB) filter.
@@ -1063,6 +1067,8 @@ describe("executeA2AMessage skill catalog", () => {
   function primeMocks(tools: Record<string, unknown>) {
     mockStreamText.mockClear();
     mockBuildSkillCatalogPrompt.mockClear();
+    mockListAccessibleCatalogSkills.mockReset();
+    mockListAccessibleCatalogSkills.mockResolvedValue([]);
     mockResolveConversationLlmSelectionForAgent.mockResolvedValue({
       chatApiKeyId: "org-key",
       selectedModel: "gemini-2.5-pro",
@@ -1126,10 +1132,16 @@ describe("executeA2AMessage skill catalog", () => {
       conversationId: "conv-1",
     });
 
+    expect(mockListAccessibleCatalogSkills).toHaveBeenCalledWith({
+      organizationId: org.id,
+      userId: "user-1",
+      agentId: agent.id,
+    });
     expect(mockBuildSkillCatalogPrompt).toHaveBeenCalledWith({
       organizationId: org.id,
       userId: "user-1",
       agentId: agent.id,
+      catalogSkills: [],
     });
     const system = mockStreamText.mock.calls[0]?.[0].system;
     expect(system).toContain("Handle the task.");

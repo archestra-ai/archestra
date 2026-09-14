@@ -53,6 +53,19 @@ class AgentRunReconciler {
       for (const workspace of workspaces)
         await this.reconcileWorkspace(workspace);
       const sessions = await AgentRunModel.listOpen();
+      const retained = await AgentRunModel.listRetainedForCredentialRefresh();
+      for (const session of [...sessions, ...retained]) {
+        try {
+          await resolveAgentRuntimeBackendDriver(
+            session.backend,
+          ).refreshCredentials?.(session);
+        } catch {
+          logger.warn(
+            { taskId: session.taskId },
+            "Agent Runtime credential refresh will retry; expired values cannot start new managed commands",
+          );
+        }
+      }
       for (const session of sessions) {
         if (this.inFlight.has(session.id)) continue;
         void this.reconcileSession(session);
@@ -245,6 +258,11 @@ class AgentRunReconciler {
     session: Awaited<ReturnType<typeof AgentRunModel.listOpen>>[number],
   ): Promise<void> {
     if (!session.completionTarget) return;
+    // Adoption can fail before its lifecycle settles the task (for example,
+    // while refreshing the heartbeat). Do not hold the recovery lease in a
+    // completion watcher: the next reconciliation must be able to retry.
+    const task = await A2ATaskModel.findById(session.taskId);
+    if (!task || !isTerminalA2ATaskState(task.state)) return;
     const agent = await AgentModel.findById(session.agentId);
     await watchTaskCompletion({
       taskId: session.taskId,

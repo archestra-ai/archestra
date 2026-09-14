@@ -174,6 +174,17 @@ export async function validateAssignment(
     };
   }
 
+  if (tool.delegateToA2aConnectionId) {
+    return {
+      code: "validation_error",
+      error: {
+        message:
+          "Outbound A2A agents must be assigned through the subagent configuration",
+        type: "validation_error",
+      },
+    };
+  }
+
   const catalogValidationError = await validateCatalogRequirements({
     tool,
     mcpServerId,

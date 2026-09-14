@@ -69,20 +69,29 @@ export function autoCompactProgressPercent(
   return Math.min((status.usedPercent / AUTO_COMPACT_PERCENT) * 100, 100);
 }
 
-/** Usage-band text color, escalating as the window fills. */
+/**
+ * Usage-band text color, escalating as the window fills.
+ */
 export function usageTextColor(percent: number): string {
-  if (percent >= USAGE_BANDS.critical) return "text-red-500";
-  if (percent >= USAGE_BANDS.warning) return "text-orange-500";
-  if (percent >= USAGE_BANDS.elevated) return "text-yellow-500";
-  return "text-emerald-500";
+  if (percent >= USAGE_BANDS.critical) return "text-red-600 dark:text-red-400";
+  if (percent >= USAGE_BANDS.warning)
+    return "text-orange-600 dark:text-orange-400";
+  if (percent >= USAGE_BANDS.elevated)
+    return "text-yellow-600 dark:text-yellow-400";
+  return "text-emerald-600 dark:text-emerald-400";
 }
 
-/** Usage-band stroke color for the indicator ring's progress arc. */
+/**
+ * Usage-band stroke color for the indicator ring's progress arc.
+ */
 export function usageStrokeColor(percent: number): string {
-  if (percent >= USAGE_BANDS.critical) return "stroke-red-500";
-  if (percent >= USAGE_BANDS.warning) return "stroke-orange-500";
-  if (percent >= USAGE_BANDS.elevated) return "stroke-yellow-500";
-  return "stroke-emerald-500";
+  if (percent >= USAGE_BANDS.critical)
+    return "stroke-red-600 dark:stroke-red-400";
+  if (percent >= USAGE_BANDS.warning)
+    return "stroke-orange-600 dark:stroke-orange-400";
+  if (percent >= USAGE_BANDS.elevated)
+    return "stroke-yellow-600 dark:stroke-yellow-400";
+  return "stroke-emerald-600 dark:stroke-emerald-400";
 }
 
 /** Compact token count: 85_600 → "85.6k", 1_000_000 → "1.0M". */

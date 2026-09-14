@@ -1,7 +1,7 @@
 // biome-ignore-all lint/suspicious/noExplicitAny: test
 import { SKILL_TOOL_PREFIX } from "@archestra/shared";
 import { vi } from "vitest";
-import { EnvironmentModel, SkillModel } from "@/models";
+import { AgentModel, EnvironmentModel, SkillModel } from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { InsertSkill } from "@/types";
 import { type ArchestraContext, executeArchestraTool } from ".";
@@ -107,6 +107,41 @@ describe("skill delegation (agent-designated skills)", () => {
     expect(tools[0].description).toContain('"deep-research"');
     expect(tools[0].description).toContain('"Research Bot"');
     expect(tools[0]._meta).toMatchObject({ targetAgentId: target.id });
+  });
+
+  test("manual policy hides an unselected delegation from its surface and dispatch", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const { organization, user, parent, context } = await setup({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeAgent,
+    });
+    await AgentModel.setActivationSkillPolicyState({
+      id: parent.id,
+      mode: "manual",
+      revision: 1,
+    });
+
+    const tools = await getSkillDelegationTools({
+      agentId: parent.id,
+      organizationId: organization.id,
+      userId: user.id,
+    });
+    const result = await executeArchestraTool(
+      `${SKILL_TOOL_PREFIX}deep_research`,
+      { message: "go" },
+      context,
+    );
+
+    expect(tools).toEqual([]);
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toContain("No skill delegation is configured");
+    expect(mockExecuteA2AMessage).not.toHaveBeenCalled();
   });
 
   test("returns no tools without a real signed-in user", async ({

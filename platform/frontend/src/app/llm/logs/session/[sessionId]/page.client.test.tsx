@@ -73,7 +73,13 @@ describe("SessionDetailPage", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("shows the empty state after session interactions finish loading empty", async () => {
+  it("shows a permission-aware unavailable state when the requested session is not visible", async () => {
+    vi.mocked(useInteractionSessions).mockReturnValue({
+      data: {
+        data: [],
+        pagination: { limit: 1, nextCursor: null, hasNext: false },
+      },
+    } as unknown as ReturnType<typeof useInteractionSessions>);
     vi.mocked(useInteractionSummaries).mockReturnValue({
       data: {
         data: [],
@@ -92,8 +98,15 @@ describe("SessionDetailPage", () => {
     renderSessionDetailPage();
 
     expect(
-      await screen.findByText("No interactions found for this session"),
+      await screen.findByText(
+        "You may not have permission to view this session, or it may no longer exist.",
+      ),
     ).toBeVisible();
+    expect(screen.getByRole("alert")).toHaveTextContent("Session unavailable");
+    expect(screen.queryByText("Requests")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("No interactions found for this session"),
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("status", { name: "Loading session logs…" }),
     ).not.toBeInTheDocument();
@@ -124,12 +137,12 @@ describe("SessionDetailPage", () => {
     ).toBeVisible();
   });
 
-  // Every Claude client id (auto-discovered, header-set) renders one "Claude" badge.
+  // Legacy Claude attribution maps to Code; explicit Desktop stays separate.
   it.each([
-    [CLAUDE_CLIENT_ID],
-    [CLAUDE_CODE_CLIENT_ID],
-    [CLAUDE_DESKTOP_CLIENT_ID],
-  ])("renders the Claude badge for client id '%s'", async (externalAgentId) => {
+    [CLAUDE_CLIENT_ID, "Claude Code"],
+    [CLAUDE_CODE_CLIENT_ID, "Claude Code"],
+    [CLAUDE_DESKTOP_CLIENT_ID, "Claude Desktop"],
+  ])("renders the Claude badge for client id '%s'", async (externalAgentId, label) => {
     vi.mocked(useInteractionSessions).mockReturnValue({
       data: { data: [{ externalAgentIds: [externalAgentId] }] },
     } as unknown as ReturnType<typeof useInteractionSessions>);
@@ -140,7 +153,7 @@ describe("SessionDetailPage", () => {
 
     renderSessionDetailPage();
 
-    expect(await screen.findByText("Claude")).toBeVisible();
+    expect(await screen.findByText(label)).toBeVisible();
   });
 
   it("shows no Claude badge for non-Claude clients", async () => {
@@ -157,7 +170,7 @@ describe("SessionDetailPage", () => {
     expect(
       await screen.findByText("No interactions found for this session"),
     ).toBeVisible();
-    expect(screen.queryByText("Claude")).not.toBeInTheDocument();
+    expect(screen.queryByText(/^Claude/)).not.toBeInTheDocument();
   });
 
   it("renders the rows-per-page selector when the session has interactions", async () => {

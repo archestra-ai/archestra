@@ -21,6 +21,8 @@ export interface TabbedDialogNavItem<TSection extends string> {
 interface TabbedDialogShellProps<TSection extends string> {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Render inside a DialogContent already owned by the caller. */
+  contentOnly?: boolean;
   title: string;
   description: string;
   sidebarLabel: string;
@@ -44,6 +46,7 @@ interface TabbedDialogShellProps<TSection extends string> {
 export function TabbedDialogShell<TSection extends string>({
   open,
   onOpenChange,
+  contentOnly = false,
   title,
   description,
   sidebarLabel,
@@ -146,6 +149,16 @@ export function TabbedDialogShell<TSection extends string>({
     </DialogForm>
   );
 
+  const content = (
+    <>
+      <DialogTitle className="sr-only">{title}</DialogTitle>
+      <DialogDescription className="sr-only">{description}</DialogDescription>
+      {wrapForm ? wrapForm(formContent) : formContent}
+    </>
+  );
+
+  if (contentOnly) return content;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
@@ -155,9 +168,7 @@ export function TabbedDialogShell<TSection extends string>({
         )}
         showCloseButton={false}
       >
-        <DialogTitle className="sr-only">{title}</DialogTitle>
-        <DialogDescription className="sr-only">{description}</DialogDescription>
-        {wrapForm ? wrapForm(formContent) : formContent}
+        {content}
       </DialogContent>
     </Dialog>
   );

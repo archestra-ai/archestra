@@ -12,7 +12,6 @@ import { agentSubagentExclusionsService } from "@/services/agent-subagent-exclus
 import { assignToolToAgent } from "@/services/agent-tool-assignment";
 import { describe, expect, test } from "@/test";
 import type { AgentConfigSnapshot, AgentVersion } from "@/types/agent-version";
-import { SelectAgentVersionSchema } from "@/types/agent-version";
 
 type AgentRef = { id: string; organizationId: string };
 
@@ -68,7 +67,7 @@ describe("AgentVersionModel", () => {
     expect(versions[0].snapshot).not.toHaveProperty("isDefault");
   });
 
-  test("legacy snapshots default missing credential behavior to allow", async ({
+  test("legacy snapshots default fields added after they were captured", async ({
     makeAgent,
   }) => {
     const agent = await makeAgent();
@@ -79,13 +78,19 @@ describe("AgentVersionModel", () => {
       ...version.snapshot,
     };
     delete legacySnapshot.missingCredentialBehavior;
+    delete legacySnapshot.activationSkillMode;
+    delete legacySnapshot.activationSkillRules;
+    await db
+      .update(schema.agentVersionsTable)
+      .set({ snapshot: legacySnapshot as AgentConfigSnapshot })
+      .where(eq(schema.agentVersionsTable.id, version.id));
 
-    const normalized = SelectAgentVersionSchema.parse({
-      ...version,
-      snapshot: legacySnapshot,
-    });
+    const normalized = await getVersion(agent, 1);
+    if (!normalized) throw new Error("legacy version disappeared");
 
     expect(normalized.snapshot.missingCredentialBehavior).toBe("allow");
+    expect(normalized.snapshot.activationSkillMode).toBe("all");
+    expect(normalized.snapshot.activationSkillRules).toEqual([]);
   });
 
   test("scalar config change forks a new head", async ({ makeAgent }) => {

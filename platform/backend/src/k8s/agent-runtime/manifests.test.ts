@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { describe, expect, it, vi } from "vitest";
+import config, { parseLabelSelector } from "@/config";
 import {
   buildAgentRuntimePlatformEgressPolicy,
   buildAgentRuntimeSandbox,
@@ -233,7 +234,11 @@ describe("buildAgentRuntimeSandbox", () => {
 
   it("retains privileged development storage on the workspace volume", () => {
     const unprivileged = buildAgentRuntimeSandbox(SPEC).spec?.podTemplate.spec;
-    expect(unprivileged?.volumes).toEqual([]);
+    expect(
+      unprivileged?.containers[0]?.volumeMounts?.some(
+        (mount) => mount.mountPath === "/var/lib/docker",
+      ),
+    ).toBe(false);
 
     const privileged = buildAgentRuntimeSandbox({ ...SPEC, privileged: true })
       .spec?.podTemplate.spec;
@@ -360,6 +365,47 @@ describe("buildAgentRuntimeSecret", () => {
 });
 
 describe("buildAgentRuntimePlatformEgressPolicy", () => {
+  it.each([
+    {
+      name: "default API label",
+      selector: undefined,
+      apiLabels: { "archestra.io/platform-api": "true" },
+    },
+    {
+      name: "custom deployment selector",
+      selector: "app=custom-api,component=backend",
+      apiLabels: { app: "custom-api", component: "backend" },
+    },
+  ])("allows $name destinations without granting worker access", ({
+    selector,
+    apiLabels,
+  }) => {
+    const policy = buildAgentRuntimePlatformEgressPolicy({
+      spec: SPEC,
+      platformNamespace: "platform",
+      platformPodLabels: parseLabelSelector(
+        selector,
+        config.agentRuntime.platformPodSelector,
+      ),
+      platformPorts: [9000],
+    });
+    const destination = policy.spec?.egress?.[0]?.to?.[0];
+    expect(destination?.namespaceSelector?.matchLabels).toEqual({
+      "kubernetes.io/metadata.name": "platform",
+    });
+    const labels = destination?.podSelector?.matchLabels;
+    expect(labels).toEqual(apiLabels);
+    const workerLabels: Record<string, string> = {
+      "archestra.io/p4-shim-client": "true",
+      "app.kubernetes.io/component": "worker",
+    };
+    expect(
+      Object.entries(labels ?? {}).every(
+        ([key, value]) => workerLabels[key] === value,
+      ),
+    ).toBe(false);
+  });
+
   it("selects only this Agent Runtime run's pods so MCP pods are unaffected", () => {
     const policy = buildAgentRuntimePlatformEgressPolicy({
       spec: SPEC,

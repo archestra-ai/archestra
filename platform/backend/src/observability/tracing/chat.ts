@@ -5,7 +5,10 @@ import {
   SpanStatusCode,
   trace,
 } from "@opentelemetry/api";
-import { SESSION_ID_KEY } from "@/observability/request-context";
+import {
+  CHAT_ROUTE_CATEGORY_KEY,
+  SESSION_ID_KEY,
+} from "@/observability/request-context";
 import type { AgentType } from "@/types";
 import {
   ATTR_ARCHESTRA_AGENT_LABEL_PREFIX,
@@ -60,7 +63,7 @@ export async function startActiveChatSpan<T>(params: {
   const spanName = `chat ${params.agentName}`;
 
   // Inject session ID into context so it's available to the pino mixin for log correlation
-  let ctx = context.active();
+  let ctx = context.active().setValue(CHAT_ROUTE_CATEGORY_KEY, routeCategory);
   if (params.sessionId) {
     ctx = ctx.setValue(SESSION_ID_KEY, params.sessionId);
   }

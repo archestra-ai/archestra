@@ -33,6 +33,7 @@ describe("OpenClaw image entrypoint", () => {
       baseUrl: "http://localhost:9000/v1/model-router/test",
       expectedBaseUrl: "http://localhost:9000/v1/model-router/test",
       workspaceId: undefined,
+      separateState: true,
     },
   ])("configures the $protocol transport as $expectedApi", async (testCase) => {
     const { protocol, expectedApi, baseUrl, expectedBaseUrl } = testCase;
@@ -50,6 +51,7 @@ describe("OpenClaw image entrypoint", () => {
         `#!/bin/sh
 cp "$PWD/SOUL.md" "$ARCHESTRA_AGENT_RUNTIME_DIR/captured-soul.md"
 printf '%s\n' "$@" > "$ARCHESTRA_AGENT_RUNTIME_DIR/captured-args"
+printf '%s' "$OPENCLAW_STATE_DIR" > "$ARCHESTRA_AGENT_RUNTIME_DIR/captured-state-dir"
 plugin_dir="$(jq -r '.plugins.load.paths[] | select(contains("openclaw-transcript"))' "$OPENCLAW_CONFIG_PATH")"
 PLUGIN_PATH="$plugin_dir/index.mjs" node --input-type=module <<'JS'
 const plugin = await import("file://" + process.env.PLUGIN_PATH);
@@ -118,6 +120,9 @@ printf '%s\n' "$*" >> "$ARCHESTRA_AGENT_RUNTIME_DIR/attention-calls"
         PATH: `${bin}:${process.env.PATH}`,
         ARCHESTRA_LLM_PROXY_PROTOCOL: protocol,
         ARCHESTRA_AGENT_RUNTIME_DIR: runtime,
+        ARCHESTRA_AGENT_RUNTIME_NATIVE_STATE_DIR: testCase.separateState
+          ? path.join(root, "separate-state")
+          : undefined,
         ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL: "test-model",
         ARCHESTRA_AGENT_RUNTIME_TASK_ID: "12345678-abcd-4000-8000-123456789abc",
         ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID: testCase.workspaceId,
@@ -177,6 +182,14 @@ printf '%s\n' "$*" >> "$ARCHESTRA_AGENT_RUNTIME_DIR/attention-calls"
         id: "archestra-runtime-attention",
         configSchema: { type: "object", additionalProperties: false },
       });
+      expect(
+        await readFile(path.join(runtime, "captured-state-dir"), "utf8"),
+      ).toBe(
+        path.join(
+          testCase.separateState ? path.join(root, "separate-state") : runtime,
+          "openclaw-state",
+        ),
+      );
       const args = (await readFile(path.join(runtime, "captured-args"), "utf8"))
         .trim()
         .split("\n");

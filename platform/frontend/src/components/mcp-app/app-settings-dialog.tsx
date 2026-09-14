@@ -21,11 +21,9 @@ import { useApp } from "@/lib/app.query";
  * Cancel/Save footer. Delete is intentionally not here (each host owns its own
  * separate delete action).
  *
- * {@link AppSettingsForm} owns the {@link TabbedDialogShell} — the same left-nav
- * dialog used by the identity-provider and team dialogs — so once the app is
- * loaded this component just mounts it. The transient load/error/unavailable
- * states render a small dialog with a Cancel button instead, since there is no
- * form to show yet.
+ * This component keeps one dialog mounted while the app loads. Once resolved,
+ * {@link AppSettingsForm} fills that same modal with the left-nav settings
+ * layout, avoiding a second modal entrance and focus cycle.
  */
 export function AppSettingsDialog({
   appId,
@@ -47,47 +45,54 @@ export function AppSettingsDialog({
 
   const close = () => onOpenChange(false);
 
-  // Once the app resolves, the form owns the whole (left-nav) dialog.
-  if (open && app) {
-    return (
-      <AppSettingsForm app={app} open={open} onOpenChange={onOpenChange} />
-    );
-  }
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
-          <DialogTitle>App settings</DialogTitle>
-          <DialogDescription>
-            Manage this app's details, tools, and who can use it.
-          </DialogDescription>
-        </DialogHeader>
-        {isPending ? (
-          <LoadingState
-            className="min-h-40 flex-1"
-            label="Loading app settings…"
-            variant="compact"
-          />
-        ) : isLoadingError ? (
-          <QueryLoadError
-            title="Couldn't load app settings"
-            onRetry={() => refetch()}
-            className="min-h-40 flex-1"
+      <DialogContent
+        className={app ? "h-[85vh] max-w-5xl flex-row gap-0 p-0" : "max-w-lg"}
+        showCloseButton={!app}
+      >
+        {app ? (
+          <AppSettingsForm
+            app={app}
+            open={open}
+            onOpenChange={onOpenChange}
+            contentOnly
           />
         ) : (
-          <output
-            aria-label="App settings unavailable"
-            className="flex min-h-40 flex-1 items-center justify-center text-sm text-muted-foreground"
-          >
-            App settings are unavailable.
-          </output>
+          <>
+            <DialogHeader>
+              <DialogTitle>App settings</DialogTitle>
+              <DialogDescription>
+                Manage this app's details, tools, and who can use it.
+              </DialogDescription>
+            </DialogHeader>
+            {isPending ? (
+              <LoadingState
+                className="min-h-40 flex-1"
+                label="Loading app settings…"
+                variant="compact"
+              />
+            ) : isLoadingError ? (
+              <QueryLoadError
+                title="Couldn't load app settings"
+                onRetry={() => refetch()}
+                className="min-h-40 flex-1"
+              />
+            ) : (
+              <output
+                aria-label="App settings unavailable"
+                className="flex min-h-40 flex-1 items-center justify-center text-sm text-muted-foreground"
+              >
+                App settings are unavailable.
+              </output>
+            )}
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={close}>
+                Cancel
+              </Button>
+            </DialogFooter>
+          </>
         )}
-        <DialogFooter>
-          <Button type="button" variant="outline" onClick={close}>
-            Cancel
-          </Button>
-        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

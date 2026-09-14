@@ -1,8 +1,12 @@
-import { spawn } from "node:child_process";
+import { execFile, spawn, spawnSync } from "node:child_process";
+import { EventEmitter } from "node:events";
+import * as fileSystem from "node:fs/promises";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { promisify } from "node:util";
+import { runInNewContext } from "node:vm";
 import { afterEach, beforeEach, expect, test } from "@/test";
 import { CLIENT_CONNECTION_INSTALLER } from "./client-connection-installer";
 
@@ -74,7 +78,7 @@ afterEach(async () => {
   await new Promise<void>((resolve) => server.close(() => resolve()));
   await rm(directory, { recursive: true, force: true });
 });
-function run(url = origin) {
+function run(url = origin, clientId = "cursor") {
   return new Promise<{ code: number | null; output: string }>(
     (resolve, reject) => {
       const child = spawn(process.execPath, [
@@ -82,8 +86,9 @@ function run(url = origin) {
         "--url",
         url,
         "--client",
-        "cursor",
+        clientId,
         "--no-open",
+        "--desktop-terminal",
       ]);
       let output = "";
       child.stdout.on("data", (chunk) => {
@@ -105,6 +110,103 @@ test("downloads and executes the approved script without logging polling credent
   expect(downloads).toBe(1);
   expect(result.output).toContain("ABCD-1234");
   expect(result.output).not.toContain("A".repeat(43));
+});
+
+test("Desktop downloads and executes its approved setup through the same protocol", async () => {
+  const result = await run(origin, "claude-desktop");
+  expect(result.code).toBe(0);
+  expect(await readFile(join(directory, "applied"), "utf8")).toBe("applied");
+  expect(downloads).toBe(1);
+  expect(result.output).not.toContain("A".repeat(43));
+});
+
+test("a downloaded Desktop setup redeems its reviewed ticket without another approval flow", async () => {
+  const token = `archestra_con_${"A".repeat(43)}`;
+  const result = await promisify(execFile)(process.execPath, [
+    join(directory, "connect.cjs"),
+    "--url",
+    origin,
+    "--client",
+    "claude-desktop",
+    "--desktop-terminal",
+    "--setup-token",
+    token,
+  ]);
+  expect(await readFile(join(directory, "applied"), "utf8")).toBe("applied");
+  expect(downloads).toBe(1);
+  expect(polls).toBe(0);
+  expect(startedAt).toBe(0);
+  expect(result.stdout + result.stderr).not.toContain(token);
+});
+
+test.each([
+  0, 1,
+])("Desktop terminal handoff handles launcher exit %s", async (exitCode) => {
+  let launcher = "";
+  const opened = new Promise<void>((resolve, reject) => {
+    runInNewContext(CLIENT_CONNECTION_INSTALLER, {
+      __filename: join(directory, "connect.cjs"),
+      process: {
+        argv: [
+          process.execPath,
+          "connect.cjs",
+          "--url",
+          origin,
+          "--client",
+          "claude-desktop",
+          "--no-open",
+        ],
+        platform: "darwin",
+        execPath: process.execPath,
+      },
+      URL,
+      fetch,
+      setTimeout,
+      clearTimeout,
+      console: {
+        log: () => resolve(),
+        error: (message: string) => reject(new Error(message)),
+      },
+      require: (name: string) => {
+        if (name === "node:fs/promises") return fileSystem;
+        if (name === "node:path") return { join };
+        if (name === "node:os") return { tmpdir: () => directory };
+        if (name === "node:child_process")
+          return {
+            spawnSync,
+            spawn: (command: string, args: string[]) => {
+              expect(command).toBe("open");
+              expect(args.slice(0, 2)).toEqual(["-a", "Terminal"]);
+              launcher = args[2];
+              const child = Object.assign(new EventEmitter(), {
+                unref() {},
+                stderr: Object.assign(new EventEmitter(), { destroy() {} }),
+              });
+              queueMicrotask(() => {
+                child.stderr.emit(
+                  "data",
+                  Buffer.from("Terminal launch refused"),
+                );
+                child.emit("exit", exitCode);
+              });
+              return child;
+            },
+          };
+        throw new Error(`Unexpected module ${name}`);
+      },
+    });
+  });
+  if (exitCode !== 0) {
+    await expect(opened).rejects.toThrow("Terminal launch refused");
+    expect(downloads).toBe(0);
+    await expect(readFile(join(directory, "applied"))).rejects.toThrow();
+    return;
+  }
+  await opened;
+  expect(downloads).toBe(0);
+  await promisify(execFile)("bash", [launcher]);
+  expect(await readFile(join(directory, "applied"), "utf8")).toBe("applied");
+  expect(downloads).toBe(1);
 });
 
 test.each([

@@ -120,7 +120,7 @@ the proxy filters model input, not data already stored or displayed by Chat.
 
 ## Storage and interrupted processing
 
-Migration `0463_openappa_native.sql` creates five tables:
+Migration `0471_openappa_native.sql` creates five tables:
 
 | Table | Owner / purpose |
 | --- | --- |

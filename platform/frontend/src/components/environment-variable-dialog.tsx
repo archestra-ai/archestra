@@ -38,7 +38,7 @@ export interface EnvVarDraft {
   required: boolean;
   description: string;
   value: string;
-  /** Stable reusable connection id for Agent Runtime secrets. */
+  /** Stable reusable credential key. */
   credentialId?: string;
 }
 
@@ -65,6 +65,8 @@ interface EnvironmentVariableDialogProps {
   targetLabel?: string;
   installationLabel?: string;
   staticLabel?: string;
+  installationDescription?: string;
+  staticDescription?: string;
   installationCalloutTitle?: string;
   requiredDescription?: string;
   deferStaticSecretValue?: boolean;
@@ -112,6 +114,8 @@ export function EnvironmentVariableDialog({
   targetLabel = "MCP server",
   installationLabel = "Installation",
   staticLabel = "Static",
+  installationDescription,
+  staticDescription,
   installationCalloutTitle = "The user enters this when installing",
   requiredDescription = "Block installation until the user supplies a value.",
   deferStaticSecretValue = false,
@@ -156,6 +160,7 @@ export function EnvironmentVariableDialog({
 
   const valueRequired =
     draft.scope === "static" &&
+    !draft.credentialId &&
     !hasStoredSecret &&
     !(draft.type === "boolean") &&
     !(deferStaticSecretValue && draft.type === "secret");
@@ -178,7 +183,7 @@ export function EnvironmentVariableDialog({
   const credentialIdError =
     requiresCredentialBinding &&
     draft.credentialId !== undefined &&
-    !/^[a-z][a-z0-9._-]*$/.test(draft.credentialId);
+    !activeCredentialBinding;
 
   const canSubmit =
     trimmedKey.length > 0 &&
@@ -216,6 +221,7 @@ export function EnvironmentVariableDialog({
         }
         if (patch.type !== "secret") next.credentialId = undefined;
       }
+      if (patch.credentialId) next.required = true;
       const binding = credentialBindingOptions?.find(
         (option) => option.id === next.credentialId,
       );
@@ -266,8 +272,13 @@ export function EnvironmentVariableDialog({
       <div className="space-y-5">
         <div className="space-y-2">
           <Label htmlFor="env-var-key">Key</Label>
+          <FieldDescription id="env-var-key-hint">
+            The environment variable name your application expects, such as
+            GITHUB_TOKEN.
+          </FieldDescription>
           <Input
             id="env-var-key"
+            aria-describedby="env-var-key-hint"
             value={draft.key}
             onChange={(e) => updateDraft({ key: normalizeKey(e.target.value) })}
             placeholder="API_KEY"
@@ -334,6 +345,8 @@ export function EnvironmentVariableDialog({
               disabledReason={disableInstallationReason}
               installationLabel={installationLabel}
               staticLabel={staticLabel}
+              installationDescription={installationDescription}
+              staticDescription={staticDescription}
             />
             {draft.scope === "installation" && (
               <FieldDescription>{installationCalloutTitle}.</FieldDescription>
@@ -349,7 +362,7 @@ export function EnvironmentVariableDialog({
           />
         )}
 
-        {draft.scope === "static" && (
+        {draft.scope === "static" && !draft.credentialId && (
           <StaticValueEditor
             draft={draft}
             hasStoredSecret={hasStoredSecret}
@@ -363,7 +376,7 @@ export function EnvironmentVariableDialog({
           />
         )}
 
-        {draft.scope === "installation" && (
+        {(draft.scope === "installation" || draft.credentialId) && (
           <RequiredToggleCard
             checked={draft.required}
             onChange={(required) => updateDraft({ required })}
@@ -405,13 +418,13 @@ function CredentialBindingEditor({
         <Label htmlFor="env-var-credential-binding">Secret source</Label>
         <FieldDescription>
           {reserved
-            ? "Uses a saved connection. Rotating it updates every Agent that uses it."
-            : "Saved for this Agent only."}{" "}
+            ? "Uses a saved credential. New executions use its current value."
+            : "Provide a value for this resource."}{" "}
           <Link
-            href="/settings/agents#runtime-credentials"
+            href="/settings/credentials"
             className="font-medium text-foreground underline underline-offset-4"
           >
-            Manage saved connections
+            Manage credentials
           </Link>
         </FieldDescription>
       </div>
@@ -429,6 +442,7 @@ function CredentialBindingEditor({
                   key: draft.key || option.defaultKey,
                   description: draft.description || option.description,
                   scope,
+                  value: "",
                 }
               : { credentialId: undefined },
           );
@@ -446,11 +460,14 @@ function CredentialBindingEditor({
               key={option.id}
               value={option.id}
               description={
-                option.description ? (
-                  <span className="line-clamp-2 whitespace-normal">
-                    {option.description}
-                  </span>
-                ) : undefined
+                <span className="line-clamp-2 whitespace-normal">
+                  {option.allowedScopes.includes("static")
+                    ? "Organization credential"
+                    : "Personal credential"}
+                  {option.description && (
+                    <span>{` · ${option.description}`}</span>
+                  )}
+                </span>
               }
               icon={<RuntimeCredentialIcon icon={option.icon ?? null} />}
             >
@@ -461,11 +478,11 @@ function CredentialBindingEditor({
             value="one-off"
             description={
               <span className="line-clamp-2 whitespace-normal">
-                Only this Agent can use this saved value.
+                This value is saved only for this resource.
               </span>
             }
           >
-            Agent-specific secret
+            Resource-specific secret
           </SelectItem>
         </SelectContent>
       </Select>

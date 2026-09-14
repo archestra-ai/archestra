@@ -121,6 +121,20 @@ test.describe("Agents", () => {
       url: "/api/agents/:id/skill-exclusions",
       body: { excludedSkillIds: [], skills: [] },
     });
+    await mswControl.use({
+      method: "get",
+      url: "/api/agents/:id/activation-skill-policy",
+      body: {
+        mode: "all",
+        revision: 0,
+        allowedReferences: [],
+        excludedReferences: [],
+        hiddenAllowedCount: 0,
+        hiddenExcludedCount: 0,
+        allowedSkills: [],
+        excludedSkills: [],
+      },
+    });
 
     await agentsPage.goto();
     await expect(agentsPage.rowFor(ORIGINAL)).toBeVisible();

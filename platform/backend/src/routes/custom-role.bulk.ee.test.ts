@@ -1,14 +1,10 @@
 import { vi } from "vitest";
-import { betterAuth, hasPermission } from "@/auth";
+import { hasPermission } from "@/auth";
 import OrganizationRoleModel from "@/models/organization-role";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
-
-const { deleteOrgRoleMock } = vi.hoisted(() => ({
-  deleteOrgRoleMock: vi.fn(),
-}));
 
 vi.mock("@/auth");
 
@@ -21,11 +17,6 @@ describe("DELETE /api/roles/bulk", () => {
 
   beforeEach(async ({ makeAdmin, makeMember, makeOrganization }) => {
     vi.clearAllMocks();
-
-    // Not part of the canonical @/auth mock surface — see custom-role.ee.test.ts.
-    const api = betterAuth.api as unknown as Record<string, unknown>;
-    api.deleteOrgRole = deleteOrgRoleMock;
-    deleteOrgRoleMock.mockResolvedValue({ success: true });
 
     user = await makeAdmin();
     organizationId = (await makeOrganization()).id;
@@ -64,7 +55,12 @@ describe("DELETE /api/roles/bulk", () => {
       ],
       failed: [],
     });
-    expect(deleteOrgRoleMock).toHaveBeenCalledTimes(2);
+    expect(
+      await OrganizationRoleModel.getById(first.id, organizationId),
+    ).toBeNull();
+    expect(
+      await OrganizationRoleModel.getById(second.id, organizationId),
+    ).toBeNull();
   });
 
   /**
@@ -110,7 +106,6 @@ describe("DELETE /api/roles/bulk", () => {
     expect(response.json().failed).toEqual([
       { id: foreign.id, name: null, error: "Role not found" },
     ]);
-    expect(deleteOrgRoleMock).not.toHaveBeenCalled();
     expect(
       await OrganizationRoleModel.getById(foreign.id, otherOrgId),
     ).not.toBeNull();
@@ -118,6 +113,5 @@ describe("DELETE /api/roles/bulk", () => {
 
   test("rejects an empty batch", async () => {
     expect((await bulkDelete([])).statusCode).toBe(400);
-    expect(deleteOrgRoleMock).not.toHaveBeenCalled();
   });
 });

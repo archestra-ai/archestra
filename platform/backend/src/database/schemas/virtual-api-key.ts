@@ -8,6 +8,7 @@ import {
 } from "drizzle-orm/pg-core";
 import type { ResourceVisibilityScope, VirtualApiKeyType } from "@/types";
 import secretsTable from "./secret";
+import serviceAccountsTable from "./service-account";
 import usersTable from "./user";
 
 const virtualApiKeysTable = pgTable(
@@ -39,6 +40,11 @@ const virtualApiKeysTable = pgTable(
       onDelete: "set null",
     }),
     expiresAt: timestamp("expires_at", { mode: "date", withTimezone: true }),
+    /** Service account creator; separate from human ownership. */
+    createdByServiceAccountId: uuid("created_by_service_account_id").references(
+      () => serviceAccountsTable.id,
+      { onDelete: "set null" },
+    ),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     lastUsedAt: timestamp("last_used_at", { mode: "date" }),
   },

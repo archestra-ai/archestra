@@ -4,6 +4,12 @@ import { useId } from "react";
 import { ContainerDeploymentFields } from "@/components/container-deployment-fields";
 import { DeploymentEnvironmentVariablesEditor } from "@/components/deployment-environment-variables-editor";
 import type { EnvVarDraft } from "@/components/environment-variable-dialog";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { FieldDescription } from "@/components/ui/field-description";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -41,6 +47,10 @@ export type AgentRuntimeConfig = {
     description?: string;
     required: boolean;
   }> | null;
+  claudeCode?: {
+    authentication: "provider" | "subscription";
+    model?: string;
+  };
   ttlHours: number | null;
   maxCostUsd: number | null;
   idleTimeoutMinutes: number | null;
@@ -74,6 +84,7 @@ export function AgentRuntimeFields({
   const appName = useAppName();
   const runtimeEnabled = useFeature("agentRuntime");
   const runtimeCredentials = useRuntimeCredentials(runtimeEnabled === true);
+  const runtimeDefaults = useFeature("agentRuntimeBackend");
   const configuredDefaultImage = useFeature("agentRuntimeBaseImage");
   const defaultImage =
     typeof configuredDefaultImage === "string" ? configuredDefaultImage : "";
@@ -155,6 +166,8 @@ export function AgentRuntimeFields({
             targetLabel="dedicated runtime"
             installationLabel="Per user"
             staticLabel="Shared"
+            installationDescription="Each user provides their own value."
+            staticDescription="The same value is used for every run."
             installationCalloutTitle="Each user provides their own value"
             requiredDescription="Required credentials are checked before every run. Chat prompts the user to connect a missing value; other callers receive an error and can retry after it is connected."
             promptedValueLabel="per-user"
@@ -247,93 +260,116 @@ export function AgentRuntimeFields({
                   </SelectContent>
                 </Select>
               </div>
-              <NumberField
-                id="runtime-idle-timeout"
-                label="Idle timeout (minutes)"
-                value={config.idleTimeoutMinutes}
-                min={1}
-                max={1440}
-                onChange={(idleTimeoutMinutes) =>
-                  update({ idleTimeoutMinutes })
-                }
-                description="Stops the run after it finishes a task and receives no follow-up instructions for this long."
-              />
             </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <NumberField
-                id="agent-runtime-max-duration"
-                label="Maximum duration (hours)"
-                value={config.ttlHours}
-                min={1}
-                max={720}
-                onChange={(ttlHours) => update({ ttlHours })}
-                description="Hard lifetime cap for a run, including active and idle time."
-              />
-              <NumberField
-                id="agent-runtime-cost-budget"
-                label="Metered LLM budget (USD)"
-                value={config.maxCostUsd}
-                min={1}
-                max={100000}
-                onChange={(maxCostUsd) => update({ maxCostUsd })}
-                description="Blocks further metered model calls after this run reaches the spend ceiling."
-              />
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              <ResourceField
-                id="agent-runtime-cpu-request"
-                label="CPU request"
-                placeholder="500m"
-                value={config.resources?.cpuRequest}
-                onChange={(cpuRequest) =>
-                  updateResource(config, update, { cpuRequest })
-                }
-              />
-              <ResourceField
-                id="agent-runtime-memory-request"
-                label="Memory request"
-                placeholder="1Gi"
-                value={config.resources?.memoryRequest}
-                onChange={(memoryRequest) =>
-                  updateResource(config, update, { memoryRequest })
-                }
-              />
-              <ResourceField
-                id="agent-runtime-cpu-limit"
-                label="CPU limit"
-                placeholder="No limit"
-                value={config.resources?.cpuLimit}
-                onChange={(cpuLimit) =>
-                  updateResource(config, update, { cpuLimit })
-                }
-              />
-              <ResourceField
-                id="agent-runtime-memory-limit"
-                label="Memory limit"
-                placeholder="4Gi"
-                value={config.resources?.memoryLimit}
-                onChange={(memoryLimit) =>
-                  updateResource(config, update, { memoryLimit })
-                }
-              />
-            </div>
-          </div>
+            <Accordion type="single" collapsible>
+              <AccordionItem
+                value="advanced"
+                className="rounded-md border px-4 last:border-b"
+              >
+                <AccordionTrigger>Advanced</AccordionTrigger>
+                <AccordionContent className="space-y-4">
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <NumberField
+                      id="runtime-idle-timeout"
+                      label="Idle timeout (minutes)"
+                      value={config.idleTimeoutMinutes}
+                      defaultValue={runtimeDefaults?.defaultIdleTimeoutMinutes}
+                      min={1}
+                      max={1440}
+                      onChange={(idleTimeoutMinutes) =>
+                        update({ idleTimeoutMinutes })
+                      }
+                      description="Stops the run after it finishes a task and receives no follow-up instructions for this long."
+                    />
+                  </div>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <NumberField
+                      id="agent-runtime-max-duration"
+                      label="Maximum duration (hours)"
+                      value={config.ttlHours}
+                      defaultValue={runtimeDefaults?.defaultTtlHours}
+                      min={1}
+                      max={720}
+                      onChange={(ttlHours) => update({ ttlHours })}
+                      description="Hard lifetime cap for a run, including active and idle time."
+                    />
+                    <NumberField
+                      id="agent-runtime-cost-budget"
+                      label="Metered LLM budget (USD)"
+                      value={config.maxCostUsd}
+                      defaultValue="No limit"
+                      min={1}
+                      max={100000}
+                      onChange={(maxCostUsd) => update({ maxCostUsd })}
+                      description="Blocks further metered model calls after this run reaches the spend ceiling."
+                    />
+                  </div>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <ResourceField
+                      id="agent-runtime-cpu-request"
+                      label="CPU request"
+                      placeholder={installationDefaultPlaceholder(
+                        runtimeDefaults?.resources.cpuRequest,
+                      )}
+                      value={config.resources?.cpuRequest}
+                      onChange={(cpuRequest) =>
+                        updateResource(config, update, { cpuRequest })
+                      }
+                    />
+                    <ResourceField
+                      id="agent-runtime-memory-request"
+                      label="Memory request"
+                      placeholder={installationDefaultPlaceholder(
+                        runtimeDefaults?.resources.memoryRequest,
+                      )}
+                      value={config.resources?.memoryRequest}
+                      onChange={(memoryRequest) =>
+                        updateResource(config, update, { memoryRequest })
+                      }
+                    />
+                    <ResourceField
+                      id="agent-runtime-cpu-limit"
+                      label="CPU limit"
+                      placeholder={installationDefaultPlaceholder("No limit")}
+                      value={config.resources?.cpuLimit}
+                      onChange={(cpuLimit) =>
+                        updateResource(config, update, { cpuLimit })
+                      }
+                    />
+                    <ResourceField
+                      id="agent-runtime-memory-limit"
+                      label="Memory limit"
+                      placeholder={installationDefaultPlaceholder(
+                        runtimeDefaults?.resources.memoryLimit,
+                      )}
+                      value={config.resources?.memoryLimit}
+                      onChange={(memoryLimit) =>
+                        updateResource(config, update, { memoryLimit })
+                      }
+                    />
+                  </div>
 
-          <div className="flex w-full items-center justify-between gap-6 rounded-md border p-4">
-            <div className="min-w-0 space-y-1">
-              <Label htmlFor="agent-runtime-privileged">Privileged mode</Label>
-              <FieldDescription>
-                Gives the container elevated access to its host. Enable it only
-                for workloads that require host-level capabilities. Only Agent
-                administrators can turn it on.
-              </FieldDescription>
-            </div>
-            <Switch
-              id="agent-runtime-privileged"
-              className="shrink-0"
-              checked={config.privileged}
-              onCheckedChange={(privileged) => update({ privileged })}
-            />
+                  <div className="flex items-start justify-between gap-6 border-t pt-4">
+                    <div className="min-w-0 space-y-1">
+                      <Label htmlFor="agent-runtime-privileged">
+                        Privileged mode
+                      </Label>
+                      <FieldDescription>
+                        Gives the container elevated access to its host. Enable
+                        it only for workloads that require host-level
+                        capabilities. Only Agent administrators can turn it on.
+                      </FieldDescription>
+                    </div>
+                    <Switch
+                      id="agent-runtime-privileged"
+                      className="mt-0.5 shrink-0"
+                      checked={config.privileged}
+                      onCheckedChange={(privileged) => update({ privileged })}
+                    />
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
           </div>
         </div>
       )}
@@ -407,7 +443,6 @@ function fromEnvironmentDrafts(
 
 function defaultCredentialEnvironmentKey(key: string): string {
   if (key === "github") return "GITHUB_TOKEN";
-  if (key === "claude-code") return "CLAUDE_CODE_OAUTH_TOKEN";
   return uppercase(key.replace(/[.-]+/g, "_"));
 }
 
@@ -435,6 +470,7 @@ function NumberField({
   max,
   onChange,
   description,
+  defaultValue,
 }: {
   id: string;
   label: string;
@@ -443,11 +479,12 @@ function NumberField({
   max: number;
   onChange: (value: number | null) => void;
   description: string;
+  defaultValue: string | number | undefined;
 }) {
   return (
-    <div className="space-y-2">
+    <div className="flex h-full flex-col gap-2">
       <Label htmlFor={id}>{label}</Label>
-      <FieldDescription>{description}</FieldDescription>
+      <FieldDescription className="flex-1">{description}</FieldDescription>
       <Input
         id={id}
         type="number"
@@ -460,7 +497,7 @@ function NumberField({
             Number.isFinite(next) ? Math.min(max, Math.max(min, next)) : null,
           );
         }}
-        placeholder="Installation default"
+        placeholder={installationDefaultPlaceholder(defaultValue)}
       />
     </div>
   );
@@ -513,3 +550,11 @@ const ENVIRONMENT_KEY_LABELS: Record<string, string> = {
   SSH: "SSH",
   URL: "URL",
 };
+
+function installationDefaultPlaceholder(
+  value: string | number | undefined,
+): string {
+  return value === undefined
+    ? "Loading default…"
+    : `${value} (Installation Default)`;
+}

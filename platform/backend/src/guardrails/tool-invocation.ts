@@ -100,7 +100,7 @@ export async function evaluateSingleMcpToolInvocationPolicy(params: {
   // policies are enforced on the gateway execution path too.
   if (
     archestraMcpBranding.isPolicyBypassedToolName(params.toolName) ||
-    isAgentTool(params.toolName) ||
+    (isAgentTool(params.toolName) && !params.resolvedToolId) ||
     isSkillTool(params.toolName)
   ) {
     return null;

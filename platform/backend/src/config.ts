@@ -21,6 +21,7 @@ import {
   DEFAULT_CONTEXT_EXPANSION_RADIUS,
   DEFAULT_MODELS,
   DEFAULT_VAULT_TOKEN,
+  getDefaultAgentRuntimeImage,
   isValidK8sCpuQuantity,
   isValidK8sMemoryQuantity,
   MAX_CHUNK_SIZE_TOKENS,
@@ -500,6 +501,19 @@ const DEFAULT_BODY_LIMIT = 70 * 1024 * 1024;
  * (60s) and nginx (75s).
  */
 const DEFAULT_KEEP_ALIVE_TIMEOUT_MS = 620_000;
+
+/**
+ * Longest the LLM proxy lets an already-committed `text/event-stream`
+ * response go without a byte before it writes an SSE comment. The proxy
+ * withholds client tool-call events until the turn ends and tool-invocation
+ * policy has run, so a large tool payload is a stretch of upstream traffic the
+ * client hears nothing of. Streaming clients run byte-clock watchdogs against
+ * exactly that: Claude Code flags a stream as stalled after ~20s of silence
+ * and aborts and retries it after a few minutes. 10s keeps at least one
+ * keep-alive inside the 20s window with margin for scheduling jitter. 0
+ * disables the keep-alive.
+ */
+const DEFAULT_LLM_PROXY_STREAM_KEEPALIVE_INTERVAL_MS = 10_000;
 
 const DEFAULT_DATABASE_POOL_MAX = 50;
 const MAX_DATABASE_POOL_MAX = 500;
@@ -2308,7 +2322,7 @@ const config = {
     /** Built-in agent loop used when an Agent enables a dedicated runtime. */
     defaultImage:
       process.env.ARCHESTRA_AGENT_RUNTIME_BASE_IMAGE?.trim() ||
-      `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/agent-archestra:${appVersion}`,
+      getDefaultAgentRuntimeImage(appVersion),
     /** Fallback lifetime cap for Agent Runtime runs whose agent sets none. */
     defaultTtlHours: parsePositiveInt(
       process.env.ARCHESTRA_AGENT_RUNTIME_DEFAULT_TTL_HOURS,
@@ -2362,13 +2376,13 @@ const config = {
     /**
      * Selects the platform's own API-serving pods, so a run's egress policy
      * can allow exactly that destination and nothing else. The default is the
-     * label the Helm chart already stamps on both the platform and worker
-     * deployments; override it if your deployment labels them differently, or
-     * when the platform runs outside the cluster.
+     * dedicated label the Helm chart stamps on the platform API deployment.
+     * Override it if your deployment labels API pods differently. Worker pods
+     * are not API destinations.
      */
     platformPodSelector: parseLabelSelector(
       process.env.ARCHESTRA_AGENT_RUNTIME_PLATFORM_POD_SELECTOR,
-      { "archestra.io/p4-shim-client": "true" },
+      { "archestra.io/platform-api": "true" },
     ),
     /**
      * Steers Agent Runtime pods onto a dedicated node pool: a key=value list that
@@ -3413,6 +3427,10 @@ const config = {
           300000,
         )
       : undefined,
+    streamKeepAliveIntervalMs: parseNonNegativeInt(
+      process.env.ARCHESTRA_LLM_PROXY_STREAM_KEEPALIVE_INTERVAL_MS,
+      DEFAULT_LLM_PROXY_STREAM_KEEPALIVE_INTERVAL_MS,
+    ),
   },
   kb: {
     crawlerChromiumPath:

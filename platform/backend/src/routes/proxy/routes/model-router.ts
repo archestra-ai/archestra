@@ -121,6 +121,7 @@ type ModelRouterUserProviderKey = Awaited<
 type ModelRouterVirtualKeyAuth = {
   authMethod: "virtual_key";
   organizationId: string;
+  virtualKeyId: string;
   virtualKeyScope: ResourceVisibilityScope;
   virtualKeyAuthorId: string | null;
   providerApiKeysByProvider: Map<
@@ -511,10 +512,9 @@ async function routeResponse(request: FastifyRequest, reply: FastifyReply) {
     allowedApiKeyIds: getMappedApiKeyIds(auth),
   });
 
-  // A model its provider serves ONLY over Responses cannot survive the
-  // responses→chat→responses round trip the uniform path uses, so hand the
-  // caller's original Responses body to the provider's native Responses
-  // adapter untouched.
+  // Preserve native Responses semantics whenever that surface is available.
+  // A chat round trip loses reasoning settings, encrypted replay state,
+  // assistant phases and tools that are not Chat Completions functions.
   const nativeResponsesAdapter = getNativeResponsesAdapter(resolution);
   if (nativeResponsesAdapter) {
     await applyModelRouterAuthOverride({
@@ -625,22 +625,22 @@ function getModelRouterEmbeddingsProvider(
 }
 
 /**
- * The provider's native Responses adapter when the resolved model is served
- * only over Responses, otherwise null.
+ * Prefer OpenAI's native Responses surface even when a model also supports
+ * chat. Other providers retain their existing compatibility routing.
  *
  * Keyed off the model's published surfaces where available. OpenAI does not
  * publish those surfaces, so its known Responses-only model families use the
  * same model-id discriminator as foreground Agent chat.
  */
 function getNativeResponsesAdapter(resolution: ModelRouterResolution) {
+  if (resolution.provider === "openai") {
+    return openAiResponsesAdapterFactory;
+  }
   if (!modelRequiresResponses(resolution)) {
     return null;
   }
   if (resolution.provider === "github-copilot") {
     return githubCopilotResponsesAdapterFactory;
-  }
-  if (resolution.provider === "openai") {
-    return openAiResponsesAdapterFactory;
   }
   return null;
 }
@@ -916,6 +916,7 @@ async function getModelRouterAuth(
     return {
       authMethod: "virtual_key",
       organizationId: resolved.virtualKey.organizationId,
+      virtualKeyId: resolved.virtualKey.id,
       virtualKeyScope: resolved.virtualKey.scope,
       virtualKeyAuthorId: resolved.virtualKey.authorId,
       providerApiKeysByProvider: new Map(
@@ -1023,12 +1024,21 @@ async function applyModelRouterAuthOverride(params: {
     authenticated: true,
     source: "model_router",
     authMethod: params.auth.authMethod,
+    virtualKeyId:
+      params.auth.authMethod === "virtual_key"
+        ? params.auth.virtualKeyId
+        : undefined,
     authenticatedApp:
       params.auth.authMethod === "oauth_user"
         ? (params.auth.oauthClient ?? undefined)
         : params.auth.oauthClient,
     userId:
-      params.auth.authMethod === "oauth_user" ? params.auth.userId : undefined,
+      params.auth.authMethod === "oauth_user"
+        ? params.auth.userId
+        : params.auth.authMethod === "virtual_key" &&
+            params.auth.virtualKeyScope === "personal"
+          ? (params.auth.virtualKeyAuthorId ?? undefined)
+          : undefined,
   };
 }
 

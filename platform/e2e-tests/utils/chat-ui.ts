@@ -24,6 +24,7 @@ type SyncModels = (request: APIRequestContext) => Promise<APIResponse>;
 interface RuntimeChatModel {
   provider: string;
   id: string;
+  dbId: string;
   displayName: string;
 }
 

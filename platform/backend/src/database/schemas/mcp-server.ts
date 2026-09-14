@@ -20,6 +20,7 @@ import type {
 } from "@/types";
 import mcpCatalogTable from "./internal-mcp-catalog";
 import secretTable from "./secret";
+import serviceAccountsTable from "./service-account";
 import { softDeletablePgTable } from "./soft-deletable-table";
 import { team } from "./team";
 import usersTable from "./user";
@@ -72,6 +73,10 @@ const mcpServerTable = softDeletablePgTable(
       .$type<Record<string, string>>()
       .notNull()
       .default({}),
+    createdByServiceAccountId: uuid("created_by_service_account_id").references(
+      () => serviceAccountsTable.id,
+      { onDelete: "set null" },
+    ),
     ownerId: text("owner_id").references(() => usersTable.id, {
       onDelete: "set null",
     }),

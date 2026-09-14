@@ -14,6 +14,7 @@ import type {
   AgentWorkspaceFileRequest,
   AgentWorkspaceFileResult,
 } from "@/types/agent-workspace-file";
+import type { RenewableCredential } from "@/types/renewable-credential";
 
 /**
  * Runtime-neutral description of one isolated Agent run.
@@ -35,6 +36,7 @@ export type AgentRunLaunchSpec = {
   resources: AgentRuntimeResources | null;
   env: Record<string, string>;
   secretEnv: Record<string, string>;
+  renewableCredentials?: Record<string, RenewableCredential>;
   activeDeadlineSeconds: number | null;
   /** Durable workspace PVC, including nested Docker storage for privileged runtimes. */
   workspaceStorageSize?: string;
@@ -91,6 +93,8 @@ export interface AgentRuntimeBackendDriver {
   }): Promise<void>;
   /** Recover a durable, unstarted continuation after its launcher disappeared. */
   recoverRun(session: AgentRunRecord): Promise<void>;
+  /** Refresh renewable files without replaying the running command. */
+  refreshCredentials?(session: AgentRunRecord): Promise<void>;
   /** Stop only this turn, keeping the workspace available for continuation. */
   stopRun(session: AgentRunRecord): Promise<"suspended" | undefined>;
   /** Revoke turn-scoped access; a successful live CLI may retain it until workspace cleanup. */
@@ -104,7 +108,7 @@ export interface AgentRuntimeBackendDriver {
   ): Promise<boolean>;
   /** Stable connection hints; commands require the caller's own cluster access. */
   getWorkspaceConnection(
-    session: Pick<AgentRunRecord, "workloadName" | "runtimeScope">,
+    session: Pick<AgentRunRecord, "workloadName" | "runtimeScope" | "taskId">,
   ): {
     hostname: string;
     shellCommand: string;

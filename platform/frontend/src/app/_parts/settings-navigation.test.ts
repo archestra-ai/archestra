@@ -31,7 +31,7 @@ vi.mock("@/lib/auth/auth.query", () => ({
         "/settings/users",
         "/settings/teams",
         "/settings/roles",
-        "/settings/github",
+        "/settings/credentials",
         "/settings/identity-providers",
         "/settings/secrets",
       ].map((href) => [href, true]),
@@ -41,6 +41,8 @@ vi.mock("@/lib/auth/auth.query", () => ({
 vi.mock("@/lib/secrets.query", () => ({
   useSecretsType: () => ({ data: { type: "Vault" } }),
 }));
+
+vi.mock("@/lib/config/config.query", () => ({ useFeature: () => true }));
 
 describe("settings navigation", () => {
   it("lists the same tabs, in the same order, as the settings page renders", () => {

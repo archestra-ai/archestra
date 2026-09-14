@@ -36,6 +36,20 @@ implementation. The configured MCP client still performs native OAuth separately
 The installer never receives the browser's login cookie or an OAuth access token.
 Cursor's existing model and marketplace setup remains manual.
 
+## Claude Desktop
+
+Use `--client claude-desktop` for the native app's Code and Cowork tabs.
+The bootstrap opens a separate host terminal before starting the approval request.
+That terminal passes `--desktop-terminal` to avoid opening another terminal and
+continues running when the approved installer restarts Desktop.
+
+This requires an allowed host-terminal tool. Computer use cannot be assumed
+to type commands into a terminal. Cowork's execution
+sandbox cannot configure the host app. Desktop Code can also deny localhost
+network access. `/connect.md` directs agents to use ordinary permission flows
+or provide the manual Connect command when host access is unavailable.
+Do not infer the host OS from Cowork's sandbox or report sandbox edits as success.
+
 ## State and failure behavior
 
 The shared PostgreSQL-backed cache holds pending requests and polling status with

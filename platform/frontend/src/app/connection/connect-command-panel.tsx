@@ -5,7 +5,7 @@ import {
   providerRequiresPerUserCredential,
   type SupportedProvider,
 } from "@archestra/shared";
-import { KeyRound, RotateCcw } from "lucide-react";
+import { Download, KeyRound, RotateCcw } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
@@ -23,6 +23,8 @@ import {
 import { CreditWarningNotice } from "@/components/connection/credit-warning-notice";
 import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
 import { GithubCopilotSignIn } from "@/components/github-copilot-sign-in";
+import { PROVIDER_CONFIG } from "@/components/llm-provider-api-key-form";
+import { LlmProviderSelectItems } from "@/components/llm-provider-select-items";
 import { ProviderIcon } from "@/components/provider-icon";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -90,6 +92,7 @@ type EditableRow =
 
 const SCRIPT_CLIENT_IDS: readonly string[] = [
   "claude-code",
+  "claude-desktop",
   "codex",
   "copilot-cli",
   "cursor",
@@ -122,19 +125,13 @@ export function isScriptClient(
  */
 const CONNECT_SKILLS_DEFER_MS = 750;
 
-function useConnectSkills(
-  llmProxyId: string | null,
-  enabled: boolean,
-): {
+function useConnectSkills(enabled: boolean): {
   eligible: boolean;
   skills: ConnectSkill[];
 } {
   const { data: canReadSkills } = useHasPermissions({ skill: ["read"] });
-  // Skills are environment-scoped: with a proxy selected, only skills in that
-  // proxy's environment are connectable.
   const { data: skills } = useAllSkills({
     enabled: enabled && canReadSkills === true,
-    forAgentId: llmProxyId,
     // Step 2's content, not step 1's: let the part of the page the user acts
     // on first render before walking the catalogue.
     deferMs: CONNECT_SKILLS_DEFER_MS,
@@ -196,10 +193,8 @@ export function ConnectCommandPanel({
   const [customizing, setCustomizing] = useState(false);
   const compact = !!connectRequest && !customizing;
   const requestedPlatform = searchParams.get("platform");
-  const { eligible: skillsEligible, skills: allSkills } = useConnectSkills(
-    llmProxyId,
-    skillsEnabled,
-  );
+  const { eligible: skillsEligible, skills: allSkills } =
+    useConnectSkills(skillsEnabled);
   // Providers are named the way this organization names them, so a renamed
   // provider reads the same here as in the model-provider settings.
   const providerCatalog = useModelProviderCatalog();
@@ -327,21 +322,25 @@ export function ConnectCommandPanel({
   // reset when the provider changes so a model picked for one provider never
   // leaks onto another. Options come from the org's synced model list; with
   // none synced for the provider, a free-text field takes any model id.
-  const isCopilotClient = client.id === "copilot-cli";
+  const supportsModelChoice =
+    client.id === "copilot-cli" || client.id === "claude-desktop";
   const [modelChoice, setModelChoice] = useState<string | null>(null);
   // biome-ignore lint/correctness/useExhaustiveDependencies: provider is the reset trigger
   useEffect(() => setModelChoice(null), [provider]);
   const { modelsByProvider } = useLlmModelsByProvider();
   const effectiveModel =
-    isCopilotClient && provider
-      ? (modelChoice ?? DEFAULT_MODELS[provider])
+    supportsModelChoice && provider
+      ? (modelChoice ??
+        (client.id === "claude-desktop"
+          ? "claude-haiku-4-5-20251001"
+          : DEFAULT_MODELS[provider]))
       : null;
   const modelOptions = useMemo(() => {
-    if (!isCopilotClient || !provider) return [];
+    if (!supportsModelChoice || !provider) return [];
     const ids = (modelsByProvider[provider] ?? []).map((m) => m.id);
     // the current value stays selectable even when it's not in the synced list
     return Array.from(new Set(effectiveModel ? [effectiveModel, ...ids] : ids));
-  }, [isCopilotClient, provider, modelsByProvider, effectiveModel]);
+  }, [supportsModelChoice, provider, modelsByProvider, effectiveModel]);
 
   // Per-user providers always use virtual-key auth (no passthrough tab). This
   // is derived rather than written back into `proxyAuth`: overwriting the
@@ -437,7 +436,7 @@ export function ConnectCommandPanel({
   });
   const passthroughAttributes =
     canAttribute === true &&
-    ((client.id === "claude-code" &&
+    (((client.id === "claude-code" || client.id === "claude-desktop") &&
       (provider === "anthropic" || provider === "bedrock")) ||
       (client.id === "codex" && provider === "openai"));
 
@@ -665,11 +664,13 @@ export function ConnectCommandPanel({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {providers.map((p) => (
-                <SelectItem key={p} value={p}>
-                  {providerCatalog.label(p)}
-                </SelectItem>
-              ))}
+              <LlmProviderSelectItems
+                options={providers.map((provider) => ({
+                  value: provider,
+                  name: providerCatalog.label(provider),
+                  icon: PROVIDER_CONFIG[provider].icon,
+                }))}
+              />
             </SelectContent>
           </Select>
         </EditorField>
@@ -685,14 +686,25 @@ export function ConnectCommandPanel({
             value={effectiveProxyAuth}
             onValueChange={handleProxyAuthChange}
           >
-            <TabsList>
-              <TabsTrigger value="provider-key">Your provider key</TabsTrigger>
-              <TabsTrigger value="virtual-key">Virtual key</TabsTrigger>
+            <TabsList size="sm">
+              <TabsTrigger value="provider-key">
+                {client.id === "claude-desktop"
+                  ? "Claude subscription"
+                  : "Your provider key"}
+              </TabsTrigger>
+              <TabsTrigger value="virtual-key">
+                {client.id === "claude-desktop" ? "API key" : "Virtual key"}
+              </TabsTrigger>
             </TabsList>
           </Tabs>
           <p className="text-xs text-muted-foreground">
             {effectiveProxyAuth === "provider-key" ? (
-              passthroughAttributes ? (
+              client.id === "claude-desktop" ? (
+                <span>
+                  The installer opens Claude subscription sign-in and configures
+                  Desktop. Your token stays on your computer.
+                </span>
+              ) : passthroughAttributes ? (
                 <span>
                   Only the base URL changes: requests keep using your own API
                   key or subscription, and a personal passthrough virtual key in
@@ -739,7 +751,7 @@ export function ConnectCommandPanel({
   ) : null;
 
   const modelEditor =
-    isCopilotClient && provider ? (
+    supportsModelChoice && provider ? (
       <div className="grid gap-1.5">
         <EditorField label="Model">
           {modelOptions.length > 1 ? (
@@ -790,11 +802,6 @@ export function ConnectCommandPanel({
         />
         Install shared skills
       </label>
-      {llmProxyId !== null && (
-        <p className="pl-6 text-xs text-muted-foreground">
-          Only skills in the LLM Proxy's environment are listed.
-        </p>
-      )}
       <p className="pl-6 text-xs text-muted-foreground">
         Everything shared with you is installed, and stays current as skills are
         added or removed. To share a fixed subset instead, use a snapshot link.
@@ -951,7 +958,9 @@ export function ConnectCommandPanel({
                   <ResourceLink href="/llm/proxy">the LLM Proxy</ResourceLink>{" "}
                   using{" "}
                   <span className="font-medium text-foreground">
-                    your provider key
+                    {client.id === "claude-desktop"
+                      ? "your Claude subscription"
+                      : "your provider key"}
                   </span>{" "}
                   <RecommendationChip>
                     Good for reusing a subscription
@@ -960,7 +969,7 @@ export function ConnectCommandPanel({
               )}
             </SetupSummaryRow>
           )}
-          {isCopilotClient && proxyActive && provider && (
+          {supportsModelChoice && proxyActive && provider && (
             <SetupSummaryRow
               compact={compact}
               done
@@ -970,7 +979,9 @@ export function ConnectCommandPanel({
               editor={modelEditor}
               changeTestId="connect-change-model"
             >
-              Run Copilot with{" "}
+              Run{" "}
+              {client.id === "claude-desktop" ? "Claude Desktop" : "Copilot"}{" "}
+              with{" "}
               <span className="font-medium text-foreground">
                 {effectiveModel}
               </span>
@@ -1026,7 +1037,10 @@ export function ConnectCommandPanel({
             >
               {compatiblePlugins.length === 0 ? (
                 <span>
-                  No compatible plugins for {platformLabels[platform]}
+                  No compatible plugins for{" "}
+                  {client.id === "claude-desktop"
+                    ? "macOS"
+                    : platformLabels[platform]}
                 </span>
               ) : selectedPlugins.length === 0 ? (
                 <span>Plugins not installed</span>
@@ -1092,11 +1106,21 @@ export function ConnectCommandPanel({
         compact={!!connectRequest}
         n={3}
         title={
-          connectRequest ? "Approve the connection" : "Run the setup script"
+          connectRequest
+            ? "Approve the connection"
+            : client.id === "claude-desktop"
+              ? "Install the connection"
+              : "Run the setup script"
         }
         last={!showOAuthStep}
       >
         <div className="flex flex-col gap-3">
+          {client.id === "claude-desktop" && (
+            <p className="text-sm text-muted-foreground">
+              Only Claude Desktop is needed. Finish active Desktop tasks before
+              setup restarts the app.
+            </p>
+          )}
           <output
             className="sr-only"
             aria-live="polite"
@@ -1120,7 +1144,7 @@ export function ConnectCommandPanel({
           <div
             className={cn(
               "overflow-hidden rounded-xl border",
-              connectRequest
+              connectRequest || client.id === "claude-desktop"
                 ? "bg-card"
                 : "border-[#1f2937] bg-[#0d1117] shadow-lg",
             )}
@@ -1165,6 +1189,35 @@ export function ConnectCommandPanel({
                 clientId={client.id}
                 platform={setupPlatform}
               />
+            ) : client.id === "claude-desktop" && result?.installerUrl ? (
+              <div className="space-y-3 p-5 text-foreground">
+                <Button asChild variant="outline" size="sm">
+                  <a href={result.installerUrl} download>
+                    <Download className="size-3.5" />
+                    <span>Download installer</span>
+                  </a>
+                </Button>
+                <p className="max-w-xl text-sm leading-relaxed text-muted-foreground">
+                  Open in Claude Desktop and confirm Install. Your browser
+                  guides you through subscription sign-in and restarting
+                  Desktop. No terminal or developer tools needed.
+                </p>
+                <details className="text-xs text-muted-foreground">
+                  <summary className="cursor-pointer">
+                    Advanced: terminal setup
+                  </summary>
+                  <p className="mt-2">
+                    The terminal option requires Python 3.9+ and Claude Code for
+                    subscription sign-in.
+                  </p>
+                  <SetupCommandLine
+                    command={result.command}
+                    pending={false}
+                    failed={false}
+                    onRetry={() => runGeneration(inputsKey)}
+                  />
+                </details>
+              </div>
             ) : (
               <SetupCommandLine
                 command={result?.command ?? null}
@@ -1178,13 +1231,26 @@ export function ConnectCommandPanel({
           {!connectRequest && (
             <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 text-xs text-muted-foreground">
               <span className="max-w-2xl">
-                The command downloads a one-time setup script (expires in 15
-                minutes) and pipes it straight to{" "}
-                {platform === "windows" ? "PowerShell" : "Bash"} on{" "}
-                {platformLabels[platform]}. The script applies the setup
-                reviewed above by editing your client config in place — it
-                isn&apos;t undone automatically, so revert manually if you need
-                to.
+                {client.id === "claude-desktop" ? (
+                  <span>
+                    The installer expires in 15 minutes. Already using a
+                    third-party Desktop profile? Use the terminal option. You
+                    can remove the setup helper from Desktop Extensions
+                    afterward.
+                  </span>
+                ) : (
+                  <span>
+                    The command downloads a one-time setup script (expires in 15
+                    minutes) and pipes it straight to{" "}
+                    {platform === "windows" ? "PowerShell" : "Bash"} on{" "}
+                    {client.id === "claude-desktop"
+                      ? "macOS"
+                      : platformLabels[platform]}
+                    . The script applies the setup reviewed above by editing
+                    your client config in place — it isn&apos;t undone
+                    automatically, so revert manually if you need to.
+                  </span>
+                )}
               </span>
               <button
                 type="button"
@@ -1398,7 +1464,8 @@ function PluginsDetail({
       )}
       {incompatiblePlugins.length > 0 && (
         <p>
-          Not compatible with {platformLabels[platform]}:{" "}
+          Not compatible with{" "}
+          {clientId === "claude-desktop" ? "macOS" : platformLabels[platform]}:{" "}
           {incompatiblePlugins.map((plugin) => plugin.displayName).join(", ")}.
         </p>
       )}

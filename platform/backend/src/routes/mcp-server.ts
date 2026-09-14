@@ -49,6 +49,7 @@ import {
   filterMcpServersAssignableToTarget,
   isPredefinedAdmin,
 } from "@/services/agent-tool-assignment";
+import { resolveMcpCredentialValues } from "@/services/credentials";
 import { assertValuesMatchEnvironmentRegex } from "@/services/environments/environment";
 import { refreshLinkedIdentityProviderAccessToken } from "@/services/identity-providers/access-token-refresh";
 import {
@@ -642,6 +643,13 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // For LOCAL servers: validate env vars and create secrets (no connection validation, since deployment will be started later)
       if (catalogItem?.serverType === "local") {
+        await resolveMcpCredentialValues({
+          organizationId,
+          userId: targetUserId,
+          installationScope: serverData.scope,
+          environment: catalogItem.localConfig?.environment ?? [],
+        });
+
         const catalogStaticUserConfigValues = getCatalogStaticUserConfigValues(
           catalogItem.userConfig,
         );
@@ -653,7 +661,8 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Validate required environment variables
         if (catalogItem.localConfig?.environment) {
           const requiredEnvVars = catalogItem.localConfig.environment.filter(
-            (env) => env.promptOnInstallation && env.required,
+            (env) =>
+              env.promptOnInstallation && env.required && !env.credentialId,
           );
 
           const missingEnvVars = requiredEnvVars.filter((env) => {
@@ -715,7 +724,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             ...catalogStaticUserConfigValues,
           };
           for (const envDef of catalogItem.localConfig.environment) {
-            if (envDef.type === "secret") {
+            if (envDef.type === "secret" && !envDef.credentialId) {
               const value = envDef.promptOnInstallation
                 ? environmentValues?.[envDef.key]
                 : envDef.value;
@@ -754,7 +763,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
           // Collect all secret-type env vars (static and prompted).
           for (const envDef of catalogItem.localConfig?.environment ?? []) {
-            if (envDef.type === "secret") {
+            if (envDef.type === "secret" && !envDef.credentialId) {
               let value: string | undefined;
               // Get value based on whether it's prompted or static
               if (envDef.promptOnInstallation) {
@@ -1473,7 +1482,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
               ...catalogStaticUserConfigValues,
             };
             for (const envDef of catalogItem.localConfig.environment) {
-              if (envDef.type === "secret") {
+              if (envDef.type === "secret" && !envDef.credentialId) {
                 const value = envDef.promptOnInstallation
                   ? environmentValues?.[envDef.key]
                   : (envDef.value as string | undefined);
@@ -2146,6 +2155,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         return reply.send(result as Record<string, unknown>);
       } catch (error) {
+        if (error instanceof ApiError) throw error;
         if (
           error instanceof McpServerNotReadyError ||
           error instanceof McpServerConnectionTimeoutError
@@ -2309,7 +2319,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ...(environmentValues ?? {}),
       };
       for (const envDef of catalogItem.localConfig?.environment ?? []) {
-        if (envDef.type === "secret") {
+        if (envDef.type === "secret" && !envDef.credentialId) {
           const value = submittedEnv[envDef.key];
           if (
             typeof value === "string" &&
@@ -2370,7 +2380,8 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // requires the body alone.
       if (catalogItem.localConfig?.environment) {
         const requiredEnvVars = catalogItem.localConfig.environment.filter(
-          (env) => env.promptOnInstallation && env.required,
+          (env) =>
+            env.promptOnInstallation && env.required && !env.credentialId,
         );
 
         const missingEnvVars = requiredEnvVars.filter((env) => {

@@ -3,7 +3,7 @@ title: "Environments"
 category: Administration
 description: "Isolate tools, knowledge, skills, subagents, runtimes, and cost limits across deployment environments"
 order: 3
-lastUpdated: 2026-09-03
+lastUpdated: 2026-09-11
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -82,7 +82,7 @@ This applies to both explicitly assigned resources and the implicit **Auto** acc
 
 ## Network egress policies
 
-An environment can define a Kubernetes **namespace** and a **network egress policy**. Self-hosted MCP server pods, agent [code sandboxes](/docs/platform-code-sandbox), and Agent [Agent Runtime Jobs](/docs/platform-agent-runtime#environments-and-network-egress) run in that namespace and inherit the policy, so their outbound network reach is contained. A policy sets one of three egress modes. **Block all** (`off`) denies all egress. **Allowlist** (`restricted`) permits only selected IP/CIDR ranges and domains. **Public internet** (`unrestricted`) permits public egress and any additional CIDRs you list. Pods in your cluster still get a [fixed floor](#the-public-internet-floor) of blocked reserved ranges outside those explicit exceptions. Domain presets and custom domains require a supported FQDN policy provider; Kubernetes `NetworkPolicy` alone only enforces IP/CIDR rules.
+An environment can define a Kubernetes **namespace** and a **network egress policy**. Self-hosted MCP server pods, agent [code sandboxes](/docs/platform-code-sandbox), and Agent [Agent Runtime workspaces](/docs/platform-agent-runtime#environments-and-network-egress) run in that namespace and inherit the policy, so their outbound network reach is contained. A policy sets one of three egress modes. **Block all** (`off`) denies all egress. **Allowlist** (`restricted`) permits only selected IP/CIDR ranges and domains. **Public internet** (`unrestricted`) permits public egress and any additional CIDRs you list. Pods in your cluster still get a [fixed floor](#the-public-internet-floor) of blocked reserved ranges outside those explicit exceptions. Domain presets and custom domains require a supported FQDN policy provider; Kubernetes `NetworkPolicy` alone only enforces IP/CIDR rules.
 
 When a workload runs in an environment, Archestra uses the environment's network policy, then the organization default network policy, then the built-in Public internet policy (`unrestricted`).
 

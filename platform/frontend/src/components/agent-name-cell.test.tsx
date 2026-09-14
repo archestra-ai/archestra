@@ -12,6 +12,18 @@ describe("AgentNameCell", () => {
     expect(screen.queryByText("Organization")).not.toBeInTheDocument();
   });
 
+  it("preserves the full name so truncation follows available space", () => {
+    render(
+      <AgentNameCell
+        name="Engineering investigation assistant"
+        href="/agents/preview"
+      />,
+    );
+    expect(
+      screen.getByRole("link", { name: "Engineering investigation assistant" }),
+    ).toBeInTheDocument();
+  });
+
   it("keeps the Built-in badge for built-in agents", () => {
     render(<AgentNameCell name="Built-in Agent" builtIn />);
 

@@ -22,6 +22,7 @@ export function ScopeBadge({
   teamNames,
   userNames,
   hidePersonal = false,
+  showLabel = false,
 }: {
   scope: ResourceVisibilityScope;
   teamNames?: string[] | null;
@@ -33,6 +34,8 @@ export function ScopeBadge({
    */
   userNames?: string[] | null;
   hidePersonal?: boolean;
+  /** Show the scope type beside the icon on surfaces where space allows. */
+  showLabel?: boolean;
 }) {
   const sharedWith = userNames?.filter(Boolean) ?? [];
   const sharedWithUsers = scope === "personal" && sharedWith.length > 0;
@@ -50,6 +53,7 @@ export function ScopeBadge({
     : scope === "team" && names.length > 0
       ? `Team: ${names.join(", ")}`
       : scopeLabel(scope);
+  const visibleLabel = sharedWithUsers ? "Shared" : scopeLabel(scope);
 
   return (
     <Tooltip>
@@ -67,6 +71,7 @@ export function ScopeBadge({
           )}
         >
           <Icon className="h-3 w-3" />
+          {showLabel ? <span>{visibleLabel}</span> : null}
         </Badge>
       </TooltipTrigger>
       <TooltipContent>{label}</TooltipContent>

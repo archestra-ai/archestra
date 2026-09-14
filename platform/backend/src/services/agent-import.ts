@@ -316,6 +316,7 @@ async function findToolByReference(ref: {
       and(
         eq(schema.toolsTable.name, ref.toolName),
         isNull(schema.toolsTable.delegateToAgentId),
+        isNull(schema.toolsTable.delegateToA2aConnectionId),
       ),
     )
     .limit(1);

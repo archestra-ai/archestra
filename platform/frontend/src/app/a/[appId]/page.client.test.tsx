@@ -29,6 +29,7 @@ const app = {
   id: APP_ID,
   organizationId: "org-1",
   authorId: "user-1",
+  createdByServiceAccountId: null,
   name: "Test App",
   slug: "test-app",
   description: null,

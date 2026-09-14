@@ -32,7 +32,7 @@ The platform stores plugin files without translating them.
 
 ## Importing a Marketplace
 
-Import from a popular marketplace, or paste a GitHub marketplace URL. Private repositories use a GitHub App or personal access token from **Settings → GitHub**.
+Import from a popular marketplace, or paste a GitHub marketplace URL. Private repositories use a GitHub App or personal access token from **Settings → Credentials**.
 
 Select the plugins you want and preview their files. GitHub-owned files stay read-only here. Edit them in their repository.
 

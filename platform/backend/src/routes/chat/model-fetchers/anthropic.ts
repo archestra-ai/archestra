@@ -94,12 +94,20 @@ export async function fetchAnthropicModelsViaVertexAi(): Promise<ModelInfo[]> {
 
 /**
  * Build the auth headers for a direct Anthropic HTTP call: `x-api-key` for a
- * real key, else the Azure-Foundry-Entra or Workload-Identity bearer when those
- * keyless modes are enabled. Shared with the credit-probe helper.
+ * real key, bearer with the OAuth beta for subscription access tokens, else
+ * the Azure-Foundry-Entra or Workload-Identity bearer when those keyless modes
+ * are enabled. Shared with the credit-probe helper.
  */
 export async function getAnthropicAuthHeaders(
   apiKey: string | undefined,
 ): Promise<Record<string, string>> {
+  if (apiKey?.startsWith("sk-ant-oat")) {
+    return {
+      Authorization: `Bearer ${apiKey}`,
+      "anthropic-beta": "oauth-2025-04-20",
+    };
+  }
+
   if (apiKey) {
     return { "x-api-key": apiKey };
   }

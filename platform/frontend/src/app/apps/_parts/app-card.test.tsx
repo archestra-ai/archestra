@@ -4,13 +4,15 @@ import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useAppAccess } from "@/lib/apps/use-app-access";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { takePendingProjectChatHandoff } from "@/lib/chat/pending-project-chat-handoff";
 import { AppCard } from "./app-card";
 
 type AppListItem = archestraApiTypes.GetAppsResponses["200"]["data"][number];
 
-const { pushMock, openExternalMutate } = vi.hoisted(() => ({
+const { pushMock, openOwnedMutate, openExternalMutate } = vi.hoisted(() => ({
   pushMock: vi.fn(),
+  openOwnedMutate: vi.fn(),
   openExternalMutate: vi.fn(),
 }));
 
@@ -21,9 +23,10 @@ vi.mock("next/link", () => ({
 }));
 
 vi.mock("next/navigation");
+vi.mock("@/lib/auth/auth.query");
 
 vi.mock("@/lib/app.query", () => ({
-  useOpenAppInChat: () => ({ mutateAsync: vi.fn() }),
+  useOpenAppInChat: () => ({ mutateAsync: openOwnedMutate }),
   useOpenExternalAppInChat: () => ({ mutateAsync: openExternalMutate }),
   usePinApp: () => ({ mutate: vi.fn() }),
   // The card hosts the shared AppSettingsDialog, which reads the app by id.
@@ -81,11 +84,13 @@ vi.mock("@/components/ui/dropdown-menu", () => ({
   DropdownMenuItem: ({
     children,
     onSelect,
+    onClick,
     variant,
     ...props
   }: {
     children: ReactNode;
     onSelect?: (e: { preventDefault: () => void }) => void;
+    onClick?: React.MouseEventHandler<HTMLDivElement>;
     variant?: string;
   } & React.HTMLAttributes<HTMLDivElement>) => (
     <div
@@ -93,7 +98,10 @@ vi.mock("@/components/ui/dropdown-menu", () => ({
       role="menuitem"
       data-variant={variant}
       tabIndex={0}
-      onClick={(e) => onSelect?.(e)}
+      onClick={(e) => {
+        onSelect?.(e);
+        onClick?.(e);
+      }}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
           onSelect?.(e);
@@ -106,6 +114,9 @@ vi.mock("@/components/ui/dropdown-menu", () => ({
 }));
 
 beforeEach(() => {
+  vi.mocked(useHasPermissions).mockReturnValue({ data: true } as ReturnType<
+    typeof useHasPermissions
+  >);
   vi.mocked(useRouter).mockReturnValue({
     push: pushMock,
   } as unknown as ReturnType<typeof useRouter>);
@@ -178,9 +189,7 @@ describe("ExternalAppCard", () => {
     expect(screen.getByText("Shows the project board")).toBeInTheDocument();
     expect(screen.queryByText(/archestra_pm/)).not.toBeInTheDocument();
     expect(screen.getByLabelText("MCP server app")).toBeInTheDocument();
-    // Per-install card carries an icon-only scope pill (label in aria/tooltip)
-    // to disambiguate sibling installs.
-    expect(screen.getByLabelText("Organization")).toBeInTheDocument();
+    expect(screen.getByText("Organization")).toBeVisible();
   });
 
   it("opens the install in chat and navigates to the seeded conversation", async () => {
@@ -233,6 +242,12 @@ describe("ExternalAppCard", () => {
   it("links 'Open in new tab' to the install-pinned run page and 'Manage MCP server'", () => {
     render(<AppCard app={externalApp} />);
 
+    expect(
+      screen.queryByRole("button", {
+        name: "Chat Archestra PM / show_board",
+      }),
+    ).not.toBeInTheDocument();
+
     const expectedRun =
       "/a/catalog/cat-1?install=srv-1&resource=ui%3A%2F%2Fpm%2Fboard.html";
 
@@ -273,6 +288,25 @@ describe("ExternalAppCard", () => {
 });
 
 describe("OwnedAppCard", () => {
+  beforeEach(() => {
+    openOwnedMutate.mockReset();
+  });
+
+  it("offers Settings without duplicating the card's chat action", () => {
+    const onOpenSettings = vi.fn();
+    render(<AppCard app={ownedApp} onOpenSettings={onOpenSettings} />);
+
+    expect(
+      screen.queryByRole("button", { name: "Chat My Owned App" }),
+    ).not.toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Settings My Owned App" }),
+    );
+    expect(onOpenSettings).toHaveBeenCalledOnce();
+    expect(onOpenSettings).toHaveBeenCalledWith(ownedApp);
+    expect(openOwnedMutate).not.toHaveBeenCalled();
+  });
+
   it("exposes a standalone link and a delete action", () => {
     render(<AppCard app={ownedApp} />);
 
@@ -325,7 +359,9 @@ describe("OwnedAppCard", () => {
 
     render(<AppCard app={ownedApp} onOpenSettings={onOpenSettings} />);
 
-    const settings = screen.getByRole("menuitem", { name: "Settings" });
+    const settings = screen.getByRole("button", {
+      name: "Settings My Owned App",
+    });
     const versionHistory = screen.getByRole("menuitem", {
       name: "Version history",
     });
@@ -359,6 +395,7 @@ describe("OwnedAppCard", () => {
     );
 
     expect(screen.getByLabelText("Team: London HQ")).toBeInTheDocument();
+    expect(screen.getByText("Team")).toBeVisible();
   });
 
   it("shows the personal pill (no owner badge) for the viewer's own personal app", () => {
@@ -377,6 +414,7 @@ describe("OwnedAppCard", () => {
     );
 
     expect(screen.getByLabelText("Personal")).toBeInTheDocument();
+    expect(screen.getByText("Personal")).toBeVisible();
     expect(screen.queryByText(/owned by/i)).not.toBeInTheDocument();
   });
 
@@ -399,6 +437,23 @@ describe("OwnedAppCard", () => {
 
     expect(screen.getByLabelText("Personal")).toBeInTheDocument();
     expect(screen.getByText("Owned by Grace Hopper")).toBeInTheDocument();
+  });
+
+  it("labels a personal app shared directly with users as shared", () => {
+    render(
+      <AppCard
+        app={{
+          ...ownedApp,
+          scope: "personal",
+          viewerRole: "owner",
+          users: [{ id: "user-2", name: "Grace Hopper" }],
+        }}
+      />,
+    );
+
+    expect(screen.getByLabelText("Shared with: Grace Hopper")).toBeVisible();
+    expect(screen.getByText("Shared")).toBeVisible();
+    expect(screen.queryByText("Personal")).not.toBeInTheDocument();
   });
 
   it("shows a 'Disabled' badge for a disabled app", () => {

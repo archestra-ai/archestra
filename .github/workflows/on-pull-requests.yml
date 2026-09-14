@@ -247,7 +247,7 @@ jobs:
   # same-named twin would mask real failures on merge_group. The guard only
   # bites on pull_request events: on merge_group, github.event.pull_request
   # is null and the first clause short-circuits, so queue validation runs
-  # unchanged.
+  # unchanged. Backport PRs from the same App run normal checks.
   #
   # EXCEPTION: platform-lint-and-unit-tests must still run on release-please
   # PRs — it auto-commits the regenerated docs/openapi.json version bump onto
@@ -356,7 +356,11 @@ jobs:
       # The credential helper is passed with -c so it applies to this one
       # command only: the token stays in the environment, never reaching argv,
       # .git/config, or any later step.
-      - name: Fetch base ref for the migration linter
+      # The release tag fetch feeds the released-tag upgrade replay matrix
+      # (backend test:migration-upgrades), which migrates a database with each
+      # active stable line's latest released history before upgrading it to
+      # this PR's history.
+      - name: Fetch base ref and release tags for migration checks
         env:
           GH_TOKEN: ${{ github.token }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
@@ -364,7 +368,36 @@ jobs:
           git -c credential.helper= \
               -c credential.helper='!f() { echo username=x-access-token; echo "password=$GH_TOKEN"; }; f' \
               fetch --depth=1 origin \
-              "+refs/heads/${DEFAULT_BRANCH}:refs/remotes/origin/${DEFAULT_BRANCH}"
+              "+refs/heads/${DEFAULT_BRANCH}:refs/remotes/origin/${DEFAULT_BRANCH}" \
+              "+refs/heads/release/*:refs/remotes/origin/release/*" \
+              "+refs/tags/platform-v*:refs/tags/platform-v*"
+
+      # The private development mirror does not publish stable release tracks.
+      # Test its changes against the actual released public histories, keeping
+      # origin/main above tied to this PR's own repository.
+      - name: Fetch canonical release histories in the private mirror
+        if: github.repository == 'archestra-ai/archestra-private'
+        run: |
+          git fetch --depth=1 https://github.com/archestra-ai/archestra.git \
+            "+refs/heads/release/*:refs/remotes/origin/release/*" \
+            "+refs/tags/platform-v*:refs/tags/platform-v*"
+
+      # The private development mirror does not publish stable release tracks.
+      # Test its changes against the actual released public histories, keeping
+      # origin/main above tied to this PR's own repository.
+      - name: Fetch canonical release histories in the private mirror
+        if: github.repository == 'archestra-ai/archestra-private'
+        run: |
+          git fetch --depth=1 https://github.com/archestra-ai/archestra.git \
+            "+refs/heads/release/*:refs/remotes/origin/release/*" \
+            "+refs/tags/platform-v*:refs/tags/platform-v*"
+
+      - name: Check migration upgrade paths across release tracks
+        env:
+          BASE_BRANCH: ${{ github.event.pull_request.base.ref || github.event.merge_group.base_ref }}
+        run: |
+          python3 ../.github/scripts/test_check_migration_upgrades.py
+          python3 ../.github/scripts/check-migration-upgrades.py --base-branch "${BASE_BRANCH#refs/heads/}"
 
       # Backend unit tests run in the parallel sharded "Backend Unit Tests"
       # jobs below; here the backend runs check:commit (same checks minus
@@ -374,8 +407,14 @@ jobs:
           pnpm exec turbo check:ci --filter=!@backend
           pnpm exec turbo check:commit --filter=@backend
 
+      - name: Test migration upgrades across release tracks
+        run: pnpm --dir backend test:migration-upgrades
+
       - name: Release skill harness
         run: pnpm test:release-skill
+
+      - name: Test backport automation
+        run: python3 ../.github/scripts/test_backport.py
 
       # Guards white-labeling: fails when user- or LLM-facing copy hardcodes the
       # brand instead of resolving the deployment's app name. Occurrences that
@@ -491,7 +530,7 @@ jobs:
   platform-rust-checks:
     name: Platform Rust Checks
     # bot-pr-guard (see comment above platform-lint-and-unit-tests)
-    if: github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'archestra-ci[bot]' && github.event.pull_request.user.login != 'archestra-contributor-pr-bot[bot]')
+    if: github.event_name != 'pull_request' || ((github.event.pull_request.user.login != 'archestra-ci[bot]' || startsWith(github.event.pull_request.head.ref, 'backport/')) && github.event.pull_request.user.login != 'archestra-contributor-pr-bot[bot]')
     runs-on: ${{ github.event_name == 'merge_group' && vars.MAC_MINI_CI == 'on' && fromJSON('["self-hosted", "mac-mini-1"]') || 'ubuntu-latest' }}
     timeout-minutes: 15
     permissions:
@@ -543,7 +582,7 @@ jobs:
       # download against its pinned manifest and picks the right platform
       # (Linux runners and the mac mini).
       - name: Install cargo-deny
-        uses: taiki-e/install-action@37f7c5781271959fb65b6b35224e28652ff2b63d # v2.87.0
+        uses: taiki-e/install-action@e67fa11c4b9316fa714ddf0abed07a0c3143b95b # v2.87.4
         with:
           tool: cargo-deny@0.20.2
 
@@ -554,7 +593,7 @@ jobs:
   ai-labs-rust-checks:
     name: AI Labs Rust Checks
     # bot-pr-guard (see comment above platform-lint-and-unit-tests)
-    if: github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'archestra-ci[bot]' && github.event.pull_request.user.login != 'archestra-contributor-pr-bot[bot]')
+    if: github.event_name != 'pull_request' || ((github.event.pull_request.user.login != 'archestra-ci[bot]' || startsWith(github.event.pull_request.head.ref, 'backport/')) && github.event.pull_request.user.login != 'archestra-contributor-pr-bot[bot]')
     # mac-mini routing (see comment above platform-rust-checks)
     runs-on: ${{ github.event_name == 'merge_group' && vars.MAC_MINI_CI == 'on' && fromJSON('["self-hosted", "mac-mini-1"]') || 'ubuntu-latest' }}
     timeout-minutes: 15
@@ -592,7 +631,7 @@ jobs:
           node-version: "24.11.1"
 
       - name: Run Node triage parity test
-        run: node --test ../.claude/skills/archestra-dev-bench-analysis/bin/render-triage.test.mjs
+        run: node --test ../.agents/skills/archestra-dev-bench-analysis/bin/render-triage.test.mjs
 
       - name: Rust formatting
         run: cargo fmt --all --check
@@ -618,7 +657,7 @@ jobs:
   backend-unit-tests:
     name: Backend Unit Tests (shard ${{ matrix.shard }}/8)
     # bot-pr-guard (see comment above platform-lint-and-unit-tests)
-    if: github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'archestra-ci[bot]' && github.event.pull_request.user.login != 'archestra-contributor-pr-bot[bot]')
+    if: github.event_name != 'pull_request' || ((github.event.pull_request.user.login != 'archestra-ci[bot]' || startsWith(github.event.pull_request.head.ref, 'backport/')) && github.event.pull_request.user.login != 'archestra-contributor-pr-bot[bot]')
     runs-on: blacksmith-16vcpu-ubuntu-2404
     # A full local suite run is ~4 min on comparable hardware; a shard is a
     # quarter of that plus setup and the cargo build (~3-3.5 min/shard in
@@ -652,6 +691,13 @@ jobs:
         uses: ./.github/actions/setup-env
         with:
           working-directory: ./platform
+
+      - name: Ensure Zsh for shell startup tests
+        run: |
+          if ! command -v zsh >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y zsh
+          fi
 
       # The NAPI package builds are deliberately uncacheable in turbo
       # (turbo.json sets cache:false on them — the .node artifacts are
@@ -725,7 +771,7 @@ jobs:
     # platform-lint-and-unit-tests): when the shards skip on a bot PR, the
     # gate must skip too — with plain always() it would run and fail on the
     # shards' "skipped" result.
-    if: always() && (github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'archestra-ci[bot]' && github.event.pull_request.user.login != 'archestra-contributor-pr-bot[bot]'))
+    if: always() && (github.event_name != 'pull_request' || ((github.event.pull_request.user.login != 'archestra-ci[bot]' || startsWith(github.event.pull_request.head.ref, 'backport/')) && github.event.pull_request.user.login != 'archestra-contributor-pr-bot[bot]'))
     needs: [backend-unit-tests]
     permissions: {}
     steps:
@@ -742,7 +788,7 @@ jobs:
   frontend-integration-tests:
     name: Frontend Integration Tests (MSW group ${{ matrix.group }}/2)
     # bot-pr-guard (see comment above platform-lint-and-unit-tests)
-    if: github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'archestra-ci[bot]' && github.event.pull_request.user.login != 'archestra-contributor-pr-bot[bot]')
+    if: github.event_name != 'pull_request' || ((github.event.pull_request.user.login != 'archestra-ci[bot]' || startsWith(github.event.pull_request.head.ref, 'backport/')) && github.event.pull_request.user.login != 'archestra-contributor-pr-bot[bot]')
     # mac-mini routing (see comment above platform-rust-checks)
     runs-on: ${{ github.event_name == 'merge_group' && vars.MAC_MINI_CI == 'on' && fromJSON('["self-hosted", "mac-mini-1"]') || 'blacksmith-8vcpu-ubuntu-2404' }}
     permissions:
@@ -784,13 +830,35 @@ jobs:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.pw-version.outputs.version }}
 
+      # apt mirror outages must not fail the job when the runner image already
+      # carries Chromium's system libraries: retry install-deps, then prove the
+      # browser launches instead of trusting apt's exit code.
       - name: Install Chromium for Playwright
         if: runner.os == 'Linux' && steps.playwright-cache.outputs.cache-hit != 'true'
-        run: pnpm --filter @frontend exec playwright install --with-deps chromium
+        run: |
+          pnpm --filter @frontend exec playwright install chromium
+          for attempt in 1 2 3; do
+            if pnpm --filter @frontend exec playwright install-deps chromium; then
+              exit 0
+            fi
+            echo "install-deps attempt ${attempt} failed; retrying in 20s"
+            sleep 20
+          done
+          echo "install-deps failed; verifying Chromium launches with existing system libraries"
+          pnpm --filter @frontend exec playwright screenshot --browser chromium about:blank /tmp/chromium-deps-check.png
 
       - name: Install Chromium system dependencies
         if: runner.os == 'Linux' && steps.playwright-cache.outputs.cache-hit == 'true'
-        run: pnpm --filter @frontend exec playwright install-deps chromium
+        run: |
+          for attempt in 1 2 3; do
+            if pnpm --filter @frontend exec playwright install-deps chromium; then
+              exit 0
+            fi
+            echo "install-deps attempt ${attempt} failed; retrying in 20s"
+            sleep 20
+          done
+          echo "install-deps failed; verifying Chromium launches with existing system libraries"
+          pnpm --filter @frontend exec playwright screenshot --browser chromium about:blank /tmp/chromium-deps-check.png
 
       - name: Install Chromium (macOS)
         # No system deps to install on macOS; a version already present in
@@ -875,7 +943,7 @@ jobs:
   frontend-integration-tests-gate:
     name: Frontend Integration Tests (MSW)
     runs-on: ubuntu-latest
-    if: always() && (github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'archestra-ci[bot]' && github.event.pull_request.user.login != 'archestra-contributor-pr-bot[bot]'))
+    if: always() && (github.event_name != 'pull_request' || ((github.event.pull_request.user.login != 'archestra-ci[bot]' || startsWith(github.event.pull_request.head.ref, 'backport/')) && github.event.pull_request.user.login != 'archestra-contributor-pr-bot[bot]'))
     needs: [frontend-integration-tests]
     permissions: {}
     steps:

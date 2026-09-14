@@ -15,12 +15,14 @@ import { WebSocket as WS } from "ws";
 import { betterAuth } from "@/auth";
 import db, { schema } from "@/database";
 import { browserStreamFeature } from "@/features/browser-stream/services/browser-stream.feature";
+import { agentRuntimeManager } from "@/k8s/agent-runtime";
 import McpServerRuntimeManager from "@/k8s/mcp-server-runtime/manager";
 import {
   A2AContextModel,
   A2ATaskModel,
   AgentRunModel,
   AgentRunShareModel,
+  AgentWorkspaceModel,
 } from "@/models";
 import AgentModel from "@/models/agent";
 import { agentRunTranscriptStore } from "@/services/agent-runtime/transcript-store";
@@ -347,7 +349,7 @@ describe("websocket Agent run authorization and cleanup", () => {
         type: "agent_run_logs_error",
         payload: {
           runId: task.id,
-          error: "Only the person who started this run can view its logs",
+          error: "You do not have access to this run's output",
         },
       }),
     );
@@ -752,6 +754,115 @@ describe("websocket Agent run authorization and cleanup", () => {
     ).toBe(readableTranscript);
   });
 
+  test("owner session history includes earlier turns while shared access remains per turn", async ({
+    makeOrganization,
+    makeUser,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const owner = await makeUser();
+    const other = await makeUser();
+    const agent = await makeAgent({ organizationId: org.id });
+    const context = await A2AContextModel.create({
+      actorKind: "user",
+      actorId: owner.id,
+    });
+    const turns = [];
+    const workloadName = `history-${crypto.randomUUID()}`;
+    for (const text of ["first turn ✓", "second turn ✓"]) {
+      const task = await A2ATaskModel.create({
+        contextId: context.id,
+        agentId: agent.id,
+        state: "TASK_STATE_COMPLETED",
+      });
+      const run = await AgentRunModel.create({
+        organizationId: org.id,
+        taskId: task.id,
+        agentId: agent.id,
+        actorKind: "user",
+        actorId: owner.id,
+        actorUserId: owner.id,
+        workloadName,
+        backend: "kubernetes",
+        runtimeScope: "test",
+        virtualApiKeyId: null,
+      });
+      await AgentRunModel.close({ id: run.id });
+      await agentRunTranscriptStore.persist({
+        runId: run.id,
+        transcript: text,
+        observedBytes: Buffer.byteLength(text),
+      });
+      turns.push(task);
+    }
+    await AgentWorkspaceModel.create({
+      id: turns[0].id,
+      organizationId: org.id,
+      agentId: agent.id,
+      actorKind: "user",
+      actorId: owner.id,
+      workloadName,
+      backend: "kubernetes",
+      runtimeScope: "test",
+      state: "idle",
+      lastTaskId: turns[1].id,
+      expiresAt: new Date(Date.now() + 3600_000),
+    });
+    const ws = {
+      readyState: WS.OPEN,
+      send: vi.fn(),
+      close: vi.fn(),
+    } as unknown as WS;
+    service.clientContexts.set(ws, {
+      userId: owner.id,
+      organizationId: org.id,
+      userIsMcpServerAdmin: false,
+    });
+    await service.handleMessage(
+      {
+        type: "subscribe_agent_run_logs",
+        payload: { runId: turns[0].id, includeSessionHistory: true },
+      },
+      ws,
+    );
+    const messages = vi
+      .mocked(ws.send)
+      .mock.calls.map(([value]) => JSON.parse(String(value)));
+    expect(
+      messages
+        .filter(
+          (message) =>
+            message.type === "agent_run_logs" && !message.payload.channel,
+        )
+        .map((message) => message.payload.logs)
+        .join(""),
+    ).toBe("first turn ✓\r\n\u001b[0msecond turn ✓");
+    expect(
+      messages.find((message) => message.type === "agent_run_logs_ended")
+        .payload.truncated,
+    ).toBe(false);
+    vi.mocked(ws.send).mockClear();
+    // Requesting the same session ID never grants another user the owner's accumulated history.
+    service.clientContexts.set(ws, {
+      userId: other.id,
+      organizationId: org.id,
+      userIsMcpServerAdmin: false,
+    });
+    await service.handleMessage(
+      {
+        type: "subscribe_agent_run_logs",
+        payload: { runId: turns[0].id, includeSessionHistory: true },
+      },
+      ws,
+    );
+    expect(
+      vi
+        .mocked(ws.send)
+        .mock.calls.map(([value]) => JSON.parse(String(value)))
+        .map((message) => message.type),
+    ).toEqual(["agent_run_logs_error"]);
+  });
+
   test("does not let an Agent administrator attach to another user's run", async ({
     makeAgent,
     makeMember,
@@ -819,6 +930,172 @@ describe("websocket Agent run authorization and cleanup", () => {
       }),
     );
     expect(service.agentRunAttachSubscriptions.has(ws)).toBe(false);
+  });
+
+  test("attaches only the Project run starter from the stable session URL to the current turn", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const organization = await makeOrganization();
+    const owner = await makeUser();
+    await makeMember(owner.id, organization.id, { role: "member" });
+    const project = await projectService.create({
+      organizationId: organization.id,
+      userId: owner.id,
+      name: "Project run",
+      description: null,
+    });
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      authorId: owner.id,
+      agentType: "agent",
+      scope: "org",
+    });
+    const context = await A2AContextModel.create({
+      actorKind: "user",
+      actorId: owner.id,
+    });
+    const firstTask = await A2ATaskModel.create({
+      contextId: context.id,
+      agentId: agent.id,
+      state: "TASK_STATE_COMPLETED",
+    });
+    const currentTask = await A2ATaskModel.create({
+      contextId: context.id,
+      agentId: agent.id,
+      state: "TASK_STATE_WORKING",
+    });
+    const workloadName = `project-run-${crypto.randomUUID()}`;
+    await AgentRunModel.create({
+      organizationId: organization.id,
+      taskId: firstTask.id,
+      agentId: agent.id,
+      actorKind: "user",
+      actorId: owner.id,
+      actorUserId: owner.id,
+      projectId: project.id,
+      workloadName,
+      backend: "kubernetes",
+      runtimeScope: "archestra-dev",
+      virtualApiKeyId: null,
+    });
+    const currentRun = await AgentRunModel.create({
+      organizationId: organization.id,
+      taskId: currentTask.id,
+      agentId: agent.id,
+      actorKind: "user",
+      actorId: owner.id,
+      actorUserId: owner.id,
+      projectId: project.id,
+      workloadName,
+      backend: "kubernetes",
+      runtimeScope: "archestra-dev",
+      virtualApiKeyId: null,
+    });
+    await AgentWorkspaceModel.create({
+      id: firstTask.id,
+      organizationId: organization.id,
+      agentId: agent.id,
+      actorKind: "user",
+      actorId: owner.id,
+      workloadName,
+      backend: "kubernetes",
+      runtimeScope: "archestra-dev",
+      state: "active",
+      lastTaskId: currentTask.id,
+      expiresAt: new Date(Date.now() + 3600_000),
+    });
+    const socket = {
+      readyState: WS.OPEN,
+      close: vi.fn(),
+      on: vi.fn(),
+      send: vi.fn(),
+    };
+    vi.spyOn(agentRuntimeManager, "isEnabled", "get").mockReturnValue(true);
+    const attach = vi.spyOn(agentRuntimeManager, "attach").mockResolvedValue({
+      podName: "project-run-pod",
+      command: "tmux attach",
+      socket: socket as never,
+    });
+    const ws = {
+      readyState: WS.OPEN,
+      send: vi.fn(),
+      close: vi.fn(),
+    } as unknown as WS;
+    service.clientContexts.set(ws, {
+      userId: owner.id,
+      organizationId: organization.id,
+      userIsMcpServerAdmin: false,
+    });
+
+    await service.handleMessage(
+      {
+        type: "subscribe_agent_run_attach",
+        payload: { runId: firstTask.id },
+      },
+      ws,
+    );
+
+    expect(attach).toHaveBeenCalledWith(
+      expect.objectContaining({
+        session: expect.objectContaining({ id: currentRun.id }),
+      }),
+    );
+    expect(ws.send).toHaveBeenCalledWith(
+      JSON.stringify({
+        type: "agent_run_attach_started",
+        payload: {
+          runId: firstTask.id,
+          command: "tmux attach",
+          resourceName: "project-run-pod",
+        },
+      }),
+    );
+
+    const viewer = await makeUser();
+    await makeMember(viewer.id, organization.id, { role: "admin" });
+    await projectService.setShare({
+      id: project.id,
+      organizationId: organization.id,
+      userId: owner.id,
+      visibility: "organization",
+      teamIds: [],
+    });
+    const viewerWs = {
+      readyState: WS.OPEN,
+      send: vi.fn(),
+      close: vi.fn(),
+    } as unknown as WS;
+    service.clientContexts.set(viewerWs, {
+      userId: viewer.id,
+      organizationId: organization.id,
+      userIsMcpServerAdmin: true,
+    });
+    attach.mockClear();
+
+    for (const taskId of [firstTask.id, currentTask.id]) {
+      await service.handleMessage(
+        {
+          type: "subscribe_agent_run_attach",
+          payload: { runId: taskId },
+        },
+        viewerWs,
+      );
+
+      expect(viewerWs.send).toHaveBeenCalledWith(
+        JSON.stringify({
+          type: "agent_run_attach_error",
+          payload: {
+            runId: taskId,
+            error: "Only the person who started this run can attach to it",
+          },
+        }),
+      );
+    }
+    expect(attach).not.toHaveBeenCalled();
+    expect(service.agentRunAttachSubscriptions.has(viewerWs)).toBe(false);
   });
 
   test("destroys Agent run streams and detaches the exec socket on disconnect", () => {

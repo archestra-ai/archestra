@@ -1,6 +1,7 @@
 import type { PaginationQuery } from "@archestra/shared";
 import {
   and,
+  asc,
   desc,
   eq,
   getTableColumns,
@@ -16,7 +17,7 @@ import config from "@/config";
 import db, { schema } from "@/database";
 import { createPaginatedResult } from "@/database/utils/pagination";
 import type {
-  AgentRun,
+  AgentRunListItem,
   AgentRunRecord,
   AgentRunSession,
   InsertAgentRunRecord,
@@ -29,6 +30,27 @@ import A2AMessageModel from "./a2a/message";
  * task's state machine is the record of how the work is going.
  */
 class AgentRunModel {
+  /** Closed turns can retain an interactive process until workspace cleanup. */
+  static async listRetainedForCredentialRefresh(): Promise<AgentRunRecord[]> {
+    return db
+      .select(getTableColumns(schema.agentRunsTable))
+      .from(schema.agentRunsTable)
+      .innerJoin(
+        schema.agentWorkspacesTable,
+        eq(
+          schema.agentWorkspacesTable.lastTaskId,
+          schema.agentRunsTable.taskId,
+        ),
+      )
+      .where(
+        and(
+          isNotNull(schema.agentRunsTable.endedAt),
+          inArray(schema.agentWorkspacesTable.state, ["idle", "active"]),
+          sql`${schema.agentWorkspacesTable.expiresAt} > now()`,
+        ),
+      );
+  }
+
   static async create(
     run: InsertAgentRunRecord & { id?: AgentRunRecord["id"] },
   ): Promise<AgentRunRecord> {
@@ -46,6 +68,69 @@ class AgentRunModel {
       .where(eq(schema.agentRunsTable.taskId, taskId))
       .limit(1);
     return run ?? null;
+  }
+
+  /** Resolve an owned session URL (or any of its task aliases) to its current turn. */
+  static async findCurrentSessionForActor(params: {
+    taskId: string;
+    actorUserId: string;
+    organizationId: string;
+  }): Promise<AgentRunSession | null> {
+    const workspaces = schema.agentWorkspacesTable;
+    const [workspace] = await db
+      .select()
+      .from(workspaces)
+      .where(
+        and(
+          eq(workspaces.organizationId, params.organizationId),
+          eq(workspaces.actorKind, "user"),
+          eq(workspaces.actorId, params.actorUserId),
+          or(
+            eq(workspaces.id, params.taskId),
+            sql`${workspaces.workloadName} IN (
+          SELECT workload_name FROM agent_runs WHERE task_id = ${params.taskId}::uuid
+          AND organization_id = ${params.organizationId}
+          AND actor_kind = 'user' AND actor_id = ${params.actorUserId}
+        )`,
+          ),
+        ),
+      )
+      .limit(1);
+    const run = await AgentRunModel.findForActorByTaskId({
+      ...params,
+      taskId: workspace?.lastTaskId ?? params.taskId,
+    });
+    return run && (!workspace || run.workloadName === workspace.workloadName)
+      ? run
+      : null;
+  }
+
+  /** Stream history metadata in bounded pages; cursor comparisons stay in PostgreSQL. */
+  static async listPreviousTurns(params: {
+    run: AgentRunRecord;
+    afterId?: string;
+  }) {
+    const table = schema.agentRunsTable;
+    return db
+      .select()
+      .from(table)
+      .where(
+        and(
+          eq(table.workloadName, params.run.workloadName),
+          eq(table.organizationId, params.run.organizationId),
+          eq(table.actorKind, params.run.actorKind),
+          eq(table.actorId, params.run.actorId),
+          sql`${table.id} <> ${params.run.id}::uuid`,
+          isNotNull(table.endedAt),
+          sql`${table.startedAt} <= (SELECT started_at FROM agent_runs WHERE id = ${params.run.id}::uuid)`,
+          params.afterId
+            ? sql`(${table.startedAt}, ${table.id}) >
+        (SELECT started_at, id FROM agent_runs WHERE id = ${params.afterId}::uuid)`
+            : undefined,
+        ),
+      )
+      .orderBy(asc(table.startedAt), asc(table.id))
+      .limit(100);
   }
 
   /** A new protocol task in an existing context continues its owner's latest
@@ -120,10 +205,26 @@ class AgentRunModel {
 
   /** Sessions whose pod should still exist, across every organization. */
   static async listOpen(): Promise<AgentRunRecord[]> {
-    return db
-      .select()
-      .from(schema.agentRunsTable)
-      .where(isNull(schema.agentRunsTable.endedAt));
+    return (
+      db
+        .select(getTableColumns(schema.agentRunsTable))
+        .from(schema.agentRunsTable)
+        .innerJoin(
+          schema.a2aTasksTable,
+          eq(schema.agentRunsTable.taskId, schema.a2aTasksTable.id),
+        )
+        // Capturing the runtime's end and settling its task are separate writes.
+        // Recover a crash between them instead of abandoning an active task.
+        .where(
+          or(
+            isNull(schema.agentRunsTable.endedAt),
+            inArray(schema.a2aTasksTable.state, [
+              "TASK_STATE_SUBMITTED",
+              "TASK_STATE_WORKING",
+            ]),
+          ),
+        )
+    );
   }
 
   /** Terminal runs whose channel completion reply is still pending. */
@@ -147,7 +248,7 @@ class AgentRunModel {
   static async listForAgent(params: {
     agentId: string;
     organizationId: string;
-  }): Promise<AgentRun[]> {
+  }): Promise<AgentRunListItem[]> {
     const {
       logs: _logs,
       completionTarget: _completionTarget,
@@ -164,6 +265,24 @@ class AgentRunModel {
         stateChangedAt: schema.a2aTasksTable.stateChangedAt,
         hardDeadlineAt: hardDeadlineAtExpression(),
         lastModelActivityAt: lastModelActivityAtExpression(),
+        initiatorName: schema.usersTable.name,
+        shareVisibility: schema.agentRunSharesTable.visibility,
+        shareTeamNames: sql<string[]>`coalesce(array(
+          select ${schema.teamsTable.name}
+          from ${schema.agentRunShareTeamsTable}
+          inner join ${schema.teamsTable}
+            on ${schema.teamsTable.id} = ${schema.agentRunShareTeamsTable.teamId}
+          where ${schema.agentRunShareTeamsTable.shareId} = ${schema.agentRunSharesTable.id}
+          order by ${schema.teamsTable.name}
+        ), array[]::text[])`,
+        shareUserNames: sql<string[]>`coalesce(array(
+          select ${schema.usersTable.name}
+          from ${schema.agentRunShareUsersTable}
+          inner join ${schema.usersTable}
+            on ${schema.usersTable.id} = ${schema.agentRunShareUsersTable.userId}
+          where ${schema.agentRunShareUsersTable.shareId} = ${schema.agentRunSharesTable.id}
+          order by ${schema.usersTable.name}
+        ), array[]::text[])`,
       })
       .from(schema.agentRunsTable)
       .innerJoin(
@@ -173,6 +292,14 @@ class AgentRunModel {
       .innerJoin(
         schema.agentsTable,
         eq(schema.agentRunsTable.agentId, schema.agentsTable.id),
+      )
+      .leftJoin(
+        schema.usersTable,
+        eq(schema.agentRunsTable.actorUserId, schema.usersTable.id),
+      )
+      .leftJoin(
+        schema.agentRunSharesTable,
+        eq(schema.agentRunsTable.taskId, schema.agentRunSharesTable.taskId),
       )
       .where(
         and(
@@ -188,6 +315,7 @@ class AgentRunModel {
     agentIds: string[];
     organizationId: string;
     limit: number;
+    thread?: { bindingId: string; threadId: string };
   }) {
     if (params.agentIds.length === 0) return [];
 
@@ -245,6 +373,18 @@ class AgentRunModel {
       )
       .where(
         and(
+          params.thread
+            ? and(
+                eq(
+                  sql`${schema.agentRunsTable.completionTarget}->>'bindingId'`,
+                  params.thread.bindingId,
+                ),
+                eq(
+                  sql`${schema.agentRunsTable.completionTarget}->>'threadId'`,
+                  params.thread.threadId,
+                ),
+              )
+            : undefined,
           inArray(schema.agentRunsTable.agentId, params.agentIds),
           eq(schema.agentRunsTable.organizationId, params.organizationId),
         ),
@@ -271,6 +411,9 @@ class AgentRunModel {
       eq(schema.agentRunsTable.actorKind, "user"),
       eq(schema.agentRunsTable.actorId, params.actorUserId),
       eq(schema.agentRunsTable.organizationId, params.organizationId),
+      sql`NOT EXISTS (SELECT 1 FROM agent_workspaces w
+        WHERE w.workload_name = ${schema.agentRunsTable.workloadName}
+        AND w.last_task_id <> ${schema.agentRunsTable.taskId})`,
     ];
     const [rows, [{ total }]] = await Promise.all([
       AgentRunModel.selectRunSessionsWhere({
@@ -498,6 +641,7 @@ class AgentRunModel {
         stateChangedAt: schema.a2aTasksTable.stateChangedAt,
         hardDeadlineAt: hardDeadlineAtExpression(),
         lastModelActivityAt: lastModelActivityAtExpression(),
+        sessionId: sql<string>`COALESCE(${schema.agentWorkspacesTable.id}, ${schema.agentRunsTable.taskId})`,
         agent: {
           id: schema.agentsTable.id,
           name: schema.agentsTable.name,
@@ -514,6 +658,13 @@ class AgentRunModel {
       .innerJoin(
         schema.agentsTable,
         eq(schema.agentRunsTable.agentId, schema.agentsTable.id),
+      )
+      .leftJoin(
+        schema.agentWorkspacesTable,
+        eq(
+          schema.agentWorkspacesTable.workloadName,
+          schema.agentRunsTable.workloadName,
+        ),
       )
       .leftJoin(
         schema.projectsTable,

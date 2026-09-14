@@ -313,6 +313,41 @@ describe("fetchGithubCopilotModels", () => {
     expect(probeBody).toEqual({ model: "gpt-4", messages: [] });
   });
 
+  test.each([
+    "/chat/completions",
+    "/responses",
+  ])("drops an integrator-rejected model on %s without dropping payload validation errors", async (endpoint) => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input, init) => {
+        const url = String(input);
+        if (url.includes("copilot_internal")) return tokenExchangeResponse();
+        if (url.endsWith("/models"))
+          return Response.json({
+            data: [
+              { id: "available-model", supported_endpoints: [endpoint] },
+              { id: "unavailable-model", supported_endpoints: [endpoint] },
+            ],
+          });
+        const body = JSON.parse(String(init?.body));
+        return Response.json(
+          {
+            error: {
+              type: "api_validation_error",
+              message:
+                body.model === "unavailable-model"
+                  ? 'The requested model is not available for integrator "vscode-chat". Available models: [available-model]. Verify the correct Copilot-Integration-Id header is being sent.'
+                  : "messages must be non-empty",
+            },
+          },
+          { status: 400 },
+        );
+      }),
+    );
+    const models = await fetchGithubCopilotModels(uniqueGithubToken());
+    expect(models.map((model) => model.id)).toEqual(["available-model"]);
+  });
+
   test("keeps a model when the invocability probe is inconclusive", async () => {
     const fetchMock = vi
       .fn()

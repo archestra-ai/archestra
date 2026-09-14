@@ -1,8 +1,10 @@
 "use client";
 
 import type { CreatedBy } from "@archestra/shared";
+import { Bot } from "lucide-react";
 import type { DetailFact } from "@/components/detail-facts";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
 import {
   Tooltip,
   TooltipContent,
@@ -44,7 +46,10 @@ export function CreatedByCell({
   }
 
   const label = creatorLabel(createdBy);
-  const detail = createdBy.email ?? label;
+  const isServiceAccount = createdBy.type === "service_account";
+  const detail = isServiceAccount
+    ? `${label} · Service account`
+    : (createdBy.email ?? label);
 
   return (
     <Tooltip>
@@ -55,10 +60,22 @@ export function CreatedByCell({
         >
           <Avatar className="h-5 w-5 shrink-0">
             <AvatarFallback className="text-[10px]">
-              {getInitials(label)}
+              {isServiceAccount ? (
+                <Bot className="size-3.5" aria-hidden="true" />
+              ) : (
+                getInitials(label)
+              )}
             </AvatarFallback>
           </Avatar>
-          <span className="min-w-0 flex-1 truncate">{label}</span>
+          <span className="min-w-0 truncate">{label}</span>
+          {isServiceAccount && (
+            <Badge
+              variant="outline"
+              className="h-4 shrink-0 rounded px-1 py-0 text-[10px] font-normal leading-none text-muted-foreground"
+            >
+              Service account
+            </Badge>
+          )}
         </span>
       </TooltipTrigger>
       <TooltipContent>{detail}</TooltipContent>

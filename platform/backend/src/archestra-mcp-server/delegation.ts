@@ -11,17 +11,28 @@ import { DelegationLoopError } from "@/agents/errors";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { startDelegatedTask } from "@/archestra-mcp-server/tasks";
 import { userHasPermission } from "@/auth/utils";
+import {
+  evaluateSingleMcpToolInvocationPolicy,
+  policyBlockToToolError,
+} from "@/guardrails/tool-invocation";
 import logger from "@/logging";
 import {
+  A2aConnectionModel,
   AgentExcludedSubagentModel,
   AgentModel,
   AgentTeamModel,
   ToolModel,
 } from "@/models";
 import { ProviderError, SubagentProviderError } from "@/routes/chat/errors";
+import { executeOutboundA2aDelegation } from "@/services/a2a-outbound-client";
 import { resolveAgentRuntime } from "@/services/agent-runtime/pod-run";
 import type { Agent } from "@/types";
-import { errorResult, isAbortLikeError, successResult } from "./helpers";
+import {
+  errorResult,
+  isAbortLikeError,
+  structuredToolErrorResult,
+  successResult,
+} from "./helpers";
 import type { ArchestraContext } from "./types";
 
 export const delegationToolArgsSchema = z.object({
@@ -65,18 +76,42 @@ export async function getAgentTools(context: {
   // (env-less) row is reachable from every environment.
   const environmentId = await AgentModel.findEnvironmentId(agentId);
 
+  // External A2A targets are always explicit, including when local subagents
+  // use Auto mode. Assigning an external credential is an egress decision and
+  // must never be widened by a dynamic local-agent setting.
+  // External A2A currently executes from the backend process, outside the
+  // per-environment network-policy runtime. Fail closed for environment-bound
+  // agents until connections can be bound to and dialed through that runtime.
+  const realUserId = userId && userId !== "system" ? userId : undefined;
+  const outboundTargets = environmentId
+    ? []
+    : await A2aConnectionModel.findAssignedTargets(
+        agentId,
+        organizationId,
+        false,
+        realUserId ? { userId: realUserId } : undefined,
+      );
+  const outboundTools = outboundTargets.map((target) =>
+    buildDelegationToolDescriptor({
+      name: target.tool.name,
+      targetAgent: target.remoteAgent,
+      inputSchema: target.tool.parameters as Tool["inputSchema"],
+      externalA2a: true,
+      toolId: target.tool.id,
+    }),
+  );
+
   // Auto mode only expands for a real authenticated user; system/token flows
   // (chatops, scheduled triggers, A2A) fall back to explicit delegations. This
   // fail-closed gate mirrors the Auto-tool `dynamicAccessContext` gate.
-  const isRealUser = Boolean(userId) && userId !== "system";
-  if (isRealUser && (await AgentModel.getAccessAllSubagents(agentId))) {
-    return buildAutoDelegationTools({
+  if (realUserId && (await AgentModel.getAccessAllSubagents(agentId))) {
+    const localTools = await buildAutoDelegationTools({
       agentId,
       organizationId,
-      // biome-ignore lint/style/noNonNullAssertion: isRealUser guarantees userId
-      userId: userId!,
+      userId: realUserId,
       environmentId,
     });
+    return dedupeDelegationTools([...outboundTools, ...localTools]);
   }
 
   // Custom mode: only explicitly-configured delegation targets, restricted to
@@ -115,13 +150,14 @@ export async function getAgentTools(context: {
   );
 
   // Convert DB tools to MCP Tool format
-  return accessibleTools.map((t) =>
+  const localTools = accessibleTools.map((t) =>
     buildDelegationToolDescriptor({
       name: t.tool.name,
       targetAgent: t.targetAgent,
       inputSchema: t.tool.parameters as Tool["inputSchema"],
     }),
   );
+  return dedupeDelegationTools([...outboundTools, ...localTools]);
 }
 
 export async function handleDelegation(
@@ -151,23 +187,69 @@ export async function handleDelegation(
   // The caller user can be present even when the selected gateway token is
   // team/org scoped.
   const userId = context.userId ?? tokenAuth?.userId;
-  const isRealUser = Boolean(userId) && userId !== "system";
+  const realUserId = userId && userId !== "system" ? userId : undefined;
+
+  const environmentId = await AgentModel.findEnvironmentId(agentId);
+
+  const outboundTarget = await A2aConnectionModel.findAssignedTargetByToolName({
+    agentId,
+    organizationId,
+    toolName,
+    ...(realUserId ? { userId: realUserId } : {}),
+  });
+  if (outboundTarget) {
+    if (environmentId) {
+      return errorResult(
+        "Outbound A2A delegation is not available for environment-bound agents yet.",
+      );
+    }
+    const policyBlock = await evaluateSingleMcpToolInvocationPolicy({
+      agentId,
+      toolName,
+      toolInput: { message },
+      organizationId,
+      contextIsTrusted: context.contextIsTrusted ?? true,
+      sensitiveContextOrigin: context.sensitiveContextOrigin,
+      enabledToolNames: new Set([toolName]),
+      resolvedToolId: outboundTarget.tool.id,
+      enforceApprovalRequired: !context.approvalRequiredPoliciesHandled,
+    });
+    if (policyBlock) {
+      return structuredToolErrorResult({
+        error: policyBlockToToolError(policyBlock),
+        text: policyBlock.contentMessage,
+      });
+    }
+
+    try {
+      const text = await executeOutboundA2aDelegation({
+        target: outboundTarget,
+        message,
+        context,
+      });
+      return successResult(text);
+    } catch (error) {
+      if (isAbortLikeError(error)) throw error;
+      return errorResult(
+        error instanceof Error
+          ? error.message
+          : "Outbound A2A delegation failed",
+      );
+    }
+  }
 
   // Same environment restriction as the advertised surface: delegation never
   // crosses environment boundaries, advisor excepted.
-  const environmentId = await AgentModel.findEnvironmentId(agentId);
-
   // Resolve the delegation target, mirroring getAgentTools: Auto mode resolves
   // dynamically against the caller-accessible set (minus exclusions); Custom
   // mode resolves against explicit delegation rows. Keeping resolution symmetric
   // with the advertised surface means a caller can only dispatch what it saw.
   const target =
-    isRealUser && (await AgentModel.getAccessAllSubagents(agentId))
+    realUserId && (await AgentModel.getAccessAllSubagents(agentId))
       ? await resolveAutoDelegationTarget({
           agentId,
           organizationId,
-          // biome-ignore lint/style/noNonNullAssertion: isRealUser guarantees userId
-          userId: userId!,
+          userId: realUserId,
           environmentId,
           targetAgentSlug,
         })
@@ -528,8 +610,10 @@ function buildDelegationToolDescriptor(params: {
     builtInAgentConfig?: Agent["builtInAgentConfig"];
   };
   inputSchema: Tool["inputSchema"];
+  externalA2a?: boolean;
+  toolId?: string;
 }): Tool {
-  const { name, targetAgent, inputSchema } = params;
+  const { name, targetAgent, inputSchema, externalA2a, toolId } = params;
   // The advisor answers with shipped guidance rather than the administrator's
   // description: that field is a one-line summary written for a person, while
   // the calling model needs the cases where consulting pays for itself. Being
@@ -538,8 +622,8 @@ function buildDelegationToolDescriptor(params: {
     targetAgent.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.ADVISOR
       ? archestraMcpBranding.brandBuiltInText(ADVISOR_DELEGATION_GUIDANCE)
       : targetAgent.description
-        ? `Delegate task to agent: ${targetAgent.name}. ${targetAgent.description.substring(0, 400)}`
-        : `Delegate task to agent: ${targetAgent.name}`;
+        ? `Delegate task to ${externalA2a ? "external A2A " : ""}agent: ${targetAgent.name}. ${targetAgent.description.substring(0, 400)}`
+        : `Delegate task to ${externalA2a ? "external A2A " : ""}agent: ${targetAgent.name}`;
 
   return {
     name,
@@ -547,6 +631,19 @@ function buildDelegationToolDescriptor(params: {
     description,
     inputSchema,
     annotations: {},
-    _meta: { targetAgentId: targetAgent.id },
+    _meta: {
+      targetAgentId: targetAgent.id,
+      ...(externalA2a ? { targetType: "external_a2a" } : {}),
+      ...(toolId ? { toolId } : {}),
+    },
   };
+}
+
+function dedupeDelegationTools(tools: Tool[]): Tool[] {
+  const names = new Set<string>();
+  return tools.filter((tool) => {
+    if (names.has(tool.name)) return false;
+    names.add(tool.name);
+    return true;
+  });
 }

@@ -244,7 +244,7 @@ describe("CreateConnectorDialog", () => {
       const { user } = await renderGithubConfigureStep();
 
       expect(screen.getByText("Owner")).toBeInTheDocument();
-      expect(screen.getByText("Authentication Method")).toBeInTheDocument();
+      expect(screen.getByText("Credential")).toBeInTheDocument();
       expect(screen.getByText("Labels to Skip (optional)")).not.toBeVisible();
 
       await user.click(screen.getByRole("button", { name: /Advanced/ }));
@@ -279,7 +279,7 @@ describe("CreateConnectorDialog", () => {
         ).toBeInTheDocument();
       });
 
-      expect(screen.getAllByText("Authentication Method")).toHaveLength(1);
+      expect(screen.getAllByText("Credential")).toHaveLength(1);
     });
   });
 
@@ -1312,30 +1312,20 @@ describe("CreateConnectorDialog", () => {
       ).not.toBeInTheDocument();
     });
 
-    it("moves GitHub's requirement to the App picker when App auth is chosen", async () => {
-      const { user } = await renderGithubConfigureStep();
-
-      await user.click(
-        screen.getByRole("combobox", { name: /Authentication/ }),
-      );
-      await user.click(screen.getByRole("option", { name: "GitHub App" }));
-
-      // App credentials live in Settings → GitHub, so the token field — and
-      // with it the usual home for the requirement — is gone entirely.
-      await waitFor(() => {
-        expect(
-          screen.queryByLabelText("Personal Access Token"),
-        ).not.toBeInTheDocument();
-      });
-      const appConfigBlock = screen
-        .getByText("GitHub App Configuration")
-        .closest("div") as HTMLElement;
+    it("keeps GitHub credential selection unified with a link to credential management", async () => {
+      await renderGithubConfigureStep();
       expect(
-        within(appConfigBlock).getByRole("link", { name: /Learn more/ }),
-      ).toHaveAttribute(
-        "href",
-        "https://archestra.ai/docs/platform-knowledge#github-auto-sync-permissions",
-      );
+        screen.getByRole("combobox", { name: "Credential" }),
+      ).toBeVisible();
+      expect(
+        screen.queryByText("GitHub App Configuration"),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByText("Authentication Method"),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.getByRole("link", { name: /Manage credentials/ }),
+      ).toHaveAttribute("href", "/settings/credentials");
     });
 
     it("moves Google Drive's requirement to the mode picker when one account authorizes", async () => {

@@ -157,6 +157,32 @@ describe("access-control", () => {
     });
   });
 
+  describe("outbound A2A administration", () => {
+    test("credential-bearing configuration mutations require agent settings administration", () => {
+      for (const routeId of [
+        RouteId.InspectA2aRemoteAgent,
+        RouteId.CreateA2aRemoteAgent,
+        RouteId.UpdateA2aRemoteAgent,
+        RouteId.DeleteA2aRemoteAgent,
+      ]) {
+        expect(requiredEndpointPermissionsMap[routeId]).toEqual({
+          agentSettings: ["update"],
+        });
+      }
+    });
+
+    test("run metadata is restricted while approved target summaries remain assignable", () => {
+      expect(
+        requiredEndpointPermissionsMap[RouteId.ListA2aRemoteAgentRuns],
+      ).toEqual({ agentSettings: ["read"] });
+      expect(
+        requiredEndpointPermissionsMap[RouteId.ListA2aRemoteAgents],
+      ).toEqual({ agent: ["read"] });
+      expect(memberPermissions.agentSettings).toEqual([]);
+      expect(editorPermissions.agentSettings).toEqual([]);
+    });
+  });
+
   describe("sandbox artifact route", () => {
     // the download_file tool (sandbox:execute) hands out this artifact URL, so
     // the fetch route must require the same permission — otherwise a role that

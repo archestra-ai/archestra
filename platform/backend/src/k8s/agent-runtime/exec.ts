@@ -2,6 +2,9 @@ import { PassThrough, type Readable } from "node:stream";
 import type { Exec } from "@kubernetes/client-node";
 import type WebSocket from "ws";
 
+/** A transport failure does not establish whether the command completed. */
+export class AgentRuntimeCommandTransportError extends Error {}
+
 /** Bound control-plane commands, including when a custom runtime never exits.
  * The 30-second default covers bounded file transfers and status reads, not
  * agent execution or Pod readiness. Callers that run a longer control-plane
@@ -36,7 +39,12 @@ export function execAgentRuntimeCommand(params: {
       else resolve(Buffer.concat(chunks).toString("utf8"));
     };
     const timer = setTimeout(
-      () => finish(new Error("Agent Runtime command timed out")),
+      () =>
+        finish(
+          new AgentRuntimeCommandTransportError(
+            "Agent Runtime command timed out",
+          ),
+        ),
       params.timeoutMs ?? 30_000,
     );
     const consume = (chunk: Buffer, retain: boolean) => {
@@ -78,7 +86,9 @@ export function execAgentRuntimeCommand(params: {
         connected.on("error", finish);
         connected.on("close", () =>
           finish(
-            new Error("Agent Runtime command disconnected before completion"),
+            new AgentRuntimeCommandTransportError(
+              "Agent Runtime command disconnected before completion",
+            ),
           ),
         );
       })

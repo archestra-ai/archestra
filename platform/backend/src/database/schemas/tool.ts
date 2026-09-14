@@ -11,6 +11,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import type { ToolParametersContent } from "@/types";
+import a2aConnectionsTable from "./a2a-connection";
 import agentsTable from "./agent";
 import mcpCatalogTable from "./internal-mcp-catalog";
 import { softDeletablePgTable } from "./soft-deletable-table";
@@ -40,6 +41,12 @@ const toolsTable = softDeletablePgTable(
       {
         onDelete: "cascade",
       },
+    ),
+    // Outbound A2A delegation tools point to a complete callable connection,
+    // making the approved interface and credential context one atomic target.
+    delegateToA2aConnectionId: uuid("delegate_to_a2a_connection_id").references(
+      () => a2aConnectionsTable.id,
+      { onDelete: "cascade" },
     ),
     name: text("name").notNull(),
     /**
@@ -108,6 +115,12 @@ const toolsTable = softDeletablePgTable(
       .where(
         sql`${table.catalogId} = ${sql.raw(`'${ARCHESTRA_MCP_CATALOG_ID}'`)} and ${table.agentId} is null and ${table.delegateToAgentId} is null and ${table.deletedAt} is null`,
       ),
+    // The column is null for every pre-existing tool and populated only by the
+    // outbound registry, so this partial index protects the one-connection/
+    // one-callable-tool invariant without changing legacy tool uniqueness.
+    uniqueIndex("tools_a2a_connection_uidx")
+      .on(table.delegateToA2aConnectionId)
+      .where(sql`${table.delegateToA2aConnectionId} is not null`),
     // Index for delegation tool lookups
     index("tools_delegate_to_agent_id_idx").on(table.delegateToAgentId),
     index("tools_cloned_pending_discovery_idx").on(

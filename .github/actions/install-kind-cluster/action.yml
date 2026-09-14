@@ -42,6 +42,11 @@ runs:
         install_only: false
         wait: 300s
 
+    - name: Configure Docker Hub cache for Kind nodes
+      uses: ./.github/actions/configure-kind-registry-cache
+      with:
+        cluster-name: ${{ inputs.cluster-name }}
+
     - name: Save Kind node image to cache
       if: ${{ steps.cache-kind-node.outputs.cache-hit != 'true' }}
       shell: bash

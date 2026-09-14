@@ -227,7 +227,7 @@ describe("AgentDetailPage", () => {
       // Connect is named for the protocol on the agents family: A2A.
       [
         "General",
-        "Tools & Knowledge",
+        "Tools, Skills & Knowledge",
         "Messaging Channels",
         "Advanced",
         "A2A",
@@ -345,7 +345,7 @@ describe("AgentDetailPage", () => {
 
     expect(screen.getByText("form section: configuration")).toBeVisible();
     expect(
-      screen.queryByRole("link", { name: "Tools & Knowledge" }),
+      screen.queryByRole("link", { name: "Tools, Skills & Knowledge" }),
     ).toBeNull();
     expect(screen.queryByText("connect content")).toBeNull();
   });
@@ -363,7 +363,7 @@ describe("AgentDetailPage", () => {
 
   it("keeps stating the creator on every section, being a fact of the record", () => {
     // It used to sit inside the General section's body and vanish the moment
-    // you opened Tools & Knowledge, which made who-made-this look like a
+    // you opened Tools, Skills & Knowledge, which made who-made-this look like a
     // property of the section rather than of the record.
     mockSection("tools");
     mockAgent({

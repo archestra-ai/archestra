@@ -18,11 +18,14 @@ import {
   MessageModel,
   ModelModel,
 } from "@/models";
+import { getActiveChatRouteCategory } from "@/observability/request-context";
 import {
   ATTR_GENAI_CONVERSATION_ID,
   ATTR_GENAI_OPERATION_NAME,
   ATTR_GENAI_PROVIDER_NAME,
   ATTR_GENAI_REQUEST_MODEL,
+  ATTR_ROUTE_CATEGORY,
+  RouteCategory,
 } from "@/observability/tracing";
 import {
   CONTEXT_COMPACTION_MAX_OUTPUT_TOKENS,
@@ -409,6 +412,8 @@ async function startContextCompactionSpan<T>(
     {
       kind: SpanKind.INTERNAL,
       attributes: {
+        [ATTR_ROUTE_CATEGORY]:
+          getActiveChatRouteCategory() ?? RouteCategory.CHAT,
         [ATTR_GENAI_OPERATION_NAME]: CONTEXT_COMPACTION_TRACE_OPERATION,
         [ATTR_GENAI_PROVIDER_NAME]: params.provider,
         [ATTR_GENAI_REQUEST_MODEL]: params.selectedModel,

@@ -244,6 +244,50 @@ class AgentToolExclusionsService {
   }
 
   /**
+   * Batched active sets for list projections. Custom-mode agents receive the
+   * empty set without entering the query; Auto agents share one joined read.
+   */
+  async getActiveExclusionSetsForAgents(
+    agents: Array<{ id: string; accessAllTools: boolean }>,
+  ): Promise<Map<string, AgentToolExclusionSets>> {
+    const result = new Map(
+      agents.map((agent) => [agent.id, EMPTY_EXCLUSION_SETS] as const),
+    );
+    const autoAgentIds = agents
+      .filter((agent) => agent.accessAllTools)
+      .map((agent) => agent.id);
+    const rows =
+      await AgentExcludedToolModel.findExcludedToolRowsByAgents(autoAgentIds);
+
+    for (const row of rows) {
+      let sets = result.get(row.agentId);
+      if (!sets) continue;
+      if (sets === EMPTY_EXCLUSION_SETS) {
+        sets = {
+          toolIds: new Set(),
+          toolKeys: new Set(),
+          resourceUris: new Set(),
+        };
+        result.set(row.agentId, sets);
+      }
+      const mutableSets = sets as {
+        toolIds: Set<string>;
+        toolKeys: Set<string>;
+        resourceUris: Set<string>;
+      };
+      mutableSets.toolIds.add(row.toolId);
+      if (row.catalogId != null) {
+        mutableSets.toolKeys.add(toolKey(row.catalogId, row.name));
+      }
+      const resourceUri = toolUiResourceUri(row.meta);
+      if (resourceUri != null) {
+        mutableSets.resourceUris.add(resourceUri);
+      }
+    }
+    return result;
+  }
+
+  /**
    * The agent's assigned MCP tools with excluded rows removed, plus the
    * exclusion sets used to filter them. The single chokepoint every dispatch
    * surface (gateway tools/list, search_tools, run_tool, resource client

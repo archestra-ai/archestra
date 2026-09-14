@@ -957,14 +957,14 @@ describe("GET /api/statistics/me/breakdown", () => {
     expect(top).toMatchObject({
       requests: 2,
       model: "claude-opus-4",
-      client: "Claude",
+      client: "Claude Code",
       durationMinutes: 30,
     });
     expect(top.cost).toBeCloseTo(8, 10);
 
     expect(body.clients).toEqual([
       expect.objectContaining({
-        client: "Claude",
+        client: "Claude Code",
         requests: 3,
         totalTokens: 420,
         percentage: expect.closeTo(95.454545, 5),

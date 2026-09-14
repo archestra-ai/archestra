@@ -5,6 +5,7 @@ import {
 } from "@archestra/shared";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { forwardRef, useImperativeHandle } from "react";
 import { toast } from "sonner";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -32,6 +33,8 @@ global.ResizeObserver = class ResizeObserver {
   disconnect() {}
 } as typeof ResizeObserver;
 
+vi.mock("next/navigation");
+
 const {
   pendingSaveChanges,
   ReportedApiError,
@@ -40,6 +43,9 @@ const {
   useAgentSubagentExclusionsMock,
   useAgentKnowledgeSourceExclusionsMock,
   useUpdateAgentKnowledgeSourceExclusionsMock,
+  useAgentActivationSkillsMock,
+  useAgentActivationSkillPolicyMock,
+  usePatchAgentActivationSkillPolicyMock,
   useAgentSkillsMock,
   useAgentSkillExclusionsMock,
   useUpdateAgentSkillsMock,
@@ -60,6 +66,9 @@ const {
   useInternalMcpCatalogMock,
   useAgentRuntimePreflightMock,
   useOrganizationDefaultModelMock,
+  useA2aRemoteAgentsMock,
+  useAgentA2aDelegationsMock,
+  useSyncAgentA2aDelegationsMock,
   saveChannelChangesMock,
 } = vi.hoisted(() => ({
   /** Stands in for what the agent write hooks reject with once they toasted. */
@@ -151,6 +160,29 @@ const {
     mutateAsync: vi.fn(),
     isPending: false,
   })),
+  useA2aRemoteAgentsMock: vi.fn(
+    (): { data: unknown[]; isPending: boolean } => ({
+      data: [],
+      isPending: false,
+    }),
+  ),
+  useAgentA2aDelegationsMock: vi.fn(
+    (): {
+      data: unknown[];
+      isPending: boolean;
+      isSuccess: boolean;
+      isError: boolean;
+    } => ({
+      data: [],
+      isPending: false,
+      isSuccess: true,
+      isError: false,
+    }),
+  ),
+  useSyncAgentA2aDelegationsMock: vi.fn(() => ({
+    mutateAsync: vi.fn(),
+    isPending: false,
+  })),
   useAgentSubagentExclusionsMock: vi.fn(
     (): { data: { excludedSubagentIds: string[] }; isSuccess: boolean } => ({
       data: { excludedSubagentIds: [] },
@@ -168,6 +200,61 @@ const {
     }),
   ),
   useUpdateAgentKnowledgeSourceExclusionsMock: vi.fn(() => ({
+    mutateAsync: vi.fn(),
+    isPending: false,
+  })),
+  useAgentActivationSkillsMock: vi.fn(
+    (): {
+      data: {
+        enabled: boolean;
+        data: unknown[];
+        pagination: {
+          currentPage: number;
+          limit: number;
+          total: number;
+          totalPages: number;
+          hasNext: boolean;
+          hasPrev: boolean;
+        };
+      };
+      isPending: boolean;
+      isFetching: boolean;
+      isError: boolean;
+      isSuccess: boolean;
+    } => ({
+      data: {
+        enabled: true,
+        data: [],
+        pagination: {
+          currentPage: 1,
+          limit: 10,
+          total: 0,
+          totalPages: 0,
+          hasNext: false,
+          hasPrev: false,
+        },
+      },
+      isPending: false,
+      isFetching: false,
+      isError: false,
+      isSuccess: true,
+    }),
+  ),
+  useAgentActivationSkillPolicyMock: vi.fn(() => ({
+    data: {
+      mode: "all",
+      revision: 0,
+      allowedReferences: [],
+      excludedReferences: [],
+      hiddenAllowedCount: 0,
+      hiddenExcludedCount: 0,
+      allowedSkills: [],
+      excludedSkills: [],
+    },
+    isSuccess: true,
+    isError: false,
+  })),
+  usePatchAgentActivationSkillPolicyMock: vi.fn(() => ({
     mutateAsync: vi.fn(),
     isPending: false,
   })),
@@ -254,6 +341,12 @@ vi.mock("@/lib/hooks/use-organization-default-model", () => ({
   useOrganizationDefaultModel: useOrganizationDefaultModelMock,
 }));
 
+vi.mock("@/lib/a2a-remote-agents.query", () => ({
+  useA2aRemoteAgents: useA2aRemoteAgentsMock,
+  useAgentA2aDelegations: useAgentA2aDelegationsMock,
+  useSyncAgentA2aDelegations: useSyncAgentA2aDelegationsMock,
+}));
+
 vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
   useInternalMcpCatalog: useInternalMcpCatalogMock,
 }));
@@ -272,6 +365,9 @@ vi.mock("@/lib/agent-knowledge-source-exclusions.query", () => ({
 }));
 
 vi.mock("@/lib/agent-skills.query", () => ({
+  useAgentActivationSkills: useAgentActivationSkillsMock,
+  useAgentActivationSkillPolicy: useAgentActivationSkillPolicyMock,
+  usePatchAgentActivationSkillPolicy: usePatchAgentActivationSkillPolicyMock,
   useAgentSkills: useAgentSkillsMock,
   useAgentSkillExclusions: useAgentSkillExclusionsMock,
   useUpdateAgentSkills: useUpdateAgentSkillsMock,
@@ -609,14 +705,17 @@ vi.mock("@/components/ui/assignment-combobox", () => ({
     onSearchChange,
     placeholder,
     isSearching,
+    label,
   }: {
     items: Array<{ id: string; name: string }>;
     onToggle: (id: string) => void;
     onSearchChange?: (query: string) => void;
     placeholder?: string;
     isSearching?: boolean;
+    label?: string;
   }) => (
     <div>
+      <button type="button">{label ?? "Add"}</button>
       <input
         aria-label={placeholder ?? "Search"}
         onChange={(e) => onSearchChange?.(e.target.value)}
@@ -632,9 +731,7 @@ vi.mock("@/components/ui/assignment-combobox", () => ({
 }));
 
 vi.mock("@/components/ui/badge", () => ({
-  Badge: ({ children }: { children?: React.ReactNode }) => (
-    <span>{children}</span>
-  ),
+  Badge: (props: React.ComponentProps<"span">) => <span {...props} />,
 }));
 
 vi.mock("@/components/ui/button", () => ({
@@ -673,8 +770,16 @@ vi.mock("@/components/ui/command", () => ({
     <div>{children}</div>
   ),
   CommandInput: () => null,
-  CommandItem: ({ children }: { children?: React.ReactNode }) => (
-    <div>{children}</div>
+  CommandItem: ({
+    children,
+    onSelect,
+  }: {
+    children?: React.ReactNode;
+    onSelect?: () => void;
+  }) => (
+    <button type="button" role="option" onClick={onSelect}>
+      {children}
+    </button>
   ),
   CommandList: ({ children }: { children?: React.ReactNode }) => (
     <div>{children}</div>
@@ -735,6 +840,9 @@ vi.mock("@/components/ui/overlapped-icons", () => ({
 
 vi.mock("@/components/ui/popover", () => ({
   Popover: ({ children }: { children?: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
+  PopoverAnchor: ({ children }: { children?: React.ReactNode }) => (
     <div>{children}</div>
   ),
   PopoverContent: ({ children }: { children?: React.ReactNode }) => (
@@ -819,6 +927,22 @@ vi.mock("@/components/ui/tooltip", () => ({
 
 beforeEach(() => {
   saveChannelChangesMock.mockResolvedValue(true);
+  useA2aRemoteAgentsMock.mockReturnValue({ data: [], isPending: false });
+  useAgentA2aDelegationsMock.mockReturnValue({
+    data: [],
+    isPending: false,
+    isSuccess: true,
+    isError: false,
+  });
+  useSyncAgentA2aDelegationsMock.mockReturnValue({
+    mutateAsync: vi.fn(),
+    isPending: false,
+  });
+  vi.mocked(useRouter).mockReturnValue({ push: vi.fn() } as never);
+  vi.mocked(usePathname).mockReturnValue("/agents/agent-1");
+  vi.mocked(useSearchParams).mockReturnValue(
+    new URLSearchParams() as ReturnType<typeof useSearchParams>,
+  );
   vi.mocked(useConnectors).mockReturnValue({
     data: [],
   } as unknown as ReturnType<typeof useConnectors>);
@@ -858,6 +982,8 @@ const baseAgent = {
   accessAllTools: false,
   accessAllSubagents: false,
   accessAllSkills: false,
+  activationSkillMode: "all" as const,
+  activationSkillPolicyRevision: 0,
   scope: "personal" as const,
   isDefault: false,
   isPersonalGateway: false,
@@ -866,6 +992,7 @@ const baseAgent = {
   tools: [],
   labels: [],
   authorId: "00000000-0000-4000-8000-000000000020",
+  createdByServiceAccountId: null,
   authorName: "Test User",
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
@@ -955,6 +1082,31 @@ describe("AgentForm delegation state", () => {
     expect(useAgentDelegationsMock).toHaveBeenCalledWith(baseAgent.id);
   });
 
+  it("marks only the experimental subagent options as Beta", () => {
+    useDelegationTargetAgentsMock.mockReturnValue({
+      data: [targetAgent, advisorAgent],
+    });
+
+    render(<AgentForm agentType="agent" agent={baseAgent} />);
+
+    const subagentsHeading = screen.getByRole("heading", {
+      name: "Subagents",
+    });
+    expect(within(subagentsHeading).queryByText("Beta")).toBeNull();
+
+    const externalAgentsTitle = screen.getByText("External Agents");
+    expect(
+      within(externalAgentsTitle.parentElement as HTMLElement).getByText(
+        "Beta",
+      ),
+    ).toBeInTheDocument();
+
+    const advisorTitle = screen.getByText("Advisor Subagent");
+    expect(
+      within(advisorTitle.parentElement as HTMLElement).getByText("Beta"),
+    ).toBeInTheDocument();
+  });
+
   it("saves a gateway's subagent mode and delegation set", async () => {
     const user = userEvent.setup();
     const gateway = {
@@ -989,8 +1141,9 @@ describe("AgentForm delegation state", () => {
       ),
     ).toBeInTheDocument();
     await user.click(
-      within(section).getByRole("button", { name: "Add Target Agent" }),
+      within(section).getByRole("combobox", { name: "Add subagent" }),
     );
+    await user.click(screen.getByRole("option", { name: /Target Agent/ }));
     await user.click(screen.getByRole("button", { name: /update/i }));
 
     await waitFor(() =>
@@ -1003,6 +1156,219 @@ describe("AgentForm delegation state", () => {
     expect(syncDelegations).toHaveBeenCalledWith(
       expect.objectContaining({ targetAgentIds: [targetAgent.id] }),
     );
+  });
+
+  it("assigns an outbound A2A agent explicitly even while local subagents use All mode", async () => {
+    const user = userEvent.setup();
+    const syncExternal = vi.fn();
+    const autoAgent = { ...baseAgent, accessAllSubagents: true };
+    useProfileMock.mockReturnValue({ data: autoAgent, refetch: vi.fn() });
+    useA2aRemoteAgentsMock.mockReturnValue({
+      data: [
+        {
+          id: "remote-agent-1",
+          name: "External Compliance Agent",
+          description: "Checks policy requirements",
+          connection: { id: "connection-1", enabled: true },
+        },
+      ],
+      isPending: false,
+    });
+    useSyncAgentA2aDelegationsMock.mockReturnValue({
+      mutateAsync: syncExternal,
+      isPending: false,
+    });
+
+    render(<AgentForm agentType="agent" agent={autoAgent} />);
+
+    expect(useA2aRemoteAgentsMock).toHaveBeenCalledWith({
+      enabled: true,
+      accessibleOnly: true,
+    });
+
+    const picker = screen.getByRole("button", {
+      name: "Add outbound agent",
+    });
+    expect(picker).toBeInTheDocument();
+    expect(screen.getByText("External Agents")).toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", {
+        name: /External Compliance Agent/,
+      }),
+    );
+    expect(
+      screen.getByRole("button", {
+        name: /External Compliance Agent.*A2A/,
+      }),
+    ).toBeInTheDocument();
+    expect(syncExternal).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: /update/i }));
+
+    await waitFor(() =>
+      expect(syncExternal).toHaveBeenCalledWith({
+        agentId: baseAgent.id,
+        connectionIds: ["connection-1"],
+      }),
+    );
+  });
+
+  it("does not offer external A2A assignment before a new agent has been saved", () => {
+    useA2aRemoteAgentsMock.mockReturnValue({
+      data: [
+        {
+          id: "remote-agent-1",
+          name: "External Compliance Agent",
+          description: null,
+          connection: { id: "connection-1", enabled: true },
+        },
+      ],
+      isPending: false,
+    });
+
+    render(<AgentForm agentType="agent" />);
+
+    expect(
+      screen.getByText(
+        "Save this agent before assigning an outbound A2A agent.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("combobox", { name: "Add subagent" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Add outbound agent" }),
+    ).not.toBeInTheDocument();
+    expect(useAgentA2aDelegationsMock).toHaveBeenCalledWith(undefined);
+  });
+
+  it.each([
+    "create",
+    "edit",
+  ])("uses canonical subagent details in the %s flow", async (flow) => {
+    const user = userEvent.setup();
+    useDelegationTargetAgentsMock.mockReturnValue({
+      data: [
+        {
+          ...targetAgent,
+          icon: "🔭",
+          scope: "personal",
+          authorName: "Agent Owner",
+        },
+      ],
+    });
+
+    render(
+      <AgentForm
+        agentType="agent"
+        agent={flow === "edit" ? baseAgent : undefined}
+      />,
+    );
+
+    await user.click(screen.getByRole("combobox", { name: "Add subagent" }));
+
+    const option = screen.getByRole("option", { name: /Target Agent/ });
+    expect(within(option).getByText("🔭")).toBeInTheDocument();
+    expect(within(option).getByText("Agent Owner")).toBeInTheDocument();
+    expect(within(option).getByLabelText("Personal")).toBeInTheDocument();
+  });
+
+  it.each([
+    "create",
+    "edit",
+  ])("offers creation of a missing subagent only in Manual mode in the %s flow", async (flow) => {
+    const user = userEvent.setup();
+    useDelegationTargetAgentsMock.mockReturnValue({ data: [] });
+    render(
+      <AgentForm
+        agentType="agent"
+        agent={flow === "edit" ? baseAgent : undefined}
+      />,
+    );
+
+    await user.click(subagentModeTab("Manual"));
+    await user.click(screen.getByRole("combobox", { name: "Add subagent" }));
+    expect(
+      screen.getByRole("link", { name: "Create a New Agent" }),
+    ).toHaveAttribute("href", "/agents/new");
+    await user.click(subagentModeTab("All"));
+    expect(
+      screen.queryByRole("link", { name: "Create a New Agent" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows local and outbound A2A assignments in their separate sections", async () => {
+    const customAgent = { ...baseAgent, accessAllSubagents: false };
+    useProfileMock.mockReturnValue({ data: customAgent, refetch: vi.fn() });
+    useDelegationTargetAgentsMock.mockReturnValue({ data: [targetAgent] });
+    useAgentDelegationsMock.mockReturnValue({
+      data: [targetAgent],
+      isSuccess: true,
+    });
+    useA2aRemoteAgentsMock.mockReturnValue({
+      data: [
+        {
+          id: "remote-agent-1",
+          name: "External Research Agent",
+          description: "Researches remote systems",
+          connection: { id: "connection-1", enabled: true },
+        },
+      ],
+      isPending: false,
+    });
+    useAgentA2aDelegationsMock.mockReturnValue({
+      data: [
+        {
+          remoteAgentId: "remote-agent-1",
+          connectionId: "connection-1",
+          toolId: "tool-1",
+          name: "External Research Agent",
+          description: "Researches remote systems",
+          enabled: true,
+        },
+      ],
+      isPending: false,
+      isSuccess: true,
+      isError: false,
+    });
+
+    render(<AgentForm agentType="agent" agent={customAgent} />);
+
+    expect(
+      await screen.findByRole("button", { name: /Target AgentLocal/ }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("External Agents")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", {
+        name: /External Research Agent.*A2A/,
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("1 subagent assigned.")).toBeInTheDocument();
+  });
+
+  it("does not replace external assignments after their read fails", async () => {
+    const user = userEvent.setup();
+    const syncExternal = vi.fn();
+    useAgentA2aDelegationsMock.mockReturnValue({
+      data: [],
+      isPending: false,
+      isSuccess: false,
+      isError: true,
+    });
+    useSyncAgentA2aDelegationsMock.mockReturnValue({
+      mutateAsync: syncExternal,
+      isPending: false,
+    });
+
+    render(<AgentForm agentType="agent" agent={baseAgent} />);
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Outbound A2A agents could not be loaded.",
+    );
+    expect(
+      screen.queryByRole("button", { name: /add outbound agent/i }),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /update/i }));
+    await waitFor(() => expect(syncExternal).not.toHaveBeenCalled());
   });
 
   it("omits Subagents on an LLM proxy, which has no MCP surface to advertise one on", () => {
@@ -1110,7 +1476,7 @@ describe("AgentForm delegation state", () => {
     });
     expect(screen.queryByText(advisorAgent.name)).not.toBeInTheDocument();
     expect(
-      screen.getByText(/Every subagent, with no exceptions\./),
+      screen.getByText(/Every local agent, with no exceptions\./),
     ).toBeInTheDocument();
   });
 
@@ -1208,7 +1574,7 @@ describe("AgentForm delegation state", () => {
     await user.click(subagentModeTab("All"));
 
     expect(
-      screen.getByText(/Every subagent, with no exceptions\./),
+      screen.getByText(/Every local agent, with no exceptions\./),
     ).toBeInTheDocument();
     expect(
       screen.getByTestId(E2eTestId.ConsultAdvisorSwitch),
@@ -1416,7 +1782,7 @@ describe("AgentForm delegation state", () => {
 
     expect(await screen.findByText("off-page-skill")).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Remove off-page-skill" }),
+      screen.getByRole("button", { name: /^Remove off-page-skill/ }),
     ).toBeInTheDocument();
   });
 
@@ -1455,7 +1821,7 @@ describe("AgentForm delegation state", () => {
 
     expect(await screen.findByText("regraded-skill")).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Remove regraded-skill" }),
+      screen.getByRole("button", { name: /^Remove regraded-skill/ }),
     ).toBeInTheDocument();
   });
 
@@ -1501,6 +1867,42 @@ const skillsModeTab = (name: "All" | "Manual") => {
 
 describe("AgentForm knowledge in Auto mode", () => {
   beforeEach(() => {
+    useAgentActivationSkillPolicyMock.mockReturnValue({
+      data: {
+        mode: "all",
+        revision: 0,
+        allowedReferences: [],
+        excludedReferences: [],
+        hiddenAllowedCount: 0,
+        hiddenExcludedCount: 0,
+        allowedSkills: [],
+        excludedSkills: [],
+      },
+      isSuccess: true,
+      isError: false,
+    });
+    usePatchAgentActivationSkillPolicyMock.mockReturnValue({
+      mutateAsync: vi.fn(),
+      isPending: false,
+    });
+    useAgentActivationSkillsMock.mockReturnValue({
+      data: {
+        enabled: true,
+        data: [],
+        pagination: {
+          currentPage: 1,
+          limit: 100,
+          total: 0,
+          totalPages: 0,
+          hasNext: false,
+          hasPrev: false,
+        },
+      },
+      isPending: false,
+      isFetching: false,
+      isError: false,
+      isSuccess: true,
+    });
     vi.mocked(useSession).mockReturnValue({
       data: { user: { id: "user-1" } },
     } as unknown as ReturnType<typeof useSession>);
@@ -1508,6 +1910,103 @@ describe("AgentForm knowledge in Auto mode", () => {
       () => ({ data: true }) as unknown as ReturnType<typeof useHasPermissions>,
     );
     vi.mocked(useIsKnowledgeBaseConfigured).mockReturnValue(true);
+  });
+
+  it("shows the All/Manual skill policy in the tools step", async () => {
+    useProfileMock.mockReturnValue({ data: baseAgent, refetch: vi.fn() });
+
+    render(<AgentForm agentType="agent" agent={baseAgent} />);
+
+    const section = (
+      await screen.findByRole("heading", { name: "Skills" })
+    ).closest("section") as HTMLElement;
+    expect(within(section).getByRole("tab", { name: "All" })).toBeVisible();
+    expect(within(section).getByRole("tab", { name: "Manual" })).toBeVisible();
+    expect(useAgentActivationSkillsMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentId: baseAgent.id,
+        environmentId: undefined,
+        view: "eligible",
+      }),
+    );
+  });
+
+  it("saves an edited internal-agent skill policy with the agent form", async () => {
+    const skill = {
+      reference: { source: "native" as const, skillId: "skill-1" },
+      name: "incident-response",
+      activationName: "incident-response",
+      description: "Respond to incidents",
+      scope: "org" as const,
+      providerName: null,
+    };
+    const patchPolicy = vi.fn().mockResolvedValue(undefined);
+    useProfileMock.mockReturnValue({ data: baseAgent, refetch: vi.fn() });
+    useAgentActivationSkillPolicyMock.mockReturnValue({
+      data: {
+        mode: "all",
+        revision: 4,
+        allowedReferences: [],
+        excludedReferences: [],
+        hiddenAllowedCount: 0,
+        hiddenExcludedCount: 0,
+        allowedSkills: [],
+        excludedSkills: [],
+      },
+      isSuccess: true,
+      isError: false,
+    });
+    useAgentActivationSkillsMock.mockReturnValue({
+      data: {
+        enabled: true,
+        data: [skill],
+        pagination: {
+          currentPage: 1,
+          limit: 100,
+          total: 1,
+          totalPages: 1,
+          hasNext: false,
+          hasPrev: false,
+        },
+      },
+      isPending: false,
+      isFetching: false,
+      isError: false,
+      isSuccess: true,
+    });
+    usePatchAgentActivationSkillPolicyMock.mockReturnValue({
+      mutateAsync: patchPolicy,
+      isPending: false,
+    });
+    const user = userEvent.setup();
+
+    render(<AgentForm agentType="agent" agent={baseAgent} />);
+
+    const section = (
+      await screen.findByRole("heading", { name: "Skills" })
+    ).closest("section") as HTMLElement;
+    await user.click(within(section).getByRole("tab", { name: "Manual" }));
+    await user.click(
+      within(section).getByRole("button", { name: "Add incident-response" }),
+    );
+    await user.click(screen.getByRole("button", { name: /update/i }));
+
+    await waitFor(() =>
+      expect(patchPolicy).toHaveBeenCalledWith({
+        agentId: baseAgent.id,
+        patch: {
+          expectedRevision: 4,
+          mode: "manual",
+          operations: [
+            {
+              op: "add",
+              disposition: "allow",
+              reference: skill.reference,
+            },
+          ],
+        },
+      }),
+    );
   });
 
   it("says what the knowledge field leaves out rather than what it holds", async () => {
@@ -2011,7 +2510,7 @@ describe("AgentForm published skills", () => {
       await screen.findByRole("button", { name: "Add far-away-skill" }),
     );
     expect(
-      screen.getByRole("button", { name: "Remove far-away-skill" }),
+      screen.getByRole("button", { name: /^Remove far-away-skill/ }),
     ).toBeInTheDocument();
 
     await user.clear(search);
@@ -2026,8 +2525,51 @@ describe("AgentForm published skills", () => {
       ),
     );
     expect(
-      screen.getByRole("button", { name: "Remove far-away-skill" }),
+      screen.getByRole("button", { name: /^Remove far-away-skill/ }),
     ).toBeInTheDocument();
+  });
+
+  it("previews the same All-mode skills offered by the exclusion picker", async () => {
+    const user = userEvent.setup();
+    const first = orgSkill(
+      "first-skill",
+      "00000000-0000-4000-8000-0000000000ac",
+    );
+    const second = orgSkill(
+      "second-skill",
+      "00000000-0000-4000-8000-0000000000ad",
+    );
+    useAgentSkillsMock.mockReturnValue({
+      data: { accessAllSkills: true, skillIds: [], skills: [] },
+      isSuccess: true,
+    });
+    useSkillsPaginatedMock.mockReturnValue({
+      data: { data: [first, second] },
+      isFetching: false,
+    });
+
+    render(<AgentForm agentType="mcp_gateway" agent={baseAgent} />);
+
+    const section = screen
+      .getByRole("heading", { name: "Skills over MCP" })
+      .closest("section") as HTMLElement;
+    expect(
+      within(section).getByRole("button", { name: "View all 2 skills" }),
+    ).toBeVisible();
+
+    await user.click(
+      within(section).getByRole("button", { name: "Disable Skill" }),
+    );
+    await user.click(
+      await screen.findByRole("button", { name: "Add first-skill" }),
+    );
+    await user.click(
+      within(section).getByRole("button", { name: "View 1 Skill" }),
+    );
+
+    const table = screen.getByRole("table");
+    expect(within(table).queryByText("first-skill")).toBeNull();
+    expect(within(table).getByText("second-skill")).toBeVisible();
   });
 
   it("writes neither skill set when the save changed nothing about them", async () => {
@@ -2119,6 +2661,42 @@ describe("AgentForm published skills", () => {
 describe("AgentForm LLM permission gating", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    useAgentActivationSkillPolicyMock.mockReturnValue({
+      data: {
+        mode: "all",
+        revision: 0,
+        allowedReferences: [],
+        excludedReferences: [],
+        hiddenAllowedCount: 0,
+        hiddenExcludedCount: 0,
+        allowedSkills: [],
+        excludedSkills: [],
+      },
+      isSuccess: true,
+      isError: false,
+    });
+    usePatchAgentActivationSkillPolicyMock.mockReturnValue({
+      mutateAsync: vi.fn(),
+      isPending: false,
+    });
+    useAgentActivationSkillsMock.mockReturnValue({
+      data: {
+        enabled: true,
+        data: [],
+        pagination: {
+          currentPage: 1,
+          limit: 100,
+          total: 0,
+          totalPages: 0,
+          hasNext: false,
+          hasPrev: false,
+        },
+      },
+      isPending: false,
+      isFetching: false,
+      isError: false,
+      isSuccess: true,
+    });
     vi.mocked(useHasPermissions).mockImplementation(
       () => ({ data: true }) as unknown as ReturnType<typeof useHasPermissions>,
     );
@@ -2194,6 +2772,42 @@ describe("AgentForm save payload and failure handling", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    useAgentActivationSkillPolicyMock.mockReturnValue({
+      data: {
+        mode: "all",
+        revision: 0,
+        allowedReferences: [],
+        excludedReferences: [],
+        hiddenAllowedCount: 0,
+        hiddenExcludedCount: 0,
+        allowedSkills: [],
+        excludedSkills: [],
+      },
+      isSuccess: true,
+      isError: false,
+    });
+    usePatchAgentActivationSkillPolicyMock.mockReturnValue({
+      mutateAsync: vi.fn(),
+      isPending: false,
+    });
+    useAgentActivationSkillsMock.mockReturnValue({
+      data: {
+        enabled: true,
+        data: [],
+        pagination: {
+          currentPage: 1,
+          limit: 100,
+          total: 0,
+          totalPages: 0,
+          hasNext: false,
+          hasPrev: false,
+        },
+      },
+      isPending: false,
+      isFetching: false,
+      isError: false,
+      isSuccess: true,
+    });
     vi.mocked(useHasPermissions).mockImplementation(
       () => ({ data: true }) as unknown as ReturnType<typeof useHasPermissions>,
     );
@@ -3183,6 +3797,7 @@ describe("AgentForm save payload and failure handling", () => {
     const runtime = {
       image: "example.com/coding-agent:latest",
       command: ["archestra-claude-code"],
+      claudeCode: { authentication: "provider" as const },
       inferenceProtocol: "anthropic" as const,
       backend: "kubernetes" as const,
       steerMode: "pipe" as const,
@@ -3728,6 +4343,61 @@ describe("AgentForm save payload and failure handling", () => {
     expect(pendingSaveChanges).toHaveBeenCalledWith({
       agentId: "created-agent",
       resourceLabel: "agent",
+    });
+  });
+
+  it("creates an internal agent with the skill policy staged in the form", async () => {
+    const skill = {
+      reference: { source: "native" as const, skillId: "skill-1" },
+      name: "incident-response",
+      activationName: "incident-response",
+      description: "Respond to incidents",
+      scope: "org" as const,
+      providerName: null,
+    };
+    useAgentActivationSkillsMock.mockReturnValue({
+      data: {
+        enabled: true,
+        data: [skill],
+        pagination: {
+          currentPage: 1,
+          limit: 100,
+          total: 1,
+          totalPages: 1,
+          hasNext: false,
+          hasPrev: false,
+        },
+      },
+      isPending: false,
+      isFetching: false,
+      isError: false,
+      isSuccess: true,
+    });
+    const user = userEvent.setup();
+    render(<AgentForm agentType="agent" />);
+
+    await user.type(
+      screen.getByPlaceholderText("Enter agent name"),
+      "New Agent",
+    );
+    const section = (
+      await screen.findByRole("heading", { name: "Skills" })
+    ).closest("section") as HTMLElement;
+    await user.click(within(section).getByRole("tab", { name: "Manual" }));
+    await user.click(
+      within(section).getByRole("button", {
+        name: "Add incident-response",
+      }),
+    );
+    await user.click(screen.getByRole("button", { name: /create/i }));
+
+    await waitFor(() => expect(createAgent).toHaveBeenCalled());
+    expect(createAgent.mock.calls[0][0]).toMatchObject({
+      activationSkillPolicy: {
+        mode: "manual",
+        allowedReferences: [skill.reference],
+        excludedReferences: [],
+      },
     });
   });
 

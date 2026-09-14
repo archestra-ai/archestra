@@ -52,6 +52,27 @@ class McpActiveUseTracker {
    */
   private inflightPersists = new Map<string, Promise<void>>();
   private heartbeatTimer: NodeJS.Timeout | null = null;
+  private credentialUseCounts = new Map<string, number>();
+
+  /** Renewable credentials need cross-replica draining even when hibernation is off. */
+  async trackCredentialUse<T>(
+    mcpServerId: string,
+    fn: () => Promise<T>,
+  ): Promise<T> {
+    this.credentialUseCounts.set(
+      mcpServerId,
+      (this.credentialUseCounts.get(mcpServerId) ?? 0) + 1,
+    );
+    try {
+      await this.stampAwaited(mcpServerId);
+      return await this.trackActiveUse(mcpServerId, fn);
+    } finally {
+      const remaining = (this.credentialUseCounts.get(mcpServerId) ?? 1) - 1;
+      if (remaining > 0) this.credentialUseCounts.set(mcpServerId, remaining);
+      else this.credentialUseCounts.delete(mcpServerId);
+      this.stamp(mcpServerId);
+    }
+  }
 
   /**
    * Wrap a demand-path operation against an MCP server: stamps last-used at
@@ -226,6 +247,7 @@ class McpActiveUseTracker {
   /** Drop tracking state for an uninstalled server. */
   remove(mcpServerId: string): void {
     this.activeUseCounts.delete(mcpServerId);
+    this.credentialUseCounts.delete(mcpServerId);
     this.lastUsedWatermarks.delete(mcpServerId);
     this.lastPersistedAt.delete(mcpServerId);
   }
@@ -340,9 +362,9 @@ class McpActiveUseTracker {
         "Could not resolve MCP idle-hibernation demand tracking heartbeat; persisting conservatively",
       );
     }
-    if (!organizationEnabled) return;
-
     for (const [mcpServerId, count] of this.activeUseCounts) {
+      if (!organizationEnabled && !this.credentialUseCounts.has(mcpServerId))
+        continue;
       if (count <= 0) continue;
       if (!this.recordDemand(mcpServerId)) continue;
       try {

@@ -3,7 +3,7 @@ import {
   QueryClientProvider,
   useQuery,
 } from "@tanstack/react-query";
-import { act, renderHook, waitFor } from "@testing-library/react";
+import { act, render, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { useIsAppLoading, useReportSearchInFlight } from "./use-is-app-loading";
@@ -48,6 +48,54 @@ describe("useIsAppLoading", () => {
     );
 
     await waitFor(() => expect(result.current).toBe(true));
+  });
+
+  it("does not update the shell while another component adds a query during render", () => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+
+    function LoadingIndicator() {
+      useIsAppLoading();
+      return null;
+    }
+
+    function PageQuery({ enabled }: { enabled: boolean }) {
+      if (enabled && !client.getQueryState(["render-started-query"])) {
+        void client
+          .fetchQuery({
+            queryKey: ["render-started-query"],
+            queryFn: () => new Promise<string>(() => {}),
+          })
+          .catch(() => undefined);
+      }
+      return null;
+    }
+
+    function TestTree({ showPage }: { showPage: boolean }) {
+      return (
+        <QueryClientProvider client={client}>
+          <LoadingIndicator />
+          <PageQuery enabled={showPage} />
+        </QueryClientProvider>
+      );
+    }
+
+    const view = render(<TestTree showPage={false} />);
+    try {
+      view.rerender(<TestTree showPage />);
+
+      expect(consoleError.mock.calls.flat().join(" ")).not.toContain(
+        "Cannot update a component",
+      );
+    } finally {
+      consoleError.mockRestore();
+      view.unmount();
+      client.clear();
+    }
   });
 
   it("does not reschedule the shell when the pending count changes but loading does not", async () => {

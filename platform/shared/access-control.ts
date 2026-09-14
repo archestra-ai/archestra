@@ -103,7 +103,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
     "admin",
   ],
   environment: ["read", "create", "update", "delete"],
-  githubAppConfig: ["read", "create", "update", "delete"],
+  credential: ["read", "create", "update", "delete"],
 
   // Knowledge
   knowledgeSource: [
@@ -222,7 +222,7 @@ export const editorPermissions: Record<Resource, Action[]> = {
   ],
   mcpServerInstallation: ["read", "create", "update", "delete"],
   environment: ["read", "create", "update", "delete"],
-  githubAppConfig: ["read", "create", "update", "delete"],
+  credential: ["read", "create", "update", "delete"],
 
   // Knowledge
   knowledgeSource: [
@@ -305,7 +305,7 @@ export const memberPermissions: Record<Resource, Action[]> = {
   environment: ["read"],
   // minting installation tokens from a stored App credential is privileged;
   // default members get no access — editors and admins manage/use App configs
-  githubAppConfig: [],
+  credential: ["read"],
 
   // Knowledge
   knowledgeSource: ["read", "query"],
@@ -523,10 +523,10 @@ export const permissionDescriptions: Record<string, string> = {
   "environment:update":
     "Modify deployment environments, including the org default environment",
   "environment:delete": "Delete deployment environments",
-  "githubAppConfig:read": "View GitHub App configurations",
-  "githubAppConfig:create": "Create GitHub App configurations",
-  "githubAppConfig:update": "Modify GitHub App configurations",
-  "githubAppConfig:delete": "Delete GitHub App configurations",
+  "credential:read": "View saved credentials",
+  "credential:create": "Create saved credentials",
+  "credential:update": "Modify saved credentials",
+  "credential:delete": "Delete saved credentials",
 
   // LLM
   "llmProxy:read": "View the LLM Proxy and its connection details",
@@ -674,6 +674,20 @@ export const permissionDescriptions: Record<string, string> = {
 export const requiredEndpointPermissionsMap: Partial<
   Record<RouteId, Permissions>
 > = {
+  // Inspecting or mutating arbitrary outbound destinations can configure
+  // credential-bearing egress, so those operations remain settings-manager
+  // only. Credential-redacted registry summaries require Agent read and are
+  // visibility-filtered unless the caller can update Agent settings. Run
+  // history includes caller and conversation identifiers, so it requires
+  // Agent-settings read and intentionally permits organization-wide access.
+  [RouteId.InspectA2aRemoteAgent]: { agentSettings: ["update"] },
+  [RouteId.ListA2aRemoteAgents]: { agent: ["read"] },
+  [RouteId.GetA2aRemoteAgent]: { agent: ["read"] },
+  [RouteId.ListA2aRemoteAgentRuns]: { agentSettings: ["read"] },
+  [RouteId.CreateA2aRemoteAgent]: { agentSettings: ["update"] },
+  [RouteId.UpdateA2aRemoteAgent]: { agentSettings: ["update"] },
+  [RouteId.DeleteA2aRemoteAgent]: { agentSettings: ["update"] },
+
   /**
    * Getting basic info about the organization requires the user to be
    * authenticated but no specific permission.
@@ -684,20 +698,25 @@ export const requiredEndpointPermissionsMap: Partial<
   // runs and manage one's own declared credentials; shared credential writes
   // additionally enforce Agent update + scope ownership inside the route.
   [RouteId.GetAgentRuntimePreflight]: { agent: ["read"] },
+  [RouteId.GetClaudeCodeAccount]: { agent: ["read"] },
+  [RouteId.StartClaudeCodeSignIn]: { agent: ["read"] },
+  [RouteId.CompleteClaudeCodeSignIn]: { agent: ["read"] },
+  [RouteId.DisconnectClaudeCodeAccount]: { agent: ["read"] },
+  [RouteId.GetClaudeCodeModels]: { agent: ["read"] },
   [RouteId.SetAgentRuntimeCredential]: { agent: ["read"] },
   [RouteId.DeleteAgentRuntimeCredential]: { agent: ["read"] },
-  [RouteId.ListRuntimeCredentials]: { agent: ["read"] },
-  [RouteId.CreateRuntimeCredential]: { agentSettings: ["update"] },
-  [RouteId.GetRuntimeCredentialUsage]: { agentSettings: ["update"] },
-  [RouteId.UpdateRuntimeCredential]: { agentSettings: ["update"] },
-  [RouteId.DeleteRuntimeCredential]: { agentSettings: ["update"] },
-  [RouteId.SetPersonalRuntimeCredentialConnection]: { agent: ["read"] },
-  [RouteId.DeletePersonalRuntimeCredentialConnection]: { agent: ["read"] },
+  [RouteId.ListRuntimeCredentials]: { credential: ["read"] },
+  [RouteId.CreateRuntimeCredential]: { credential: ["create"] },
+  [RouteId.GetRuntimeCredentialUsage]: { credential: ["read"] },
+  [RouteId.UpdateRuntimeCredential]: { credential: ["update"] },
+  [RouteId.DeleteRuntimeCredential]: { credential: ["delete"] },
+  [RouteId.SetPersonalRuntimeCredentialConnection]: { credential: ["read"] },
+  [RouteId.DeletePersonalRuntimeCredentialConnection]: { credential: ["read"] },
   [RouteId.SetOrganizationRuntimeCredentialConnection]: {
-    agentSettings: ["update"],
+    credential: ["update"],
   },
   [RouteId.DeleteOrganizationRuntimeCredentialConnection]: {
-    agentSettings: ["update"],
+    credential: ["update"],
   },
   [RouteId.GetAgentRuns]: { agent: ["read"] },
   [RouteId.StartAgentRun]: { agent: ["read"] },
@@ -782,6 +801,12 @@ export const requiredEndpointPermissionsMap: Partial<
   // the same disclosure the connector list endpoint gates on that permission.
   [RouteId.GetAgentKnowledgeSourceExclusions]: { knowledgeSource: ["read"] },
   [RouteId.UpdateAgentKnowledgeSourceExclusions]: { knowledgeSource: ["read"] },
+  // Caller-relative skills an internal agent can activate. Agent-type
+  // create/read/update permissions and environment checks are conditional and
+  // stay in the route.
+  [RouteId.GetAgentActivationSkills]: { skill: ["read"] },
+  [RouteId.GetAgentActivationSkillPolicy]: { skill: ["read"] },
+  [RouteId.PatchAgentActivationSkillPolicy]: { skill: ["read"] },
   // Skill assignments/exclusions (what the gateway publishes over skill://):
   // agent-type read/update permission checked dynamically in handler, on top
   // of this floor. `skill:read` is the floor rather than `{}` because these
@@ -1409,6 +1434,8 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetAgentDelegations]: {},
   [RouteId.SyncAgentDelegations]: {},
   [RouteId.DeleteAgentDelegation]: {},
+  [RouteId.GetAgentA2aDelegations]: {},
+  [RouteId.SyncAgentA2aDelegations]: {},
   [RouteId.GetAllDelegationConnections]: {},
   [RouteId.GetLimits]: {
     llmLimit: ["read"],
@@ -1495,33 +1522,33 @@ export const requiredEndpointPermissionsMap: Partial<
     environment: ["update"],
   },
   [RouteId.ListGithubAppConfigs]: {
-    githubAppConfig: ["read"],
+    credential: ["read"],
   },
   [RouteId.GetGithubAppConfig]: {
-    githubAppConfig: ["read"],
+    credential: ["read"],
   },
   [RouteId.CreateGithubAppConfig]: {
-    githubAppConfig: ["create"],
+    credential: ["create"],
   },
   [RouteId.UpdateGithubAppConfig]: {
-    githubAppConfig: ["update"],
+    credential: ["update"],
   },
   [RouteId.DeleteGithubAppConfig]: {
-    githubAppConfig: ["delete"],
+    credential: ["delete"],
   },
   // stored PATs share the githubAppConfig resource: both are org GitHub
   // credentials managed on the same settings page by the same audience
   [RouteId.ListGithubPats]: {
-    githubAppConfig: ["read"],
+    credential: ["read"],
   },
   [RouteId.CreateGithubPat]: {
-    githubAppConfig: ["create"],
+    credential: ["create"],
   },
   [RouteId.UpdateGithubPat]: {
-    githubAppConfig: ["update"],
+    credential: ["update"],
   },
   [RouteId.DeleteGithubPat]: {
-    githubAppConfig: ["delete"],
+    credential: ["delete"],
   },
   [RouteId.UpdateKnowledgeSettings]: {
     knowledgeSettings: ["update"],
@@ -2163,6 +2190,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
 
   // Agents
   "/agents": { agent: ["read"] },
+  "/a2a/agents": { agent: ["read"] },
   "/agents/new": { agent: ["create"] },
   "/messaging-channels": { agentTrigger: ["read"] },
   "/messaging-channels/slack": { agentTrigger: ["read"] },
@@ -2239,7 +2267,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/settings/roles": { ac: ["read"] },
   "/settings/identity-providers": { identityProvider: ["read"] },
   "/settings/secrets": { secret: ["read"] },
-  "/settings/github": { githubAppConfig: ["read"] },
+  "/settings/credentials": { credential: ["read"] },
   "/settings/appearance": { organizationSettings: ["read"] },
   "/settings/auth": { organizationSettings: ["read"] },
   "/settings/connection": { organizationSettings: ["read"] },

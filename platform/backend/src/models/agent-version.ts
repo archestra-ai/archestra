@@ -1,6 +1,7 @@
-import { createHash } from "node:crypto";
+import { createHash, createHmac } from "node:crypto";
 import type { PaginationQuery } from "@archestra/shared";
 import { and, asc, count, desc, eq, lt } from "drizzle-orm";
+import config from "@/config";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import {
   createPaginatedResult,
@@ -22,9 +23,9 @@ type AgentRow = typeof schema.agentsTable.$inferSelect;
  * operations fork a new version at their boundary via `forkIfChangedBestEffort`
  * when the write changes the canonical payload (see AgentConfigSnapshotSchema
  * for the exact surface): agent create/update, tool assign/unassign/delegation,
- * hook create/update/delete, tool/subagent exclusion edits, and knowledge/
- * connector assignment. A write producing an identical payload leaves the head
- * untouched (content-hash dedup).
+ * activation-skill policy edits, hook create/update/delete, tool/subagent
+ * exclusion edits, and knowledge/connector assignment. A write producing an
+ * identical payload leaves the head untouched (content-hash dedup).
  *
  * Coverage is at those operation boundaries, not a DB trigger — a write that
  * bypasses them (e.g. the bulk MCP-server install tool fan-out, which runs
@@ -38,6 +39,35 @@ class AgentVersionModel {
    */
   static computeContentHash(snapshot: AgentConfigSnapshot): string {
     return createHash("sha256").update(stableStringify(snapshot)).digest("hex");
+  }
+
+  /** Server-keyed marker that prevents offline testing of guessed rule sets. */
+  static computeActivationSkillRuleDigest(
+    rules: AgentConfigSnapshot["activationSkillRules"],
+  ): string {
+    return AgentVersionModel.computePublicDigest(
+      "activation-skill-rules",
+      stableStringify(rules),
+    );
+  }
+
+  /** Server-keyed projection of the private snapshot hash for read APIs. */
+  static computePublicContentHash(contentHash: string): string {
+    return AgentVersionModel.computePublicDigest("content-hash", contentHash);
+  }
+
+  private static computePublicDigest(domain: string, value: string): string {
+    const secret = config.auth.secret;
+    if (!secret) {
+      throw new Error(
+        "ARCHESTRA_AUTH_SESSION_SECRET or ARCHESTRA_AUTH_SECRET is required",
+      );
+    }
+    return createHmac("sha256", secret)
+      .update(domain)
+      .update("\0")
+      .update(value)
+      .digest("hex");
   }
 
   /**
@@ -59,6 +89,7 @@ class AgentVersionModel {
       knowledgeBases,
       connectors,
       excludedConnectors,
+      activationSkillRuleRows,
       modelRows,
       keyRows,
     ] = await Promise.all([
@@ -161,6 +192,10 @@ class AgentVersionModel {
           ),
         )
         .where(eq(schema.agentExcludedConnectorsTable.agentId, agent.id)),
+      tx
+        .select()
+        .from(schema.agentActivationSkillRulesTable)
+        .where(eq(schema.agentActivationSkillRulesTable.agentId, agent.id)),
       agent.modelId
         ? tx
             .select({ externalId: schema.modelsTable.externalId })
@@ -194,6 +229,15 @@ class AgentVersionModel {
       missingCredentialBehavior: agent.missingCredentialBehavior,
       accessAllTools: agent.accessAllTools,
       accessAllSubagents: agent.accessAllSubagents,
+      activationSkillMode: agent.activationSkillMode,
+      activationSkillRules: activationSkillRuleRows
+        .map((row) => ({
+          disposition: row.disposition,
+          reference: activationSkillRuleReference(row),
+        }))
+        .sort((left, right) =>
+          stableStringify(left).localeCompare(stableStringify(right)),
+        ),
       // Header NAMES only (no values); order is not meaningful.
       passthroughHeaders: [...(agent.passthroughHeaders ?? [])].sort(),
       incomingEmailEnabled: agent.incomingEmailEnabled,
@@ -413,6 +457,29 @@ class AgentVersionModel {
   }
 }
 
+function activationSkillRuleReference(
+  row: typeof schema.agentActivationSkillRulesTable.$inferSelect,
+) {
+  if (row.source === "native" && row.skillId) {
+    return { source: row.source, skillId: row.skillId } as const;
+  }
+  if (row.source === "external_mcp" && row.mcpServerId && row.uri !== null) {
+    return {
+      source: row.source,
+      mcpServerId: row.mcpServerId,
+      uri: row.uri,
+    } as const;
+  }
+  if (row.source === "plugin" && row.pluginId && row.skillPath !== null) {
+    return {
+      source: row.source,
+      pluginId: row.pluginId,
+      skillPath: row.skillPath,
+    } as const;
+  }
+  throw new Error("Invalid stored activation skill rule");
+}
+
 export default AgentVersionModel;
 
 // === Internal helpers ===
@@ -454,6 +521,14 @@ function normalizeAgentVersion(row: AgentVersion): AgentVersion {
       missingCredentialBehavior:
         AgentConfigSnapshotSchema.shape.missingCredentialBehavior.parse(
           row.snapshot.missingCredentialBehavior,
+        ),
+      activationSkillMode:
+        AgentConfigSnapshotSchema.shape.activationSkillMode.parse(
+          row.snapshot.activationSkillMode,
+        ),
+      activationSkillRules:
+        AgentConfigSnapshotSchema.shape.activationSkillRules.parse(
+          row.snapshot.activationSkillRules,
         ),
     },
   };

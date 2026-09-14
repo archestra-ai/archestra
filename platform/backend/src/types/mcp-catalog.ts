@@ -85,6 +85,8 @@ const LocalConfigSelectSchema = z.object({
         key: z.string(),
         type: z.enum(["plain_text", "secret", "boolean", "number"]),
         value: z.string().optional(),
+        credentialId: z.string().min(1).max(128).optional(),
+        credentialScope: z.enum(["personal", "organization"]).optional(),
         promptOnInstallation: z.boolean(),
         required: z.boolean().optional(), // Optional in database
         description: z.string().optional(), // Optional in database
@@ -240,6 +242,7 @@ const InsertInternalMcpCatalogSchemaBase = createInsertSchema(
     deletedAt: true,
     organizationId: true,
     authorId: true,
+    createdByServiceAccountId: true,
     // Frozen K8s deployment identity (multitenant) — computed by
     // InternalMcpCatalogModel.create / the startup adopt pass, never
     // accepted from input.
@@ -290,6 +293,7 @@ const UpdateInternalMcpCatalogSchemaBase = createUpdateSchema(
     deletedAt: true,
     organizationId: true,
     authorId: true,
+    createdByServiceAccountId: true,
     // Tenancy is locked after creation
     multitenant: true,
     // Frozen at creation/adopt time — renames must never touch it

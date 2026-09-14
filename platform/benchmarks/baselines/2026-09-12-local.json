@@ -1,0 +1,2673 @@
+{
+  "schemaVersion": 1,
+  "startedAt": "2026-09-12T21:35:16.686Z",
+  "metadata": {
+    "gitCommit": "2973854af23bbcddc5152de071aa9a8653c0059c",
+    "platformTree": "a69d221165f3aad0087eb477064bc934267c4bff",
+    "node": "v24.19.0",
+    "os": "Darwin",
+    "osRelease": "25.6.0",
+    "arch": "arm64",
+    "cpu": "Apple M5 Pro",
+    "logicalCpus": 18,
+    "totalMemoryBytes": 68719476736,
+    "proxyUrl": "http://127.0.0.1:19000/v1/openai/chat/completions",
+    "mockUrl": "http://127.0.0.1:19092/v1/chat/completions",
+    "auth": "synthetic-provider-key",
+    "count": 1000,
+    "streamCount": 100,
+    "warmup": 30,
+    "repeats": 3,
+    "concurrencyLevels": [
+      1,
+      10,
+      50
+    ],
+    "scenarios": [
+      "chat",
+      "tools",
+      "stream"
+    ],
+    "mock": {
+      "benchmarkMock": 1,
+      "chunks": 20,
+      "intervalMs": 10
+    },
+    "methodology": "Closed-loop HTTP/1.1 keep-alive; direct and proxy blocks alternate order. Median difference is an estimate, not a per-request overhead distribution. Streaming first content excludes non-content SSE events."
+  },
+  "blocks": [
+    {
+      "scenario": "chat",
+      "concurrency": 1,
+      "repeat": 1,
+      "target": "direct",
+      "requestBytes": 113,
+      "attempted": 1000,
+      "succeeded": 1000,
+      "failed": 0,
+      "elapsedMs": 92.70158400000001,
+      "successfulRequestsPerSecond": 10787.30218892484,
+      "totalMs": {
+        "count": 1000,
+        "mean": 0.08599449999999986,
+        "p50": 0.0752080000000035,
+        "p95": 0.14791699999999253,
+        "p99": 0.1954160000000087,
+        "min": 0.04712499999999409,
+        "max": 0.5133749999999964
+      },
+      "firstByteMs": {
+        "count": 1000,
+        "mean": 0.08021467299999986,
+        "p50": 0.0699160000000063,
+        "p95": 0.14000000000000057,
+        "p99": 0.1838329999999928,
+        "min": 0.04458300000001714,
+        "max": 0.42020799999998815
+      },
+      "firstContentMs": null,
+      "gapsMs": null
+    },
+    {
+      "scenario": "chat",
+      "concurrency": 1,
+      "repeat": 1,
+      "target": "proxy",
+      "requestBytes": 113,
+      "attempted": 1000,
+      "succeeded": 1000,
+      "failed": 0,
+      "elapsedMs": 7322.841332999999,
+      "successfulRequestsPerSecond": 136.5590150770511,
+      "totalMs": {
+        "count": 1000,
+        "mean": 7.305685129000005,
+        "p50": 7.113209000000097,
+        "p95": 8.886249999999563,
+        "p99": 10.74200000000019,
+        "min": 4.551250000000437,
+        "max": 24.603374999998778
+      },
+      "firstByteMs": {
+        "count": 1000,
+        "mean": 7.2944857870000135,
+        "p50": 7.103042000000642,
+        "p95": 8.876709000000119,
+        "p99": 10.724250000000211,
+        "min": 4.543874999999389,
+        "max": 24.585916999998517
+      },
+      "firstContentMs": null,
+      "gapsMs": null
+    },
+    {
+      "scenario": "chat",
+      "concurrency": 1,
+      "repeat": 2,
+      "target": "proxy",
+      "requestBytes": 113,
+      "attempted": 1000,
+      "succeeded": 1000,
+      "failed": 0,
+      "elapsedMs": 7093.186583000001,
+      "successfulRequestsPerSecond": 140.98036027935117,
+      "totalMs": {
+        "count": 1000,
+        "mean": 7.079975746999977,
+        "p50": 6.90625,
+        "p95": 8.394875000001775,
+        "p99": 9.351792000001296,
+        "min": 5.030291000000943,
+        "max": 18.084875000000466
+      },
+      "firstByteMs": {
+        "count": 1000,
+        "mean": 7.071841632999941,
+        "p50": 6.900250000000597,
+        "p95": 8.379708000000392,
+        "p99": 9.3403330000001,
+        "min": 5.024999999999636,
+        "max": 18.06945800000176
+      },
+      "firstContentMs": null,
+      "gapsMs": null
+    },
+    {
+      "scenario": "chat",
+      "concurrency": 1,
+      "repeat": 2,
+      "target": "direct",
+      "requestBytes": 113,
+      "attempted": 1000,
+      "succeeded": 1000,
+      "failed": 0,
+      "elapsedMs": 66.6875,
+      "successfulRequestsPerSecond": 14995.31396438613,
+      "totalMs": {
+        "count": 1000,
+        "mean": 0.06351442700006374,
+        "p50": 0.05329199999687262,
+        "p95": 0.10695800000030431,
+        "p99": 0.12137499999880674,
+        "min": 0.03966700000091805,
+        "max": 0.19720799999777228
+      },
+      "firstByteMs": {
+        "count": 1000,
+        "mean": 0.06084297800006971,
+        "p50": 0.05083299999751034,
+        "p95": 0.10408299999835435,
+        "p99": 0.11824999999953434,
+        "min": 0.03804200000013225,
+        "max": 0.19425000000046566
+      },
+      "firstContentMs": null,
+      "gapsMs": null
+    },
+    {
+      "scenario": "chat",
+      "concurrency": 1,
+      "repeat": 3,
+      "target": "direct",
+      "requestBytes": 113,
+      "attempted": 1000,
+      "succeeded": 1000,
+      "failed": 0,
+      "elapsedMs": 71.51691600000049,
+      "successfulRequestsPerSecond": 13982.705853814967,
+      "totalMs": {
+        "count": 1000,
+        "mean": 0.06817065700000603,
+        "p50": 0.05549999999857391,
+        "p95": 0.13112499999988358,
+        "p99": 0.15324999999938882,
+        "min": 0.041875000002619345,
+        "max": 0.2428330000002461
+      },
+      "firstByteMs": {
+        "count": 1000,
+        "mean": 0.06548481499997796,
+        "p50": 0.053167000001849374,
+        "p95": 0.12745799999902374,
+        "p99": 0.1494590000002063,
+        "min": 0.03895900000134134,
+        "max": 0.23949999999967986
+      },
+      "firstContentMs": null,
+      "gapsMs": null
+    },
+    {
+      "scenario": "chat",
+      "concurrency": 1,
+      "repeat": 3,
+      "target": "proxy",
+      "requestBytes": 113,
+      "attempted": 1000,
+      "succeeded": 1000,
+      "failed": 0,
+      "elapsedMs": 7850.745667000003,
+      "successfulRequestsPerSecond": 127.37643561724614,
+      "totalMs": {
+        "count": 1000,
+        "mean": 7.835991205000031,
+        "p50": 7.701208000002225,
+        "p95": 9.577582999998413,
+        "p99": 11.173917000000074,
+        "min": 5.146249999997963,
+        "max": 13.730541000000812
+      },
+      "firstByteMs": {
+        "count": 1000,
+        "mean": 7.826628619000017,
+        "p50": 7.690750000001572,
+        "p95": 9.569208000000799,
+        "p99": 11.148583000001963,
+        "min": 5.140999999999622,
+        "max": 13.718541000002006
+      },
+      "firstContentMs": null,
+      "gapsMs": null
+    },
+    {
+      "scenario": "chat",
+      "concurrency": 10,
+      "repeat": 1,
+      "target": "direct",
+      "requestBytes": 113,
+      "attempted": 1000,
+      "succeeded": 1000,
+      "failed": 0,
+      "elapsedMs": 38.90204100000119,
+      "successfulRequestsPerSecond": 25705.59215646216,
+      "totalMs": {
+        "count": 1000,
+        "mean": 0.38230462099998475,
+        "p50": 0.3199590000003809,
+        "p95": 0.7390840000007302,
+        "p99": 0.9172079999989364,
+        "min": 0.1329169999989972,
+        "max": 1.306416999999783
+      },
+      "firstByteMs": {
+        "count": 1000,
+        "mean": 0.37925375100003295,
+        "p50": 0.31683399999747053,
+        "p95": 0.7352500000015425,
+        "p99": 0.9139580000010028,
+        "min": 0.13062499999796273,
+        "max": 1.3020419999993464
+      },
+      "firstContentMs": null,
+      "gapsMs": null
+    },
+    {
+      "scenario": "chat",
+      "concurrency": 10,
+      "repeat": 1,
+      "target": "proxy",
+      "requestBytes": 113,
+      "attempted": 1000,
+      "succeeded": 1000,
+      "failed": 0,
+      "elapsedMs": 2586.5397919999996,
+      "successfulRequestsPerSecond": 386.6169015040617,
+      "totalMs": {
+        "count": 1000,
+        "mean": 25.77015833500003,
+        "p50": 25.58112500000061,
+        "p95": 30.44970900000044,
+        "p99": 32.49783299999763,
+        "min": 15.734292000001005,
+        "max": 35.74725000000035
+      },
+      "firstByteMs": {
+        "count": 1000,
+        "mean": 25.761459818000016,
+        "p50": 25.571583000000828,
+        "p95": 30.44008400000166,
+        "p99": 32.49170799999774,
+        "min": 15.721874999999272,
+        "max": 35.735749999999825
+      },
+      "firstContentMs": null,
+      "gapsMs": null
+    },
+    {
+      "scenario": "chat",
+      "concurrency": 10,
+      "repeat": 2,
+      "target": "proxy",
+      "requestBytes": 113,
+      "attempted": 1000,
+      "succeeded": 1000,
+      "failed": 0,
+      "elapsedMs": 2634.9756250000028,
+      "successfulRequestsPerSecond": 379.51015201516293,
+      "totalMs": {
+        "count": 1000,
+        "mean": 26.27655148100004,
+        "p50": 25.67254200000025,
+        "p95": 32.02666599999793,
+        "p99": 44.98700000000099,
+        "min": 17.06275000000096,
+        "max": 70.23241699999926
+      },
+      "firstByteMs": {
+        "count": 1000,
+        "mean": 26.268120124999932,
+        "p50": 25.66358300000138,
+        "p95": 32.01787499999773,
+        "p99": 44.9765419999967,
+        "min": 17.052083999999013,
+        "max": 70.2169170000052
+      },
+      "firstContentMs": null,
+      "gapsMs": null
+    },
+    {
+      "scenario": "chat",
+      "concurrency": 10,
+      "repeat": 2,
+      "target": "direct",
+      "requestBytes": 113,
+      "attempted": 1000,
+      "succeeded": 1000,
+      "failed": 0,
+      "elapsedMs": 39.52037500000006,
+      "successfulRequestsPerSecond": 25303.403624079947,
+      "totalMs": {
+        "count": 1000,
+        "mean": 0.3888462150000487,
+        "p50": 0.32549999999901047,
+        "p95": 0.7416250000023865,
+        "p99": 1.1242910000000848,
+        "min": 0.10383400000137044,
+        "max": 1.4897080000009737
+      },
+      "firstByteMs": {
+        "count": 1000,
+        "mean": 0.38598012400011794,
+        "p50": 0.3227499999993597,
+        "p95": 0.738167000003159,
+        "p99": 1.1195829999996931,
+        "min": 0.10137499999837019,
+        "max": 1.4859579999974812
+      },
+      "firstContentMs": null,
+      "gapsMs": null
+    },
+    {
+      "scenario": "chat",
+      "concurrency": 10,
+      "repeat": 3,
+      "target": "direct",
+      "requestBytes": 113,
+      "attempted": 1000,
+      "succeeded": 1000,
+      "failed": 0,
+      "elapsedMs": 41.029875000000175,
+      "successfulRequestsPerSecond": 24372.484683416555,
+      "totalMs": {
+        "count": 1000,
+        "mean": 0.40389191900002336,
+        "p50": 0.33924999999726424,
+        "p95": 0.8600000000005821,
+        "p99": 1.357292000000598,
+        "min": 0.11129100000107428,
+        "max": 1.5858749999970314
+      },
+      "firstByteMs": {
+        "count": 1000,
+        "mean": 0.4007761789999713,
+        "p50": 0.3358749999970314,
+        "p95": 0.8318340000041644,
+        "p99": 1.352459000001545,
+        "min": 0.10949999999866122,
+        "max": 1.5817499999975553
+      },
+      "firstContentMs": null,
+      "gapsMs": null
+    },
+    {
+      "scenario": "chat",
+      "concurrency": 10,
+      "repeat": 3,
+      "target": "proxy",
+      "requestBytes": 113,
+      "attempted": 1000,
+      "succeeded": 1000,
+      "failed": 0,
+      "elapsedMs": 2649.8825829999987,
+      "successfulRequestsPerSecond": 377.3752114208301,
+      "totalMs": {
+        "count": 1000,
+        "mean": 26.421074787000048,
+        "p50": 26.29033299999719,
+        "p95": 31.86112499999581,
+        "p99": 34.36879200000112,
+        "min": 15.171958999999333,
+        "max": 37.6551249999975
+      },
+      "firstByteMs": {
+        "count": 1000,
+        "mean": 26.412108084999957,
+        "p50": 26.283917000000656,
+        "p95": 31.851416999998037,
+        "p99": 34.357499999998254,
+        "min": 15.16270899999654,
+        "max": 37.64574999999604
+      },
+      "firstContentMs": null,
+      "gapsMs": null
+    },
+    {
+      "scenario": "chat",
+      "concurrency": 50,
+      "repeat": 1,
+      "target": "direct",
+      "requestBytes": 113,
+      "attempted": 1000,
+      "succeeded": 1000,
+      "failed": 0,
+      "elapsedMs": 35.46949999999924,
+      "successfulRequestsPerSecond": 28193.236442578025,
+      "totalMs": {
+        "count": 1000,
+        "mean": 1.7225516490000081,
+        "p50": 1.6074999999982538,
+        "p95": 2.5142500000001746,
+        "p99": 3.8092089999991003,
+        "min": 0.5396669999972801,
+        "max": 4.5630829999936395
+      },
+      "firstByteMs": {
+        "count": 1000,
+        "mean": 1.7197380420002228,
+        "p50": 1.6038340000013704,
+        "p95": 2.51091599999927,
+        "p99": 3.805500000002212,
+        "min": 0.5359170000010636,
+        "max": 4.559832999999344
+      },
+      "firstContentMs": null,
+      "gapsMs": null
+    },
+    {
+      "scenario": "chat",
+      "concurrency": 50,
+      "repeat": 1,
+      "target": "proxy",
+      "requestBytes": 113,
+      "attempted": 1000,
+      "succeeded": 1000,
+      "failed": 0,
+      "elapsedMs": 2412.5667500000054,
+      "successfulRequestsPerSecond": 414.4963035737759,
+      "totalMs": {
+        "count": 1000,
+        "mean": 119.89179678500018,
+        "p50": 120.27670899999794,
+        "p95": 128.30554200000188,
+        "p99": 130.1662920000017,
+        "min": 99.61583399999654,
+        "max": 132.77670899999794
+      },
+      "firstByteMs": {
+        "count": 1000,
+        "mean": 119.88534329799988,
+        "p50": 120.2719999999972,
+        "p95": 128.30187500000466,
+        "p99": 130.15933300000324,
+        "min": 99.59787499999948,
+        "max": 132.77108399999997
+      },
+      "firstContentMs": null,
+      "gapsMs": null
+    },
+    {
+      "scenario": "chat",
+      "concurrency": 50,
+      "repeat": 2,
+      "target": "proxy",
+      "requestBytes": 113,
+      "attempted": 1000,
+      "succeeded": 1000,
+      "failed": 0,
+      "elapsedMs": 2366.876916000001,
+      "successfulRequestsPerSecond": 422.49767752604146,
+      "totalMs": {
+        "count": 1000,
+        "mean": 117.696570216,
+        "p50": 118.02762500000244,
+        "p95": 124.51054100000329,
+        "p99": 127.47187500000291,
+        "min": 99.46033399999578,
+        "max": 130.39633300000423
+      },
+      "firstByteMs": {
+        "count": 1000,
+        "mean": 117.69075321399987,
+        "p50": 118.02416700000322,
+        "p95": 124.50116600000183,
+        "p99": 127.46625000000495,
+        "min": 99.4438749999972,
+        "max": 130.3894580000051
+      },
+      "firstContentMs": null,
+      "gapsMs": null
+    },
+    {
+      "scenario": "chat",
+      "concurrency": 50,
+      "repeat": 2,
+      "target": "direct",
+      "requestBytes": 113,
+      "attempted": 1000,
+      "succeeded": 1000,
+      "failed": 0,
+      "elapsedMs": 34.71824999999808,
+      "successfulRequestsPerSecond": 28803.295096960686,
+      "totalMs": {
+        "count": 1000,
+        "mean": 1.6803516569999484,
+        "p50": 1.5647920000046724,
+        "p95": 2.741415999997116,
+        "p99": 3.6421249999984866,
+        "min": 0.5914999999949941,
+        "max": 4.029666999995243
+      },
+      "firstByteMs": {
+        "count": 1000,
+        "mean": 1.6778398979999911,
+        "p50": 1.5625,
+        "p95": 2.7383330000011483,
+        "p99": 3.6389170000038575,
+        "min": 0.5897499999991851,
+        "max": 4.027082999993581
+      },
+      "firstContentMs": null,
+      "gapsMs": null
+    },
+    {
+      "scenario": "chat",
+      "concurrency": 50,
+      "repeat": 3,
+      "target": "direct",
+      "requestBytes": 113,
+      "attempted": 1000,
+      "succeeded": 1000,
+      "failed": 0,
+      "elapsedMs": 34.033416999998735,
+      "successfulRequestsPerSecond": 29382.885650301796,
+      "totalMs": {
+        "count": 1000,
+        "mean": 1.649100754000072,
+        "p50": 1.4970830000020214,
+        "p95": 2.7132500000006985,
+        "p99": 4.116874999999709,
+        "min": 0.5669170000037411,
+        "max": 4.620875000000524
+      },
+      "firstByteMs": {
+        "count": 1000,
+        "mean": 1.646499372000013,
+        "p50": 1.4931249999935972,
+        "p95": 2.7098340000011376,
+        "p99": 4.113582999998471,
+        "min": 0.5650000000023283,
+        "max": 4.618291000006138
+      },
+      "firstContentMs": null,
+      "gapsMs": null
+    },
+    {
+      "scenario": "chat",
+      "concurrency": 50,
+      "repeat": 3,
+      "target": "proxy",
+      "requestBytes": 113,
+      "attempted": 1000,
+      "succeeded": 1000,
+      "failed": 0,
+      "elapsedMs": 2483.6223329999993,
+      "successfulRequestsPerSecond": 402.63770651155613,
+      "totalMs": {
+        "count": 1000,
+        "mean": 123.54863999299991,
+        "p50": 120.8291659999959,
+        "p95": 153.05662499999744,
+        "p99": 176.42412499999773,
+        "min": 97.31883299999754,
+        "max": 183.78529100000014
+      },
+      "firstByteMs": {
+        "count": 1000,
+        "mean": 123.54207644800006,
+        "p50": 120.825874999995,
+        "p95": 153.04054200000246,
+        "p99": 176.42054199999984,
+        "min": 97.30112499999814,
+        "max": 183.77608299999702
+      },
+      "firstContentMs": null,
+      "gapsMs": null
+    },
+    {
+      "scenario": "tools",
+      "concurrency": 1,
+      "repeat": 1,
+      "target": "direct",
+      "requestBytes": 315,
+      "attempted": 1000,
+      "succeeded": 1000,
+      "failed": 0,
+      "elapsedMs": 71.50891599999886,
+      "successfulRequestsPerSecond": 13984.270157304802,
+      "totalMs": {
+        "count": 1000,
+        "mean": 0.06834988500004692,
+        "p50": 0.055208999998285435,
+        "p95": 0.1349999999947613,
+        "p99": 0.15233399999851827,
+        "min": 0.034749999998894054,
+        "max": 0.8028330000015558
+      },
+      "firstByteMs": {
+        "count": 1000,
+        "mean": 0.06551144099994417,
+        "p50": 0.05254100000456674,
+        "p95": 0.13029200000164565,
+        "p99": 0.14816699999937555,
+        "min": 0.033000000003085006,
+        "max": 0.7975829999995767
+      },
+      "firstContentMs": null,
+      "gapsMs": null
+    },
+    {
+      "scenario": "tools",
+      "concurrency": 1,
+      "repeat": 1,
+      "target": "proxy",
+      "requestBytes": 315,
+      "attempted": 1000,
+      "succeeded": 1000,
+      "failed": 0,
+      "elapsedMs": 8052.276083000004,
+      "successfulRequestsPerSecond": 124.18848902997797,
+      "totalMs": {
+        "count": 1000,
+        "mean": 8.039286762000025,
+        "p50": 7.436874999999418,
+        "p95": 9.860582999994222,
+        "p99": 14.114792000000307,
+        "min": 5.312832999996317,
+        "max": 188.07975000000442
+      },
+      "firstByteMs": {
+        "count": 1000,
+        "mean": 8.02985691800002,
+        "p50": 7.427834000001894,
+        "p95": 9.852791999997862,
+        "p99": 14.102624999999534,
+        "min": 5.307374999996682,
+        "max": 188.0515000000014
+      },
+      "firstContentMs": null,
+      "gapsMs": null
+    },
+    {
+      "scenario": "tools",
+      "concurrency": 1,
+      "repeat": 2,
+      "target": "proxy",
+      "requestBytes": 315,
+      "attempted": 1000,
+      "succeeded": 1000,
+      "failed": 0,
+      "elapsedMs": 7418.130291000001,
+      "successfulRequestsPerSecond": 134.80485793209152,
+      "totalMs": {
+        "count": 1000,
+        "mean": 7.406397571000125,
+        "p50": 7.180375000003551,
+        "p95": 9.014084000002185,
+        "p99": 10.627832999998645,
+        "min": 5.025417000004381,
+        "max": 21.422000000005937
+      },
+      "firstByteMs": {
+        "count": 1000,
+        "mean": 7.39865020299999,
+        "p50": 7.173167000000831,
+        "p95": 9.003124999995634,
+        "p99": 10.616416999997455,
+        "min": 5.020875000001979,
+        "max": 21.410625000004075
+      },
+      "firstContentMs": null,
+      "gapsMs": null
+    },
+    {
+      "scenario": "tools",
+      "concurrency": 1,
+      "repeat": 2,
+      "target": "direct",
+      "requestBytes": 315,
+      "attempted": 1000,
+      "succeeded": 1000,
+      "failed": 0,
+      "elapsedMs": 76.99516600000061,
+      "successfulRequestsPerSecond": 12987.828352756484,
+      "totalMs": {
+        "count": 1000,
+        "mean": 0.07343735099999321,
+        "p50": 0.05587500000547152,
+        "p95": 0.1477500000037253,
+        "p99": 0.21229200000379933,
+        "min": 0.04179199999634875,
+        "max": 0.39849999999569263
+      },
+      "firstByteMs": {
+        "count": 1000,
+        "mean": 0.07041248200001428,
+        "p50": 0.05354099999385653,
+        "p95": 0.14412500000617,
+        "p99": 0.20570800000132294,
+        "min": 0.03954099999828031,
+        "max": 0.38312500000029104
+      },
+      "firstContentMs": null,
+      "gapsMs": null
+    },
+    {
+      "scenario": "tools",
+      "concurrency": 1,
+      "repeat": 3,
+      "target": "direct",
+      "requestBytes": 315,
+      "attempted": 1000,
+      "succeeded": 1000,
+      "failed": 0,
+      "elapsedMs": 59.81341699999757,
+      "successfulRequestsPerSecond": 16718.656952837864,
+      "totalMs": {
+        "count": 1000,
+        "mean": 0.057276950999934344,
+        "p50": 0.04841600000509061,
+        "p95": 0.0940000000045984,
+        "p99": 0.11483399999997346,
+        "min": 0.03720799999427982,
+        "max": 0.3100419999973383
+      },
+      "firstByteMs": {
+        "count": 1000,
+        "mean": 0.054934784999910335,
+        "p50": 0.04616600000008475,
+        "p95": 0.09187500000552973,
+        "p99": 0.11195899999438552,
+        "min": 0.03570900000340771,
+        "max": 0.3073329999970156
+      },
+      "firstContentMs": null,
+      "gapsMs": null
+    },
+    {
+      "scenario": "tools",
+      "concurrency": 1,
+      "repeat": 3,
+      "target": "proxy",
+      "requestBytes": 315,
+      "attempted": 1000,
+      "succeeded": 1000,
+      "failed": 0,
+      "elapsedMs": 7373.17025000001,
+      "successfulRequestsPerSecond": 135.62686959520548,
+      "totalMs": {
+        "count": 1000,
+        "mean": 7.360946044999728,
+        "p50": 7.159790999998222,
+        "p95": 9.302874999993946,
+        "p99": 10.316791000004741,
+        "min": 5.22041700000409,
+        "max": 13.15854199999012
+      },
+      "firstByteMs": {
+        "count": 1000,
+        "mean": 7.35397971099976,
+        "p50": 7.153374999994412,
+        "p95": 9.292416999989655,
+        "p99": 10.307125000006636,
+        "min": 5.215709000010975,
+        "max": 13.142542000001413
+      },
+      "firstContentMs": null,
+      "gapsMs": null
+    },
+    {
+      "scenario": "tools",
+      "concurrency": 10,
+      "repeat": 1,
+      "target": "direct",
+      "requestBytes": 315,
+      "attempted": 1000,
+      "succeeded": 1000,
+      "failed": 0,
+      "elapsedMs": 31.56812500000524,
+      "successfulRequestsPerSecond": 31677.522817710396,
+      "totalMs": {
+        "count": 1000,
+        "mean": 0.31100410599986206,
+        "p50": 0.24891700000443961,
+        "p95": 0.5487910000083502,
+        "p99": 0.7749169999879086,
+        "min": 0.12662500000442378,
+        "max": 1.5897079999995185
+      },
+      "firstByteMs": {
+        "count": 1000,
+        "mean": 0.3089540849997429,
+        "p50": 0.24687499999708962,
+        "p95": 0.5460410000086995,
+        "p99": 0.7730419999861624,
+        "min": 0.12379100000543986,
+        "max": 1.5869999999995343
+      },
+      "firstContentMs": null,
+      "gapsMs": null
+    },
+    {
+      "scenario": "tools",
+      "concurrency": 10,
+      "repeat": 1,
+      "target": "proxy",
+      "requestBytes": 315,
+      "attempted": 1000,
+      "succeeded": 1000,
+      "failed": 0,
+      "elapsedMs": 2664.373749999999,
+      "successfulRequestsPerSecond": 375.3227188940742,
+      "totalMs": {
+        "count": 1000,
+        "mean": 26.578083457999995,
+        "p50": 25.770415999999386,
+        "p95": 33.36970899999142,
+        "p99": 50.72116599998844,
+        "min": 13.183124999995925,
+        "max": 72.64070899999933
+      },
+      "firstByteMs": {
+        "count": 1000,
+        "mean": 26.57103031200016,
+        "p50": 25.76350000000093,
+        "p95": 33.36216699999932,
+        "p99": 50.706374999994296,
+        "min": 13.177541999990353,
+        "max": 72.62641700000677
+      },
+      "firstContentMs": null,
+      "gapsMs": null
+    },
+    {
+      "scenario": "tools",
+      "concurrency": 10,
+      "repeat": 2,
+      "target": "proxy",
+      "requestBytes": 315,
+      "attempted": 1000,
+      "succeeded": 1000,
+      "failed": 0,
+      "elapsedMs": 2646.022167000003,
+      "successfulRequestsPerSecond": 377.9257832649892,
+      "totalMs": {
+        "count": 1000,
+        "mean": 26.3809024759998,
+        "p50": 26.118666000009398,
+        "p95": 31.826499999995576,
+        "p99": 39.10879099999147,
+        "min": 16.92820799999754,
+        "max": 44.76112500000454
+      },
+      "firstByteMs": {
+        "count": 1000,
+        "mean": 26.373743369000017,
+        "p50": 26.11120800000208,
+        "p95": 31.812250000002678,
+        "p99": 39.10283299999719,
+        "min": 16.924750000005588,
+        "max": 44.747667000003275
+      },
+      "firstContentMs": null,
+      "gapsMs": null
+    },
+    {
+      "scenario": "tools",
+      "concurrency": 10,
+      "repeat": 2,
+      "target": "direct",
+      "requestBytes": 315,
+      "attempted": 1000,
+      "succeeded": 1000,
+      "failed": 0,
+      "elapsedMs": 34.16120800000499,
+      "successfulRequestsPerSecond": 29272.969503884466,
+      "totalMs": {
+        "count": 1000,
+        "mean": 0.3365248050001974,
+        "p50": 0.27995799999916926,
+        "p95": 0.6472080000094138,
+        "p99": 0.9037499999976717,
+        "min": 0.10616599999775644,
+        "max": 1.3107080000045244
+      },
+      "firstByteMs": {
+        "count": 1000,
+        "mean": 0.33417197600031795,
+        "p50": 0.2776250000024447,
+        "p95": 0.6445830000011483,
+        "p99": 0.9015000000072177,
+        "min": 0.10450000000128057,
+        "max": 1.3084579999995185
+      },
+      "firstContentMs": null,
+      "gapsMs": null
+    },
+    {
+      "scenario": "tools",
+      "concurrency": 10,
+      "repeat": 3,
+      "target": "direct",
+      "requestBytes": 315,
+      "attempted": 1000,
+      "succeeded": 1000,
+      "failed": 0,
+      "elapsedMs": 31.443707999991602,
+      "successfulRequestsPerSecond": 31802.86498018195,
+      "totalMs": {
+        "count": 1000,
+        "mean": 0.30944546099992293,
+        "p50": 0.21700000000419095,
+        "p95": 0.5008329999982379,
+        "p99": 1.0678750000079162,
+        "min": 0.10025000000314321,
+        "max": 3.997417000005953
+      },
+      "firstByteMs": {
+        "count": 1000,
+        "mean": 0.30748379000001297,
+        "p50": 0.21504199999617413,
+        "p95": 0.49870799999916926,
+        "p99": 1.0635420000035083,
+        "min": 0.09708400000818074,
+        "max": 3.994750000012573
+      },
+      "firstContentMs": null,
+      "gapsMs": null
+    },
+    {
+      "scenario": "tools",
+      "concurrency": 10,
+      "repeat": 3,
+      "target": "proxy",
+      "requestBytes": 315,
+      "attempted": 1000,
+      "succeeded": 1000,
+      "failed": 0,
+      "elapsedMs": 2586.4976250000036,
+      "successfulRequestsPerSecond": 386.6232044191413,
+      "totalMs": {
+        "count": 1000,
+        "mean": 25.778437968999686,
+        "p50": 25.563334000005852,
+        "p95": 31.144834000006085,
+        "p99": 35.1181249999936,
+        "min": 16.948791999995592,
+        "max": 45.01645799999824
+      },
+      "firstByteMs": {
+        "count": 1000,
+        "mean": 25.771535305999905,
+        "p50": 25.554583999997703,
+        "p95": 31.13787500000035,
+        "p99": 35.112916999991285,
+        "min": 16.94133299999521,
+        "max": 45.01350000000093
+      },
+      "firstContentMs": null,
+      "gapsMs": null
+    },
+    {
+      "scenario": "tools",
+      "concurrency": 50,
+      "repeat": 1,
+      "target": "direct",
+      "requestBytes": 315,
+      "attempted": 1000,
+      "succeeded": 1000,
+      "failed": 0,
+      "elapsedMs": 33.463375000006636,
+      "successfulRequestsPerSecond": 29883.417318181495,
+      "totalMs": {
+        "count": 1000,
+        "mean": 1.6142249130001873,
+        "p50": 1.3827500000043074,
+        "p95": 3.408208000008017,
+        "p99": 4.870750000001863,
+        "min": 0.5067500000004657,
+        "max": 5.089082999998936
+      },
+      "firstByteMs": {
+        "count": 1000,
+        "mean": 1.6120936620002613,
+        "p50": 1.3807920000108425,
+        "p95": 3.4058749999967404,
+        "p99": 4.867666999998619,
+        "min": 0.5051669999957085,
+        "max": 5.086083000001963
+      },
+      "firstContentMs": null,
+      "gapsMs": null
+    },
+    {
+      "scenario": "tools",
+      "concurrency": 50,
+      "repeat": 1,
+      "target": "proxy",
+      "requestBytes": 315,
+      "attempted": 1000,
+      "succeeded": 1000,
+      "failed": 0,
+      "elapsedMs": 2455.7378330000065,
+      "successfulRequestsPerSecond": 407.2095915785801,
+      "totalMs": {
+        "count": 1000,
+        "mean": 122.164023995,
+        "p50": 121.92812499999127,
+        "p95": 133.0424170000042,
+        "p99": 139.67354099999648,
+        "min": 105.2809169999964,
+        "max": 143.15858299999672
+      },
+      "firstByteMs": {
+        "count": 1000,
+        "mean": 122.1589425710003,
+        "p50": 121.91554200000246,
+        "p95": 133.03575000001,
+        "p99": 139.66912500000035,
+        "min": 105.26591699999699,
+        "max": 143.15170800000487
+      },
+      "firstContentMs": null,
+      "gapsMs": null
+    },
+    {
+      "scenario": "tools",
+      "concurrency": 50,
+      "repeat": 2,
+      "target": "proxy",
+      "requestBytes": 315,
+      "attempted": 1000,
+      "succeeded": 1000,
+      "failed": 0,
+      "elapsedMs": 2496.072125000006,
+      "successfulRequestsPerSecond": 400.6294489587305,
+      "totalMs": {
+        "count": 1000,
+        "mean": 124.21366841500024,
+        "p50": 121.44154200000048,
+        "p95": 147.80383400000574,
+        "p99": 173.21091700000397,
+        "min": 103.14574999999604,
+        "max": 183.38624999999593
+      },
+      "firstByteMs": {
+        "count": 1000,
+        "mean": 124.20826925400031,
+        "p50": 121.43912500000442,
+        "p95": 147.7995840000076,
+        "p99": 173.20387500000652,
+        "min": 103.12854099999822,
+        "max": 183.37062499999593
+      },
+      "firstContentMs": null,
+      "gapsMs": null
+    },
+    {
+      "scenario": "tools",
+      "concurrency": 50,
+      "repeat": 2,
+      "target": "direct",
+      "requestBytes": 315,
+      "attempted": 1000,
+      "succeeded": 1000,
+      "failed": 0,
+      "elapsedMs": 34.10425000000396,
+      "successfulRequestsPerSecond": 29321.85871262039,
+      "totalMs": {
+        "count": 1000,
+        "mean": 1.640756556999986,
+        "p50": 1.4582920000102604,
+        "p95": 2.871207999996841,
+        "p99": 5.293332999994163,
+        "min": 0.46254100000078324,
+        "max": 5.503542000005837
+      },
+      "firstByteMs": {
+        "count": 1000,
+        "mean": 1.638582249999934,
+        "p50": 1.4560829999973066,
+        "p95": 2.8690829999977723,
+        "p99": 5.290500000002794,
+        "min": 0.46095800001057796,
+        "max": 5.500542000008863
+      },
+      "firstContentMs": null,
+      "gapsMs": null
+    },
+    {
+      "scenario": "tools",
+      "concurrency": 50,
+      "repeat": 3,
+      "target": "direct",
+      "requestBytes": 315,
+      "attempted": 1000,
+      "succeeded": 1000,
+      "failed": 0,
+      "elapsedMs": 32.426250000004075,
+      "successfulRequestsPerSecond": 30839.212058128036,
+      "totalMs": {
+        "count": 1000,
+        "mean": 1.5729165129999891,
+        "p50": 1.5417500000039581,
+        "p95": 2.3279590000020107,
+        "p99": 3.3519999999989523,
+        "min": 0.5235420000099111,
+        "max": 3.807249999998021
+      },
+      "firstByteMs": {
+        "count": 1000,
+        "mean": 1.5707059929999523,
+        "p50": 1.5395839999982854,
+        "p95": 2.3247919999994338,
+        "p99": 3.3492499999993015,
+        "min": 0.5218750000058208,
+        "max": 3.804915999993682
+      },
+      "firstContentMs": null,
+      "gapsMs": null
+    },
+    {
+      "scenario": "tools",
+      "concurrency": 50,
+      "repeat": 3,
+      "target": "proxy",
+      "requestBytes": 315,
+      "attempted": 1000,
+      "succeeded": 1000,
+      "failed": 0,
+      "elapsedMs": 2450.9322500000126,
+      "successfulRequestsPerSecond": 408.00801409341074,
+      "totalMs": {
+        "count": 1000,
+        "mean": 121.8508483120001,
+        "p50": 122.29616699999315,
+        "p95": 129.46079100000497,
+        "p99": 132.97375000000466,
+        "min": 98.85466700000688,
+        "max": 137.42504200000258
+      },
+      "firstByteMs": {
+        "count": 1000,
+        "mean": 121.84528520300033,
+        "p50": 122.2925830000022,
+        "p95": 129.4531660000066,
+        "p99": 132.9706670000014,
+        "min": 98.85045900000841,
+        "max": 137.4182920000021
+      },
+      "firstContentMs": null,
+      "gapsMs": null
+    },
+    {
+      "scenario": "stream",
+      "concurrency": 1,
+      "repeat": 1,
+      "target": "direct",
+      "requestBytes": 167,
+      "attempted": 100,
+      "succeeded": 100,
+      "failed": 0,
+      "elapsedMs": 23257.206166000004,
+      "successfulRequestsPerSecond": 4.299742595316166,
+      "totalMs": {
+        "count": 100,
+        "mean": 232.4513057399988,
+        "p50": 232.36958400000003,
+        "p95": 237.2457080000022,
+        "p99": 239.55229099999997,
+        "min": 224.8303339999984,
+        "max": 239.78533299999253
+      },
+      "firstByteMs": {
+        "count": 100,
+        "mean": 12.230996180000075,
+        "p50": 12.53087499999674,
+        "p95": 12.88408299999719,
+        "p99": 13.046042000001762,
+        "min": 10.590666999996756,
+        "max": 13.097542000003159
+      },
+      "firstContentMs": {
+        "count": 100,
+        "mean": 12.257150349999574,
+        "p50": 12.55304199999955,
+        "p95": 12.924749999991036,
+        "p99": 13.101250000006985,
+        "min": 10.614707999993698,
+        "max": 13.155459000001429
+      },
+      "gapsMs": {
+        "count": 1900,
+        "mean": 11.584130458947383,
+        "p50": 11.993042000001878,
+        "p95": 12.311709000001429,
+        "p99": 12.44529099999636,
+        "min": 9.178749999991851,
+        "max": 12.878333000000566
+      }
+    },
+    {
+      "scenario": "stream",
+      "concurrency": 1,
+      "repeat": 1,
+      "target": "proxy",
+      "requestBytes": 167,
+      "attempted": 100,
+      "succeeded": 100,
+      "failed": 0,
+      "elapsedMs": 25082.920125000004,
+      "successfulRequestsPerSecond": 3.9867766393088564,
+      "totalMs": {
+        "count": 100,
+        "mean": 250.72067378999753,
+        "p50": 250.88708300000872,
+        "p95": 257.52504100001534,
+        "p99": 258.58029200002784,
+        "min": 241.88625000001048,
+        "max": 261.2560419999936
+      },
+      "firstByteMs": {
+        "count": 100,
+        "mean": 29.906192119997577,
+        "p50": 29.66141699999571,
+        "p95": 35.40854100001161,
+        "p99": 36.666417000000365,
+        "min": 22.13316699999268,
+        "max": 41.421875
+      },
+      "firstContentMs": {
+        "count": 100,
+        "mean": 29.940230899997985,
+        "p50": 29.708583999978146,
+        "p95": 35.44812499999534,
+        "p99": 36.70370899999398,
+        "min": 22.154166999971494,
+        "max": 41.45787499999278
+      },
+      "gapsMs": {
+        "count": 1900,
+        "mean": 11.615420369999974,
+        "p50": 11.92324999999255,
+        "p95": 12.49374999999418,
+        "p99": 12.922041999991052,
+        "min": 8.937915999995312,
+        "max": 13.714999999996508
+      }
+    },
+    {
+      "scenario": "stream",
+      "concurrency": 1,
+      "repeat": 2,
+      "target": "proxy",
+      "requestBytes": 167,
+      "attempted": 100,
+      "succeeded": 100,
+      "failed": 0,
+      "elapsedMs": 25100.935916000017,
+      "successfulRequestsPerSecond": 3.9839151948217713,
+      "totalMs": {
+        "count": 100,
+        "mean": 250.89989621999965,
+        "p50": 250.69291700000758,
+        "p95": 256.92800000001444,
+        "p99": 259.0891249999986,
+        "min": 238.73241600001347,
+        "max": 259.6739579999994
+      },
+      "firstByteMs": {
+        "count": 100,
+        "mean": 30.097537879998853,
+        "p50": 29.797166999982437,
+        "p95": 35.58929099998204,
+        "p99": 36.22066600000835,
+        "min": 23.686833000014303,
+        "max": 36.27758300001733
+      },
+      "firstContentMs": {
+        "count": 100,
+        "mean": 30.132694149999587,
+        "p50": 29.83316699997522,
+        "p95": 35.6243329999852,
+        "p99": 36.26187499999651,
+        "min": 23.706000000005588,
+        "max": 36.322749999992084
+      },
+      "gapsMs": {
+        "count": 1900,
+        "mean": 11.614699825263111,
+        "p50": 11.912749999988591,
+        "p95": 12.513458000001265,
+        "p99": 12.91745800001081,
+        "min": 8.26624999998603,
+        "max": 13.942041999980574
+      }
+    },
+    {
+      "scenario": "stream",
+      "concurrency": 1,
+      "repeat": 2,
+      "target": "direct",
+      "requestBytes": 167,
+      "attempted": 100,
+      "succeeded": 100,
+      "failed": 0,
+      "elapsedMs": 23381.791416000022,
+      "successfulRequestsPerSecond": 4.276832267504131,
+      "totalMs": {
+        "count": 100,
+        "mean": 233.70021420000003,
+        "p50": 233.74833400000352,
+        "p95": 238.59558300001663,
+        "p99": 239.9167080000043,
+        "min": 223.00508299999638,
+        "max": 240.39824999999837
+      },
+      "firstByteMs": {
+        "count": 100,
+        "mean": 12.302037110000093,
+        "p50": 12.621458999987226,
+        "p95": 12.930083999992348,
+        "p99": 13.008957999991253,
+        "min": 10.683000000019092,
+        "max": 13.174082999990787
+      },
+      "firstContentMs": {
+        "count": 100,
+        "mean": 12.324112110000279,
+        "p50": 12.640416999987792,
+        "p95": 12.956667000020389,
+        "p99": 13.038292000012007,
+        "min": 10.694417000020621,
+        "max": 13.235707999992883
+      },
+      "gapsMs": {
+        "count": 1900,
+        "mean": 11.646449757894704,
+        "p50": 12.050000000017462,
+        "p95": 12.283166999986861,
+        "p99": 12.446374999999534,
+        "min": 9.044250000006286,
+        "max": 12.949124999984633
+      }
+    },
+    {
+      "scenario": "stream",
+      "concurrency": 1,
+      "repeat": 3,
+      "target": "direct",
+      "requestBytes": 167,
+      "attempted": 100,
+      "succeeded": 100,
+      "failed": 0,
+      "elapsedMs": 23391.497124999994,
+      "successfulRequestsPerSecond": 4.275057704328107,
+      "totalMs": {
+        "count": 100,
+        "mean": 233.78232582000084,
+        "p50": 233.99908400001004,
+        "p95": 238.01600000000326,
+        "p99": 241.91574999998556,
+        "min": 225.62437500001397,
+        "max": 242.1432499999937
+      },
+      "firstByteMs": {
+        "count": 100,
+        "mean": 12.373029559999122,
+        "p50": 12.787375000014435,
+        "p95": 13.060582999984035,
+        "p99": 13.075917000009213,
+        "min": 10.105874999979278,
+        "max": 13.082832999993116
+      },
+      "firstContentMs": {
+        "count": 100,
+        "mean": 12.401359549999178,
+        "p50": 12.808665999997174,
+        "p95": 13.1127919999999,
+        "p99": 13.127459000010276,
+        "min": 10.130959000001894,
+        "max": 13.131457999988925
+      },
+      "gapsMs": {
+        "count": 1900,
+        "mean": 11.643952632631668,
+        "p50": 12.039374999993015,
+        "p95": 12.29408299998613,
+        "p99": 12.40862499998184,
+        "min": 9.181750000017928,
+        "max": 13.318666999984998
+      }
+    },
+    {
+      "scenario": "stream",
+      "concurrency": 1,
+      "repeat": 3,
+      "target": "proxy",
+      "requestBytes": 167,
+      "attempted": 100,
+      "succeeded": 100,
+      "failed": 0,
+      "elapsedMs": 25269.397625000012,
+      "successfulRequestsPerSecond": 3.957355908676907,
+      "totalMs": {
+        "count": 100,
+        "mean": 252.57786834000143,
+        "p50": 251.71658399997978,
+        "p95": 261.03074999997625,
+        "p99": 279.8447080000187,
+        "min": 243.31599999999162,
+        "max": 310.74874999996973
+      },
+      "firstByteMs": {
+        "count": 100,
+        "mean": 31.434334270002147,
+        "p50": 30.72079200000735,
+        "p95": 35.48633400001563,
+        "p99": 61.82545800000662,
+        "min": 25.547291999973822,
+        "max": 81.83783400000539
+      },
+      "firstContentMs": {
+        "count": 100,
+        "mean": 31.467621330003894,
+        "p50": 30.754375000018626,
+        "p95": 35.5202500000014,
+        "p99": 61.87570800003596,
+        "min": 25.562334000016563,
+        "max": 81.85066699999152
+      },
+      "gapsMs": {
+        "count": 1900,
+        "mean": 11.630626427894658,
+        "p50": 11.932249999954365,
+        "p95": 12.581500000029337,
+        "p99": 12.980666000046767,
+        "min": 3.560541999991983,
+        "max": 18.354499999957625
+      }
+    },
+    {
+      "scenario": "stream",
+      "concurrency": 10,
+      "repeat": 1,
+      "target": "direct",
+      "requestBytes": 167,
+      "attempted": 100,
+      "succeeded": 100,
+      "failed": 0,
+      "elapsedMs": 2347.536542000016,
+      "successfulRequestsPerSecond": 42.59784595932365,
+      "totalMs": {
+        "count": 100,
+        "mean": 234.6413383400021,
+        "p50": 235.1865000000107,
+        "p95": 238.0290420000092,
+        "p99": 238.04475000000093,
+        "min": 228.93225000001257,
+        "max": 238.04854099999648
+      },
+      "firstByteMs": {
+        "count": 100,
+        "mean": 12.115015400002594,
+        "p50": 12.155291999981273,
+        "p95": 13.7975420000148,
+        "p99": 13.811417000018992,
+        "min": 10.280665999976918,
+        "max": 13.917666000023019
+      },
+      "firstContentMs": {
+        "count": 100,
+        "mean": 12.123076620002976,
+        "p50": 12.163291999953799,
+        "p95": 13.802750000031665,
+        "p99": 13.817417000012938,
+        "min": 10.284415999951307,
+        "max": 13.961125000030734
+      },
+      "gapsMs": {
+        "count": 1900,
+        "mean": 11.709368708947348,
+        "p50": 11.732084000017494,
+        "p95": 12.669249999977183,
+        "p99": 13.604999999981374,
+        "min": 9.356334000010975,
+        "max": 14.197334000025876
+      }
+    },
+    {
+      "scenario": "stream",
+      "concurrency": 10,
+      "repeat": 1,
+      "target": "proxy",
+      "requestBytes": 167,
+      "attempted": 100,
+      "succeeded": 100,
+      "failed": 0,
+      "elapsedMs": 2604.3342500000144,
+      "successfulRequestsPerSecond": 38.39752904221086,
+      "totalMs": {
+        "count": 100,
+        "mean": 259.983071240001,
+        "p50": 259.59887500002515,
+        "p95": 265.0079999999725,
+        "p99": 268.83050000004005,
+        "min": 248.0494169999729,
+        "max": 269.65950000000885
+      },
+      "firstByteMs": {
+        "count": 100,
+        "mean": 41.550556169997435,
+        "p50": 41.53187499998603,
+        "p95": 47.23729199997615,
+        "p99": 50.786625000007916,
+        "min": 33.95345799997449,
+        "max": 50.78912499995204
+      },
+      "firstContentMs": {
+        "count": 100,
+        "mean": 41.55542452999798,
+        "p50": 41.53395900002215,
+        "p95": 47.24437500000931,
+        "p99": 50.79329099995084,
+        "min": 33.95529199996963,
+        "max": 50.79337500000838
+      },
+      "gapsMs": {
+        "count": 1900,
+        "mean": 11.494152412105377,
+        "p50": 11.520374999963678,
+        "p95": 12.986875000002328,
+        "p99": 14.944375000020955,
+        "min": 0.762624999973923,
+        "max": 21.115999999979977
+      }
+    },
+    {
+      "scenario": "stream",
+      "concurrency": 10,
+      "repeat": 2,
+      "target": "proxy",
+      "requestBytes": 167,
+      "attempted": 100,
+      "succeeded": 100,
+      "failed": 0,
+      "elapsedMs": 2573.289416000014,
+      "successfulRequestsPerSecond": 38.8607668372734,
+      "totalMs": {
+        "count": 100,
+        "mean": 255.01908292000414,
+        "p50": 256.46308300003875,
+        "p95": 264.5650409999653,
+        "p99": 266.6292920000269,
+        "min": 226.3475000000326,
+        "max": 269.39274999999907
+      },
+      "firstByteMs": {
+        "count": 100,
+        "mean": 40.09509502000408,
+        "p50": 39.86766600003466,
+        "p95": 48.4550000000163,
+        "p99": 50.986583000048995,
+        "min": 23.519000000029337,
+        "max": 53.308958999987226
+      },
+      "firstContentMs": {
+        "count": 100,
+        "mean": 40.099582550001216,
+        "p50": 39.87020800000755,
+        "p95": 48.45737499999814,
+        "p99": 50.98904200003017,
+        "min": 23.527708999987226,
+        "max": 53.31116699997801
+      },
+      "gapsMs": {
+        "count": 1900,
+        "mean": 11.309201315263238,
+        "p50": 11.225875000003725,
+        "p95": 13.000124999962281,
+        "p99": 15.835916000010911,
+        "min": 2.9254999999538995,
+        "max": 19.368875000043772
+      }
+    },
+    {
+      "scenario": "stream",
+      "concurrency": 10,
+      "repeat": 2,
+      "target": "direct",
+      "requestBytes": 167,
+      "attempted": 100,
+      "succeeded": 100,
+      "failed": 0,
+      "elapsedMs": 2332.3800829999964,
+      "successfulRequestsPerSecond": 42.874658692581605,
+      "totalMs": {
+        "count": 100,
+        "mean": 233.1071975499962,
+        "p50": 232.7410839999793,
+        "p95": 239.61308300000383,
+        "p99": 239.70408300001873,
+        "min": 228.09412500000326,
+        "max": 239.70800000004238
+      },
+      "firstByteMs": {
+        "count": 100,
+        "mean": 11.879971699995803,
+        "p50": 11.901541999948677,
+        "p95": 12.813708000001498,
+        "p99": 12.982666999974754,
+        "min": 9.888249999959953,
+        "max": 13.148667000001296
+      },
+      "firstContentMs": {
+        "count": 100,
+        "mean": 11.885197139997036,
+        "p50": 11.904583999945316,
+        "p95": 12.834290999977384,
+        "p99": 13.015417000046,
+        "min": 9.891124999965541,
+        "max": 13.160792000009678
+      },
+      "gapsMs": {
+        "count": 1900,
+        "mean": 11.641641292105287,
+        "p50": 11.762999999977183,
+        "p95": 12.466000000014901,
+        "p99": 12.902292000013404,
+        "min": 9.526500000036322,
+        "max": 13.43458300002385
+      }
+    },
+    {
+      "scenario": "stream",
+      "concurrency": 10,
+      "repeat": 3,
+      "target": "direct",
+      "requestBytes": 167,
+      "attempted": 100,
+      "succeeded": 100,
+      "failed": 0,
+      "elapsedMs": 2284.910291999986,
+      "successfulRequestsPerSecond": 43.765394357110544,
+      "totalMs": {
+        "count": 100,
+        "mean": 228.41783748999936,
+        "p50": 227.81066700001247,
+        "p95": 232.5995840000105,
+        "p99": 232.60845900001004,
+        "min": 220.30400000000373,
+        "max": 232.61133399995742
+      },
+      "firstByteMs": {
+        "count": 100,
+        "mean": 11.49365374999994,
+        "p50": 11.59208299999591,
+        "p95": 12.717000000004191,
+        "p99": 12.930958999961149,
+        "min": 9.833333999966271,
+        "max": 13.135124999971595
+      },
+      "firstContentMs": {
+        "count": 100,
+        "mean": 11.499513750000041,
+        "p50": 11.594541999977082,
+        "p95": 12.720375000033528,
+        "p99": 12.936791999964043,
+        "min": 9.836416999984067,
+        "max": 13.190291000006255
+      },
+      "gapsMs": {
+        "count": 1900,
+        "mean": 11.415451865263044,
+        "p50": 11.347124999971129,
+        "p95": 12.455291000020225,
+        "p99": 12.67112499999348,
+        "min": 9.292167000006884,
+        "max": 13.071583999961149
+      }
+    },
+    {
+      "scenario": "stream",
+      "concurrency": 10,
+      "repeat": 3,
+      "target": "proxy",
+      "requestBytes": 167,
+      "attempted": 100,
+      "succeeded": 100,
+      "failed": 0,
+      "elapsedMs": 2563.782957999967,
+      "successfulRequestsPerSecond": 39.00486181482812,
+      "totalMs": {
+        "count": 100,
+        "mean": 254.18030959000404,
+        "p50": 253.8609169999836,
+        "p95": 277.7092910000356,
+        "p99": 278.3933749999851,
+        "min": 228.1301669999957,
+        "max": 279.8139160000137
+      },
+      "firstByteMs": {
+        "count": 100,
+        "mean": 37.74367658000497,
+        "p50": 39.01650000002701,
+        "p95": 49.82604100002209,
+        "p99": 51.12283299997216,
+        "min": 20.634500000043772,
+        "max": 53.22816599998623
+      },
+      "firstContentMs": {
+        "count": 100,
+        "mean": 37.74879286000156,
+        "p50": 39.025499999988824,
+        "p95": 49.829041000048164,
+        "p99": 51.12483300000895,
+        "min": 20.64012500003446,
+        "max": 53.23108299996238
+      },
+      "gapsMs": {
+        "count": 1900,
+        "mean": 11.389099736315792,
+        "p50": 11.457457999989856,
+        "p95": 12.731000000028871,
+        "p99": 14.870750000001863,
+        "min": 5.1454999999841675,
+        "max": 17.392915999982506
+      }
+    },
+    {
+      "scenario": "stream",
+      "concurrency": 50,
+      "repeat": 1,
+      "target": "direct",
+      "requestBytes": 167,
+      "attempted": 100,
+      "succeeded": 100,
+      "failed": 0,
+      "elapsedMs": 471.3822500000242,
+      "successfulRequestsPerSecond": 212.14205668540737,
+      "totalMs": {
+        "count": 100,
+        "mean": 234.83788329000177,
+        "p50": 234.1287500000326,
+        "p95": 236.07366600004025,
+        "p99": 236.13783299998613,
+        "min": 233.8458329999703,
+        "max": 236.15358400001423
+      },
+      "firstByteMs": {
+        "count": 100,
+        "mean": 12.956686269997736,
+        "p50": 12.709084000030998,
+        "p95": 13.989292000012938,
+        "p99": 14.040124999999534,
+        "min": 11.368000000016764,
+        "max": 14.159374999988358
+      },
+      "firstContentMs": {
+        "count": 100,
+        "mean": 12.958939170005614,
+        "p50": 12.714208999997936,
+        "p95": 13.991542000032496,
+        "p99": 14.044333000027109,
+        "min": 11.36929100000998,
+        "max": 14.187916000024416
+      },
+      "gapsMs": {
+        "count": 1900,
+        "mean": 11.677180414210277,
+        "p50": 11.628124999988358,
+        "p95": 12.854709000035655,
+        "p99": 13.074041999992914,
+        "min": 10.127875000005588,
+        "max": 13.090834000031464
+      }
+    },
+    {
+      "scenario": "stream",
+      "concurrency": 50,
+      "repeat": 1,
+      "target": "proxy",
+      "requestBytes": 167,
+      "attempted": 100,
+      "succeeded": 100,
+      "failed": 0,
+      "elapsedMs": 689.8175409999676,
+      "successfulRequestsPerSecond": 144.96587004012514,
+      "totalMs": {
+        "count": 100,
+        "mean": 337.67990912999664,
+        "p50": 337.6591250000056,
+        "p95": 349.26458299998194,
+        "p99": 350.0938750000205,
+        "min": 238.02591600001324,
+        "max": 350.330083000008
+      },
+      "firstByteMs": {
+        "count": 100,
+        "mean": 115.35993252000131,
+        "p50": 116.86404200003017,
+        "p95": 123.63199999998324,
+        "p99": 124.3020409999881,
+        "min": 31.97916600003373,
+        "max": 125.36087499995483
+      },
+      "firstContentMs": {
+        "count": 100,
+        "mean": 115.36211414000135,
+        "p50": 116.86545900005149,
+        "p95": 123.63404099998297,
+        "p99": 124.30362500000047,
+        "min": 31.98237500002142,
+        "max": 125.36329199996544
+      },
+      "gapsMs": {
+        "count": 1900,
+        "mean": 11.70030458473671,
+        "p50": 11.696292000007816,
+        "p95": 12.839374999981374,
+        "p99": 15.839166999969166,
+        "min": 0.0035829999833367765,
+        "max": 17.828791000007186
+      }
+    },
+    {
+      "scenario": "stream",
+      "concurrency": 50,
+      "repeat": 2,
+      "target": "proxy",
+      "requestBytes": 167,
+      "attempted": 100,
+      "succeeded": 100,
+      "failed": 0,
+      "elapsedMs": 643.4138340000063,
+      "successfulRequestsPerSecond": 155.42096659363875,
+      "totalMs": {
+        "count": 100,
+        "mean": 313.4456158199965,
+        "p50": 314.45108299999265,
+        "p95": 328.4981250000419,
+        "p99": 329.05395899998257,
+        "min": 254.9560000000056,
+        "max": 329.2135830000043
+      },
+      "firstByteMs": {
+        "count": 100,
+        "mean": 100.47216200999682,
+        "p50": 101.91620799998054,
+        "p95": 109.73229099996388,
+        "p99": 112.17200000002049,
+        "min": 55.365749999997206,
+        "max": 113.92091599997366
+      },
+      "firstContentMs": {
+        "count": 100,
+        "mean": 100.47453371999552,
+        "p50": 101.91787499998463,
+        "p95": 109.73483299999498,
+        "p99": 112.17362499999581,
+        "min": 55.37716700002784,
+        "max": 113.92266599996947
+      },
+      "gapsMs": {
+        "count": 1900,
+        "mean": 11.20846828736861,
+        "p50": 11.259124999982305,
+        "p95": 13.2039999999688,
+        "p99": 14.505166999995708,
+        "min": 2.3437920000287704,
+        "max": 15.659749999991618
+      }
+    },
+    {
+      "scenario": "stream",
+      "concurrency": 50,
+      "repeat": 2,
+      "target": "direct",
+      "requestBytes": 167,
+      "attempted": 100,
+      "succeeded": 100,
+      "failed": 0,
+      "elapsedMs": 466.9127079999889,
+      "successfulRequestsPerSecond": 214.17279565670415,
+      "totalMs": {
+        "count": 100,
+        "mean": 232.7511158700043,
+        "p50": 227.18345900002168,
+        "p95": 239.86979100003373,
+        "p99": 240.01987499999814,
+        "min": 225.81079099996714,
+        "max": 240.05775000003632
+      },
+      "firstByteMs": {
+        "count": 100,
+        "mean": 12.891666750001022,
+        "p50": 12.742457999964245,
+        "p95": 13.769625000015367,
+        "p99": 13.937042000005022,
+        "min": 12.176374999980908,
+        "max": 14.09745900001144
+      },
+      "firstContentMs": {
+        "count": 100,
+        "mean": 12.893782170001067,
+        "p50": 12.744040999969002,
+        "p95": 13.771875000034925,
+        "p99": 13.940708999987692,
+        "min": 12.178083000006154,
+        "max": 14.110541999980342
+      },
+      "gapsMs": {
+        "count": 1900,
+        "mean": 11.570743575789445,
+        "p50": 11.611375000036787,
+        "p95": 12.871167000033893,
+        "p99": 13.335916000010911,
+        "min": 9.363540999998804,
+        "max": 14.082290999998804
+      }
+    },
+    {
+      "scenario": "stream",
+      "concurrency": 50,
+      "repeat": 3,
+      "target": "direct",
+      "requestBytes": 167,
+      "attempted": 100,
+      "succeeded": 100,
+      "failed": 0,
+      "elapsedMs": 471.7791660000221,
+      "successfulRequestsPerSecond": 211.96357789143093,
+      "totalMs": {
+        "count": 100,
+        "mean": 235.09895424000104,
+        "p50": 229.49050000001444,
+        "p95": 241.57587499998044,
+        "p99": 241.6514169999864,
+        "min": 228.26545800000895,
+        "max": 241.71574999997392
+      },
+      "firstByteMs": {
+        "count": 100,
+        "mean": 13.012047530001729,
+        "p50": 13.232917000015732,
+        "p95": 13.673540999996476,
+        "p99": 13.705249999999069,
+        "min": 11.62370799999917,
+        "max": 13.784041000006255
+      },
+      "firstContentMs": {
+        "count": 100,
+        "mean": 13.014519630001159,
+        "p50": 13.248499999986961,
+        "p95": 13.675958000007086,
+        "p99": 13.710124999983236,
+        "min": 11.62475000001723,
+        "max": 13.812333000008948
+      },
+      "gapsMs": {
+        "count": 1900,
+        "mean": 11.688131446842208,
+        "p50": 11.664333000022452,
+        "p95": 12.580750000022817,
+        "p99": 12.629083000007086,
+        "min": 10.022041999967769,
+        "max": 12.661290999967605
+      }
+    },
+    {
+      "scenario": "stream",
+      "concurrency": 50,
+      "repeat": 3,
+      "target": "proxy",
+      "requestBytes": 167,
+      "attempted": 100,
+      "succeeded": 100,
+      "failed": 0,
+      "elapsedMs": 691.8062090000021,
+      "successfulRequestsPerSecond": 144.54915075791072,
+      "totalMs": {
+        "count": 100,
+        "mean": 341.1061200200004,
+        "p50": 339.85524999996414,
+        "p95": 357.5463340000133,
+        "p99": 358.2371249999851,
+        "min": 262.3787500000326,
+        "max": 358.2859579999931
+      },
+      "firstByteMs": {
+        "count": 100,
+        "mean": 118.94769127000123,
+        "p50": 119.83666599995922,
+        "p95": 129.22937499999534,
+        "p99": 133.7795000000042,
+        "min": 56.63266699999804,
+        "max": 134.09325000003446
+      },
+      "firstContentMs": {
+        "count": 100,
+        "mean": 118.95010749999958,
+        "p50": 119.83849999995437,
+        "p95": 129.23112499999115,
+        "p99": 133.782583000022,
+        "min": 56.64320900000166,
+        "max": 134.09525000001304
+      },
+      "gapsMs": {
+        "count": 1900,
+        "mean": 11.691787523157974,
+        "p50": 11.564249999995809,
+        "p95": 13.66195899999002,
+        "p99": 18.56566700001713,
+        "min": 1.9392089999746531,
+        "max": 20.56724999996368
+      }
+    }
+  ],
+  "finishedAt": "2026-09-12T21:40:28.605Z",
+  "aggregates": [
+    {
+      "scenario": "chat",
+      "concurrency": 1,
+      "target": "direct",
+      "attempted": 3000,
+      "failed": 0,
+      "successfulRequestsPerSecond": 12992.299896927725,
+      "totalMs": {
+        "count": 3000,
+        "mean": 0.07255986133335654,
+        "p50": 0.061499999999995225,
+        "p95": 0.13162499999816646,
+        "p99": 0.1705000000000041,
+        "min": 0.03966700000091805,
+        "max": 0.5133749999999964
+      },
+      "firstByteMs": {
+        "count": 3000,
+        "mean": 0.06884748866668251,
+        "p50": 0.05741699999998673,
+        "p95": 0.12574999999999648,
+        "p99": 0.158457999999996,
+        "min": 0.03804200000013225,
+        "max": 0.42020799999998815
+      },
+      "firstContentMs": null,
+      "gapsMs": null
+    },
+    {
+      "scenario": "chat",
+      "concurrency": 1,
+      "target": "proxy",
+      "attempted": 3000,
+      "failed": 0,
+      "successfulRequestsPerSecond": 134.7298919988304,
+      "totalMs": {
+        "count": 3000,
+        "mean": 7.407217360333338,
+        "p50": 7.22387499999968,
+        "p95": 8.969249999998283,
+        "p99": 10.728250000000116,
+        "min": 4.551250000000437,
+        "max": 24.603374999998778
+      },
+      "firstByteMs": {
+        "count": 3000,
+        "mean": 7.39765201299999,
+        "p50": 7.217959000001429,
+        "p95": 8.958291999999346,
+        "p99": 10.718874999998661,
+        "min": 4.543874999999389,
+        "max": 24.585916999998517
+      },
+      "firstContentMs": null,
+      "gapsMs": null
+    },
+    {
+      "scenario": "chat",
+      "concurrency": 10,
+      "target": "direct",
+      "attempted": 3000,
+      "failed": 0,
+      "successfulRequestsPerSecond": 25114.62923720705,
+      "totalMs": {
+        "count": 3000,
+        "mean": 0.3916809183333523,
+        "p50": 0.32345899999927497,
+        "p95": 0.7649590000000899,
+        "p99": 1.1611249999987194,
+        "min": 0.10383400000137044,
+        "max": 1.5858749999970314
+      },
+      "firstByteMs": {
+        "count": 3000,
+        "mean": 0.38867001800004075,
+        "p50": 0.32062500000029104,
+        "p95": 0.7611670000042068,
+        "p99": 1.156875000000582,
+        "min": 0.10137499999837019,
+        "max": 1.5817499999975553
+      },
+      "firstContentMs": null,
+      "gapsMs": null
+    },
+    {
+      "scenario": "chat",
+      "concurrency": 10,
+      "target": "proxy",
+      "attempted": 3000,
+      "failed": 0,
+      "successfulRequestsPerSecond": 381.1267070982816,
+      "totalMs": {
+        "count": 3000,
+        "mean": 26.15592820100004,
+        "p50": 25.89233300000342,
+        "p95": 31.192457999997714,
+        "p99": 37.30699999999342,
+        "min": 15.171958999999333,
+        "max": 70.23241699999926
+      },
+      "firstByteMs": {
+        "count": 3000,
+        "mean": 26.147229342666634,
+        "p50": 25.882000000001426,
+        "p95": 31.18358299999818,
+        "p99": 37.29558399999951,
+        "min": 15.16270899999654,
+        "max": 70.2169170000052
+      },
+      "firstContentMs": null,
+      "gapsMs": null
+    },
+    {
+      "scenario": "chat",
+      "concurrency": 50,
+      "target": "direct",
+      "attempted": 3000,
+      "failed": 0,
+      "successfulRequestsPerSecond": 28784.939627476186,
+      "totalMs": {
+        "count": 3000,
+        "mean": 1.6840013533333429,
+        "p50": 1.5574590000032913,
+        "p95": 2.6630829999994603,
+        "p99": 3.8897500000020955,
+        "min": 0.5396669999972801,
+        "max": 4.620875000000524
+      },
+      "firstByteMs": {
+        "count": 3000,
+        "mean": 1.6813591040000757,
+        "p50": 1.5542499999937718,
+        "p95": 2.660082999995211,
+        "p99": 3.885958999999275,
+        "min": 0.5359170000010636,
+        "max": 4.618291000006138
+      },
+      "firstContentMs": null,
+      "gapsMs": null
+    },
+    {
+      "scenario": "chat",
+      "concurrency": 50,
+      "target": "proxy",
+      "attempted": 3000,
+      "failed": 0,
+      "successfulRequestsPerSecond": 413.0487042817794,
+      "totalMs": {
+        "count": 3000,
+        "mean": 120.37900233133337,
+        "p50": 119.62249999999767,
+        "p95": 129.47929199999635,
+        "p99": 170.70158300000185,
+        "min": 97.31883299999754,
+        "max": 183.78529100000014
+      },
+      "firstByteMs": {
+        "count": 3000,
+        "mean": 120.37272431999997,
+        "p50": 119.61983299999702,
+        "p95": 129.46966699999757,
+        "p99": 170.69779100000596,
+        "min": 97.30112499999814,
+        "max": 183.77608299999702
+      },
+      "firstContentMs": null,
+      "gapsMs": null
+    },
+    {
+      "scenario": "tools",
+      "concurrency": 1,
+      "target": "direct",
+      "attempted": 3000,
+      "failed": 0,
+      "successfulRequestsPerSecond": 14401.094552311433,
+      "totalMs": {
+        "count": 3000,
+        "mean": 0.0663547289999915,
+        "p50": 0.053292000004148576,
+        "p95": 0.13533299999835435,
+        "p99": 0.17304199999489356,
+        "min": 0.034749999998894054,
+        "max": 0.8028330000015558
+      },
+      "firstByteMs": {
+        "count": 3000,
+        "mean": 0.06361956933328959,
+        "p50": 0.05083299999387236,
+        "p95": 0.13129099999787286,
+        "p99": 0.16649999999935972,
+        "min": 0.033000000003085006,
+        "max": 0.7975829999995767
+      },
+      "firstContentMs": null,
+      "gapsMs": null
+    },
+    {
+      "scenario": "tools",
+      "concurrency": 1,
+      "target": "proxy",
+      "attempted": 3000,
+      "failed": 0,
+      "successfulRequestsPerSecond": 131.32794611716483,
+      "totalMs": {
+        "count": 3000,
+        "mean": 7.602210125999959,
+        "p50": 7.2632919999887235,
+        "p95": 9.422333000002254,
+        "p99": 11.24316700000054,
+        "min": 5.025417000004381,
+        "max": 188.07975000000442
+      },
+      "firstByteMs": {
+        "count": 3000,
+        "mean": 7.594162277333257,
+        "p50": 7.257416000000376,
+        "p95": 9.417207999998936,
+        "p99": 11.23029200000019,
+        "min": 5.020875000001979,
+        "max": 188.0515000000014
+      },
+      "firstContentMs": null,
+      "gapsMs": null
+    },
+    {
+      "scenario": "tools",
+      "concurrency": 10,
+      "target": "direct",
+      "attempted": 3000,
+      "failed": 0,
+      "successfulRequestsPerSecond": 30872.7602751461,
+      "totalMs": {
+        "count": 3000,
+        "mean": 0.31899145733332746,
+        "p50": 0.25129200000083074,
+        "p95": 0.5679999999993015,
+        "p99": 0.9041250000009313,
+        "min": 0.10025000000314321,
+        "max": 3.997417000005953
+      },
+      "firstByteMs": {
+        "count": 3000,
+        "mean": 0.31686995033335796,
+        "p50": 0.24916700000176206,
+        "p95": 0.5652079999999842,
+        "p99": 0.901624999998603,
+        "min": 0.09708400000818074,
+        "max": 3.994750000012573
+      },
+      "firstContentMs": null,
+      "gapsMs": null
+    },
+    {
+      "scenario": "tools",
+      "concurrency": 10,
+      "target": "proxy",
+      "attempted": 3000,
+      "failed": 0,
+      "successfulRequestsPerSecond": 379.8962191961126,
+      "totalMs": {
+        "count": 3000,
+        "mean": 26.245807967666494,
+        "p50": 25.792791999992914,
+        "p95": 31.736167000010028,
+        "p99": 40.46504100000311,
+        "min": 13.183124999995925,
+        "max": 72.64070899999933
+      },
+      "firstByteMs": {
+        "count": 3000,
+        "mean": 26.23876966233336,
+        "p50": 25.78591599999345,
+        "p95": 31.73170800000662,
+        "p99": 40.45208299999649,
+        "min": 13.177541999990353,
+        "max": 72.62641700000677
+      },
+      "firstContentMs": null,
+      "gapsMs": null
+    },
+    {
+      "scenario": "tools",
+      "concurrency": 50,
+      "target": "direct",
+      "attempted": 3000,
+      "failed": 0,
+      "successfulRequestsPerSecond": 30001.83761254937,
+      "totalMs": {
+        "count": 3000,
+        "mean": 1.609299327666721,
+        "p50": 1.4535420000029262,
+        "p95": 2.6249580000003334,
+        "p99": 4.985583000001498,
+        "min": 0.46254100000078324,
+        "max": 5.503542000005837
+      },
+      "firstByteMs": {
+        "count": 3000,
+        "mean": 1.6071273016667158,
+        "p50": 1.4514999999955762,
+        "p95": 2.6231669999979204,
+        "p99": 4.982749999995576,
+        "min": 0.46095800001057796,
+        "max": 5.500542000008863
+      },
+      "firstContentMs": null,
+      "gapsMs": null
+    },
+    {
+      "scenario": "tools",
+      "concurrency": 50,
+      "target": "proxy",
+      "attempted": 3000,
+      "failed": 0,
+      "successfulRequestsPerSecond": 405.2552305222716,
+      "totalMs": {
+        "count": 3000,
+        "mean": 122.74284690733343,
+        "p50": 121.91020900000876,
+        "p95": 133.02087500000198,
+        "p99": 167.0376249999972,
+        "min": 98.85466700000688,
+        "max": 183.38624999999593
+      },
+      "firstByteMs": {
+        "count": 3000,
+        "mean": 122.73749900933365,
+        "p50": 121.90341700000863,
+        "p95": 133.01550000000861,
+        "p99": 167.03066699999908,
+        "min": 98.85045900000841,
+        "max": 183.37062499999593
+      },
+      "firstContentMs": null,
+      "gapsMs": null
+    },
+    {
+      "scenario": "stream",
+      "concurrency": 1,
+      "target": "direct",
+      "attempted": 300,
+      "failed": 0,
+      "successfulRequestsPerSecond": 4.283848075829928,
+      "totalMs": {
+        "count": 300,
+        "mean": 233.31128191999989,
+        "p50": 233.43887499999255,
+        "p95": 238.02929199999198,
+        "p99": 239.9167080000043,
+        "min": 223.00508299999638,
+        "max": 242.1432499999937
+      },
+      "firstByteMs": {
+        "count": 300,
+        "mean": 12.302020949999763,
+        "p50": 12.61424999999872,
+        "p95": 13.02704200000153,
+        "p99": 13.075917000009213,
+        "min": 10.105874999979278,
+        "max": 13.174082999990787
+      },
+      "firstContentMs": {
+        "count": 300,
+        "mean": 12.327540669999678,
+        "p50": 12.640416999987792,
+        "p95": 13.055791999999201,
+        "p99": 13.127459000010276,
+        "min": 10.130959000001894,
+        "max": 13.235707999992883
+      },
+      "gapsMs": {
+        "count": 5700,
+        "mean": 11.624844283157918,
+        "p50": 12.036833999998635,
+        "p95": 12.296833000000333,
+        "p99": 12.431708999996772,
+        "min": 9.044250000006286,
+        "max": 13.318666999984998
+      }
+    },
+    {
+      "scenario": "stream",
+      "concurrency": 1,
+      "target": "proxy",
+      "attempted": 300,
+      "failed": 0,
+      "successfulRequestsPerSecond": 3.975971683447534,
+      "totalMs": {
+        "count": 300,
+        "mean": 251.39947944999955,
+        "p50": 251.14520800000173,
+        "p95": 258.30650000000605,
+        "p99": 262.00633299996844,
+        "min": 238.73241600001347,
+        "max": 310.74874999996973
+      },
+      "firstByteMs": {
+        "count": 300,
+        "mean": 30.479354756666194,
+        "p50": 29.877332999982173,
+        "p95": 35.424167000019224,
+        "p99": 36.666417000000365,
+        "min": 22.13316699999268,
+        "max": 81.83783400000539
+      },
+      "firstContentMs": {
+        "count": 300,
+        "mean": 30.51351546000049,
+        "p50": 29.90891699999338,
+        "p95": 35.47312500001863,
+        "p99": 36.70370899999398,
+        "min": 22.154166999971494,
+        "max": 81.85066699999152
+      },
+      "gapsMs": {
+        "count": 5700,
+        "mean": 11.620248874385913,
+        "p50": 11.921165999985533,
+        "p95": 12.529749999986961,
+        "p99": 12.939208000025246,
+        "min": 3.560541999991983,
+        "max": 18.354499999957625
+      }
+    },
+    {
+      "scenario": "stream",
+      "concurrency": 10,
+      "target": "direct",
+      "attempted": 300,
+      "failed": 0,
+      "successfulRequestsPerSecond": 43.0735757794281,
+      "totalMs": {
+        "count": 300,
+        "mean": 232.05545779333255,
+        "p50": 232.35566699999617,
+        "p95": 238.0290420000092,
+        "p99": 239.6844159999746,
+        "min": 220.30400000000373,
+        "max": 239.70800000004238
+      },
+      "firstByteMs": {
+        "count": 300,
+        "mean": 11.829546949999445,
+        "p50": 11.877500000002328,
+        "p95": 13.135124999971595,
+        "p99": 13.803916000004392,
+        "min": 9.833333999966271,
+        "max": 13.917666000023019
+      },
+      "firstContentMs": {
+        "count": 300,
+        "mean": 11.835929170000018,
+        "p50": 11.881667000008747,
+        "p95": 13.160792000009678,
+        "p99": 13.80945800000336,
+        "min": 9.836416999984067,
+        "max": 13.961125000030734
+      },
+      "gapsMs": {
+        "count": 5700,
+        "mean": 11.588820622105226,
+        "p50": 11.556042000011075,
+        "p95": 12.53566699998919,
+        "p99": 13.046916999970563,
+        "min": 9.292167000006884,
+        "max": 14.197334000025876
+      }
+    },
+    {
+      "scenario": "stream",
+      "concurrency": 10,
+      "target": "proxy",
+      "attempted": 300,
+      "failed": 0,
+      "successfulRequestsPerSecond": 38.75264723466878,
+      "totalMs": {
+        "count": 300,
+        "mean": 256.3941545833364,
+        "p50": 257.9538750000065,
+        "p95": 266.6292920000269,
+        "p99": 278.1120419999934,
+        "min": 226.3475000000326,
+        "max": 279.8139160000137
+      },
+      "firstByteMs": {
+        "count": 300,
+        "mean": 39.796442590002165,
+        "p50": 40.32429200003389,
+        "p95": 48.4550000000163,
+        "p99": 50.986583000048995,
+        "min": 20.634500000043772,
+        "max": 53.308958999987226
+      },
+      "firstContentMs": {
+        "count": 300,
+        "mean": 39.80126664666692,
+        "p50": 40.33070900000166,
+        "p95": 48.45737499999814,
+        "p99": 50.98904200003017,
+        "min": 20.64012500003446,
+        "max": 53.31116699997801
+      },
+      "gapsMs": {
+        "count": 5700,
+        "mean": 11.397484487894802,
+        "p50": 11.442291999992449,
+        "p95": 12.822042000014335,
+        "p99": 15.460834000026807,
+        "min": 0.762624999973923,
+        "max": 21.115999999979977
+      }
+    },
+    {
+      "scenario": "stream",
+      "concurrency": 50,
+      "target": "direct",
+      "attempted": 300,
+      "failed": 0,
+      "successfulRequestsPerSecond": 212.75477288312575,
+      "totalMs": {
+        "count": 300,
+        "mean": 234.22931780000238,
+        "p50": 234.1287500000326,
+        "p95": 241.46212499996182,
+        "p99": 241.60933400003705,
+        "min": 225.81079099996714,
+        "max": 241.71574999997392
+      },
+      "firstByteMs": {
+        "count": 300,
+        "mean": 12.953466850000162,
+        "p50": 12.751332999963779,
+        "p95": 13.978707999980543,
+        "p99": 14.024832999974024,
+        "min": 11.368000000016764,
+        "max": 14.159374999988358
+      },
+      "firstContentMs": {
+        "count": 300,
+        "mean": 12.955746990002615,
+        "p50": 12.752957999997307,
+        "p95": 13.9807500000461,
+        "p99": 14.029042000009213,
+        "min": 11.36929100000998,
+        "max": 14.187916000024416
+      },
+      "gapsMs": {
+        "count": 5700,
+        "mean": 11.645351812280643,
+        "p50": 11.627791000006255,
+        "p95": 12.810167000046931,
+        "p99": 13.064125000033528,
+        "min": 9.363540999998804,
+        "max": 14.082290999998804
+      }
+    },
+    {
+      "scenario": "stream",
+      "concurrency": 50,
+      "target": "proxy",
+      "attempted": 300,
+      "failed": 0,
+      "successfulRequestsPerSecond": 148.14539856955244,
+      "totalMs": {
+        "count": 300,
+        "mean": 330.7438816566645,
+        "p50": 333.4427499999874,
+        "p95": 355.64795800001593,
+        "p99": 357.74124999996275,
+        "min": 238.02591600001324,
+        "max": 358.2859579999931
+      },
+      "firstByteMs": {
+        "count": 300,
+        "mean": 111.59326193333312,
+        "p50": 113.87199999997392,
+        "p95": 125.43758300004993,
+        "p99": 129.53699999995297,
+        "min": 31.97916600003373,
+        "max": 134.09325000003446
+      },
+      "firstContentMs": {
+        "count": 300,
+        "mean": 111.59558511999882,
+        "p50": 113.87454200000502,
+        "p95": 125.43924999999581,
+        "p99": 129.53879199997755,
+        "min": 31.98237500002142,
+        "max": 134.09525000001304
+      },
+      "gapsMs": {
+        "count": 5700,
+        "mean": 11.53352013175443,
+        "p50": 11.52820800000336,
+        "p95": 13.314290999958757,
+        "p99": 15.839166999969166,
+        "min": 0.0035829999833367765,
+        "max": 20.56724999996368
+      }
+    }
+  ],
+  "aggregation": "Nearest-rank quantiles of successful samples pooled across all three repeats, grouped by scenario, concurrency and target. Throughput uses combined successful count / combined measured duration. Individual samples omitted from this committed snapshot.",
+  "environment": {
+    "backend": "production web process, default info logging, no trace exporter",
+    "database": "PostgreSQL 17.11 (Debian), aarch64, pgvector",
+    "databaseImage": "pgvector/pgvector:pg17@sha256:cf134a767f474095eeba57e0117be8e568e011a63f33fbf252f14c9b760f8e6f",
+    "databasePoolMax": 20,
+    "databaseStorage": "tmpfs in Docker/OrbStack",
+    "dockerVmLogicalCpus": 18,
+    "dockerVmMemory": "approximately 16 GiB",
+    "network": "Client, mock and backend use local loopback; PostgreSQL through Docker published port",
+    "scope": "Fresh disposable database; synthetic provider-key passthrough, no configured policy rules or virtual-key validation; tool definitions without tool calls; no inference provider requests",
+    "sourceNote": "Backend unchanged from metadata.gitCommit. Harness developed in this PR; later changes to failure handling do not affect this all-successful run."
+  },
+  "rawResultsSha256": "284f8f649c045c5e120b85d6c94e68bf3041a6e1b2ea14dd8fbf3e3833fbd769"
+}

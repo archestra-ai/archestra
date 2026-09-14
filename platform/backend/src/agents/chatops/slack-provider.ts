@@ -460,7 +460,7 @@ class SlackProvider implements ChatOpsProvider {
     // we post one message per chunk and thread the follow-ups so the user sees
     // the full reply. Non-final messages reserve their footer slot for a
     // "continued in a message below" hint.
-    const chunks = splitSlackMarkdownText(body);
+    const chunks = splitSlackMarkdownText(protectSlackUrlBoundaries(body));
 
     let firstTs = "";
     for (let i = 0; i < chunks.length; i++) {
@@ -2599,4 +2599,19 @@ interface SlackInteractivePayload {
   team?: { id: string };
   message?: { ts: string; thread_ts?: string };
   response_url?: string;
+}
+
+/** Slack's markdown converter can absorb the next line into a bare URL. */
+function protectSlackUrlBoundaries(text: string): string {
+  // Leave fenced/inline code, explicit links and autolinks alone. Delimit bare
+  // URLs before handing them to Slack's server-side Markdown converter.
+  return text.replace(
+    /(`{3,}[\s\S]*?`{3,}|~{3,}[\s\S]*?~{3,}|`+[^`]*`+|<[^>\n]*>|\[[^\]\n]*\]\([^\n]*?\))|(https?:\/\/[^\s<>`]+)(?=[ \t]*\r?\n)/g,
+    (match, protectedText: string | undefined, url: string | undefined) => {
+      if (protectedText || !url) return match;
+      const trailing = url.match(/[.,;:!?]+$/)?.[0] ?? "";
+      const address = trailing ? url.slice(0, -trailing.length) : url;
+      return `<${address}>${trailing}`;
+    },
+  );
 }

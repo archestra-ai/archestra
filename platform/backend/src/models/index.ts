@@ -5,8 +5,16 @@ export { default as A2AMessageModel } from "./a2a/message";
 export { default as A2APushNotificationConfigModel } from "./a2a/push-notification-config";
 export { default as A2ATaskModel } from "./a2a/task";
 export { default as A2ATaskApprovalRequestModel } from "./a2a/task-approval-request";
+export { default as A2aOutboundRunModel } from "./a2a-outbound-run";
+export {
+  A2aConnectionModel,
+  default as A2aRemoteAgentModel,
+} from "./a2a-remote-agent";
+export { default as A2aRemoteAgentTeamModel } from "./a2a-remote-agent-team";
+export { default as A2aRemoteAgentUserModel } from "./a2a-remote-agent-user";
 export { default as AccountModel } from "./account";
 export { default as AgentModel } from "./agent";
+export { default as AgentActivationSkillRuleModel } from "./agent-activation-skill-rule";
 export { default as AgentConnectorAssignmentModel } from "./agent-connector-assignment";
 export { default as AgentExcludedConnectorModel } from "./agent-excluded-connector";
 export { default as AgentExcludedSkillModel } from "./agent-excluded-skill";
@@ -69,7 +77,6 @@ export { default as EnvironmentResourceDefaultModel } from "./environment-resour
 export { default as ExternalMcpSkillUsageEventModel } from "./external-mcp-skill-usage-event";
 export { default as FileModel, FileNameExistsError } from "./file";
 export { default as GithubAppConfigModel } from "./github-app-config";
-export { default as GithubPatModel } from "./github-pat";
 export { default as HookFileModel } from "./hook-file";
 export { default as InstanceUsageModel } from "./instance-usage";
 export { default as InteractionModel } from "./interaction";

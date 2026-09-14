@@ -96,7 +96,7 @@ describe("AgentSkillsEditor", () => {
     const user = userEvent.setup();
     render(<Harness tone="exclude" />);
 
-    await user.click(screen.getByRole("button", { name: /add/i }));
+    await user.click(screen.getByRole("button", { name: "Disable Skill" }));
 
     expect(screen.queryByText(/rendered per user/i)).not.toBeInTheDocument();
     await user.click(await screen.findByText("templated-skill"));

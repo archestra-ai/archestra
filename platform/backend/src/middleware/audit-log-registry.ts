@@ -1,4 +1,5 @@
 import config from "@/config";
+import A2aRemoteAgentModel from "@/models/a2a-remote-agent";
 import AgentModel from "@/models/agent";
 import AgentToolModel from "@/models/agent-tool";
 import ApiKeyModel from "@/models/api-key";
@@ -155,21 +156,31 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     fetchById: (id, orgId) => AgentModel.findByIdForAudit(id, orgId),
     onlyWhenChanged: true,
   },
-  "/api/runtime-credentials": {
-    resourceType: "runtimeCredential",
+  "/api/agents/:id/runtime/claude-code/account": {
+    resourceType: "agent",
+    action: "agent.updated",
+    onlyWhenChanged: true,
+  },
+  "/api/agents/:id/runtime/claude-code/account/complete": {
+    resourceType: "agent",
+    action: "agent.updated",
+    onlyWhenChanged: true,
+  },
+  "/api/credentials": {
+    resourceType: "credential",
     fetchById: (id, orgId) =>
       RuntimeCredentialDefinitionModel.findByIdForAudit(id, orgId),
   },
-  "/api/runtime-credentials/:key": {
-    resourceType: "runtimeCredential",
+  "/api/credentials/:key": {
+    resourceType: "credential",
     resourceIdParam: "key",
     fetchById: (key, orgId) =>
       RuntimeCredentialDefinitionModel.findByKeyForAudit(key, orgId),
   },
-  "/api/runtime-credentials/:key/organization": {
-    resourceType: "runtimeCredential",
+  "/api/credentials/:key/organization": {
+    resourceType: "credential",
     resourceIdParam: "key",
-    action: "runtimeCredential.updated",
+    action: "credential.updated",
     onlyWhenChanged: true,
   },
   "/api/agents/:id/runs": {
@@ -249,6 +260,24 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     resourceIdParam: "agentId",
     action: "agent.updated",
     fetchById: (id, orgId) => AgentModel.findByIdForAudit(id, orgId),
+  },
+  "/api/agents/:agentId/a2a-delegations": {
+    resourceType: "agent",
+    resourceIdParam: "agentId",
+    action: "agent.updated",
+    fetchById: (id, orgId) => AgentModel.findByIdForAudit(id, orgId),
+  },
+
+  // External A2A identities are agent-like resources in the product model.
+  // Reuse the agent audit vocabulary while the snapshot fetcher keeps their
+  // connection metadata tenant-scoped and excludes secret identifiers.
+  "/api/a2a/remote-agents": {
+    resourceType: "agent",
+    fetchById: (id, orgId) => A2aRemoteAgentModel.findByIdForAudit(id, orgId),
+  },
+  "/api/a2a/remote-agents/:id": {
+    resourceType: "agent",
+    fetchById: (id, orgId) => A2aRemoteAgentModel.findByIdForAudit(id, orgId),
   },
 
   "/api/agent-tools/:id": {
@@ -553,21 +582,21 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
 
   // GitHub App configs
   "/api/github-app-configs": {
-    resourceType: "githubAppConfig",
+    resourceType: "credential",
     fetchById: (id, orgId) => GithubAppConfigModel.findByIdForAudit(id, orgId),
   },
   "/api/github-app-configs/:id": {
-    resourceType: "githubAppConfig",
+    resourceType: "credential",
     fetchById: (id, orgId) => GithubAppConfigModel.findByIdForAudit(id, orgId),
   },
 
   // Stored GitHub personal access tokens
   "/api/github-pats": {
-    resourceType: "githubPat",
+    resourceType: "credential",
     fetchById: (id, orgId) => GithubPatModel.findByIdForAudit(id, orgId),
   },
   "/api/github-pats/:id": {
-    resourceType: "githubPat",
+    resourceType: "credential",
     fetchById: (id, orgId) => GithubPatModel.findByIdForAudit(id, orgId),
   },
 

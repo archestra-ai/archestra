@@ -673,6 +673,7 @@ function ProjectCard({
           scope={projectVisibilityToScope(project.visibility)}
           teamNames={project.shareTeamNames}
           userNames={project.shareUserNames}
+          showLabel
         />
         {project.viewerRole === "admin" && project.visibility === null ? (
           <Badge variant="secondary">

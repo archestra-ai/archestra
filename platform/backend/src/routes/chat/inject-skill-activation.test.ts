@@ -1,7 +1,7 @@
 import type { ChatMessage } from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
-import { EnvironmentModel, SkillModel } from "@/models";
+import { AgentModel, EnvironmentModel, SkillModel } from "@/models";
 import { expect, test } from "@/test";
 import { drainBackgroundWork } from "@/utils/background-work";
 import { injectSkillActivation } from "./inject-skill-activation";
@@ -222,6 +222,46 @@ test("leaves the message unchanged when the skill is outside the agent's environ
     environmentIds: [otherEnv.id],
   });
 
+  const messages: ChatMessage[] = [
+    {
+      role: "user",
+      parts: [{ type: "text", text: "summarize this paper" }],
+      metadata: { skill: { id: skill.id, name: skill.name } },
+    },
+  ];
+
+  const result = await injectSkillActivation({
+    messages,
+    organizationId: org.id,
+    userId: user.id,
+    agentId: agent.id,
+    conversationId: undefined,
+    provider: "anthropic",
+    model: "claude-sonnet-4-5",
+  });
+
+  expect(result).toBe(messages);
+});
+
+test("leaves a slash-command skill unchanged when the agent policy excludes it", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+  makeAgent,
+}) => {
+  const org = await makeOrganization();
+  const user = await makeUser();
+  await makeMember(user.id, org.id);
+  const agent = await makeAgent({
+    name: "Restricted Agent",
+    organizationId: org.id,
+  });
+  const skill = await seedSkill(org.id, "Research");
+  await AgentModel.setActivationSkillPolicyState({
+    id: agent.id,
+    mode: "manual",
+    revision: 1,
+  });
   const messages: ChatMessage[] = [
     {
       role: "user",

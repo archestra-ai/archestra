@@ -6,6 +6,9 @@ import {
 import { z } from "zod";
 import { schema } from "@/database";
 
+export const CredentialKindSchema = z.enum(["secret", "github_app"]);
+export type CredentialKind = z.infer<typeof CredentialKindSchema>;
+
 const ConnectionKeySchema = z
   .string()
   .min(1)
@@ -17,12 +20,14 @@ const ConnectionKeySchema = z
 
 export const SelectRuntimeCredentialDefinitionSchema = createSelectSchema(
   schema.runtimeCredentialDefinitionsTable,
+  { kind: CredentialKindSchema },
 );
 
 export const InsertRuntimeCredentialDefinitionSchema = createInsertSchema(
   schema.runtimeCredentialDefinitionsTable,
   {
     key: ConnectionKeySchema,
+    kind: CredentialKindSchema.optional(),
     name: (field) => field.trim().min(1).max(120),
     description: (field) => field.trim().max(1_000),
     icon: (field) => field.max(700_000),
@@ -32,6 +37,7 @@ export const InsertRuntimeCredentialDefinitionSchema = createInsertSchema(
     id: true,
     organizationId: true,
     createdBy: true,
+    createdByServiceAccountId: true,
     createdAt: true,
     updatedAt: true,
   })
@@ -53,12 +59,21 @@ export const UpdateRuntimeCredentialDefinitionSchema = createUpdateSchema(
   },
 )
   .pick({
+    name: true,
+    githubUrl: true,
+    appId: true,
+    installationId: true,
     description: true,
     icon: true,
   })
   .partial();
 
 export const RuntimeCredentialDefinitionViewSchema = z.object({
+  id: z.string().uuid(),
+  kind: CredentialKindSchema,
+  githubUrl: z.string().nullable(),
+  appId: z.string().nullable(),
+  installationId: z.string().nullable(),
   key: ConnectionKeySchema,
   name: z.string(),
   description: z.string(),
@@ -71,6 +86,13 @@ export const RuntimeCredentialDefinitionViewSchema = z.object({
 });
 
 export const RuntimeCredentialUsageSchema = z.object({
+  resources: z.array(
+    z.object({
+      id: z.string().uuid(),
+      name: z.string(),
+      kind: z.enum(["mcp", "skill", "plugin", "knowledge"]),
+    }),
+  ),
   agents: z.array(
     z.object({
       id: z.string().uuid(),

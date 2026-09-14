@@ -4,6 +4,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import type { AgentRuntimeConfig } from "@/components/agent-runtime-fields";
+import { ClaudeCodeAccount } from "@/components/claude-code-account";
 import { ExternalSecretReferenceDialog } from "@/components/external-secret-reference-dialog";
 import { QueryLoadError } from "@/components/query-load-error";
 import { StandardFormDialog } from "@/components/standard-dialog";
@@ -105,7 +106,9 @@ function MissingCredentialsDialog({
     config.isPending ||
     permissionsPending;
   const loadFailed = preflight.isError || definitions.isError || config.isError;
-  const complete = !loading && !loadFailed && missing.length === 0;
+  const needsClaudeCodeAccount = missingKeys.has("CLAUDE_CODE_ACCOUNT");
+  const complete =
+    !loading && !loadFailed && missing.length === 0 && !needsClaudeCodeAccount;
 
   return (
     <StandardFormDialog
@@ -139,7 +142,7 @@ function MissingCredentialsDialog({
           >
             {complete ? "Done" : "Cancel"}
           </Button>
-          {!complete && (
+          {!complete && editable.length > 0 && (
             <Button
               type="submit"
               disabled={
@@ -171,6 +174,7 @@ function MissingCredentialsDialog({
       ) : (
         <Form {...form}>
           <div className="space-y-6">
+            {needsClaudeCodeAccount && <ClaudeCodeAccount agentId={agentId} />}
             {missing.map((credential) => {
               const definition = definitions.data?.find(
                 ({ key }) => key === credential.credentialId,

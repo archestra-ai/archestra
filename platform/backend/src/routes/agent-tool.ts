@@ -136,7 +136,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Check agent-type-specific modify permission based on scope
       const agent = await AgentModel.findById(agentId);
-      if (!agent) {
+      if (!agent || agent.organizationId !== request.organizationId) {
         throw new ApiError(404, `Agent with ID ${agentId} not found`);
       }
       const checker = await getAgentTypePermissionChecker({

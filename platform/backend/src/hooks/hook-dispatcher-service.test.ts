@@ -57,6 +57,63 @@ describe("hookDispatcherService", () => {
     expect(skillSandboxRuntimeService.runCommand).not.toHaveBeenCalled();
   });
 
+  test("hook execution carries the agent identity into the sandbox revocation gate", async ({
+    makeOrganization,
+    makeUser,
+    makeAgent,
+    makeConversation,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const agent = await makeAgent({ organizationId: org.id });
+    const conversation = await makeConversation(agent.id, {
+      organizationId: org.id,
+      userId: user.id,
+    });
+    if (!conversation) throw new Error("conversation seed failed");
+    await HookFileModel.create({
+      organizationId: org.id,
+      agentId: agent.id,
+      event: "pre_tool_use",
+      fileName: "policy-aware.py",
+      content: "print('ok')",
+      requirements: [],
+    });
+    vi.mocked(skillSandboxRuntimeService.runCommand).mockResolvedValueOnce({
+      commandId: "cmd-1",
+      sandboxId: "s" as never,
+      command: "",
+      cwd: null,
+      stdout: "",
+      stderr: "",
+      exitCode: 0,
+      durationMs: 5,
+      timedOut: false,
+      truncated: false,
+      binaryStripped: false,
+      stagingNotices: [],
+    });
+
+    await hookDispatcherService.fire({
+      event: "pre_tool_use",
+      conversationId: conversation.id,
+      agentId: agent.id,
+      organizationId: org.id,
+      userId: user.id,
+      fields: { tool_name: "bash", tool_input: {} },
+    });
+
+    expect(skillSandboxRuntimeService.runCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        caller: {
+          userId: user.id,
+          organizationId: org.id,
+          agentId: agent.id,
+        },
+      }),
+    );
+  });
+
   // -----------------------------------------------------------------------
   // 2. Two hooks, first blocks (exit 2) → result blocked, second never runs
   // -----------------------------------------------------------------------

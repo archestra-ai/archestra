@@ -283,7 +283,7 @@ export const SelectAppSchema = createSelectSchema(schema.appsTable, {
 export const PublicAppSchema = SelectAppSchema.omit({
   creationGraceSessionKey: true,
   authoringSessionId: true,
-});
+}).extend({ createdBy: CreatedByNullableSchema.optional() });
 // `latestVersion` is owned by AppModel (set on create, bumped on fork); omit it
 // from external insert payloads alongside the generated/managed columns.
 export const InsertAppSchema = createInsertSchema(schema.appsTable, {

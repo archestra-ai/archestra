@@ -70,7 +70,7 @@ test.describe("Quickstart", { tag: "@quickstart" }, () => {
         await createLlmProviderApiKey(page, {
           name: "Quickstart Key",
           apiKey: "sk-quickstart-test",
-          providerOptionName: "OpenAI OpenAI",
+          providerOptionName: /^OpenAI$/,
           // Quickstart dialog redirects to /chat on success; the api-keys list
           // row never renders here.
           waitForRow: false,

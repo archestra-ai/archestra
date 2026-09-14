@@ -91,7 +91,12 @@ class InternalMcpCatalogModel {
     let createdItem = (
       await db
         .insert(schema.internalMcpCatalogTable)
-        .values(insertValues)
+        .values(
+          await CreatedByModel.forInsert({
+            data: insertValues,
+            userIdField: "authorId",
+          }),
+        )
         .returning()
     )[0];
 
@@ -1679,7 +1684,8 @@ class InternalMcpCatalogModel {
   ): Promise<void> {
     const authorIds = new Set<string>();
     for (const item of catalogItems) {
-      if (item.authorId) authorIds.add(item.authorId);
+      const creatorId = CreatedByModel.id(item, item.authorId);
+      if (creatorId) authorIds.add(creatorId);
     }
 
     if (authorIds.size === 0) return;
@@ -1687,7 +1693,10 @@ class InternalMcpCatalogModel {
     const creators = await CreatedByModel.resolve(Array.from(authorIds));
 
     for (const item of catalogItems) {
-      const creator = lookupCreator(creators, item.authorId);
+      const creator = lookupCreator(
+        creators,
+        CreatedByModel.id(item, item.authorId),
+      );
       item.authorName = creator?.name ?? null;
       item.createdBy = creator;
     }

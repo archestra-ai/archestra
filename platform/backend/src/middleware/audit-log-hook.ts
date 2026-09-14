@@ -132,7 +132,7 @@ export function registerAuditLogHook(fastify: FastifyInstanceWithZod): void {
 
     const payload = {
       organizationId: request.organizationId,
-      actorId: request.user.id,
+      actorId: actorType === "service_account" ? null : request.user.id,
       actorType,
       actorName: request.user.name ?? null,
       actorEmail: request.user.email,

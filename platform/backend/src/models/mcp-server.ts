@@ -19,6 +19,7 @@ import {
   type SQL,
   sql,
 } from "drizzle-orm";
+import { isServiceAccountUserId } from "@/auth/utils";
 import mcpClient from "@/clients/mcp-client";
 import config from "@/config";
 import db, { schema, type Transaction } from "@/database";
@@ -46,6 +47,7 @@ import type {
 import { externalAppLabel } from "@/utils/external-app-label";
 import { toolRequiresInputs } from "@/utils/tool-inputs";
 import AgentToolModel from "./agent-tool";
+import CreatedByModel from "./created-by";
 import InternalMcpCatalogModel from "./internal-mcp-catalog";
 import McpCatalogTeamModel from "./mcp-catalog-team";
 import McpHttpSessionModel from "./mcp-http-session";
@@ -143,6 +145,27 @@ class McpServerModel {
     tx?: Transaction,
   ): Promise<McpServer> {
     const { userId, ...serverData } = server;
+    const actorId = serverData.ownerId ?? userId;
+    const serviceAccountActor = !!actorId && isServiceAccountUserId(actorId);
+    const [catalog] = serviceAccountActor
+      ? await (tx ?? db)
+          .select({
+            organizationId: schema.internalMcpCatalogTable.organizationId,
+          })
+          .from(schema.internalMcpCatalogTable)
+          .where(eq(schema.internalMcpCatalogTable.id, serverData.catalogId))
+      : [];
+    const { organizationId: _organizationId, ...insertData } =
+      await CreatedByModel.forInsert({
+        data: {
+          ...serverData,
+          ownerId: actorId,
+          scope: serverData.scope ?? "personal",
+          organizationId: catalog?.organizationId ?? undefined,
+        },
+        userIdField: "ownerId",
+        transaction: tx,
+      });
 
     const mcpServerName = McpServerModel.constructServerName({
       baseName: serverData.name,
@@ -167,11 +190,11 @@ class McpServerModel {
     // ownerId is part of serverData and will be inserted
     const [createdServer] = await (tx ?? db)
       .insert(schema.mcpServersTable)
-      .values({ ...serverData, id, name: mcpServerName, deploymentName })
+      .values({ ...insertData, id, name: mcpServerName, deploymentName })
       .returning();
 
     // Assign user to the MCP server if provided (personal auth)
-    if (userId) {
+    if (userId && !isServiceAccountUserId(userId)) {
       await McpServerUserModel.assignUserToMcpServer(
         createdServer.id,
         userId,

@@ -19,7 +19,6 @@ import { LlmProviderApiKeyDropdown } from "@/components/llm-provider-api-key-dro
 import { QueryLoadError } from "@/components/query-load-error";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import { IntegrationAvailabilitySection } from "@/components/settings/integration-availability-section";
-import { RuntimeCredentialsSection } from "@/components/settings/runtime-credentials-section";
 import {
   SettingsBlock,
   SettingsSaveBar,
@@ -462,10 +461,7 @@ export default function AgentSettingsPage() {
         savedMessage="Available messaging channels updated"
       />
       {runtimeBackend && (
-        <>
-          <RuntimeCredentialsSection />
-          <RuntimeBackendSection runtimeBackend={runtimeBackend} />
-        </>
+        <RuntimeBackendSection runtimeBackend={runtimeBackend} />
       )}
     </SettingsSectionStack>
   );

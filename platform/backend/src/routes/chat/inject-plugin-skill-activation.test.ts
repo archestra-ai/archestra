@@ -1,6 +1,6 @@
 import { ADMIN_ROLE_NAME, type ChatMessage } from "@archestra/shared";
 import config from "@/config";
-import { PluginModel, PluginSkillUsageEventModel } from "@/models";
+import { AgentModel, PluginModel, PluginSkillUsageEventModel } from "@/models";
 import { beforeEach, expect, test } from "@/test";
 import { drainBackgroundWork } from "@/utils/background-work";
 import { injectPluginSkillActivation } from "./inject-skill-activation";
@@ -65,6 +65,7 @@ test("injects and counts an accessible plugin Skill attachment", async ({
     messages,
     organizationId: agent.organizationId,
     userId: user.id,
+    agentId: agent.id,
     conversationId: "conversation-1",
     provider: "openai",
     model: "gpt-4o-mini",
@@ -83,4 +84,21 @@ test("injects and counts an accessible plugin Skill attachment", async ({
     { pluginId: plugin.id, skillPath: "skills/release" },
   ]);
   expect(usage.get(plugin.id)?.get("skills/release")?.usageCount).toBe(1);
+
+  await AgentModel.setActivationSkillPolicyState({
+    id: agent.id,
+    mode: "manual",
+    revision: 1,
+  });
+  expect(
+    await injectPluginSkillActivation({
+      messages,
+      organizationId: agent.organizationId,
+      userId: user.id,
+      agentId: agent.id,
+      conversationId: "conversation-1",
+      provider: "openai",
+      model: "gpt-4o-mini",
+    }),
+  ).toBe(messages);
 });

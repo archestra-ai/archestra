@@ -111,6 +111,8 @@ spec:
       labels:
         {{- include "archestra-platform.labels" . | nindent 8 }}
         app.kubernetes.io/component: web
+        # Destination for Agent Runtime platform API egress.
+        archestra.io/platform-api: "true"
         {{- /*
           Grants this pod passage through the p4 shim's ingress NetworkPolicy
           (Perforce knowledge-connector permission sync; see

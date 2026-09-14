@@ -43,8 +43,8 @@ interface KnowledgeSourcesEditorProps {
 }
 
 /**
- * The knowledge half of an agent's Tools & Knowledge step, in both modes: the
- * sources it may search (Custom) and the sources it may not (Auto). Shaped like
+ * The knowledge half of the shared Tools step, in both modes: the sources it
+ * may search (Custom) and the sources it may not (Auto). Shaped like
  * the tool and subagent editors beside it — a pill per named source, and one
  * combobox to name another.
  *

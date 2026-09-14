@@ -74,6 +74,9 @@ export function useRuntimeCredentialUsage(key: string | null, enabled = true) {
       return data ?? { agents: [], resources: [] };
     },
     enabled: enabled && Boolean(key),
+    // References can change on other pages between openings of the delete dialog.
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 }
 

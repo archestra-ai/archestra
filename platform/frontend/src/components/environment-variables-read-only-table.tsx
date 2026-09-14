@@ -213,6 +213,7 @@ export function EnvironmentVariablesTable({
                 <RuntimeCredentialIcon
                   icon={credentialSources?.[row.credentialId]?.icon ?? null}
                   className="size-3.5"
+                  size={14}
                 />
                 <span>
                   {credentialSources?.[row.credentialId]?.label ??

@@ -1,7 +1,7 @@
 "use client";
 
 import { Plus } from "lucide-react";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import {
   type CredentialBindingOption,
   EnvironmentVariableDialog,
@@ -16,7 +16,7 @@ import { Button } from "@/components/ui/button";
 interface DeploymentEnvironmentVariablesEditorProps {
   value: EnvVarDraft[];
   onChange: (value: EnvVarDraft[]) => void;
-  description: string;
+  description: ReactNode;
   targetLabel: string;
   installationLabel: string;
   staticLabel: string;
@@ -88,6 +88,12 @@ export function DeploymentEnvironmentVariablesEditor({
             (credentialBindingOptions ?? []).map((option) => [
               option.id,
               option.label,
+            ]),
+          )}
+          credentialSources={Object.fromEntries(
+            (credentialBindingOptions ?? []).map((option) => [
+              option.id,
+              { icon: option.icon, label: option.sourceLabel },
             ]),
           )}
           promptedValueLabel={promptedValueLabel}

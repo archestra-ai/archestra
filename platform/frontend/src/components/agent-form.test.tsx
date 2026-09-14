@@ -547,10 +547,6 @@ vi.mock("@/components/agent-chat-apps", () => ({
   },
 }));
 
-vi.mock("./agent-pages/agent-runtime-credential-card", () => ({
-  AgentRuntimeCredentialCard: () => <div>Mock Background Credentials</div>,
-}));
-
 vi.mock("./agent-runtime-fields", () => ({
   AgentRuntimeFields: ({
     value,

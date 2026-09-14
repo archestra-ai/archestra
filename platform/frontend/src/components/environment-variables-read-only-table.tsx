@@ -9,6 +9,7 @@ import type {
   UseFormWatch,
 } from "react-hook-form";
 import type { FieldScopeValue } from "@/components/field-scope-select";
+import { RuntimeCredentialIcon } from "@/components/runtime-credential-icon";
 import { Button } from "@/components/ui/button";
 
 interface EnvironmentVariablesReadOnlyTableProps<
@@ -42,6 +43,7 @@ export interface EnvironmentVariableTableRow {
 }
 
 interface EnvironmentVariablesTableProps {
+  credentialSources?: Record<string, { icon?: string | null; label?: string }>;
   rows: EnvironmentVariableTableRow[];
   useExternalSecretsManager?: boolean;
   credentialLabels?: Record<string, string>;
@@ -144,6 +146,7 @@ export function EnvironmentVariablesReadOnlyTable<
 }
 
 export function EnvironmentVariablesTable({
+  credentialSources,
   rows,
   useExternalSecretsManager = false,
   credentialLabels,
@@ -207,10 +210,16 @@ export function EnvironmentVariablesTable({
           <div className="min-w-0 truncate">
             {row.credentialId ? (
               <span className="inline-flex items-center gap-1.5 text-muted-foreground">
-                <KeyRound className="size-3.5" />
-                {row.scope === "installation"
-                  ? "Personal credential"
-                  : "Organization credential"}
+                <RuntimeCredentialIcon
+                  icon={credentialSources?.[row.credentialId]?.icon ?? null}
+                  className="size-3.5"
+                />
+                <span>
+                  {credentialSources?.[row.credentialId]?.label ??
+                    (row.scope === "installation"
+                      ? "Personal credential"
+                      : "Organization credential")}
+                </span>
               </span>
             ) : (
               <ValueCell

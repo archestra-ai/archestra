@@ -3,7 +3,7 @@ title: Agent Runtime (Beta)
 category: Agents
 order: 7
 description: Configure isolated workspaces for coding agents and delegated tasks
-lastUpdated: "2026-09-12"
+lastUpdated: "2026-09-14"
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -29,6 +29,8 @@ Your administrator must enable Agent Runtime on a Kubernetes cluster with persis
 Choose a maintained template from **Create Agent**, then configure its instructions, model, tools, and connections. For an existing Agent, enable **Dedicated runtime** under **Edit → Advanced**.
 
 Select the Agent in Chat or a Project and send your first task. Its live terminal opens so you can follow progress and provide input. See [Work With Runs In Chat](#work-with-runs-in-chat) for continuing work.
+
+The **Agents** list marks an Agent with a dedicated runtime with a **Runtime** badge. An Agent created from a popular agent template shows the template name instead — **Claude Code**, for example. Its **Chat** action reads **Start run**.
 
 **Settings → Agents → Runtime Backend** shows backend health and deployment defaults. Each Agent can override its image, command, environment variables, resources, and run controls. Deployment defaults remain managed by the operator.
 

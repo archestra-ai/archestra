@@ -13940,6 +13940,322 @@ export type PostV2A2aByAgentIdResponses = {
 
 export type PostV2A2aByAgentIdResponse = PostV2A2aByAgentIdResponses[keyof PostV2A2aByAgentIdResponses];
 
+export type GetAgentCatalogData = {
+    body?: never;
+    path?: never;
+    query?: {
+        name?: string;
+        scope?: 'personal' | 'team' | 'org' | 'built_in';
+        teamIds?: Array<string>;
+        authorIds?: Array<string>;
+        excludeAuthorIds?: Array<string>;
+        excludeOtherPersonalAgents?: boolean;
+        /**
+         * When true, omit external A2A agents unless the caller can manage external-agent settings. Used to enumerate rows for bulk selection on the Agents page.
+         */
+        selectableOnly?: boolean;
+        labels?: string;
+        status?: 'active' | 'deleted';
+        providerApiKeyId?: string | 'organization-default';
+        /**
+         * Filter internal agents by the current user's pins. Pinned results exclude external A2A agents and are ordered by newest pin first.
+         */
+        pinned?: boolean;
+        limit?: number;
+        offset?: number;
+        sortBy?: 'name' | 'createdAt' | 'team';
+        sortDirection?: 'asc' | 'desc';
+    };
+    url: '/api/agent-catalog';
+};
+
+export type GetAgentCatalogErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAgentCatalogError = GetAgentCatalogErrors[keyof GetAgentCatalogErrors];
+
+export type GetAgentCatalogResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        data: Array<{
+            type: 'agent';
+            value: {
+                id: string;
+                organizationId: string;
+                authorId: string | null;
+                scope: 'personal' | 'team' | 'org';
+                name: string;
+                slug: string | null;
+                isDefault: boolean;
+                isPersonalGateway: boolean;
+                isPersonalProxy: boolean;
+                considerContextUntrusted: boolean;
+                agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+                systemPrompt: string | null;
+                description: string | null;
+                icon: string | null;
+                incomingEmailEnabled: boolean;
+                incomingEmailSecurityMode: 'private' | 'internal' | 'public';
+                incomingEmailAllowedDomain: string | null;
+                llmApiKeyId: string | null;
+                llmModel: string | null;
+                modelId: string | null;
+                identityProviderId: string | null;
+                environmentId: string | null;
+                runtime: {
+                    image: string;
+                    command: Array<string> | null;
+                    inferenceProtocol: 'openai_responses' | 'openai_chat' | 'anthropic';
+                    backend: 'kubernetes';
+                    steerMode: 'pipe' | 'tmux_keys';
+                    privileged: boolean;
+                    resources: {
+                        cpuRequest?: string;
+                        memoryRequest?: string;
+                        cpuLimit?: string;
+                        memoryLimit?: string;
+                    } | null;
+                    environment: Array<{
+                        key: string;
+                        value: string;
+                    }> | null;
+                    credentials: Array<{
+                        key: string;
+                        scope: 'shared' | 'per_user';
+                        credentialId?: string;
+                        label: string;
+                        description?: string;
+                        required: boolean;
+                    }> | null;
+                    claudeCode?: {
+                        authentication: 'provider' | 'subscription';
+                        model?: string;
+                    };
+                    ttlHours: number | null;
+                    maxCostUsd?: number | null;
+                    idleTimeoutMinutes: number | null;
+                } | null;
+                runtimeSecretId: string | null;
+                passthroughHeaders: Array<string> | null;
+                toolExposureMode: 'full' | 'search_and_run_only';
+                missingCredentialBehavior: 'allow' | 'warn' | 'block';
+                accessAllTools: boolean;
+                accessAllSkills: boolean;
+                activationSkillMode: 'all' | 'manual';
+                activationSkillPolicyRevision: number;
+                accessAllSubagents: boolean;
+                builtInAgentConfig: {
+                    name: 'policy-configuration-subagent';
+                    autoConfigureOnToolDiscovery: boolean;
+                } | {
+                    name: 'dual-llm-main-agent';
+                    maxRounds: number;
+                } | {
+                    name: 'dual-llm-quarantine-agent';
+                } | {
+                    name: 'context-compaction-subagent';
+                } | {
+                    name: 'chat-title-generation-subagent';
+                } | {
+                    name: 'app-runtime-llm-agent';
+                } | {
+                    name: 'advisor-agent';
+                } | null;
+                builtIn: boolean | null;
+                latestVersion: number;
+                createdByServiceAccountId: string | null;
+                createdAt: string;
+                updatedAt: string;
+                deletedAt: string | null;
+                tools: Array<{
+                    id: string;
+                    agentId: string | null;
+                    catalogId: string | null;
+                    delegateToAgentId: string | null;
+                    delegateToA2aConnectionId: string | null;
+                    name: string;
+                    rawName: string | null;
+                    description: string | null;
+                }>;
+                teams: Array<{
+                    id: string;
+                    name: string;
+                }>;
+                users?: Array<{
+                    id: string;
+                    name: string;
+                    email: string;
+                }>;
+                labels: Array<{
+                    key: string;
+                    value: string;
+                    keyId?: string;
+                    valueId?: string;
+                }>;
+                authorName?: string | null;
+                authorEmail?: string | null;
+                createdBy?: {
+                    id: string;
+                    type?: 'user' | 'service_account';
+                    name: string | null;
+                    email: string | null;
+                } | null;
+                knowledgeBaseIds: Array<string>;
+                connectorIds: Array<string>;
+                suggestedPrompts: Array<{
+                    summaryTitle: string;
+                    prompt: string;
+                }>;
+                resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                resolvedLlmProviderKeyName?: string | null;
+                resolvedLlmModelName?: string | null;
+                llmProviderRequiresPerUserCredential?: boolean;
+                sandboxAvailable?: boolean;
+                activationSkillsCount?: number;
+                lastUsedAt?: string | null;
+                pinnedAt: string | null;
+            };
+        } | {
+            type: 'external';
+            value: {
+                id: string;
+                organizationId: string;
+                authorId: string | null;
+                scope: 'personal' | 'team' | 'org';
+                name: string;
+                description: string | null;
+                discoveryMode: 'well_known' | 'card_url' | 'inline_card';
+                discoveryUrl: string | null;
+                agentCard: {
+                    [key: string]: unknown;
+                };
+                cardHash: string;
+                lastDiscoveredAt: string;
+                createdByServiceAccountId: string | null;
+                createdAt: string;
+                updatedAt: string;
+                connection: {
+                    id: string;
+                    remoteAgentId: string;
+                    selectedInterface: {
+                        url: string;
+                        protocolBinding: 'JSONRPC' | 'HTTP+JSON';
+                        protocolVersion: string;
+                        tenant?: string;
+                    };
+                    securityRequirement: {
+                        [key: string]: Array<string>;
+                    } | null;
+                    authType: 'none' | 'bearer' | 'api_key';
+                    authConfig: {
+                        headerName?: string;
+                    };
+                    enabled: boolean;
+                    lastVerifiedAt: string | null;
+                    createdAt: string;
+                    updatedAt: string;
+                    hasCredential: boolean;
+                };
+                toolId: string;
+                assignmentCount: number;
+                lastUsedAt: string | null;
+                authorName: string | null;
+                createdBy: {
+                    id: string;
+                    type?: 'user' | 'service_account';
+                    name: string | null;
+                    email: string | null;
+                } | null;
+                teams: Array<{
+                    id: string;
+                    name: string;
+                }>;
+                users: Array<{
+                    id: string;
+                    name: string;
+                    email: string;
+                }>;
+            };
+        }>;
+        pagination: {
+            currentPage: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasNext: boolean;
+            hasPrev: boolean;
+        };
+        totals: {
+            agents: number;
+            externalAgents: number;
+        };
+    };
+};
+
+export type GetAgentCatalogResponse = GetAgentCatalogResponses[keyof GetAgentCatalogResponses];
+
 export type GetAgentsData = {
     body?: never;
     path?: never;
@@ -13992,6 +14308,10 @@ export type GetAgentsData = {
          * Filter by a configured provider key, or organization-default for agents with no pinned key or model.
          */
         providerApiKeyId?: string | 'organization-default';
+        /**
+         * Filter by the current user's pins. Pinned results are ordered by newest pin first; unpinned results keep the requested sort.
+         */
+        pinned?: boolean;
         limit?: number;
         offset?: number;
         sortBy?: 'name' | 'createdAt' | 'toolsCount' | 'subagentsCount' | 'knowledgeSourcesCount' | 'team' | 'lastUsedAt';
@@ -14204,6 +14524,7 @@ export type GetAgentsResponses = {
             sandboxAvailable?: boolean;
             activationSkillsCount?: number;
             lastUsedAt?: string | null;
+            pinnedAt: string | null;
         }>;
         pagination: {
             currentPage: number;
@@ -14602,6 +14923,176 @@ export type CreateAgentResponses = {
 };
 
 export type CreateAgentResponse = CreateAgentResponses[keyof CreateAgentResponses];
+
+export type UnpinAgentData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/agents/{id}/pin';
+};
+
+export type UnpinAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UnpinAgentError = UnpinAgentErrors[keyof UnpinAgentErrors];
+
+export type UnpinAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        ok: true;
+    };
+};
+
+export type UnpinAgentResponse = UnpinAgentResponses[keyof UnpinAgentResponses];
+
+export type PinAgentData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/agents/{id}/pin';
+};
+
+export type PinAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type PinAgentError = PinAgentErrors[keyof PinAgentErrors];
+
+export type PinAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        ok: true;
+    };
+};
+
+export type PinAgentResponse = PinAgentResponses[keyof PinAgentResponses];
 
 export type GetAllAgentsData = {
     body?: never;

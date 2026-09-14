@@ -113,28 +113,26 @@ export function CreateProjectFromChatDialog({
         icon={icon}
         onIconChange={(next) => form.setValue("icon", next)}
         fallbackType="project"
+        label={<Label htmlFor="chat-project-name">Name *</Label>}
       >
-        <div className="space-y-2">
-          <Label htmlFor="chat-project-name">Name *</Label>
-          <Input
-            autoFocus
-            id="chat-project-name"
-            maxLength={PROJECT_NAME_MAX_LENGTH}
-            aria-invalid={!!form.formState.errors.name}
-            {...form.register("name", {
-              required: "Project name is required.",
-              maxLength: {
-                value: PROJECT_NAME_MAX_LENGTH,
-                message: `Project name must be ${PROJECT_NAME_MAX_LENGTH} characters or fewer.`,
-              },
-            })}
-          />
-          {form.formState.errors.name?.message && (
-            <p className="text-xs text-destructive">
-              {form.formState.errors.name.message}
-            </p>
-          )}
-        </div>
+        <Input
+          autoFocus
+          id="chat-project-name"
+          maxLength={PROJECT_NAME_MAX_LENGTH}
+          aria-invalid={!!form.formState.errors.name}
+          {...form.register("name", {
+            required: "Project name is required.",
+            maxLength: {
+              value: PROJECT_NAME_MAX_LENGTH,
+              message: `Project name must be ${PROJECT_NAME_MAX_LENGTH} characters or fewer.`,
+            },
+          })}
+        />
+        {form.formState.errors.name?.message && (
+          <p className="text-xs text-destructive">
+            {form.formState.errors.name.message}
+          </p>
+        )}
       </IdentityFields>
       <div className="space-y-2">
         <Label htmlFor="chat-project-description">Description</Label>

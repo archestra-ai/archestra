@@ -50,6 +50,7 @@ export function BulkVisibilityDialog({
   onOpenChange,
   onApply,
   isPending,
+  applyDisabled = false,
   renderSelector,
   renderTeamSelectionNotice,
 }: {
@@ -65,6 +66,7 @@ export function BulkVisibilityDialog({
    */
   onApply: (change: BulkVisibilityChange) => Promise<boolean>;
   isPending: boolean;
+  applyDisabled?: boolean;
   /** Override when a resource has different visibility permission rules. */
   renderSelector?: (props: BulkVisibilitySelectorProps) => ReactNode;
   /** Optional resource-specific consequence of the staged team selection. */
@@ -96,6 +98,7 @@ export function BulkVisibilityDialog({
   };
 
   const handleApply = async () => {
+    if (applyDisabled) return;
     const moved = await onApply({
       scope,
       teamIds: scope === "team" ? teamIds : [],
@@ -131,7 +134,10 @@ export function BulkVisibilityDialog({
         <Button variant="outline" onClick={() => onOpenChange(false)}>
           <span>Cancel</span>
         </Button>
-        <Button disabled={!canApply || isPending} onClick={handleApply}>
+        <Button
+          disabled={!canApply || isPending || applyDisabled}
+          onClick={handleApply}
+        >
           <span>{isPending ? "Applying…" : "Apply"}</span>
         </Button>
       </DialogStickyFooter>

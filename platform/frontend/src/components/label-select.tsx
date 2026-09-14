@@ -14,6 +14,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import type { QueryParamsAdapter } from "@/lib/hooks/use-query-params-adapter";
 import { cn } from "@/lib/utils";
 
 export interface LabelSelectProps {
@@ -28,12 +29,14 @@ export interface LabelSelectProps {
    * control matches the rest of the row.
    */
   className?: string;
+  queryParamsAdapter?: QueryParamsAdapter;
 }
 
 export function LabelSelect({
   labelKeys,
   LabelKeyRowComponent,
   className,
+  queryParamsAdapter,
 }: LabelSelectProps) {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -41,7 +44,8 @@ export function LabelSelect({
   const [open, setOpen] = useState(false);
   const [keySearch, setKeySearch] = useState("");
 
-  const labelsParam = searchParams.get("labels");
+  const activeSearchParams = queryParamsAdapter?.searchParams ?? searchParams;
+  const labelsParam = activeSearchParams.get("labels");
   const parsed = useMemo(() => parseLabelsParam(labelsParam), [labelsParam]);
 
   const totalSelected = useMemo(() => {
@@ -58,8 +62,18 @@ export function LabelSelect({
 
   const updateLabels = useCallback(
     (updated: Record<string, string[]>) => {
-      const params = new URLSearchParams(searchParams.toString());
       const serialized = serializeLabels(updated);
+      if (queryParamsAdapter) {
+        queryParamsAdapter.updateQueryParams(
+          {
+            labels: serialized || null,
+            page: activeSearchParams.has("page") ? "1" : undefined,
+          },
+          { history: "replace" },
+        );
+        return;
+      }
+      const params = new URLSearchParams(searchParams.toString());
       if (serialized) {
         params.set("labels", serialized);
       } else {
@@ -70,7 +84,7 @@ export function LabelSelect({
       }
       router.replace(`${pathname}?${params.toString()}`, { scroll: false });
     },
-    [searchParams, router, pathname],
+    [activeSearchParams, searchParams, router, pathname, queryParamsAdapter],
   );
 
   const handleToggleValue = useCallback(

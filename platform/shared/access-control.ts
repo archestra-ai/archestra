@@ -772,9 +772,15 @@ export const requiredEndpointPermissionsMap: Partial<
   // Generic agent CRUD routes - enforcement is handled dynamically in route handlers
   // based on agentType (agent, mcp_gateway, llm_proxy map to agent, mcpGateway, llmProxy resources)
   [RouteId.GetAgents]: {},
+  [RouteId.GetAgentCatalog]: {},
   [RouteId.GetAllAgents]: {},
   [RouteId.GetAgentCredentialReadiness]: {},
   [RouteId.GetAgent]: {},
+  // Agent type and instance visibility are dynamic and checked by PinAgent's
+  // handler. Unpin is deliberately ungated beyond authentication so a stale
+  // pin can be cleared after access is lost.
+  [RouteId.PinAgent]: {},
+  [RouteId.UnpinAgent]: {},
   [RouteId.CreateAgent]: {},
   [RouteId.CloneAgent]: {},
   [RouteId.UpdateAgent]: {},
@@ -2192,8 +2198,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
 
   // Agents
   "/agents": { agent: ["read"] },
-  "/a2a/agents": { agent: ["read"] },
-  "/agents/new": { agent: ["create"] },
+  "/agents/a2a": { agent: ["read"] },
   "/messaging-channels": { agentTrigger: ["read"] },
   "/messaging-channels/slack": { agentTrigger: ["read"] },
   "/messaging-channels/ms-teams": { agentTrigger: ["read"] },

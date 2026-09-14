@@ -108,6 +108,7 @@ export type AgentSetupStep = WizardStepDefinition<AgentSetupStepId>;
  * `general` is the page's default and carries no `?section=`.
  */
 export type AgentDetailSection =
+  | "runtime"
   | "general"
   | "tools"
   | "messaging"
@@ -133,6 +134,7 @@ export const AGENT_SECTION_FORM_GROUPS = {
   general: ["configuration"],
   tools: ["tools"],
   messaging: ["messaging"],
+  runtime: ["runtime"],
   advanced: ["advanced"],
   settings: ["configuration", "tools", "advanced"],
 } as const satisfies Partial<

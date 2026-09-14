@@ -39,12 +39,19 @@ async function createViaWizard(
   // has navigated anywhere.
   const nameField = page.getByRole("textbox", { name: /^Name\b/ });
   const submitButton = page.getByTestId(E2eTestId.AgentSetupSubmitButton);
+  const startFromScratchButton = page.getByRole("button", {
+    name: /Start from scratch/,
+  });
 
-  // 1. Open the wizard — retry the trigger until the name field mounts on
-  //    the /new page. Guarded on the URL so a landed click is never re-sent.
+  // 1. Open the wizard — retry the trigger until the name field mounts. The
+  //    Agents page first opens its creation catalog, where this flow chooses
+  //    "Start from scratch"; gateways continue straight to their form.
   await expect(async () => {
     if (!page.url().includes(`${listPath}/new`)) {
       await createButton.click();
+    }
+    if (listPath === "/agents" && (await startFromScratchButton.isVisible())) {
+      await startFromScratchButton.click();
     }
     await expect(nameField).toBeVisible({ timeout: 3_000 });
   }).toPass({ timeout: 20_000 });

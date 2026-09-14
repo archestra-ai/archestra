@@ -5,9 +5,11 @@ export type HttpMethod = "get" | "post" | "put" | "patch" | "delete";
 export type HandlerOverride = {
   method: HttpMethod;
   url: string;
+  query?: Record<string, string>;
   status?: number;
   body?: unknown;
   once?: boolean;
+  delayMs?: number;
 };
 
 export class MswControl {

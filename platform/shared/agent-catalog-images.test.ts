@@ -2,7 +2,42 @@ import { describe, expect, test } from "vitest";
 import {
   getAgentCatalogImages,
   getDefaultAgentRuntimeImage,
+  resolveAgentCatalogId,
 } from "./agent-catalog-images";
+
+describe("resolveAgentCatalogId", () => {
+  test("names a maintained CLI template by the wrapper command it runs", () => {
+    expect(
+      resolveAgentCatalogId({
+        image: "registry.example/team/agent-claude-code:v2",
+        command: ["archestra-claude-code", "--permission-mode", "bypass"],
+      }),
+    ).toBe("claude-code");
+    expect(
+      resolveAgentCatalogId({
+        image: "ghcr.io/example/my-codex:latest",
+        command: ["archestra-codex"],
+      }),
+    ).toBe("codex");
+  });
+
+  test("answers null for a custom runtime, the platform loop, and anything that is not a runtime", () => {
+    expect(
+      resolveAgentCatalogId({
+        image: "ghcr.io/example/toolbox:latest",
+        command: ["python", "loop.py"],
+      }),
+    ).toBeNull();
+    expect(
+      resolveAgentCatalogId({
+        image: getDefaultAgentRuntimeImage("1.4.0"),
+        command: null,
+      }),
+    ).toBeNull();
+    expect(resolveAgentCatalogId(null)).toBeNull();
+    expect(resolveAgentCatalogId("archestra-claude-code")).toBeNull();
+  });
+});
 
 describe("popular Agent images", () => {
   test("preserves registry ports, namespaces and the release tag across the catalog", () => {

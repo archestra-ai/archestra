@@ -154,6 +154,7 @@ const {
   },
 } = config;
 
+// Register at import time so every proxy route shares the same lifecycle set.
 registerAppaLlmProxyPlugin();
 
 /**
@@ -1138,10 +1139,7 @@ export async function handleLLMProxy<
         });
 
     // Apply tool result updates
-    requestAdapter.applyToolResultUpdates({
-      ...pluginToolResults.toolResultUpdates,
-      ...toolResultUpdates,
-    });
+    requestAdapter.applyToolResultUpdates(pluginToolResults.toolResultUpdates);
 
     logger.info(
       {

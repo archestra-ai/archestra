@@ -30,9 +30,7 @@ export class AppaOpenCodeAdapter implements AppaClientAdapter {
   }
 
   normalizeLocalToolName(name: string): string {
-    return name.startsWith("mcp:") ||
-      name.startsWith("builtin:") ||
-      name.startsWith("host/")
+    return name.startsWith("builtin:") || name.startsWith("host/")
       ? name
       : `builtin:${name}`;
   }

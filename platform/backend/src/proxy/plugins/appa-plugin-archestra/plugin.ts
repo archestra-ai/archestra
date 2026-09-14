@@ -7,11 +7,16 @@ import {
 import type {
   LlmProxyPlugin,
   LlmProxyRequestContext,
+  LlmProxyToolCallsContext,
+  LlmProxyToolCallsOutcome,
+  LlmProxyToolResultsContext,
+  LlmProxyToolResultsOutcome,
 } from "@/proxy/plugins/registry";
-import type { CommonToolResult } from "@/types";
 import type { AppaClientAdapter } from "./types";
 
 export const APPA_PLUGIN_BINDING = "archestra.appa.binding";
+const APPA_PLUGIN_ADAPTER = "archestra.appa.adapter";
+const APPA_PLUGIN_NATIVE_SESSION_ID = "archestra.appa.native-session-id";
 const APPA_PLUGIN_RESULT = "archestra.appa.result";
 const APPA_PLUGIN_REFUSAL = "archestra.appa.refusal";
 
@@ -36,18 +41,16 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
   async onSessionInit(context: LlmProxyRequestContext): Promise<void> {
     const adapter = this.getClientAdapter(context);
     if (adapter) {
-      context.resources.set(`${this.id}.adapter`, adapter);
+      context.resources.set(APPA_PLUGIN_ADAPTER, adapter);
       const sessionId = adapter.getNativeSessionId(context);
       if (sessionId)
-        context.resources.set(`${this.id}.native-session-id`, sessionId);
+        context.resources.set(APPA_PLUGIN_NATIVE_SESSION_ID, sessionId);
     }
   }
 
   async onToolResults(
-    context: LlmProxyRequestContext & {
-      toolResults: readonly CommonToolResult[];
-    },
-  ) {
+    context: LlmProxyToolResultsContext,
+  ): Promise<LlmProxyToolResultsOutcome | undefined> {
     const binding = getBinding(context.resources);
     if (!binding) return;
     const result = await processProxyResults(binding.session, [
@@ -58,17 +61,11 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
   }
 
   async onToolCalls(
-    context: LlmProxyRequestContext & {
-      toolCalls: readonly {
-        id: string;
-        name: string;
-        arguments: string | Record<string, unknown>;
-      }[];
-    },
-  ) {
+    context: LlmProxyToolCallsContext,
+  ): Promise<LlmProxyToolCallsOutcome | undefined> {
     const binding = getBinding(context.resources);
     if (!binding) return;
-    const adapter = context.resources.get(`${this.id}.adapter`) as
+    const adapter = context.resources.get(APPA_PLUGIN_ADAPTER) as
       | AppaClientAdapter
       | undefined;
     const refusal = await checkToolCalls(

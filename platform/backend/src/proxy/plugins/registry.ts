@@ -1,3 +1,6 @@
+import logger from "@/logging";
+import type { CommonToolResult } from "@/types";
+
 /**
  * Public extension contract for cross-cutting LLM proxy behavior.
  *
@@ -40,12 +43,7 @@ export type LlmProxyToolCallsOutcome =
   | { decision: "allow"; toolCalls: readonly LlmProxyToolCall[] }
   | { decision: "refuse"; message: string };
 
-type LlmProxyToolResult = {
-  id: string;
-  name: string;
-  content: unknown;
-  isError: boolean;
-};
+export type LlmProxyToolResult = CommonToolResult;
 
 export type LlmProxyToolResultsContext = LlmProxyRequestContext & {
   toolResults: readonly LlmProxyToolResult[];
@@ -172,11 +170,18 @@ export class LlmProxyPluginRegistry {
     context: LlmProxyToolResultsContext,
   ): Promise<LlmProxyToolResultsOutcome> {
     const updates: Record<string, string> = {};
+    let toolResults = context.toolResults;
     for (const plugin of this.getSessionPlugins(context)) {
-      const result = (await this.invoke(plugin, "onToolResults", context)) as
-        | LlmProxyToolResultsOutcome
-        | undefined;
-      if (result) Object.assign(updates, result.toolResultUpdates);
+      const result = (await this.invoke(plugin, "onToolResults", {
+        ...context,
+        toolResults,
+      })) as LlmProxyToolResultsOutcome | undefined;
+      if (!result) continue;
+      Object.assign(updates, result.toolResultUpdates);
+      toolResults = toolResults.map((toolResult) => ({
+        ...toolResult,
+        content: result.toolResultUpdates[toolResult.id] ?? toolResult.content,
+      }));
     }
     return { toolResultUpdates: updates };
   }
@@ -245,6 +250,12 @@ export class LlmProxyPluginRegistry {
       try {
         await this.invoke(plugin, "onCleanup", context);
       } catch (error) {
+        if (firstError) {
+          logger.warn(
+            { err: error, pluginId: plugin.id },
+            "Suppressed LLM proxy plugin cleanup error",
+          );
+        }
         firstError ??= error;
       }
     }

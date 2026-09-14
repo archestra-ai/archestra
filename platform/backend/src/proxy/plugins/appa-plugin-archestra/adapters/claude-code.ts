@@ -29,10 +29,6 @@ export class AppaClaudeCodeAdapter implements AppaClientAdapter {
   }
 
   normalizeLocalToolName(name: string): string {
-    return name.startsWith("mcp/") ||
-      name.startsWith("mcp__") ||
-      name.startsWith("host/")
-      ? name
-      : `host/claude-code/${name}`;
+    return name.startsWith("host/") ? name : `host/claude-code/${name}`;
   }
 }

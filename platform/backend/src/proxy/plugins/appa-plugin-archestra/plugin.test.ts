@@ -24,8 +24,10 @@ describe("APPA client adapters", () => {
       }),
     ).toBe(true);
     expect(
-      new AppaClaudeCodeAdapter().normalizeLocalToolName("mcp__gateway__read"),
-    ).toBe("mcp__gateway__read");
+      new AppaClaudeCodeAdapter().normalizeLocalToolName(
+        "host/claude-code/Bash",
+      ),
+    ).toBe("host/claude-code/Bash");
     expect(
       new AppaCodexAdapter().normalizeLocalToolName("functions.exec_command"),
     ).toBe("builtin:exec_command");
@@ -47,6 +49,9 @@ describe("APPA client adapters", () => {
     expect(new AppaOpenCodeAdapter().classifyToolName("mcp:gateway:read")).toBe(
       "gateway",
     );
+    expect(
+      new AppaClaudeCodeAdapter().classifyToolName("mcp__gateway__read"),
+    ).toBe("gateway");
     expect(new AppaClaudeCodeAdapter().classifyToolName("Bash")).toBe("local");
   });
 });

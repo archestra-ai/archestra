@@ -101,6 +101,37 @@ describe("LlmProxyPluginRegistry", () => {
     await registry.complete(context);
   });
 
+  test("passes transformed tool results to later plugins", async () => {
+    const registry = new LlmProxyPluginRegistry();
+    const context = requestContext();
+    registry.register({
+      id: "redact",
+      async onToolResults() {
+        return { toolResultUpdates: { "call-1": "redacted" } };
+      },
+    });
+    registry.register({
+      id: "observe-redaction",
+      async onToolResults({ toolResults }) {
+        expect(toolResults[0]?.content).toBe("redacted");
+        return { toolResultUpdates: { "call-2": "derived" } };
+      },
+    });
+
+    await registry.onSessionInit(context);
+    await expect(
+      registry.onToolResults({
+        ...context,
+        toolResults: [
+          { id: "call-1", name: "read", content: "raw", isError: false },
+        ],
+      }),
+    ).resolves.toEqual({
+      toolResultUpdates: { "call-1": "redacted", "call-2": "derived" },
+    });
+    await registry.complete(context);
+  });
+
   test("fails closed and cleans initialized plugins in reverse order", async () => {
     const registry = new LlmProxyPluginRegistry();
     const events: string[] = [];

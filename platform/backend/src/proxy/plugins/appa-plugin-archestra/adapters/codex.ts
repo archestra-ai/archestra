@@ -34,9 +34,7 @@ export class AppaCodexAdapter implements AppaClientAdapter {
     const stripped = name.startsWith("functions.")
       ? name.slice("functions.".length)
       : name;
-    return stripped.startsWith("mcp:") ||
-      stripped.startsWith("builtin:") ||
-      stripped.startsWith("host/")
+    return stripped.startsWith("builtin:") || stripped.startsWith("host/")
       ? stripped
       : `builtin:${stripped}`;
   }

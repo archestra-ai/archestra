@@ -57,7 +57,7 @@ describe("AgentsPageServer", () => {
     render(await AgentsPageServer());
 
     expect(screen.getByTestId("agents-page")).toHaveTextContent(
-      JSON.stringify({ agents: null, teams: [] }),
+      JSON.stringify({ agents: null, pinnedAgents: null, teams: [] }),
     );
   });
 

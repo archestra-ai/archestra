@@ -14,6 +14,7 @@ export function AgentPageShell({
   onBackRequest,
   header,
   children,
+  stickyFooter = false,
 }: {
   /** Left unset for a state with nowhere to go back to; no link is rendered. */
   backHref?: string;
@@ -30,11 +31,14 @@ export function AgentPageShell({
     action?: ReactNode;
   };
   children: ReactNode;
+  /** Let the shared WizardFooter follow the page's vertical scroll. */
+  stickyFooter?: boolean;
 }) {
   return (
     <PageLayout
       maxWidth="wizard"
       minWidth="phone"
+      contentOverflowX={stickyFooter ? "clip" : "auto"}
       title={header.title}
       description={header.description}
       actionButton={header.action}

@@ -48,6 +48,7 @@ const testPatterns = {
 };
 
 const uiTestMatch = [
+  "**/agent-creation-footer.spec.ts",
   "**/agent-version-history.spec.ts",
   "**/agents.spec.ts",
   "**/apps.spec.ts",

@@ -161,6 +161,7 @@ function NewPluginWizard() {
           />
         }
         maxWidth="wizard"
+        contentOverflowX="clip"
       >
         <div className="space-y-6">
           {step === "source" && (

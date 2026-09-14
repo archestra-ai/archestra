@@ -5,7 +5,7 @@ import { useState } from "react";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { SearchableSelect } from "@/components/ui/searchable-select";
+import { UserSearchableSelect } from "@/components/user-searchable-select";
 import { useTransferAgentOwnership } from "@/lib/agent.query";
 import { useOrganizationMembers } from "@/lib/organization.query";
 
@@ -64,7 +64,7 @@ export function TransferAgentOwnershipDialog({
     >
       <div className="space-y-2">
         <Label htmlFor="transfer-agent-owner">New owner</Label>
-        <SearchableSelect
+        <UserSearchableSelect
           id="transfer-agent-owner"
           ariaLabel="New owner"
           className="w-full"
@@ -75,12 +75,12 @@ export function TransferAgentOwnershipDialog({
           }
           searchPlaceholder="Search users…"
           disabled={members.isPending || transfer.isPending}
-          items={(members.data ?? [])
+          users={(members.data ?? [])
             .filter((member) => member.id !== agent.authorId)
             .map((member) => ({
-              value: member.id,
-              label: member.name,
-              description: member.email,
+              userId: member.id,
+              name: member.name,
+              email: member.email,
             }))}
         />
       </div>

@@ -24,7 +24,7 @@ test("streamed words release finished animations without losing their fade or te
       {
         mode: "streaming",
         isAnimating: true,
-        animated: { animation: "fadeIn", sep: "word" },
+        animated: { animation: "fadeIn", sep: "word", stagger: 0 },
       },
       text,
     ),

@@ -80,13 +80,7 @@ export function parsePolicyDenied(text: string): PolicyDeniedPart | null {
 export function parseAuthRequired(
   errorText: string,
 ): AuthRequiredResult | null {
-  let message = errorText;
-  try {
-    const json = JSON.parse(errorText);
-    message = json?.originalError?.message || json?.message || errorText;
-  } catch {
-    /* not JSON, use raw text */
-  }
+  const message = unwrapErrorMessage(errorText);
 
   if (!message.includes("Authentication required for")) return null;
 
@@ -104,13 +98,7 @@ export function parseAuthRequired(
 }
 
 export function parseExpiredAuth(errorText: string): ExpiredAuthResult | null {
-  let message = errorText;
-  try {
-    const json = JSON.parse(errorText);
-    message = json?.originalError?.message || json?.message || errorText;
-  } catch {
-    /* not JSON, use raw text */
-  }
+  const message = unwrapErrorMessage(errorText);
 
   if (
     !message.includes("Expired or invalid authentication for") &&
@@ -412,4 +400,15 @@ export function isAuthInstructionText(text: string): boolean {
       text,
     )
   );
+}
+
+function unwrapErrorMessage(text: string): string {
+  // Most inputs are ordinary message text, not serialized error envelopes.
+  if (!text.trimStart().startsWith("{")) return text;
+  try {
+    const json = JSON.parse(text);
+    return json?.originalError?.message || json?.message || text;
+  } catch {
+    return text;
+  }
 }

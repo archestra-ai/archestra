@@ -107,6 +107,41 @@ describe("parsePolicyDenied", () => {
   });
 });
 
+describe("auth error text envelopes", () => {
+  it.each([
+    "plain",
+    "envelope",
+    "whitespace",
+    "malformed",
+  ])("keeps authentication prompts actionable in %s text", (form) => {
+    const required =
+      'Authentication required for "Example". Please visit: https://example.com/mcp/registry?install=example';
+    const expired =
+      'Expired or invalid authentication for "Example". Please visit: https://example.com/mcp/registry?reauth=example';
+    const wrap = (text: string) => {
+      switch (form) {
+        case "envelope":
+          return JSON.stringify({ originalError: { message: text } });
+        case "whitespace":
+          return ` \n\t${JSON.stringify({ message: text })}`;
+        case "malformed":
+          return `{incomplete envelope\n${text}`;
+        default:
+          return text;
+      }
+    };
+
+    expect(parseAuthRequired(wrap(required))).toMatchObject({
+      catalogName: "Example",
+      actionUrl: "https://example.com/mcp/registry?install=example",
+    });
+    expect(parseExpiredAuth(wrap(expired))).toEqual({
+      catalogName: "Example",
+      reauthUrl: "https://example.com/mcp/registry?reauth=example",
+    });
+  });
+});
+
 describe("parseAuthRequired", () => {
   const makeDirectErrorText = (catalogName: string, installUrl: string) =>
     `Authentication required for "${catalogName}".\n\nNo credentials were found for your account (user: usr_123).\nTo set up your credentials, visit this URL: ${installUrl}\n\nIMPORTANT: You MUST display the URL above to the user exactly as shown. Do NOT omit it or paraphrase it.\n\nOnce you have completed authentication, retry this tool call.`;

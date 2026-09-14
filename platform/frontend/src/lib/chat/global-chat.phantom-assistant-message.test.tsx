@@ -1,6 +1,6 @@
 import type { UIMessage } from "@ai-sdk/react";
-import { render, waitFor } from "@testing-library/react";
-import { useEffect } from "react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { Suspense, useEffect, useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { ChatProvider, useGlobalChat } from "./global-chat.context";
@@ -174,6 +174,67 @@ describe("phantom assistant messages", () => {
     mocks.mutateAsync.mockResolvedValue({});
     sessions = [];
     chatRequests = [];
+  });
+
+  it("keeps the composer usable while a streamed transcript update is pending", async () => {
+    const { response, stream } = sseResponse();
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response));
+    let resume!: () => void;
+    const pending = new Promise<void>((resolve) => {
+      resume = resolve;
+    });
+    let ready = false;
+    const attemptedUpdate = vi.fn();
+
+    function Transcript() {
+      const { getSession } = useGlobalChat();
+      const text = getSession(CONVERSATION_ID)
+        ?.messages.at(-1)
+        ?.parts.filter((part) => part.type === "text")
+        .map((part) => part.text)
+        .join("");
+      if (text === "the answer" && !ready) {
+        attemptedUpdate();
+        throw pending;
+      }
+      return <p>{text || "Waiting for response"}</p>;
+    }
+
+    function Composer() {
+      const [draft, setDraft] = useState("");
+      return (
+        <input
+          aria-label="Next message"
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+        />
+      );
+    }
+
+    render(
+      <ChatProvider>
+        <RegisterAndSend prompt="Hello" />
+        <Suspense fallback={<p>Loading transcript</p>}>
+          <Transcript />
+          <Composer />
+        </Suspense>
+      </ChatProvider>,
+    );
+    await waitFor(() => expect(fetch).toHaveBeenCalled());
+    emitTurn(stream, SERVER_MESSAGE_ID);
+    await waitFor(() => expect(attemptedUpdate).toHaveBeenCalled());
+
+    const input = screen.getByRole("textbox", { name: "Next message" });
+    fireEvent.change(input, { target: { value: "My next question" } });
+    expect(input).toBeVisible();
+    expect(input).toHaveValue("My next question");
+    expect(screen.queryByText("Loading transcript")).not.toBeInTheDocument();
+
+    ready = true;
+    resume();
+    finishTurn(stream);
+    await waitFor(() => expect(screen.getByText("the answer")).toBeVisible());
+    expect(input).toHaveValue("My next question");
   });
 
   it("keeps a single assistant message when telemetry arrives before the stream's start chunk", async () => {

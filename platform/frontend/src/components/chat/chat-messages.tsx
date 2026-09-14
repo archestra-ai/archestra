@@ -90,7 +90,7 @@ import {
   isAuthInstructionText,
   isInstallAuthResolved,
   parsePolicyDenied,
-  resolveAssistantTextAuthState,
+  type resolveAssistantTextAuthState,
   resolveToolAuthState,
   type ToolAuthState,
 } from "@/lib/chat/mcp-error-ui";
@@ -804,11 +804,14 @@ export function ChatMessages({
                           }
 
                           // Anthropic sends policy denials as text blocks (see MessageTool for OpenAI path)
-                          const assistantAuthState =
-                            resolveAssistantTextAuthState(part.text);
                           const textToolAuthState = resolveToolAuthState({
                             errorText: part.text,
                           });
+                          const assistantAuthState =
+                            textToolAuthState?.kind === "auth-required" ||
+                            textToolAuthState?.kind === "auth-expired"
+                              ? textToolAuthState
+                              : null;
                           if (textToolAuthState?.kind === "policy-denied") {
                             const shouldRenderPolicyDeniedUnsafeBoundary =
                               !!canReadToolPolicy &&

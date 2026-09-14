@@ -121,7 +121,11 @@ export const Response = memo(
       <Streamdown
         mode={isStreaming ? "streaming" : "static"}
         isAnimating={isStreaming}
-        animated={isStreaming ? { animation: "fadeIn", sep: "word" } : false}
+        // The stream already paces incoming words. Staggering a large chunk
+        // queues thousands of opacity animations and delays its visibility.
+        animated={
+          isStreaming ? { animation: "fadeIn", sep: "word", stagger: 0 } : false
+        }
         caret={isStreaming ? "block" : undefined}
         controls={{
           code: { copy: true, download: true },

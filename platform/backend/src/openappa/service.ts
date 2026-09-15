@@ -12,6 +12,8 @@ import type { PolicyBlockResult } from "@/guardrails/tool-invocation";
 import { normalizeToolCallsForPolicy } from "@/routes/proxy/llm-proxy-helpers";
 import { ApiError, type CommonToolResult } from "@/types";
 
+import { isChatBlockResult } from "./chat-block";
+
 export const APPA_SESSION_HEADER = "X-Appa-Session-ID";
 export const APPA_PARENT_HEADER = "X-Appa-Parent-ID";
 export const OPENAPPA_REMEDY_TOOL = "archestra__execute_remedy_plan";
@@ -186,6 +188,15 @@ export async function processProxyResults(
   await startSession(session);
   const updates: Record<string, string> = {};
   for (const result of results) {
+    // A signed proxy refusal is feedback, not an executed tool result.
+    if (
+      isChatBlockResult({
+        content: result.content,
+        toolCallId: result.id,
+        session,
+      })
+    )
+      continue;
     // Like existing proxy guardrails, consume the client's reported result.
     // This is protocol-level completion, not independent proof of execution.
     // Explicit tool errors remain failures; a reported cancellation is unknown.

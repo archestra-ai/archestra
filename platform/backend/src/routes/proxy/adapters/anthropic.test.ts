@@ -138,7 +138,7 @@ describe("AnthropicResponseAdapter", () => {
       const refusal = adapter.toRefusalResponse("refusal", "blocked message");
 
       expect(refusal.content).toEqual([
-        { type: "text", text: "blocked message", citations: null },
+        { type: "text", text: "blocked message", citations: [] },
       ]);
       expect(refusal.stop_reason).toBe("end_turn");
     });

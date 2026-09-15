@@ -64,7 +64,7 @@ export function PolicyDeniedTool({
           <ToolStatusRow
             icon={<ShieldX className="size-4 flex-none text-destructive" />}
             title="Rejected"
-            description={reason}
+            description={<span className="whitespace-pre-wrap">{reason}</span>}
             secondaryText={inlineSupportMessage}
             actions={
               canEditPolicy

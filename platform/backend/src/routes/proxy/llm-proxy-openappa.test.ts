@@ -1,3 +1,5 @@
+import { createAnthropic } from "@ai-sdk/anthropic";
+import { generateText, stepCountIs, streamText, tool } from "ai";
 /** Native decisions at the existing buffered proxy seam. The real native +
  * PostgreSQL engine is exercised separately by openappa-rs/smoke.test.cjs. */
 import Fastify, { type FastifyInstance } from "fastify";
@@ -7,12 +9,15 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { vi } from "vitest";
+import { z } from "zod";
 import { executeArchestraTool } from "@/archestra-mcp-server";
+import { withOpenAppaChat } from "@/clients/chat-openappa";
 import config from "@/config";
 import * as database from "@/database";
 import * as toolInvocation from "@/guardrails/tool-invocation";
 import * as trustedData from "@/guardrails/trusted-data";
 import { ModelModel } from "@/models";
+import { APPA_CHAT_BLOCK_HEADER, decodeChatBlock } from "@/openappa/chat-block";
 import { createAppaLlmProxyPlugin } from "@/proxy/plugins/appa-plugin-archestra";
 import { registerLlmProxyPlugin } from "@/proxy/plugins/registry";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -164,6 +169,198 @@ describe("OpenAPPA on the existing LLM proxy", () => {
   test.each([
     true,
     false,
+  ])("Chat continues from a blocked attempt, with model-selected remedy (stream=%s)", async (stream) => {
+    block = true;
+    const dispatch = native.dispatchHook.getMockImplementation();
+    native.dispatchHook.mockImplementation(async (raw: string) => {
+      const event = JSON.parse(raw);
+      if (
+        event.event === "tool_call" &&
+        event.tool === "appa/execute_remedy_plan"
+      ) {
+        events.push(event);
+        return JSON.stringify({ decision: "pass_control" });
+      }
+      return dispatch?.(raw);
+    });
+    const weather = vi.fn(async () => ({
+      content: [{ type: "text", text: "Sunny" }],
+    }));
+    const remedy = vi.fn(async () => {
+      block = false;
+      return { content: [{ type: "text", text: "Restriction accepted" }] };
+    });
+    const session = {
+      organization_id: agent.organizationId,
+      caller_id: `user:${userId}`,
+      session_id: sessionId,
+    };
+    let inference = 0;
+    vi.mocked(anthropicAdapterFactory.createClient).mockImplementation(() => {
+      const turn = inference++;
+      const selected =
+        turn === 1
+          ? {
+              name: "archestra__execute_remedy_plan",
+              input: { offer_id: "test-offer" },
+            }
+          : { name: "get_weather", input: { location: "SF" } };
+      const client = createAnthropicTestClient({
+        includeToolUse: turn < 3,
+        nonStreamingToolUse: turn < 3 ? selected : undefined,
+        streamStopReason: turn < 3 ? "tool_use" : "end_turn",
+      });
+      const create = client.messages.create;
+      client.messages.create = (async (
+        params: Parameters<typeof create>[0],
+      ) => {
+        providerRequests.push(structuredClone(params));
+        if (turn === 1) {
+          expect(JSON.stringify(params)).toContain("NATIVE REFUSAL");
+          expect(weather).not.toHaveBeenCalled();
+          expect(remedy).not.toHaveBeenCalled();
+        }
+        const response = await create(params);
+        // Preserve the boundary stub, giving each attempt a distinct provider ID.
+        if (!(Symbol.asyncIterator in response))
+          return {
+            ...response,
+            content:
+              turn < 3
+                ? [{ type: "tool_use", id: `attempt_${turn}`, ...selected }]
+                : [{ type: "text", text: "Finished" }],
+          };
+        return (async function* () {
+          let argumentsSent = false;
+          for await (const event of response) {
+            if (!event) continue;
+            if (
+              event?.type === "content_block_start" &&
+              event.content_block.type === "tool_use"
+            ) {
+              yield {
+                ...event,
+                content_block: {
+                  ...event.content_block,
+                  id: `attempt_${turn}`,
+                  name: selected.name,
+                },
+              };
+            } else if (
+              event?.type === "content_block_delta" &&
+              event.delta.type === "input_json_delta"
+            ) {
+              if (argumentsSent) continue;
+              argumentsSent = true;
+              yield {
+                ...event,
+                delta: {
+                  ...event.delta,
+                  partial_json: JSON.stringify(selected.input),
+                },
+              };
+            } else yield event;
+          }
+          return undefined;
+        })();
+      }) as typeof create;
+      return client as never;
+    });
+    const sdk = createAnthropic({
+      apiKey: "test-key",
+      baseURL: `http://localhost/v1/anthropic/${agent.id}/v1`,
+      headers: headers(),
+      fetch: async (input, init) => {
+        const response = await app.inject({
+          method: "POST",
+          url: new URL(String(input)).pathname,
+          remoteAddress: "127.0.0.1",
+          headers: Object.fromEntries(new Headers(init?.headers).entries()),
+          payload: JSON.parse(String(init?.body)),
+        });
+        return new Response(response.body, {
+          status: response.statusCode,
+          headers: response.headers as Record<string, string>,
+        });
+      },
+    });
+    const bridge = withOpenAppaChat({
+      model: sdk("claude-3-5-sonnet-20241022"),
+      session,
+      tools: {
+        get_weather: tool({
+          inputSchema: z.object({ location: z.string() }),
+          execute: weather,
+        }),
+        archestra__execute_remedy_plan: tool({
+          inputSchema: z.object({ offer_id: z.string() }),
+          execute: remedy,
+        }),
+      },
+    });
+    const params = {
+      ...bridge,
+      prompt: "Check the weather",
+      stopWhen: stepCountIs(4),
+      maxRetries: 0,
+    };
+    const result = stream ? streamText(params) : await generateText(params);
+    const steps = await result.steps;
+    expect(steps).toHaveLength(4);
+    expect(steps[0].toolResults[0].output).toMatchObject({
+      isError: true,
+      _meta: { archestraError: { type: "policy_denied" } },
+    });
+    expect(weather).toHaveBeenCalledTimes(1);
+    expect(remedy).toHaveBeenCalledTimes(1);
+    expect(
+      events
+        .filter((event) => event.event === "tool_result")
+        .some((event) => event.tool_call_id === "attempt_0"),
+    ).toBe(false);
+    expect(
+      events
+        .filter((event) => event.event === "tool_call")
+        .map((event) => event.tool),
+    ).toEqual(["get_weather", "appa/execute_remedy_plan", "get_weather"]);
+  });
+
+  test.each([
+    true,
+    false,
+  ])("only opted-in internal Chat receives a signed blocked attempt (stream=%s)", async (stream) => {
+    block = true;
+    const response = await app.inject({
+      method: "POST",
+      url: url(),
+      remoteAddress: "127.0.0.1",
+      headers: {
+        ...headers(),
+        [APPA_CHAT_BLOCK_HEADER]: "v1:2edfbd9f-ab24-4b4f-a1c0-346bb5c385a9",
+      },
+      payload: payload(stream),
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    const session = {
+      organization_id: agent.organizationId,
+      caller_id: `user:${userId}`,
+      session_id: sessionId,
+    };
+    const blockResult = decodeChatBlock(response.body, session);
+    expect(blockResult?.calls[0].name).toBe("get_weather");
+    expect(blockResult?.feedback).toContain("test-offer");
+    expect(response.body).not.toContain('"type":"tool_use"');
+    expect(
+      decodeChatBlock(response.body, {
+        ...session,
+        session_id: "another-chat",
+      }),
+    ).toBeNull();
+  });
+
+  test.each([
+    true,
+    false,
   ])("human-approval offers remain refusals without automatic remedies (stream=%s)", async (stream) => {
     native.dispatchHook.mockImplementation(async (raw: string) => {
       const event = JSON.parse(raw);
@@ -220,7 +417,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           {
             type: "text",
             text: refusal,
-            citations: null,
+            citations: [],
           },
         ]);
       }

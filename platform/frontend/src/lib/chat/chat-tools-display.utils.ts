@@ -146,6 +146,7 @@ export function isCompactEligible(params: {
   );
   if (errorText) {
     if (
+      structuredError?.type === "policy_denied" ||
       structuredError?.type === "assigned_credential_unavailable" ||
       structuredError?.type === "auth_required" ||
       structuredError?.type === "auth_expired"

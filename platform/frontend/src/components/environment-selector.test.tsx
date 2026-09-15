@@ -97,8 +97,8 @@ describe("EnvironmentSelector — saved value", () => {
     const user = userEvent.setup();
     await user.click(trigger);
     expect(
-      screen.queryByRole("option", { name: "Restricted Environment" }),
-    ).not.toBeInTheDocument();
+      screen.getByRole("option", { name: /^Restricted Environment/ }),
+    ).toHaveAttribute("aria-disabled", "true");
     await user.click(screen.getByRole("option", { name: "Default" }));
     expect(onChange).toHaveBeenCalledWith(null);
   });

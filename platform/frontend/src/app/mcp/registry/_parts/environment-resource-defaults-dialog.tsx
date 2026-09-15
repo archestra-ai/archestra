@@ -5,28 +5,16 @@ import {
   ENVIRONMENT_DEFAULTABLE_RESOURCES,
   type EnvironmentDefaultableResource,
 } from "@archestra/shared";
+import { EnvironmentSelector } from "@/components/environment-selector";
 import { FormDialog } from "@/components/form-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DialogBody, DialogStickyFooter } from "@/components/ui/dialog";
-import { FieldDescription } from "@/components/ui/field-description";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   useEnvironments,
   useUpdateEnvironmentResourceDefaults,
 } from "@/lib/environment.query";
 import { useDefaultEnvironment } from "@/lib/organization.query";
-
-// shadcn Select can't use an empty string value, so "no configured default —
-// new items land in the org Default environment" gets this sentinel.
-const DEFAULT_ENVIRONMENT_VALUE = "__default__";
 
 /**
  * Chooses, per resource kind, which environment newly created items of that
@@ -107,40 +95,26 @@ function ResourceDefaultRow({
   const selected = environments.find((environment) => environment.id === value);
 
   return (
-    <div className="space-y-2">
-      <Label htmlFor={selectId}>
-        {ENVIRONMENT_DEFAULTABLE_RESOURCE_LABELS[resource]}
-      </Label>
-      {selected?.restricted ? (
-        <FieldDescription>
-          <Badge variant="secondary" className="mr-1.5">
-            Restricted
-          </Badge>
-          Creators without permission to deploy here fall back to{" "}
-          {defaultEnvironmentName}.
-        </FieldDescription>
-      ) : null}
-      <Select
-        value={value ?? DEFAULT_ENVIRONMENT_VALUE}
-        disabled={disabled}
-        onValueChange={(next) =>
-          onChange(next === DEFAULT_ENVIRONMENT_VALUE ? null : next)
-        }
-      >
-        <SelectTrigger id={selectId} className="w-full">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent position="popper">
-          <SelectItem value={DEFAULT_ENVIRONMENT_VALUE}>
-            {defaultEnvironmentName}
-          </SelectItem>
-          {environments.map((environment) => (
-            <SelectItem key={environment.id} value={environment.id}>
-              {environment.name}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </div>
+    <EnvironmentSelector
+      mode="default"
+      id={selectId}
+      label={ENVIRONMENT_DEFAULTABLE_RESOURCE_LABELS[resource]}
+      value={value}
+      onChange={onChange}
+      disabled={disabled}
+      helpText={
+        selected?.restricted ? (
+          <>
+            <Badge variant="secondary" className="mr-1.5">
+              Restricted
+            </Badge>
+            <span>
+              Creators without permission to deploy here fall back to{" "}
+              {defaultEnvironmentName}.
+            </span>
+          </>
+        ) : undefined
+      }
+    />
   );
 }

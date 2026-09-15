@@ -23,7 +23,7 @@ import { AgentIcon } from "@/components/agent-icon";
 import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EntityLabelFilter } from "@/components/entity-label-filter";
-import { EnvironmentScopeSelect } from "@/components/environment-scope-select";
+import { EnvironmentSelector } from "@/components/environment-selector";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import {
   CollectionFilters,
@@ -1064,15 +1064,15 @@ export default function LimitsPage() {
                 )}
 
                 {formState.entityType === "environment" && (
-                  <EnvironmentScopeSelect
+                  <EnvironmentSelector
+                    mode="scope"
                     value={formState.entityId}
-                    onValueChange={(value) =>
+                    onChange={(value) =>
                       setFormState((current) => ({
                         ...current,
                         entityId: value,
                       }))
                     }
-                    environments={environments}
                     className="w-full sm:flex-1"
                   />
                 )}

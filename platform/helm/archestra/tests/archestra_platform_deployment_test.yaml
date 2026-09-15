@@ -5,6 +5,7 @@ tests:
   - it: preserves existing bulk environment imports on upgrade
     documentIndex: 1
     set:
+      archestra.database.connectionBudget: 8
       archestra.envFrom:
         - configMapRef:
             name: database-pool
@@ -23,6 +24,7 @@ tests:
   - it: budgets pools when bulk imports are exclusively prefixed
     documentIndex: 1
     set:
+      archestra.database.connectionBudget: 200
       archestra.envFrom:
         - prefix: APP_
           configMapRef:
@@ -168,6 +170,7 @@ tests:
   - it: should preserve an explicit database pool environment override
     documentIndex: 1
     set:
+      archestra.database.connectionBudget: 8
       archestra.env.ARCHESTRA_DATABASE_POOL_MAX: "17"
     asserts:
       - contains:
@@ -179,6 +182,7 @@ tests:
   - it: should support a fixed per-pod database pool override
     documentIndex: 1
     set:
+      archestra.database.connectionBudget: 8
       archestra.database.poolMax: 12
     asserts:
       - contains:
@@ -200,6 +204,7 @@ tests:
   - it: budgets Kubernetes default surge when no deployment strategy is provided
     documentIndex: 1
     set:
+      archestra.database.connectionBudget: 200
       archestra.replicaCount: 3
       archestra.worker.enabled: false
       archestra.deploymentStrategy: null
@@ -213,6 +218,7 @@ tests:
   - it: preserves zero surge and reserves terminating replicas
     documentIndex: 1
     set:
+      archestra.database.connectionBudget: 200
       archestra.replicaCount: 3
       archestra.worker.enabled: false
       archestra.deploymentStrategy.rollingUpdate.maxSurge: 0
@@ -226,6 +232,7 @@ tests:
   - it: does not reserve overlapping replicas for Recreate
     documentIndex: 1
     set:
+      archestra.database.connectionBudget: 200
       archestra.replicaCount: 4
       archestra.worker.enabled: false
       archestra.deploymentStrategy.type: Recreate
@@ -257,6 +264,7 @@ tests:
   - it: permits scaling every backend deployment to zero
     documentIndex: 1
     set:
+      archestra.database.connectionBudget: 200
       archestra.replicaCount: 0
       archestra.worker.enabled: false
     asserts:

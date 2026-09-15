@@ -20,23 +20,25 @@ archestra:
   # as the HPA will manage the replica count dynamically
   replicaCount: 1
 
-  # Database connection pool sizing for all backend pods. By default, Helm
-  # divides connectionBudget across the maximum web and worker pods that can
-  # coexist, including HPA scale-out, surge, and a terminating old revision.
+  # Optional database connection budgeting across all backend pods.
+  # When configured, Helm divides the budget across peak web and worker pods,
+  # including HPA scale-out, surge, and a terminating old revision.
   database:
-    # Total PostgreSQL connections available to Archestra backend pods. Each
-    # pod reserves 12 connections for its cache pool and notification listeners.
-    # At least 13 connections per peak pod are required; undersizing fails Helm.
-    # bundled database reserves the remaining 50 of its 250 connections for
+    # null preserves existing pool configuration or the backend default of 50
+    # query connections per pod. Set a budget to enable automatic pool sizing.
+    # Each peak pod needs at least 13 connections: 1 query, 10 cache, 2 listeners.
+    # Explicitly undersized budgets fail Helm rendering.
+    # Keep the budget below PostgreSQL max_connections, reserving capacity for
     # migrations, monitoring, administration, and other database clients.
-    # Set this below your external database's max_connections when using one.
-    connectionBudget: 200
+    # For the bundled database, 200 leaves 50 of its 250 connections in reserve.
+    connectionBudget: null
     # Optional fixed per-pod override. Prefer connectionBudget so scaling the
     # chart automatically reduces each pod's pool allocation.
     poolMax: null
     # With unprefixed envFrom, null preserves inherited pool configuration on
     # upgrade (or the backend default if the source supplies no pool limit).
-    # true explicitly uses the bulk pool value; false opts into chart sizing.
+    # true explicitly uses the bulk pool value; false uses chart sizing when
+    # connectionBudget is set.
     poolMaxFromEnvFrom: null
 
   # Annotations to add to pods created by the Deployment
@@ -1017,7 +1019,7 @@ postgresql:
           ALTER USER archestra WITH SUPERUSER;
     # Appended to postgresql.conf. max_connections must cover every backend
     # pod's query and cache pools, notification listeners, and non-app clients.
-    # Helm allocates database.connectionBudget across rollout pods, leaving
+    # When set, Helm allocates database.connectionBudget across rollout pods, leaving
     # the remainder for migrations, administration, and monitoring.
     # Raise this ceiling before increasing database.connectionBudget.
     extendedConfiguration: |

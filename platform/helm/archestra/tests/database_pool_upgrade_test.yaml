@@ -1,0 +1,210 @@
+suite: database pool upgrade compatibility
+templates:
+  - archestra-platform.yaml
+  - archestra-worker.yaml
+  - migration-job.yaml
+values:
+  - ../ci/test-values.yaml
+release:
+  upgrade: true
+tests:
+  - it: preserves the backend default without pool configuration in archestra-platform.yaml
+    template: archestra-platform.yaml
+    documentIndex: 1
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_DATABASE_POOL_MAX
+          any: true
+
+  - it: preserves the backend default without pool configuration in archestra-worker.yaml
+    template: archestra-worker.yaml
+    documentIndex: 0
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_DATABASE_POOL_MAX
+          any: true
+
+  - it: preserves the backend default without pool configuration in migration-job.yaml
+    template: migration-job.yaml
+    documentIndex: 0
+    asserts:
+      - notContains:
+          path: spec.template.spec.initContainers[0].env
+          content:
+            name: ARCHESTRA_DATABASE_POOL_MAX
+          any: true
+
+  - it: allows existing HPA settings without a connection budget in archestra-platform.yaml
+    template: archestra-platform.yaml
+    documentIndex: 1
+    set:
+      archestra.horizontalPodAutoscaler.enabled: true
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_DATABASE_POOL_MAX
+          any: true
+
+  - it: allows existing HPA settings without a connection budget in archestra-worker.yaml
+    template: archestra-worker.yaml
+    documentIndex: 0
+    set:
+      archestra.horizontalPodAutoscaler.enabled: true
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_DATABASE_POOL_MAX
+          any: true
+
+  - it: allows existing HPA settings without a connection budget in migration-job.yaml
+    template: migration-job.yaml
+    documentIndex: 0
+    set:
+      archestra.horizontalPodAutoscaler.enabled: true
+    asserts:
+      - notContains:
+          path: spec.template.spec.initContainers[0].env
+          content:
+            name: ARCHESTRA_DATABASE_POOL_MAX
+          any: true
+
+  - it: allows existing replica counts without a connection budget in archestra-platform.yaml
+    template: archestra-platform.yaml
+    documentIndex: 1
+    set:
+      archestra.replicaCount: 8
+      archestra.worker.replicaCount: 4
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_DATABASE_POOL_MAX
+          any: true
+
+  - it: allows existing replica counts without a connection budget in archestra-worker.yaml
+    template: archestra-worker.yaml
+    documentIndex: 0
+    set:
+      archestra.replicaCount: 8
+      archestra.worker.replicaCount: 4
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_DATABASE_POOL_MAX
+          any: true
+
+  - it: allows existing replica counts without a connection budget in migration-job.yaml
+    template: migration-job.yaml
+    documentIndex: 0
+    set:
+      archestra.replicaCount: 8
+      archestra.worker.replicaCount: 4
+    asserts:
+      - notContains:
+          path: spec.template.spec.initContainers[0].env
+          content:
+            name: ARCHESTRA_DATABASE_POOL_MAX
+          any: true
+
+  - it: allows explicitly clearing the connection budget in archestra-platform.yaml
+    template: archestra-platform.yaml
+    documentIndex: 1
+    set:
+      archestra.database.connectionBudget: null
+      archestra.horizontalPodAutoscaler.enabled: true
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_DATABASE_POOL_MAX
+          any: true
+
+  - it: allows explicitly clearing the connection budget in archestra-worker.yaml
+    template: archestra-worker.yaml
+    documentIndex: 0
+    set:
+      archestra.database.connectionBudget: null
+      archestra.horizontalPodAutoscaler.enabled: true
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_DATABASE_POOL_MAX
+          any: true
+
+  - it: allows explicitly clearing the connection budget in migration-job.yaml
+    template: migration-job.yaml
+    documentIndex: 0
+    set:
+      archestra.database.connectionBudget: null
+      archestra.horizontalPodAutoscaler.enabled: true
+    asserts:
+      - notContains:
+          path: spec.template.spec.initContainers[0].env
+          content:
+            name: ARCHESTRA_DATABASE_POOL_MAX
+          any: true
+
+  - it: sizes pools with the minimum explicit HPA budget in archestra-platform.yaml
+    template: archestra-platform.yaml
+    documentIndex: 1
+    set:
+      archestra.database.connectionBudget: 338
+      archestra.horizontalPodAutoscaler.enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_DATABASE_POOL_MAX
+            value: "1"
+
+  - it: sizes pools with the minimum explicit HPA budget in archestra-worker.yaml
+    template: archestra-worker.yaml
+    documentIndex: 0
+    set:
+      archestra.database.connectionBudget: 338
+      archestra.horizontalPodAutoscaler.enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_DATABASE_POOL_MAX
+            value: "1"
+
+  - it: sizes pools with the minimum explicit HPA budget in migration-job.yaml
+    template: migration-job.yaml
+    documentIndex: 0
+    set:
+      archestra.database.connectionBudget: 338
+      archestra.horizontalPodAutoscaler.enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.initContainers[0].env
+          content:
+            name: ARCHESTRA_DATABASE_POOL_MAX
+            value: "1"
+
+  - it: rejects an explicit budget of 0 for the existing HPA configuration
+    template: migration-job.yaml
+    set:
+      archestra.horizontalPodAutoscaler.enabled: true
+      archestra.database.connectionBudget: 0
+    asserts:
+      - failedTemplate:
+          errorMessage: "Configuration error: archestra.database.connectionBudget (0) must provide at least 13 connections (1 query, 10 cache, 2 listeners) for each of the 26 peak backend pods."
+
+  - it: rejects an explicit budget of 200 for the existing HPA configuration
+    template: migration-job.yaml
+    set:
+      archestra.horizontalPodAutoscaler.enabled: true
+      archestra.database.connectionBudget: 200
+    asserts:
+      - failedTemplate:
+          errorMessage: "Configuration error: archestra.database.connectionBudget (200) must provide at least 13 connections (1 query, 10 cache, 2 listeners) for each of the 26 peak backend pods."

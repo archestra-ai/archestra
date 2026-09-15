@@ -68,7 +68,7 @@ describe("APPA Guide feature availability", () => {
       context,
     );
     expect(reference.isError).not.toBe(true);
-    expect(JSON.stringify(reference)).toContain("Writing Archestra policies");
+    expect(JSON.stringify(reference)).toContain("Writing OpenAPPA policies");
   });
 
   test("disabling APPA hides persisted and assigned guides without deleting user edits", async ({

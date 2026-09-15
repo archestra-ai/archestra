@@ -4,12 +4,12 @@ export const APPA_GUIDE_SKILL: BuiltInSkill = {
   builtInSkillId: "appa-guide",
   name: "appa-guide",
   description:
-    "Configure Guardrails v2 (OpenAPPA) in Archestra: explain the current policy, review available tools, and change how tool calls and results are handled using the policy read, validate, and update tools.",
+    "Configure Guardrails v2 (OpenAPPA): explain the current policy, review available tools, and change how tool calls and results are handled using the policy read, validate, and update tools.",
   feature: "appa",
   content: `# APPA Guide
 
-Use this skill to explain or change Archestra's organization policy. It works
-through Archestra tools, including when those tools are connected to Claude Code.
+Use this skill to explain or change the organization policy. It works
+through platform tools, including when those tools are connected to Claude Code.
 The policy is shared with the OpenAPPA editor in Studio and stored in the database.
 A local organization.appa.toml file, Claude Code settings, or a shell command does
 not change it.
@@ -41,7 +41,7 @@ are not a complete inventory of installed servers. Missing discovery results,
 missing Catalog IDs, and permission errors mean incomplete coverage. Say which
 servers or tools could not be inspected.
 
-This inspection reads Archestra's stored tool metadata. It does not test live
+This inspection reads stored tool metadata. It does not test live
 server health or prove a tool's behavior. Do not execute tools or read private
 content merely to classify them. Loading this skill does not run an automatic
 scan or save policy rules; follow these steps when handling the user's request.
@@ -51,7 +51,7 @@ scan or save policy rules; follow these steps when handling the user's request.
 1. Read the latest policy before editing. For initial setup, build on it rather
    than replacing it. Preserve unrelated rules, comments, and external bindings.
 2. Load \`references/policy-writing.md\` with \`archestra__load_skill\` before
-   writing TOML. Use the actual names returned by Archestra; do not translate
+   writing TOML. Use the actual names returned by the platform; do not translate
    them to Claude Code's host tool names or invent connector names.
 3. Explain the intended behavior in plain English. Make only the change the
    user authorized. If the requested outcome is unclear, ask one focused
@@ -84,20 +84,20 @@ scan or save policy rules; follow these steps when handling the user's request.
   restrictions. It neither classifies their data nor raises existing trust.
 - Explicit rules still apply. Keep the catch-all unless the user wants unknown
   tools blocked. Do not quietly weaken a rule to make a blocked call succeed.
-- Archestra's supported editor format is \`[policy]\` plus \`[externals]\`.
+- The supported editor format is \`[policy]\` plus \`[externals]\`.
   Local commands and file includes are rejected. Do not copy Claude Code's
   subprocess annotators, battery includes, CLI reload steps, or local hooks.
 - Keep secrets out of policy text. Existing remote bindings may refer to a
   backend environment variable with \`token_env\`; never invent a credential.
-- APPA is available only when \`ARCHESTRA_LLM_PROXY_PLUGINS\` includes
-  \`appa\`. If its tools are unavailable, report that rather than pretending
+- APPA is available only when \`ARCHESTRA_OPENAPPA_ENABLED=true\`.
+  If its tools are unavailable, report that rather than pretending
   the policy changed. Do not change deployment settings through this skill.
 `,
   files: [
     {
       path: "references/policy-writing.md",
       kind: "reference",
-      content: `# Writing Archestra policies
+      content: `# Writing OpenAPPA policies
 
 The document starts with:
 

@@ -8,6 +8,7 @@ import { ClaudeCodeAccount } from "@/components/claude-code-account";
 import { ExternalSecretReferenceDialog } from "@/components/external-secret-reference-dialog";
 import { GitHubConnectButton } from "@/components/github-connect-button";
 import { QueryLoadError } from "@/components/query-load-error";
+import { RuntimeCredentialConnectionDialog } from "@/components/runtime-credential-connection-dialog";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
 import {
@@ -27,8 +28,8 @@ import {
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useConfig } from "@/lib/config/config.query";
 import {
+  type RuntimeCredentialDefinition,
   useRuntimeCredentials,
-  useStartGitHubUserConnection,
 } from "@/lib/runtime-credentials.query";
 
 /** Accept both new setup links and credential anchors already sent to users. */
@@ -81,7 +82,8 @@ function MissingCredentialsDialog({
 }) {
   const preflight = useAgentRuntimePreflight(agentId);
   const definitions = useRuntimeCredentials();
-  const startGitHub = useStartGitHubUserConnection();
+  const [connecting, setConnecting] =
+    useState<RuntimeCredentialDefinition | null>(null);
   const { data: canManageOrganization, isPending: permissionsPending } =
     useHasPermissions({ agentSettings: ["update"] });
   const config = useConfig();
@@ -122,6 +124,29 @@ function MissingCredentialsDialog({
   const needsClaudeCodeAccount = missingKeys.has("CLAUDE_CODE_ACCOUNT");
   const complete =
     !loading && !loadFailed && missing.length === 0 && !needsClaudeCodeAccount;
+
+  const singleGitHubConnection =
+    !loading &&
+    !loadFailed &&
+    !needsClaudeCodeAccount &&
+    missing.length === 1 &&
+    canSet(missing[0])
+      ? definitions.data?.find(
+          (definition) =>
+            definition.key === missing[0].credentialId &&
+            definition.kind === "github_app_user",
+        )
+      : undefined;
+  const connectionDefinition = connecting ?? singleGitHubConnection;
+  if (connectionDefinition) {
+    return (
+      <RuntimeCredentialConnectionDialog
+        definition={connectionDefinition}
+        scope="personal"
+        onClose={connecting ? () => setConnecting(null) : onClose}
+      />
+    );
+  }
 
   return (
     <StandardFormDialog
@@ -236,9 +261,9 @@ function MissingCredentialsDialog({
                         </p>
                       ) : definition?.kind === "github_app_user" ? (
                         <GitHubConnectButton
-                          pending={startGitHub.isPending}
+                          className="justify-self-start"
                           disabled={save.isPending}
-                          onClick={() => startGitHub.mutate(definition.key)}
+                          onClick={() => setConnecting(definition)}
                         />
                       ) : byosEnabled ? (
                         <FormControl>

@@ -238,6 +238,15 @@ describe("credential setup deep links", () => {
       await screen.findByLabelText("Service token"),
       "example-service-secret",
     );
+    await user.click(screen.getByRole("button", { name: "Connect GitHub" }));
+    expect(
+      screen.getByRole("dialog", { name: "Connect GitHub" }),
+    ).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.getByLabelText("Service token")).toHaveValue(
+      "example-service-secret",
+    );
+    expect(writes).toEqual([]);
     await user.click(screen.getByRole("button", { name: "Save credentials" }));
     await waitFor(() =>
       expect(writes).toEqual([

@@ -1,0 +1,80 @@
+{
+  "name": "you__remote-mcp",
+  "display_name": "You.com",
+  "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI4IDI4Ij48cGF0aCBmaWxsPSIjMTExODI3IiBmaWxsLXJ1bGU9ImV2ZW5vZGQiIGNsaXAtcnVsZT0iZXZlbm9kZCIgZD0iTTE2LjEwODggMS40NzAyM0MxNC43NjE3IDAuNzY4MDQxIDEzLjE1NyAwLjc2ODA0IDExLjgwOTkgMS40NzAyM0wyLjUwMzY5IDYuMzIxMjlDMC45NjUwNjYgNy4xMjMzMyAwIDguNzE1NDEgMCAxMC40NTE3VjE5LjM1NDNDMCAyMS4wOTA1IDAuOTY1MDY3IDIyLjY4MjYgMi41MDM2OSAyMy40ODQ3TDExLjgwOTkgMjguMzM1N0MxMi4yMjc2IDI4LjU1MzQgMTIuNjcgMjguNzAzNiAxMy4xMjE4IDI4Ljc4NjRWMjIuNDQxQzEzLjEyMTggMTguNzQwNSAxMC4xMjE5IDE1Ljc0MDUgNi40MjEzMiAxNS43NDA1SDMuMzUwMjVWMTQuMDY1NEg2LjQyMTMyQzEwLjEyMTkgMTQuMDY1NCAxMy4xMjE4IDExLjA2NTUgMTMuMTIxOCA3LjM2NDlWNC4yOTM4M0gxNC43OTdWNy4zNjQ5QzE0Ljc5NyAxMS4wNjU1IDE3Ljc5NjkgMTQuMDY1NCAyMS40OTc1IDE0LjA2NTRIMjcuOTE4OFYxMC40NTE3QzI3LjkxODggOC43MTU0MSAyNi45NTM3IDcuMTIzMzMgMjUuNDE1MSA2LjMyMTI5TDE2LjEwODggMS40NzAyM1pNMjcuOTE4OCAxNS43NDA1SDIxLjQ5NzVDMTcuNzk2OSAxNS43NDA1IDE0Ljc5NyAxOC43NDA1IDE0Ljc5NyAyMi40NDFWMjguNzg2NEMxNS4yNDg4IDI4LjcwMzYgMTUuNjkxMiAyOC41NTM0IDE2LjEwODggMjguMzM1N0wyNS40MTUxIDIzLjQ4NDdDMjYuOTUzNyAyMi42ODI2IDI3LjkxODggMjEuMDkwNSAyNy45MTg4IDE5LjM1NDNWMTUuNzQwNVoiLz48L3N2Zz4=",
+  "description": "Official remote MCP server for You.com. Exposes you-search (current web and news search with snippets, source URLs, domain/country/language/freshness filters, and optional page extraction), you-contents (URL content extraction in markdown or HTML), you-research (one-shot cited synthesis across sources), you-finance (equity research with market data), and you-discover (search for AI agents, MCP servers, A2A agents, and skills).",
+  "oauth_config": {
+    "name": "You.com MCP",
+    "server_url": "https://api.you.com/mcp",
+    "client_id": "",
+    "redirect_uris": [
+      "http://localhost:8080/oauth/callback"
+    ],
+    "scopes": [
+      "Tools"
+    ],
+    "description": "You.com MCP Server (dynamic registration)",
+    "default_scopes": [
+      "Tools"
+    ],
+    "supports_resource_metadata": true
+  },
+  "tools": [
+    {
+      "name": "you-search",
+      "description": "Current web and news search returning snippets, source URLs, and metadata. Default for finding current information; supports domain, country, language, and freshness filters, and extraction (highlights or full page content). For multi-part questions, issue a separate focused query per sub-question - one facet each, not the whole question."
+    },
+    {
+      "name": "you-contents",
+      "description": "Extract the content of supplied URLs and return it in markdown or HTML format. Use HTML format for layout preservation, interactive content, and visual fidelity; use markdown for text extraction and simpler consumption."
+    },
+    {
+      "name": "you-research",
+      "description": "One-shot cited research: returns a concise synthesized answer with citations, built from web search and content extraction across multiple sources. Use when the user needs a researched, sourced answer rather than a raw result list."
+    },
+    {
+      "name": "you-finance",
+      "description": "Equity and market research: company overviews, financials, valuations, and cited market data for finance questions."
+    },
+    {
+      "name": "you-discover",
+      "description": "Discover AI agents, MCP servers, A2A agents, and skills via ARD Agent Finder services. Search-only - never installs or connects. Returns ranked results with relevance scores."
+    }
+  ],
+  "prompts": [],
+  "keywords": [
+    "you.com",
+    "search",
+    "web-search",
+    "news-search",
+    "research",
+    "finance",
+    "content-extraction",
+    "citations",
+    "rag"
+  ],
+  "user_config": {},
+  "readme": null,
+  "category": "Search",
+  "archestra_config": {
+    "client_config_permutations": null,
+    "oauth": {
+      "provider": null,
+      "required": true
+    },
+    "works_in_archestra": true
+  },
+  "author": {
+    "name": "You.com",
+    "url": "https://you.com/"
+  },
+  "homepage": "https://you.com/",
+  "documentation": "https://docs.you.com/docs/api-reference/mcp/overview",
+  "server": {
+    "type": "remote",
+    "url": "https://api.you.com/mcp",
+    "docs_url": "https://docs.you.com"
+  },
+  "github_info": null,
+  "programming_language": null
+}

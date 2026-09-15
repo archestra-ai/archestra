@@ -10,7 +10,6 @@ import {
   PinOff,
   Plug,
   RotateCcw,
-  Sparkles,
   Star,
   TerminalSquare,
   Trash2,
@@ -44,7 +43,6 @@ type AgentActionsProps = {
   onPermanentlyDelete: (agent: Agent) => void;
   onClone: (agent: Agent) => void;
   onExport: (agent: Agent) => void;
-  onConvertToSkill: (agent: Agent) => void;
   onTogglePin: (agent: Agent) => void;
   /**
    * The caller's personal default agent, when this row is one of the caller's
@@ -74,7 +72,6 @@ export function AgentActions({
   onPermanentlyDelete,
   onClone,
   onExport,
-  onConvertToSkill,
   onTogglePin,
   personalDefault,
   onHistory,
@@ -94,7 +91,6 @@ export function AgentActions({
   const cloneAction = agentAction(actionModel, "clone");
   const exportAction = agentAction(actionModel, "export");
   const historyAction = agentAction(actionModel, "history");
-  const convertAction = agentAction(actionModel, "convert");
   const deleteAction = agentAction(actionModel, "delete");
 
   if (isDeleted) {
@@ -238,18 +234,6 @@ export function AgentActions({
       permissions: historyAction.permissions,
       testId: `${E2eTestId.AgentVersionHistoryButton}-${agent.name}`,
       onClick: () => onHistory(agent.id, canModify),
-    },
-    {
-      icon: <Sparkles className="h-4 w-4" />,
-      label: convertAction.label,
-      permissions: convertAction.permissions,
-      disabled: isBuiltIn || agent.agentType !== "agent",
-      disabledTooltip: isBuiltIn
-        ? "Built-in agents cannot be converted"
-        : agent.agentType !== "agent"
-          ? "Only internal agents can be converted to skills"
-          : undefined,
-      onClick: () => onConvertToSkill(agent),
     },
     {
       icon: <Trash2 className="h-4 w-4" />,

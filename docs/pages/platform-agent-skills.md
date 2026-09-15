@@ -195,7 +195,7 @@ Only content is versioned. A change to the name, scope, teams, or environments i
 
 A skill can be restricted to one or more [environments](./platform-environments). A skill with no environments is available to agents in every environment. A restricted skill is only visible to agents in one of its environments — `list_skills`, `load_skill`, and slash commands are all filtered the same way. Built-in skills are visible everywhere, like built-in tools.
 
-Pick the environments in the skill editor; leave the field empty to keep the skill available everywhere. A skill authored from chat inherits the authoring agent's environment. Converting an agent to a skill carries the agent's environment over. Restricting a skill to a `restricted` environment requires the `skill:deploy-to-restricted` permission.
+Pick the environments in the skill editor; leave the field empty to keep the skill available everywhere. A skill authored from chat inherits the authoring agent's environment. Restricting a skill to a `restricted` environment requires the `skill:deploy-to-restricted` permission.
 
 ## Running a Skill in a Subagent
 

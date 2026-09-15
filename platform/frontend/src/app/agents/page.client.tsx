@@ -133,7 +133,6 @@ import {
 import { useMyTeams } from "@/lib/teams/team.query";
 import { resolveCatalogEnvironmentLabel } from "../mcp/registry/_parts/catalog-environment-label";
 import { AgentActions } from "./agent-actions";
-import { ConvertToSkillDialog } from "./convert-to-skill-dialog";
 
 type AgentsInitialData = {
   agents: archestraApiTypes.GetAgentCatalogResponses["200"] | null;
@@ -367,9 +366,6 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     id: string;
     canModify: boolean;
   } | null>(null);
-  const [convertingAgent, setConvertingAgent] = useState<AgentData | null>(
-    null,
-  );
 
   // Create/edit/view used to be dialogs on this page, opened from
   // `?create=true`, `?edit=<id>` and `?view=<id>`; those links still arrive
@@ -668,7 +664,6 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
         }}
         onPermanentlyDelete={setPermanentlyDeletingAgent}
         onClone={setCloningAgent}
-        onConvertToSkill={setConvertingAgent}
         onTogglePin={(target) =>
           pinAgent.mutate({ id: target.id, pinned: !target.pinnedAt })
         }
@@ -1415,13 +1410,6 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                 open={isImportDialogOpen}
                 onOpenChange={setIsImportDialogOpen}
                 onSuccess={() => {}}
-              />
-
-              <ConvertToSkillDialog
-                agent={convertingAgent}
-                onOpenChange={(open) => {
-                  if (!open) setConvertingAgent(null);
-                }}
               />
 
               <CloneAgentDialog

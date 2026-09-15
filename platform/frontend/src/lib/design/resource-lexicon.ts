@@ -98,8 +98,8 @@ export const FIELD_LABEL = {
  * label and accessible name, a header button, a kebab item.
  *
  * Only verbs that appear on more than one of the five surfaces live here. A
- * verb one page alone offers ("Convert to skill") has nothing to agree with
- * and stays where it is used.
+ * verb one page alone offers has nothing to agree with and stays where it is
+ * used.
  */
 export const ACTION_LABEL = {
   chat: "Chat",

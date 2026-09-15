@@ -820,8 +820,6 @@ export const RouteId = {
   GetExternalMcpSkill: "getExternalMcpSkill",
   GetExternalMcpSkillUsageStatistics: "getExternalMcpSkillUsageStatistics",
   CreateSkill: "createSkill",
-  ConvertAgentToSkill: "convertAgentToSkill",
-  SuggestSkillDescription: "suggestSkillDescription",
   GetSkill: "getSkill",
   UpdateSkill: "updateSkill",
   BulkUpdateSkillsVisibility: "bulkUpdateSkillsVisibility",

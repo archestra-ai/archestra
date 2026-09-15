@@ -71,9 +71,6 @@ vi.mock("@/components/clone-agent-dialog", () => ({
 vi.mock("@/components/agent-version-history-dialog", () => ({
   AgentVersionHistoryDialog: () => null,
 }));
-vi.mock("@/app/agents/convert-to-skill-dialog", () => ({
-  ConvertToSkillDialog: () => null,
-}));
 
 let access = {
   resource: "agent",

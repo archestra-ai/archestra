@@ -784,22 +784,19 @@ class SkillModel {
    * inserted in the same transaction, so a failed assignment cannot leave a
    * scoped skill orphaned.
    */
-  static async createWithFiles(
-    params: {
-      skill: InsertSkill;
-      files: Omit<InsertSkillFile, "skillId">[];
-      teamIds?: string[];
-      /** Environments the skill is restricted to; empty/omitted = every environment. */
-      environmentIds?: string[];
-      /**
-       * Git commit the initial bytes came from, stamped on version 1. Passed
-       * only by the GitHub import; see `skill_versions.source_commit`.
-       */
-      versionSourceCommit?: string;
-    },
-    tx?: Transaction,
-  ): Promise<Skill | null> {
-    const run = async (tx: Transaction) => {
+  static async createWithFiles(params: {
+    skill: InsertSkill;
+    files: Omit<InsertSkillFile, "skillId">[];
+    teamIds?: string[];
+    /** Environments the skill is restricted to; empty/omitted = every environment. */
+    environmentIds?: string[];
+    /**
+     * Git commit the initial bytes came from, stamped on version 1. Passed
+     * only by the GitHub import; see `skill_versions.source_commit`.
+     */
+    versionSourceCommit?: string;
+  }): Promise<Skill | null> {
+    return await withDbTransaction(async (tx) => {
       const [skill] = await tx
         .insert(schema.skillsTable)
         .values(
@@ -868,11 +865,7 @@ class SkillModel {
       });
 
       return skill;
-    };
-
-    // join a caller-supplied transaction so the create can be made atomic with
-    // other writes (e.g. agent→skill conversion deleting the source agent).
-    return tx ? await run(tx) : await withDbTransaction(run);
+    });
   }
 
   /**

@@ -107,8 +107,8 @@ const skillsTable = softDeletablePgTable(
     compatibility: text("compatibility"),
     /**
      * Optional `allowed-tools` frontmatter field (agentskills.io): a
-     * space-separated list of tools the skill is pre-approved to use. Populated
-     * from the source agent's tools on conversion; round-trips through SKILL.md.
+     * space-separated list of tools the skill is pre-approved to use.
+     * Round-trips through SKILL.md.
      */
     allowedTools: text("allowed_tools"),
     /**

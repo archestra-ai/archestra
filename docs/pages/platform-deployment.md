@@ -2076,9 +2076,15 @@ To learn more about enterprise licensing, see the [pricing model](/docs/platform
 
 ### OpenAPPA Tool Guardrails (experimental)
 
-- `ARCHESTRA_LLM_PROXY_PLUGINS`: comma-separated startup allowlist, empty by default. Including `appa` enables OpenAPPA; omitting it disables the integration. No separate enable flag is needed.
-- `ARCHESTRA_OPENAPPA_POLICY_PATH`: absolute deployment TOML path, required when the plugin list includes `appa`.
+- `ARCHESTRA_LLM_PROXY_PLUGINS`: comma-separated startup allowlist, empty by default. Include `appa` to enable OpenAPPA.
+- `ARCHESTRA_OPENAPPA_POLICY_PATH`: absolute deployment TOML path, required when the allowlist includes `appa`.
+- `ARCHESTRA_OPENAPPA_SESSION_HMAC_SECRET`: required for native APPA lifecycle receipts, encrypted wire frames, and checkpoints.
+- `ARCHESTRA_OPENAPPA_APPROVAL_SIGNING_SECRET`: optional signing secret for configured human approval grants.
 
-`ARCHESTRA_BETA` and a policy path alone do not enable OpenAPPA. Restart the backend after changing these settings. Enabling APPA without a policy path fails startup.
-
-With an empty plugin list, existing Tool Guardrails run unchanged. The native APPA runtime and MCP remedy tool remain inactive. When enabled, APPA evaluates tool calls and results; errors fail closed. The existing refusal envelope carries APPA's explanation and remedy text. The special MCP remedy tool is available, but interactive APPA human approval is not integrated. See [the integration setup](https://github.com/archestra-ai/archestra/blob/main/platform/archestra-rs/openappa-rs/README.md) for current limitations.
+Restart the backend after changing these settings. While disabled, existing Tool
+Guardrails run unchanged and the native APPA runtime and MCP remedy tool are
+inactive. While enabled, APPA evaluates calls/results at the same LLM-proxy
+checkpoints; errors fail closed. The existing refusal envelope carries APPA's
+explanation and remedy text. Human approvals and the special MCP remedy tool
+remain available. See [the integration setup](https://github.com/archestra-ai/archestra/blob/main/platform/archestra-rs/openappa-rs/README.md)
+for paired source builds and current limitations.

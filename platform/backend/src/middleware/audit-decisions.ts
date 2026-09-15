@@ -957,6 +957,42 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "authenticated adapter identity mapping",
   },
+  appaProxyApprovalsTable: {
+    audited: false,
+    reason: "approval workflow state; decisions write their own audited event",
+  },
+  appaProxyCallsTable: {
+    audited: false,
+    reason: "durable APPA call correlation ledger",
+  },
+  appaProxyCheckpointBindingsTable: {
+    audited: false,
+    reason: "runtime checkpoint to provider-frame binding",
+  },
+  appaProxyEventsTable: {
+    audited: false,
+    reason: "durable native runtime receipt ledger",
+  },
+  appaProxyHistoryItemsTable: {
+    audited: false,
+    reason: "encrypted opaque client-history fragment",
+  },
+  appaProxyHistoryWindowsTable: {
+    audited: false,
+    reason: "encrypted opaque client-history window",
+  },
+  appaProxySessionsTable: {
+    audited: false,
+    reason: "active native APPA lifecycle state",
+  },
+  appaProxyWireAliasesTable: {
+    audited: false,
+    reason: "single-use native client wire alias",
+  },
+  appaProxyWireFramesTable: {
+    audited: false,
+    reason: "encrypted native provider wire frame",
+  },
 } satisfies Record<keyof typeof schema, AuditDecision>;
 
 /**

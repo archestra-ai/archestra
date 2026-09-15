@@ -4,13 +4,12 @@ import { AppaCodexAdapter } from "./adapters/codex";
 import { AppaOpenCodeAdapter } from "./adapters/opencode";
 import { AppaPluginArchestra } from "./plugin";
 
+/** Creates the configured APPA extension at process startup. */
 export function createAppaLlmProxyPlugin(): AppaPluginArchestra {
-  return new AppaPluginArchestra([
-    // Prefer externally declared client protocols; Chat's trusted loopback marker
-    // is intentionally last so incidental SDK headers keep their native syntax.
-    new AppaClaudeCodeAdapter(),
-    new AppaCodexAdapter(),
-    new AppaOpenCodeAdapter(),
-    new AppaChatAdapter(),
-  ]);
+  const plugin = new AppaPluginArchestra();
+  plugin.registerClientAdapter(new AppaClaudeCodeAdapter());
+  plugin.registerClientAdapter(new AppaCodexAdapter());
+  plugin.registerClientAdapter(new AppaOpenCodeAdapter());
+  plugin.registerClientAdapter(new AppaChatAdapter());
+  return plugin;
 }

@@ -6,191 +6,146 @@ import {
 import config from "@/config";
 import * as database from "@/database";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
-import { processProxyResults } from "./service";
+import {
+  APPA_PARENT_HEADER,
+  APPA_SESSION_HEADER,
+  executeRemedy,
+  sessionFromHeaders,
+} from "./service";
 
 const native = vi.hoisted(() => ({
-  initializeOpenappa: vi.fn(),
   dispatchHook: vi.fn(),
+  initializeOpenappa: vi.fn(),
 }));
+
 vi.mock("@archestra/openappa-rs", () => native);
+
 const session = {
-  organization_id: "org",
-  caller_id: "user:alice",
-  session_id: "conversation",
+  organization_id: "organization",
+  caller_id: "user:caller",
+  session_id: "session",
 };
 
-beforeEach(() => {
-  config.llmProxy.plugins = ["appa"];
-  config.openappa = { policyPath: "/test/policy.toml" };
-  vi.spyOn(database, "getDatabaseConnectionString").mockReturnValue(
-    "postgresql://test:test@localhost/test",
-  );
-  native.dispatchHook.mockImplementation(async (raw: string) => {
-    const event = JSON.parse(raw);
-    return JSON.stringify(
-      event.event === "tool_result"
-        ? {
-            decision: "replace_output",
-            approved_output: "APPA: withheld; remedy offer-123",
-          }
-        : { decision: "ack" },
+describe("OpenAPPA native service", () => {
+  beforeEach(() => {
+    config.llmProxy.plugins = ["appa"];
+    config.openappa = { enabled: true, policyPath: "/policy.toml" };
+    vi.spyOn(database, "getDatabaseConnectionString").mockReturnValue(
+      "postgresql://user:secret@localhost/openappa?schema=public",
+    );
+    native.initializeOpenappa.mockResolvedValue(undefined);
+    native.dispatchHook.mockResolvedValue(
+      JSON.stringify({
+        decision: "mcp_result",
+        result: { content: [{ type: "text", text: "remedy applied" }] },
+      }),
     );
   });
-});
-afterEach(() => {
-  vi.restoreAllMocks();
-  vi.clearAllMocks();
-});
 
-describe("APPA feature boundary", () => {
-  test("does not initialize or dispatch while disabled, even with a configured path", async () => {
-    config.llmProxy.plugins = [];
-    await expect(processProxyResults(session, [])).rejects.toThrow(
-      "OpenAPPA could not safely complete",
-    );
-    expect(native.initializeOpenappa).not.toHaveBeenCalled();
-    expect(native.dispatchHook).not.toHaveBeenCalled();
-    expect(database.getDatabaseConnectionString).not.toHaveBeenCalled();
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.clearAllMocks();
   });
-  test("hides the remedy tool and rejects direct calls without an agent while disabled", async () => {
+
+  test("keeps the remedy tool unavailable while the feature is disabled", async () => {
     config.llmProxy.plugins = [];
     expect(
       getArchestraMcpTools().some((tool) =>
         tool.name.endsWith("__execute_remedy_plan"),
       ),
     ).toBe(false);
+
     await expect(
       executeArchestraTool(
         "archestra__execute_remedy_plan",
-        { offer_id: "offer" },
+        { offer_id: "offer-1" },
         {
           agent: { id: "agent", name: "Assistant" },
-          organizationId: "org",
-          userId: "alice",
-          sessionId: "conversation",
+          organizationId: "organization",
+          userId: "caller",
+          sessionId: "session",
         },
       ),
     ).rejects.toMatchObject({ code: -32601 });
     expect(native.dispatchHook).not.toHaveBeenCalled();
   });
-  test("exposes the remedy tool only when enabled", () => {
+
+  test("exposes and dispatches the remedy tool while enabled", async () => {
     expect(
       getArchestraMcpTools().some((tool) =>
         tool.name.endsWith("__execute_remedy_plan"),
       ),
     ).toBe(true);
-  });
-  test("executes the enabled special MCP remedy through the native binding", async () => {
-    native.dispatchHook.mockResolvedValue(
-      JSON.stringify({
-        decision: "mcp_result",
-        result: { content: [{ type: "text", text: "APPA remedy completed" }] },
-      }),
-    );
-    const result = await executeArchestraTool(
-      "archestra__execute_remedy_plan",
-      { offer_id: "offer" },
-      {
-        agent: { id: "agent", name: "Assistant" },
-        agentId: "agent",
-        organizationId: "org",
-        userId: "alice",
-        sessionId: "conversation",
-        currentToolCallId: "remedy-call",
-      },
-    );
-    expect(result.content).toEqual([
-      { type: "text", text: "APPA remedy completed" },
-    ]);
-    expect(
-      native.dispatchHook.mock.calls.map(([raw]) => JSON.parse(raw).event),
-    ).toEqual(["remedy"]);
+
+    await expect(
+      executeArchestraTool(
+        "archestra__execute_remedy_plan",
+        { offer_id: "offer-1" },
+        {
+          agent: { id: "agent", name: "Assistant" },
+          organizationId: "organization",
+          userId: "caller",
+          sessionId: "session",
+          currentToolCallId: "remedy-call",
+        },
+      ),
+    ).resolves.toEqual({
+      content: [{ type: "text", text: "remedy applied" }],
+    });
   });
 
-  test.each([
-    true,
-    false,
-  ])("preserves APPA remedy feedback and error status without opening Chat prompts (isError=%s)", async (isError) => {
-    const appaResult = {
-      isError,
-      content: [{ type: "text", text: "APPA: authority unreachable" }],
-    };
-    native.dispatchHook.mockResolvedValue(
-      JSON.stringify({ decision: "mcp_result", result: appaResult }),
-    );
-    const elicit = vi.fn();
-    const result = await executeArchestraTool(
-      "archestra__execute_remedy_plan",
-      { offer_id: "human-offer" },
-      {
-        agent: { id: "agent", name: "Assistant" },
-        agentId: "agent",
-        organizationId: "org",
-        userId: "alice",
-        sessionId: "conversation",
-        currentToolCallId: "human-remedy",
-        elicitation: { elicit, setWriter: vi.fn(), createHandler: vi.fn() },
-      },
-    );
-    expect(result).toMatchObject(appaResult);
-    expect(elicit).not.toHaveBeenCalled();
-    expect(
-      native.dispatchHook.mock.calls.map(([raw]) => JSON.parse(raw)),
-    ).toEqual([
-      {
+  test("dispatches an exact remedy operation to the embedded binding", async () => {
+    await expect(
+      executeRemedy(session, "call-1", { offer_id: "offer-1" }),
+    ).resolves.toEqual({
+      content: [{ type: "text", text: "remedy applied" }],
+    });
+
+    expect(native.dispatchHook).toHaveBeenCalledWith(
+      JSON.stringify({
         ...session,
         event: "remedy",
-        operation_id: "remedy:human-remedy",
-        arguments: { offer_id: "human-offer" },
-      },
-    ]);
-  });
-
-  test("admits the first client result without Chat execution reporting", async () => {
-    const result = await processProxyResults(session, [
-      {
-        id: "call",
-        name: "read_file",
-        content: "RAW RESULT",
-        isError: false,
-      },
-    ]);
-    expect(result.toolResultUpdates).toEqual({
-      call: "APPA: withheld; remedy offer-123",
-    });
-    expect(
-      native.dispatchHook.mock.calls.map(([raw]) => JSON.parse(raw)),
-    ).toEqual([
-      { ...session, event: "session_start" },
-      {
-        ...session,
-        event: "tool_result",
-        tool_call_id: "call",
-        output: "RAW RESULT",
-        outcome: "success",
-      },
-    ]);
-  });
-  test("keeps a structured cancellation indeterminate when processing proxy results", async () => {
-    await processProxyResults(session, [
-      {
-        id: "cancelled",
-        name: "read_file",
-        content: "Partial output",
-        isError: true,
-        _meta: {
-          archestraError: { type: "cancelled", message: "Stopped by user" },
-        },
-      },
-    ]);
-    expect(
-      native.dispatchHook.mock.calls.map(([raw]) => JSON.parse(raw)),
-    ).toContainEqual(
-      expect.objectContaining({
-        event: "tool_result",
-        tool_call_id: "cancelled",
-        outcome: "unknown",
+        operation_id: "remedy:call-1",
+        arguments: { offer_id: "offer-1" },
       }),
     );
+  });
+
+  test("does not expose native connection diagnostics", async () => {
+    native.dispatchHook.mockRejectedValue(
+      new Error("postgresql://user:secret@localhost/openappa failed"),
+    );
+
+    await expect(
+      executeRemedy(session, "call-1", { offer_id: "offer-1" }),
+    ).rejects.toMatchObject({
+      statusCode: 503,
+      message: "OpenAPPA could not safely complete this operation",
+    });
+  });
+
+  test("accepts only authenticated, bounded proxy session headers", () => {
+    expect(
+      sessionFromHeaders({
+        headers: {
+          [APPA_SESSION_HEADER.toLowerCase()]: "child-session",
+          [APPA_PARENT_HEADER.toLowerCase()]: "parent-session",
+        },
+        organizationId: "organization",
+        callerId: "user:caller",
+      }),
+    ).toEqual({
+      organization_id: "organization",
+      caller_id: "user:caller",
+      session_id: "child-session",
+      parent_id: "parent-session",
+    });
+
+    expect(() =>
+      sessionFromHeaders({
+        headers: { [APPA_SESSION_HEADER.toLowerCase()]: "child-session" },
+        organizationId: "organization",
+      }),
+    ).toThrow("requires an authenticated");
   });
 });

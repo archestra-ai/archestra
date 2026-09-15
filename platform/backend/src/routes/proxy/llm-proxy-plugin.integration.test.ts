@@ -6,10 +6,7 @@ import {
 } from "fastify-type-provider-zod";
 import { vi } from "vitest";
 import { InteractionModel, ModelModel } from "@/models";
-import {
-  getLlmProxyPluginRegistry,
-  registerLlmProxyPlugin,
-} from "@/proxy/plugins/registry";
+import { getLlmProxyPluginRegistry } from "@/proxy/plugins/registry";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { createOpenAiTestClient } from "@/test/llm-provider-stubs";
 import { openaiAdapterFactory } from "./adapters";
@@ -120,7 +117,7 @@ describe("LLM proxy plugin lifecycle", () => {
     makeAgent,
   }) => {
     const events: string[] = [];
-    const unregister = registerLlmProxyPlugin({
+    const unregister = getLlmProxyPluginRegistry().register({
       id: `test-observer-${crypto.randomUUID()}`,
       async onPrompt() {
         events.push("prompt");
@@ -197,7 +194,7 @@ describe("LLM proxy plugin lifecycle", () => {
     const events: string[] = [];
     let returnInvalidResponse = false;
     let invalidResponse: unknown;
-    const unregister = registerLlmProxyPlugin({
+    const unregister = getLlmProxyPluginRegistry().register({
       id: `test-invalid-response-${crypto.randomUUID()}`,
       async onModelResponse({ response }) {
         events.push("response");
@@ -286,7 +283,7 @@ describe("LLM proxy plugin lifecycle", () => {
     makeAgent,
   }) => {
     const responses: unknown[] = [];
-    const unregister = registerLlmProxyPlugin({
+    const unregister = getLlmProxyPluginRegistry().register({
       id: `test-stream-snapshot-${crypto.randomUUID()}`,
       async onModelResponse({ response }) {
         responses.push(response);
@@ -312,7 +309,7 @@ describe("LLM proxy plugin lifecycle", () => {
     makeAgent,
   }) => {
     const events: string[] = [];
-    const unregister = registerLlmProxyPlugin({
+    const unregister = getLlmProxyPluginRegistry().register({
       id: `test-stream-error-${crypto.randomUUID()}`,
       async onBeforeModel() {
         events.push("before-model");
@@ -354,7 +351,7 @@ describe("LLM proxy plugin lifecycle", () => {
     makeAgent,
   }) => {
     const events: string[] = [];
-    const unregister = registerLlmProxyPlugin({
+    const unregister = getLlmProxyPluginRegistry().register({
       id: `test-error-cleanup-${crypto.randomUUID()}`,
       async onSessionInit() {
         events.push("init");
@@ -408,7 +405,7 @@ describe("LLM proxy plugin lifecycle", () => {
   }) => {
     const events: string[] = [];
     let failOnce = true;
-    const unregister = registerLlmProxyPlugin({
+    const unregister = getLlmProxyPluginRegistry().register({
       id: `test-tool-result-error-${crypto.randomUUID()}`,
       async onSessionInit() {
         events.push("init");
@@ -519,7 +516,7 @@ describe("LLM proxy plugin lifecycle", () => {
         }) as never,
     );
     const events: string[] = [];
-    const unregisterFirst = registerLlmProxyPlugin({
+    const unregisterFirst = getLlmProxyPluginRegistry().register({
       id: `test-rewrite-${crypto.randomUUID()}`,
       async onToolCalls({ toolCalls, resources }) {
         events.push(toolCalls[0]?.name ?? "missing");
@@ -540,7 +537,7 @@ describe("LLM proxy plugin lifecycle", () => {
         };
       },
     });
-    const unregisterSecond = registerLlmProxyPlugin({
+    const unregisterSecond = getLlmProxyPluginRegistry().register({
       id: `test-refusal-${crypto.randomUUID()}`,
       async onToolCalls({ toolCalls }) {
         events.push(toolCalls[0]?.name ?? "missing");

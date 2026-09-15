@@ -47,6 +47,7 @@ import config, {
   parseContentMaxLength,
   parseDatabasePoolMax,
   parseDatabaseStatementTimeoutMillis,
+  parseEmbeddedOpenAppaProxyConfig,
   parseEngineDeniedCidrs,
   parseFileStorageFilesystemRoot,
   parseFileStorageProvider,
@@ -62,7 +63,6 @@ import config, {
   // SPDX-SnippetEnd
   parseK8sResourceQuantity,
   parseKeepAliveTimeoutMs,
-  parseLlmProxyPlugins,
   parseLogFormat,
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -3470,28 +3470,56 @@ describe("parseOtelCaptureContent", () => {
 });
 
 describe("OpenAPPA feature configuration", () => {
-  test("defaults proxy plugins to empty and accepts only the APPA plugin", () => {
-    expect(parseLlmProxyPlugins(undefined)).toEqual([]);
-    expect(parseLlmProxyPlugins(" appa ")).toEqual(["appa"]);
-    expect(() => parseLlmProxyPlugins("unknown")).toThrow(
-      "ARCHESTRA_LLM_PROXY_PLUGINS contains unsupported plugin names",
-    );
-    expect(() => parseLlmProxyPlugins("appa,appa")).toThrow(
-      "ARCHESTRA_LLM_PROXY_PLUGINS must not contain duplicates",
-    );
+  test("activates the durable native proxy lifecycle with required secrets", () => {
+    expect(
+      parseEmbeddedOpenAppaProxyConfig({
+        plugins: ["appa"],
+        policyPath: "/policy.toml",
+        sessionHmacSecret: "s".repeat(32),
+        approvalSigningSecret: "a".repeat(32),
+        nativeCodexEnabled: undefined,
+        nativeSpawnToolMap: '{"Agent":"agent:ops/reviewer"}',
+        maxCallsPerSession: "12",
+        maxSessionsPerOwner: "3",
+        maxStreamBufferBytes: "1024",
+      }),
+    ).toMatchObject({
+      nativeCodexEnabled: true,
+      nativeSpawnToolMap: { Agent: "agent:ops/reviewer" },
+      maxCallsPerSession: 12,
+      maxSessionsPerOwner: 3,
+      maxStreamBufferBytes: 1024,
+    });
   });
 
-  test("accepts an empty plugin list with or without a policy path", () => {
+  test("refuses incomplete embedded native lifecycle configuration", () => {
+    expect(() =>
+      parseEmbeddedOpenAppaProxyConfig({
+        plugins: ["appa"],
+        policyPath: "/policy.toml",
+        sessionHmacSecret: "short",
+        approvalSigningSecret: undefined,
+        nativeCodexEnabled: undefined,
+        nativeSpawnToolMap: undefined,
+        maxCallsPerSession: undefined,
+        maxSessionsPerOwner: undefined,
+        maxStreamBufferBytes: undefined,
+      }),
+    ).toThrow("ARCHESTRA_OPENAPPA_SESSION_HMAC_SECRET");
+  });
+
+  test("does not activate from a policy path or beta flag without the plugin", () => {
     vi.stubEnv("ARCHESTRA_BETA", "true");
-    expect(parseOpenAppaConfig([], undefined)).toEqual({
-      policyPath: undefined,
-    });
     expect(parseOpenAppaConfig([], "/policy.toml")).toEqual({
+      enabled: false,
       policyPath: "/policy.toml",
     });
+    vi.unstubAllEnvs();
   });
-  test("requires a policy path when the plugin list includes APPA", () => {
-    expect(parseOpenAppaConfig(["appa"], " /policy.toml ")).toEqual({
+  test("requires a policy path only for explicit activation", () => {
+    expect(parseOpenAppaConfig([], undefined).enabled).toBe(false);
+    expect(parseOpenAppaConfig(["appa"], "/policy.toml")).toEqual({
+      enabled: true,
       policyPath: "/policy.toml",
     });
     for (const path of [undefined, "", "   "]) {
@@ -3499,5 +3527,19 @@ describe("OpenAPPA feature configuration", () => {
         "ARCHESTRA_OPENAPPA_POLICY_PATH is required",
       );
     }
+  });
+
+  test("retains non-empty native APPA signing secrets", () => {
+    expect(
+      parseOpenAppaConfig(
+        ["appa"],
+        "/policy.toml",
+        " approval-secret ",
+        " session-secret ",
+      ),
+    ).toMatchObject({
+      approvalSigningSecret: "approval-secret",
+      sessionHmacSecret: "session-secret",
+    });
   });
 });

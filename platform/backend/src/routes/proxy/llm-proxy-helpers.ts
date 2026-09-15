@@ -172,6 +172,7 @@ export function planDispatchModeToolCallRewrites(params: {
   toolCalls: AccumulatedToolCall[];
   enabledToolNames: Set<string>;
   canonicalizeToolName?: ToolNameCanonicalizer;
+  preserveDirectToolCall?: (toolName: string) => boolean;
 }): AccumulatedToolCall[] | null {
   const { toolCalls, enabledToolNames } = params;
   const canonicalizeToolName = params.canonicalizeToolName ?? ((name) => name);
@@ -190,6 +191,7 @@ export function planDispatchModeToolCallRewrites(params: {
     // be wrapped a second time).
     if (
       isAlwaysDirectlyCallableBuiltIn(canonicalName) ||
+      params.preserveDirectToolCall?.(toolCall.name) ||
       enabledToolNames.has(canonicalName)
     ) {
       return toolCall;

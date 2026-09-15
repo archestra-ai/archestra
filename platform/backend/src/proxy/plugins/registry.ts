@@ -9,9 +9,12 @@ import type {
 /**
  * Public extension contract for cross-cutting LLM proxy behavior.
  *
- * Plugins observe only proxy request/response boundaries. They never imply
- * that a client executed a tool or that the proxy owns a client-side session.
+ * Plugins run in registration order. A tool-call refusal or hold stops later
+ * plugins for that event. Any callback error fails the request closed; abort
+ * callbacks then run in reverse registration order for every initialized
+ * plugin.
  */
+
 export type LlmProxyRequestContext = {
   requestId: string;
   organizationId: string;
@@ -19,11 +22,22 @@ export type LlmProxyRequestContext = {
   userId?: string;
   provider: string;
   interactionType: string;
-  model: string;
   streaming: boolean;
+  protocol: string;
+  model: string;
   headers: Readonly<Record<string, string | string[] | undefined>>;
   requestBody: unknown;
+  session: {
+    id: string;
+    parentId?: string;
+    binding?: string;
+  };
+  /**
+   * Server-owned, request-local values keyed by plugin id. A plugin may consume
+   * only its own value; values never cross the proxy's public boundary.
+   */
   resources: Map<PropertyKey, unknown>;
+  signal?: AbortSignal;
 };
 
 export type LlmProxyPromptContext = LlmProxyRequestContext & {
@@ -34,22 +48,22 @@ export type LlmProxyBeforeModelContext = LlmProxyRequestContext & {
   request: unknown;
 };
 
-/**
- * Provider-neutral tool calls retain parsed arguments when an adapter already
- * has them. Plugins must support either representation; the handler serializes
- * them only when it returns to a provider-specific response adapter.
- */
-type LlmProxyToolCall = {
+export type LlmProxyToolCall = {
   id: string;
   name: string;
   arguments: string | Record<string, unknown>;
+  target?: {
+    name: string;
+    arguments: unknown;
+  };
+  isChildSpawn?: boolean;
 };
 
 export type LlmProxyToolCallsContext = LlmProxyRequestContext & {
   toolCalls: readonly LlmProxyToolCall[];
+  response?: unknown;
 };
 
-/** A plugin-provided tool-call refusal rendered by the proxy's adapters. */
 export type LlmProxyToolCallRefusal = {
   refusalMessage: string;
   contentMessage: string;
@@ -62,12 +76,20 @@ export type LlmProxyToolCallRefusal = {
 
 export type LlmProxyToolCallsOutcome =
   | { decision: "allow"; toolCalls: readonly LlmProxyToolCall[] }
-  | { decision: "refuse"; refusal: LlmProxyToolCallRefusal };
+  | {
+      decision: "refuse";
+      refusal: LlmProxyToolCallRefusal;
+    };
 
 export type LlmProxyToolResult = CommonToolResult;
 
 export type LlmProxyToolResultsContext = LlmProxyRequestContext & {
   toolResults: readonly LlmProxyToolResult[];
+};
+
+export type LlmProxyToolResultsOutcome = {
+  toolResultUpdates: Readonly<Record<string, string>>;
+  contextTrust?: LlmProxyContextTrust;
 };
 
 export type LlmProxyContextTrust = {
@@ -76,14 +98,24 @@ export type LlmProxyContextTrust = {
   unsafeContextBoundary: UnsafeContextBoundary | undefined;
 };
 
-/**
- * Uses the request adapter's existing provider-wire update path. Later plugins
- * receive the cumulative updates from earlier plugins in registration order.
- */
-export type LlmProxyToolResultsOutcome = {
-  toolResultUpdates: Readonly<Record<string, string>>;
-  /** The final plugin-provided context trust decision, if one was made. */
-  contextTrust?: LlmProxyContextTrust;
+export type LlmProxyTurnEndContext = LlmProxyRequestContext & {
+  response?: unknown;
+  resultText?: string;
+  error?: unknown;
+  awaitClientContinuation?: boolean;
+  /** A durable continuation is owned by another proxy component. */
+  deferCleanup?: boolean;
+  beforeResponseRelease?: () => Promise<void>;
+};
+
+export type LlmProxyChildContext = LlmProxyRequestContext & {
+  /**
+   * A verified child proxy turn, not evidence that a client executed the child.
+   * The proxy emits start/end around the observed request/response boundary.
+   */
+  childSessionId: string;
+  binding?: string;
+  result?: unknown;
 };
 
 export type LlmProxyModelResponseContext = LlmProxyRequestContext & {
@@ -109,11 +141,10 @@ export interface LlmProxyPlugin {
   onToolResults?(
     context: LlmProxyToolResultsContext,
   ): Promise<LlmProxyToolResultsOutcome | undefined>;
-  /**
-   * Runs before a non-streaming response is released. Streaming responses are
-   * observable only after their already-forwarded chunks are assembled; returned
-   * replacements are ignored when context.streaming is true.
-   */
+  onTurnEnd?(context: LlmProxyTurnEndContext): Promise<void>;
+  onChildStart?(context: LlmProxyChildContext): Promise<void>;
+  onChildEnd?(context: LlmProxyChildContext): Promise<void>;
+  onAbort?(context: LlmProxyRequestContext): Promise<void>;
   onModelResponse?(
     context: LlmProxyModelResponseContext,
   ): Promise<{ response: unknown } | undefined>;
@@ -122,7 +153,7 @@ export interface LlmProxyPlugin {
   onCleanup?(context: LlmProxyRequestContext): Promise<void>;
 }
 
-class LlmProxyPluginError extends Error {
+export class LlmProxyPluginError extends Error {
   readonly pluginId: string;
   readonly phase: string;
 
@@ -136,7 +167,7 @@ class LlmProxyPluginError extends Error {
   }
 }
 
-/** Ordered, fail-closed lifecycle registry for proxy extensions. */
+/** Minimal ordered registry for the LLM proxy's request lifecycle. */
 export class LlmProxyPluginRegistry {
   private readonly plugins: LlmProxyPlugin[] = [];
   private readonly sessions = new Map<string, LlmProxyPlugin[]>();
@@ -164,13 +195,18 @@ export class LlmProxyPluginRegistry {
     return this.plugins.length > 0;
   }
 
+  getPlugin<T extends LlmProxyPlugin>(id: string): T | undefined {
+    return this.plugins.find((plugin) => plugin.id === id) as T | undefined;
+  }
+
   async onSessionInit(context: LlmProxyRequestContext): Promise<void> {
     if (!this.hasPlugins()) return;
     if (this.sessions.has(context.requestId)) {
       throw new Error(
-        `LLM proxy request ${context.requestId} is already active`,
+        `LLM proxy session ${context.requestId} is already active`,
       );
     }
+
     const initialized: LlmProxyPlugin[] = [];
     this.sessions.set(context.requestId, initialized);
     try {
@@ -180,7 +216,10 @@ export class LlmProxyPluginRegistry {
       }
     } catch (error) {
       try {
-        await this.cleanup(context, initialized);
+        await this.abortInitialized(context, initialized);
+      } catch {
+        // Initialization is the primary failure. Abort is best-effort here,
+        // but always releases registry state for a later request with this id.
       } finally {
         this.sessions.delete(context.requestId);
       }
@@ -209,17 +248,13 @@ export class LlmProxyPluginRegistry {
       toolCalls: context.toolCalls,
     };
     for (const plugin of this.getSessionPlugins(context)) {
-      const result: LlmProxyToolCallsOutcome | undefined = await this.invoke(
-        plugin,
-        "onToolCalls",
-        {
-          ...context,
-          toolCalls: outcome.toolCalls,
-        },
-      );
+      const result = (await this.invoke(plugin, "onToolCalls", {
+        ...context,
+        toolCalls: outcome.toolCalls,
+      })) as LlmProxyToolCallsOutcome | undefined;
       if (!result) continue;
       outcome = result;
-      if (outcome.decision === "refuse") return outcome;
+      if (outcome.decision !== "allow") return outcome;
     }
     return outcome;
   }
@@ -232,10 +267,10 @@ export class LlmProxyPluginRegistry {
     let toolResults = context.toolResults;
     let contextTrust: LlmProxyContextTrust | undefined;
     for (const plugin of this.getSessionPlugins(context)) {
-      const result = await this.invoke(plugin, "onToolResults", {
+      const result = (await this.invoke(plugin, "onToolResults", {
         ...context,
         toolResults,
-      });
+      })) as LlmProxyToolResultsOutcome | undefined;
       if (!result) continue;
       Object.assign(updates, result.toolResultUpdates);
       if (result.contextTrust) contextTrust = result.contextTrust;
@@ -250,16 +285,53 @@ export class LlmProxyPluginRegistry {
     };
   }
 
+  async onTurnEnd(context: LlmProxyTurnEndContext): Promise<void> {
+    if (!this.hasPlugins()) return;
+    const plugins = this.getSessionPlugins(context);
+    try {
+      for (const plugin of plugins) {
+        await this.invoke(plugin, "onTurnEnd", context);
+      }
+    } catch (error) {
+      try {
+        await this.abortInitialized(context, plugins);
+      } catch {
+        // The turn-end failure remains the request failure.
+      } finally {
+        this.sessions.delete(context.requestId);
+      }
+      throw error;
+    }
+  }
+
+  async onChildStart(context: LlmProxyChildContext): Promise<void> {
+    await this.dispatch(context, "onChildStart");
+  }
+
+  async onChildEnd(context: LlmProxyChildContext): Promise<void> {
+    await this.dispatch(context, "onChildEnd");
+  }
+
+  async onAbort(context: LlmProxyRequestContext): Promise<void> {
+    const plugins = this.sessions.get(context.requestId);
+    if (!plugins) return;
+    try {
+      await this.abortInitialized(context, plugins);
+    } finally {
+      this.sessions.delete(context.requestId);
+    }
+  }
+
   async onModelResponse(
     context: LlmProxyModelResponseContext,
   ): Promise<unknown> {
     if (!this.hasPlugins()) return context.response;
     let response = context.response;
     for (const plugin of this.getSessionPlugins(context)) {
-      const result = await this.invoke(plugin, "onModelResponse", {
+      const result = (await this.invoke(plugin, "onModelResponse", {
         ...context,
         response,
-      });
+      })) as { response: unknown } | undefined;
       if (result) response = result.response;
     }
     return response;
@@ -268,39 +340,54 @@ export class LlmProxyPluginRegistry {
   async complete(context: LlmProxyCompleteContext): Promise<void> {
     if (!this.hasPlugins()) return;
     const plugins = this.getSessionPlugins(context);
+    let primaryError: unknown;
     try {
-      for (const plugin of plugins) {
+      for (const plugin of plugins)
         await this.invoke(plugin, "onComplete", context);
-      }
+    } catch (error) {
+      primaryError = error;
     } finally {
       try {
         await this.cleanup(context, plugins);
+      } catch (cleanupError) {
+        if (!primaryError) primaryError = cleanupError;
       } finally {
         this.sessions.delete(context.requestId);
       }
     }
+    if (primaryError) throw primaryError;
   }
 
   async fail(context: LlmProxyErrorContext): Promise<void> {
     if (!this.hasPlugins()) return;
     const plugins = this.sessions.get(context.requestId);
     if (!plugins) return;
+    let primaryError: unknown;
     try {
-      for (const plugin of plugins) {
+      for (const plugin of plugins)
         await this.invoke(plugin, "onError", context);
-      }
+    } catch (error) {
+      primaryError = error;
     } finally {
       try {
         await this.cleanup(context, plugins);
+      } catch (cleanupError) {
+        if (!primaryError) primaryError = cleanupError;
       } finally {
         this.sessions.delete(context.requestId);
       }
     }
+    if (primaryError) throw primaryError;
   }
 
   private async dispatch<
     TContext extends LlmProxyRequestContext,
-    TPhase extends "onPrompt" | "onBeforeModel",
+    TPhase extends
+      | "onPrompt"
+      | "onBeforeModel"
+      | "onTurnEnd"
+      | "onChildStart"
+      | "onChildEnd",
   >(context: TContext, phase: TPhase): Promise<void> {
     for (const plugin of this.getSessionPlugins(context)) {
       await this.invoke(plugin, phase, context);
@@ -308,11 +395,26 @@ export class LlmProxyPluginRegistry {
   }
 
   private getSessionPlugins(context: LlmProxyRequestContext): LlmProxyPlugin[] {
-    if (!this.hasPlugins()) return [];
     const plugins = this.sessions.get(context.requestId);
-    if (!plugins)
-      throw new Error(`LLM proxy request ${context.requestId} is not active`);
+    if (!plugins) {
+      throw new Error(`LLM proxy session ${context.requestId} is not active`);
+    }
     return plugins;
+  }
+
+  private async abortInitialized(
+    context: LlmProxyRequestContext,
+    plugins: readonly LlmProxyPlugin[],
+  ): Promise<void> {
+    let firstError: unknown;
+    for (const plugin of [...plugins].reverse()) {
+      try {
+        await this.invoke(plugin, "onAbort", context);
+      } catch (error) {
+        firstError ??= error;
+      }
+    }
+    if (firstError) throw firstError;
   }
 
   private async cleanup(
@@ -336,25 +438,6 @@ export class LlmProxyPluginRegistry {
     if (firstError) throw firstError;
   }
 
-  private async invoke(
-    plugin: LlmProxyPlugin,
-    phase: "onToolCalls",
-    context: LlmProxyToolCallsContext,
-  ): Promise<LlmProxyToolCallsOutcome | undefined>;
-  private async invoke(
-    plugin: LlmProxyPlugin,
-    phase: "onToolResults",
-    context: LlmProxyToolResultsContext,
-  ): Promise<LlmProxyToolResultsOutcome | undefined>;
-  private async invoke(
-    plugin: LlmProxyPlugin,
-    phase: "onModelResponse",
-    context: LlmProxyModelResponseContext,
-  ): Promise<{ response: unknown } | undefined>;
-  private async invoke<
-    TPhase extends keyof LlmProxyPlugin,
-    TContext extends LlmProxyRequestContext,
-  >(plugin: LlmProxyPlugin, phase: TPhase, context: TContext): Promise<unknown>;
   private async invoke<
     TPhase extends keyof LlmProxyPlugin,
     TContext extends LlmProxyRequestContext,
@@ -381,8 +464,7 @@ const EMPTY_TOOL_RESULTS_OUTCOME: LlmProxyToolResultsOutcome = {
   toolResultUpdates: {},
 };
 
-/** @public — test-only loader injection verifies startup retry semantics. */
-export class LlmProxyPluginInitializer {
+class LlmProxyPluginInitializer {
   private initialization: Promise<void> | undefined;
 
   constructor(
@@ -392,56 +474,40 @@ export class LlmProxyPluginInitializer {
 
   initialize(): Promise<void> {
     if (this.initialization) return this.initialization;
-
-    const initialization = this.loadAndRegister();
+    const initialization = this.loadPlugins().then((plugins) =>
+      this.registry.registerAll(plugins),
+    );
     this.initialization = initialization;
-    // Keep the caller's rejection intact while allowing a later startup attempt
-    // to retry instead of permanently retaining this rejected promise.
     void initialization.catch(() => {
-      if (this.initialization === initialization) {
+      if (this.initialization === initialization)
         this.initialization = undefined;
-      }
     });
     return initialization;
-  }
-
-  private async loadAndRegister(): Promise<void> {
-    const plugins = await this.loadPlugins();
-    this.registry.registerAll(plugins);
   }
 }
 
 const defaultLlmProxyPluginInitializer = new LlmProxyPluginInitializer(
   defaultLlmProxyPluginRegistry,
-  loadConfiguredLlmProxyPlugins,
+  async () => {
+    const plugins: LlmProxyPlugin[] = [];
+    for (const pluginName of config.llmProxy.plugins) {
+      if (pluginName === "appa") {
+        const { createAppaLlmProxyPlugin } = await import(
+          "./appa-plugin-archestra"
+        );
+        plugins.push(createAppaLlmProxyPlugin());
+      }
+    }
+    return plugins;
+  },
 );
 
-/** Loads and registers the deployment's allowlisted proxy plugins once at startup. */
+/** Loads the configured allowlist once per process, retrying failed attempts. */
 export function initializeLlmProxyPlugins(): Promise<void> {
   return defaultLlmProxyPluginInitializer.initialize();
-}
-
-/** @public — test-only registration verifies generic lifecycle behavior. */
-export function registerLlmProxyPlugin(plugin: LlmProxyPlugin): () => void {
-  return defaultLlmProxyPluginRegistry.register(plugin);
 }
 
 /** Returns the proxy's process-wide plugin registry. */
 export function getLlmProxyPluginRegistry(): LlmProxyPluginRegistry {
   return defaultLlmProxyPluginRegistry;
-}
-
-async function loadConfiguredLlmProxyPlugins(): Promise<
-  readonly LlmProxyPlugin[]
-> {
-  const plugins: LlmProxyPlugin[] = [];
-  for (const pluginName of config.llmProxy.plugins) {
-    if (pluginName === "appa") {
-      const { createAppaLlmProxyPlugin } = await import(
-        "./appa-plugin-archestra"
-      );
-      plugins.push(createAppaLlmProxyPlugin());
-    }
-  }
-  return plugins;
 }

@@ -23,7 +23,7 @@ export type LlmProxyRequestContext = {
   streaming: boolean;
   headers: Readonly<Record<string, string | string[] | undefined>>;
   requestBody: unknown;
-  resources: Map<string, unknown>;
+  resources: Map<PropertyKey, unknown>;
 };
 
 export type LlmProxyPromptContext = LlmProxyRequestContext & {
@@ -142,14 +142,22 @@ export class LlmProxyPluginRegistry {
   private readonly sessions = new Map<string, LlmProxyPlugin[]>();
 
   register(plugin: LlmProxyPlugin): () => void {
-    if (this.plugins.some((candidate) => candidate.id === plugin.id)) {
-      throw new Error(`LLM proxy plugin ${plugin.id} is already registered`);
-    }
-    this.plugins.push(plugin);
+    this.registerAll([plugin]);
     return () => {
       const index = this.plugins.indexOf(plugin);
       if (index >= 0) this.plugins.splice(index, 1);
     };
+  }
+
+  registerAll(plugins: readonly LlmProxyPlugin[]): void {
+    const ids = new Set(this.plugins.map((plugin) => plugin.id));
+    for (const plugin of plugins) {
+      if (ids.has(plugin.id)) {
+        throw new Error(`LLM proxy plugin ${plugin.id} is already registered`);
+      }
+      ids.add(plugin.id);
+    }
+    this.plugins.push(...plugins);
   }
 
   hasPlugins(): boolean {
@@ -372,21 +380,45 @@ const defaultLlmProxyPluginRegistry = new LlmProxyPluginRegistry();
 const EMPTY_TOOL_RESULTS_OUTCOME: LlmProxyToolResultsOutcome = {
   toolResultUpdates: {},
 };
-let configuredPlugins: Promise<void> | undefined;
+
+/** @public — test-only loader injection verifies startup retry semantics. */
+export class LlmProxyPluginInitializer {
+  private initialization: Promise<void> | undefined;
+
+  constructor(
+    private readonly registry: LlmProxyPluginRegistry,
+    private readonly loadPlugins: () => Promise<readonly LlmProxyPlugin[]>,
+  ) {}
+
+  initialize(): Promise<void> {
+    if (this.initialization) return this.initialization;
+
+    const initialization = this.loadAndRegister();
+    this.initialization = initialization;
+    // Keep the caller's rejection intact while allowing a later startup attempt
+    // to retry instead of permanently retaining this rejected promise.
+    void initialization.catch(() => {
+      if (this.initialization === initialization) {
+        this.initialization = undefined;
+      }
+    });
+    return initialization;
+  }
+
+  private async loadAndRegister(): Promise<void> {
+    const plugins = await this.loadPlugins();
+    this.registry.registerAll(plugins);
+  }
+}
+
+const defaultLlmProxyPluginInitializer = new LlmProxyPluginInitializer(
+  defaultLlmProxyPluginRegistry,
+  loadConfiguredLlmProxyPlugins,
+);
 
 /** Loads and registers the deployment's allowlisted proxy plugins once at startup. */
 export function initializeLlmProxyPlugins(): Promise<void> {
-  configuredPlugins ??= (async () => {
-    for (const pluginName of config.llmProxy.plugins) {
-      if (pluginName === "appa") {
-        const { createAppaLlmProxyPlugin } = await import(
-          "./appa-plugin-archestra"
-        );
-        defaultLlmProxyPluginRegistry.register(createAppaLlmProxyPlugin());
-      }
-    }
-  })();
-  return configuredPlugins;
+  return defaultLlmProxyPluginInitializer.initialize();
 }
 
 /** @public — test-only registration verifies generic lifecycle behavior. */
@@ -397,4 +429,19 @@ export function registerLlmProxyPlugin(plugin: LlmProxyPlugin): () => void {
 /** Returns the proxy's process-wide plugin registry. */
 export function getLlmProxyPluginRegistry(): LlmProxyPluginRegistry {
   return defaultLlmProxyPluginRegistry;
+}
+
+async function loadConfiguredLlmProxyPlugins(): Promise<
+  readonly LlmProxyPlugin[]
+> {
+  const plugins: LlmProxyPlugin[] = [];
+  for (const pluginName of config.llmProxy.plugins) {
+    if (pluginName === "appa") {
+      const { createAppaLlmProxyPlugin } = await import(
+        "./appa-plugin-archestra"
+      );
+      plugins.push(createAppaLlmProxyPlugin());
+    }
+  }
+  return plugins;
 }

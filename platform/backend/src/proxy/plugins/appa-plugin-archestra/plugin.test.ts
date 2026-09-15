@@ -1,8 +1,12 @@
-import { describe, expect, test } from "@/test";
+import * as appaService from "@/openappa/service";
+import type { LlmProxyRequestContext } from "@/proxy/plugins/registry";
+import { describe, expect, test, vi } from "@/test";
 import { AppaChatAdapter } from "./adapters/chat";
 import { AppaClaudeCodeAdapter } from "./adapters/claude-code";
 import { AppaCodexAdapter } from "./adapters/codex";
 import { AppaOpenCodeAdapter } from "./adapters/opencode";
+import { AppaPluginArchestra } from "./plugin";
+import { APPA_PLUGIN_TRUSTED_CONTEXT } from "./types";
 
 describe("APPA client adapters", () => {
   test("maps each integrated client to its real local tool namespace", () => {
@@ -65,3 +69,113 @@ describe("APPA client adapters", () => {
     expect(claudeCode.classifyToolName("Bash")).toBe("local");
   });
 });
+
+describe("AppaPluginArchestra", () => {
+  test("keeps bindings private to each request and deletes them at cleanup", async () => {
+    const canonicalizedNames: string[] = [];
+    const checkToolCalls = vi
+      .spyOn(appaService, "checkToolCalls")
+      .mockImplementation(async (_session, _calls, canonicalize) => {
+        canonicalizedNames.push(canonicalize("read_file"));
+        return null;
+      });
+    const plugin = new AppaPluginArchestra([
+      {
+        id: "test-adapter",
+        matches: () => true,
+        classifyToolName: () => "local",
+        normalizeLocalToolName: (name) => `local:${name}`,
+      },
+    ]);
+    const first = requestContext({
+      sessionId: "first-session",
+      canonicalizeToolName: (name) => `first:${name}`,
+    });
+    const second = requestContext({
+      sessionId: "second-session",
+      canonicalizeToolName: (name) => `second:${name}`,
+    });
+
+    try {
+      await plugin.onSessionInit(first);
+      await plugin.onSessionInit(second);
+      // These were private map keys before the binding moved into the plugin.
+      // A later plugin can still mutate shared resources, but cannot replace
+      // APPA's selected adapter or session binding.
+      first.resources.set("archestra.appa.binding", {
+        canonicalizeToolName: () => "overwritten",
+      });
+      first.resources.set("archestra.appa.adapter", {
+        classifyToolName: () => "gateway",
+      });
+      first.resources.set(APPA_PLUGIN_TRUSTED_CONTEXT, {
+        session: {
+          organization_id: "other-organization",
+          caller_id: "user:other",
+          session_id: "other-session",
+        },
+        profileId: "other-profile",
+        canonicalizeToolName: () => "overwritten",
+      });
+
+      await plugin.onToolCalls({
+        ...first,
+        toolCalls: [{ id: "first-call", name: "read_file", arguments: {} }],
+      });
+      await plugin.onToolCalls({
+        ...second,
+        toolCalls: [{ id: "second-call", name: "read_file", arguments: {} }],
+      });
+
+      expect(canonicalizedNames).toEqual([
+        "first:local:read_file",
+        "second:local:read_file",
+      ]);
+      expect(
+        checkToolCalls.mock.calls.map(([session]) => session.session_id),
+      ).toEqual(["first-session", "second-session"]);
+
+      await plugin.onCleanup(first);
+      await expect(
+        plugin.onToolCalls({
+          ...first,
+          toolCalls: [{ id: "cleaned-call", name: "read_file", arguments: {} }],
+        }),
+      ).resolves.toBeUndefined();
+      expect(checkToolCalls).toHaveBeenCalledTimes(2);
+    } finally {
+      checkToolCalls.mockRestore();
+    }
+  });
+});
+
+function requestContext(params: {
+  sessionId: string;
+  canonicalizeToolName: (name: string) => string;
+}): LlmProxyRequestContext {
+  return {
+    requestId: params.sessionId,
+    organizationId: "organization",
+    profileId: "profile",
+    provider: "anthropic",
+    interactionType: "anthropic:messages",
+    model: "model",
+    streaming: false,
+    headers: {},
+    requestBody: {},
+    resources: new Map([
+      [
+        APPA_PLUGIN_TRUSTED_CONTEXT,
+        {
+          session: {
+            organization_id: "organization",
+            caller_id: "user:user",
+            session_id: params.sessionId,
+          },
+          profileId: "profile",
+          canonicalizeToolName: params.canonicalizeToolName,
+        },
+      ],
+    ]),
+  };
+}

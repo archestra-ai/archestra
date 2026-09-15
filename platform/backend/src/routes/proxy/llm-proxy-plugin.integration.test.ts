@@ -19,7 +19,11 @@ describe("LLM proxy plugin lifecycle", () => {
   let app: FastifyInstance;
 
   beforeEach(async () => {
-    app = Fastify().withTypeProvider<ZodTypeProvider>();
+    app = Fastify({
+      // A failed lifecycle must release the request id so a later request can
+      // reuse it without inheriting stale plugin state.
+      genReqId: () => "plugin-test-request",
+    }).withTypeProvider<ZodTypeProvider>();
     app.setValidatorCompiler(validatorCompiler);
     app.setSerializerCompiler(serializerCompiler);
     vi.spyOn(openaiAdapterFactory, "createClient").mockImplementation(
@@ -229,6 +233,79 @@ describe("LLM proxy plugin lifecycle", () => {
       expect(response.statusCode, response.body).toBeGreaterThanOrEqual(400);
       await new Promise((resolve) => setTimeout(resolve, 25));
       expect(events).toEqual(["before-model", "error", "cleanup"]);
+    } finally {
+      unregister();
+    }
+  });
+
+  test("cleans an initialized tool-result hook failure before invoking the provider", async ({
+    makeAgent,
+  }) => {
+    const events: string[] = [];
+    let failOnce = true;
+    const unregister = registerLlmProxyPlugin({
+      id: `test-tool-result-error-${crypto.randomUUID()}`,
+      async onSessionInit() {
+        events.push("init");
+      },
+      async onToolResults() {
+        events.push("tool-results");
+        if (failOnce) {
+          failOnce = false;
+          throw new Error("tool results unavailable");
+        }
+      },
+      async onError() {
+        events.push("error");
+      },
+      async onCleanup() {
+        events.push("cleanup");
+      },
+    });
+    const agent = await makeAgent({ agentType: "llm_proxy", isDefault: true });
+
+    try {
+      const failed = await app.inject({
+        method: "POST",
+        url: `/v1/openai/${agent.id}/chat/completions`,
+        headers: {
+          authorization: "Bearer test-key",
+          "content-type": "application/json",
+        },
+        payload: {
+          model: "gpt-4o",
+          messages: [{ role: "user", content: "hello" }],
+        },
+      });
+
+      expect(failed.statusCode, failed.body).toBeGreaterThanOrEqual(400);
+      expect(openaiAdapterFactory.createClient).not.toHaveBeenCalled();
+      expect(events).toEqual(["init", "tool-results", "error", "cleanup"]);
+
+      const retried = await app.inject({
+        method: "POST",
+        url: `/v1/openai/${agent.id}/chat/completions`,
+        headers: {
+          authorization: "Bearer test-key",
+          "content-type": "application/json",
+        },
+        payload: {
+          model: "gpt-4o",
+          messages: [{ role: "user", content: "hello" }],
+        },
+      });
+
+      expect(retried.statusCode, retried.body).toBe(200);
+      expect(openaiAdapterFactory.createClient).toHaveBeenCalledTimes(1);
+      expect(events).toEqual([
+        "init",
+        "tool-results",
+        "error",
+        "cleanup",
+        "init",
+        "tool-results",
+        "cleanup",
+      ]);
     } finally {
       unregister();
     }

@@ -1,6 +1,8 @@
 import type { AppaChatSource, OpenAppaSession } from "@/openappa/service";
 
-export const APPA_PLUGIN_TRUSTED_CONTEXT = "archestra.appa.trusted-context";
+export const APPA_PLUGIN_TRUSTED_CONTEXT: unique symbol = Symbol(
+  "archestra.appa.trusted-context",
+);
 
 export type AppaTrustedContext = {
   /** Established by the proxy after authentication and session-root validation. */

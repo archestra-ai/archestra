@@ -302,6 +302,7 @@ export async function handleLLMProxy<
   const pluginRegistry = getLlmProxyPluginRegistry();
   const hasProxyPlugins = pluginRegistry.hasPlugins();
   let pluginContext: LlmProxyRequestContext | undefined;
+  let pluginSessionInitialized = false;
 
   // Extract header-based context
   const headersForExtraction = headers as Record<
@@ -1114,6 +1115,7 @@ export async function handleLLMProxy<
         });
       }
       await pluginRegistry.onSessionInit(pluginContext);
+      pluginSessionInitialized = true;
       pluginToolResultsOutcome = await pluginRegistry.onToolResults({
         ...pluginContext,
         toolResults: requestAdapter.getToolResults(),
@@ -1471,8 +1473,9 @@ export async function handleLLMProxy<
     return await handleNonStreaming(client, finalRequest, reply, provider, ctx);
   } catch (error) {
     let lifecycleError = error;
-    if (pluginContext) {
+    if (pluginContext && pluginSessionInitialized) {
       try {
+        pluginSessionInitialized = false;
         await pluginRegistry.fail({ ...pluginContext, error });
       } catch (pluginError) {
         lifecycleError = pluginError;

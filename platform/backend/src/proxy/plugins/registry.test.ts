@@ -1,6 +1,7 @@
 import { describe, expect, test, vi } from "@/test";
 import {
   type LlmProxyPlugin,
+  LlmProxyPluginInitializer,
   LlmProxyPluginRegistry,
   type LlmProxyRequestContext,
 } from "./registry";
@@ -92,6 +93,62 @@ describe("LlmProxyPluginRegistry", () => {
       },
     });
     expect(events).toEqual(["first", "deny"]);
+  });
+
+  test("does not partially register a plugin batch when validation fails", async () => {
+    const registry = new LlmProxyPluginRegistry();
+    const events: string[] = [];
+    registry.register({
+      id: "existing",
+      async onSessionInit() {
+        events.push("existing");
+      },
+    });
+
+    expect(() =>
+      registry.registerAll([
+        {
+          id: "new",
+          async onSessionInit() {
+            events.push("new");
+          },
+        },
+        { id: "existing" },
+      ]),
+    ).toThrow("LLM proxy plugin existing is already registered");
+
+    await registry.onSessionInit(requestContext());
+    expect(events).toEqual(["existing"]);
+  });
+
+  test("retries failed plugin loading and coalesces concurrent attempts", async () => {
+    const registry = new LlmProxyPluginRegistry();
+    const events: string[] = [];
+    let attempts = 0;
+    const initializer = new LlmProxyPluginInitializer(registry, async () => {
+      attempts += 1;
+      if (attempts === 1) throw new Error("plugin module unavailable");
+      return [
+        {
+          id: "loaded-plugin",
+          async onSessionInit() {
+            events.push("initialized");
+          },
+        },
+      ];
+    });
+
+    const first = initializer.initialize();
+    const concurrentFirst = initializer.initialize();
+    expect(attempts).toBe(1);
+    await expect(first).rejects.toThrow("plugin module unavailable");
+    await expect(concurrentFirst).rejects.toThrow("plugin module unavailable");
+    expect(registry.hasPlugins()).toBe(false);
+
+    await Promise.all([initializer.initialize(), initializer.initialize()]);
+    expect(attempts).toBe(2);
+    await registry.onSessionInit(requestContext());
+    expect(events).toEqual(["initialized"]);
   });
 
   test("chains tool and response transformations in registration order", async () => {

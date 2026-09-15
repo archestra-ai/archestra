@@ -27,12 +27,14 @@ import {
 
 export function RuntimeCredentialConnectionDialog({
   definition,
+  description,
   scope,
   useExternalSecretsManager = false,
   onClose,
   onConnected,
 }: {
   definition: RuntimeCredentialDefinition;
+  description?: string;
   scope: "personal" | "organization";
   useExternalSecretsManager?: boolean;
   onClose: () => void;
@@ -70,7 +72,12 @@ export function RuntimeCredentialConnectionDialog({
           if (!open) onClose();
         }}
         title="Connect GitHub"
-        description="Connect your GitHub account to use it with your agents."
+        description={
+          <span className="whitespace-pre-wrap break-words">
+            {description?.trim() ||
+              "Connect your GitHub account to use it with your agents."}
+          </span>
+        }
         action={
           <GitHubConnectButton
             pending={startGitHub.isPending}

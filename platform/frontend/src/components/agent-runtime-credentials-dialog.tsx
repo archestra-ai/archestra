@@ -147,6 +147,12 @@ export function AgentRuntimeCredentialsDialog({
     return (
       <RuntimeCredentialConnectionDialog
         definition={connectionDefinition}
+        description={
+          missing.find(
+            (credential) =>
+              credential.credentialId === connectionDefinition.key,
+          )?.description
+        }
         scope="personal"
         onClose={connecting ? () => setConnecting(null) : onClose}
       />
@@ -251,23 +257,11 @@ export function AgentRuntimeCredentialsDialog({
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>{credential.label}</FormLabel>
-                      <FormDescription className="space-y-2">
-                        {[
-                          ...new Set([
-                            credential.description?.trim(),
-                            definition?.description.trim(),
-                          ]),
-                        ]
-                          .filter(Boolean)
-                          .map((description) => (
-                            <span
-                              key={description}
-                              className="block whitespace-pre-wrap break-words"
-                            >
-                              {description}
-                            </span>
-                          ))}
-                      </FormDescription>
+                      {credential.description?.trim() && (
+                        <FormDescription className="whitespace-pre-wrap break-words">
+                          {credential.description.trim()}
+                        </FormDescription>
+                      )}
                       {!canSet(credential) ? (
                         <p className="text-sm text-muted-foreground">
                           An administrator must configure this organization

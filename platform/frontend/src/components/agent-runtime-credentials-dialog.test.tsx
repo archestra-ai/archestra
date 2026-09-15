@@ -511,7 +511,7 @@ describe("credential setup deep links", () => {
     });
   });
 
-  it("shows full multiline definition and agent-specific instructions for every missing credential", async () => {
+  it("uses agent-specific instructions rather than shared credential descriptions", async () => {
     const githubDescription =
       "Create a token for the example repository.\nChoose the repository permissions required by your workflow.\nKeep the token private and paste it below.";
     const claudeDescription =
@@ -546,11 +546,11 @@ describe("credential setup deep links", () => {
     });
     await screen.findByLabelText("GitHub token");
     expect(
-      screen.getByText(githubDescription, { normalizer: (text) => text }),
-    ).toBeVisible();
+      screen.queryByText(githubDescription, { normalizer: (text) => text }),
+    ).not.toBeInTheDocument();
     expect(
-      screen.getByText(claudeDescription, { normalizer: (text) => text }),
-    ).toBeVisible();
+      screen.queryByText(claudeDescription, { normalizer: (text) => text }),
+    ).not.toBeInTheDocument();
     expect(screen.getAllByText(instructions)).toHaveLength(2);
   });
 
@@ -564,7 +564,10 @@ describe("credential setup deep links", () => {
 it.each([
   1, 2,
 ])("opens the same setup from chat for %s missing credentials", async (count) => {
-  const missing = declarations.slice(0, count);
+  const missing = declarations.slice(0, count).map((credential) => ({
+    ...credential,
+    description: "Agent-specific setup instructions.",
+  }));
   server.use(
     http.get(`${origin}/api/credentials`, () =>
       HttpResponse.json([
@@ -593,7 +596,7 @@ it.each([
       <AgentRuntimeCredentialPrompt
         agentId="agent-1"
         missing={missing}
-        declarations={declarations}
+        declarations={missing}
         onConnected={vi.fn()}
       />
     </QueryClientProvider>,
@@ -602,7 +605,7 @@ it.each([
   if (count === 1) {
     expect(
       await screen.findByRole("dialog", { name: "Connect GitHub" }),
-    ).toBeVisible();
+    ).toHaveTextContent("Agent-specific setup instructions.");
   } else {
     expect(await screen.findByLabelText("Service token")).toBeVisible();
     await user.click(screen.getByRole("button", { name: "Connect GitHub" }));

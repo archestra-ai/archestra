@@ -350,18 +350,18 @@ describe("AgentDetailPage", () => {
     expect(screen.queryByText("connect content")).toBeNull();
   });
 
-  it("states the creator in the header", () => {
+  it("states the owner in the header", () => {
     mockAgent({
       ...baseAgent,
       createdBy: { id: "u1", name: "Ada Lovelace", email: "ada@example.com" },
     });
     render(<AgentDetailPage kind="agent" id="a1" />);
 
-    expect(screen.getByText("Created by")).toBeVisible();
+    expect(screen.getByText("Owner")).toBeVisible();
     expect(screen.getByText("Ada Lovelace")).toBeVisible();
   });
 
-  it("keeps stating the creator on every section, being a fact of the record", () => {
+  it("keeps stating the owner on every section, being a fact of the record", () => {
     // It used to sit inside the General section's body and vanish the moment
     // you opened Tools, Skills & Knowledge, which made who-made-this look like a
     // property of the section rather than of the record.
@@ -372,20 +372,20 @@ describe("AgentDetailPage", () => {
     });
     render(<AgentDetailPage kind="agent" id="a1" />);
 
-    expect(screen.getByText("Created by")).toBeVisible();
+    expect(screen.getByText("Owner")).toBeVisible();
     expect(screen.getByText("Ada Lovelace")).toBeVisible();
   });
 
-  it("omits the creator for a built-in record, which belongs to nobody", () => {
+  it("omits the owner for a built-in record, which belongs to nobody", () => {
     // Absent rather than present-but-empty, which would read as missing data.
     access = { ...access, isBuiltIn: true };
     mockAgent({ ...baseAgent, builtIn: true });
     render(<AgentDetailPage kind="agent" id="a1" />);
 
-    expect(screen.queryByText("Created by")).toBeNull();
+    expect(screen.queryByText("Owner")).toBeNull();
   });
 
-  it("omits the creator when the record has none recorded", () => {
+  it("omits the owner when the record has none recorded", () => {
     // The header used to keep the label and put an em dash where the name
     // goes, which reads as a name that failed to load rather than as a record
     // nobody is recorded as having made — one created before the platform
@@ -394,7 +394,7 @@ describe("AgentDetailPage", () => {
     mockAgent({ ...baseAgent, createdBy: null });
     render(<AgentDetailPage kind="agent" id="a1" />);
 
-    expect(screen.queryByText("Created by")).toBeNull();
+    expect(screen.queryByText("Owner")).toBeNull();
     expect(screen.queryByText("—")).toBeNull();
   });
 
@@ -412,11 +412,27 @@ describe("AgentDetailPage", () => {
     ).toBe(true);
   });
 
+  it("opens runtime settings in their own tab after tools, even before a runtime is enabled", () => {
+    vi.mocked(useFeature).mockReturnValue(true);
+    mockSection("runtime");
+    render(<AgentDetailPage kind="agent" id="a1" />);
+    const runtimeLink = screen.getAllByRole("link", {
+      name: "Agent Runtime",
+    })[0];
+    expect(runtimeLink).toHaveAttribute("href", "/agents/a1?section=runtime");
+    const links = screen.getAllByRole("link");
+    expect(links[links.indexOf(runtimeLink) - 1]).toHaveTextContent(
+      "Tools, Skills & Knowledge",
+    );
+    expect(screen.getByText("form section: runtime")).toBeVisible();
+  });
+
   it("keeps run UI invisible when its feature flag is disabled", () => {
     mockAgent({ ...baseAgent, runtime: {} });
     render(<AgentDetailPage kind="agent" id="a1" />);
 
     expect(screen.queryByRole("link", { name: "Runs" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Agent Runtime" })).toBeNull();
     expect(screen.queryByText("run history")).toBeNull();
   });
 });

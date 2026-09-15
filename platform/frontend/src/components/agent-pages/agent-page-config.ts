@@ -108,6 +108,7 @@ export type AgentSetupStep = WizardStepDefinition<AgentSetupStepId>;
  * `general` is the page's default and carries no `?section=`.
  */
 export type AgentDetailSection =
+  | "runtime"
   | "general"
   | "tools"
   | "messaging"
@@ -133,6 +134,7 @@ export const AGENT_SECTION_FORM_GROUPS = {
   general: ["configuration"],
   tools: ["tools"],
   messaging: ["messaging"],
+  runtime: ["runtime"],
   advanced: ["advanced"],
   settings: ["configuration", "tools", "advanced"],
 } as const satisfies Partial<
@@ -235,7 +237,8 @@ const ADVANCED_STEP: AgentSetupStep = { id: "advanced", title: "Advanced" };
  * a gateway or proxy is not something a person messages — so the step is
  * offered for that type alone. A built-in agent is a single-step edit, so its host renders no
  * stepper. Connecting is not a step: it is the detail page's Connect section,
- * where a record lands once created and which the list's Connect action opens.
+ * which the list's Connect action opens. New agents open a creation summary; new gateways
+ * open on Connect.
  */
 export function getAgentSetupSteps({
   agentType,

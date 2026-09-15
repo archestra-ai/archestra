@@ -1,7 +1,24 @@
-/**
- * Extensible abstract lifecycle hook contracts for the appa-plugin-archestra package.
- * Inspired by Google ADK and Claude Code lifecycle hook patterns.
- */
+import type { AppaProxyHookSession } from "@/routes/proxy/appa-proxy-hook";
+
+export type AppaChatSource =
+  | "chat"
+  | "chat:tool_call_repair"
+  | "chat:compaction";
+
+/** The proxy-only host binding is never addressed by a plugin string id. */
+export const APPA_PLUGIN_HOST_BINDING: unique symbol = Symbol(
+  "archestra.appa.host-binding",
+);
+
+export type AppaTrustedContext = {
+  chatSource?: AppaChatSource;
+};
+
+export type AppaPluginHostBinding = {
+  session: AppaProxyHookSession;
+  adapter?: AppaClientAdapter;
+  trustedContext?: AppaTrustedContext;
+};
 
 export type AppaProtocol = "anthropic" | "responses" | "chat_completions";
 
@@ -51,7 +68,7 @@ export type AppaSessionIdentityResolution =
  */
 export interface AppaClientAdapter {
   readonly id: string;
-  readonly nativeClient: Exclude<AppaNativeClient, "unknown">;
+  readonly nativeClient: AppaNativeClient;
   readonly protocol: AppaProtocol;
 
   matches(context: {
@@ -59,7 +76,11 @@ export interface AppaClientAdapter {
     provider?: string;
     headers: Record<string, string | string[] | undefined>;
     requestBody: unknown;
+    trustedContext?: AppaTrustedContext;
   }): boolean;
+
+  classifyToolName?(name: string): "gateway" | "local";
+  normalizeLocalToolName?(name: string): string;
 
   resolveSessionIdentity(context: {
     headers: Record<string, string | string[] | undefined>;

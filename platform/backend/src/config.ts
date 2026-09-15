@@ -1977,27 +1977,49 @@ export function betaFeatureEnabled(envValue: string | undefined): boolean {
   return envValue === "true";
 }
 
+const LLM_PROXY_PLUGIN_NAMES = ["appa"] as const;
+type LlmProxyPluginName = (typeof LLM_PROXY_PLUGIN_NAMES)[number];
+
+/** @public — parses the startup-only proxy plugin allowlist. */
+export function parseLlmProxyPlugins(
+  value: string | undefined,
+): LlmProxyPluginName[] {
+  const plugins = parseCommaSeparatedList(value ?? "");
+  const invalid = plugins.filter(
+    (plugin) => !(LLM_PROXY_PLUGIN_NAMES as readonly string[]).includes(plugin),
+  );
+  if (invalid.length > 0) {
+    throw new Error(
+      `ARCHESTRA_LLM_PROXY_PLUGINS contains unsupported plugin names: ${invalid.join(", ")}. Supported values: ${LLM_PROXY_PLUGIN_NAMES.join(", ")}`,
+    );
+  }
+  if (new Set(plugins).size !== plugins.length) {
+    throw new Error("ARCHESTRA_LLM_PROXY_PLUGINS must not contain duplicates");
+  }
+  return plugins as LlmProxyPluginName[];
+}
+
 /**
- * APPA must be explicitly enabled; a policy path or ARCHESTRA_BETA does not activate it.
+ * Validates APPA settings only when the startup plugin list enables it.
  * @public — exported for testability
  */
 export function parseOpenAppaConfig(
-  enabled: string | undefined,
+  plugins: readonly LlmProxyPluginName[],
   policyPath: string | undefined,
   approvalSigningSecret?: string | undefined,
   sessionHmacSecret?: string | undefined,
 ) {
-  const isEnabled = enabled === "true";
+  const enabled = plugins.includes("appa");
   const path = policyPath?.trim() || undefined;
   const approvalSecret = approvalSigningSecret?.trim() || undefined;
   const sessionSecret = sessionHmacSecret?.trim() || undefined;
-  if (isEnabled && !path) {
+  if (enabled && !path) {
     throw new Error(
-      "ARCHESTRA_OPENAPPA_POLICY_PATH is required when ARCHESTRA_OPENAPPA_ENABLED=true",
+      "ARCHESTRA_OPENAPPA_POLICY_PATH is required when ARCHESTRA_LLM_PROXY_PLUGINS includes appa",
     );
   }
   return {
-    enabled: isEnabled,
+    enabled,
     policyPath: path,
     ...(approvalSecret ? { approvalSigningSecret: approvalSecret } : {}),
     ...(sessionSecret ? { sessionHmacSecret: sessionSecret } : {}),
@@ -2009,7 +2031,7 @@ export function parseOpenAppaConfig(
  * @public — exported for testability
  */
 export function parseEmbeddedOpenAppaProxyConfig(params: {
-  enabled: string | undefined;
+  plugins: readonly LlmProxyPluginName[];
   policyPath: string | undefined;
   sessionHmacSecret: string | undefined;
   approvalSigningSecret: string | undefined;
@@ -2019,12 +2041,12 @@ export function parseEmbeddedOpenAppaProxyConfig(params: {
   maxSessionsPerOwner: string | undefined;
   maxStreamBufferBytes: string | undefined;
 }): AppaProxyHookConfig | undefined {
-  if (params.enabled !== "true") return undefined;
+  if (!params.plugins.includes("appa")) return undefined;
 
   const policyPath = params.policyPath?.trim();
   if (!policyPath) {
     throw new Error(
-      "ARCHESTRA_OPENAPPA_POLICY_PATH is required when ARCHESTRA_OPENAPPA_ENABLED=true",
+      "ARCHESTRA_OPENAPPA_POLICY_PATH is required when ARCHESTRA_LLM_PROXY_PLUGINS includes appa",
     );
   }
   const sessionHmacSecret = params.sessionHmacSecret?.trim();
@@ -2301,9 +2323,13 @@ const fileStorageS3Config = parseFileStorageS3Config({
   },
 });
 
+const llmProxyPlugins = parseLlmProxyPlugins(
+  process.env.ARCHESTRA_LLM_PROXY_PLUGINS,
+);
+
 const config = {
   openappa: parseOpenAppaConfig(
-    process.env.ARCHESTRA_OPENAPPA_ENABLED,
+    llmProxyPlugins,
     process.env.ARCHESTRA_OPENAPPA_POLICY_PATH,
     process.env.ARCHESTRA_OPENAPPA_APPROVAL_SIGNING_SECRET,
     process.env.ARCHESTRA_OPENAPPA_SESSION_HMAC_SECRET,
@@ -3536,6 +3562,7 @@ const config = {
   production: isProduction,
   environment,
   llmProxy: {
+    plugins: llmProxyPlugins,
     maxVirtualKeysPerApiKey: parsePositiveInt(
       process.env.ARCHESTRA_LLM_PROXY_MAX_VIRTUAL_KEYS,
       10,
@@ -3554,7 +3581,7 @@ const config = {
       DEFAULT_LLM_PROXY_STREAM_KEEPALIVE_INTERVAL_MS,
     ),
     appaHook: parseEmbeddedOpenAppaProxyConfig({
-      enabled: process.env.ARCHESTRA_OPENAPPA_ENABLED,
+      plugins: llmProxyPlugins,
       policyPath: process.env.ARCHESTRA_OPENAPPA_POLICY_PATH,
       sessionHmacSecret: process.env.ARCHESTRA_OPENAPPA_SESSION_HMAC_SECRET,
       approvalSigningSecret:

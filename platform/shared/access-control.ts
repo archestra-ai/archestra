@@ -713,6 +713,8 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.SetAgentRuntimeCredential]: { agent: ["read"] },
   [RouteId.DeleteAgentRuntimeCredential]: { agent: ["read"] },
   [RouteId.ListRuntimeCredentials]: { credential: ["read"] },
+  [RouteId.StartGitHubUserConnection]: { credential: ["read"] },
+  [RouteId.CompleteGitHubUserConnection]: { credential: ["read"] },
   [RouteId.CreateRuntimeCredential]: { credential: ["create"] },
   [RouteId.GetRuntimeCredentialUsage]: { credential: ["read"] },
   [RouteId.UpdateRuntimeCredential]: { credential: ["update"] },
@@ -777,11 +779,24 @@ export const requiredEndpointPermissionsMap: Partial<
   // Generic agent CRUD routes - enforcement is handled dynamically in route handlers
   // based on agentType (agent, mcp_gateway, llm_proxy map to agent, mcpGateway, llmProxy resources)
   [RouteId.GetAgents]: {},
+  [RouteId.GetAgentCatalog]: {},
   [RouteId.GetAllAgents]: {},
   [RouteId.GetAgentCredentialReadiness]: {},
   [RouteId.GetAgent]: {},
+  // Agent type and instance visibility are dynamic and checked by PinAgent's
+  // handler. Unpin is deliberately ungated beyond authentication so a stale
+  // pin can be cleared after access is lost.
+  [RouteId.PinAgent]: {},
+  [RouteId.UnpinAgent]: {},
   [RouteId.CreateAgent]: {},
   [RouteId.CloneAgent]: {},
+  [RouteId.TransferSkillOwnership]: { skill: ["update"] },
+  [RouteId.TransferPluginOwnership]: { plugin: ["update", "admin"] },
+  [RouteId.TransferProjectOwnership]: { project: ["update"] },
+  [RouteId.TransferAppOwnership]: { app: ["update"] },
+  [RouteId.TransferMcpCatalogOwnership]: { mcpRegistry: ["update"] },
+  [RouteId.TransferRemoteAgentOwnership]: { agentSettings: ["update"] },
+  [RouteId.TransferAgentOwnership]: {},
   [RouteId.UpdateAgent]: {},
   [RouteId.BulkUpdateAgents]: {},
   [RouteId.BulkDeleteAgents]: {},
@@ -2197,8 +2212,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
 
   // Agents
   "/agents": { agent: ["read"] },
-  "/a2a/agents": { agent: ["read"] },
-  "/agents/new": { agent: ["create"] },
+  "/agents/a2a": { agent: ["read"] },
   "/messaging-channels": { agentTrigger: ["read"] },
   "/messaging-channels/slack": { agentTrigger: ["read"] },
   "/messaging-channels/ms-teams": { agentTrigger: ["read"] },

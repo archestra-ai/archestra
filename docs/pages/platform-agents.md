@@ -3,7 +3,7 @@ title: Overview
 category: Agents
 order: 1
 description: Agent overview, invocation paths, knowledge sources, and prompt templating
-lastUpdated: 2026-09-12
+lastUpdated: 2026-09-14
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -29,11 +29,19 @@ Hover or focus an agent's provider logo to see its configured key name and model
 
 ## Creating and Editing an Agent
 
-**Create Agent** opens a setup wizard with three steps. **Configuration** asks for the name, visibility, instructions, and model. **Tools, Skills & Knowledge** picks the tools, knowledge sources, subagents, skills, and hooks. **Advanced** holds labels, security, and the identity provider. Nothing is saved until you press **Create** on the last step — the agent then opens on its page's **Connect** tab, which shows how to reach it.
+**Add Agent** opens a catalog. Start from scratch to open the setup wizard. When dedicated runtimes are enabled, popular agents can prefill that wizard. **Configuration** includes the name, visibility, instructions, model, and optional dedicated runtime settings. Nothing is saved until you press **Create** on the last step. A confirmation page summarizes its email address and assigned messaging channels. Select **Chat** to start a conversation with the new agent.
 
-Every agent has its own page, and that page is where you change it. The same three groups are its tabs, edited in place: **Configuration**, **Tools, Skills & Knowledge**, and **Advanced**. **Save changes** writes the tab you are on and leaves you there, so a rename is one save rather than a walk through the rest. **Connect** holds the endpoint, authentication options, and examples.
+Each agent has its own page for editing. When dedicated runtimes are enabled, **Agent Runtime** follows **Tools, Skills & Knowledge**. It controls the runtime configuration and credentials. **Save changes** saves the current tab and keeps it open. **A2A** holds the endpoint, authentication options, and connection examples. An Agent with a dedicated runtime is marked **Runtime** in the list and on its page. Its **Chat** action reads **Start run**.
 
 Switching tabs with unsaved edits asks before it discards them. If you cannot change an agent, its configuration still opens — read-only, with the reason.
+
+## Ownership Transfers
+
+You can hand an agent over to another organization member without recreating it. For example, a departing maintainer can transfer a reporting assistant to their replacement.
+
+The current owner or a resource admin can transfer ownership. The recipient needs permission to manage the agent at its current visibility. Configuration and sharing stay unchanged. Transferring a personal agent can remove the previous owner's access.
+
+Transfers require the recipient to retain access to configured model credentials and pinned tool connections. Platform-managed resources cannot be transferred. Audit logs record the previous and new owners.
 
 ## Tool Access Modes
 
@@ -176,6 +184,12 @@ The **Convert to skill** action on the agents page opens a confirmation dialog w
 - assigned tools are carried into the skill's [`allowed-tools`](https://agentskills.io/specification#allowed-tools-field) frontmatter (the skill-runtime tools are dropped as noise), so the activating agent knows which tools to enable; the default model and knowledge sources have no skill equivalent and are reported as not carried, without cluttering the skill body
 - suggested prompts, icon, and labels are folded into the body or metadata, and the origin agent is recorded in metadata so the skill stays linked back to it
 - removing the source agent is optional and off by default; it is a soft delete, so the agent can be restored later from the deleted-agents filter
+
+## Organizing Agents
+
+Use **Pin** in an agent's overflow menu to move it into the **Pinned** section. Pins are personal and do not change anyone else's list. The most recently pinned agent appears first.
+
+List pins only organize the **Agents** page. They do not change which agent starts a new chat. Use **Set as default** for that behavior.
 
 ## Default Agents
 

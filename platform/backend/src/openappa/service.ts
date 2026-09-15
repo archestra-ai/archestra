@@ -40,7 +40,7 @@ const Decision = z.object({
 });
 
 export function openappaEnabled(): boolean {
-  return config.openappa.enabled;
+  return config.llmProxy.plugins.includes("appa");
 }
 
 async function binding() {

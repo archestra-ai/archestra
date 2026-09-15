@@ -1,5 +1,5 @@
 -- drizzle-migration-linter: allow-breaking
--- drizzle-migration-linter: reason=All constraints and indexes target the nine new empty APPA proxy tables created in this migration. No existing tables, existing rows, or older writers are modified.
+-- drizzle-migration-linter: reason=All constraints and indexes target the nine new APPA proxy tables created in this migration. No existing table, row, or writer is modified.
 CREATE TABLE "appa_proxy_approvals" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"organization_id" uuid NOT NULL,

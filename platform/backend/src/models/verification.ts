@@ -3,6 +3,14 @@ import db, { schema, type Transaction } from "@/database";
 import logger from "@/logging";
 
 class VerificationModel {
+  /** Atomically consume a one-time value; an expired value is never returned. */
+  static async consume(identifier: string) {
+    const [record] = await db
+      .delete(schema.verificationsTable)
+      .where(eq(schema.verificationsTable.identifier, identifier))
+      .returning();
+    return record && record.expiresAt > new Date() ? record : null;
+  }
   static async create(params: {
     identifier: string;
     value: string;

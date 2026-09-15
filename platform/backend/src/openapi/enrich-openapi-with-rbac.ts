@@ -271,12 +271,16 @@ const HTTP_METHODS = new Set<HttpMethod>([
 ]);
 
 const DYNAMIC_ROUTE_PERMISSION_NOTES = {
+  [RouteId.GetAgentCatalog]:
+    "Requires `agent:read`; when `status=deleted`, requires `agent:delete`. External A2A rows are limited to agents visible to the caller unless they have `agentSettings:update`; when `selectableOnly=true`, external rows are omitted unless the caller has that permission.",
   [RouteId.GetAgents]:
     "Checked dynamically based on agent type. `profile` and `agent` require `agent:read`; `mcp_gateway` requires `mcpGateway:read`. If no type filter is provided, the user must have read access to at least one agent type.",
   [RouteId.GetAllAgents]:
     "Checked dynamically based on agent type. `profile` and `agent` require `agent:read`; `mcp_gateway` requires `mcpGateway:read`. If no type filter is provided, the user must have read access to at least one agent type.",
   [RouteId.GetAgent]:
     "Checked dynamically based on the target agent's type. `profile` and `agent` require `agent:read`; `mcp_gateway` requires `mcpGateway:read`.",
+  [RouteId.PinAgent]:
+    "Checked dynamically based on the target agent's type and the caller's visibility. `profile` and `agent` require `agent:read`; `mcp_gateway` requires `mcpGateway:read`.",
   [RouteId.CreateAgent]:
     "Checked dynamically based on the agent type being created. `profile` and `agent` require `agent:create`; `mcp_gateway` requires `mcpGateway:create`. Additional scope and team-admin checks may apply.",
   [RouteId.UpdateAgent]:

@@ -547,10 +547,6 @@ vi.mock("@/components/agent-chat-apps", () => ({
   },
 }));
 
-vi.mock("./agent-pages/agent-runtime-credential-card", () => ({
-  AgentRuntimeCredentialCard: () => <div>Mock Background Credentials</div>,
-}));
-
 vi.mock("./agent-runtime-fields", () => ({
   AgentRuntimeFields: ({
     value,
@@ -1780,7 +1776,9 @@ describe("AgentForm delegation state", () => {
 
     render(<AgentForm agentType="mcp_gateway" agent={baseAgent} />);
 
-    expect(await screen.findByText("off-page-skill")).toBeInTheDocument();
+    expect(
+      await screen.findByRole("button", { name: "off-page-skill" }),
+    ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /^Remove off-page-skill/ }),
     ).toBeInTheDocument();
@@ -1819,7 +1817,9 @@ describe("AgentForm delegation state", () => {
 
     render(<AgentForm agentType="mcp_gateway" agent={baseAgent} />);
 
-    expect(await screen.findByText("regraded-skill")).toBeInTheDocument();
+    expect(
+      await screen.findByRole("button", { name: "regraded-skill" }),
+    ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /^Remove regraded-skill/ }),
     ).toBeInTheDocument();
@@ -2899,6 +2899,24 @@ describe("AgentForm save payload and failure handling", () => {
     });
   });
 
+  it("hides existing runtime settings when another form panel is active", () => {
+    vi.mocked(useFeature).mockImplementation((flag) => flag === "agentRuntime");
+    const { rerender } = render(
+      <AgentForm
+        agentType="agent"
+        agent={baseAgent}
+        activeSection="configuration"
+      />,
+    );
+    expect(panelOf(screen.getByTestId("agent-runtime"))).toHaveClass("hidden");
+    rerender(
+      <AgentForm agentType="agent" agent={baseAgent} activeSection="runtime" />,
+    );
+    expect(panelOf(screen.getByTestId("agent-runtime"))).not.toHaveClass(
+      "hidden",
+    );
+  });
+
   it("opens the shared provider-key dialog from the agent picker", async () => {
     const user = userEvent.setup();
     renderConfiguration();
@@ -3332,8 +3350,8 @@ describe("AgentForm save payload and failure handling", () => {
             idleTimeoutMinutes: null,
           },
         }}
-        sections={["advanced"]}
-        activeSection="advanced"
+        sections={["runtime"]}
+        activeSection="runtime"
       />,
     );
 
@@ -3401,8 +3419,8 @@ describe("AgentForm save payload and failure handling", () => {
             idleTimeoutMinutes: null,
           },
         }}
-        sections={["advanced"]}
-        activeSection="advanced"
+        sections={["runtime"]}
+        activeSection="runtime"
       />,
     );
 
@@ -3415,6 +3433,9 @@ describe("AgentForm save payload and failure handling", () => {
       ).not.toBeInTheDocument(),
     );
     expect(screen.getByRole("button", { name: /update/i })).toBeEnabled();
+    await user.click(screen.getByRole("button", { name: /update/i }));
+    await waitFor(() => expect(updateAgent).toHaveBeenCalled());
+    expect(savedBody()).toEqual({ runtime: null });
   });
 
   it("blocks an Anthropic runtime when the inherited organization model is Gemini", async () => {
@@ -3923,6 +3944,7 @@ describe("AgentForm save payload and failure handling", () => {
   });
 
   it("sends the advanced step's own fields, and nothing the step does not show", async () => {
+    vi.mocked(useFeature).mockImplementation((flag) => flag === "agentRuntime");
     const user = userEvent.setup();
     const { container } = render(
       <AgentForm agentType="agent" agent={baseAgent} sections={["advanced"]} />,
@@ -3931,6 +3953,7 @@ describe("AgentForm save payload and failure handling", () => {
     // The Switch and Label mocks above leave the control unlabelled, so it
     // is reached by the id the label points at.
     await screen.findByText("Security");
+    expect(screen.queryByTestId("agent-runtime")).not.toBeInTheDocument();
     const securitySwitch = container.querySelector<HTMLInputElement>(
       "#consider-context-untrusted",
     );
@@ -4283,6 +4306,7 @@ describe("AgentForm save payload and failure handling", () => {
     // The create wizard walks one form across its steps: what a hidden step
     // holds (the tools picked on it) must survive the step change, and Enter
     // on an earlier step must not create the record.
+    vi.mocked(useFeature).mockImplementation((flag) => flag === "agentRuntime");
     const user = userEvent.setup();
     const { rerender } = render(
       <AgentForm
@@ -4290,6 +4314,14 @@ describe("AgentForm save payload and failure handling", () => {
         activeSection="configuration"
         submitEnabled={false}
       />,
+    );
+
+    const runtimeSection = screen.getByRole("region", {
+      name: "Agent runtime",
+    });
+    expect(runtimeSection).toBeVisible();
+    await user.click(
+      within(runtimeSection).getByRole("button", { name: "Disable runtime" }),
     );
 
     const toolsEditor = await screen.findByText("Mock Tools Editor");
@@ -4325,12 +4357,19 @@ describe("AgentForm save payload and failure handling", () => {
     expect(
       panelOf(screen.getByRole("heading", { name: "Security" })),
     ).not.toHaveClass("hidden");
+    expect(panelOf(runtimeSection.parentElement as HTMLElement)).toHaveClass(
+      "hidden",
+    );
+    expect(
+      screen.queryByRole("heading", { name: "Agent Runtime" }),
+    ).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /create/i }));
 
     await waitFor(() => expect(createAgent).toHaveBeenCalled());
     const body = createAgent.mock.calls[0][0] as Record<string, unknown>;
     expect(body).toMatchObject({
       name: "New Agent",
+      runtime: null,
       labels: [],
       suggestedPrompts: [],
       considerContextUntrusted: false,

@@ -5,6 +5,7 @@ import {
 } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { agentCatalogQueryKeys } from "@/lib/agent-catalog.query";
 import { runBulkAction } from "@/lib/bulk-action";
 import { handleApiError, throwOnApiError } from "./utils";
 
@@ -114,6 +115,7 @@ export function useCreateA2aRemoteAgent() {
     onSuccess: () => {
       toast.success("External A2A agent connected");
       queryClient.invalidateQueries({ queryKey: a2aRemoteAgentQueryKeys.all });
+      queryClient.invalidateQueries({ queryKey: agentCatalogQueryKeys.all });
     },
   });
 }
@@ -135,6 +137,7 @@ export function useUpdateA2aRemoteAgent(id: string) {
         queryClient.setQueryData([...a2aRemoteAgentQueryKeys.all, id], agent);
       }
       queryClient.invalidateQueries({ queryKey: a2aRemoteAgentQueryKeys.all });
+      queryClient.invalidateQueries({ queryKey: agentCatalogQueryKeys.all });
     },
   });
 }
@@ -171,6 +174,7 @@ export function useBulkUpdateA2aRemoteAgentVisibility() {
       }),
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: a2aRemoteAgentQueryKeys.all });
+      queryClient.invalidateQueries({ queryKey: agentCatalogQueryKeys.all });
     },
   });
 }
@@ -191,6 +195,7 @@ export function useDeleteA2aRemoteAgent(options?: { notify?: boolean }) {
         toast.success("External A2A agent removed");
       }
       queryClient.invalidateQueries({ queryKey: a2aRemoteAgentQueryKeys.all });
+      queryClient.invalidateQueries({ queryKey: agentCatalogQueryKeys.all });
     },
   });
 }

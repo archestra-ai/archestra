@@ -11,11 +11,16 @@ import type {
 } from "@/proxy/plugins/registry";
 import {
   type AppaOutboundToolCall,
-  AppaProxyHookSession,
+  type AppaProxyHookSession,
   canonicalJsonObject,
 } from "@/routes/proxy/appa-proxy-hook";
 import { AppaProxyLedger } from "@/services/appa-proxy/ledger";
-import type { AppaClientAdapter } from "./types";
+import {
+  APPA_PLUGIN_HOST_BINDING,
+  type AppaClientAdapter,
+  type AppaPluginHostBinding,
+  type AppaTrustedContext,
+} from "./types";
 
 /**
  * Foundational appa-plugin-archestra meta-plugin.
@@ -27,13 +32,9 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
   readonly id = "archestra.appa";
 
   private readonly clientAdapters = new Map<string, AppaClientAdapter>();
-  private readonly sessions = new Map<
-    string,
-    {
-      session: AppaProxyHookSession;
-      adapter?: AppaClientAdapter;
-      promptSent: boolean;
-    }
+  private readonly bindings = new WeakMap<
+    object,
+    AppaPluginHostBinding & { promptSent: boolean }
   >();
 
   /**
@@ -63,16 +64,25 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
   }
 
   async onSessionInit(context: LlmProxyRequestContext): Promise<void> {
-    const binding = context.resources.get(this.id);
-    if (!isProxySessionBinding(binding)) return;
-    if (this.sessions.has(context.requestId)) {
-      throw new Error(`APPA session ${context.requestId} is already bound`);
-    }
-    this.sessions.set(context.requestId, { ...binding, promptSent: false });
+    this.bindings.delete(context.resources);
+    const hostBinding = getHostBinding(context.resources);
+    if (!hostBinding) return;
+    const adapter =
+      hostBinding.adapter ??
+      this.findAdapter({
+        headers: context.headers,
+        requestBody: context.requestBody,
+        trustedContext: hostBinding.trustedContext,
+      });
+    this.bindings.set(context.resources, {
+      ...hostBinding,
+      ...(adapter ? { adapter } : {}),
+      promptSent: false,
+    });
   }
 
   async onPrompt(context: LlmProxyPromptContext): Promise<void> {
-    const state = this.sessions.get(context.requestId);
+    const state = this.bindings.get(context.resources);
     if (!state) return;
     await state.session.sendPrompt(context.prompt);
     state.promptSent = true;
@@ -81,7 +91,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
   async onToolCalls(
     context: LlmProxyToolCallsContext,
   ): Promise<LlmProxyToolCallsOutcome | undefined> {
-    const state = this.sessions.get(context.requestId);
+    const state = this.bindings.get(context.resources);
     if (!state || context.toolCalls.length === 0) return;
 
     try {
@@ -125,10 +135,22 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     } catch (error) {
       return {
         decision: "refuse",
-        message:
-          error instanceof Error
-            ? error.message
-            : "APPA policy denied tool execution",
+        refusal: {
+          refusalMessage: "OpenAPPA policy denied tool execution",
+          contentMessage: "OpenAPPA policy denied tool execution",
+          reason:
+            error instanceof Error
+              ? error.message
+              : "APPA policy denied tool execution",
+          blockedToolName:
+            context.toolCalls[0]?.target?.name ??
+            context.toolCalls[0]?.name ??
+            "unknown",
+          toolInput: {},
+          allToolCallNames: context.toolCalls.map(
+            (call) => call.target?.name ?? call.name,
+          ),
+        },
       };
     }
   }
@@ -136,16 +158,17 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
   async onToolResults(
     context: LlmProxyToolResultsContext,
   ): Promise<LlmProxyToolResultsOutcome | undefined> {
-    const state = this.sessions.get(context.requestId);
+    const state = this.bindings.get(context.resources);
     if (!state) return;
     return {
-      toolResults: context.toolResults,
-      modelUpdates: state.session.getModelResultUpdates(),
+      toolResultUpdates: Object.fromEntries(
+        state.session.getModelResultUpdates(),
+      ),
     };
   }
 
   async onTurnEnd(context: LlmProxyTurnEndContext): Promise<void> {
-    const state = this.sessions.get(context.requestId);
+    const state = this.bindings.get(context.resources);
     if (!state) return;
     try {
       if (context.deferCleanup) return;
@@ -159,12 +182,12 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         await state.session.releaseWithoutPrompt();
       }
     } finally {
-      this.sessions.delete(context.requestId);
+      state.promptSent = false;
     }
   }
 
   async onAbort(context: LlmProxyRequestContext): Promise<void> {
-    const state = this.sessions.get(context.requestId);
+    const state = this.bindings.get(context.resources);
     if (!state) return;
     try {
       if (state.promptSent) {
@@ -173,8 +196,18 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         await state.session.releaseWithoutPrompt();
       }
     } finally {
-      this.sessions.delete(context.requestId);
+      this.bindings.delete(context.resources);
     }
+  }
+
+  async onError(
+    context: LlmProxyRequestContext & { error: unknown },
+  ): Promise<void> {
+    await this.onAbort(context);
+  }
+
+  async onCleanup(context: LlmProxyRequestContext): Promise<void> {
+    this.bindings.delete(context.resources);
   }
 
   private nativeSpawnCarrierPreparation(params: {
@@ -231,15 +264,29 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       },
     };
   }
+
+  private findAdapter(context: {
+    headers: Record<string, string | string[] | undefined>;
+    requestBody: unknown;
+    trustedContext?: AppaTrustedContext;
+  }): AppaClientAdapter | undefined {
+    if (!context.trustedContext?.chatSource) return undefined;
+    const chatAdapter = this.clientAdapters.get("archestra-chat");
+    return chatAdapter?.matches({ ...context, protocol: "chat_completions" })
+      ? chatAdapter
+      : undefined;
+  }
 }
 
-function isProxySessionBinding(
-  value: unknown,
-): value is { session: AppaProxyHookSession; adapter?: AppaClientAdapter } {
-  return (
-    typeof value === "object" &&
+function getHostBinding(
+  resources: ReadonlyMap<PropertyKey, unknown>,
+): AppaPluginHostBinding | undefined {
+  const value = resources.get(APPA_PLUGIN_HOST_BINDING);
+  return typeof value === "object" &&
     value !== null &&
     "session" in value &&
-    value.session instanceof AppaProxyHookSession
-  );
+    typeof value.session === "object" &&
+    value.session !== null
+    ? (value as AppaPluginHostBinding)
+    : undefined;
 }

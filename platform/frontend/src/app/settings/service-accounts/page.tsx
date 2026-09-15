@@ -22,17 +22,11 @@ import { LabelTags } from "@/components/label-tags";
 import { QueryLoadError } from "@/components/query-load-error";
 import { SearchInput } from "@/components/search-input";
 import { AccountHealthBadge } from "@/components/service-account-status-badge";
-import {
-  TableCard,
-  TableCardList,
-  TableCardView,
-  TableCardViewContent,
-  TableCardViewToggle,
-} from "@/components/table-card-view";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { BulkActions } from "@/components/ui/bulk-actions-bar";
+import { BulkActionsScope } from "@/components/ui/bulk-actions-context";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
@@ -52,7 +46,6 @@ import {
   useServiceAccountLabelKeys,
   useServiceAccountLabelValues,
 } from "@/lib/entity-labels.query";
-import { useBulkCardSelection } from "@/lib/hooks/use-bulk-card-selection";
 import { useBulkSelection } from "@/lib/hooks/use-bulk-selection";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import {
@@ -205,13 +198,6 @@ export default function ServiceAccountsSettingsPage() {
     matchDescription: hasActiveFilters ? "match these filters" : "exist",
   });
 
-  const cardSelection = useBulkCardSelection({
-    rows: filteredServiceAccounts,
-    getRowId: (account) => account.id,
-    rowSelection,
-    setRowSelection,
-  });
-
   const setDisabled = bulkSetDisabled.mutate;
   const renderRowActions = useCallback(
     (account: ServiceAccount) => (
@@ -313,7 +299,7 @@ export default function ServiceAccountsSettingsPage() {
       // narrower column than a top-level page, and an eighth column pushed
       // Actions off-screen. For a machine identity "last used" is the
       // operational question; the creation date is archival and still shown on
-      // the card footer and the account's own page.
+      // the account's own page.
     ];
 
     if (!canUpdateServiceAccounts && !canDeleteServiceAccounts) {
@@ -389,11 +375,10 @@ export default function ServiceAccountsSettingsPage() {
            out for the whole view meant the toolbar and headers arrived a beat
            after the wait had visibly ended, so one navigation read as loader,
            then components, then content. */
-        <TableCardView storageKey="archestra-service-accounts-view">
+        <BulkActionsScope>
           <div>
             <CollectionFilters>
               <FilterBar
-                actions={<TableCardViewToggle />}
                 onClearFilters={hasActiveFilters ? clearFilters : undefined}
                 search={
                   <SearchInput
@@ -482,98 +467,42 @@ export default function ServiceAccountsSettingsPage() {
                     <span>Delete</span>
                   </PermissionButton>
                 </BulkActions>
-                <TableCardViewContent
-                  cards={
-                    <TableCardList
-                      itemCount={filteredServiceAccounts.length}
-                      isLoading={isPending}
-                      emptyIcon={Bot}
-                      emptyMessage="No service accounts yet"
-                      emptyDescription="Service accounts are organization-owned identities that let scripts and integrations call the platform API."
-                      hasActiveFilters={hasActiveFilters}
-                      filteredEmptyMessage="No service accounts match your filters"
-                      onClearFilters={clearFilters}
-                    >
-                      {filteredServiceAccounts.map((account) => (
-                        <TableCard
-                          key={account.id}
-                          icon={<Bot className="h-5 w-5" />}
-                          title={
-                            <span className="flex items-center gap-1.5">
-                              <Link
-                                className="hover:underline"
-                                href={`/settings/service-accounts/${account.id}`}
-                              >
-                                {account.name}
-                              </Link>
-                              <LabelTags labels={account.labels} />
-                            </span>
-                          }
-                          description={formatRoleName(account.role)}
-                          actions={renderRowActions(account)}
-                          {...cardSelection(account)}
-                          footer={
-                            <div className="flex items-center justify-between gap-3">
-                              <span>
-                                Created{" "}
-                                {formatRelativeTimeFromNow(account.createdAt)}
-                              </span>
-                              <LastUsed account={account} prefix="Used " />
-                            </div>
-                          }
-                        >
-                          <div className="flex items-center justify-between gap-3">
-                            <AccountHealthBadge
-                              health={getAccountHealth(account)}
-                            />
-                            <span className="text-muted-foreground">
-                              <KeyCount account={account} withLabel />
-                            </span>
-                          </div>
-                        </TableCard>
-                      ))}
-                    </TableCardList>
+                <DataTable
+                  columns={columns}
+                  data={filteredServiceAccounts}
+                  isLoading={
+                    (isPending || isFetching) && serviceAccounts.length === 0
                   }
-                  table={
-                    <DataTable
-                      columns={columns}
-                      data={filteredServiceAccounts}
-                      isLoading={
-                        (isPending || isFetching) &&
-                        serviceAccounts.length === 0
-                      }
-                      getRowId={(row) => row.id}
-                      rowSelection={rowSelection}
-                      onRowSelectionChange={setRowSelection}
-                      onPageRowIdsChange={onPageRowIdsChange}
-                      hideSelectedCount
-                      onRowClick={(account, event) => {
-                        const target = event.target as HTMLElement;
-                        if (target.closest("a,button")) return;
-                        router.push(`/settings/service-accounts/${account.id}`);
-                      }}
-                      emptyIcon={Bot}
-                      emptyMessage="No service accounts yet"
-                      emptyDescription="Service accounts are organization-owned identities that let scripts and integrations call the platform API."
-                      hasActiveFilters={hasActiveFilters}
-                      filteredEmptyMessage="No service accounts match your filters"
-                      onClearFilters={clearFilters}
-                      hidePaginationWhenSinglePage
-                      fixedWidthColumnIds={[
-                        "role",
-                        "disabled",
-                        "tokenCount",
-                        "lastUsedAt",
-                        "actions",
-                      ]}
-                      flexibleColumnIds={["name"]}
-                    />
-                  }
+                  getRowId={(row) => row.id}
+                  rowSelection={rowSelection}
+                  onRowSelectionChange={setRowSelection}
+                  onPageRowIdsChange={onPageRowIdsChange}
+                  hideSelectedCount
+                  onRowClick={(account, event) => {
+                    const target = event.target as HTMLElement;
+                    if (target.closest("a,button")) return;
+                    router.push(`/settings/service-accounts/${account.id}`);
+                  }}
+                  emptyIcon={Bot}
+                  emptyMessage="No service accounts yet"
+                  emptyDescription="Service accounts are organization-owned identities that let scripts and integrations call the platform API."
+                  hasActiveFilters={hasActiveFilters}
+                  filteredEmptyMessage="No service accounts match your filters"
+                  onClearFilters={clearFilters}
+                  hidePaginationWhenSinglePage
+                  fixedWidthColumnIds={[
+                    "role",
+                    "disabled",
+                    "tokenCount",
+                    "lastUsedAt",
+                    "actions",
+                  ]}
+                  flexibleColumnIds={["name"]}
                 />
               </>
             )}
           </div>
-        </TableCardView>
+        </BulkActionsScope>
       )}
 
       {bulkDeleteOpen && (
@@ -681,30 +610,12 @@ export default function ServiceAccountsSettingsPage() {
  * Keys as "usable of total", collapsing to one number when they agree. `2` and
  * `0 of 2` are very different situations that a bare count renders identically.
  */
-function KeyCount({
-  account,
-  withLabel,
-}: {
-  account: ServiceAccount;
-  withLabel?: boolean;
-}) {
+function KeyCount({ account }: { account: ServiceAccount }) {
   if (account.tokenCount === 0) return <span>None</span>;
-
-  const noun = account.tokenCount === 1 ? "key" : "keys";
   if (account.activeTokenCount === account.tokenCount) {
-    return (
-      <span>
-        {account.tokenCount}
-        {withLabel ? ` ${noun}` : ""}
-      </span>
-    );
+    return <span>{account.tokenCount}</span>;
   }
-  // Cards have room for words; the table column does not, so it says "0 / 2".
-  return withLabel ? (
-    <span>
-      {account.activeTokenCount} of {account.tokenCount} {noun} usable
-    </span>
-  ) : (
+  return (
     <span
       title={`${account.activeTokenCount} of ${account.tokenCount} keys usable`}
     >
@@ -713,20 +624,9 @@ function KeyCount({
   );
 }
 
-function LastUsed({
-  account,
-  prefix = "",
-}: {
-  account: ServiceAccount;
-  prefix?: string;
-}) {
+function LastUsed({ account }: { account: ServiceAccount }) {
   if (!account.lastUsedAt) {
     return <span className="text-muted-foreground">Never used</span>;
   }
-  return (
-    <span>
-      {prefix}
-      {formatRelativeTimeFromNow(account.lastUsedAt)}
-    </span>
-  );
+  return <span>{formatRelativeTimeFromNow(account.lastUsedAt)}</span>;
 }

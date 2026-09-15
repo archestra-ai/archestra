@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useIsGlobalAdmin } from "@/lib/organization.query";
 import { McpGatewayActions } from "./mcp-gateway-actions";
 
@@ -46,6 +46,9 @@ const openRowMenu = () =>
 
 describe("McpGatewayActions", () => {
   beforeEach(() => {
+    vi.mocked(useSession).mockReturnValue({
+      data: { user: { id: "user-1" } },
+    } as ReturnType<typeof useSession>);
     vi.clearAllMocks();
     vi.mocked(useIsGlobalAdmin).mockReturnValue({
       isGlobalAdmin: true,

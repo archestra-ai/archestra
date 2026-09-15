@@ -390,6 +390,11 @@ export const SelectAgentSchema = AgentRowSchema.extend({
   lastUsedAt: z.date().nullable().optional(),
 });
 
+/** Paginated Agents-surface row with the current user's pin marker. */
+export const AgentListItemSchema = SelectAgentSchema.extend({
+  pinnedAt: z.date().nullable(),
+});
+
 // Base schema without refinement - can be used with .partial()
 export const InsertAgentSchemaBase = createInsertSchema(
   schema.agentsTable,
@@ -496,6 +501,7 @@ export const CloneAgentBodySchema = z.object({
 });
 
 export type Agent = z.infer<typeof SelectAgentSchema>;
+export type AgentListItem = z.infer<typeof AgentListItemSchema>;
 export type AgentAccessContext = Pick<
   Agent,
   "id" | "organizationId" | "scope" | "authorId"

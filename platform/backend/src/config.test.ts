@@ -3473,7 +3473,7 @@ describe("OpenAPPA feature configuration", () => {
   test("activates the durable native proxy lifecycle with required secrets", () => {
     expect(
       parseEmbeddedOpenAppaProxyConfig({
-        enabled: "true",
+        plugins: ["appa"],
         policyPath: "/policy.toml",
         sessionHmacSecret: "s".repeat(32),
         approvalSigningSecret: "a".repeat(32),
@@ -3495,7 +3495,7 @@ describe("OpenAPPA feature configuration", () => {
   test("refuses incomplete embedded native lifecycle configuration", () => {
     expect(() =>
       parseEmbeddedOpenAppaProxyConfig({
-        enabled: "true",
+        plugins: ["appa"],
         policyPath: "/policy.toml",
         sessionHmacSecret: "short",
         approvalSigningSecret: undefined,
@@ -3508,28 +3508,22 @@ describe("OpenAPPA feature configuration", () => {
     ).toThrow("ARCHESTRA_OPENAPPA_SESSION_HMAC_SECRET");
   });
 
-  test.each([
-    undefined,
-    "",
-    "false",
-    "TRUE",
-    "1",
-  ])("does not activate from a policy path or beta flag when enabled=%s", (enabled) => {
+  test("does not activate from a policy path or beta flag without the plugin", () => {
     vi.stubEnv("ARCHESTRA_BETA", "true");
-    expect(parseOpenAppaConfig(enabled, "/policy.toml")).toEqual({
+    expect(parseOpenAppaConfig([], "/policy.toml")).toEqual({
       enabled: false,
       policyPath: "/policy.toml",
     });
     vi.unstubAllEnvs();
   });
   test("requires a policy path only for explicit activation", () => {
-    expect(parseOpenAppaConfig(undefined, undefined).enabled).toBe(false);
-    expect(parseOpenAppaConfig("true", "/policy.toml")).toEqual({
+    expect(parseOpenAppaConfig([], undefined).enabled).toBe(false);
+    expect(parseOpenAppaConfig(["appa"], "/policy.toml")).toEqual({
       enabled: true,
       policyPath: "/policy.toml",
     });
     for (const path of [undefined, "", "   "]) {
-      expect(() => parseOpenAppaConfig("true", path)).toThrow(
+      expect(() => parseOpenAppaConfig(["appa"], path)).toThrow(
         "ARCHESTRA_OPENAPPA_POLICY_PATH is required",
       );
     }
@@ -3538,7 +3532,7 @@ describe("OpenAPPA feature configuration", () => {
   test("retains non-empty native APPA signing secrets", () => {
     expect(
       parseOpenAppaConfig(
-        "true",
+        ["appa"],
         "/policy.toml",
         " approval-secret ",
         " session-secret ",

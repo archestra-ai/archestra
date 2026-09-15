@@ -172,6 +172,7 @@ export function ChannelDetailsDialog({
 
             <div className="space-y-2">
               <SystemPromptEditor
+                templating={false}
                 title={
                   binding.isDm
                     ? "Conversation instructions"

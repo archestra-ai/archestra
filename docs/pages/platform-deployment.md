@@ -2076,8 +2076,8 @@ To learn more about enterprise licensing, see the [pricing model](/docs/platform
 
 ### OpenAPPA Tool Guardrails (experimental)
 
-- `ARCHESTRA_OPENAPPA_ENABLED`: explicit opt-in, default `false`. `ARCHESTRA_BETA` and a policy path do not enable it.
-- `ARCHESTRA_OPENAPPA_POLICY_PATH`: absolute deployment TOML path, required when enabled.
+- `ARCHESTRA_LLM_PROXY_PLUGINS`: comma-separated startup allowlist, empty by default. Include `appa` to enable OpenAPPA.
+- `ARCHESTRA_OPENAPPA_POLICY_PATH`: absolute deployment TOML path, required when the allowlist includes `appa`.
 - `ARCHESTRA_OPENAPPA_SESSION_HMAC_SECRET`: required for native APPA lifecycle receipts, encrypted wire frames, and checkpoints.
 - `ARCHESTRA_OPENAPPA_APPROVAL_SIGNING_SECRET`: optional signing secret for configured human approval grants.
 

@@ -28,6 +28,7 @@ const session = {
 
 describe("OpenAPPA native service", () => {
   beforeEach(() => {
+    config.llmProxy.plugins = ["appa"];
     config.openappa = { enabled: true, policyPath: "/policy.toml" };
     vi.spyOn(database, "getDatabaseConnectionString").mockReturnValue(
       "postgresql://user:secret@localhost/openappa?schema=public",
@@ -47,7 +48,7 @@ describe("OpenAPPA native service", () => {
   });
 
   test("keeps the remedy tool unavailable while the feature is disabled", async () => {
-    config.openappa.enabled = false;
+    config.llmProxy.plugins = [];
     expect(
       getArchestraMcpTools().some((tool) =>
         tool.name.endsWith("__execute_remedy_plan"),

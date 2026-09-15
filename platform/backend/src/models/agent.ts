@@ -20,6 +20,7 @@ import {
   count,
   desc,
   eq,
+  exists,
   getTableColumns,
   ilike,
   inArray,
@@ -33,6 +34,7 @@ import {
   type SQL,
   sql,
 } from "drizzle-orm";
+import { unionAll } from "drizzle-orm/pg-core";
 import { LRUCacheManager } from "@/cache-manager";
 import { clearChatMcpClient } from "@/clients/chat-mcp-client";
 import config from "@/config";
@@ -50,6 +52,7 @@ import {
   type Agent,
   type AgentActivationSkillMode,
   AgentActivationSkillModeSchema,
+  type AgentListItem,
   type AgentScope,
   type AgentScopeFilter,
   type AgentToolRef,
@@ -64,6 +67,7 @@ import {
 } from "@/types";
 import { isUniqueConstraintError } from "@/utils/db";
 import { isUuid } from "@/utils/uuid";
+import A2aRemoteAgentModel from "./a2a-remote-agent";
 import AgentActivationSkillRuleModel from "./agent-activation-skill-rule";
 import AgentConnectorAssignmentModel from "./agent-connector-assignment";
 import AgentExcludedConnectorModel from "./agent-excluded-connector";
@@ -72,6 +76,7 @@ import AgentExcludedSubagentModel from "./agent-excluded-subagent";
 import AgentExcludedToolModel from "./agent-excluded-tool";
 import AgentKnowledgeBaseModel from "./agent-knowledge-base";
 import AgentLabelModel from "./agent-label";
+import AgentPinModel from "./agent-pin";
 import AgentSkillModel from "./agent-skill";
 import AgentSuggestedPromptModel from "./agent-suggested-prompt";
 import AgentTeamModel from "./agent-team";
@@ -83,6 +88,36 @@ import McpToolCallModel from "./mcp-tool-call";
 import OrganizationModel from "./organization";
 import TeamModel from "./team";
 import ToolModel from "./tool";
+
+type AgentListFilters = {
+  organizationId?: string;
+  ids?: string[];
+  name?: string;
+  agentType?: AgentType;
+  agentTypes?: AgentType[];
+  scope?: AgentScopeFilter;
+  teamIds?: string[];
+  authorIds?: string[];
+  excludeAuthorIds?: string[];
+  excludeOtherPersonalAgents?: boolean;
+  labels?: Record<string, string[]>;
+  status?: AgentRecordStatus;
+  providerApiKeyId?: string;
+  /** Caller-relative pin filter for the paginated Agents surface. */
+  pinned?: boolean;
+};
+
+type AgentCatalogRowRef = {
+  type: "agent" | "external";
+  id: string;
+};
+
+type AgentCatalogCandidatePage = {
+  rows: AgentCatalogRowRef[];
+  total: number;
+  agentTotal: number;
+  externalAgentTotal: number;
+};
 
 class AgentModel {
   /**
@@ -1330,194 +1365,284 @@ class AgentModel {
   }
 
   /**
+   * Return globally sorted references for the dedicated Agents-page catalog.
+   * Full rows are hydrated only after pagination chooses the winning ids.
+   */
+  static async findCatalogCandidates(params: {
+    pagination: PaginationQuery;
+    sorting?: SortingQuery;
+    filters?: AgentListFilters;
+    userId: string;
+    isAgentAdmin: boolean;
+    canManageExternalAgents: boolean;
+    includeExternalAgents?: boolean;
+    excludeOtherPersonalExternalAgents?: boolean;
+  }): Promise<AgentCatalogCandidatePage> {
+    const regularWhereClause = await AgentModel.buildListWhereClause({
+      filters: {
+        ...params.filters,
+        agentTypes: ["agent"],
+      },
+      userId: params.userId,
+      isAgentAdmin: params.isAgentAdmin,
+    });
+    const includeExternalAgents =
+      (params.includeExternalAgents ?? true) &&
+      (params.filters?.status ?? "active") === "active" &&
+      !params.filters?.labels &&
+      !params.filters?.providerApiKeyId &&
+      params.filters?.pinned !== true &&
+      params.filters?.scope !== "built_in";
+    const externalWhereConditions: SQL[] = [
+      includeExternalAgents
+        ? eq(
+            schema.a2aRemoteAgentsTable.organizationId,
+            params.filters?.organizationId ?? "",
+          )
+        : sql<boolean>`false`,
+    ];
+
+    if (params.filters?.name) {
+      externalWhereConditions.push(
+        ilike(schema.a2aRemoteAgentsTable.name, `%${params.filters.name}%`),
+      );
+    }
+    if (
+      params.filters?.scope === "personal" ||
+      params.filters?.scope === "team" ||
+      params.filters?.scope === "org"
+    ) {
+      externalWhereConditions.push(
+        eq(schema.a2aRemoteAgentsTable.scope, params.filters.scope),
+      );
+    }
+    if (params.filters?.teamIds?.length) {
+      externalWhereConditions.push(
+        exists(
+          db
+            .select({ value: sql`1` })
+            .from(schema.a2aRemoteAgentTeamsTable)
+            .where(
+              and(
+                eq(
+                  schema.a2aRemoteAgentTeamsTable.remoteAgentId,
+                  schema.a2aRemoteAgentsTable.id,
+                ),
+                inArray(
+                  schema.a2aRemoteAgentTeamsTable.teamId,
+                  params.filters.teamIds,
+                ),
+              ),
+            ),
+        ),
+      );
+    }
+    if (params.filters?.authorIds?.length) {
+      externalWhereConditions.push(
+        inArray(schema.a2aRemoteAgentsTable.authorId, params.filters.authorIds),
+      );
+    }
+    if (params.filters?.excludeAuthorIds?.length) {
+      const excludeAuthorsCondition = or(
+        isNull(schema.a2aRemoteAgentsTable.authorId),
+        notInArray(
+          schema.a2aRemoteAgentsTable.authorId,
+          params.filters.excludeAuthorIds,
+        ),
+      );
+      if (excludeAuthorsCondition) {
+        externalWhereConditions.push(excludeAuthorsCondition);
+      }
+    }
+    if (params.excludeOtherPersonalExternalAgents) {
+      const ownPersonalOnlyCondition = or(
+        ne(schema.a2aRemoteAgentsTable.scope, "personal"),
+        eq(schema.a2aRemoteAgentsTable.authorId, params.userId),
+      );
+      if (ownPersonalOnlyCondition) {
+        externalWhereConditions.push(ownPersonalOnlyCondition);
+      }
+    }
+    if (!params.canManageExternalAgents) {
+      externalWhereConditions.push(
+        A2aRemoteAgentModel.visibilityCondition(params.userId),
+      );
+    }
+    externalWhereConditions.push(
+      exists(
+        db
+          .select({ value: sql`1` })
+          .from(schema.a2aConnectionsTable)
+          .innerJoin(
+            schema.toolsTable,
+            eq(
+              schema.toolsTable.delegateToA2aConnectionId,
+              schema.a2aConnectionsTable.id,
+            ),
+          )
+          .where(
+            eq(
+              schema.a2aConnectionsTable.remoteAgentId,
+              schema.a2aRemoteAgentsTable.id,
+            ),
+          ),
+      ),
+    );
+
+    const regularTeamNames = db
+      .select({
+        agentId: schema.agentTeamsTable.agentId,
+        teamName: min(schema.teamsTable.name).as("team_name"),
+      })
+      .from(schema.agentTeamsTable)
+      .innerJoin(
+        schema.teamsTable,
+        eq(schema.teamsTable.id, schema.agentTeamsTable.teamId),
+      )
+      .groupBy(schema.agentTeamsTable.agentId)
+      .as("regular_catalog_team_names");
+    const externalTeamNames = db
+      .select({
+        agentId: schema.a2aRemoteAgentTeamsTable.remoteAgentId,
+        teamName: min(schema.teamsTable.name).as("team_name"),
+      })
+      .from(schema.a2aRemoteAgentTeamsTable)
+      .innerJoin(
+        schema.teamsTable,
+        eq(schema.teamsTable.id, schema.a2aRemoteAgentTeamsTable.teamId),
+      )
+      .groupBy(schema.a2aRemoteAgentTeamsTable.remoteAgentId)
+      .as("external_catalog_team_names");
+    const regularCandidates = db
+      .select({
+        resourceType: sql<"agent" | "external">`'agent'`.as("resource_type"),
+        id: schema.agentsTable.id,
+        name: schema.agentsTable.name,
+        createdAt: schema.agentsTable.createdAt,
+        teamName: sql<string>`COALESCE(${regularTeamNames.teamName}, '')`.as(
+          "team_name",
+        ),
+        personalPriority: sql<number>`CASE
+          WHEN ${schema.agentsTable.scope} = 'personal'
+            AND ${schema.agentsTable.authorId} = ${params.userId}
+          THEN 0 ELSE 1 END`.as("personal_priority"),
+        pinnedAt: sql<Date | null>`(
+          SELECT ${schema.agentPinsTable.pinnedAt}
+          FROM ${schema.agentPinsTable}
+          WHERE ${schema.agentPinsTable.userId} = ${params.userId}
+            AND ${schema.agentPinsTable.agentId} = ${schema.agentsTable.id}
+        )`.as("pinned_at"),
+      })
+      .from(schema.agentsTable)
+      .leftJoin(
+        regularTeamNames,
+        eq(regularTeamNames.agentId, schema.agentsTable.id),
+      )
+      .where(regularWhereClause);
+    const externalCandidates = db
+      .select({
+        resourceType: sql<"agent" | "external">`'external'`.as("resource_type"),
+        id: schema.a2aRemoteAgentsTable.id,
+        name: schema.a2aRemoteAgentsTable.name,
+        createdAt: schema.a2aRemoteAgentsTable.createdAt,
+        teamName: sql<string>`COALESCE(${externalTeamNames.teamName}, '')`.as(
+          "team_name",
+        ),
+        personalPriority: sql<number>`CASE
+          WHEN ${schema.a2aRemoteAgentsTable.scope} = 'personal'
+            AND ${schema.a2aRemoteAgentsTable.authorId} = ${params.userId}
+          THEN 0 ELSE 1 END`.as("personal_priority"),
+        pinnedAt: sql<Date | null>`NULL::timestamp`.as("pinned_at"),
+      })
+      .from(schema.a2aRemoteAgentsTable)
+      .leftJoin(
+        externalTeamNames,
+        eq(externalTeamNames.agentId, schema.a2aRemoteAgentsTable.id),
+      )
+      .where(and(...externalWhereConditions));
+    const candidates = unionAll(regularCandidates, externalCandidates).as(
+      "agent_catalog_candidates",
+    );
+    const direction = params.sorting?.sortDirection === "asc" ? asc : desc;
+    const sortColumn =
+      params.sorting?.sortBy === "name"
+        ? candidates.name
+        : params.sorting?.sortBy === "team"
+          ? candidates.teamName
+          : candidates.createdAt;
+
+    const candidateOrder =
+      params.filters?.pinned === true
+        ? [desc(candidates.pinnedAt), asc(candidates.name), asc(candidates.id)]
+        : [
+            asc(candidates.personalPriority),
+            direction(sortColumn),
+            asc(candidates.name),
+            asc(candidates.resourceType),
+            asc(candidates.id),
+          ];
+
+    const [rows, [totals]] = await Promise.all([
+      db
+        .select({
+          type: candidates.resourceType,
+          id: candidates.id,
+        })
+        .from(candidates)
+        .orderBy(...candidateOrder)
+        .limit(params.pagination.limit)
+        .offset(params.pagination.offset),
+      db
+        .select({
+          total: count(),
+          agentTotal: sql<number>`COUNT(*) FILTER (WHERE ${candidates.resourceType} = 'agent')`,
+          externalAgentTotal: sql<number>`COUNT(*) FILTER (WHERE ${candidates.resourceType} = 'external')`,
+        })
+        .from(candidates),
+    ]);
+
+    return {
+      rows,
+      total: Number(totals.total),
+      agentTotal: Number(totals.agentTotal),
+      externalAgentTotal: Number(totals.externalAgentTotal),
+    };
+  }
+
+  /**
    * Find all agents with pagination, sorting, and filtering support
    */
   static async findAllPaginated(
     pagination: PaginationQuery,
     sorting?: SortingQuery,
-    filters?: {
-      organizationId?: string;
-      name?: string;
-      agentType?: AgentType;
-      agentTypes?: AgentType[];
-      scope?: AgentScopeFilter;
-      teamIds?: string[];
-      authorIds?: string[];
-      excludeAuthorIds?: string[];
-      excludeOtherPersonalAgents?: boolean;
-      labels?: Record<string, string[]>;
-      status?: AgentRecordStatus;
-      providerApiKeyId?: string;
-    },
+    filters?: AgentListFilters,
     userId?: string,
     isAgentAdmin?: boolean,
-  ): Promise<PaginatedResult<Agent>> {
+  ): Promise<PaginatedResult<AgentListItem>> {
     // Determine the ORDER BY clause based on sorting params
     const orderByClause = AgentModel.getOrderByClause(sorting);
     const personalAgentPriorityOrderClauses =
       AgentModel.getPersonalAgentPriorityOrderClauses(userId);
-
-    // Build where clause for filters and access control
-    const whereConditions: SQL[] = [
-      getAgentStatusCondition(filters?.status ?? "active"),
-    ];
-
-    if (filters?.organizationId) {
-      whereConditions.push(
-        eq(schema.agentsTable.organizationId, filters.organizationId),
-      );
+    if (filters?.pinned !== undefined && !userId) {
+      return createPaginatedResult([], 0, pagination);
     }
+    const pinnedAgentOrderClauses =
+      filters?.pinned === true && userId
+        ? [
+            desc(sql`(
+              SELECT ${schema.agentPinsTable.pinnedAt}
+              FROM ${schema.agentPinsTable}
+              WHERE ${schema.agentPinsTable.userId} = ${userId}
+                AND ${schema.agentPinsTable.agentId} = ${schema.agentsTable.id}
+            )`),
+          ]
+        : [];
 
-    // Add name filter if provided
-    if (filters?.name) {
-      whereConditions.push(ilike(schema.agentsTable.name, `%${filters.name}%`));
-    }
-
-    if (filters?.providerApiKeyId === "organization-default") {
-      whereConditions.push(
-        isNull(schema.agentsTable.llmApiKeyId),
-        isNull(schema.agentsTable.modelId),
-      );
-    } else if (filters?.providerApiKeyId) {
-      whereConditions.push(
-        eq(schema.agentsTable.llmApiKeyId, filters.providerApiKeyId),
-      );
-    }
-
-    // Add agentTypes filter if provided (array of types)
-    if (filters?.agentTypes && filters.agentTypes.length > 0) {
-      whereConditions.push(
-        inArray(schema.agentsTable.agentType, filters.agentTypes),
-      );
-    }
-    // Add agentType filter if provided (single type, backwards compatible)
-    else if (filters?.agentType !== undefined) {
-      whereConditions.push(eq(schema.agentsTable.agentType, filters.agentType));
-    }
-
-    // Add scope filter if provided
-    if (filters?.scope === "built_in") {
-      whereConditions.push(eq(schema.agentsTable.builtIn, true));
-    } else if (filters?.scope === "personal") {
-      whereConditions.push(eq(schema.agentsTable.scope, "personal"));
-      whereConditions.push(eq(schema.agentsTable.builtIn, false));
-    } else if (filters?.scope === "team") {
-      whereConditions.push(eq(schema.agentsTable.scope, "team"));
-      whereConditions.push(eq(schema.agentsTable.builtIn, false));
-    } else if (filters?.scope === "org") {
-      whereConditions.push(eq(schema.agentsTable.scope, "org"));
-      whereConditions.push(eq(schema.agentsTable.builtIn, false));
-    } else {
-      // No scope filter: exclude built-in agents by default.
-      // Built-in agents are only shown when explicitly filtered via scope=built_in.
-      whereConditions.push(eq(schema.agentsTable.builtIn, false));
-    }
-
-    // Hide built-in agents from non-admin users
-    if (!isAgentAdmin) {
-      whereConditions.push(eq(schema.agentsTable.builtIn, false));
-    }
-
-    // Add teamIds filter if provided (filter team-scoped agents by specific teams)
-    if (filters?.teamIds && filters.teamIds.length > 0) {
-      const agentIdsInTeams = await db
-        .selectDistinct({ agentId: schema.agentTeamsTable.agentId })
-        .from(schema.agentTeamsTable)
-        .where(inArray(schema.agentTeamsTable.teamId, filters.teamIds));
-
-      const ids = agentIdsInTeams.map((r) => r.agentId);
-      if (ids.length === 0) {
-        return createPaginatedResult([], 0, pagination);
-      }
-      whereConditions.push(inArray(schema.agentsTable.id, ids));
-    }
-
-    // Add authorIds filter if provided (filter personal agents by owner)
-    if (filters?.authorIds && filters.authorIds.length > 0) {
-      whereConditions.push(
-        inArray(schema.agentsTable.authorId, filters.authorIds),
-      );
-    }
-
-    // Exclude specific authors if provided
-    if (filters?.excludeAuthorIds && filters.excludeAuthorIds.length > 0) {
-      const condition = or(
-        isNull(schema.agentsTable.authorId),
-        notInArray(schema.agentsTable.authorId, filters.excludeAuthorIds),
-      );
-      if (condition) {
-        whereConditions.push(condition);
-      }
-    }
-
-    // Exclude other users' personal agents (show non-personal + own personal)
-    if (filters?.excludeOtherPersonalAgents && userId) {
-      const condition = or(
-        ne(schema.agentsTable.scope, "personal"),
-        eq(schema.agentsTable.authorId, userId),
-      );
-      if (condition) {
-        whereConditions.push(condition);
-      }
-    }
-
-    // Add label filters if provided (AND across keys, OR within values)
-    if (filters?.labels) {
-      for (const [key, values] of Object.entries(filters.labels)) {
-        const agentIdsWithLabel = await db
-          .selectDistinct({ agentId: schema.agentLabelsTable.agentId })
-          .from(schema.agentLabelsTable)
-          .innerJoin(
-            schema.labelKeysTable,
-            eq(schema.agentLabelsTable.keyId, schema.labelKeysTable.id),
-          )
-          .innerJoin(
-            schema.labelValuesTable,
-            eq(schema.agentLabelsTable.valueId, schema.labelValuesTable.id),
-          )
-          .where(
-            and(
-              eq(schema.labelKeysTable.key, key),
-              inArray(schema.labelValuesTable.value, values),
-            ),
-          );
-
-        const ids = agentIdsWithLabel.map((r) => r.agentId);
-        if (ids.length === 0) {
-          return createPaginatedResult([], 0, pagination);
-        }
-        whereConditions.push(inArray(schema.agentsTable.id, ids));
-      }
-    }
-
-    // Access-control filtering. Non-admins are always restricted to the agents
-    // they can access (own personal + org + teams they belong to). An admin is
-    // restricted the same way ONLY in the default active "All" view (no explicit
-    // scope), so it shows just what they can access rather than the whole org —
-    // oversight (other users' personal agents and team agents for teams they
-    // aren't in) is dropped there. Explicit scopes keep the admin's full
-    // org-wide base (oversight stays reachable via Team → pick that team and
-    // Personal → Other users), and so does the admin-only deleted view, whose
-    // whole purpose is reviewing every removed agent.
-    const isDefaultActiveAllView =
-      filters?.scope === undefined &&
-      (filters?.status ?? "active") !== "deleted";
-    const restrictToAccessible = !isAgentAdmin || isDefaultActiveAllView;
-    if (userId && restrictToAccessible) {
-      const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
-        userId,
-        false,
-      );
-
-      if (accessibleAgentIds.length === 0) {
-        return createPaginatedResult([], 0, pagination);
-      }
-
-      whereConditions.push(inArray(schema.agentsTable.id, accessibleAgentIds));
-    }
-
-    const whereClause =
-      whereConditions.length > 0 ? and(...whereConditions) : undefined;
+    const whereClause = await AgentModel.buildListWhereClause({
+      filters,
+      userId,
+      isAgentAdmin,
+    });
 
     // Step 1: Get paginated agent IDs with proper sorting
     // This ensures LIMIT/OFFSET applies to agents, not to joined rows with tools
@@ -1553,6 +1678,7 @@ class AgentModel {
           eq(schema.agentsTable.id, subagentsCountSubquery.agentId),
         )
         .orderBy(
+          ...pinnedAgentOrderClauses,
           ...personalAgentPriorityOrderClauses,
           direction(sql`COALESCE(${subagentsCountSubquery.subagentsCount}, 0)`),
         );
@@ -1572,6 +1698,7 @@ class AgentModel {
           eq(schema.agentsTable.id, toolsCountSubquery.agentId),
         )
         .orderBy(
+          ...pinnedAgentOrderClauses,
           ...personalAgentPriorityOrderClauses,
           direction(sql`COALESCE(${toolsCountSubquery.toolsCount}, 0)`),
         );
@@ -1593,6 +1720,7 @@ class AgentModel {
           eq(schema.agentsTable.id, knowledgeSourcesCountSubquery.agentId),
         )
         .orderBy(
+          ...pinnedAgentOrderClauses,
           ...personalAgentPriorityOrderClauses,
           direction(
             sql`COALESCE(${knowledgeSourcesCountSubquery.knowledgeSourcesCount}, 0)`,
@@ -1628,6 +1756,7 @@ class AgentModel {
           eq(schema.agentsTable.id, lastUsedAtSubquery.agentId),
         )
         .orderBy(
+          ...pinnedAgentOrderClauses,
           ...personalAgentPriorityOrderClauses,
           // Ordered by the same value the row displays: the later of the two
           // signals. Never-used agents sort as oldest (asc first / desc last).
@@ -1658,11 +1787,13 @@ class AgentModel {
           eq(schema.agentsTable.id, teamNameSubquery.agentId),
         )
         .orderBy(
+          ...pinnedAgentOrderClauses,
           ...personalAgentPriorityOrderClauses,
           direction(sql`COALESCE(${teamNameSubquery.teamName}, '')`),
         );
     } else {
       query = query.orderBy(
+        ...pinnedAgentOrderClauses,
         ...personalAgentPriorityOrderClauses,
         orderByClause,
       );
@@ -1758,14 +1889,193 @@ class AgentModel {
       AgentModel.populateResolvedLlm(agents),
       AgentModel.populateLastUsedAt(agents),
     ]);
+    const pinnedAtByAgent = userId
+      ? await AgentPinModel.getPinnedAtForAgents({ userId, agentIds })
+      : new Map<string, Date>();
     AgentModel.filterUnavailableKnowledgeTools(agents);
 
-    return createPaginatedResult(agents, Number(totalResult), pagination);
+    return createPaginatedResult(
+      agents.map((agent) => ({
+        ...agent,
+        pinnedAt: pinnedAtByAgent.get(agent.id) ?? null,
+      })),
+      Number(totalResult),
+      pagination,
+    );
   }
 
   /**
-   * Helper to get the appropriate ORDER BY clause based on sorting params
+   * Build the regular-agent list predicate shared by the standard endpoint and
+   * the Agents-page catalog candidate query.
    */
+  private static async buildListWhereClause(params: {
+    filters?: AgentListFilters;
+    userId?: string;
+    isAgentAdmin?: boolean;
+  }): Promise<SQL | undefined> {
+    const { filters, userId, isAgentAdmin } = params;
+    const whereConditions: SQL[] = [
+      getAgentStatusCondition(filters?.status ?? "active"),
+    ];
+
+    if (filters?.organizationId) {
+      whereConditions.push(
+        eq(schema.agentsTable.organizationId, filters.organizationId),
+      );
+    }
+    if (filters?.ids) {
+      whereConditions.push(
+        filters.ids.length > 0
+          ? inArray(schema.agentsTable.id, filters.ids)
+          : sql<boolean>`false`,
+      );
+    }
+    if (filters?.name) {
+      whereConditions.push(ilike(schema.agentsTable.name, `%${filters.name}%`));
+    }
+    if (filters?.providerApiKeyId === "organization-default") {
+      whereConditions.push(
+        isNull(schema.agentsTable.llmApiKeyId),
+        isNull(schema.agentsTable.modelId),
+      );
+    } else if (filters?.providerApiKeyId) {
+      whereConditions.push(
+        eq(schema.agentsTable.llmApiKeyId, filters.providerApiKeyId),
+      );
+    }
+    if (filters?.agentTypes?.length) {
+      whereConditions.push(
+        inArray(schema.agentsTable.agentType, filters.agentTypes),
+      );
+    } else if (filters?.agentType !== undefined) {
+      whereConditions.push(eq(schema.agentsTable.agentType, filters.agentType));
+    }
+
+    if (filters?.scope === "built_in") {
+      whereConditions.push(eq(schema.agentsTable.builtIn, true));
+    } else if (filters?.scope === "personal") {
+      whereConditions.push(
+        eq(schema.agentsTable.scope, "personal"),
+        eq(schema.agentsTable.builtIn, false),
+      );
+    } else if (filters?.scope === "team") {
+      whereConditions.push(
+        eq(schema.agentsTable.scope, "team"),
+        eq(schema.agentsTable.builtIn, false),
+      );
+    } else if (filters?.scope === "org") {
+      whereConditions.push(
+        eq(schema.agentsTable.scope, "org"),
+        eq(schema.agentsTable.builtIn, false),
+      );
+    } else {
+      whereConditions.push(eq(schema.agentsTable.builtIn, false));
+    }
+    if (!isAgentAdmin) {
+      whereConditions.push(eq(schema.agentsTable.builtIn, false));
+    }
+    if (filters?.teamIds?.length) {
+      const agentIdsInTeams = await db
+        .selectDistinct({ agentId: schema.agentTeamsTable.agentId })
+        .from(schema.agentTeamsTable)
+        .where(inArray(schema.agentTeamsTable.teamId, filters.teamIds));
+      const ids = agentIdsInTeams.map((row) => row.agentId);
+      whereConditions.push(
+        ids.length > 0
+          ? inArray(schema.agentsTable.id, ids)
+          : sql<boolean>`false`,
+      );
+    }
+    if (filters?.authorIds?.length) {
+      whereConditions.push(
+        inArray(schema.agentsTable.authorId, filters.authorIds),
+      );
+    }
+    if (filters?.excludeAuthorIds?.length) {
+      const condition = or(
+        isNull(schema.agentsTable.authorId),
+        notInArray(schema.agentsTable.authorId, filters.excludeAuthorIds),
+      );
+      if (condition) whereConditions.push(condition);
+    }
+    if (filters?.excludeOtherPersonalAgents && userId) {
+      const condition = or(
+        ne(schema.agentsTable.scope, "personal"),
+        eq(schema.agentsTable.authorId, userId),
+      );
+      if (condition) whereConditions.push(condition);
+    }
+    if (filters?.labels) {
+      for (const [key, values] of Object.entries(filters.labels)) {
+        const agentIdsWithLabel = await db
+          .selectDistinct({ agentId: schema.agentLabelsTable.agentId })
+          .from(schema.agentLabelsTable)
+          .innerJoin(
+            schema.labelKeysTable,
+            eq(schema.agentLabelsTable.keyId, schema.labelKeysTable.id),
+          )
+          .innerJoin(
+            schema.labelValuesTable,
+            eq(schema.agentLabelsTable.valueId, schema.labelValuesTable.id),
+          )
+          .where(
+            and(
+              eq(schema.labelKeysTable.key, key),
+              inArray(schema.labelValuesTable.value, values),
+            ),
+          );
+        const ids = agentIdsWithLabel.map((row) => row.agentId);
+        whereConditions.push(
+          ids.length > 0
+            ? inArray(schema.agentsTable.id, ids)
+            : sql<boolean>`false`,
+        );
+      }
+    }
+    if (filters?.pinned !== undefined) {
+      if (!userId) {
+        whereConditions.push(sql<boolean>`false`);
+      } else {
+        const pinExists = exists(
+          db
+            .select({ value: sql`1` })
+            .from(schema.agentPinsTable)
+            .where(
+              and(
+                eq(schema.agentPinsTable.userId, userId),
+                eq(schema.agentPinsTable.agentId, schema.agentsTable.id),
+              ),
+            ),
+        );
+        whereConditions.push(
+          filters.pinned ? pinExists : sql`NOT ${pinExists}`,
+        );
+      }
+    }
+
+    // The default active All view remains restricted to rows the caller can
+    // reach, even for admins. Explicit scopes and the deleted view retain the
+    // existing oversight behavior.
+    const isDefaultActiveAllView =
+      filters?.scope === undefined &&
+      (filters?.status ?? "active") !== "deleted";
+    const restrictToAccessible = !isAgentAdmin || isDefaultActiveAllView;
+    if (userId && restrictToAccessible) {
+      const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
+        userId,
+        false,
+      );
+      whereConditions.push(
+        accessibleAgentIds.length > 0
+          ? inArray(schema.agentsTable.id, accessibleAgentIds)
+          : sql<boolean>`false`,
+      );
+    }
+
+    return whereConditions.length > 0 ? and(...whereConditions) : undefined;
+  }
+
+  /** Get the appropriate ORDER BY clause for the standard agent list. */
   private static getOrderByClause(sorting?: SortingQuery) {
     const direction = sorting?.sortDirection === "asc" ? asc : desc;
 
@@ -2858,6 +3168,37 @@ class AgentModel {
       .where(eq(schema.agentsTable.id, params.id))
       .returning({ id: schema.agentsTable.id });
     return updated.length > 0;
+  }
+
+  /** Change only ownership, and refuse a stale authorization snapshot. */
+  static async transferOwnership(params: {
+    id: string;
+    organizationId: string;
+    previousOwnerId: string | null;
+    updatedAt: Date;
+    ownerId: string;
+  }): Promise<boolean> {
+    const rows = await db
+      .update(schema.agentsTable)
+      .set({
+        authorId: params.ownerId,
+        createdByServiceAccountId: null,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(schema.agentsTable.id, params.id),
+          eq(schema.agentsTable.organizationId, params.organizationId),
+          params.previousOwnerId === null
+            ? isNull(schema.agentsTable.authorId)
+            : eq(schema.agentsTable.authorId, params.previousOwnerId),
+          // PostgreSQL defaults can carry sub-millisecond precision; JS Date cannot.
+          sql`date_trunc('milliseconds', ${schema.agentsTable.updatedAt}) = ${params.updatedAt.toISOString()}::timestamp`,
+          notDeleted(schema.agentsTable),
+        ),
+      )
+      .returning({ id: schema.agentsTable.id });
+    return rows.length === 1;
   }
 
   static async update(
@@ -4042,6 +4383,8 @@ class AgentModel {
       name: row.name,
       organizationId: row.organizationId,
       agentType: row.agentType,
+      authorId: row.authorId,
+      createdByServiceAccountId: row.createdByServiceAccountId,
       scope: row.scope,
       description: row.description ?? null,
       systemPrompt: row.systemPrompt ?? null,

@@ -239,7 +239,6 @@ import {
   shouldOfferAppCatalogs,
   shouldShowDescriptionField,
 } from "./agent-form.utils";
-import { AgentRuntimeCredentialCard } from "./agent-pages/agent-runtime-credential-card";
 
 type Agent = archestraApiTypes.GetAllAgentsResponses["200"][number];
 type ToolExposureMode = Agent["toolExposureMode"];
@@ -856,7 +855,7 @@ function OutboundAgentsEditor({
             emptyMessage="No external A2A agents connected."
             createAction={{
               label: "Manage external agents",
-              href: "/a2a/agents",
+              href: "/agents",
             }}
           />
         )}
@@ -1101,10 +1100,11 @@ export function AccessLevelSelector({
  *
  * - `configuration`: identity (name, icon, description, environment), who can
  *   use it, and the instruction, suggested prompts and model of an internal
- *   agent.
+ *   agent. During creation, this also includes Agent runtime.
  * - `tools`: everything the agent reaches — tools, activation skills,
  *   knowledge sources, subagents, and hooks.
- * - `advanced`: Agent Runtime, security, passthrough headers, identity
+ * - `runtime`: Agent runtime and credentials on the detail page.
+ * - `advanced`: Security, passthrough headers, identity
  *   provider, and labels.
  *
  * The groups a host can mount independently. `messaging` is a section of its
@@ -1116,13 +1116,15 @@ export type AgentFormSection =
   | "configuration"
   | "messaging"
   | "tools"
-  | "advanced";
+  | "advanced"
+  | "runtime";
 
 /** The default render: the whole form. */
 const AGENT_FORM_SECTIONS: readonly AgentFormSection[] = [
   "configuration",
   "messaging",
   "tools",
+  "runtime",
   "advanced",
 ];
 
@@ -1246,11 +1248,15 @@ export function AgentForm({
   const showMessagingSection = mountedSections.has("messaging");
   const showToolsSections = mountedSections.has("tools");
   const showAdvancedSections = mountedSections.has("advanced");
+  const showRuntimeSection = mountedSections.has("runtime");
   // Whether anything on screen contributes a field to the agent record's own
   // PUT. Messaging channels alone do not — they write through their own
   // endpoint.
   const mountsAgentFields =
-    showConfigurationSections || showToolsSections || showAdvancedSections;
+    showConfigurationSections ||
+    showToolsSections ||
+    showAdvancedSections ||
+    showRuntimeSection;
   const isActiveSection = (group: AgentFormSection) =>
     activeSection === undefined || activeSection === group;
   // Which records can delegate at all, mirroring the backend's
@@ -2626,10 +2632,8 @@ export function AgentForm({
                 passthroughHeaders:
                   passthroughHeaders.length > 0 ? passthroughHeaders : null,
               }),
-              ...(agentRuntimeEnabled && {
-                runtime,
-              }),
             }),
+            ...(showRuntimeSection && agentRuntimeEnabled && { runtime }),
             // The tools group: what the agent may reach, and how.
             ...(showToolsSections && {
               knowledgeBaseIds: knowledgeBaseIds,
@@ -2924,6 +2928,7 @@ export function AgentForm({
     showConfigurationSections,
     showToolsSections,
     showAdvancedSections,
+    showRuntimeSection,
     mountsAgentFields,
     advisorAgentId,
     deleteAgent,
@@ -3274,17 +3279,15 @@ export function AgentForm({
                       onIconChange={setIcon}
                       fallbackType={defaultIconType}
                       showLogos={agentType === "agent"}
+                      label={<Label htmlFor="agentName">Name *</Label>}
                     >
-                      <div className="space-y-2">
-                        <Label htmlFor="agentName">Name *</Label>
-                        <Input
-                          id="agentName"
-                          value={name}
-                          onChange={(e) => setName(e.target.value)}
-                          placeholder={getNamePlaceholder(agentType)}
-                          autoFocus
-                        />
-                      </div>
+                      <Input
+                        id="agentName"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        placeholder={getNamePlaceholder(agentType)}
+                        autoFocus
+                      />
                     </IdentityFields>
                   )}
 
@@ -3471,6 +3474,7 @@ export function AgentForm({
                     <div className="space-y-2">
                       <SystemPromptEditor
                         title="Instructions"
+                        description="Define what this agent should do, how it should respond, and any rules it should follow."
                         value={systemPrompt}
                         onChange={setSystemPrompt}
                         readOnly={readOnly}
@@ -3495,6 +3499,18 @@ export function AgentForm({
                         }
                       />
                     </div>
+                  )}
+
+                  {!agent && agentType === "agent" && agentRuntimeEnabled && (
+                    <section
+                      className="space-y-4 border-y py-6"
+                      aria-label="Agent runtime"
+                    >
+                      <AgentRuntimeFields
+                        value={runtime}
+                        onChange={setAgentRuntime}
+                      />
+                    </section>
                   )}
 
                   {/* Visibility: an ordinary field of the record, not a
@@ -4068,7 +4084,24 @@ export function AgentForm({
             </SettingsSectionGroup>
           )}
 
-          {/* The Advanced step: Agent Runtime, security, passthrough
+          {agent &&
+            showRuntimeSection &&
+            agentType === "agent" &&
+            agentRuntimeEnabled &&
+            !isBuiltIn && (
+              <SettingsSectionGroup
+                className={cn(!isActiveSection("runtime") && "hidden")}
+              >
+                <SettingsSection aria-label="Agent runtime">
+                  <AgentRuntimeFields
+                    value={runtime}
+                    onChange={setAgentRuntime}
+                  />
+                </SettingsSection>
+              </SettingsSectionGroup>
+            )}
+
+          {/* The Advanced step: security, passthrough
               headers, the identity provider, and labels. A built-in agent has
               none. */}
           {showAdvancedSections && !isBuiltIn && (
@@ -4178,28 +4211,6 @@ export function AgentForm({
                           />
                         </div>
                       }
-                    />
-                  )}
-                </SettingsSection>
-              )}
-
-              {agentType === "agent" && agentRuntimeEnabled && (
-                <SettingsSection
-                  title="Agent Runtime"
-                  description="Whether this agent may run on its own, and the credentials it runs with."
-                >
-                  <AgentRuntimeFields
-                    value={runtime}
-                    onChange={setAgentRuntime}
-                  />
-                  {agent?.runtime && runtime && (
-                    <AgentRuntimeCredentialCard
-                      agentId={agent.id}
-                      credentials={(agent.runtime.credentials ?? []).filter(
-                        ({ key }) =>
-                          !isClaudeCodeRuntime ||
-                          key !== "CLAUDE_CODE_OAUTH_TOKEN",
-                      )}
                     />
                   )}
                 </SettingsSection>

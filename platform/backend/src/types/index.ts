@@ -8,6 +8,7 @@ export * from "./account";
 export * from "./agent";
 export * from "./agent-activation-skill";
 export * from "./agent-activation-skill-policy";
+export * from "./agent-catalog";
 export * from "./agent-connector-assignment";
 export * from "./agent-export";
 export * from "./agent-knowledge-base";

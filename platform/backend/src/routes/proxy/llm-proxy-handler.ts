@@ -53,6 +53,7 @@ import {
   AppaProxySessionModel,
   AppaProxySessionProtocolError,
   AppModel,
+  ConversationModel,
   EnvironmentModel,
   InteractionModel,
   LimitValidationService,
@@ -82,17 +83,18 @@ import {
   EVENT_GENAI_CONTENT_COMPLETION,
   type SpanTeamInfo,
 } from "@/observability/tracing";
+import type { AppaPluginArchestra } from "@/proxy/plugins/appa-plugin-archestra/plugin";
 import {
+  APPA_PLUGIN_HOST_BINDING,
   type AppaClientAdapter,
   type AppaNativeClient,
-  getAppaPluginArchestra,
-  registerAppaLlmProxyPlugin,
-} from "@/proxy/plugins/appa-plugin-archestra";
+} from "@/proxy/plugins/appa-plugin-archestra/types";
 import type {
   LlmProxyChildContext,
   LlmProxyPluginRegistry,
   LlmProxyRequestContext,
   LlmProxyToolCall,
+  LlmProxyToolResultsOutcome,
 } from "@/proxy/plugins/registry";
 import {
   getLlmProxyPluginRegistry,
@@ -490,9 +492,12 @@ export async function handleLLMProxy<
     otelContext.active(),
     request.headers,
   );
-  const appaPlugin = getAppaPluginArchestra();
-  registerAppaLlmProxyPlugin();
   const proxyPlugins = getLlmProxyPluginRegistry();
+  const appaPlugin =
+    proxyPlugins.getPlugin<AppaPluginArchestra>("archestra.appa");
+  if (config.llmProxy.appaHook && !appaPlugin) {
+    throw new Error("APPA proxy plugin was not initialized at process startup");
+  }
 
   let requestBody = config.llmProxy.appaHook?.nativeCodexEnabled
     ? normalizeNativeCodexInput(body)
@@ -915,6 +920,8 @@ export async function handleLLMProxy<
     profileId: resolvedAgent.id,
     userId,
     provider: providerName,
+    interactionType: provider.interactionType,
+    streaming: requestAdapter.isStreaming(),
     protocol: provider.interactionType,
     model: stripClaudeContextVariantSuffix(requestAdapter.getModel()),
     headers: headersForExtraction,
@@ -922,18 +929,20 @@ export async function handleLLMProxy<
     session: { id: sessionId ?? randomUUID() },
     resources: new Map(),
   };
+  let pluginToolResultsOutcome: LlmProxyToolResultsOutcome | undefined;
 
   // Check usage limits
   try {
-    appaNativeAdapter = config.llmProxy.appaHook
-      ? resolveAppaNativeAdapter({
-          plugin: appaPlugin,
-          provider: providerName,
-          interactionType: provider.interactionType,
-          headers: headersForExtraction,
-          request: requestAdapter.getOriginalRequest(),
-        })
-      : undefined;
+    appaNativeAdapter =
+      config.llmProxy.appaHook && appaPlugin
+        ? resolveAppaNativeAdapter({
+            plugin: appaPlugin,
+            provider: providerName,
+            interactionType: provider.interactionType,
+            headers: headersForExtraction,
+            request: requestAdapter.getOriginalRequest(),
+          })
+        : undefined;
     appaNativeClient = appaNativeAdapter?.nativeClient ?? "unknown";
     const appaThreadCandidate = config.llmProxy.appaHook
       ? resolveAppaThreadContext({
@@ -976,6 +985,15 @@ export async function handleLLMProxy<
         );
       }
       let appaThread = appaThreadCandidate;
+      if (!appaThread) {
+        const headerSessionId = singleHeader(
+          headersForExtraction["x-appa-session-id"],
+        );
+        appaThread =
+          headerSessionId && isValidAppaSessionId(headerSessionId)
+            ? { threadId: headerSessionId }
+            : null;
+      }
       if (!appaThread || "error" in appaThread) {
         throw new ApiError(
           400,
@@ -993,6 +1011,23 @@ export async function handleLLMProxy<
           400,
           "OpenAPPA proxy hooks require a stable thread id.",
         );
+      }
+      if (
+        (source === "chat" || source === "chat:tool_call_repair") &&
+        isLoopbackRequest(request) &&
+        authenticatedUserId
+      ) {
+        const conversationAgentId = await ConversationModel.getAgentIdForUser(
+          appaThread.threadId,
+          authenticatedUserId,
+          resolvedAgent.organizationId,
+        );
+        if (conversationAgentId !== resolvedAgent.id) {
+          throw new ApiError(
+            403,
+            "OpenAPPA Chat session is not owned by this proxy profile.",
+          );
+        }
       }
       const nativeChildRequest = nativeCodexRequested
         ? extractNativeChildRequest({
@@ -1349,9 +1384,15 @@ export async function handleLLMProxy<
             ? { binding: appaThread.spawnBinding }
             : {}),
         };
-        proxyPluginContext.resources.set(appaPlugin.id, {
+        proxyPluginContext.resources.set(APPA_PLUGIN_HOST_BINDING, {
           session: activeAppaHook,
           adapter: appaNativeAdapter,
+          ...((source === "chat" ||
+            source === "chat:tool_call_repair" ||
+            source === "chat:compaction") &&
+          isLoopbackRequest(request)
+            ? { trustedContext: { chatSource: source } }
+            : {}),
         });
         await proxyPlugins.onSessionInit(proxyPluginContext);
         if (nativeChildRequest && nativeChildNeedsAttachment) {
@@ -1383,6 +1424,10 @@ export async function handleLLMProxy<
               request: nativeRequest,
             });
             await proxyPlugins.onTurnEnd({
+              ...proxyPluginContext,
+              response: bootstrap,
+            });
+            await proxyPlugins.complete({
               ...proxyPluginContext,
               response: bootstrap,
             });
@@ -1457,22 +1502,10 @@ export async function handleLLMProxy<
             threadId: appaThread.threadId,
           };
         }
-        const pluginToolResults = await proxyPlugins.onToolResults({
+        pluginToolResultsOutcome = await proxyPlugins.onToolResults({
           ...proxyPluginContext,
-          toolResults: inboundToolResults,
+          toolResults: requestAdapter.getToolResults(),
         });
-        const modelResultUpdates =
-          pluginToolResults.modelUpdates instanceof Map
-            ? pluginToolResults.modelUpdates
-            : activeAppaHook.getModelResultUpdates();
-        if (modelResultUpdates.size > 0) {
-          const presented = applyAppaOutcomeNotices(
-            requestAdapter.toProviderRequest(),
-            modelResultUpdates,
-          );
-          requestAdapter = provider.createRequestAdapter(presented);
-          streamAdapter = provider.createStreamAdapter(presented);
-        }
       } catch (error) {
         activeAppaHook?.recordFailure({ phase: "native_setup", error });
         throw toAppaHookApiError(error);
@@ -1480,17 +1513,10 @@ export async function handleLLMProxy<
     }
     if (!config.llmProxy.appaHook) {
       await proxyPlugins.onSessionInit(proxyPluginContext);
-      const inboundToolResults = collectAppaInboundToolResults({
-        adapter: undefined,
-        request: body,
-        interactionType: provider.interactionType,
+      pluginToolResultsOutcome = await proxyPlugins.onToolResults({
+        ...proxyPluginContext,
+        toolResults: requestAdapter.getToolResults(),
       });
-      if (inboundToolResults.length > 0) {
-        await proxyPlugins.onToolResults({
-          ...proxyPluginContext,
-          toolResults: inboundToolResults,
-        });
-      }
     }
     logger.debug(
       { resolvedAgentId },
@@ -1768,47 +1794,52 @@ export async function handleLLMProxy<
           }
         : undefined;
 
-    const {
-      toolResultUpdates,
-      contextIsTrusted,
-      dualLlmAnalyses,
-      unsafeContextBoundary,
-    } = await utils.trustedData.evaluateIfContextIsTrusted({
-      messages: commonMessages,
-      agentId: resolvedAgentId,
-      organizationId: resolvedAgent.organizationId,
-      userId,
-      considerContextUntrusted: effectiveConsiderContextUntrusted,
-      policyContext: { teamIds, externalAgentId },
-      onDualLlmStart: (info) => {
-        writeDualLlmKeepAlive?.();
-        publishDualLlmEvent?.({ kind: "start", ...info });
-      },
-      onDualLlmProgress: (progress) => {
-        writeDualLlmKeepAlive?.();
-        publishDualLlmEvent?.({ kind: "qa", ...progress });
-      },
-      // A failed analysis fails the request closed. Chat renders the failure
-      // from the structured event; for other clients the message is written
-      // as a text delta — safe here because the request errors out and no
-      // model output follows that could fuse with it.
-      onDualLlmError: (info) => {
-        publishDualLlmEvent?.({ kind: "error", ...info });
-        if (!publishDualLlmEvent && requestAdapter.isStreaming()) {
-          ensureStreamHeaders();
-          reply.raw.write(streamAdapter.formatTextDeltaSSE(info.message));
-        }
-      },
-      onDualLlmComplete: (analysis, info) =>
-        publishDualLlmEvent?.({
-          kind: "complete",
-          toolCallId: analysis.toolCallId,
-          toolName: info.toolName,
-          analysis,
-          cached: info.cached,
-        }),
-      initialUntrustedReason,
-    });
+    const trustedDataOutcome =
+      pluginToolResultsOutcome?.contextTrust ??
+      (await utils.trustedData.evaluateIfContextIsTrusted({
+        messages: commonMessages,
+        agentId: resolvedAgentId,
+        organizationId: resolvedAgent.organizationId,
+        userId,
+        considerContextUntrusted: effectiveConsiderContextUntrusted,
+        policyContext: { teamIds, externalAgentId },
+        onDualLlmStart: (info) => {
+          writeDualLlmKeepAlive?.();
+          publishDualLlmEvent?.({ kind: "start", ...info });
+        },
+        onDualLlmProgress: (progress) => {
+          writeDualLlmKeepAlive?.();
+          publishDualLlmEvent?.({ kind: "qa", ...progress });
+        },
+        // A failed analysis fails the request closed. Chat renders the failure
+        // from the structured event; for other clients the message is written
+        // as a text delta — safe here because the request errors out and no
+        // model output follows that could fuse with it.
+        onDualLlmError: (info) => {
+          publishDualLlmEvent?.({ kind: "error", ...info });
+          if (!publishDualLlmEvent && requestAdapter.isStreaming()) {
+            ensureStreamHeaders();
+            reply.raw.write(streamAdapter.formatTextDeltaSSE(info.message));
+          }
+        },
+        onDualLlmComplete: (analysis, info) =>
+          publishDualLlmEvent?.({
+            kind: "complete",
+            toolCallId: analysis.toolCallId,
+            toolName: info.toolName,
+            analysis,
+            cached: info.cached,
+          }),
+        initialUntrustedReason,
+      }));
+    const { contextIsTrusted, dualLlmAnalyses, unsafeContextBoundary } =
+      trustedDataOutcome;
+    const toolResultUpdates = {
+      ...pluginToolResultsOutcome?.toolResultUpdates,
+      ...("toolResultUpdates" in trustedDataOutcome
+        ? trustedDataOutcome.toolResultUpdates
+        : {}),
+    };
 
     // Apply tool result updates
     requestAdapter.applyToolResultUpdates(toolResultUpdates);
@@ -2152,18 +2183,14 @@ export async function handleLLMProxy<
     // captured as unhandled server exceptions.
     return await handleNonStreaming(client, finalRequest, reply, provider, ctx);
   } catch (error) {
-    let handledError = error;
+    const handledError = error;
     try {
-      await proxyPlugins.onAbort(proxyPluginContext);
-    } catch (abortError) {
-      handledError = abortError;
-    }
-    if (activeAppaHook && !appaNativeAdapter) {
-      try {
-        await activeAppaHook.abort();
-      } catch (abortError) {
-        handledError = toAppaHookApiError(abortError);
-      }
+      await proxyPlugins.fail({ ...proxyPluginContext, error });
+    } catch (pluginError) {
+      logger.warn(
+        { err: pluginError },
+        "Plugin cleanup failed while handling proxy error",
+      );
     }
     // Persist failed interactions so they appear in LLM logs
     try {
@@ -2411,6 +2438,10 @@ async function handleStreaming<
       parentContext,
       user: toSpanUserInfo(resolvedUser),
       callback: async (llmSpan) => {
+        await proxyPlugins.onBeforeModel({
+          ...proxyPluginContext,
+          request,
+        });
         const stream = await provider.executeStream(client, request);
         billingMode = getBillingMode();
 
@@ -2781,6 +2812,9 @@ async function handleStreaming<
             awaitClientContinuation: true,
             deferCleanup: true,
           });
+          // The held-response controller owns the durable continuation. This
+          // only releases request-local plugin state; it must not abort it.
+          await proxyPlugins.complete({ ...proxyPluginContext, response });
           streamCompleted = true;
           return reply;
         }
@@ -2903,17 +2937,7 @@ async function handleStreaming<
         response: streamAdapter.toProviderResponse(),
       });
       if (pluginOutcome.decision === "refuse") {
-        toolInvocationRefusal = proxyPluginPolicyBlock({
-          toolCalls:
-            pluginOutcome.decision === "refuse"
-              ? toolCalls.map((call) => ({
-                  id: call.id,
-                  name: call.name,
-                  arguments: call.arguments,
-                }))
-              : [],
-          message: pluginOutcome.message,
-        });
+        toolInvocationRefusal = pluginOutcome.refusal;
         toolCallBlock = toToolCallBlock(toolInvocationRefusal);
       } else {
         rewrittenToolCalls = pluginOutcome.toolCalls.map((call) => ({
@@ -3030,6 +3054,12 @@ async function handleStreaming<
       !toolInvocationRefusal &&
       !reply.raw.destroyed
     ) {
+      const response = streamAdapter.toProviderResponse();
+      await proxyPlugins.onModelResponse({
+        ...proxyPluginContext,
+        response,
+      });
+      await proxyPlugins.complete({ ...proxyPluginContext, response });
       ensureStreamHeaders();
       reply.raw.end(
         nativeCodexBootstrapSse(
@@ -3098,6 +3128,15 @@ async function handleStreaming<
       }
     }
 
+    // Streaming bytes have already been released; this is one final observation
+    // of the completed provider response, not a mutable replacement boundary.
+    const response = streamAdapter.toProviderResponse();
+    await proxyPlugins.onModelResponse({
+      ...proxyPluginContext,
+      response,
+    });
+    await proxyPlugins.complete({ ...proxyPluginContext, response });
+
     // Stream end events
     writeToClient(streamAdapter.formatEndSSE());
     reply.raw.end();
@@ -3105,18 +3144,14 @@ async function handleStreaming<
     streamCompleted = true;
     return reply;
   } catch (error) {
-    let handledError = error;
+    const handledError = error;
     try {
-      await proxyPlugins.onAbort(proxyPluginContext);
-    } catch (abortError) {
-      handledError = abortError;
-    }
-    if (appaHook && !appaNativeAdapter) {
-      try {
-        await appaHook.abort();
-      } catch (abortError) {
-        handledError = toAppaHookApiError(abortError);
-      }
+      await proxyPlugins.fail({ ...proxyPluginContext, error });
+    } catch (pluginError) {
+      logger.warn(
+        { err: pluginError },
+        "Plugin cleanup failed while handling proxy error",
+      );
     }
     // If the stream never established (e.g. a provider 400 rejecting the
     // request), record the duration here for providers we instrument in the
@@ -3391,6 +3426,10 @@ async function handleNonStreaming<
       // must not double-report here — the flag gates that.
       let result: TResponse;
       try {
+        await proxyPlugins.onBeforeModel({
+          ...proxyPluginContext,
+          request,
+        });
         result = await provider.execute(client, request);
         billingMode = getBillingMode();
       } catch (error) {
@@ -3699,6 +3738,9 @@ async function handleNonStreaming<
               awaitClientContinuation: true,
               deferCleanup: true,
             });
+            // The held-response controller owns the durable continuation. This
+            // only releases request-local plugin state; it must not abort it.
+            await proxyPlugins.complete({ ...proxyPluginContext, response });
             return reply.send(response);
           }
           rewrittenToolCalls = held.calls.map((call) => ({
@@ -3899,14 +3941,7 @@ async function handleNonStreaming<
         response: responseAdapter.getOriginalResponse(),
       });
       if (pluginOutcome.decision === "refuse") {
-        toolInvocationRefusal = proxyPluginPolicyBlock({
-          toolCalls: toolCalls.map((call) => ({
-            id: call.id,
-            name: call.name,
-            arguments: call.arguments,
-          })),
-          message: pluginOutcome.message,
-        });
+        toolInvocationRefusal = pluginOutcome.refusal;
       } else {
         rewrittenToolCalls = pluginOutcome.toolCalls.map((call) => ({
           id: call.id,
@@ -4020,6 +4055,10 @@ async function handleNonStreaming<
           resultText: contentMessage,
         });
       }
+      await proxyPlugins.complete({
+        ...proxyPluginContext,
+        response: refusalResponse,
+      });
       return reply.send(refusalResponse);
     }
   }
@@ -4038,10 +4077,23 @@ async function handleNonStreaming<
         : rewrittenToolCalls && responseAdapter.withRewrittenToolCalls
           ? responseAdapter.withRewrittenToolCalls(rewrittenToolCalls)
           : responseAdapter.getOriginalResponse();
-  const clientResponse =
+  let clientResponse =
     nativeCodexWire || nativeCodexApplyPatch
       ? rewriteNativeCodexResponseForClient(clientResponseBeforeNativeWire)
       : clientResponseBeforeNativeWire;
+
+  const pluginResponse = await proxyPlugins.onModelResponse({
+    ...proxyPluginContext,
+    response: clientResponse,
+  });
+  if (
+    typeof pluginResponse !== "object" ||
+    pluginResponse === null ||
+    Array.isArray(pluginResponse)
+  ) {
+    throw new ApiError(500, "LLM proxy plugin returned an invalid response");
+  }
+  clientResponse = pluginResponse as TResponse;
 
   if (toolCalls.length === 0 && appaHook) {
     try {
@@ -4195,6 +4247,10 @@ async function handleNonStreaming<
   }
 
   try {
+    await proxyPlugins.complete({
+      ...proxyPluginContext,
+      response: clientResponse,
+    });
     const sent = reply.send(clientResponse);
     return sent;
   } catch (error) {
@@ -4260,24 +4316,6 @@ function proxyChildContext(
     childSessionId: context.session.id,
     ...(context.session.binding ? { binding: context.session.binding } : {}),
     ...(result !== undefined ? { result } : {}),
-  };
-}
-
-function proxyPluginPolicyBlock(params: {
-  toolCalls: readonly LlmProxyToolCall[];
-  message: string;
-}): utils.toolInvocation.PolicyBlockResult {
-  const blockedToolName =
-    params.toolCalls[0]?.target?.name ?? params.toolCalls[0]?.name ?? "unknown";
-  return {
-    refusalMessage: params.message,
-    contentMessage: params.message,
-    reason: "LLM proxy plugin denied the tool call",
-    blockedToolName,
-    toolInput: {},
-    allToolCallNames: params.toolCalls.map(
-      (toolCall) => toolCall.target?.name ?? toolCall.name,
-    ),
   };
 }
 
@@ -4876,7 +4914,7 @@ function isValidAppaSessionId(value: string | null): value is string {
 }
 
 function resolveAppaNativeAdapter(params: {
-  plugin: ReturnType<typeof getAppaPluginArchestra>;
+  plugin: AppaPluginArchestra;
   provider: string;
   interactionType: string;
   headers: Record<string, string | string[] | undefined>;
@@ -5102,44 +5140,6 @@ function collectAppaInboundToolResults(params: {
     return results;
   }
   return [];
-}
-
-function applyAppaOutcomeNotices<T>(
-  body: T,
-  updates: ReadonlyMap<string, string>,
-): T {
-  if (!isJsonObject(body)) return body;
-  return {
-    ...body,
-    ...(Array.isArray(body.messages)
-      ? {
-          messages: body.messages.map((message) => {
-            if (
-              !isJsonObject(message) ||
-              message.role !== "tool" ||
-              typeof message.tool_call_id !== "string"
-            )
-              return message;
-            const content = updates.get(message.tool_call_id);
-            return content === undefined ? message : { ...message, content };
-          }),
-        }
-      : {}),
-    ...(Array.isArray(body.input)
-      ? {
-          input: body.input.map((item) => {
-            if (
-              !isJsonObject(item) ||
-              item.type !== "function_call_output" ||
-              typeof item.call_id !== "string"
-            )
-              return item;
-            const output = updates.get(item.call_id);
-            return output === undefined ? item : { ...item, output };
-          }),
-        }
-      : {}),
-  } as T;
 }
 
 function toAppaHookApiError(error: unknown): ApiError {

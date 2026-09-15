@@ -112,6 +112,10 @@ export function useAgentAccess(
     // Built-ins belong to nobody and are org-scoped; the backend lets only
     // resource admins update them (`requireAgentModifyPermission`).
     canEdit: !!canUpdate && (isBuiltIn ? !!isAdmin : canModify),
+    canTransferOwnership:
+      !!canUpdate &&
+      !isBuiltIn &&
+      (!!isAdmin || (!!currentUserId && agent?.authorId === currentUserId)),
     canCreate: !!canCreate,
     canDelete: !!canDelete && canModify && !isBuiltIn,
     isBuiltIn,

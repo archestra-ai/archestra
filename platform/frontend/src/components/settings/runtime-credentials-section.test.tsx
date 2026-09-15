@@ -16,6 +16,7 @@ Element.prototype.setPointerCapture = vi.fn();
 Element.prototype.releasePointerCapture = vi.fn();
 
 const mocks = vi.hoisted(() => ({
+  setActionButton: vi.fn(),
   create: vi.fn(),
   update: vi.fn(),
   deleteDefinition: vi.fn(),
@@ -35,6 +36,11 @@ const mocks = vi.hoisted(() => ({
     },
   ],
 }));
+
+vi.mock("@/app/settings/layout", () => ({
+  useSetSettingsAction: () => mocks.setActionButton,
+}));
+vi.mock("next/navigation");
 
 vi.mock("@/components/agent-icon-picker", () => ({
   AgentIconPicker: () => <button type="button">Choose icon</button>,
@@ -110,6 +116,7 @@ describe("RuntimeCredentialsSection", () => {
     );
 
     expect(screen.getByText("GitHub PAT")).toBeVisible();
+    render(mocks.setActionButton.mock.calls.at(-1)?.[0]);
     await user.click(screen.getByRole("button", { name: "Add credential" }));
     const dialog = screen.getByRole("dialog");
     await user.type(within(dialog).getByLabelText("Name"), "GitLab PAT");

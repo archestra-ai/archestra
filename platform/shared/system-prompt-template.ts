@@ -173,7 +173,7 @@ export function getSystemPromptTemplateExpressions(params?: {
 }) {
   if (params?.builtInAgentId === BUILT_IN_AGENT_IDS.POLICY_CONFIG) {
     return [
-      ...SYSTEM_PROMPT_TEMPLATE_EXPRESSIONS,
+      ...SYSTEM_PROMPT_HELPERS,
       ...POLICY_CONFIG_SYSTEM_PROMPT_TEMPLATE_EXPRESSIONS,
     ];
   }

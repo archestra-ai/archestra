@@ -1,5 +1,6 @@
 import { vi } from "vitest";
 import { z } from "zod";
+import * as proxyPlugins from "@/proxy/plugins/registry";
 import { describe, expect, test } from "@/test";
 import { ApiError } from "@/types";
 
@@ -28,7 +29,11 @@ import config from "@/config";
 import OrganizationModel from "@/models/organization";
 // Import after mock setup
 import healthRoutes from "@/routes/health";
-import { buildSandboxFrameAncestors, createFastifyInstance } from "./server";
+import {
+  buildSandboxFrameAncestors,
+  createFastifyInstance,
+  registerApiRoutes,
+} from "./server";
 
 // Mock process.exit to prevent it from actually exiting during tests
 const _processExitSpy = vi.spyOn(process, "exit").mockImplementation(() => {
@@ -37,6 +42,26 @@ const _processExitSpy = vi.spyOn(process, "exit").mockImplementation(() => {
 });
 
 describe("createFastifyInstance", () => {
+  test("propagates plugin startup failure before API routes can be registered", async () => {
+    const initialization = vi
+      .spyOn(proxyPlugins, "initializeLlmProxyPlugins")
+      .mockRejectedValue(new Error("plugin startup unavailable"));
+    const app = createFastifyInstance();
+    const register = vi.spyOn(app, "register");
+
+    try {
+      await expect(registerApiRoutes(app)).rejects.toThrow(
+        "plugin startup unavailable",
+      );
+      // startWebServer awaits registerApiRoutes before it calls listen, so this
+      // rejection keeps the server from becoming reachable or ready.
+      expect(register).not.toHaveBeenCalled();
+    } finally {
+      initialization.mockRestore();
+      await app.close();
+    }
+  });
+
   describe("error handling", () => {
     test.each([
       [400, "Validation failed", "api_validation_error"],

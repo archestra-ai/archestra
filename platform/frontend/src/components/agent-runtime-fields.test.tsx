@@ -1,10 +1,23 @@
+import { archestraApiClient } from "@archestra/shared";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { HttpResponse, http } from "msw";
+import { setupServer } from "msw/node";
 import { useState } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { siGithub } from "simple-icons";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import { useFeature } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
-import { useRuntimeCredentials } from "@/lib/runtime-credentials.query";
 import {
   type AgentRuntimeConfig,
   AgentRuntimeFields,
@@ -20,42 +33,46 @@ global.ResizeObserver = class ResizeObserver {
   disconnect() {}
 } as typeof ResizeObserver;
 
-vi.mock("@/lib/config/config.query", () => ({
-  useFeature: vi.fn(),
-}));
+vi.mock("@/lib/config/config.query");
 vi.mock("@/lib/hooks/use-app-name");
-vi.mock("@/lib/runtime-credentials.query", () => ({
-  useRuntimeCredentials: vi.fn(),
-}));
+const server = setupServer();
+beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
+afterEach(() => server.resetHandlers());
+afterAll(() => server.close());
 
 describe("AgentRuntimeFields", () => {
   beforeEach(() => {
-    vi.mocked(useRuntimeCredentials).mockReturnValue({
-      data: [
-        {
-          key: "github",
-          name: "GitHub PAT",
-          description: "Access GitHub repositories",
-          icon: "logo:github",
-          builtIn: true,
-          allowPersonal: true,
-          allowOrganization: false,
-          personalConfigured: false,
-          organizationConfigured: false,
-        },
-        {
-          key: "gitlab-pat",
-          name: "GitLab PAT",
-          description: "Access GitLab repositories",
-          icon: null,
-          builtIn: false,
-          allowPersonal: false,
-          allowOrganization: true,
-          personalConfigured: false,
-          organizationConfigured: false,
-        },
-      ],
-    } as ReturnType<typeof useRuntimeCredentials>);
+    archestraApiClient.setConfig({ baseUrl: "http://localhost:9000" });
+    server.use(
+      http.get("http://localhost:9000/api/credentials", () =>
+        HttpResponse.json([
+          {
+            key: "github",
+            name: "Repository access",
+            kind: "github_app_user",
+            description: "Access GitHub repositories",
+            icon: null,
+            builtIn: true,
+            allowPersonal: true,
+            allowOrganization: false,
+            personalConfigured: false,
+            organizationConfigured: false,
+          },
+          {
+            key: "gitlab-pat",
+            name: "GitLab PAT",
+            kind: "secret",
+            description: "Access GitLab repositories",
+            icon: null,
+            builtIn: false,
+            allowPersonal: false,
+            allowOrganization: true,
+            personalConfigured: false,
+            organizationConfigured: false,
+          },
+        ]),
+      ),
+    );
   });
 
   it("starts with the configured image and preserves explicit run controls", async () => {
@@ -84,8 +101,18 @@ describe("AgentRuntimeFields", () => {
     });
     const user = userEvent.setup();
 
-    render(<Harness />);
-    await user.click(screen.getByRole("switch", { name: "Dedicated runtime" }));
+    render(
+      <QueryClientProvider
+        client={
+          new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        }
+      >
+        <Harness />
+      </QueryClientProvider>,
+    );
+    await user.click(
+      screen.getByRole("switch", { name: "Dedicated Agent runtime" }),
+    );
 
     expect(screen.getByLabelText("Container image")).toHaveValue(
       "registry.example.com/coding-agent:1.2.3",
@@ -152,18 +179,59 @@ describe("AgentRuntimeFields", () => {
     );
     const user = userEvent.setup();
 
-    render(<Harness />);
-    await user.click(screen.getByRole("switch", { name: "Dedicated runtime" }));
+    render(
+      <QueryClientProvider
+        client={
+          new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        }
+      >
+        <Harness />
+      </QueryClientProvider>,
+    );
+    await user.click(
+      screen.getByRole("switch", { name: "Dedicated Agent runtime" }),
+    );
 
     await user.click(screen.getByRole("button", { name: "Add variable" }));
     let dialog = screen.getByRole("dialog");
     await user.click(within(dialog).getByLabelText("Type"));
     await user.click(screen.getByRole("option", { name: "Secret" }));
     await user.click(within(dialog).getByLabelText("Secret source"));
-    await user.click(screen.getByRole("option", { name: "GitHub PAT" }));
+    const githubOption = await screen.findByRole("option", {
+      name: "Repository access",
+    });
+    expect(githubOption).toHaveTextContent("GitHub connection");
+    expect(githubOption.querySelector("svg path")).toHaveAttribute(
+      "d",
+      siGithub.path,
+    );
+    await user.click(githubOption);
     expect(within(dialog).getByLabelText("Key")).toHaveValue("GITHUB_TOKEN");
     await user.click(
       within(dialog).getByRole("button", { name: "Add variable" }),
+    );
+
+    expect(screen.getByText("GitHub connection")).toBeVisible();
+    expect(
+      Array.from(
+        screen
+          .getByRole("button", { name: /GITHUB_TOKEN/ })
+          .querySelectorAll("svg path"),
+        (path) => path.getAttribute("d"),
+      ),
+    ).toContain(siGithub.path);
+    expect(screen.getByRole("link", { name: "Credentials" })).toHaveAttribute(
+      "href",
+      "/settings/credentials",
+    );
+    await user.click(screen.getByRole("button", { name: /GITHUB_TOKEN/ }));
+    expect(
+      within(screen.getByRole("dialog")).getByLabelText("Secret source"),
+    ).toHaveTextContent("Repository access");
+    await user.click(
+      within(screen.getByRole("dialog")).getByRole("button", {
+        name: "Cancel",
+      }),
     );
 
     await user.click(screen.getByRole("button", { name: "Add variable" }));
@@ -179,6 +247,7 @@ describe("AgentRuntimeFields", () => {
       within(dialog).getByRole("button", { name: "Add variable" }),
     );
 
+    expect(screen.getByText("Organization credential")).toBeVisible();
     const saved = JSON.parse(
       screen.getByTestId("config").textContent ?? "null",
     );

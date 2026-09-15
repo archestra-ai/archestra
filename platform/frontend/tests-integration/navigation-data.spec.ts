@@ -1,4 +1,4 @@
-import { makeAgent, makeAgentsList } from "../src/mocks/data/agents";
+import { makeAgent, makeAgentCatalog } from "../src/mocks/data/agents";
 import { expect, test } from "./fixtures";
 
 test("the default Agents view uses its server list through hydration", async ({
@@ -7,14 +7,21 @@ test("the default Agents view uses its server list through hydration", async ({
 }) => {
   await mswControl.use({
     method: "get",
-    url: "/api/agents",
-    body: makeAgentsList({
+    url: "/api/agent-catalog",
+    query: { pinned: "false" },
+    body: makeAgentCatalog({
       agents: [makeAgent({ name: "Server-rendered agent" })],
     }),
   });
+  await mswControl.use({
+    method: "get",
+    url: "/api/agent-catalog",
+    query: { pinned: "true" },
+    body: makeAgentCatalog(),
+  });
   const clientListRequests: string[] = [];
   page.on("request", (request) => {
-    if (new URL(request.url()).pathname === "/api/agents")
+    if (new URL(request.url()).pathname === "/api/agent-catalog")
       clientListRequests.push(request.url());
   });
   await page.goto("/agents");

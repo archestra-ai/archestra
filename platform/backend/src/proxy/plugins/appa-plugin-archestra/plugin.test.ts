@@ -2,11 +2,11 @@ import { describe, expect, test } from "@/test";
 import { AppaClaudeCodeAdapter } from "./adapters/claude-code";
 import { AppaCodexAdapter } from "./adapters/codex";
 import { AppaOpenCodeAdapter } from "./adapters/opencode";
-import { getAppaPluginArchestra } from "./index";
+import { createAppaLlmProxyPlugin } from "./index";
 
 describe("AppaPluginArchestra", () => {
   test("registers default client adapters and resolves by protocol", () => {
-    const plugin = getAppaPluginArchestra();
+    const plugin = createAppaLlmProxyPlugin();
     expect(plugin.getClientAdapters().length).toBeGreaterThanOrEqual(3);
 
     const anthropicAdapter = plugin.resolveClientAdapter({
@@ -350,7 +350,7 @@ describe("AppaPluginArchestra", () => {
   });
 
   test("classifies native wire evidence through the owning adapter", () => {
-    const plugin = getAppaPluginArchestra();
+    const plugin = createAppaLlmProxyPlugin();
     expect(
       plugin.resolveClientAdapter({
         protocol: "anthropic",

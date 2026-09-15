@@ -1,6 +1,7 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { rememberGitHubConnectionReturn } from "@/lib/github-connection-return";
 import { PERSISTED_QUERY_META } from "@/lib/query-persistence";
 import { reportApiError, throwOnApiError } from "@/lib/utils";
 
@@ -74,6 +75,9 @@ export function useRuntimeCredentialUsage(key: string | null, enabled = true) {
       return data ?? { agents: [], resources: [] };
     },
     enabled: enabled && Boolean(key),
+    // References can change on other pages between openings of the delete dialog.
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 }
 
@@ -166,6 +170,48 @@ function useCredentialMutation<TInput, TOutput>(
         queryClient.invalidateQueries({ queryKey: ["github-app-configs"] }),
         queryClient.invalidateQueries({ queryKey: ["github-pats"] }),
       ]);
+    },
+  });
+}
+
+export function useStartGitHubUserConnection() {
+  return useMutation({
+    mutationFn: async (key: string) => {
+      const pathname = window.location.pathname;
+      const { data, error } = await archestraApiSdk.startGitHubUserConnection({
+        path: { key },
+      });
+      if (error) throw reportApiError(error);
+      if (data) {
+        const state = new URL(data.authorizationUrl).searchParams.get("state");
+        if (state) rememberGitHubConnectionReturn(state, pathname);
+      }
+      return data;
+    },
+    onSuccess: (data) => {
+      if (data) window.location.assign(data.authorizationUrl);
+    },
+  });
+}
+
+export function useCompleteGitHubUserConnection() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (
+      body: archestraApiTypes.CompleteGitHubUserConnectionData["body"],
+    ) => {
+      const { data, error } =
+        await archestraApiSdk.completeGitHubUserConnection({
+          body,
+          signal: AbortSignal.timeout(45_000),
+        });
+      if (error) throw reportApiError(error);
+      return data;
+    },
+    retry: false,
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: runtimeCredentialsQueryKey });
+      toast.success(`Connected GitHub${data ? ` as ${data.login}` : ""}`);
     },
   });
 }

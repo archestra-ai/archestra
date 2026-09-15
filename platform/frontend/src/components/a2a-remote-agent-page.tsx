@@ -33,7 +33,9 @@ import {
   useGuardedInAppNavigation,
   useUnsavedChangesGuard,
 } from "@/components/unsaved-changes-guard";
+import { useResourceOwnershipTransfer } from "@/components/use-resource-ownership-transfer";
 import { getA2aRemoteAgentDeleteDescription } from "@/lib/a2a-remote-agent-delete";
+import { a2aRemoteAgentDetailHref } from "@/lib/a2a-remote-agent-route";
 import {
   useA2aRemoteAgent,
   useCreateA2aRemoteAgent,
@@ -42,7 +44,8 @@ import {
 } from "@/lib/a2a-remote-agents.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 
-const LIST_HREF = "/a2a/agents";
+const CREATE_BACK_HREF = "/agents/new";
+const LIST_HREF = "/agents";
 
 export function CreateA2aRemoteAgentPage() {
   const router = useRouter();
@@ -54,9 +57,9 @@ export function CreateA2aRemoteAgentPage() {
   return (
     <>
       <AgentPageShell
-        backHref={LIST_HREF}
-        backLabel="External Agents"
-        onBackRequest={() => navigationGuard.requestNavigate(LIST_HREF)}
+        backHref={CREATE_BACK_HREF}
+        backLabel="Add Agent"
+        onBackRequest={() => navigationGuard.requestNavigate(CREATE_BACK_HREF)}
         header={{
           title: "Connect external A2A agent",
           description:
@@ -81,7 +84,7 @@ export function CreateA2aRemoteAgentPage() {
                 },
                 {
                   onSuccess: (agent) => {
-                    if (agent) router.push(`${LIST_HREF}/${agent.id}`);
+                    if (agent) router.push(a2aRemoteAgentDetailHref(agent.id));
                   },
                 },
               );
@@ -117,6 +120,14 @@ export function A2aRemoteAgentDetailPage({ id }: { id: string }) {
   const [formDirty, setFormDirty] = useState(false);
   const navigationGuard = usePageUnsavedChangesGuard(formDirty);
   const agent = query.data;
+  const ownership = useResourceOwnershipTransfer({
+    kind: "remoteAgent",
+    resource: agent,
+    disabledReason: formDirty
+      ? "Save or discard your changes first"
+      : undefined,
+    onTransferred: () => router.push("/agents"),
+  });
   const canManage = !!permission.data;
 
   if (query.isPending || permission.isPending) {
@@ -162,7 +173,7 @@ export function A2aRemoteAgentDetailPage({ id }: { id: string }) {
     <>
       <AgentPageShell
         backHref={LIST_HREF}
-        backLabel="External Agents"
+        backLabel="Agents"
         onBackRequest={() => navigationGuard.requestNavigate(LIST_HREF)}
         header={{
           documentTitle: agent.name,
@@ -173,45 +184,49 @@ export function A2aRemoteAgentDetailPage({ id }: { id: string }) {
               </div>
               <span className="min-w-0 truncate">{agent.name}</span>
               <Badge variant="secondary" className="font-normal">
-                External Agents
+                A2A
               </Badge>
             </div>
           ),
           description: agent.description || "External A2A agent",
           action: canManage ? (
-            <TableRowActions
-              itemName={agent.name}
-              actions={[]}
-              dropdownActions={[
-                {
-                  icon: <Power className="h-4 w-4" />,
-                  label: agent.connection.enabled
-                    ? "Disable delegation"
-                    : "Enable delegation",
-                  tooltip: agent.connection.enabled
-                    ? "Pause this connection everywhere without removing its agent assignments."
-                    : "Make this connection available to its assigned agents again.",
-                  disabled: updateMutation.isPending || formDirty,
-                  disabledTooltip: formDirty
-                    ? "Save or discard your changes before changing delegation availability."
-                    : undefined,
-                  onClick: () =>
-                    updateMutation.mutate({
-                      enabled: !agent.connection.enabled,
-                    }),
-                },
-                {
-                  icon: <Trash2 className="h-4 w-4" />,
-                  label: "Delete",
-                  variant: "destructive",
-                  disabled: deleteMutation.isPending || formDirty,
-                  disabledTooltip: formDirty
-                    ? "Save or discard your changes before deleting this external agent."
-                    : undefined,
-                  onClick: () => setDeleteOpen(true),
-                },
-              ]}
-            />
+            <div className="flex items-center gap-2">
+              <TableRowActions
+                dropdownContent={ownership.menuItem}
+                itemName={agent.name}
+                actions={[]}
+                dropdownActions={[
+                  {
+                    icon: <Power className="h-4 w-4" />,
+                    label: agent.connection.enabled
+                      ? "Disable delegation"
+                      : "Enable delegation",
+                    tooltip: agent.connection.enabled
+                      ? "Pause this connection everywhere without removing its agent assignments."
+                      : "Make this connection available to its assigned agents again.",
+                    disabled: updateMutation.isPending || formDirty,
+                    disabledTooltip: formDirty
+                      ? "Save or discard your changes before changing delegation availability."
+                      : undefined,
+                    onClick: () =>
+                      updateMutation.mutate({
+                        enabled: !agent.connection.enabled,
+                      }),
+                  },
+                  {
+                    icon: <Trash2 className="h-4 w-4" />,
+                    label: "Delete",
+                    variant: "destructive",
+                    disabled: deleteMutation.isPending || formDirty,
+                    disabledTooltip: formDirty
+                      ? "Save or discard your changes before deleting this external agent."
+                      : undefined,
+                    onClick: () => setDeleteOpen(true),
+                  },
+                ]}
+              />
+              {ownership.dialog}
+            </div>
           ) : undefined,
         }}
       >
@@ -279,11 +294,7 @@ function DetailShell({
   children: React.ReactNode;
 }) {
   return (
-    <AgentPageShell
-      backHref={LIST_HREF}
-      backLabel="External Agents"
-      header={{ title }}
-    >
+    <AgentPageShell backHref={LIST_HREF} backLabel="Agents" header={{ title }}>
       {children}
     </AgentPageShell>
   );

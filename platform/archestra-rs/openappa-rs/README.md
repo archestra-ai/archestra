@@ -39,17 +39,19 @@ pnpm --filter @backend db:migrate
 Configure the usual Archestra database and auth secret, then explicitly set:
 
 ```sh
-ARCHESTRA_OPENAPPA_ENABLED=true
+ARCHESTRA_LLM_PROXY_PLUGINS=appa
 ARCHESTRA_OPENAPPA_POLICY_PATH=/absolute/path/to/policy.toml
+ARCHESTRA_OPENAPPA_SESSION_HMAC_SECRET="<deployment-secret-at-least-32-characters>"
 ```
 
-The feature flag defaults to false and does not inherit `ARCHESTRA_BETA`.
-A policy path alone does not enable APPA. With the flag off, the existing Tool
+The plugin list defaults to empty and does not inherit `ARCHESTRA_BETA`.
+Including `appa` is the only enablement switch; there is no separate flag.
+A policy path alone does not enable APPA. With the list empty, the existing Tool
 Guardrails run unchanged: APPA is not loaded, session headers are not required
 or injected, and the remedy tool is neither advertised nor callable. Additive
 schema migrations still run normally.
 
-Enabling without a policy path is a configuration error. The native runtime
+Enabling without a policy path or the session HMAC secret is a configuration error. Human approvals also require `ARCHESTRA_OPENAPPA_APPROVAL_SIGNING_SECRET`. The native runtime
 validates the policy and initializes lazily on first use. Failures do not fall
 back to the old evaluator. Restart the backend after changing either setting.
 
@@ -66,8 +68,7 @@ In a new conversation, ask Chat to discover and run `whoami`. The fixture first
 returns an acceptance remedy; ask Chat to execute the offered plan and retry.
 After the successful identity read, restart the backend and ask Chat to run
 `list_agents` without accepting any further remedy. The native policy should
-refuse because the session's trust is now suspicious. The paired `summary.md`
-records this complete live sequence with GPT-5.6 Terra.
+refuse because the session's trust is now suspicious. This describes the basic remedy scenario; it does not qualify the newer held-response, checkpoint, or child-return paths.
 
 The existing platform Dockerfile builds and deploys the fourth native addon
 using the same pinned Cargo dependency. Build it through the normal image path:
@@ -83,8 +84,8 @@ The production `pnpm deploy` includes `index.cjs`, declarations, the native
 binary, and the shared napi loader. Native builds are excluded from Turbo's
 cross-platform cache. The normal Archestra image and release workflows are
 unchanged; no separate addon release or binary download is introduced. The
-feature flag gates execution, so builds still compile/package the addon when
-the runtime feature is off.
+plugin list gates execution, so builds still compile/package the addon when
+APPA is not enabled.
 
 ## Identity and lifecycle
 
@@ -130,7 +131,7 @@ Migration `0471_openappa_native.sql` creates five OpenAPPA-owned tables:
 | `openappa_operations` | Call, lifecycle, and remedy receipts |
 | `openappa_processed_results` | Result status, decision, and approved output |
 
-Migration `0472_restore-appa-stateful-lifecycle.sql` restores the proxy session,
+Migration `0474_restore-appa-stateful-lifecycle.sql` restores the proxy session,
 call, event, approval, held-batch, checkpoint, and native-child correlation
 tables used by the existing durable proxy adapters.
 

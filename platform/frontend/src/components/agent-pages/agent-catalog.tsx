@@ -4,7 +4,7 @@ import {
   getDefaultAgentRuntimeImage,
   type SubscriptionCredentialKind,
 } from "@archestra/shared";
-import { Bot } from "lucide-react";
+import { Bot, Network } from "lucide-react";
 import Image from "next/image";
 import type { AgentFormInitialValues } from "@/components/agent-form";
 import { CatalogSourceCard } from "@/components/catalog-source-card";
@@ -25,6 +25,21 @@ export interface AgentCatalogTemplate {
   icon: string | null;
   initialValues: AgentFormInitialValues;
 }
+
+/**
+ * Shared by the catalog card and the runtime pill. `archestra` is absent: its
+ * name is composed from the app name.
+ */
+export const AGENT_CATALOG_TEMPLATE_NAMES: Record<
+  Exclude<AgentCatalogId, "archestra">,
+  string
+> = {
+  "claude-code": "Claude Code",
+  codex: "Codex",
+  opencode: "OpenCode",
+  hermes: "Hermes",
+  openclaw: "OpenClaw",
+};
 
 export function getAgentCatalogTemplates(
   archestraImage: string,
@@ -47,7 +62,7 @@ export function getAgentCatalogTemplates(
     }),
     template({
       id: "claude-code",
-      name: "Claude Code",
+      name: AGENT_CATALOG_TEMPLATE_NAMES["claude-code"],
       icon: "/model-logos/anthropic.svg",
       description: `Anthropic's coding agent with personal Claude sign-in or provider billing, connected to the ${appName} MCP gateway.`,
       platformName: appName,
@@ -58,7 +73,7 @@ export function getAgentCatalogTemplates(
     }),
     template({
       id: "codex",
-      name: "Codex",
+      name: AGENT_CATALOG_TEMPLATE_NAMES.codex,
       icon: "/model-logos/openai.svg",
       description: `OpenAI's coding agent, preconfigured to use the ${appName} LLM proxy and MCP gateway.`,
       platformName: appName,
@@ -70,7 +85,7 @@ export function getAgentCatalogTemplates(
     }),
     template({
       id: "opencode",
-      name: "OpenCode",
+      name: AGENT_CATALOG_TEMPLATE_NAMES.opencode,
       icon: "/agent-logos/opencode.svg",
       description: `The open source coding agent, preconfigured to use the ${appName} LLM proxy and MCP gateway.`,
       platformName: appName,
@@ -81,7 +96,7 @@ export function getAgentCatalogTemplates(
     }),
     template({
       id: "hermes",
-      name: "Hermes",
+      name: AGENT_CATALOG_TEMPLATE_NAMES.hermes,
       icon: "/agent-logos/hermes.png",
       description: `The Hermes coding agent with its model and remote MCP tools supplied by ${appName}.`,
       platformName: appName,
@@ -92,7 +107,7 @@ export function getAgentCatalogTemplates(
     }),
     template({
       id: "openclaw",
-      name: "OpenClaw",
+      name: AGENT_CATALOG_TEMPLATE_NAMES.openclaw,
       icon: "/agent-logos/openclaw.svg",
       description: `OpenClaw in an isolated task pod, with inference and MCP access kept behind ${appName}.`,
       platformName: appName,
@@ -105,11 +120,19 @@ export function getAgentCatalogTemplates(
 }
 
 export function AgentCatalog({
+  canAddExternalAgent,
+  canCreateAgent,
   onStartFromScratch,
+  onAddExternalAgent,
   onSelect,
+  showPopularAgents,
 }: {
+  canAddExternalAgent: boolean;
+  canCreateAgent: boolean;
   onStartFromScratch: () => void;
+  onAddExternalAgent: () => void;
   onSelect: (template: AgentCatalogTemplate) => void;
+  showPopularAgents: boolean;
 }) {
   const configuredImage = useFeature("agentRuntimeBaseImage");
   const appName = useAppName();
@@ -131,7 +154,7 @@ export function AgentCatalog({
     appIconLogo,
   );
   return (
-    <div className="mx-auto max-w-4xl space-y-8">
+    <div className="space-y-8">
       <div className="space-y-3">
         <h2 className="text-base font-semibold">Create your own</h2>
         <div className="grid gap-4 sm:grid-cols-2">
@@ -140,85 +163,117 @@ export function AgentCatalog({
             title="Start from scratch"
             description="Build an Agent with the existing setup wizard and choose every setting yourself."
             onClick={onStartFromScratch}
+            disabled={!canCreateAgent}
+            disabledReason="Requires permission to create agents."
           />
         </div>
       </div>
 
+      {showPopularAgents ? (
+        <div className="space-y-3">
+          <h2 className="text-base font-semibold">Popular agents</h2>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {templates.map((item) => (
+              <CatalogSourceCard
+                key={item.id}
+                icon={
+                  <CatalogAgentIcon id={item.id} appIconLogo={appIconLogo} />
+                }
+                title={item.name}
+                description={item.description}
+                badge={
+                  item.id === "archestra" ? (
+                    <Badge variant="outline">Built in</Badge>
+                  ) : undefined
+                }
+                onClick={() => onSelect(item)}
+                disabled={!canCreateAgent}
+                disabledReason="Requires permission to create agents."
+              />
+            ))}
+          </div>
+        </div>
+      ) : null}
+
       <div className="space-y-3">
-        <h2 className="text-base font-semibold">Popular agents</h2>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {templates.map((item) => (
-            <CatalogSourceCard
-              key={item.id}
-              icon={<CatalogAgentIcon id={item.id} appIconLogo={appIconLogo} />}
-              title={item.name}
-              description={item.description}
-              badge={
-                item.id === "archestra" ? (
-                  <Badge variant="outline">Built in</Badge>
-                ) : undefined
-              }
-              onClick={() => onSelect(item)}
-            />
-          ))}
+        <h2 className="text-base font-semibold">External agents</h2>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <CatalogSourceCard
+            icon={<Network className="size-5" />}
+            title="Connect via A2A"
+            description="Connect an A2A-compatible agent that your agents can use only as a subagent."
+            onClick={onAddExternalAgent}
+            disabled={!canAddExternalAgent}
+            disabledReason="Requires permission to view agents and update agent settings."
+          />
         </div>
       </div>
     </div>
   );
 }
 
-function CatalogAgentIcon({
+export function CatalogAgentIcon({
   id,
-  appIconLogo,
+  appIconLogo = null,
+  size = 22,
 }: {
-  id: AgentCatalogTemplate["id"];
-  appIconLogo: string | null;
+  id: AgentCatalogId;
+  appIconLogo?: string | null;
+  size?: number;
 }) {
+  const box = { width: size, height: size };
   switch (id) {
     case "archestra":
       return appIconLogo ? (
         <Image
           src={appIconLogo}
           alt=""
-          width={22}
-          height={22}
-          className="size-[22px] rounded-sm object-contain"
+          width={size}
+          height={size}
+          style={box}
+          className="rounded-sm object-contain"
         />
       ) : (
         <Bot className="size-5" />
       );
     case "claude-code":
-      return <ProviderIcon provider="anthropic" size={22} />;
+      return <ProviderIcon provider="anthropic" size={size} />;
     case "codex":
-      return <ProviderIcon provider="openai" size={22} />;
+      return <ProviderIcon provider="openai" size={size} />;
     case "opencode":
       return (
         <Image
           src="/agent-logos/opencode.svg"
           alt=""
-          width={22}
-          height={22}
-          className="h-[22px] w-auto object-contain dark:invert"
+          width={size}
+          height={size}
+          style={{ height: size }}
+          className="w-auto object-contain dark:invert"
         />
       );
-    case "hermes":
+    case "hermes": {
+      // The artwork carries its own padding, so it draws larger than its peers.
+      const hermesSize = Math.round((size * 30) / 22);
       return (
         <Image
           src="/agent-logos/hermes.png"
           alt=""
-          width={30}
-          height={30}
-          className="size-[30px] rounded-md object-contain"
+          width={hermesSize}
+          height={hermesSize}
+          style={{ width: hermesSize, height: hermesSize }}
+          className="rounded-md object-contain"
         />
       );
+    }
     case "openclaw":
       return (
         <Image
           src="/agent-logos/openclaw.svg"
           alt=""
-          width={22}
-          height={22}
-          className="size-[22px] object-contain"
+          width={size}
+          height={size}
+          style={box}
+          className="object-contain"
         />
       );
     default:

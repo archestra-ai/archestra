@@ -22,6 +22,7 @@ export { default as AgentExcludedSubagentModel } from "./agent-excluded-subagent
 export { default as AgentExcludedToolModel } from "./agent-excluded-tool";
 export { default as AgentKnowledgeBaseModel } from "./agent-knowledge-base";
 export { default as AgentLabelModel } from "./agent-label";
+export { default as AgentPinModel } from "./agent-pin";
 export { default as AgentRunModel } from "./agent-run";
 export { default as AgentRunInputModel } from "./agent-run-input";
 export { default as AgentRunShareModel } from "./agent-run-share";

@@ -6,11 +6,13 @@ import {
   History,
   MessageSquare,
   Pencil,
+  Pin,
   PinOff,
   Plug,
   RotateCcw,
   Sparkles,
   Star,
+  TerminalSquare,
   Trash2,
 } from "lucide-react";
 import {
@@ -18,11 +20,13 @@ import {
   getAgentActionModel,
 } from "@/components/agent-pages/agent-actions-model";
 import { permanentDeleteRowAction } from "@/components/permanent-delete";
+import { ResourceTableRowActions } from "@/components/resource-table-row-actions";
 import {
   type TableRowAction,
   TableRowActions,
 } from "@/components/table-row-actions";
 import type { useProfilesPaginated } from "@/lib/agent.query";
+import { useFeature } from "@/lib/config/config.query";
 import { ACTION_LABEL, notYoursToChange } from "@/lib/design/resource-lexicon";
 import { useIsGlobalAdmin } from "@/lib/organization.query";
 
@@ -41,6 +45,7 @@ type AgentActionsProps = {
   onClone: (agent: Agent) => void;
   onExport: (agent: Agent) => void;
   onConvertToSkill: (agent: Agent) => void;
+  onTogglePin: (agent: Agent) => void;
   /**
    * The caller's personal default agent, when this row is one of the caller's
    * own personal chat agents. `null` = none set; `undefined` = not applicable
@@ -70,13 +75,19 @@ export function AgentActions({
   onClone,
   onExport,
   onConvertToSkill,
+  onTogglePin,
   personalDefault,
   onHistory,
 }: AgentActionsProps) {
   const admin = useIsGlobalAdmin();
   const isBuiltIn = Boolean(agent.builtIn);
   const isDeleted = Boolean(agent.deletedAt);
-  const actionModel = getAgentActionModel({ kind: "agent", agent });
+  const agentRuntimeEnabled = useFeature("agentRuntime") === true;
+  const actionModel = getAgentActionModel({
+    kind: "agent",
+    agent,
+    agentRuntimeEnabled,
+  });
   const connectAction = agentAction(actionModel, "connect");
   const chatAction = agentAction(actionModel, "chat");
   const editAction = agentAction(actionModel, "edit");
@@ -156,7 +167,11 @@ export function AgentActions({
     ...(chatAction.visible
       ? [
           {
-            icon: <MessageSquare className="h-4 w-4" />,
+            icon: chatAction.startsRun ? (
+              <TerminalSquare className="h-4 w-4" />
+            ) : (
+              <MessageSquare className="h-4 w-4" />
+            ),
             label: chatAction.label,
             href: chatAction.href,
           },
@@ -166,6 +181,15 @@ export function AgentActions({
   ];
 
   const dropdownActions: TableRowAction[] = [
+    {
+      icon: agent.pinnedAt ? (
+        <PinOff className="h-4 w-4" />
+      ) : (
+        <Pin className="h-4 w-4" />
+      ),
+      label: agent.pinnedAt ? "Unpin" : "Pin",
+      onClick: () => onTogglePin(agent),
+    },
     ...(personalDefault
       ? [
           personalDefault.isDefault
@@ -242,7 +266,9 @@ export function AgentActions({
   ];
 
   return (
-    <TableRowActions
+    <ResourceTableRowActions
+      kind="agent"
+      resource={agent}
       itemName={agent.name}
       actions={primaryActions}
       dropdownActions={dropdownActions}

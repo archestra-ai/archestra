@@ -11,6 +11,8 @@ function requestContext(requestId = "request-1"): LlmProxyRequestContext {
     organizationId: "organization-1",
     profileId: "profile-1",
     provider: "openai",
+    interactionType: "openai:chatCompletions",
+    streaming: false,
     protocol: "openai:chatCompletions",
     model: "gpt-test",
     headers: {},
@@ -88,7 +90,17 @@ describe("LlmProxyPluginRegistry", () => {
       },
       async onToolCalls() {
         events.push("deny:tools");
-        return { decision: "refuse", message: "blocked" };
+        return {
+          decision: "refuse",
+          refusal: {
+            refusalMessage: "blocked",
+            contentMessage: "blocked",
+            reason: "blocked",
+            blockedToolName: "unknown",
+            toolInput: {},
+            allToolCallNames: [],
+          },
+        };
       },
     });
     registry.register({
@@ -103,13 +115,53 @@ describe("LlmProxyPluginRegistry", () => {
     const outcome = await registry.onToolCalls({ ...context, toolCalls: [] });
     await registry.onAbort(context);
 
-    expect(outcome).toEqual({ decision: "refuse", message: "blocked" });
+    expect(outcome).toMatchObject({
+      decision: "refuse",
+      refusal: { contentMessage: "blocked" },
+    });
     expect(events).toEqual([
       "first:tools",
       "deny:tools",
       "deny:abort",
       "first:abort",
     ]);
+  });
+
+  test("chains tool-result content updates through later plugins", async () => {
+    const registry = new LlmProxyPluginRegistry();
+    const observedContent: unknown[] = [];
+    registry.register({
+      id: "first-result-rewriter",
+      async onToolResults() {
+        return { toolResultUpdates: { "call-1": "first rewrite" } };
+      },
+    });
+    registry.register({
+      id: "second-result-rewriter",
+      async onToolResults({ toolResults }) {
+        observedContent.push(toolResults[0]?.content);
+        return { toolResultUpdates: { "call-1": "second rewrite" } };
+      },
+    });
+
+    const context = requestContext();
+    await registry.onSessionInit(context);
+    const outcome = await registry.onToolResults({
+      ...context,
+      toolResults: [
+        {
+          id: "call-1",
+          name: "read_file",
+          content: "original",
+          isError: false,
+        },
+      ],
+    });
+
+    expect(observedContent).toEqual(["first rewrite"]);
+    expect(outcome).toEqual({
+      toolResultUpdates: { "call-1": "second rewrite" },
+    });
   });
 
   test("dispatches verified child proxy-turn boundaries in registration order", async () => {

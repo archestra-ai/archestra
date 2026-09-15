@@ -36,6 +36,7 @@ import { knowledgeSourceAccessControlService } from "@/knowledge-base";
 import {
   AgentLabelModel,
   AgentModel,
+  AgentPinModel,
   AgentTeamModel,
   AgentVersionModel,
   KnowledgeBaseConnectorModel,
@@ -51,15 +52,15 @@ import { initializeObservabilityMetrics } from "@/observability";
 import { listPolicyIndependentAvailableAgentSkills } from "@/services/agent-activation-skill-candidates";
 import { agentActivationSkillPolicyService } from "@/services/agent-activation-skill-policy";
 import {
-  getAgentSkillActivationAvailability,
   getPaginatedAgentActivationSkills,
-  projectEffectiveAvailableAgentSkills,
   projectPolicyIndependentAvailableAgentSkills,
 } from "@/services/agent-activation-skills";
 import { getAgentCredentialReadiness } from "@/services/agent-credential-readiness";
 import { serializeAgentForExport } from "@/services/agent-export";
 import { importAgentFromPayload } from "@/services/agent-import";
 import { agentKnowledgeSourceExclusionsService } from "@/services/agent-knowledge-source-exclusions";
+import { populateAgentListActivationSkillCounts } from "@/services/agent-list";
+import { transferAgentOwnership } from "@/services/agent-ownership";
 import { getResolvedAgentRuntimeModelCompatibility } from "@/services/agent-runtime/model-compatibility";
 import { agentSkillAssignmentService } from "@/services/agent-skill-assignment";
 import { agentSubagentExclusionsService } from "@/services/agent-subagent-exclusions";
@@ -77,6 +78,7 @@ import {
   AgentCredentialReadinessSchema,
   AgentExportPayloadSchema,
   AgentKnowledgeSourceExclusionsSchema,
+  AgentListItemSchema,
   type AgentRuntime,
   type AgentScope,
   AgentScopeFilterSchema,
@@ -206,6 +208,16 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
               .describe(
                 "Filter by a configured provider key, or organization-default for agents with no pinned key or model.",
               ),
+            pinned: z
+              .preprocess(
+                (value) =>
+                  typeof value === "string" ? value === "true" : value,
+                z.boolean(),
+              )
+              .optional()
+              .describe(
+                "Filter by the current user's pins. Pinned results are ordered by newest pin first; unpinned results keep the requested sort.",
+              ),
           })
           .merge(PaginationQuerySchema)
           .merge(
@@ -220,7 +232,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
             ] as const),
           ),
         response: constructResponseSchema(
-          createPaginatedResponseSchema(SelectAgentSchema),
+          createPaginatedResponseSchema(AgentListItemSchema),
         ),
       },
     },
@@ -239,6 +251,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           status,
           includeActivationSkillsCount,
           providerApiKeyId,
+          pinned,
           limit,
           offset,
           sortBy,
@@ -292,18 +305,56 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           labels: parseLabelsParam(labels),
           status,
           providerApiKeyId,
+          pinned,
         },
         user.id,
         isAdmin,
       );
       if (includeActivationSkillsCount) {
-        await populateActivationSkillCounts({
+        await populateAgentListActivationSkillCounts({
           agents: result.data,
           organizationId,
           userId: user.id,
         });
       }
       return reply.send(result);
+    },
+  );
+
+  fastify.put(
+    "/api/agents/:id/pin",
+    {
+      schema: {
+        operationId: RouteId.PinAgent,
+        description:
+          "Pin an agent for the current user. Personal — does not affect other members. Any user who can read the agent may pin it.",
+        tags: ["Agents"],
+        params: z.object({ id: UuidIdSchema }),
+        response: constructResponseSchema(z.object({ ok: z.literal(true) })),
+      },
+    },
+    async ({ params: { id }, user, organizationId }, reply) => {
+      await requireReadableAgent({ id, userId: user.id, organizationId });
+      await AgentPinModel.pin({ userId: user.id, agentId: id });
+      return reply.send({ ok: true as const });
+    },
+  );
+
+  fastify.delete(
+    "/api/agents/:id/pin",
+    {
+      schema: {
+        operationId: RouteId.UnpinAgent,
+        description:
+          "Remove the current user's pin on an agent. Idempotent and intentionally has no visibility check so stale pins can still be cleared.",
+        tags: ["Agents"],
+        params: z.object({ id: UuidIdSchema }),
+        response: constructResponseSchema(z.object({ ok: z.literal(true) })),
+      },
+    },
+    async ({ params: { id }, user }, reply) => {
+      await AgentPinModel.unpin({ userId: user.id, agentId: id });
+      return reply.send({ ok: true as const });
     },
   );
 
@@ -1813,6 +1864,30 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
+  fastify.post(
+    "/api/agents/:id/transfer-ownership",
+    {
+      schema: {
+        operationId: RouteId.TransferAgentOwnership,
+        description:
+          "Transfer an agent or MCP gateway to another organization member",
+        tags: ["Agents"],
+        params: z.object({ id: UuidIdSchema }),
+        body: z.object({ ownerId: z.string().min(1) }),
+        response: constructResponseSchema(z.object({ success: z.boolean() })),
+      },
+    },
+    async ({ params: { id }, body, user, organizationId }, reply) => {
+      await transferAgentOwnership({
+        agentId: id,
+        ownerId: body.ownerId,
+        userId: user.id,
+        organizationId,
+      });
+      return reply.send({ success: true });
+    },
+  );
+
   fastify.put(
     "/api/agents/:id",
     {
@@ -2902,76 +2977,6 @@ function getPermittedAgentTypesForList(params: {
   }
 
   return permittedTypes;
-}
-
-/**
- * Add the caller-relative activation count requested by internal-agent cards.
- * Tool reachability is agent-specific; catalog resolution is shared per
- * represented environment after disabled agents have been removed.
- */
-async function populateActivationSkillCounts(params: {
-  agents: Agent[];
-  organizationId: string;
-  userId: string;
-}): Promise<void> {
-  const internalAgents = params.agents.filter(
-    (agent) => agent.agentType === "agent",
-  );
-  if (internalAgents.length === 0) return;
-
-  const skillChecker = await getSkillPermissionChecker({
-    userId: params.userId,
-    organizationId: params.organizationId,
-  });
-  if (!skillChecker.canRead) return;
-
-  const availabilityByAgent = await getAgentSkillActivationAvailability({
-    agents: internalAgents,
-    userId: params.userId,
-  });
-  const canActivate = (agent: Agent) =>
-    availabilityByAgent.get(agent.id) === true;
-  const activeAgents = internalAgents.filter(canActivate);
-  const environmentIds = [
-    ...new Set(activeAgents.map((agent) => agent.environmentId ?? null)),
-  ];
-  const [candidateEntries, evaluators] = await Promise.all([
-    Promise.all(
-      environmentIds.map(
-        async (environmentId) =>
-          [
-            environmentId ?? "default",
-            await listPolicyIndependentAvailableAgentSkills({
-              organizationId: params.organizationId,
-              userId: params.userId,
-              environmentId,
-            }),
-          ] as const,
-      ),
-    ),
-    agentActivationSkillPolicyService.getEvaluators(
-      activeAgents.map((agent) => agent.id),
-    ),
-  ]);
-  const candidatesByEnvironment = new Map(candidateEntries);
-  const countsByAgent = new Map(
-    activeAgents.map((agent) => {
-      const evaluator = evaluators.get(agent.id);
-      const candidates =
-        candidatesByEnvironment.get(agent.environmentId ?? "default") ?? [];
-      return [
-        agent.id,
-        projectEffectiveAvailableAgentSkills(
-          candidates,
-          params.userId,
-          evaluator ?? null,
-        ).length,
-      ] as const;
-    }),
-  );
-  for (const agent of internalAgents) {
-    agent.activationSkillsCount = countsByAgent.get(agent.id) ?? 0;
-  }
 }
 
 /**

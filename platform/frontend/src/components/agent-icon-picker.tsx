@@ -17,8 +17,11 @@ import dynamic from "next/dynamic";
 import Image from "next/image";
 import { useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
-import type { AgentIconVariant } from "@/components/agent-icon";
-import { isAgentImageIcon } from "@/components/agent-icon.utils";
+import { AgentIcon, type AgentIconVariant } from "@/components/agent-icon";
+import {
+  isAgentImageIcon,
+  isBuiltInServiceIcon,
+} from "@/components/agent-icon.utils";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -167,6 +170,8 @@ export function AgentIconPicker({
                 height={32}
                 className="rounded-md object-contain"
               />
+            ) : isBuiltInServiceIcon(value) ? (
+              <AgentIcon icon={value} size={28} />
             ) : (
               <span className="text-2xl leading-none">{value}</span>
             )

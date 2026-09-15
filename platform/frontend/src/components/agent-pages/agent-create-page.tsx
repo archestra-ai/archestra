@@ -3,7 +3,7 @@
 import { E2eTestId } from "@archestra/shared";
 import { ArrowLeft, ArrowRight, CircleCheck, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AgentForm } from "@/components/agent-form";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,6 +20,7 @@ import {
 } from "@/components/unsaved-changes-guard";
 import { WizardFooter } from "@/components/wizard-footer";
 import { WizardStepper } from "@/components/wizard-stepper";
+import { a2aRemoteAgentNewHref } from "@/lib/a2a-remote-agent-route";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { AgentCatalog, type AgentCatalogTemplate } from "./agent-catalog";
@@ -37,14 +38,22 @@ import { AgentPageShell } from "./agent-page-shell";
  * `/<family>/new` — the setup wizard for a record that does not exist yet.
  * Every step fills one form that lives for the whole wizard; nothing reaches
  * the backend until the last step's Create, which writes the record and
- * everything picked for it together, then lands on the detail page's Connect
- * section — the way the skills wizard collects a draft and creates at the end.
+ * everything picked for it together, then opens the agent's creation summary
+ * or the gateway's connection instructions.
  */
-export function AgentCreatePage({ kind }: { kind: AgentPageKind }) {
+export function AgentCreatePage({
+  kind,
+  canAddExternalAgent = false,
+  canCreateAgent = false,
+}: {
+  kind: AgentPageKind;
+  canAddExternalAgent?: boolean;
+  canCreateAgent?: boolean;
+}) {
   const config = AGENT_PAGE_CONFIGS[kind];
   const router = useRouter();
   const runtimeEnabled = useFeature("agentRuntime");
-  const catalogEnabled = kind === "agent" && runtimeEnabled === true;
+  const sourceChooserEnabled = kind === "agent";
   const [sourceSelected, setSourceSelected] = useState(false);
   const [selectedTemplate, setSelectedTemplate] =
     useState<AgentCatalogTemplate | null>(null);
@@ -78,43 +87,42 @@ export function AgentCreatePage({ kind }: { kind: AgentPageKind }) {
     !!created && isReadPermissionKnown && !canReadFamily;
   useEffect(() => {
     if (!created || !isReadPermissionKnown || !canReadFamily) return;
-    // A personal Claude subscription still needs to be connected after the
-    // record exists. Its account control lives in General, so surface that
-    // required setup instead of sending the creator to the unrelated A2A tab.
-    // Other records keep their established next step: connecting a client.
-    const needsClaudeCodeSignIn = selectedTemplate?.id === "claude-code";
     router.push(
-      agentDetailHref(
-        kind,
-        created.id,
-        needsClaudeCodeSignIn ? "general" : "connect",
-      ),
+      kind === "agent"
+        ? `/agents/${encodeURIComponent(created.id)}/created`
+        : agentDetailHref(kind, created.id, "connect"),
     );
-  }, [
-    created,
-    isReadPermissionKnown,
-    canReadFamily,
-    router,
-    kind,
-    selectedTemplate,
-  ]);
+  }, [created, isReadPermissionKnown, canReadFamily, router, kind]);
 
   const [isDirty, setIsDirty] = useState(false);
   useBeforeUnloadWhileDirty(isDirty);
-  const leave = useCallback(
+  const closeTargetRef = useRef<"list" | "catalog">("list");
+  const completeClose = useCallback(
     (open: boolean) => {
-      if (!open) router.push(agentListHref(kind));
+      if (open) return;
+      if (closeTargetRef.current === "catalog") {
+        closeTargetRef.current = "list";
+        setSelectedTemplate(null);
+        setSourceSelected(false);
+        setStep(steps[0].id);
+        setIsDirty(false);
+        return;
+      }
+      router.push(agentListHref(kind));
     },
-    [router, kind],
+    [router, kind, steps],
   );
   // Same dirty check the modal used to run on close, now guarding Cancel and
   // the back link.
-  const guard = useUnsavedChangesGuard({ isDirty, onOpenChange: leave });
-  const isChoosingSource = catalogEnabled && !sourceSelected;
+  const guard = useUnsavedChangesGuard({
+    isDirty,
+    onOpenChange: completeClose,
+  });
+  const isChoosingSource = sourceChooserEnabled && !sourceSelected;
   const header = {
     title: `Create ${config.singular}`,
     description: isChoosingSource
-      ? "Choose a maintained Agent template or start from scratch."
+      ? "Choose how you want to add an Agent."
       : selectedTemplate
         ? `${selectedTemplate.name} is prefilled below. Review or change any setting before creating it.`
         : config.createDescription,
@@ -145,7 +153,13 @@ export function AgentCreatePage({ kind }: { kind: AgentPageKind }) {
       // the success state there is nowhere to go back to.
       backHref={showsUnreadableSuccess ? undefined : agentListHref(kind)}
       backLabel={config.plural}
-      onBackRequest={guard.requestClose}
+      onBackRequest={() => {
+        closeTargetRef.current =
+          sourceChooserEnabled && sourceSelected && !created
+            ? "catalog"
+            : "list";
+        guard.requestClose();
+      }}
       header={header}
     >
       {showsUnreadableSuccess ? (
@@ -164,7 +178,7 @@ export function AgentCreatePage({ kind }: { kind: AgentPageKind }) {
           </EmptyHeader>
         </Empty>
       ) : created ? (
-        // Created, and on its way to the Connect section as soon as the read
+        // Created, and on its way to the next page as soon as the read
         // permission answers. The form stays unmounted so it cannot be
         // submitted a second time.
         <Empty className="border">
@@ -180,14 +194,18 @@ export function AgentCreatePage({ kind }: { kind: AgentPageKind }) {
         </Empty>
       ) : isChoosingSource ? (
         <AgentCatalog
+          canAddExternalAgent={canAddExternalAgent}
+          canCreateAgent={canCreateAgent}
           onStartFromScratch={() => {
             setSelectedTemplate(null);
             setSourceSelected(true);
           }}
+          onAddExternalAgent={() => router.push(a2aRemoteAgentNewHref())}
           onSelect={(template) => {
             setSelectedTemplate(template);
             setSourceSelected(true);
           }}
+          showPopularAgents={runtimeEnabled === true}
         />
       ) : (
         <AgentForm
@@ -219,14 +237,13 @@ export function AgentCreatePage({ kind }: { kind: AgentPageKind }) {
                     <ArrowLeft className="h-4 w-4" />
                     <span>{prevStep.title}</span>
                   </Button>
-                ) : catalogEnabled ? (
+                ) : sourceChooserEnabled ? (
                   <Button
                     type="button"
                     variant="outline"
                     onClick={() => {
-                      setSelectedTemplate(null);
-                      setSourceSelected(false);
-                      setStep(steps[0].id);
+                      closeTargetRef.current = "catalog";
+                      guard.requestClose();
                     }}
                     disabled={isSaving}
                   >

@@ -27,6 +27,7 @@ import {
 import { UserSearchableMultiSelect } from "@/components/user-searchable-multi-select";
 import { useLabelKeys, useLabelValues } from "@/lib/agent.query";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import type { QueryParamsAdapter } from "@/lib/hooks/use-query-params-adapter";
 import { useOrganizationMembers } from "@/lib/organization.query";
 import { useTeams } from "@/lib/teams/team.query";
 import { cn } from "@/lib/utils";
@@ -42,8 +43,9 @@ const OrganizationScopeIcon = SCOPE_META.org.icon;
 /**
  * Shared Personal / Team / Organization visibility filter for resource list
  * pages (agents, MCP gateways, skills, projects, apps). Scope is
- * the resource's share visibility; state lives entirely in URL search params
- * (`scope`, `teamIds`, `authorIds`, `excludeAuthorIds`). A resource admin
+ * the resource's share visibility; state lives entirely in URL search params.
+ * By default it owns `scope`, `teamIds`, `authorIds`, and `excludeAuthorIds`;
+ * a query-params adapter can namespace those logical keys. A resource admin
  * additionally gets a "My … / Other users" sub-filter under Personal and can
  * narrow to specific owners. Read the params back with
  * {@link useScopeFilterParams} when passing them to a list API hook.
@@ -56,6 +58,7 @@ export function ResourceScopeFilter({
   showLabels = false,
   showTeamSelect = true,
   navigate,
+  queryParamsAdapter,
 }: {
   /** Admin permission unlocking the owner sub-filter, e.g. `{ skill: ["admin"] }`. */
   adminPermission: Permissions;
@@ -75,15 +78,19 @@ export function ResourceScopeFilter({
   showTeamSelect?: boolean;
   /** Override navigation for lists that own local URL state without an RSC round trip. */
   navigate?: (url: string) => void;
+  /** Optional logical-to-URL adapter shared by a page section. */
+  queryParamsAdapter?: QueryParamsAdapter;
 }) {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
 
-  const scope = (searchParams.get("scope") as ScopeValue | null) ?? undefined;
-  const teamIdsParam = searchParams.get("teamIds");
-  const authorIdsParam = searchParams.get("authorIds");
-  const excludeAuthorIdsParam = searchParams.get("excludeAuthorIds");
+  const activeSearchParams = queryParamsAdapter?.searchParams ?? searchParams;
+  const scope =
+    (activeSearchParams.get("scope") as ScopeValue | null) ?? undefined;
+  const teamIdsParam = activeSearchParams.get("teamIds");
+  const authorIdsParam = activeSearchParams.get("authorIds");
+  const excludeAuthorIdsParam = activeSearchParams.get("excludeAuthorIds");
 
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
@@ -121,6 +128,10 @@ export function ResourceScopeFilter({
 
   const updateUrlParams = useCallback(
     (updates: Record<string, string | null>) => {
+      if (queryParamsAdapter) {
+        queryParamsAdapter.updateQueryParams({ ...updates, page: null });
+        return;
+      }
       const params = new URLSearchParams(searchParams.toString());
       for (const [key, value] of Object.entries(updates)) {
         if (value === null || value === "") {
@@ -135,7 +146,7 @@ export function ResourceScopeFilter({
         navigate ?? ((url: string) => router.push(url, { scroll: false }));
       navigateTo(`${pathname}?${params.toString()}`);
     },
-    [searchParams, router, pathname, navigate],
+    [searchParams, router, pathname, navigate, queryParamsAdapter],
   );
 
   const handleScopeChange = useCallback(
@@ -339,7 +350,9 @@ export function ResourceScopeFilter({
           selectedSuffix={(n) => `${n === 1 ? "user" : "users"} selected`}
         />
       )}
-      {showLabels && <AgentLabelFilter />}
+      {showLabels && (
+        <AgentLabelFilter queryParamsAdapter={queryParamsAdapter} />
+      )}
     </div>
   );
 }
@@ -363,14 +376,21 @@ interface ScopeFilterParams<Scope extends string> {
  */
 export function useScopeFilterParams(options: {
   includeBuiltIn: true;
+  queryParamsAdapter?: QueryParamsAdapter;
 }): ScopeFilterParams<ScopeValue>;
-export function useScopeFilterParams(): ScopeFilterParams<SharedScopeValue>;
+export function useScopeFilterParams(options?: {
+  includeBuiltIn?: false;
+  queryParamsAdapter?: QueryParamsAdapter;
+}): ScopeFilterParams<SharedScopeValue>;
 export function useScopeFilterParams(options?: {
   includeBuiltIn?: boolean;
+  queryParamsAdapter?: QueryParamsAdapter;
 }): ScopeFilterParams<ScopeValue> {
   const searchParams = useSearchParams();
+  const activeSearchParams =
+    options?.queryParamsAdapter?.searchParams ?? searchParams;
 
-  const rawScope = searchParams.get("scope");
+  const rawScope = activeSearchParams.get("scope");
   const allowedScopes: readonly string[] = options?.includeBuiltIn
     ? [...SHARED_SCOPES, "built_in"]
     : SHARED_SCOPES;
@@ -378,9 +398,9 @@ export function useScopeFilterParams(options?: {
     rawScope && allowedScopes.includes(rawScope)
       ? (rawScope as ScopeValue)
       : undefined;
-  const teamIdsParam = searchParams.get("teamIds");
-  const authorIdsParam = searchParams.get("authorIds");
-  const excludeAuthorIdsParam = searchParams.get("excludeAuthorIds");
+  const teamIdsParam = activeSearchParams.get("teamIds");
+  const authorIdsParam = activeSearchParams.get("authorIds");
+  const excludeAuthorIdsParam = activeSearchParams.get("excludeAuthorIds");
 
   return {
     scope,
@@ -404,18 +424,29 @@ export function useScopeFilterParams(options?: {
 
 export function ResourceDeletedStatusFilter({
   deletePermission,
+  queryParamsAdapter,
 }: {
   deletePermission: Permissions;
+  queryParamsAdapter?: QueryParamsAdapter;
 }) {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
   const { data: canDelete } = useHasPermissions(deletePermission);
 
-  const status = (searchParams.get("status") as StatusValue | null) ?? "active";
+  const activeSearchParams = queryParamsAdapter?.searchParams ?? searchParams;
+  const status =
+    (activeSearchParams.get("status") as StatusValue | null) ?? "active";
 
   const handleStatusChange = useCallback(
     (value: string) => {
+      if (queryParamsAdapter) {
+        queryParamsAdapter.updateQueryParams({
+          status: value === "deleted" ? "deleted" : null,
+          page: null,
+        });
+        return;
+      }
       const params = new URLSearchParams(searchParams.toString());
       if (value === "deleted") {
         params.set("status", "deleted");
@@ -425,7 +456,7 @@ export function ResourceDeletedStatusFilter({
       params.delete("page");
       router.push(`${pathname}?${params.toString()}`, { scroll: false });
     },
-    [searchParams, router, pathname],
+    [searchParams, router, pathname, queryParamsAdapter],
   );
 
   if (!canDelete) return null;
@@ -449,17 +480,24 @@ export function ResourceDeletedStatusFilter({
 
 export function ActiveFilterBadges({
   adminPermission,
+  queryParamsAdapter,
+  showLabels = true,
 }: {
   adminPermission: Permissions;
+  /** Optional logical-to-URL adapter shared by a page section. */
+  queryParamsAdapter?: QueryParamsAdapter;
+  /** Whether to read and render badges for the agent-only labels query param. */
+  showLabels?: boolean;
 }) {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
 
-  const teamIdsParam = searchParams.get("teamIds");
-  const authorIdsParam = searchParams.get("authorIds");
-  const labelsParam = searchParams.get("labels");
-  const scopeParam = searchParams.get("scope");
+  const activeSearchParams = queryParamsAdapter?.searchParams ?? searchParams;
+  const teamIdsParam = activeSearchParams.get("teamIds");
+  const authorIdsParam = activeSearchParams.get("authorIds");
+  const labelsParam = showLabels ? activeSearchParams.get("labels") : null;
+  const scopeParam = activeSearchParams.get("scope");
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
   const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
@@ -501,6 +539,13 @@ export function ActiveFilterBadges({
   const handleRemoveTeam = useCallback(
     (teamId: string) => {
       const ids = (teamIdsParam ?? "").split(",").filter((id) => id !== teamId);
+      if (queryParamsAdapter) {
+        queryParamsAdapter.updateQueryParams({
+          teamIds: ids.length > 0 ? ids.join(",") : null,
+          page: null,
+        });
+        return;
+      }
       const params = new URLSearchParams(searchParams.toString());
       if (ids.length > 0) {
         params.set("teamIds", ids.join(","));
@@ -510,7 +555,7 @@ export function ActiveFilterBadges({
       params.delete("page");
       router.push(`${pathname}?${params.toString()}`, { scroll: false });
     },
-    [teamIdsParam, searchParams, router, pathname],
+    [teamIdsParam, searchParams, router, pathname, queryParamsAdapter],
   );
 
   const handleRemoveUser = useCallback(
@@ -518,6 +563,14 @@ export function ActiveFilterBadges({
       const ids = (authorIdsParam ?? "")
         .split(",")
         .filter((id) => id !== userId);
+      if (queryParamsAdapter) {
+        queryParamsAdapter.updateQueryParams({
+          authorIds: ids.length > 0 ? ids.join(",") : null,
+          excludeAuthorIds: ids.length > 0 ? null : (currentUserId ?? null),
+          page: null,
+        });
+        return;
+      }
       const params = new URLSearchParams(searchParams.toString());
       if (ids.length > 0) {
         params.set("authorIds", ids.join(","));
@@ -531,7 +584,14 @@ export function ActiveFilterBadges({
       params.delete("page");
       router.push(`${pathname}?${params.toString()}`, { scroll: false });
     },
-    [authorIdsParam, searchParams, router, pathname, currentUserId],
+    [
+      authorIdsParam,
+      searchParams,
+      router,
+      pathname,
+      currentUserId,
+      queryParamsAdapter,
+    ],
   );
 
   const handleRemoveLabel = useCallback(
@@ -541,6 +601,13 @@ export function ActiveFilterBadges({
       updated[key] = updated[key].filter((v) => v !== value);
       if (updated[key].length === 0) {
         delete updated[key];
+      }
+      if (queryParamsAdapter) {
+        queryParamsAdapter.updateQueryParams({
+          labels: serializeLabels(updated) || null,
+          page: null,
+        });
+        return;
       }
       const params = new URLSearchParams(searchParams.toString());
       const serialized = serializeLabels(updated);
@@ -552,7 +619,7 @@ export function ActiveFilterBadges({
       params.delete("page");
       router.push(`${pathname}?${params.toString()}`, { scroll: false });
     },
-    [parsedLabels, searchParams, router, pathname],
+    [parsedLabels, searchParams, router, pathname, queryParamsAdapter],
   );
 
   const hasTeams = selectedTeams.length > 0;
@@ -624,15 +691,23 @@ export function ActiveFilterBadges({
 
 // The label filter is agent-specific (labels only exist on agents); keeping it
 // in a child component keeps its queries out of pages that don't render it.
-function AgentLabelFilter() {
+function AgentLabelFilter({
+  queryParamsAdapter,
+}: {
+  queryParamsAdapter?: QueryParamsAdapter;
+}) {
   const { data: labelKeys } = useLabelKeys();
-  const labelsParam = useSearchParams().get("labels");
+  const searchParams = useSearchParams();
+  const labelsParam = (queryParamsAdapter?.searchParams ?? searchParams).get(
+    "labels",
+  );
   const hasLabels = Object.keys(parseLabelsParam(labelsParam) ?? {}).length > 0;
   return (
     <LabelSelect
       labelKeys={labelKeys}
       LabelKeyRowComponent={AgentLabelKeyRow}
       className={filterControlClass({ active: hasLabels })}
+      queryParamsAdapter={queryParamsAdapter}
     />
   );
 }

@@ -1209,6 +1209,8 @@ describe("OAuth routes", () => {
     });
     const secret = await secretManager().createSecret(
       {
+        client_id: "public-client-id",
+        client_secret: "previous-client-secret",
         refresh_token: "stored-refresh-token",
         access_token: "old-access-token",
       },
@@ -1237,9 +1239,11 @@ describe("OAuth routes", () => {
     expect(requestBody.get("grant_type")).toBe("refresh_token");
     expect(requestBody.get("refresh_token")).toBe("stored-refresh-token");
     expect(requestBody.get("resource")).toBe("https://mcp.example.com");
+    expect(requestBody.get("client_id")).toBe("public-client-id");
+    expect(requestBody.get("client_secret")).toBe("public-client-secret");
   });
 
-  test("uses the dynamically registered client authentication method when refreshing", async ({
+  test("keeps registered credentials when a catalog secret has no client ID", async ({
     makeInternalMcpCatalog,
   }) => {
     const catalog = await makeInternalMcpCatalog({
@@ -1251,6 +1255,7 @@ describe("OAuth routes", () => {
         server_url: "https://mcp.example.com/mcp",
         grant_type: "authorization_code",
         client_id: "",
+        client_secret: "unrelated-catalog-secret",
         redirect_uris: ["http://localhost:3000/oauth-callback"],
         scopes: ["read"],
         default_scopes: ["read"],
@@ -1334,7 +1339,7 @@ describe("OAuth routes", () => {
         };
       },
     ) as Mock;
-    globalThis.fetch = fetchMock;
+    vi.stubGlobal("fetch", fetchMock);
 
     const initiateResponse = await app.inject({
       method: "POST",
@@ -1394,6 +1399,17 @@ describe("OAuth routes", () => {
       token_endpoint_auth_method: "client_secret_basic",
     });
 
+    await expect(
+      refreshOAuthToken(callbackResponse.json().secretId, catalog.id),
+    ).resolves.toEqual({ ok: true });
+    const refreshedSecret = await secretManager().getSecret(
+      callbackResponse.json().secretId,
+    );
+    expect(refreshedSecret?.secret).toMatchObject({
+      access_token: "refreshed-access-token",
+      client_id: "registered-client",
+      client_secret: "registered-secret",
+    });
     await expect(
       refreshOAuthToken(callbackResponse.json().secretId, catalog.id),
     ).resolves.toEqual({ ok: true });

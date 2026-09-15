@@ -22,12 +22,14 @@ export interface MultiSelectOption {
   /** Optional leading icon (provider/client logo, …). */
   icon?: React.ReactNode;
   /** Secondary line under the label, for options that need explaining. */
-  description?: string;
+  description?: React.ReactNode;
   /** Offered but not selectable — say why in `description`. */
   disabled?: boolean;
 }
 
 interface MultiSelectComboboxProps {
+  id?: string;
+  ariaLabel?: string;
   options: MultiSelectOption[];
   value: string[];
   onChange: (value: string[]) => void;
@@ -38,6 +40,8 @@ interface MultiSelectComboboxProps {
 }
 
 export function MultiSelectCombobox({
+  id,
+  ariaLabel,
   options,
   value,
   onChange,
@@ -122,7 +126,9 @@ export function MultiSelectCombobox({
       <PopoverAnchor asChild>
         <div
           ref={containerRef}
+          id={id}
           role="combobox"
+          aria-label={ariaLabel}
           aria-expanded={open}
           aria-disabled={disabled}
           tabIndex={disabled ? undefined : -1}
@@ -220,7 +226,7 @@ export function MultiSelectCombobox({
                         <span className="block min-w-0">
                           <span className="block truncate">{option.label}</span>
                           {option.description && (
-                            <span className="block truncate text-xs text-muted-foreground">
+                            <span className="block whitespace-normal break-words text-xs text-muted-foreground">
                               {option.description}
                             </span>
                           )}

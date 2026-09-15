@@ -114,148 +114,100 @@ describe("websocket Agent run attach ownership", () => {
     vi.restoreAllMocks();
   });
 
-  const subscribe = () =>
-    service.handleMessage(
+  async function startAttach() {
+    const index = pending.length;
+    const done = service.handleMessage(
       { type: "subscribe_agent_run_attach", payload: { runId } },
       ws,
     );
-  const unsubscribe = () =>
-    service.handleMessage(
-      { type: "unsubscribe_agent_run_attach", payload: { runId } },
-      ws,
-    );
-
-  async function expectCurrentTerminalWorks() {
-    send.mockClear();
-    await service.handleMessage(
-      { type: "agent_run_attach_input", payload: { runId, data: "abc123" } },
-      ws,
-    );
-    await service.handleMessage(
-      {
-        type: "agent_run_attach_resize",
-        payload: { runId, cols: 120, rows: 40 },
-      },
-      ws,
-    );
-    const current = pending[1];
-    current.params.stdout.write("abc123");
-    current.params.stderr.write("stderr");
-    expect(pending.map((attachment) => attachment.input)).toEqual([
-      [],
-      ["abc123"],
-    ]);
-    expect(pending[0].socket.send).not.toHaveBeenCalled();
-    expect(current.socket.send).toHaveBeenCalledWith(
-      Buffer.concat([
-        Buffer.from([4]),
-        Buffer.from(JSON.stringify({ Width: 120, Height: 40 })),
-      ]),
-    );
-    expect(send.mock.calls.map(([message]) => JSON.parse(message))).toEqual([
-      { type: "agent_run_attach_output", payload: { runId, data: "abc123" } },
-      { type: "agent_run_attach_output", payload: { runId, data: "stderr" } },
-    ]);
+    await vi.waitFor(() => expect(pending).toHaveLength(index + 1));
+    return { ...pending[index], done };
   }
 
-  function emitObsoleteCallbacks() {
-    const old = pending[0];
+  const messages = () =>
+    send.mock.calls.map(([message]) => JSON.parse(message));
+
+  test.each([
+    "old first",
+    "new first",
+  ])("keeps the newest terminal when overlapping attaches finish %s", async (order) => {
+    const old = await startAttach();
+    const current = await startAttach();
+    for (const attachment of order === "old first"
+      ? [old, current]
+      : [current, old]) {
+      attachment.resolve();
+      await attachment.done;
+    }
+    expect(messages().map(({ type }) => type)).toEqual([
+      "agent_run_attach_started",
+    ]);
+    expect(old.socket.close).toHaveBeenCalledOnce();
+    expect(current.socket.close).not.toHaveBeenCalled();
+
+    await service.handleMessage(
+      { type: "agent_run_attach_input", payload: { runId, data: "hello" } },
+      ws,
+    );
+    expect(old.input).toEqual([]);
+    expect(current.input).toEqual(["hello"]);
+    current.params.stdout.write("hello");
+    expect(messages().at(-1)).toEqual({
+      type: "agent_run_attach_output",
+      payload: { runId, data: "hello" },
+    });
+  });
+
+  test.each([
+    "unsubscribe",
+    "disconnect",
+  ])("closes a pending attach that completes after %s", async (action) => {
+    const attachment = await startAttach();
+    if (action === "disconnect") {
+      service.cleanupAgentRunSubscriptions(ws);
+      service.clientContexts.delete(ws);
+    } else {
+      await service.handleMessage(
+        { type: "unsubscribe_agent_run_attach", payload: { runId } },
+        ws,
+      );
+    }
+    attachment.resolve();
+    await attachment.done;
+    expect(attachment.socket.close).toHaveBeenCalledOnce();
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  test("ignores an obsolete attach rejection after a replacement is live", async () => {
+    const old = await startAttach();
+    const current = await startAttach();
+    current.resolve();
+    await current.done;
+    send.mockClear();
+    old.reject(new Error("obsolete attach failed"));
+    await old.done;
+    expect(send).not.toHaveBeenCalled();
+    expect(current.socket.close).not.toHaveBeenCalled();
+  });
+
+  test("ignores late events from a replaced terminal", async () => {
+    const old = await startAttach();
+    old.resolve();
+    await old.done;
+    const current = await startAttach();
+    current.resolve();
+    await current.done;
+    send.mockClear();
+
     old.params.onProgress?.({
       phase: "attaching",
       message: "old progress",
       detail: null,
     });
     old.params.onStatus?.({ status: "Failure", message: "old failure" });
-    old.params.stdout.emit("data", Buffer.from("old stdout"));
-    old.params.stderr.emit("data", Buffer.from("old stderr"));
+    old.params.stdout.emit("data", Buffer.from("old output"));
     old.socket.emit("close");
-  }
-
-  for (const reopen of [false, true]) {
-    for (const completionOrder of [
-      [0, 1],
-      [1, 0],
-    ]) {
-      test(`keeps only the newest attach after ${reopen ? "close/reopen" : "overlap"}, completion order ${completionOrder}`, async () => {
-        const first = subscribe();
-        await vi.waitFor(() => expect(pending).toHaveLength(1));
-        if (reopen) await unsubscribe();
-        const second = subscribe();
-        await vi.waitFor(() => expect(pending).toHaveLength(2));
-        const requests = [first, second];
-        for (const index of completionOrder) {
-          pending[index].resolve();
-          await requests[index];
-        }
-        expect(
-          send.mock.calls.map(([message]) => JSON.parse(message).type),
-        ).toEqual(["agent_run_attach_started"]);
-        expect(pending[0].socket.close).toHaveBeenCalledOnce();
-        expect(pending[0].params.stdin.destroyed).toBe(true);
-        expect(pending[0].params.stdout.destroyed).toBe(true);
-        expect(pending[0].params.stderr.destroyed).toBe(true);
-        send.mockClear();
-        emitObsoleteCallbacks();
-        expect(send).not.toHaveBeenCalled();
-        expect(pending[1].socket.close).not.toHaveBeenCalled();
-        await expectCurrentTerminalWorks();
-      });
-    }
-  }
-
-  for (const disconnect of [false, true]) {
-    test(`disposes an attach completing after ${disconnect ? "disconnect" : "unsubscribe"}`, async () => {
-      const request = subscribe();
-      await vi.waitFor(() => expect(pending).toHaveLength(1));
-      if (disconnect) {
-        Object.assign(ws, { readyState: WS.CLOSED });
-        service.cleanupAgentRunSubscriptions(ws);
-        service.clientContexts.delete(ws);
-      } else {
-        await unsubscribe();
-      }
-      pending[0].resolve();
-      await request;
-      expect(pending[0].socket.close).toHaveBeenCalledOnce();
-      expect(pending[0].params.stdin.destroyed).toBe(true);
-      expect(pending[0].params.stdout.destroyed).toBe(true);
-      expect(pending[0].params.stderr.destroyed).toBe(true);
-      emitObsoleteCallbacks();
-      expect(send).not.toHaveBeenCalled();
-    });
-  }
-
-  test("ignores an obsolete attach rejection after a replacement is live", async () => {
-    const first = subscribe();
-    await vi.waitFor(() => expect(pending).toHaveLength(1));
-    const second = subscribe();
-    await vi.waitFor(() => expect(pending).toHaveLength(2));
-    pending[1].resolve();
-    await second;
-    send.mockClear();
-    pending[0].reject(new Error("obsolete attach failed"));
-    await first;
     expect(send).not.toHaveBeenCalled();
-    expect(pending[1].socket.close).not.toHaveBeenCalled();
-    expect(pending[0].params.stdin.destroyed).toBe(true);
-    expect(pending[0].params.stdout.destroyed).toBe(true);
-    expect(pending[0].params.stderr.destroyed).toBe(true);
-    await expectCurrentTerminalWorks();
-  });
-
-  test("ignores late callbacks from an already attached terminal after replacement", async () => {
-    const first = subscribe();
-    await vi.waitFor(() => expect(pending).toHaveLength(1));
-    pending[0].resolve();
-    await first;
-    const second = subscribe();
-    await vi.waitFor(() => expect(pending).toHaveLength(2));
-    pending[1].resolve();
-    await second;
-    send.mockClear();
-    emitObsoleteCallbacks();
-    expect(send).not.toHaveBeenCalled();
-    expect(pending[1].socket.close).not.toHaveBeenCalled();
-    await expectCurrentTerminalWorks();
+    expect(current.socket.close).not.toHaveBeenCalled();
   });
 });

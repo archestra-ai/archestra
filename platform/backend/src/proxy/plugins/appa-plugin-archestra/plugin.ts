@@ -40,6 +40,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     if (adapter) {
       context.resources.set(APPA_PLUGIN_ADAPTER, adapter);
     }
+    // Unknown clients still get APPA enforcement using the proxy's canonical names.
     context.resources.set(APPA_PLUGIN_BINDING, {
       session: trustedContext.session,
       canonicalizeToolName: trustedContext.canonicalizeToolName,

@@ -174,6 +174,7 @@ describe("LLM proxy plugin lifecycle", () => {
       id: `test-stream-snapshot-${crypto.randomUUID()}`,
       async onModelResponse({ response }) {
         responses.push(response);
+        return { response: { model: "ignored-streaming-replacement" } };
       },
       async onComplete({ response }) {
         responses.push(response);

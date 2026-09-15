@@ -111,7 +111,8 @@ export interface LlmProxyPlugin {
   ): Promise<LlmProxyToolResultsOutcome | undefined>;
   /**
    * Runs before a non-streaming response is released. Streaming responses are
-   * observable only after their already-forwarded chunks are assembled.
+   * observable only after their already-forwarded chunks are assembled; returned
+   * replacements are ignored when context.streaming is true.
    */
   onModelResponse?(
     context: LlmProxyModelResponseContext,

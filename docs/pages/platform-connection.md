@@ -3,7 +3,7 @@ title: Connect Your Agents
 category: Archestra Platform
 order: 8
 description: How the one-command setup script connects your AI tools, and how to audit or undo it
-lastUpdated: 2026-09-11
+lastUpdated: 2026-09-15
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -80,7 +80,7 @@ An upstream proxy that requires login for every URL must allow these documents a
 A script can set up four things:
 
 - **MCP gateway** — gives the client access to your Archestra tools. Its tools unlock after a one-time sign-in.
-- **LLM proxy** — routes the client's model calls through Archestra. In passthrough mode the script leaves your own provider credential untouched and changes only the base URL. In virtual-key mode it injects a key Archestra provisions for you.
+- **LLM proxy** — routes the client's model calls through Archestra. Passthrough mode uses your own provider credentials. Virtual-key mode injects a key Archestra provisions for you.
 - **Skills** — installs a shared skills plugin into the client.
 - **Plugins** — installs selected, approved, platform-compatible plugins for the client. The review step lets you change the selection before generating the command. See [Plugins](/docs/platform-agent-plugins).
 
@@ -158,12 +158,14 @@ For a full walkthrough, see [Using Claude Code with a Pro or Max Subscription](/
 The `claude` CLI must be on your `PATH`.
 
 - **MCP gateway** — runs `claude mcp add --transport http <name> <url>`. Finish with `claude /mcp`, select the gateway, and sign in once in your browser.
-- **LLM proxy** — merges `ANTHROPIC_BASE_URL` and the Archestra attribution headers into `~/.claude/settings.json`. Virtual-key mode also sets `ANTHROPIC_AUTH_TOKEN`. For Amazon Bedrock it sets the Bedrock variables instead and prints an `AWS_BEARER_TOKEN_BEDROCK` line to add to your shell profile.
+- **LLM proxy** — merges `ANTHROPIC_BASE_URL` and the Archestra attribution headers into `~/.claude/settings.json`. Virtual-key mode also sets `ANTHROPIC_AUTH_TOKEN`. For Amazon Bedrock it merges the Bedrock variables, including `AWS_BEARER_TOKEN_BEDROCK` in virtual-key mode.
 - **Skills** — runs `claude plugin marketplace add` then `claude plugin install`.
 - **Plugins** — installs the selected Claude Code plugins. OpenAPPA is imported by default and can be deselected, updated, or deleted.
 - **Startup guard** — installs a pre-loader that checks your Archestra remotes before every `claude` launch. See [Startup Guard](#startup-guard).
 - **Backup** — `~/.claude/settings.json.archestra-backup`.
 - **Revert** — the startup guard's reconfigure menu (press `C` at launch) disconnects any remote. By hand: restore the backup, delete the Archestra env keys, run `claude mcp remove <name>` and `claude plugin marketplace remove <name>`, and drop the exported Bedrock token from your profile.
+
+Switching to passthrough removes saved Archestra keys from that provider's authentication variables in `~/.claude/settings.json`. Your provider credentials stay unchanged. Switching to virtual-key mode removes the old passthrough header. For Anthropic, it also removes saved Archestra keys from `ANTHROPIC_API_KEY`. Restart Claude Code after changing modes. Remove stale Archestra credentials from shell or project settings separately if you configured them there.
 
 ### Codex
 

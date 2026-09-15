@@ -1,4 +1,5 @@
 import {
+  ALL_ARCHESTRA_TOKEN_PREFIXES,
   CLAUDE_CODE_CLIENT_ID,
   CLAUDE_CODE_CUSTOM_HEADERS_ENV_KEY,
   CLAUDE_CODE_PROXY_ENV_KEYS,
@@ -354,7 +355,21 @@ function mergeJsonFileSnippet(params: {
   nestedKey: string;
   /** Leaf key/value pairs to set under the nested object. */
   values: Record<string, string>;
+  removeManagedTokenKeys?: string[];
 }): string {
+  const removeManagedTokens = params.removeManagedTokenKeys?.length
+    ? `foreach ($arch_key in @(${params.removeManagedTokenKeys.map(psq).join(", ")})) {
+  $arch_property = $arch_nested.PSObject.Properties[$arch_key]
+  if ($arch_property -and ($arch_property.Value -is [string])) {
+    foreach ($arch_prefix in @(${ALL_ARCHESTRA_TOKEN_PREFIXES.map(psq).join(", ")})) {
+      if ($arch_property.Value.StartsWith($arch_prefix, [StringComparison]::Ordinal)) {
+        $arch_nested.PSObject.Properties.Remove($arch_key)
+        break
+      }
+    }
+  }
+}`
+    : "";
   const setLines = Object.entries(params.values)
     .map(
       ([key, value]) =>
@@ -374,6 +389,7 @@ if (Test-Path $arch_path) {
 }
 if (-not $arch_config.PSObject.Properties[${psq(params.nestedKey)}]) { $arch_config | Add-Member -NotePropertyName ${psq(params.nestedKey)} -NotePropertyValue ([pscustomobject]@{}) }
 $arch_nested = $arch_config.${psBareOrIndex(params.nestedKey)}
+${removeManagedTokens}
 ${setLines}
 $arch_config | ConvertTo-Json -Depth 32 | Set-Content -Path $arch_path -Encoding utf8
 Write-Host ('Updated ' + $arch_path)`;
@@ -637,6 +653,9 @@ ${mergeJsonFileSnippet({
   pathExpr: CLAUDE_SETTINGS_PATH,
   nestedKey: "env",
   values,
+  removeManagedTokenKeys: proxy.virtualKey
+    ? ["ANTHROPIC_API_KEY"]
+    : [ANTHROPIC_AUTH_TOKEN_KEY, "ANTHROPIC_API_KEY"],
 })}${headerAppend}${passthroughNote}`;
 }
 
@@ -649,6 +668,9 @@ ${mergeJsonFileSnippet({
  */
 function claudeCustomHeaderAppendSnippet(headerLines: string[]): string {
   const psArray = headerLines.map(psq).join(", ");
+  const ownedNames = [EXTERNAL_AGENT_ID_HEADER, VIRTUAL_KEY_HEADER]
+    .map((name) => psq(name.toLowerCase()))
+    .join(", ");
   return `$arch_hpath = ${CLAUDE_SETTINGS_PATH}
 $arch_hconfig = [pscustomobject]@{}
 if (Test-Path $arch_hpath) {
@@ -658,7 +680,7 @@ if (Test-Path $arch_hpath) {
 if (-not $arch_hconfig.PSObject.Properties['env']) { $arch_hconfig | Add-Member -NotePropertyName 'env' -NotePropertyValue ([pscustomobject]@{}) }
 $arch_henv = $arch_hconfig.env
 $arch_hnew = @(${psArray})
-$arch_hnames = @($arch_hnew | ForEach-Object { ($_ -split ':',2)[0].Trim().ToLower() })
+$arch_hnames = @(${ownedNames})
 $arch_hexisting = ''
 if ($arch_henv.PSObject.Properties['${CLAUDE_CODE_CUSTOM_HEADERS_ENV_KEY}']) { $arch_hexisting = [string]$arch_henv.${CLAUDE_CODE_CUSTOM_HEADERS_ENV_KEY} }
 $arch_hkept = @()
@@ -689,6 +711,7 @@ ${mergeJsonFileSnippet({
   pathExpr: CLAUDE_SETTINGS_PATH,
   nestedKey: "env",
   values,
+  removeManagedTokenKeys: proxy.virtualKey ? [] : [AWS_BEARER_TOKEN_KEY],
 })}
 ${claudeCustomHeaderAppendSnippet(claudeCustomHeaderLines(proxy))}
 Write-Host 'Update AWS_REGION in the settings.json env block if you use a different region.'${

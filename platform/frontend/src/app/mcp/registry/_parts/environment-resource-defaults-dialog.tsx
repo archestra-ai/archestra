@@ -7,7 +7,6 @@ import {
 } from "@archestra/shared";
 import { EnvironmentSelector } from "@/components/environment-selector";
 import { FormDialog } from "@/components/form-dialog";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DialogBody, DialogStickyFooter } from "@/components/ui/dialog";
 import {
@@ -104,15 +103,13 @@ function ResourceDefaultRow({
       disabled={disabled}
       helpText={
         selected?.restricted ? (
-          <>
-            <Badge variant="secondary" className="mr-1.5">
-              Restricted
-            </Badge>
-            <span>
-              Creators without permission to deploy here fall back to{" "}
-              {defaultEnvironmentName}.
-            </span>
-          </>
+          <span>
+            Creators without{" "}
+            <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs break-all">
+              {resource}:deploy-to-restricted
+            </code>{" "}
+            permission fall back to {defaultEnvironmentName}.
+          </span>
         ) : undefined
       }
     />

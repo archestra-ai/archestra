@@ -25,7 +25,10 @@ import {
 } from "@/lib/agent-runtime.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useConfig } from "@/lib/config/config.query";
-import { useRuntimeCredentials } from "@/lib/runtime-credentials.query";
+import {
+  useRuntimeCredentials,
+  useStartGitHubUserConnection,
+} from "@/lib/runtime-credentials.query";
 
 /** Accept both new setup links and credential anchors already sent to users. */
 export function AgentRuntimeCredentialsDeepLink(props: {
@@ -77,6 +80,7 @@ function MissingCredentialsDialog({
 }) {
   const preflight = useAgentRuntimePreflight(agentId);
   const definitions = useRuntimeCredentials();
+  const startGitHub = useStartGitHubUserConnection();
   const { data: canManageOrganization, isPending: permissionsPending } =
     useHasPermissions({ agentSettings: ["update"] });
   const config = useConfig();
@@ -99,7 +103,15 @@ function MissingCredentialsDialog({
   const canSet = (credential: (typeof declarations)[number]) =>
     credential.scope === "per_user" ||
     (credential.credentialId ? canManageOrganization : canEditAgent);
-  const editable = missing.filter(canSet);
+  const isGitHubUserConnection = (credential: (typeof declarations)[number]) =>
+    definitions.data?.some(
+      (definition) =>
+        definition.key === credential.credentialId &&
+        definition.kind === "github_app_user",
+    );
+  const editable = missing.filter(
+    (credential) => canSet(credential) && !isGitHubUserConnection(credential),
+  );
   const loading =
     preflight.isPending ||
     definitions.isPending ||
@@ -188,6 +200,7 @@ function MissingCredentialsDialog({
                   rules={{
                     validate: (value) =>
                       !canSet(credential) ||
+                      isGitHubUserConnection(credential) ||
                       !!value?.trim() ||
                       "Secret value is required",
                     maxLength: {
@@ -226,6 +239,19 @@ function MissingCredentialsDialog({
                           An administrator must configure this organization
                           credential.
                         </p>
+                      ) : definition?.kind === "github_app_user" ? (
+                        <div>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            disabled={startGitHub.isPending || save.isPending}
+                            onClick={() => startGitHub.mutate(definition.key)}
+                          >
+                            {startGitHub.isPending
+                              ? "Connecting…"
+                              : "Connect GitHub"}
+                          </Button>
+                        </div>
                       ) : byosEnabled ? (
                         <FormControl>
                           <Button

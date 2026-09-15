@@ -58,6 +58,7 @@ afterAll(() => {
   archestraApiClient.setConfig({ baseUrl: "" });
 });
 afterEach(() => {
+  vi.unstubAllGlobals();
   server.resetHandlers();
   queryClient.clear();
   window.history.replaceState(null, "", "/");
@@ -160,6 +161,97 @@ function show(
 }
 
 describe("credential setup deep links", () => {
+  it.each([
+    false,
+    true,
+  ])("authorizes GitHub user connections instead of requesting a secret (Vault: %s)", async (byosEnabled) => {
+    configured = ["SERVICE_TOKEN"];
+    const authorizationUrl =
+      "https://github.com/login/oauth/authorize?state=test-flow";
+    const assign = vi.fn();
+    let starts = 0;
+    server.use(
+      http.get(`${origin}/api/config`, () =>
+        HttpResponse.json(makeConfig({ features: { byosEnabled } })),
+      ),
+      http.get(`${origin}/api/credentials`, () =>
+        HttpResponse.json([
+          {
+            key: "github",
+            name: "GitHub account",
+            kind: "github_app_user",
+            description: "Authorize your GitHub account",
+            allowPersonal: true,
+            allowOrganization: false,
+            personalConfigured: false,
+            organizationConfigured: false,
+          },
+        ]),
+      ),
+      http.post(`${origin}/api/credentials/github/github/start`, () => {
+        starts++;
+        return HttpResponse.json({ authorizationUrl });
+      }),
+    );
+    const user = userEvent.setup();
+    show();
+    const connect = await screen.findByRole("button", {
+      name: "Connect GitHub",
+    });
+    expect(
+      screen.queryByPlaceholderText("Paste secret"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Select Vault secret")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Save credentials" }),
+    ).not.toBeInTheDocument();
+    vi.stubGlobal("location", { pathname: "/agents/agent-1", assign });
+    await user.click(connect);
+    await waitFor(() => expect(assign).toHaveBeenCalledWith(authorizationUrl));
+    expect(starts).toBe(1);
+    expect(writes).toEqual([]);
+  });
+
+  it("saves manual secrets without validating or submitting a GitHub user connection", async () => {
+    server.use(
+      http.get(`${origin}/api/credentials`, () =>
+        HttpResponse.json([
+          {
+            key: "github",
+            name: "GitHub account",
+            kind: "github_app_user",
+            description: "Authorize your GitHub account",
+            allowPersonal: true,
+            allowOrganization: false,
+            personalConfigured: false,
+            organizationConfigured: false,
+          },
+        ]),
+      ),
+    );
+    const user = userEvent.setup();
+    show();
+    await user.type(
+      await screen.findByLabelText("Service token"),
+      "example-service-secret",
+    );
+    await user.click(screen.getByRole("button", { name: "Save credentials" }));
+    await waitFor(() =>
+      expect(writes).toEqual([
+        { key: "SERVICE_TOKEN", value: "example-service-secret" },
+      ]),
+    );
+    await waitFor(() =>
+      expect(screen.queryByLabelText("Service token")).not.toBeInTheDocument(),
+    );
+    expect(
+      screen.getByRole("button", { name: "Connect GitHub" }),
+    ).toBeVisible();
+    expect(
+      screen.queryByText("Secret value is required"),
+    ).not.toBeInTheDocument();
+  });
+
   it.each([
     "?section=advanced&setup=credentials",
     "?tab=overview#runtime-credentials",

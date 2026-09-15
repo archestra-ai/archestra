@@ -192,6 +192,7 @@ Required RBAC permission: `agent:read`
 | `agents[].id` | `string` | Yes | The agent ID. |
 | `agents[].name` | `string` | Yes | The agent name. |
 | `agents[].scope` | `"personal" \| "team" \| "org"` | Yes | The agent scope. |
+| `agents[].executionMode` | `"runtime" \| "foreground"` | Yes | Runtime agents retain a workspace and support steering; foreground agents do not. |
 | `agents[].description` | `string \| null` | Yes | The agent description, if any. |
 | `agents[].resolvedLlmProviderKeyName` | `string \| null` | Yes | The configured provider-key name, or null when unconfigured. |
 | `agents[].resolvedLlmModelName` | `string \| null` | Yes | The configured model name, or null when unconfigured. |

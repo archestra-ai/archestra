@@ -150,19 +150,14 @@ export async function startDelegatedTask(params: {
       });
     }
 
-    return structuredSuccessResult(
-      {
-        run: runSummary(taskRow),
-        session_id: runtime ? taskRow.id : null,
-        run_url: runtime
-          ? `${config.frontendBaseUrl}/chat/runs/${taskRow.id}`
-          : null,
-        runtime: runtime ? "dedicated" : "foreground",
-      },
-      `Run ${taskRow.id} started on ${agent.name}` +
-        (runtime ? " (Agent Runtime)" : " (foreground)") +
-        ". Poll get_run for progress.",
-    );
+    return structuredSuccessResult({
+      run: runSummary(taskRow),
+      session_id: runtime ? taskRow.id : null,
+      run_url: runtime
+        ? `${config.frontendBaseUrl}/chat/runs/${taskRow.id}`
+        : null,
+      runtime: runtime ? "dedicated" : "foreground",
+    });
   } catch (error) {
     const needed = missingCredentialsFrom(error);
     if (needed) {
@@ -358,19 +353,16 @@ const registry = defineArchestraTools([
           request: { operation: "read", path: args.path },
         });
         const { content_base64, ...metadata } = result;
-        return structuredSuccessResult(
-          {
-            ...metadata,
-            encoding: args.encoding,
-            content:
-              args.encoding === "base64"
-                ? content_base64
-                : new TextDecoder("utf-8", { fatal: true }).decode(
-                    Buffer.from(content_base64 ?? "", "base64"),
-                  ),
-          },
-          "Workspace file read.",
-        );
+        return structuredSuccessResult({
+          ...metadata,
+          encoding: args.encoding,
+          content:
+            args.encoding === "base64"
+              ? content_base64
+              : new TextDecoder("utf-8", { fatal: true }).decode(
+                  Buffer.from(content_base64 ?? "", "base64"),
+                ),
+        });
       } catch (error) {
         return catchError(
           error,
@@ -406,7 +398,7 @@ const registry = defineArchestraTools([
             overwrite: args.overwrite,
           },
         });
-        return structuredSuccessResult(result, "Workspace file written.");
+        return structuredSuccessResult(result);
       } catch (error) {
         return catchError(error, "writing workspace file");
       }
@@ -488,41 +480,38 @@ const registry = defineArchestraTools([
             ? await AgentWorkspaceModel.findByWorkloadName(session.workloadName)
             : null;
 
-        return structuredSuccessResult(
-          {
-            run: runSummary(task.row),
-            session_id: workspace?.id ?? (session ? session.taskId : null),
-            run_url: session
-              ? `${config.frontendBaseUrl}/chat/runs/${workspace?.id ?? task.row.id}`
-              : null,
-            // The tail: the newest output is what a poller wants to see.
-            output: truncated ? text.slice(-MAX_INLINED_OUTPUT_CHARS) : text,
-            output_truncated: truncated,
-            workspace: workspace
-              ? {
-                  state: workspace.state,
-                  retained_until: workspace.expiresAt.toISOString(),
-                  can_continue:
-                    ["idle", "suspended"].includes(workspace.state) &&
-                    !workspace.activeTaskId &&
-                    workspace.expiresAt.getTime() > Date.now(),
-                  connection:
-                    session && ["active", "idle"].includes(workspace.state)
-                      ? resolveAgentRuntimeBackendDriver(
-                          session.backend,
-                        ).getWorkspaceConnection(session)
-                      : null,
-                }
-              : null,
-            session: session
-              ? {
-                  attachable: session.endedAt === null,
-                  started_at: session.startedAt?.toISOString() ?? null,
-                }
-              : null,
-          },
-          `Run ${task.row.id}: ${task.row.state}`,
-        );
+        return structuredSuccessResult({
+          run: runSummary(task.row),
+          session_id: workspace?.id ?? (session ? session.taskId : null),
+          run_url: session
+            ? `${config.frontendBaseUrl}/chat/runs/${workspace?.id ?? task.row.id}`
+            : null,
+          // The tail: the newest output is what a poller wants to see.
+          output: truncated ? text.slice(-MAX_INLINED_OUTPUT_CHARS) : text,
+          output_truncated: truncated,
+          workspace: workspace
+            ? {
+                state: workspace.state,
+                retained_until: workspace.expiresAt.toISOString(),
+                can_continue:
+                  ["idle", "suspended"].includes(workspace.state) &&
+                  !workspace.activeTaskId &&
+                  workspace.expiresAt.getTime() > Date.now(),
+                connection:
+                  session && ["active", "idle"].includes(workspace.state)
+                    ? resolveAgentRuntimeBackendDriver(
+                        session.backend,
+                      ).getWorkspaceConnection(session)
+                    : null,
+              }
+            : null,
+          session: session
+            ? {
+                attachable: session.endedAt === null,
+                started_at: session.startedAt?.toISOString() ?? null,
+              }
+            : null,
+        });
       } catch (error) {
         return catchError(error, "reading the run");
       }
@@ -560,10 +549,10 @@ const registry = defineArchestraTools([
             : undefined,
           pageSize: MAX_LISTED_RUNS,
         });
-        return structuredSuccessResult(
-          { runs: tasks.map(runSummary), total: totalSize },
-          `${totalSize} run(s)`,
-        );
+        return structuredSuccessResult({
+          runs: tasks.map(runSummary),
+          total: totalSize,
+        });
       } catch (error) {
         return catchError(error, "listing runs");
       }
@@ -770,15 +759,12 @@ const registry = defineArchestraTools([
           steerMode: runtime.steerMode,
           message: args.message,
         });
-        return structuredSuccessResult(
-          {
-            success: true,
-            task_id: task.row.id,
-            session_id: workspace?.id ?? session.taskId,
-            run_url: `${config.frontendBaseUrl}/chat/runs/${workspace?.id ?? session.taskId}`,
-          },
-          "Steer delivered. It lands at the loop's next turn boundary (pipe) or is typed into the session (tmux keys).",
-        );
+        return structuredSuccessResult({
+          success: true,
+          task_id: task.row.id,
+          session_id: workspace?.id ?? session.taskId,
+          run_url: `${config.frontendBaseUrl}/chat/runs/${workspace?.id ?? session.taskId}`,
+        });
       } catch (error) {
         const needed = missingCredentialsFrom(error);
         if (needed) {

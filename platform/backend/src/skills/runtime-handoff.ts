@@ -13,7 +13,7 @@ Use the connected tools to move work between clients and a retained runtime sess
 
 Find the actual tool names and schemas through archestra__search_tools when available, then call them through archestra__run_tool. The lifecycle tools are start_run, get_run, list_runs, steer_run, and cancel_run. Do not guess older names such as start_task or steer_task. If a required tool is unavailable, explain which capability the connected gateway needs; do not substitute an unrelated tool or change permissions.
 
-Use list_agents to identify an accessible Agent with Agent Runtime configured. Reuse the user's chosen Agent. Ask only when the choice or scope cannot be determined.
+Use list_agents to identify an accessible Agent with executionMode set to runtime. Foreground agents do not retain a runtime workspace or support steering. Reuse the user's chosen Agent. Ask only when the choice or scope cannot be determined.
 
 ## Hand off
 

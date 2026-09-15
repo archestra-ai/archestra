@@ -482,6 +482,9 @@ describe("run tools", () => {
         context,
       );
       expect(written.isError).toBeFalsy();
+      expect(JSON.parse((written.content[0] as { text: string }).text)).toEqual(
+        written.structuredContent,
+      );
       const read = await executeArchestraTool(
         "archestra__read_workspace_file",
         { task_id: task.id, path: "notes.txt" },
@@ -491,6 +494,9 @@ describe("run tools", () => {
         content: "hello",
         encoding: "utf8",
       });
+      expect(JSON.parse((read.content[0] as { text: string }).text)).toEqual(
+        read.structuredContent,
+      );
       expect(access).toHaveBeenCalledTimes(2);
       const other = await makeUser();
       await makeMember(other.id, organizationId, { role: "member" });

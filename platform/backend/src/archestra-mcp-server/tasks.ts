@@ -20,6 +20,7 @@ import config from "@/config";
 import logger from "@/logging";
 import {
   A2AArtifactModel,
+  A2AMessageModel,
   A2ATaskModel,
   AgentModel,
   AgentRunModel,
@@ -223,6 +224,17 @@ const GetRunOutputSchema = z.object({
       "Stable runtime session handle; use as task_id for steering and later handoffs.",
     ),
   run_url: z.string().nullable(),
+  requests: z
+    .array(
+      z.object({
+        task_id: z.string(),
+        text: z.string(),
+        truncated: z.boolean(),
+      }),
+    )
+    .describe(
+      "The original task request and, when different, the current turn's request. Use this context to interpret short follow-ups from another client.",
+    ),
   output: z
     .string()
     .describe("The run's response artifact so far (tail, capped)."),
@@ -231,7 +243,11 @@ const GetRunOutputSchema = z.object({
     .object({
       state: AgentWorkspaceStateSchema,
       retained_until: z.string(),
-      can_continue: z.boolean(),
+      can_continue: z
+        .boolean()
+        .describe(
+          "Whether steer_run can accept a follow-up in this workspace, including while work is running.",
+        ),
       connection: z
         .object({ hostname: z.string(), shellCommand: z.string() })
         .nullable(),
@@ -443,7 +459,8 @@ const registry = defineArchestraTools([
       "Read a run's state and the output it has produced so far. " +
       "Accepts the stable session_id or any prior task_id and resolves the current turn. " +
       "Use this when picking up work from another client. Keep session_id and run_url. " +
-      "A run in state 'working' is still going — poll again rather than assuming it stalled. " +
+      "Read requests for the task context before interpreting a follow-up. " +
+      "A run in state 'working' can be steered immediately; do not wait for completion to send instructions. " +
       "Use read_workspace_file for deliverables and steer_run for follow-ups in the SAME session.",
     schema: z.object({
       task_id: z.string().uuid().describe("From start_run or list_runs."),
@@ -479,6 +496,32 @@ const registry = defineArchestraTools([
           session.actorId === actor.id
             ? await AgentWorkspaceModel.findByWorkloadName(session.workloadName)
             : null;
+        const requestTaskIds = [
+          ...new Set([workspace?.id ?? task.row.id, task.row.id]),
+        ];
+        const requestParts =
+          await A2AMessageModel.findFirstUserPartsByTaskIds(requestTaskIds);
+        const requests = requestTaskIds.flatMap((taskId) => {
+          const parts = requestParts.get(taskId);
+          if (!parts) return [];
+          const request = parts
+            .flatMap((part) =>
+              part &&
+              typeof part === "object" &&
+              "text" in part &&
+              typeof part.text === "string"
+                ? [part.text]
+                : [],
+            )
+            .join("\n");
+          return [
+            {
+              task_id: taskId,
+              text: request.slice(0, MAX_INLINED_OUTPUT_CHARS),
+              truncated: request.length > MAX_INLINED_OUTPUT_CHARS,
+            },
+          ];
+        });
 
         return structuredSuccessResult({
           run: runSummary(task.row),
@@ -486,6 +529,7 @@ const registry = defineArchestraTools([
           run_url: session
             ? `${config.frontendBaseUrl}/chat/runs/${workspace?.id ?? task.row.id}`
             : null,
+          requests,
           // The tail: the newest output is what a poller wants to see.
           output: truncated ? text.slice(-MAX_INLINED_OUTPUT_CHARS) : text,
           output_truncated: truncated,
@@ -494,8 +538,11 @@ const registry = defineArchestraTools([
                 state: workspace.state,
                 retained_until: workspace.expiresAt.toISOString(),
                 can_continue:
-                  ["idle", "suspended"].includes(workspace.state) &&
-                  !workspace.activeTaskId &&
+                  ((workspace.state === "active" &&
+                    !session?.endedAt &&
+                    workspace.activeTaskId === task.row.id) ||
+                    (["idle", "suspended"].includes(workspace.state) &&
+                      !workspace.activeTaskId)) &&
                   workspace.expiresAt.getTime() > Date.now(),
                 connection:
                   session && ["active", "idle"].includes(workspace.state)
@@ -675,7 +722,14 @@ const registry = defineArchestraTools([
       "Never use start_run as a fallback: unavailable or expired sessions return an error, not a new workspace. Only Agent Runtime runs can be steered.",
     schema: z.object({
       task_id: z.string().uuid(),
-      message: z.string().trim().min(1, "message is required."),
+      message: z
+        .string()
+        .trim()
+        .min(1, "message is required.")
+        .refine(
+          (message) => !message.includes("\0"),
+          "message cannot contain a NUL character. Describe it as U+0000 or an escaped \\u0000 sequence instead.",
+        ),
     }),
     handler: async ({ args, context }) => {
       try {

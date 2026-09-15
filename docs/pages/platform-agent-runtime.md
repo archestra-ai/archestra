@@ -188,7 +188,7 @@ The built-in **Agent Runtime Handoff** skill guides work between connected clien
 
 Send the current goal, decisions, remaining work, and required files when handing off. Input files arrive before the first turn starts. Local file paths alone do not transfer their contents.
 
-Keep the returned session link when switching clients. Follow-ups use the same workspace and saved conversation. An unavailable session reports an error instead of silently starting another workspace.
+Keep the returned session link when switching clients. The connected client can read the original request to recover the task context. Follow-ups reach the same workspace and saved conversation, including while work is running. An unavailable session reports an error instead of silently starting another workspace.
 
 For repository work, include the exact base commit and any local changes. Request a return patch relative to the handed-off working tree so it does not repeat existing local edits. Review it against your current working tree before applying it. For documents, retrieve the finished file from the retained workspace.
 

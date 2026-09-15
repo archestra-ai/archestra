@@ -19,14 +19,14 @@ Use list_agents to identify an accessible Agent with executionMode set to runtim
 
 1. If this work already has a runtime session, call get_run with its saved session ID (as task_id). Recover a lost ID with list_runs on the known Agent. Do not choose among ambiguous matches without the user.
 2. For NEW runtime work, call start_run once. Put the handoff in message and include needed documents or patches in attachments: name, contentType, contentBase64. Files are staged before execution. A path on the laptop is not a file the runtime can read.
-3. For EXISTING runtime work, use steer_run. It continues the same workspace and saved conversation, including after a previous turn finishes. Send additional files with write_workspace_file using workspace-relative paths before referring to them in the follow-up.
+3. For EXISTING runtime work, use steer_run immediately, including while the run is working. Do not wait for completion to send a correction. It continues the same workspace and saved conversation, including after a previous turn finishes. Send additional files with write_workspace_file using workspace-relative paths before referring to them in the follow-up.
 4. Save the returned session_id and run_url in the conversation's handoff note. The task ID can change between turns; the session ID stays stable. Poll get_run until startup is confirmed or it reports a failure. An accepted request alone does not prove the work started.
 
 A retry must never create another session. After an ambiguous timeout, inspect the known session or list recent runs before repeating a start. If a workspace expired or saved session state is missing, report that blocker and preserve existing work. Do not silently call start_run.
 
 ## Pick up in any client
 
-Read get_run with the saved session ID. Report what completed, what remains, and any failed checks. Read deliverables with read_workspace_file using workspace-relative paths (for example, reports/summary.md); use base64 for binary files. Output can be truncated: retrieve the actual deliverable instead of treating a partial response as complete.
+Read get_run with the saved session ID. Read requests for the original goal and current turn before interpreting a short follow-up; terminal output alone may show only setup commands. Report what completed, what remains, and any failed checks. Read deliverables with read_workspace_file using workspace-relative paths (for example, reports/summary.md); use base64 for binary files. Output can be truncated: retrieve the actual deliverable instead of treating a partial response as complete.
 
 If work will continue locally, coordinate a stopping point with the runtime and verify it stopped writing before applying its files. cancel_run stops active work while preserving the workspace. Download results before retention expires. Never delete a workspace as part of handoff.
 

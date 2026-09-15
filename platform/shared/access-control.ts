@@ -674,6 +674,11 @@ export const permissionDescriptions: Record<string, string> = {
 export const requiredEndpointPermissionsMap: Partial<
   Record<RouteId, Permissions>
 > = {
+  // Public, stateless APPA endpoint. Returns only an empty annotation.
+  [RouteId.AnnotateGuardrailsTool]: {},
+  [RouteId.GetGuardrailsPolicy]: { toolPolicy: ["read"] },
+  [RouteId.ValidateGuardrailsPolicy]: { toolPolicy: ["update"] },
+  [RouteId.UpdateGuardrailsPolicy]: { toolPolicy: ["update"] },
   // Inspecting or mutating arbitrary outbound destinations can configure
   // credential-bearing egress, so those operations remain settings-manager
   // only. Credential-redacted registry summaries require Agent read and are
@@ -2242,6 +2247,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
 
   "/mcp/tool-policies": { toolPolicy: ["read"] },
   "/mcp/tool-guardrails": { toolPolicy: ["read"] },
+  "/openappa": { toolPolicy: ["read"] },
 
   // Logs
   "/llm/logs": { log: ["read"] },

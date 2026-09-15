@@ -21,6 +21,9 @@ export const TOOL_PERMISSIONS: Record<
   // Identity — available to all
   whoami: null,
   execute_remedy_plan: null,
+  get_guardrails_policy: { resource: "toolPolicy", action: "read" },
+  validate_guardrails_policy: { resource: "toolPolicy", action: "update" },
+  update_guardrails_policy: { resource: "toolPolicy", action: "update" },
 
   // Agents
   create_agent: { resource: "agent", action: "create" },

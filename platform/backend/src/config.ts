@@ -2012,18 +2012,8 @@ export function parseLlmProxyPlugins(
  * Validates APPA settings only when its feature flag is explicitly enabled.
  * @public — exported for testability
  */
-export function parseOpenAppaConfig(
-  enabled: string | undefined,
-  policyPath: string | undefined,
-) {
-  const path = policyPath?.trim() || undefined;
-  const isEnabled = enabled === "true";
-  if (isEnabled && !path) {
-    throw new Error(
-      "ARCHESTRA_OPENAPPA_POLICY_PATH is required when ARCHESTRA_OPENAPPA_ENABLED=true",
-    );
-  }
-  return { enabled: isEnabled, policyPath: path };
+export function parseOpenAppaConfig(enabled: string | undefined) {
+  return { enabled: enabled === "true" };
 }
 
 /**
@@ -2213,10 +2203,7 @@ const fileStorageS3Config = parseFileStorageS3Config({
   },
 });
 
-const openappa = parseOpenAppaConfig(
-  process.env.ARCHESTRA_OPENAPPA_ENABLED,
-  process.env.ARCHESTRA_OPENAPPA_POLICY_PATH,
-);
+const openappa = parseOpenAppaConfig(process.env.ARCHESTRA_OPENAPPA_ENABLED);
 const llmProxyPlugins = parseLlmProxyPlugins(
   process.env.ARCHESTRA_LLM_PROXY_PLUGINS,
   openappa.enabled,

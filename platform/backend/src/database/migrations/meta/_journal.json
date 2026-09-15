@@ -3319,6 +3319,13 @@
       "when": 1789408411759,
       "tag": "0473_sloppy_gertrude_yorkes",
       "breakpoints": true
+    },
+    {
+      "idx": 474,
+      "version": "7",
+      "when": 1789419085483,
+      "tag": "0474_white_demogoblin",
+      "breakpoints": true
     }
   ]
 }

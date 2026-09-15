@@ -61,6 +61,7 @@ export function makeConfig(
       mcpSandboxDomain: null,
       chatSecretScanEnabled: true,
       lockedChatEnabled: false,
+      openappaEnabled: false,
       agentHooksEnabled: false,
       chatopsTelegramEnabled: false,
       kbAutoSyncPermissionsEnabled: false,

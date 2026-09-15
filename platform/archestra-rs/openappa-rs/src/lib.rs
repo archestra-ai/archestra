@@ -1,6 +1,8 @@
 //! Archestra's host boundary. Policy evaluation and event serialization live in
 //! OpenAPPA; identity, call correlation and durable processing receipts live here.
 
+mod policy;
+
 use appa_eventlog::{
     Backend, LogStore,
     postgres::{PostgresError, PostgresStore},
@@ -17,7 +19,6 @@ use serde_json::{Value, json, value::RawValue};
 use sha2::{Digest, Sha256};
 use std::{
     panic::AssertUnwindSafe,
-    path::Path,
     sync::{Arc, OnceLock},
 };
 use tokio::sync::Mutex;
@@ -28,6 +29,7 @@ struct State {
     runtime: Runtime,
     config: Config,
     store: Arc<LogStore>,
+    policy_content: String,
 }
 
 #[derive(Clone, Deserialize)]
@@ -74,14 +76,14 @@ fn identity(input: &Input) -> String {
 }
 
 #[napi(js_name = "initializeOpenappa")]
-pub async fn initialize_openappa(database_url: String, policy_path: String) -> napi::Result<()> {
+pub async fn initialize_openappa(database_url: String, policy_content: String) -> napi::Result<()> {
     let mut slot = STATE.get_or_init(|| Mutex::new(None)).lock().await;
     if slot.is_some() {
         return Ok(());
     }
     let state = tokio::task::spawn_blocking(move || -> napi::Result<State> {
         appa_runtime::tls::install_crypto_provider();
-        let config = Config::load(Path::new(&policy_path)).map_err(error)?;
+        let config = policy::compile(&policy_content).map_err(error)?;
         let store =
             Arc::new(LogStore::open(Backend::Postgres { url: database_url }).map_err(error)?);
         let runtime =
@@ -90,6 +92,7 @@ pub async fn initialize_openappa(database_url: String, policy_path: String) -> n
             runtime,
             config,
             store,
+            policy_content,
         })
     })
     .await
@@ -98,8 +101,19 @@ pub async fn initialize_openappa(database_url: String, policy_path: String) -> n
     Ok(())
 }
 
+#[napi(js_name = "validateOpenappaPolicy")]
+pub async fn validate_openappa_policy(content: String) -> napi::Result<Vec<String>> {
+    tokio::task::spawn_blocking(move || {
+        std::panic::catch_unwind(|| policy::validate(&content))
+            .map(|result| result.err().into_iter().collect())
+            .map_err(|_| error("OpenAPPA policy validation failed"))
+    })
+    .await
+    .map_err(error)?
+}
+
 #[napi(js_name = "dispatchHook")]
-pub async fn dispatch_hook(input: String) -> napi::Result<String> {
+pub async fn dispatch_hook(input: String, policy_content: Option<String>) -> napi::Result<String> {
     let input: Input = serde_json::from_str(&input).map_err(error)?;
     for (name, value) in [
         ("organization", &input.organization_id),
@@ -155,7 +169,19 @@ pub async fn dispatch_hook(input: String) -> napi::Result<String> {
     let state = slot
         .as_mut()
         .ok_or_else(|| error("OpenAPPA is not initialized"))?;
-    let result = AssertUnwindSafe(state.dispatch(input)).catch_unwind().await;
+    let result = AssertUnwindSafe(async {
+        if let Some(content) = policy_content
+            && content != state.policy_content
+        {
+            let config = policy::compile(&content).map_err(error)?;
+            state.runtime.reload(config.clone()).map_err(error)?;
+            state.config = config;
+            state.policy_content = content;
+        }
+        state.dispatch(input).await
+    })
+    .catch_unwind()
+    .await;
     match result {
         Ok(Ok(value)) => Ok(value.to_string()),
         failure => {

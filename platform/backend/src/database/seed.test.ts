@@ -31,9 +31,9 @@ import AgentVersionModel from "@/models/agent-version";
 import ToolModel from "@/models/tool";
 import { DEFAULT_APPS } from "@/services/apps/default-apps";
 import {
-  BUILT_IN_SKILLS,
   builtInSkillSourceRef,
   builtInSkillVersion,
+  getEnabledBuiltInSkills,
 } from "@/skills/built-in-skills";
 import { describe, expect, test } from "@/test";
 import {
@@ -43,7 +43,7 @@ import {
   syncBuiltInSkills,
 } from "./seed";
 
-const [BASE_SKILL] = BUILT_IN_SKILLS;
+const [BASE_SKILL] = getEnabledBuiltInSkills();
 
 describe("syncBuiltInAgents", () => {
   test("creates built-in agents for every organization", async ({
@@ -563,7 +563,7 @@ describe("syncBuiltInSkills", () => {
     await syncBuiltInSkills();
     await syncBuiltInSkills();
 
-    const expected = BUILT_IN_SKILLS.length;
+    const expected = getEnabledBuiltInSkills().length;
     expect(await countBuiltInSkills(org.id)).toBe(expected);
   });
 
@@ -589,7 +589,9 @@ describe("syncBuiltInSkills", () => {
 
     // the squatted built-in is skipped (no phantom copy); the other built-ins
     // still seed.
-    expect(await countBuiltInSkills(org.id)).toBe(BUILT_IN_SKILLS.length - 1);
+    expect(await countBuiltInSkills(org.id)).toBe(
+      getEnabledBuiltInSkills().length - 1,
+    );
     const built = await SkillModel.findBuiltIn({
       organizationId: org.id,
       sourceRef: builtInSkillSourceRef(BASE_SKILL.builtInSkillId),
@@ -677,7 +679,9 @@ describe("syncBuiltInSkills", () => {
 
     // not resurrected: no new copy, the soft-deleted row is untouched, and
     // the skill stays invisible to reads.
-    expect(await countBuiltInSkills(org.id)).toBe(BUILT_IN_SKILLS.length);
+    expect(await countBuiltInSkills(org.id)).toBe(
+      getEnabledBuiltInSkills().length,
+    );
     const afterSync = await SkillModel.findBuiltIn({
       organizationId: org.id,
       sourceRef,

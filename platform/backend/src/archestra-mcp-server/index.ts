@@ -16,7 +16,7 @@ import {
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { ZodError, type ZodType, z } from "zod";
 import config from "@/config";
-import { OPENAPPA_REMEDY_TOOL, openappaEnabled } from "@/openappa/service";
+import { openappaEnabled } from "@/openappa/service";
 import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
 // Import all groups
 import { toolEntries as agentToolEntries, tools as agentTools } from "./agents";
@@ -60,6 +60,7 @@ import {
   tools as mcpServerTools,
 } from "./mcp-servers";
 import {
+  isOpenappaTool,
   toolEntries as openappaToolEntries,
   tools as openappaTools,
 } from "./openappa";
@@ -285,8 +286,7 @@ export async function executeArchestraTool(
   // not activate APPA while its feature flag is off.
   if (
     !openappaEnabled() &&
-    archestraMcpBranding.getToolShortName(toolName) ===
-      TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME
+    isOpenappaTool(archestraMcpBranding.getToolShortName(toolName))
   ) {
     throw {
       code: -32601,
@@ -424,7 +424,8 @@ export async function executeArchestraTool(
  * mirror is a 404 while the flag is off.
  */
 function isToolRuntimeEnabled(canonicalName: string): boolean {
-  if (canonicalName === OPENAPPA_REMEDY_TOOL) return openappaEnabled();
+  if (isOpenappaTool(archestraMcpBranding.getToolShortName(canonicalName)))
+    return openappaEnabled();
   if (getSandboxToolNames().has(canonicalName))
     return config.skillsSandbox.enabled;
   if (getHookToolNames().has(canonicalName)) return config.hooks.enabled;

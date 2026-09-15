@@ -6,9 +6,25 @@ The special MCP remedy tool also calls the embedded runtime.
 
 ## Startup configuration
 
-`ARCHESTRA_OPENAPPA_ENABLED` defaults to `false`. Explicit `true` enables APPA across the proxy, Chat, and MCP remedy tool. It automatically adds `appa` to the effective plugin list. With the flag off, an explicit `appa` entry in `ARCHESTRA_LLM_PROXY_PLUGINS` stays inactive. A configured policy path and `ARCHESTRA_BETA` do not activate it.
+`ARCHESTRA_OPENAPPA_ENABLED` defaults to `false`. Explicit `true` enables APPA
+and the OpenAPPA editor. It automatically registers the proxy plugin.
+`ARCHESTRA_BETA` and the plugin list alone do not activate them.
+The OpenAPPA editor stores organization policy revisions in PostgreSQL. Restart
+the backend when changing the flag; saving a policy requires no restart.
 
-`ARCHESTRA_OPENAPPA_POLICY_PATH` is required when the feature flag is enabled. Restart the backend when changing these settings.
+The HTTP API and agent read/validate/update tools share validation and revision
+checks. Edits compile without executing external services. The next dispatch
+loads the latest saved revision under the native runtime lock. New conversations
+use it; existing conversations retain their recorded policy.
+
+The editor accepts `[policy]` and URL/builtin bindings in `[externals]`. File
+includes, local commands, and runtime-owned settings are rejected. Tokens are
+referenced through `token_env`; policy documents must not contain credentials.
+Existing file-based deployments must copy their policy into the editor. An
+unconfigured organization starts with only a catch-all annotator. It returns
+empty changes and requirements, leaving trust and audience unchanged. Explicit
+tool rules take precedence over the catch-all. The local backend serves this
+fixed answer without calling a model or accessing user data.
 
 | Boundary | Flag off | Flag on |
 | --- | --- | --- |
@@ -75,7 +91,7 @@ unresolved-dispatch cleanup and unused remedy-permit lifetime are unchanged.
 The enabled prototype still refuses locked chats and delegation and disables
 detached tool tasks. These restrictions do not apply with the APPA flag off.
 
-Policy reload, general attachment/final-answer enforcement, child return
+General attachment/final-answer enforcement, child return
 integration, provider-hosted tools and operator recovery remain follow-up work.
 Start new conversations when enabling APPA: old tool results have no receipts.
 

@@ -3497,24 +3497,9 @@ describe("OpenAPPA feature configuration", () => {
     "1",
   ])("requires explicit true to enable APPA (flag=%s)", (enabled) => {
     vi.stubEnv("ARCHESTRA_BETA", "true");
-    expect(parseOpenAppaConfig(enabled, undefined)).toEqual({
-      enabled: false,
-      policyPath: undefined,
-    });
-    expect(parseOpenAppaConfig(enabled, "/policy.toml")).toEqual({
-      enabled: false,
-      policyPath: "/policy.toml",
-    });
+    expect(parseOpenAppaConfig(enabled)).toEqual({ enabled: false });
   });
-  test("requires a policy path when the APPA feature flag is enabled", () => {
-    expect(parseOpenAppaConfig("true", " /policy.toml ")).toEqual({
-      enabled: true,
-      policyPath: "/policy.toml",
-    });
-    for (const path of [undefined, "", "   "]) {
-      expect(() => parseOpenAppaConfig("true", path)).toThrow(
-        "ARCHESTRA_OPENAPPA_POLICY_PATH is required",
-      );
-    }
+  test("enables database policies without a container path", () => {
+    expect(parseOpenAppaConfig("true")).toEqual({ enabled: true });
   });
 });

@@ -9,6 +9,7 @@ import ChatOpsChannelBindingModel from "@/models/chatops-channel-binding";
 import EnvironmentModel from "@/models/environment";
 import EnvironmentDefaultUserLimitModel from "@/models/environment-default-user-limit";
 import EnvironmentResourceDefaultModel from "@/models/environment-resource-default";
+import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import KbDirectoryModel from "@/models/kb-directory";
 import KbFileModel from "@/models/kb-file";
@@ -81,6 +82,10 @@ type AuditDecision =
  * @public — consumed by audit-log-snapshot.test.ts invariant tests
  */
 export const AUDIT_DECISIONS = {
+  guardrailsPolicyRevisionsTable: {
+    audited: true,
+    model: GuardrailsPolicyModel,
+  },
   // =========================================================================
   // Audited resources — mutations captured via AUDITABLE_ROUTES
   // =========================================================================

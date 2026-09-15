@@ -5,6 +5,7 @@ import { skillInEnvironmentPredicate } from "@/services/environments/environment
 import type { AssignedSkill, PublishableSkill } from "@/types";
 import {
   afterIdPredicate,
+  enabledSkillPredicate,
   publishableSkillColumns,
   publishableSkillPredicate,
   skillUriKeyPredicate,
@@ -51,6 +52,7 @@ class AgentSkillModel {
         and(
           eq(schema.agentSkillsTable.agentId, agentId),
           notDeleted(schema.skillsTable),
+          enabledSkillPredicate(),
         ),
       )
       .orderBy(asc(schema.agentSkillsTable.skillId));
@@ -87,6 +89,7 @@ class AgentSkillModel {
         and(
           eq(schema.agentSkillsTable.agentId, agentId),
           notDeleted(schema.skillsTable),
+          enabledSkillPredicate(),
         ),
       )
       .orderBy(asc(schema.agentSkillsTable.skillId));
@@ -128,6 +131,7 @@ class AgentSkillModel {
         and(
           eq(schema.agentSkillsTable.agentId, params.agentId),
           notDeleted(schema.skillsTable),
+          enabledSkillPredicate(),
           skillInEnvironmentPredicate(params.environmentId),
           publishableSkillPredicate(),
           afterIdPredicate(params.afterId),
@@ -166,6 +170,7 @@ class AgentSkillModel {
           eq(schema.agentSkillsTable.agentId, params.agentId),
           skillUriKeyPredicate(params),
           notDeleted(schema.skillsTable),
+          enabledSkillPredicate(),
           skillInEnvironmentPredicate(params.environmentId),
           publishableSkillPredicate(),
         ),

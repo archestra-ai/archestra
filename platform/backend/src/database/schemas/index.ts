@@ -39,6 +39,7 @@
  *   - messages — a top-level entity named for itself, not a conversation child
  *   - chat_active_runs — ephemeral run state predating this guidance
  */
+
 export { default as a2aArtifactsTable } from "./a2a-artifact";
 export { default as a2aConnectionsTable } from "./a2a-connection";
 export { default as a2aContextsTable } from "./a2a-context";
@@ -127,6 +128,7 @@ export { default as environmentLabelsTable } from "./environment-label";
 export { default as environmentResourceDefaultsTable } from "./environment-resource-default";
 export { default as externalMcpSkillUsageEventsTable } from "./external-mcp-skill-usage-event";
 export { default as filesTable } from "./file";
+export { guardrailsPolicyRevisionsTable } from "./guardrails-policy";
 export { default as hookFilesTable } from "./hook-file";
 export { default as identityProvidersTable } from "./identity-provider";
 export { default as incomingEmailSubscriptionsTable } from "./incoming-email-subscription";

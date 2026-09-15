@@ -91,6 +91,7 @@ const NAVIGATION_KEYWORDS: Record<string, string> = {
   "/mcp/registry": "mcp catalog registry servers",
   "/mcp/gateways": "gateways security mcp",
   "/mcp/tool-guardrails": "tools guardrails policies permissions security",
+  "/openappa": "openappa guardrails v2 policy toml",
   "/llm/proxy": "proxy llm network",
   "/llm/proxy/virtual-keys": "virtual keys credentials",
   "/llm/model-providers": "provider api keys models llm",
@@ -115,6 +116,7 @@ const NAVIGATION_KEYWORDS: Record<string, string> = {
 function useNavigationDestinations() {
   const permissionMap = usePermissionMap(requiredPagePermissionsMap);
   const pluginsEnabled = useFeature("plugins");
+  const openappaEnabled = useFeature("openappaEnabled");
   // Connect is useful with either half, exactly as the sidebar gates its row.
   const { data: canReadLlmProxy } = useHasPermissions({ llmProxy: ["read"] });
   const { data: canReadMcpGateway } = useHasPermissions({
@@ -135,6 +137,7 @@ function useNavigationDestinations() {
           return canReadLlmProxy === true || canReadMcpGateway === true;
         }
         if (item.url === "/plugins") return pluginsEnabled === true;
+        if (item.url === "/openappa" && openappaEnabled !== true) return false;
         return isNavItemPermitted(item, permissionMap);
       })
       .map((item) => ({
@@ -144,7 +147,13 @@ function useNavigationDestinations() {
         keywords: NAVIGATION_KEYWORDS[item.url] ?? "",
         href: item.url,
       }));
-  }, [permissionMap, pluginsEnabled, canReadLlmProxy, canReadMcpGateway]);
+  }, [
+    permissionMap,
+    pluginsEnabled,
+    openappaEnabled,
+    canReadLlmProxy,
+    canReadMcpGateway,
+  ]);
 }
 
 interface ConversationSearchPaletteProps {

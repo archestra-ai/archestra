@@ -16,6 +16,18 @@ This gives you a middle ground between two extremes:
 
 With AI tool guardrails, the same agent can operate normally in safe contexts and become more restricted only when context or tool output requires it.
 
+## Guardrails V2 Preview
+
+Set `ARCHESTRA_OPENAPPA_ENABLED=true` to enable the OpenAPPA sidebar entry in Studio. Open OpenAPPA to edit the organization policy as TOML. The Guardrails page keeps its existing controls. Policies are stored in PostgreSQL. Saved revisions apply to new conversations without restarting the backend. Existing conversations retain their original policy.
+
+The built-in APPA Guide skill helps agents inspect, explain, and edit this policy. It uses the same read, validate, and update tools as the editor. The skill is available only while APPA is enabled.
+
+While APPA is enabled, the proxy rejects responses containing multiple tool calls. No calls in the batch run. The model receives instructions to retry one tool at a time.
+
+The default policy has no rules for specific tools. A catch-all annotator adds no restrictions or label changes. Explicit tool rules take precedence over this fallback.
+
+The assistant can read, validate, and update the same policy through its policy tools. Both editing paths enforce permissions and reject conflicting revisions. Invalid policies leave the saved revision unchanged.
+
 ## The Lethal Trifecta
 
 The "lethal trifecta" is a prompt-injection risk that appears when an agent has all three of these at once (a pattern named by security researcher Simon Willison):

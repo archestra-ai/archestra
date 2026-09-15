@@ -5,8 +5,9 @@ import {
 } from "@/archestra-mcp-server";
 import config from "@/config";
 import * as database from "@/database";
+import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
-import { processProxyResults } from "./service";
+import { checkToolCalls, processProxyResults } from "./service";
 
 const native = vi.hoisted(() => ({
   initializeOpenappa: vi.fn(),
@@ -21,7 +22,7 @@ const session = {
 
 beforeEach(() => {
   config.llmProxy.plugins = ["appa"];
-  config.openappa = { enabled: true, policyPath: "/test/policy.toml" };
+  config.openappa = { enabled: true };
   vi.spyOn(database, "getDatabaseConnectionString").mockReturnValue(
     "postgresql://test:test@localhost/test",
   );
@@ -43,7 +44,24 @@ afterEach(() => {
 });
 
 describe("APPA feature boundary", () => {
-  test("does not initialize or dispatch while disabled, even with a configured path", async () => {
+  test("rejects a batch without reserving any call and permits a single-call retry", async () => {
+    native.dispatchHook.mockResolvedValue(
+      JSON.stringify({ decision: "allow_call" }),
+    );
+    const calls = [
+      { id: "first", name: "read_file", arguments: {} },
+      { id: "second", name: "write_file", arguments: {} },
+    ];
+    const blocked = await checkToolCalls(session, calls, (name) => name);
+    expect(blocked?.reason).toContain("None of these calls ran");
+    expect(native.dispatchHook).not.toHaveBeenCalled();
+    expect(
+      await checkToolCalls(session, [calls[0]], (name) => name),
+    ).toBeNull();
+    expect(native.dispatchHook).toHaveBeenCalledTimes(1);
+  });
+
+  test("does not initialize or dispatch while disabled, even with an explicit plugin entry", async () => {
     config.openappa.enabled = false;
     // An explicit plugin entry must not override the feature flag.
     config.llmProxy.plugins = ["appa"];
@@ -197,4 +215,39 @@ describe("APPA feature boundary", () => {
       }),
     );
   });
+});
+
+test("dispatch loads the latest saved policy text from the organization database", async ({
+  makeOrganization,
+  makeUser,
+}) => {
+  const organization = await makeOrganization();
+  const user = await makeUser();
+  const content = "[policy]\nversion = 2\n";
+  const scoped = { ...session, organization_id: organization.id };
+  await GuardrailsPolicyModel.save({
+    organizationId: organization.id,
+    updatedBy: user.id,
+    content,
+    contentHash: "first",
+    expectedRevision: 0,
+  });
+  await processProxyResults(scoped, []);
+  expect(native.dispatchHook).toHaveBeenLastCalledWith(
+    expect.any(String),
+    content,
+  );
+  const updated = `${content}# updated`;
+  await GuardrailsPolicyModel.save({
+    organizationId: organization.id,
+    updatedBy: user.id,
+    content: updated,
+    contentHash: "second",
+    expectedRevision: 1,
+  });
+  await processProxyResults(scoped, []);
+  expect(native.dispatchHook).toHaveBeenLastCalledWith(
+    expect.any(String),
+    updated,
+  );
 });

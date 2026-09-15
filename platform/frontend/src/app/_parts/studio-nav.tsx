@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import type React from "react";
 import { McpRegistryAttentionBadge } from "@/components/mcp-registry-attention-badge";
+import { OpenAppaIcon } from "@/components/openappa-icon";
 import type { NavDotKey } from "@/lib/onboarding/nav-onboarding";
 
 /**
@@ -293,6 +294,12 @@ export const contentNavGroups: NavGroup[] = [
         testId: E2eTestId.SidebarNavGuardrails,
         customIsActive: (pathname: string) =>
           pathname.startsWith("/mcp/tool-guardrails"),
+      },
+      {
+        title: "OpenAPPA",
+        url: "/openappa",
+        icon: OpenAppaIcon,
+        customIsActive: (pathname: string) => pathname.startsWith("/openappa"),
       },
       {
         title: "Logs",

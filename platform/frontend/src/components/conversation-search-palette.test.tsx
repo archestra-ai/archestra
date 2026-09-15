@@ -434,6 +434,35 @@ describe("ConversationSearchPalette", () => {
     expect(mockRouterPush).toHaveBeenCalledWith("/mcp/registry");
   });
 
+  it.each([
+    { enabled: true, permitted: true },
+    { enabled: false, permitted: true },
+    { enabled: true, permitted: false },
+  ])("offers OpenAPPA only when enabled and permitted: %j", ({
+    enabled,
+    permitted,
+  }) => {
+    vi.mocked(useFeature).mockImplementation(
+      (feature) => feature === "openappaEnabled" && enabled,
+    );
+    vi.mocked(usePermissionMap).mockReturnValue({ "/openappa": permitted });
+    mockUseConversations.mockReturnValue({
+      data: [],
+      isLoading: false,
+      isFetching: false,
+    });
+    render(<ConversationSearchPalette {...defaultProps} />);
+    fireEvent.change(screen.getByTestId("command-input"), {
+      target: { value: "openappa" },
+    });
+    if (enabled && permitted) {
+      fireEvent.click(screen.getByText("OpenAPPA"));
+      expect(mockRouterPush).toHaveBeenCalledWith("/openappa");
+    } else {
+      expect(screen.queryByText("OpenAPPA")).not.toBeInTheDocument();
+    }
+  });
+
   it("searches pages by their visible labels and navigates to a match", () => {
     mockUseConversations.mockReturnValue({
       data: [],

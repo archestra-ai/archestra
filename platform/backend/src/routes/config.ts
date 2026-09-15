@@ -151,6 +151,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
               maintenanceMode: z.string().nullable(),
               chatSecretScanEnabled: z.boolean(),
               lockedChatEnabled: z.boolean(),
+              openappaEnabled: z.boolean(),
               agentHooksEnabled: z.boolean(),
               chatopsTelegramEnabled: z.boolean(),
               /** BETA: auto-sync-permissions connector visibility and its Permissions tab UI. */
@@ -289,6 +290,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           maintenanceMode: config.maintenanceMode,
           chatSecretScanEnabled: config.chat.secretScanEnabled,
           lockedChatEnabled: isLockedChatEnabled(),
+          openappaEnabled: config.openappa.enabled,
           agentHooksEnabled: config.hooks.enabled,
           chatopsTelegramEnabled: config.chatops.telegramEnabled,
           kbAutoSyncPermissionsEnabled: config.kb.autoSyncPermissionsEnabled,

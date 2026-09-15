@@ -10,13 +10,13 @@ import config from "@/config";
 import { getDatabaseConnectionString } from "@/database";
 import type { PolicyBlockResult } from "@/guardrails/tool-invocation";
 import { normalizeToolCallsForPolicy } from "@/routes/proxy/llm-proxy-helpers";
+import { guardrailsPolicyService } from "@/services/guardrails-policy";
 import { ApiError, type CommonToolResult } from "@/types";
 
 import { isChatBlockResult } from "./chat-block";
 
 export const APPA_SESSION_HEADER = "X-Appa-Session-ID";
 export const APPA_PARENT_HEADER = "X-Appa-Parent-ID";
-export const OPENAPPA_REMEDY_TOOL = "archestra__execute_remedy_plan";
 export const APPA_CHAT_SOURCES = [
   "chat",
   "chat:tool_call_repair",
@@ -65,17 +65,16 @@ export function isAppaChatSource(
   return (APPA_CHAT_SOURCES as readonly string[]).includes(source ?? "");
 }
 
-async function binding() {
-  if (!openappaEnabled() || !config.openappa.policyPath) {
-    throw new Error("OpenAPPA is disabled or its policy path is missing");
+async function binding(content: string) {
+  if (!openappaEnabled()) {
+    throw new Error("OpenAPPA is disabled");
   }
-  const policyPath = config.openappa.policyPath;
   native ??= (async () => {
     const module = await import("@archestra/openappa-rs");
     const url = new URL(getDatabaseConnectionString());
     // pg ignores Prisma's legacy schema parameter; rust-postgres rejects it.
     url.searchParams.delete("schema");
-    await module.initializeOpenappa(url.toString(), policyPath);
+    await module.initializeOpenappa(url.toString(), content);
     return module;
   })().catch((error) => {
     native = undefined;
@@ -89,10 +88,14 @@ async function dispatch(
   event: Record<string, unknown>,
 ) {
   try {
-    const module = await binding();
+    const policy = await guardrailsPolicyService.get(session.organization_id);
+    const module = await binding(policy.content);
     return Decision.parse(
       JSON.parse(
-        await module.dispatchHook(JSON.stringify({ ...session, ...event })),
+        await module.dispatchHook(
+          JSON.stringify({ ...session, ...event }),
+          policy.content,
+        ),
       ),
     );
   } catch (error) {
@@ -230,6 +233,20 @@ export async function checkToolCalls(
   calls: Array<{ id: string; name: string; arguments: string | object }>,
   canonicalize: (name: string) => string,
 ): Promise<PolicyBlockResult | null> {
+  // APPA reserves an allowed call until its result arrives. Withholding a
+  // partially checked batch would leave that reservation stuck forever.
+  if (openappaEnabled() && calls.length > 1) {
+    const feedback =
+      "OpenAPPA requires one tool call at a time. None of these calls ran. Retry with one tool call, wait for its result, then make the next call.";
+    return {
+      refusalMessage: feedback,
+      contentMessage: feedback,
+      reason: feedback,
+      blockedToolName: calls[0].name,
+      toolInput: {},
+      allToolCallNames: calls.map((call) => call.name),
+    };
+  }
   const normalized = normalizeToolCallsForPolicy(calls, canonicalize);
   for (const [index, call] of calls.entries()) {
     if (typeof call.arguments === "string") {

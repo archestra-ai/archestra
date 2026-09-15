@@ -90,10 +90,10 @@ describe("organization routes", () => {
       "@/database/seed"
     );
     const { SkillModel } = await import("@/models");
-    const { BUILT_IN_SKILLS, builtInSkillSourceRef } = await import(
+    const { getEnabledBuiltInSkills, builtInSkillSourceRef } = await import(
       "@/skills/built-in-skills"
     );
-    const [base] = BUILT_IN_SKILLS;
+    const [base] = getEnabledBuiltInSkills();
     const sourceRef = builtInSkillSourceRef(base.builtInSkillId);
 
     // seed the canonical (un-branded) built-in skill first.

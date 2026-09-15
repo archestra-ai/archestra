@@ -1765,7 +1765,7 @@ describe("LLM Proxy Handler — recordBlockedToolSpans", () => {
         {
           type: "text",
           text: "Tool get_weather is not enabled here",
-          citations: null,
+          citations: [],
         },
       ]);
       expect(

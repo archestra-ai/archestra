@@ -107,8 +107,8 @@ describe("EnvironmentResourceDefaultsDialog", () => {
     renderDialog();
 
     expect(
-      screen.getByText(/Creators without permission to deploy here fall back/i),
-    ).toBeInTheDocument();
+      screen.getByText("mcpRegistry:deploy-to-restricted").parentElement,
+    ).toHaveTextContent(/Creators without .+ permission fall back to Default/);
   });
 
   test("is read-only without environment:update", () => {

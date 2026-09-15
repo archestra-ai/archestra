@@ -55,7 +55,7 @@ export const guardrailsPolicyService = {
 };
 
 function requireEnabled() {
-  if (!config.openappa.enabled)
+  if (!config.llmProxy.plugins.includes("appa"))
     throw new ApiError(404, "Guardrails v2 is disabled");
 }
 function hash(content: string) {

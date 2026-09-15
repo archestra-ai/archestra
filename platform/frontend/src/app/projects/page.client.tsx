@@ -646,6 +646,7 @@ function ProjectCard({
       description={project.description}
       actions={
         <ProjectActionsMenu
+          project={project}
           pinned={!!project.pinnedAt}
           canPin={project.viewerRole !== "admin"}
           canManage={canManageProject(project.viewerRole, !!isProjectAdmin)}

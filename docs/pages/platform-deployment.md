@@ -2,7 +2,7 @@
 title: Deployment
 category: Archestra Platform
 order: 3
-lastUpdated: 2026-09-12
+lastUpdated: 2026-09-15
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -124,7 +124,7 @@ Helm deployment is our recommended approach for deploying Archestra Platform to 
 Install Archestra Platform using the Helm chart from our OCI registry:
 
 ```bash
-export ARCHESTRA_VERSION="1.4.0-beta.8" # x-release-please-version
+export ARCHESTRA_VERSION="1.4.0-beta.9" # x-release-please-version
 helm upgrade archestra-platform \
   oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts/archestra-platform \
   --version "$ARCHESTRA_VERSION" \
@@ -802,13 +802,14 @@ The following environment variables can be used to configure Archestra Platform.
 - **`ARCHESTRA_DATABASE_POOL_MAX`** - Maximum number of PostgreSQL connections per backend pod.
   - Default: `50`
   - Range: `1`–`500`
-  - Helm divides `archestra.database.connectionBudget` (default `200`) across peak backend pods, then subtracts 12 per pod. Those 12 connections cover the cache pool and two notification listeners. The query pool is capped at `500`.
+  - `archestra.database.connectionBudget` defaults to `null`. Omitting it preserves existing pool configuration, or the backend default of 50 query connections per pod. Upgrades do not require a budget, including deployments with HPA or multiple replicas.
+  - Set a connection budget to enable automatic sizing. Helm divides it across peak backend pods, then subtracts 12 per pod. Those 12 connections cover the cache pool and two notification listeners. The query pool is capped at `500`.
   - Peak pods include web/HPA maximum replicas, worker replicas, rollout surge, and one terminating old revision. Recreate deployments count only their target replicas. Each peak pod needs at least 13 budgeted connections; Helm rejects smaller budgets.
   - For example, four web and three worker replicas with default surge budget for 16 peak pods. A `400`-connection budget gives each pod 13 query connections: `16 × (13 + 12) = 400`.
-  - Keep the budget below PostgreSQL `max_connections`, after subtracting reserved slots and other clients. The bundled database allows `250` connections, leaving `50` outside the default budget. External databases and multiple releases need explicitly allocated budgets.
+  - Keep the budget below PostgreSQL `max_connections`, after subtracting reserved slots and other clients. The bundled database allows `250` connections. An explicit budget of `200` leaves `50` for other clients. External databases and multiple releases need explicitly allocated budgets.
   - Finish one rollout before starting another. Before increasing replicas, roll out a smaller `archestra.database.poolMax` at the existing replica count. Then scale and clear the override. Old pods keep their previous limits until replaced; Helm cannot resize existing pools.
   - Fixed overrides (`archestra.database.poolMax` or this environment variable) bypass automatic budgeting. Operators must budget their aggregate use separately.
-  - Unprefixed `archestra.envFrom` imports preserve their existing pool configuration by default. Helm omits its explicit pool variable so it cannot override a value from the Secret or ConfigMap; if neither supplies a pool limit, the backend default applies. Set `archestra.database.poolMaxFromEnvFrom: false` to opt into chart-managed sizing, or `true` to explicitly require an unprefixed bulk source. Exclusively prefixed sources cannot supply `ARCHESTRA_DATABASE_POOL_MAX`, so they use chart sizing by default.
+  - Unprefixed `archestra.envFrom` imports preserve their existing pool configuration by default. Helm omits its explicit pool variable so it cannot override a value from the Secret or ConfigMap; if neither supplies a pool limit, the backend default applies. Set `archestra.database.poolMaxFromEnvFrom: false` alongside a budget to enable chart-managed sizing. Set it to `true` to require an unprefixed bulk source. Exclusively prefixed sources use chart sizing when a budget is configured.
 
 - **`ARCHESTRA_DATABASE_STATEMENT_TIMEOUT_MILLIS`** - Per-connection PostgreSQL `statement_timeout` (in milliseconds) applied to every pooled connection.
   - Default: `30000` (30s)
@@ -998,7 +999,7 @@ On GKE, custom Sandbox controllers can produce a “not backed by a controller�
   - Values: `true`, `false`
 
 - **`ARCHESTRA_AGENT_RUNTIME_BASE_IMAGE`** - Container image prefilled when Agent Runtime is enabled on an Agent. The built-in image supplies the default Agent loop. Custom images can replace it and set their own command.
-  - Default: `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/agent-archestra:1.4.0-beta.8` <!-- x-release-please-version -->
+  - Default: `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/agent-archestra:1.4.0-beta.9` <!-- x-release-please-version -->
 
 - **`ARCHESTRA_AGENT_RUNTIME_ALLOW_PRIVILEGED`** - Allows Agent administrators to configure privileged Agent Runtime pods. Privileged containers have node-level access.
   - Default: `false`
@@ -2076,11 +2077,9 @@ To learn more about enterprise licensing, see the [pricing model](/docs/platform
 
 ### OpenAPPA Tool Guardrails (experimental)
 
-- `ARCHESTRA_OPENAPPA_ENABLED`: explicit opt-in, default `false`. `ARCHESTRA_BETA` does not enable it.
+- `ARCHESTRA_LLM_PROXY_PLUGINS`: comma-separated plugin list, empty by default. Including `appa` enables OpenAPPA and the policy editor. `ARCHESTRA_BETA` does not enable them.
 Policies are stored in PostgreSQL and edited in Guardrails. Container policy paths are no longer used. Save your existing policy in the editor when upgrading. Saved revisions apply to new conversations. Existing conversations keep their original policy.
 
-Restart the backend after changing these settings. While disabled, existing Tool
-Guardrails run unchanged and the native APPA runtime and MCP remedy tool are
-inactive. While enabled, APPA evaluates calls/results at the same LLM-proxy
-checkpoints; errors fail closed. Chat shows blocked attempts as denied tool calls and returns APPA's feedback to the model. The model can choose a remedy and continue without another user message. Existing approval requirements still apply. External clients receive the existing text refusal; automatic continuation requires client support. See [the integration setup](https://github.com/archestra-ai/archestra/blob/main/platform/archestra-rs/openappa-rs/README.md)
-for paired source builds and current limitations.
+`ARCHESTRA_BETA` and a policy path alone do not enable OpenAPPA. Restart the backend after changing these settings. Enabling APPA without a policy path fails startup.
+
+With an empty plugin list, existing Tool Guardrails run unchanged. The native APPA runtime and MCP remedy tool remain inactive. When enabled, APPA evaluates tool calls and results; errors fail closed. Chat shows blocked attempts as denied tool calls and returns APPA's feedback to the model. The model can choose a remedy and continue without another user message. Existing approval requirements still apply. External clients receive the existing text refusal; automatic continuation requires client support. See [the integration setup](https://github.com/archestra-ai/archestra/blob/main/platform/archestra-rs/openappa-rs/README.md) for current limitations.

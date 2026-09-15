@@ -60,4 +60,14 @@ describe("AgentIconPicker", () => {
     expect(onChange).toHaveBeenCalledWith("🎉");
     await waitFor(() => expect(emoji).not.toBeInTheDocument());
   });
+
+  it("renders a built-in service logo value as its icon, not the raw token text", () => {
+    render(
+      <AgentIconPicker value="logo:github" onChange={vi.fn()} showLogos />,
+    );
+
+    const trigger = screen.getByRole("button", { name: "Change icon" });
+    expect(trigger).not.toHaveTextContent("logo:github");
+    expect(trigger.querySelector("svg > path")).not.toBeNull();
+  });
 });

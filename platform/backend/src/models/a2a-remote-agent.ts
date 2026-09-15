@@ -23,6 +23,34 @@ import CreatedByModel from "./created-by";
 import TeamModel from "./team";
 
 class A2aRemoteAgentModel {
+  static async transferOwnership(params: {
+    id: string;
+    organizationId: string;
+    previousOwnerId: string | null;
+    updatedAt: Date;
+    ownerId: string;
+  }): Promise<boolean> {
+    const rows = await db
+      .update(schema.a2aRemoteAgentsTable)
+      .set({
+        authorId: params.ownerId,
+        createdByServiceAccountId: null,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(schema.a2aRemoteAgentsTable.id, params.id),
+          eq(schema.a2aRemoteAgentsTable.organizationId, params.organizationId),
+          params.previousOwnerId === null
+            ? isNull(schema.a2aRemoteAgentsTable.authorId)
+            : eq(schema.a2aRemoteAgentsTable.authorId, params.previousOwnerId),
+          sql`date_trunc('milliseconds', ${schema.a2aRemoteAgentsTable.updatedAt}) = ${params.updatedAt.toISOString()}::timestamp`,
+        ),
+      )
+      .returning({ id: schema.a2aRemoteAgentsTable.id });
+    return rows.length === 1;
+  }
+
   static async findByIdForAudit(
     id: string,
     organizationId: string,

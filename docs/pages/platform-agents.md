@@ -29,11 +29,19 @@ Hover or focus an agent's provider logo to see its configured key name and model
 
 ## Creating and Editing an Agent
 
-**Add Agent** opens a catalog. Start from scratch to open the setup wizard. When dedicated runtimes are enabled, popular agents can prefill that wizard. **Configuration** includes the name, visibility, instructions, model, and optional dedicated runtime settings. Nothing is saved until you press **Create** on the last step. The agent then opens on its **A2A** tab, unless it needs a personal Claude sign-in.
+**Add Agent** opens a catalog. Start from scratch to open the setup wizard. When dedicated runtimes are enabled, popular agents can prefill that wizard. **Configuration** includes the name, visibility, instructions, model, and optional dedicated runtime settings. Nothing is saved until you press **Create** on the last step. A confirmation page summarizes its email address and assigned messaging channels. Select **Chat** to start a conversation with the new agent.
 
 Each agent has its own page for editing. When dedicated runtimes are enabled, **Agent Runtime** follows **Tools, Skills & Knowledge**. It controls the runtime configuration and credentials. **Save changes** saves the current tab and keeps it open. **A2A** holds the endpoint, authentication options, and connection examples. An Agent with a dedicated runtime is marked **Runtime** in the list and on its page. Its **Chat** action reads **Start run**.
 
 Switching tabs with unsaved edits asks before it discards them. If you cannot change an agent, its configuration still opens — read-only, with the reason.
+
+## Ownership Transfers
+
+You can hand an agent over to another organization member without recreating it. For example, a departing maintainer can transfer a reporting assistant to their replacement.
+
+The current owner or a resource admin can transfer ownership. The recipient needs permission to manage the agent at its current visibility. Configuration and sharing stay unchanged. Transferring a personal agent can remove the previous owner's access.
+
+Transfers require the recipient to retain access to configured model credentials and pinned tool connections. Platform-managed resources cannot be transferred. Audit logs record the previous and new owners.
 
 ## Tool Access Modes
 

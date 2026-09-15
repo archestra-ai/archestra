@@ -35,6 +35,7 @@ import {
   ResourceScopeFilter,
   useScopeFilterParams,
 } from "@/components/resource-scope-filter";
+import { ResourceTableRowActions } from "@/components/resource-table-row-actions";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { SearchInput } from "@/components/search-input";
 import {
@@ -44,10 +45,7 @@ import {
   TableCardViewContent,
   TableCardViewToggle,
 } from "@/components/table-card-view";
-import {
-  type TableRowAction,
-  TableRowActions,
-} from "@/components/table-row-actions";
+import type { TableRowAction } from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";
 import { BulkActions } from "@/components/ui/bulk-actions-bar";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
@@ -373,7 +371,9 @@ function PluginsList() {
       },
     ];
     return (
-      <TableRowActions
+      <ResourceTableRowActions
+        kind="plugin"
+        resource={{ ...plugin, name: plugin.displayName }}
         actions={actions}
         dropdownActions={dropdownActions}
         itemName={plugin.displayName}

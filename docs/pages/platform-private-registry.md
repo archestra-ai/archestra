@@ -3,7 +3,7 @@ title: Private MCP Registry
 category: MCP
 order: 2
 description: Managing your organization's MCP servers in a private registry
-lastUpdated: 2026-09-13
+lastUpdated: 2026-09-15
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -13,6 +13,10 @@ lastUpdated: 2026-09-13
 The Private MCP Registry is the catalog of MCP servers approved for your organization. It defines what servers exist, how they should be configured, who can see them, and what credentials are required when someone installs them.
 
 A registry entry is a reusable template. An installation is the actual connection created from that template for a person or team. Agents and [MCP Gateways](/docs/platform-mcp-gateway) use installed connections when they call tools.
+
+## Ownership
+
+You can transfer a registry entry to another organization member. Server configuration and sharing stay intact. Existing installations keep their owners and credentials. App-backed entries transfer with their app.
 
 ## Registry Entries And Installations
 

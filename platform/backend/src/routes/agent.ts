@@ -60,6 +60,7 @@ import { serializeAgentForExport } from "@/services/agent-export";
 import { importAgentFromPayload } from "@/services/agent-import";
 import { agentKnowledgeSourceExclusionsService } from "@/services/agent-knowledge-source-exclusions";
 import { populateAgentListActivationSkillCounts } from "@/services/agent-list";
+import { transferAgentOwnership } from "@/services/agent-ownership";
 import { getResolvedAgentRuntimeModelCompatibility } from "@/services/agent-runtime/model-compatibility";
 import { agentSkillAssignmentService } from "@/services/agent-skill-assignment";
 import { agentSubagentExclusionsService } from "@/services/agent-subagent-exclusions";
@@ -1860,6 +1861,30 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           excludedSkillIds: body.excludedSkillIds,
         }),
       );
+    },
+  );
+
+  fastify.post(
+    "/api/agents/:id/transfer-ownership",
+    {
+      schema: {
+        operationId: RouteId.TransferAgentOwnership,
+        description:
+          "Transfer an agent or MCP gateway to another organization member",
+        tags: ["Agents"],
+        params: z.object({ id: UuidIdSchema }),
+        body: z.object({ ownerId: z.string().min(1) }),
+        response: constructResponseSchema(z.object({ success: z.boolean() })),
+      },
+    },
+    async ({ params: { id }, body, user, organizationId }, reply) => {
+      await transferAgentOwnership({
+        agentId: id,
+        ownerId: body.ownerId,
+        userId: user.id,
+        organizationId,
+      });
+      return reply.send({ success: true });
     },
   );
 

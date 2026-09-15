@@ -3,7 +3,10 @@
 import type { archestraApiTypes } from "@archestra/shared";
 import { Bot, Folder, Network, Route, Server } from "lucide-react";
 import Image from "next/image";
-import { isAgentImageIcon } from "@/components/agent-icon.utils";
+import {
+  getBuiltInServiceIconPath,
+  isAgentImageIcon,
+} from "@/components/agent-icon.utils";
 import { cn } from "@/lib/utils";
 
 export type AgentIconVariant = Exclude<
@@ -56,6 +59,21 @@ export function AgentIcon({
         height={size}
         className={cn("shrink-0 rounded-sm object-contain", className)}
       />
+    );
+  }
+
+  const servicePath = getBuiltInServiceIconPath(icon);
+  if (servicePath) {
+    return (
+      <svg
+        aria-hidden="true"
+        viewBox="0 0 24 24"
+        className={cn("shrink-0", className)}
+        style={{ width: size, height: size }}
+        fill="currentColor"
+      >
+        <path d={servicePath} />
+      </svg>
     );
   }
 

@@ -1,12 +1,70 @@
-import { and, eq, notInArray } from "drizzle-orm";
+import { and, eq, ne, notInArray } from "drizzle-orm";
 import db, { schema, withDbTransaction } from "@/database";
-import type { CredentialResolutionMode } from "@/types";
+import { notDeleted } from "@/database/schemas/soft-deletable-table";
+import type {
+  CredentialResolutionMode,
+  InternalMcpCatalogServerType,
+  ResourceVisibilityScope,
+} from "@/types";
 import type { InsertAppTool } from "@/types/app";
 
 /**
  * Tool attachments for apps, mirroring `AgentToolModel` with the app as owner.
  */
 class AppToolModel {
+  static async findStaticPinnedAssignmentsByApp(appId: string): Promise<
+    {
+      toolId: string;
+      toolName: string;
+      mcpServer: {
+        id: string;
+        name: string;
+        ownerId: string | null;
+        teamId: string | null;
+        scope: ResourceVisibilityScope;
+        serverType: InternalMcpCatalogServerType;
+      };
+    }[]
+  > {
+    const rows = await db
+      .select({
+        toolId: schema.appToolsTable.toolId,
+        toolName: schema.toolsTable.name,
+        id: schema.mcpServersTable.id,
+        name: schema.mcpServersTable.name,
+        ownerId: schema.mcpServersTable.ownerId,
+        teamId: schema.mcpServersTable.teamId,
+        scope: schema.mcpServersTable.scope,
+        serverType: schema.mcpServersTable.serverType,
+      })
+      .from(schema.appToolsTable)
+      .innerJoin(
+        schema.toolsTable,
+        eq(schema.appToolsTable.toolId, schema.toolsTable.id),
+      )
+      .innerJoin(
+        schema.mcpServersTable,
+        eq(schema.appToolsTable.mcpServerId, schema.mcpServersTable.id),
+      )
+      .where(
+        and(
+          eq(schema.appToolsTable.appId, appId),
+          // The mode is the whole test: only `dynamic` resolves the connection
+          // per caller at call time, so every other mode leaves `mcpServerId`
+          // as a pin the runtime targets. A null `mcpServerId` needs no
+          // predicate of its own — the join above already drops those rows.
+          ne(schema.appToolsTable.credentialResolutionMode, "dynamic"),
+          notDeleted(schema.mcpServersTable),
+        ),
+      );
+
+    return rows.map(({ toolId, toolName, ...mcpServer }) => ({
+      toolId,
+      toolName,
+      mcpServer,
+    }));
+  }
+
   /** Tools attached to an app. */
   static async getToolsForApp(appId: string) {
     const results = await db

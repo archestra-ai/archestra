@@ -239,7 +239,10 @@ Additionally, any env var matching ARCHESTRA_CHAT_*_API_KEY is treated as sensit
     {{- if not .prefix }}{{- $databasePoolProvided = true }}{{- end }}
   {{- end }}
 {{- end }}
-{{- if not $databasePoolProvided }}
+{{/* An omitted budget preserves the backend default on upgrade. Check for nil
+     explicitly so zero budgets still reach validation instead of opting out. */}}
+{{- $databasePoolConfigured := or (ne (toString .Values.archestra.database.poolMax) "<nil>") (ne (toString .Values.archestra.database.connectionBudget) "<nil>") }}
+{{- if and (not $databasePoolProvided) $databasePoolConfigured }}
 - name: ARCHESTRA_DATABASE_POOL_MAX
   value: {{ include "archestra-platform.databasePoolMax" . | quote }}
 {{- end }}

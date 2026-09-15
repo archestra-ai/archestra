@@ -3,7 +3,7 @@ title: Skills
 category: Agents
 order: 3
 description: Reusable SKILL.md instruction sets that agents load on demand
-lastUpdated: 2026-09-03
+lastUpdated: 2026-09-15
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -17,6 +17,10 @@ Skills live under **Studio** in the sidebar. The page lists every skill in the o
 Click a skill's use count (or its chart action) to open usage analytics. It shows the last 30 days of activations as a daily chart, broken down by who ran the skill.
 
 ![The Skills page open under the Studio tab of the sidebar, listing the organization's skills](/docs/automated_screenshots/platform-agent-skills_skills-in-studio.webp)
+
+## Ownership
+
+You can transfer a skill to another organization member. Its files, versions, sharing, and source configuration stay intact. Built-in skills remain managed by the platform.
 
 ## Progressive disclosure via two tools
 
@@ -40,7 +44,7 @@ Typing `/` lists the available skills. Picking one, for example `/pdf-to-markdow
 
 **Add new skill** on the Skills page asks for a source, then opens the skill form: the name and description, the `SKILL.md` and any resource files, and who can use the skill. It is one page — everything a skill has, in the order you fill it in. Creating it takes you to the skill's own page. Picking a GitHub repo instead hands over to the import dialog described below.
 
-Every skill has a page of its own, and that page is the form you just filled in. Change the name, the instructions, the files, or who can use the skill, then **Save changes** — there is no separate edit screen to open. **Discard changes** puts the skill back the way you found it. **Usage** is a tab beside the settings; version history, chat, and delete sit in the page header.
+Every skill has a page of its own, and that page is the form you just filled in. Change the name, the instructions, the files, or who can use the skill, then **Save** — there is no separate edit screen to open. **Discard changes** puts the skill back the way you found it. **Usage** is a tab beside the settings; version history, chat, and delete sit in the page header.
 
 A skill is a `SKILL.md` plus optional resource files.
 

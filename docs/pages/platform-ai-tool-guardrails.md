@@ -18,7 +18,7 @@ With AI tool guardrails, the same agent can operate normally in safe contexts an
 
 ## Guardrails V2 Preview
 
-Enable `ARCHESTRA_OPENAPPA_ENABLED` to edit the organization policy as TOML. Policies are stored in PostgreSQL. Saved revisions apply to new conversations without restarting the backend. Existing conversations retain their original policy.
+Set `ARCHESTRA_LLM_PROXY_PLUGINS=appa` to edit the organization policy as TOML. Policies are stored in PostgreSQL. Saved revisions apply to new conversations without restarting the backend. Existing conversations retain their original policy.
 
 The assistant can read, validate, and update the same policy through its policy tools. Both editing paths enforce permissions and reject conflicting revisions. Invalid policies leave the saved revision unchanged.
 

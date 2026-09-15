@@ -3,7 +3,7 @@ title: Projects
 category: Projects
 order: 1
 description: A shared workspace to organize your work
-lastUpdated: 2026-09-03
+lastUpdated: 2026-09-15
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -11,6 +11,10 @@ lastUpdated: 2026-09-03
 A project is a shared workspace for your chats, Agent Runtime sessions, files, instructions, and scheduled tasks. Projects are private until you share them with teams or the whole organization.
 
 ![A project with its chats, files, and monthly schedule](/docs/automated_screenshots/platform-projects_project-overview.webp)
+
+## Ownership
+
+You can transfer a project to another organization member. Files, instructions, schedules, and sharing stay intact. Existing chats and scheduled tasks keep their original authors and execution identities.
 
 ## Creating a Project
 

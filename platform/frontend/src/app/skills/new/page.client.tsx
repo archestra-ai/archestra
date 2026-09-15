@@ -164,6 +164,7 @@ function NewSkillWizard() {
           />
         }
         maxWidth="wizard"
+        contentOverflowX="clip"
       >
         <div className="space-y-6">
           {isOrganizationPending ? null : (
@@ -301,18 +302,7 @@ function NewSkillWizard() {
                     }
                     labelsRef={labelsRef}
                   />
-                  {/*
-                   * No top rule. `WizardFooter` carries `sticky bottom-0
-                   * border-t`, where the rule marks the edge the footer pins
-                   * to while content scrolls underneath. It never pins on this
-                   * page: an ancestor sets `overflow-x-auto`, which makes that
-                   * box the footer's nearest scrollport in *both* axes, and it
-                   * never scrolls — the real scrolling happens further out. So
-                   * the footer just flows with the content, and its rule only
-                   * ever reads as a second line stacked 16px under the last
-                   * panel's own bottom border.
-                   */}
-                  <WizardFooter className="border-t-0">
+                  <WizardFooter>
                     {catalogDisabled ? (
                       <Button variant="outline" asChild>
                         <Link href="/skills">Cancel</Link>

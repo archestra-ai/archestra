@@ -62,6 +62,7 @@ import config, {
   // SPDX-SnippetEnd
   parseK8sResourceQuantity,
   parseKeepAliveTimeoutMs,
+  parseLlmProxyPlugins,
   parseLogFormat,
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -70,7 +71,6 @@ import config, {
   // SPDX-SnippetEnd
   parseMetricsPort,
   parseNonNegativeInt,
-  parseOpenAppaConfig,
   parseOptionalPort,
   parseOtelCaptureContent,
   parseProcessType,
@@ -3469,18 +3469,20 @@ describe("parseOtelCaptureContent", () => {
 });
 
 describe("OpenAPPA feature configuration", () => {
-  test.each([
-    undefined,
-    "",
-    "false",
-    "TRUE",
-    "1",
-  ])("does not activate from the beta flag when enabled=%s", (enabled) => {
-    vi.stubEnv("ARCHESTRA_BETA", "true");
-    expect(parseOpenAppaConfig(enabled)).toEqual({ enabled: false });
+  test("defaults proxy plugins to empty and accepts only the APPA plugin", () => {
+    expect(parseLlmProxyPlugins(undefined)).toEqual([]);
+    expect(parseLlmProxyPlugins(" appa ")).toEqual(["appa"]);
+    expect(() => parseLlmProxyPlugins("unknown")).toThrow(
+      "ARCHESTRA_LLM_PROXY_PLUGINS contains unsupported plugin names",
+    );
+    expect(() => parseLlmProxyPlugins("appa,appa")).toThrow(
+      "ARCHESTRA_LLM_PROXY_PLUGINS must not contain duplicates",
+    );
   });
-  test("supports database policies without a container path", () => {
-    expect(parseOpenAppaConfig(undefined).enabled).toBe(false);
-    expect(parseOpenAppaConfig("true")).toEqual({ enabled: true });
+
+  test("enables database policies without a container path or beta fallback", () => {
+    vi.stubEnv("ARCHESTRA_BETA", "true");
+    expect(parseLlmProxyPlugins(undefined)).toEqual([]);
+    expect(parseLlmProxyPlugins("appa")).toEqual(["appa"]);
   });
 });

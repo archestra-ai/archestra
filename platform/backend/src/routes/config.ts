@@ -290,7 +290,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           maintenanceMode: config.maintenanceMode,
           chatSecretScanEnabled: config.chat.secretScanEnabled,
           lockedChatEnabled: isLockedChatEnabled(),
-          openappaEnabled: config.openappa.enabled,
+          openappaEnabled: config.llmProxy.plugins.includes("appa"),
           agentHooksEnabled: config.hooks.enabled,
           chatopsTelegramEnabled: config.chatops.telegramEnabled,
           kbAutoSyncPermissionsEnabled: config.kb.autoSyncPermissionsEnabled,

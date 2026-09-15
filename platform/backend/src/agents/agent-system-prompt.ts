@@ -24,6 +24,7 @@ import type { Tool } from "ai";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
 import { MemberModel, TeamModel, UserModel } from "@/models";
 import type { OpenedApp } from "@/services/apps/opened-app-context";
+import { buildKnowledgeSearchInstruction } from "@/services/knowledge-search-instruction";
 import { buildSkillCatalogPrompt } from "@/skills/skill-catalog-prompt";
 import {
   SKILL_SANDBOX_ATTACHMENTS_DIR,
@@ -197,6 +198,12 @@ export async function buildAgentSystemPrompt(params: {
   // it from the tools actually present. Keyed off mcpTools (already RBAC- and
   // availability-filtered upstream), not a separate availability probe.
   const fileHandlingInstruction = buildFileHandlingInstruction(mcpTools);
+  const knowledgeSearchInstruction = await buildKnowledgeSearchInstruction({
+    agentId,
+    userId,
+    organizationId,
+    toolNames: Object.keys(mcpTools),
+  });
 
   const projectInstructionsPrompt = projectInstructions
     ? `${PROJECT_INSTRUCTIONS_PREFIX}\n\n${projectInstructions}`
@@ -226,6 +233,7 @@ export async function buildAgentSystemPrompt(params: {
       openedAppPrompt,
       skillCatalogPrompt,
       fileHandlingInstruction,
+      knowledgeSearchInstruction,
       advisorConsultInstruction,
       TOOL_DENIAL_INSTRUCTION,
       toolResultInstructions,

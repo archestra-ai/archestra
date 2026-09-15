@@ -1,6 +1,7 @@
 import {
   isAlwaysExposedArchestraToolShortName,
   parseFullToolName,
+  TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
   TOOL_RUN_COMMAND_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
@@ -19,6 +20,7 @@ import {
   appLaunchToolDescription,
   sanitizeAppNameForToolMetadata,
 } from "@/services/apps/app-run-link";
+import { buildKnowledgeSourcesDescription } from "@/services/knowledge-sources-description";
 import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
 import { APP_LAUNCH_TOOL_NAME } from "@/types/app";
 import { archestraMcpBranding } from "./branding";
@@ -383,10 +385,22 @@ async function getSearchableTools(params: {
     if (candidates.has(tool.name)) {
       continue;
     }
+    const isKnowledge =
+      archestraMcpBranding.getToolShortName(tool.name) ===
+      TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME;
+    const knowledgeDescription = isKnowledge
+      ? await buildKnowledgeSourcesDescription(
+          agentId,
+          organizationId ? { userId, organizationId } : undefined,
+        )
+      : null;
+    if (isKnowledge && !knowledgeDescription) continue;
     candidates.set(
       tool.name,
       toAssignedToolCandidate({
-        tool,
+        tool: knowledgeDescription
+          ? { ...tool, description: knowledgeDescription }
+          : tool,
         catalog:
           tool.catalogId != null
             ? (catalogsById.get(tool.catalogId) ?? null)

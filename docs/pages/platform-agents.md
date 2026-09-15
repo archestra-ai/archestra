@@ -3,7 +3,7 @@ title: Overview
 category: Agents
 order: 1
 description: Agent overview, invocation paths, knowledge sources, and prompt templating
-lastUpdated: 2026-09-12
+lastUpdated: 2026-09-15
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -123,6 +123,10 @@ Knowledge follows the same **Auto** / **Custom** setting as tools (**Tools & Kno
 **Auto** can be too broad here too. Each agent has its own list of disabled knowledge sources — edit it under **All knowledge sources except** on the **Auto** tab of the agent's **Tools & Knowledge** step, or via `GET`/`PUT /api/agents/:id/knowledge-source-exclusions`. A disabled source drops out of every search the agent runs, so you can keep an archived wiki out of its answers without hiding it from anyone else. The list applies only while the setting is **Auto**; **Custom** mode already searches just what you assign.
 
 Whenever an agent has at least one reachable knowledge source, Archestra adds the built-in [`query_knowledge_sources`](/docs/platform-archestra-mcp-server#query_knowledge_sources) tool so the model can search across them during a run. The tool disappears when every source the caller can reach is disabled for that agent.
+
+Agents receive a short overview of accessible knowledge sources, including their names and descriptions. The system prompt and tool discovery both include this overview. Knowledge bases without connectors and inaccessible sources are not advertised.
+
+Knowledge search finds and summarizes indexed content, such as decisions recorded across Jira issues. Source MCP tools handle live status, exact record lookups, exhaustive listings, and changes. Indexed knowledge reflects the last sync; it may lag behind the source.
 
 The output of `query_knowledge_sources` is treated as sensitive by default, which can impact the ability to use subsequent tools. See [Archestra MCP Server](/docs/platform-archestra-mcp-server#auth), and [AI Tool Guardrails](/docs/platform-ai-tool-guardrails), for more details.
 

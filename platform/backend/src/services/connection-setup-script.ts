@@ -1,4 +1,5 @@
 import {
+  ALL_ARCHESTRA_TOKEN_PREFIXES,
   CLAUDE_CODE_CLIENT_ID,
   CLAUDE_CODE_CUSTOM_HEADERS_ENV_KEY,
   CLAUDE_CODE_PROXY_ENV_KEYS,
@@ -763,24 +764,25 @@ if path.exists():
     if raw:
         settings = json.loads(raw)
 env = settings.setdefault("env", {})
+for key in os.environ.get("ARCHESTRA_REMOVE_VIRTUAL_KEY_ENV", "").split(","):
+    value = env.get(key)
+    if isinstance(value, str) and any(value.startswith(prefix) for prefix in ${JSON.stringify(ALL_ARCHESTRA_TOKEN_PREFIXES)}):
+        env.pop(key)
 for key in os.environ:
     if key.startswith("ARCHESTRA_SET_ENV_"):
         env[key.removeprefix("ARCHESTRA_SET_ENV_")] = os.environ[key]
-# Append-merge our custom headers into ANTHROPIC_CUSTOM_HEADERS: keep the user's
-# other headers, replace only our lines (matched case-insensitively by header
-# name) so re-runs and key rotation never duplicate or leave a stale one. The
-# append var carries one "Name: Value" per line (e.g. the agent-id attribution
-# header and the passthrough key header).
+# Replace both attribution headers so switching auth modes also removes a
+# passthrough key that the new configuration no longer uses.
 append_headers = os.environ.get("ARCHESTRA_APPEND_${CLAUDE_CODE_CUSTOM_HEADERS_ENV_KEY}")
 if append_headers:
     # strip each line: the script's env-assignment block is indented, which
     # indents the continuation lines of this multi-line value too.
     new_lines = [ln.strip() for ln in append_headers.splitlines() if ln.strip()]
-    new_names = {ln.split(":", 1)[0].strip().lower() for ln in new_lines}
+    managed_names = {"${EXTERNAL_AGENT_ID_HEADER.toLowerCase()}", "${VIRTUAL_KEY_HEADER.toLowerCase()}"}
     existing = env.get("${CLAUDE_CODE_CUSTOM_HEADERS_ENV_KEY}", "") or ""
     lines = [
         ln for ln in existing.splitlines()
-        if ln.strip() and ln.split(":", 1)[0].strip().lower() not in new_names
+        if ln.strip() and ln.split(":", 1)[0].strip().lower() not in managed_names
     ]
     lines.extend(new_lines)
     env["${CLAUDE_CODE_CUSTOM_HEADERS_ENV_KEY}"] = "\\n".join(lines)
@@ -803,8 +805,12 @@ function claudeCustomHeaders(proxy: SetupScriptProxySection): string {
 }
 
 function claudeAnthropicProxySection(proxy: SetupScriptProxySection): string {
+  const removeVirtualKeyEnv = proxy.virtualKey
+    ? ["ANTHROPIC_API_KEY"]
+    : [ANTHROPIC_AUTH_TOKEN_KEY, "ANTHROPIC_API_KEY"];
   const env: Record<string, string> = {
     [`ARCHESTRA_SET_ENV_${ANTHROPIC_BASE_URL_KEY}`]: proxy.url,
+    ARCHESTRA_REMOVE_VIRTUAL_KEY_ENV: removeVirtualKeyEnv.join(","),
   };
   const manualEnv: Record<string, string> = {
     [ANTHROPIC_BASE_URL_KEY]: proxy.url,
@@ -813,8 +819,6 @@ function claudeAnthropicProxySection(proxy: SetupScriptProxySection): string {
     env[`ARCHESTRA_SET_ENV_${ANTHROPIC_AUTH_TOKEN_KEY}`] = proxy.virtualKey;
     manualEnv[ANTHROPIC_AUTH_TOKEN_KEY] = proxy.virtualKey;
   }
-  // The merge appends/replaces only our header lines, never clobbering headers
-  // the user already set.
   const customHeaders = claudeCustomHeaders(proxy);
   env[`ARCHESTRA_APPEND_${CLAUDE_CODE_CUSTOM_HEADERS_ENV_KEY}`] = customHeaders;
   manualEnv[CLAUDE_CODE_CUSTOM_HEADERS_ENV_KEY] = customHeaders;
@@ -828,18 +832,19 @@ ${mergeJsonFileSnippet({
   file: "$HOME/.claude/settings.json",
   env,
   python: CLAUDE_SETTINGS_MERGE_PY,
-  fallbackMessage:
-    "python3 not found — merge this into ~/.claude/settings.json manually:",
+  fallbackMessage: claudeManualMergeMessage(removeVirtualKeyEnv),
   fallbackSnippet: JSON.stringify({ env: manualEnv }, null, 2),
 })}${passthroughNote}`;
 }
 
 function claudeBedrockProxySection(proxy: SetupScriptProxySection): string {
+  const removeVirtualKeyEnv = proxy.virtualKey ? [] : [AWS_BEARER_TOKEN_KEY];
   const customHeaders = claudeCustomHeaders(proxy);
   const env: Record<string, string> = {
     [`ARCHESTRA_SET_ENV_${CLAUDE_USE_BEDROCK_KEY}`]: "1",
     [`ARCHESTRA_SET_ENV_${AWS_REGION_KEY}`]: "us-east-1",
     [`ARCHESTRA_SET_ENV_${BEDROCK_BASE_URL_KEY}`]: proxy.url,
+    ARCHESTRA_REMOVE_VIRTUAL_KEY_ENV: removeVirtualKeyEnv.join(","),
   };
   const manualEnv: Record<string, string> = {
     [CLAUDE_USE_BEDROCK_KEY]: "1",
@@ -861,8 +866,7 @@ ${mergeJsonFileSnippet({
   file: "$HOME/.claude/settings.json",
   env,
   python: CLAUDE_SETTINGS_MERGE_PY,
-  fallbackMessage:
-    "python3 not found — merge this into ~/.claude/settings.json manually:",
+  fallbackMessage: claudeManualMergeMessage(removeVirtualKeyEnv),
   fallbackSnippet: JSON.stringify({ env: manualEnv }, null, 2),
 })}
 echo "Update AWS_REGION in ~/.claude/settings.json if you use a different region."${
@@ -871,6 +875,13 @@ echo "Update AWS_REGION in ~/.claude/settings.json if you use a different region
       : `
 echo "Your existing AWS credentials keep working — only the base URL changed."`
   }`;
+}
+
+function claudeManualMergeMessage(removeVirtualKeyEnv: string[]): string {
+  const credentialCleanup = removeVirtualKeyEnv.length
+    ? ` Remove ${removeVirtualKeyEnv.join(" and ")} from env if they contain an Archestra virtual key; keep your provider credentials.`
+    : "";
+  return `python3 not found — remove existing ${EXTERNAL_AGENT_ID_HEADER.toLowerCase()} and ${VIRTUAL_KEY_HEADER.toLowerCase()} lines from env.${CLAUDE_CODE_CUSTOM_HEADERS_ENV_KEY}.${credentialCleanup} Then merge this into ~/.claude/settings.json manually:`;
 }
 
 // ===================================================================

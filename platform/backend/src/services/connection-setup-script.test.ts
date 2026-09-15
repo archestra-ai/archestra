@@ -144,23 +144,23 @@ async function expectValidBash(script: string): Promise<void> {
 }
 
 /**
- * Runs the real ~/.claude/settings.json merge (the python extracted from the
- * rendered claude-code passthrough script) against a temp HOME, so the
- * append/dedupe behavior is asserted end-to-end rather than by string match.
+ * Runs the rendered settings merge, including its environment assignments,
+ * against an isolated home directory.
  */
 async function runClaudeSettingsMerge(params: {
   existing: object | null;
-}): Promise<{ env: { ANTHROPIC_CUSTOM_HEADERS: string } }> {
+  proxy?: SetupScriptContext["proxy"];
+}): Promise<{ env: Record<string, string>; [key: string]: unknown }> {
   const script = renderSetupScript({
     ...fullContext("claude-code"),
     mcp: null,
     skills: null,
-    proxy: ANTHROPIC_PASSTHROUGH_PROXY,
+    proxy: params.proxy ?? ANTHROPIC_PASSTHROUGH_PROXY,
   });
-  const match = script.match(
-    /python3 - <<'ARCHESTRA_PY'\n([\s\S]*?)\nARCHESTRA_PY/,
-  );
-  if (!match) throw new Error("could not extract the settings-merge python");
+  const start = script.indexOf("if command -v python3");
+  const endMarker = "\nARCHESTRA_MANUAL\nfi";
+  const end = script.indexOf(endMarker, start);
+  if (start < 0 || end < 0) throw new Error("Missing settings merge block");
   const home = await mkdtemp(path.join(tmpdir(), "archestra-home-"));
   try {
     await mkdir(path.join(home, ".claude"), { recursive: true });
@@ -168,18 +168,15 @@ async function runClaudeSettingsMerge(params: {
     if (params.existing) {
       await writeFile(settingsPath, JSON.stringify(params.existing), "utf8");
     }
-    const pyFile = path.join(home, "merge.py");
-    await writeFile(pyFile, match[1], "utf8");
-    await execFileAsync("python3", [pyFile], {
-      env: {
-        ...process.env,
-        HOME: home,
-        // The script exports one "Name: Value" per line — the client-attribution
-        // header plus the passthrough key header — so the merge dedupes both.
-        // The continuation line arrives indented (the script's env-assignment
-        // block indents multi-line values); the merge must strip it.
-        ARCHESTRA_APPEND_ANTHROPIC_CUSTOM_HEADERS: `${AGENT_ID_HEADER_LINE}\n  X-Archestra-Virtual-Key: arch_passthroughcafe`,
-      },
+    const blockFile = path.join(home, "merge.sh");
+    await writeFile(
+      blockFile,
+      `set -euo pipefail\n${script.slice(start, end + endMarker.length)}\n`,
+      "utf8",
+    );
+    await execFileAsync("bash", [blockFile], {
+      cwd: home,
+      env: { ...process.env, HOME: home },
     });
     return JSON.parse(await readFile(settingsPath, "utf8"));
   } finally {
@@ -1233,6 +1230,125 @@ cli sh -c '[ -t 1 ] && echo TTY-VIA-CLI || echo PIPE-VIA-CLI; cat'`;
       lines.filter((l) => l.startsWith("X-Archestra-Virtual-Key:")),
     ).toEqual(["X-Archestra-Virtual-Key: arch_passthroughcafe"]);
     expect(second.env.ANTHROPIC_CUSTOM_HEADERS).toContain("X-Foo: bar");
+  });
+
+  test.each([
+    "arch_",
+    "archestra_",
+  ])("claude-code settings merge: switching to passthrough removes %s primary credentials", async (prefix) => {
+    const standard = await runClaudeSettingsMerge({
+      proxy: { ...PROXY, virtualKey: `${prefix}revoked` },
+      existing: {
+        env: { ANTHROPIC_API_KEY: `${prefix}older-key`, KEEP_ME: "value" },
+        permissions: { deny: ["Bash"] },
+      },
+    });
+    const passthrough = await runClaudeSettingsMerge({ existing: standard });
+    expect(passthrough.env.ANTHROPIC_AUTH_TOKEN).toBeUndefined();
+    expect(passthrough.env.ANTHROPIC_API_KEY).toBeUndefined();
+    expect(passthrough.env.KEEP_ME).toBe("value");
+    expect(passthrough.permissions).toEqual({ deny: ["Bash"] });
+    expect(passthrough.env.ANTHROPIC_CUSTOM_HEADERS).toContain(
+      "X-Archestra-Virtual-Key: arch_passthroughcafe",
+    );
+  });
+
+  test.each([
+    "arch_stale",
+    "archestra_stale",
+  ])("claude-code virtual-key settings merge: removes a stale primary API key (%s)", async (credential) => {
+    const result = await runClaudeSettingsMerge({
+      proxy: PROXY,
+      existing: {
+        env: {
+          ANTHROPIC_API_KEY: credential,
+          ANTHROPIC_CUSTOM_HEADERS:
+            "X-User: retained\nX-Archestra-Virtual-Key: arch_old-attribution",
+        },
+      },
+    });
+    expect(result.env.ANTHROPIC_API_KEY).toBeUndefined();
+    expect(result.env.ANTHROPIC_AUTH_TOKEN).toBe(PROXY.virtualKey);
+    expect(result.env.ANTHROPIC_CUSTOM_HEADERS).toBe(
+      `X-User: retained\n${AGENT_ID_HEADER_LINE}`,
+    );
+  });
+
+  test("claude-code virtual-key settings merge: preserves a provider API key", async () => {
+    const result = await runClaudeSettingsMerge({
+      proxy: PROXY,
+      existing: { env: { ANTHROPIC_API_KEY: "sk-ant-api-provider-key" } },
+    });
+    expect(result.env.ANTHROPIC_API_KEY).toBe("sk-ant-api-provider-key");
+    expect(result.env.ANTHROPIC_AUTH_TOKEN).toBe(PROXY.virtualKey);
+  });
+
+  test("claude-code settings merge: passthrough preserves provider credentials", async () => {
+    const env = {
+      ANTHROPIC_AUTH_TOKEN: "sk-ant-oat-provider-token",
+      ANTHROPIC_API_KEY: "sk-ant-api-provider-key",
+      AWS_BEARER_TOKEN_BEDROCK: "provider-bedrock-token",
+    };
+    const result = await runClaudeSettingsMerge({ existing: { env } });
+    expect(result.env).toMatchObject(env);
+  });
+
+  test.each([
+    "arch_",
+    "archestra_",
+  ])("claude-code bedrock settings merge: switching to passthrough removes %s bearer credentials", async (prefix) => {
+    const proxy = {
+      ...ANTHROPIC_PASSTHROUGH_PROXY,
+      provider: "bedrock" as const,
+      providerLabel: "Bedrock",
+      url: "https://archestra.example.com/v1/bedrock",
+    };
+    const standard = await runClaudeSettingsMerge({
+      existing: null,
+      proxy: {
+        ...proxy,
+        authMode: "virtual-key",
+        virtualKey: `${prefix}revoked`,
+      },
+    });
+    const passthrough = await runClaudeSettingsMerge({
+      existing: standard,
+      proxy,
+    });
+    expect(passthrough.env.AWS_BEARER_TOKEN_BEDROCK).toBeUndefined();
+    const providerCredential = await runClaudeSettingsMerge({
+      existing: { env: { AWS_BEARER_TOKEN_BEDROCK: "provider-bedrock-token" } },
+      proxy,
+    });
+    expect(providerCredential.env.AWS_BEARER_TOKEN_BEDROCK).toBe(
+      "provider-bedrock-token",
+    );
+  });
+
+  test.each([
+    { name: "virtual-key", proxy: PROXY },
+    {
+      name: "unattributed passthrough",
+      proxy: { ...ANTHROPIC_PASSTHROUGH_PROXY, passthroughVirtualKey: null },
+    },
+  ])("claude-code settings merge: switching to $name removes the old passthrough header", async ({
+    proxy,
+  }) => {
+    const result = await runClaudeSettingsMerge({
+      existing: {
+        env: {
+          ANTHROPIC_CUSTOM_HEADERS:
+            "X-Foo: keep\n  x-archestra-virtual-key: arch_revoked\nX-Archestra-Agent-Id: old-client",
+        },
+      },
+      proxy,
+    });
+    expect(result.env.ANTHROPIC_CUSTOM_HEADERS.split("\n")).toEqual([
+      "X-Foo: keep",
+      AGENT_ID_HEADER_LINE,
+    ]);
+    if (proxy.virtualKey)
+      expect(result.env.ANTHROPIC_AUTH_TOKEN).toBe(proxy.virtualKey);
   });
 
   test("claude-code settings merge: expands $HOME, creates the config dir, and backs up on re-run", async () => {

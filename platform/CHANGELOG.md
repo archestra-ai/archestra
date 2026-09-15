@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.3.61](https://github.com/archestra-ai/archestra/compare/platform-v1.3.60...platform-v1.3.61) (2026-09-15)
+
+
+### Bug Fixes
+
+* describe available knowledge sources in agent discovery (release/1.3) ([#7942](https://github.com/archestra-ai/archestra/issues/7942)) ([8bc30c8](https://github.com/archestra-ai/archestra/commit/8bc30c83e6dcde42c0ea0707838de1e604fb349d))
+* **frontend:** preserve and unify environment selections (release/1.3) ([#7945](https://github.com/archestra-ai/archestra/issues/7945)) ([646bd42](https://github.com/archestra-ai/archestra/commit/646bd4288edcd5caf5e0d4bb2f167ecdcc2b8cee))
+* **helm:** preserve upgrades without an explicit connection budget (backport release/1.3) ([#7931](https://github.com/archestra-ai/archestra/issues/7931)) ([0ad675e](https://github.com/archestra-ai/archestra/commit/0ad675ef577f04727c0ad01743a340a853af7be2))
+* **mcp-gateway:** return 405 for unsupported GET streams (backport release/1.3) ([#7943](https://github.com/archestra-ai/archestra/issues/7943)) ([ea59d6e](https://github.com/archestra-ai/archestra/commit/ea59d6eceede2f937a538a049e7ebe01b0b7b760))
+* **oauth:** preserve registered client secrets during refresh (backport release/1.3) ([#7926](https://github.com/archestra-ai/archestra/issues/7926)) ([481b902](https://github.com/archestra-ai/archestra/commit/481b90259c5e5489ac626bb1ef2527898876a209))
+
 ## [1.3.60](https://github.com/archestra-ai/archestra/compare/platform-v1.3.59...platform-v1.3.60) (2026-09-14)
 
 

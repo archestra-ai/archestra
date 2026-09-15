@@ -2415,12 +2415,16 @@ Required RBAC permission: `agent:read`
 | `run.state_changed_at` | `string` | Yes | ISO 8601 of the last transition. |
 | `session_id` | `string \| null` | Yes | Stable runtime session handle; use as task_id for steering and later handoffs. |
 | `run_url` | `string \| null` | Yes |  |
+| `requests` | `object[]` | Yes | The original task request and, when different, the current turn's request. Use this context to interpret short follow-ups from another client. |
+| `requests[].task_id` | `string` | Yes |  |
+| `requests[].text` | `string` | Yes |  |
+| `requests[].truncated` | `boolean` | Yes |  |
 | `output` | `string` | Yes | The run's response artifact so far (tail, capped). |
 | `output_truncated` | `boolean` | Yes |  |
 | `workspace` | `object \| null` | Yes | The owner's retained workspace, independent of the run's terminal state. |
 | `workspace.state` | `"active" \| "idle" \| "suspending" \| "suspended" \| "resuming" \| "deleting" \| "deleted"` | Yes |  |
 | `workspace.retained_until` | `string` | Yes |  |
-| `workspace.can_continue` | `boolean` | Yes |  |
+| `workspace.can_continue` | `boolean` | Yes | Whether steer_run can accept a follow-up in this workspace, including while work is running. |
 | `workspace.connection` | `object \| null` | Yes |  |
 | `workspace.connection.hostname` | `string` | Yes |  |
 | `workspace.connection.shellCommand` | `string` | Yes |  |

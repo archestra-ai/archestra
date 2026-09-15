@@ -11,6 +11,7 @@ import { agentRuntimeManager } from "@/k8s/agent-runtime";
 import { claudeCodeAccountRuntime } from "@/k8s/agent-runtime/claude-code-account";
 import {
   A2AContextModel,
+  A2AMessageModel,
   A2ATaskModel,
   AgentRunInputModel,
   AgentRunModel,
@@ -172,6 +173,21 @@ test("an external gateway steers the current turn using the original session han
     backend: "kubernetes",
     runtimeScope: previous.runtimeScope,
   });
+  for (const [taskId, text] of [
+    [
+      previous.taskId,
+      "Decode numeric HTML entities in the existing repository",
+    ],
+    [currentTask.id, "Cover invalid Unicode code points too"],
+  ]) {
+    await A2AMessageModel.create({
+      contextId: previousTask.contextId,
+      taskId,
+      role: "ROLE_USER",
+      parts: [{ text }],
+      content: { role: "user", content: text },
+    });
+  }
   await AgentWorkspaceModel.claim({
     id: previous.taskId,
     organizationId: agent.organizationId,
@@ -225,6 +241,19 @@ test("an external gateway steers the current turn using the original session han
     session_id: previous.taskId,
     run: { task_id: currentTask.id },
     run_url: expect.stringContaining(`/chat/runs/${previous.taskId}`),
+    workspace: { can_continue: true },
+    requests: [
+      {
+        task_id: previous.taskId,
+        text: "Decode numeric HTML entities in the existing repository",
+        truncated: false,
+      },
+      {
+        task_id: currentTask.id,
+        text: "Cover invalid Unicode code points too",
+        truncated: false,
+      },
+    ],
   });
   expect(JSON.parse((status.content[0] as { text: string }).text)).toEqual(
     status.structuredContent,
@@ -257,11 +286,27 @@ test("an external gateway steers the current turn using the original session han
 
 test("an expired session rejects steering without creating a replacement task", async () => {
   const previous = await retainedRun();
+  const retained = await executeArchestraTool(
+    TOOL_GET_RUN_FULL_NAME,
+    { task_id: previous.taskId },
+    context,
+  );
+  expect(retained.structuredContent).toMatchObject({
+    workspace: { can_continue: true },
+  });
   vi.useFakeTimers({ toFake: ["Date"] });
   onTestFinished(() => {
     vi.useRealTimers();
   });
   vi.setSystemTime(Date.now() + 7200_000);
+  const expired = await executeArchestraTool(
+    TOOL_GET_RUN_FULL_NAME,
+    { task_id: previous.taskId },
+    context,
+  );
+  expect(expired.structuredContent).toMatchObject({
+    workspace: { can_continue: false },
+  });
   const result = await executeArchestraTool(
     TOOL_STEER_RUN_FULL_NAME,
     { task_id: previous.taskId, message: "Continue the draft" },
@@ -271,6 +316,31 @@ test("an expired session rejects steering without creating a replacement task", 
   expect(JSON.stringify(result.content)).toContain(
     "No new session was started",
   );
+  expect(
+    (
+      await A2ATaskModel.listForActor({
+        actorKind: "user",
+        actorId: userId,
+        agentId: agent.id,
+        pageSize: 100,
+      })
+    ).tasks,
+  ).toHaveLength(1);
+});
+
+test("steering rejects literal NUL characters with an actionable error before delivery", async () => {
+  const previous = await retainedRun();
+  const steer = vi.spyOn(backend, "steer");
+  const continuation = vi.spyOn(backend, "continueRun");
+  const result = await executeArchestraTool(
+    TOOL_STEER_RUN_FULL_NAME,
+    { task_id: previous.taskId, message: "Test the character \0 too" },
+    context,
+  );
+  expect(result.isError).toBe(true);
+  expect(JSON.stringify(result.content)).toContain("U+0000");
+  expect(steer).not.toHaveBeenCalled();
+  expect(continuation).not.toHaveBeenCalled();
   expect(
     (
       await A2ATaskModel.listForActor({

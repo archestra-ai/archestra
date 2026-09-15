@@ -28,10 +28,12 @@ beforeEach(() => {
     "/github/callback?code=synthetic-code&state=synthetic-state",
   );
 });
-function renderCallback() {
+function renderCallback(
+  client = new QueryClient({ defaultOptions: { queries: { retry: false } } }),
+) {
   return render(
     <StrictMode>
-      <QueryClientProvider client={new QueryClient()}>
+      <QueryClientProvider client={client}>
         <GitHubConnectionCallback />
       </QueryClientProvider>
     </StrictMode>,
@@ -40,7 +42,7 @@ function renderCallback() {
 it.each([
   "/account/connections",
   "/settings/credentials",
-  "/agents/agent-1?section=advanced&setup=credentials#runtime-credentials",
+  "/chat?conversation=conversation-1",
 ])("completes once in strict mode and returns to %s without leaving authorization in the URL", async (destination) => {
   rememberGitHubConnectionReturn("synthetic-state", destination);
   let calls = 0;
@@ -128,4 +130,100 @@ it("returns a declined authorization to the originating Agent without exchanging
   expect(replace).toHaveBeenCalledWith(destination);
   expect(calls).toBe(0);
   expect(window.location.search).toBe("");
+});
+
+it.each([
+  false,
+  true,
+])("keeps conversation setup on the callback with remaining credentials: %s", async (stillMissing) => {
+  const destination = "/agents/agent-1?section=advanced&setup=credentials";
+  rememberGitHubConnectionReturn("synthetic-state", destination);
+  server.use(
+    http.post("http://localhost:9000/api/credentials/github/callback", () =>
+      HttpResponse.json({ configured: true }),
+    ),
+    http.get("http://localhost:9000/api/agents/agent-1/runtime/preflight", () =>
+      HttpResponse.json({
+        configured: ["GITHUB_TOKEN"],
+        missing: stillMissing
+          ? [{ key: "SERVICE_TOKEN", label: "Service token" }]
+          : [],
+        misconfigured: [],
+        incompatible: null,
+        ready: !stillMissing,
+      }),
+    ),
+  );
+  renderCallback();
+  if (stillMissing) {
+    expect(await screen.findByText("Service token")).toBeVisible();
+    expect(screen.queryByText("You’re ready")).not.toBeInTheDocument();
+    expect(replace).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Finish setup" }));
+    expect(replace).toHaveBeenCalledWith(destination);
+  } else {
+    expect(await screen.findByText("You’re ready")).toBeVisible();
+    expect(
+      screen.getByText(
+        "Return to your conversation and send your message again.",
+      ),
+    ).toBeVisible();
+    expect(replace).not.toHaveBeenCalled();
+  }
+});
+
+it("does not claim setup is complete when the remaining-credentials check fails", async () => {
+  rememberGitHubConnectionReturn(
+    "synthetic-state",
+    "/agents/agent-1?setup=credentials",
+  );
+  server.use(
+    http.post("http://localhost:9000/api/credentials/github/callback", () =>
+      HttpResponse.json({ configured: true }),
+    ),
+    http.get(
+      "http://localhost:9000/api/agents/agent-1/runtime/preflight",
+      () => new HttpResponse(null, { status: 503 }),
+    ),
+  );
+  renderCallback();
+  expect(
+    await screen.findByRole("button", { name: "Try again" }),
+  ).toBeVisible();
+  expect(screen.queryByText("You’re ready")).not.toBeInTheDocument();
+  expect(replace).not.toHaveBeenCalled();
+});
+
+it("rechecks credentials after authorization instead of trusting cached readiness", async () => {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false, staleTime: Infinity } },
+  });
+  client.setQueryData(["agents", "agent-1", "runtime", "preflight"], {
+    configured: [],
+    missing: [],
+    misconfigured: [],
+    incompatible: null,
+    ready: true,
+  });
+  rememberGitHubConnectionReturn(
+    "synthetic-state",
+    "/agents/agent-1?setup=credentials",
+  );
+  server.use(
+    http.post("http://localhost:9000/api/credentials/github/callback", () =>
+      HttpResponse.json({ configured: true }),
+    ),
+    http.get("http://localhost:9000/api/agents/agent-1/runtime/preflight", () =>
+      HttpResponse.json({
+        configured: ["GITHUB_TOKEN"],
+        missing: [{ key: "SERVICE_TOKEN", label: "Service token" }],
+        misconfigured: [],
+        incompatible: null,
+        ready: false,
+      }),
+    ),
+  );
+  renderCallback(client);
+  expect(await screen.findByText("Service token")).toBeVisible();
+  expect(screen.queryByText("You’re ready")).not.toBeInTheDocument();
 });

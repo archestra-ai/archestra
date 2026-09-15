@@ -2,19 +2,14 @@
 
 import { InfoIcon, KeyRound } from "lucide-react";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useState } from "react";
+import { AgentRuntimeCredentialsDialog } from "@/components/agent-runtime-credentials-dialog";
 import { ClaudeCodeAccount } from "@/components/claude-code-account";
-import { RuntimeCredentialConnectionDialog } from "@/components/runtime-credential-connection-dialog";
 import { Button } from "@/components/ui/button";
 import {
   CompactWarning,
   CompactWarningText,
 } from "@/components/ui/compact-warning";
-import { useFeature } from "@/lib/config/config.query";
-import {
-  type RuntimeCredentialDefinition,
-  useRuntimeCredentials,
-} from "@/lib/runtime-credentials.query";
 
 type MissingCredential = {
   key: string;
@@ -41,31 +36,11 @@ export function AgentRuntimeCredentialPrompt({
   incompatible?: string | null;
   onConnected: () => void;
 }) {
-  const definitions = useRuntimeCredentials();
-  const byosEnabled = useFeature("byosEnabled");
-  const [connecting, setConnecting] =
-    useState<RuntimeCredentialDefinition | null>(null);
-  const personalMissing = useMemo(
-    () =>
-      missing.find((credential) => {
-        const declaration = declarations.find(
-          (candidate) => candidate.key === credential.key,
-        );
-        return declaration?.scope === "per_user" && credential.credentialId;
-      }),
-    [declarations, missing],
-  );
-  const definition = definitions.data?.find(
-    (candidate) => candidate.key === personalMissing?.credentialId,
-  );
-  const firstDeclaration = declarations.find(
-    (candidate) => candidate.key === missing[0]?.key,
-  );
-  const helperText = definition
-    ? "Connect it once to use it with every compatible Agent."
-    : firstDeclaration?.scope === "shared"
-      ? "An admin must configure this organization connection."
-      : "Add this personal secret from the Agent details page.";
+  const [connecting, setConnecting] = useState(false);
+  const helperText =
+    missing.length > 1
+      ? "Set up the missing credentials to continue."
+      : "Connect it once to use it with every compatible Agent.";
 
   if (incompatible) {
     return (
@@ -87,7 +62,7 @@ export function AgentRuntimeCredentialPrompt({
     );
   }
 
-  if (missing.some(({ key }) => key === "CLAUDE_CODE_ACCOUNT")) {
+  if (missing.length === 1 && missing[0].key === "CLAUDE_CODE_ACCOUNT") {
     return (
       <div className="mt-2">
         <ClaudeCodeAccount agentId={agentId} variant="compact" />
@@ -107,38 +82,25 @@ export function AgentRuntimeCredentialPrompt({
             : `${missing.length} connections are required`}
         </span>
         <CompactWarningText>{helperText}</CompactWarningText>
-        {definition ? (
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="ml-auto h-6 shrink-0 bg-background px-2 text-xs"
-            onClick={() => setConnecting(definition)}
-          >
-            Connect
-          </Button>
-        ) : (
-          <Button
-            asChild
-            size="sm"
-            variant="outline"
-            className="ml-auto h-6 shrink-0 px-2 text-xs"
-          >
-            <Link
-              href={`/agents/${agentId}?section=advanced&setup=credentials`}
-            >
-              Agent details
-            </Link>
-          </Button>
-        )}
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="ml-auto h-6 shrink-0 bg-background px-2 text-xs"
+          onClick={() => setConnecting(true)}
+        >
+          Connect
+        </Button>
       </CompactWarning>
       {connecting && (
-        <RuntimeCredentialConnectionDialog
-          definition={connecting}
-          scope="personal"
-          useExternalSecretsManager={byosEnabled}
-          onConnected={onConnected}
-          onClose={() => setConnecting(null)}
+        <AgentRuntimeCredentialsDialog
+          agentId={agentId}
+          declarations={declarations}
+          canEditAgent={false}
+          onClose={() => {
+            setConnecting(false);
+            onConnected();
+          }}
         />
       )}
     </>

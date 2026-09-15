@@ -17,6 +17,7 @@ import {
 } from "vitest";
 import { makeSession } from "@/mocks/data/auth";
 import { makeConfig } from "@/mocks/data/config";
+import { AgentRuntimeCredentialPrompt } from "./agent-run-credential-prompt";
 import { AgentRuntimeCredentialsDeepLink } from "./agent-runtime-credentials-dialog";
 
 vi.mock("next/navigation");
@@ -558,4 +559,55 @@ describe("credential setup deep links", () => {
     show();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
+});
+
+it.each([
+  1, 2,
+])("opens the same setup from chat for %s missing credentials", async (count) => {
+  const missing = declarations.slice(0, count);
+  server.use(
+    http.get(`${origin}/api/credentials`, () =>
+      HttpResponse.json([
+        {
+          key: "github",
+          name: "GitHub",
+          description: "Repository access",
+          kind: "github_app_user",
+          allowPersonal: true,
+        },
+      ]),
+    ),
+    http.get(`${origin}/api/agents/agent-1/runtime/preflight`, () =>
+      HttpResponse.json({
+        configured: [],
+        missing,
+        misconfigured: [],
+        incompatible: null,
+        ready: false,
+      }),
+    ),
+  );
+  const user = userEvent.setup();
+  render(
+    <QueryClientProvider client={queryClient}>
+      <AgentRuntimeCredentialPrompt
+        agentId="agent-1"
+        missing={missing}
+        declarations={declarations}
+        onConnected={vi.fn()}
+      />
+    </QueryClientProvider>,
+  );
+  await user.click(screen.getByRole("button", { name: "Connect" }));
+  if (count === 1) {
+    expect(
+      await screen.findByRole("dialog", { name: "Connect GitHub" }),
+    ).toBeVisible();
+  } else {
+    expect(await screen.findByLabelText("Service token")).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Connect GitHub" }));
+    expect(
+      screen.getByRole("dialog", { name: "Connect GitHub" }),
+    ).toBeVisible();
+  }
 });

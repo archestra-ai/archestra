@@ -53,7 +53,7 @@ export function AgentRuntimeCredentialsDeepLink(props: {
   if (searchParams.get("setup") !== "credentials" && !legacyLink) return null;
 
   return (
-    <MissingCredentialsDialog
+    <AgentRuntimeCredentialsDialog
       {...props}
       onClose={() => {
         setLegacyLink(false);
@@ -69,7 +69,7 @@ export function AgentRuntimeCredentialsDeepLink(props: {
   );
 }
 
-function MissingCredentialsDialog({
+export function AgentRuntimeCredentialsDialog({
   agentId,
   declarations,
   canEditAgent,

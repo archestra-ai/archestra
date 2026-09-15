@@ -211,6 +211,7 @@ export function useCompleteGitHubUserConnection() {
     retry: false,
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: runtimeCredentialsQueryKey });
+      queryClient.invalidateQueries({ queryKey: ["agents"] });
       toast.success(`Connected GitHub${data ? ` as ${data.login}` : ""}`);
     },
   });

@@ -14,6 +14,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { useAgentRuntimePreflight } from "@/lib/agent-runtime.query";
 import { consumeGitHubConnectionReturn } from "@/lib/github-connection-return";
 import { useCompleteGitHubUserConnection } from "@/lib/runtime-credentials.query";
 
@@ -46,13 +47,22 @@ export default function GitHubConnectionCallback() {
       if (!code || !state || query.has("error")) return;
       complete.mutate(
         { code, state },
-        { onSuccess: () => router.replace(destination) },
+        {
+          onSuccess: () => {
+            if (!setupAgentId(destination)) router.replace(destination);
+          },
+        },
       );
     });
     return () => {
       active = false;
     };
   }, [complete, router]);
+
+  const agentId = setupAgentId(returnTo);
+  if (complete.isSuccess && agentId) {
+    return <GitHubSetupResult agentId={agentId} returnTo={returnTo} />;
+  }
 
   const pending = !initialized || complete.isPending;
   const success = complete.isSuccess;
@@ -114,7 +124,9 @@ export default function GitHubConnectionCallback() {
           </div>
           {pending && (
             <p className="text-center text-xs leading-5 text-muted-foreground">
-              Keep this page open. You’ll return to {returnLabel} automatically.
+              {agentId
+                ? "Keep this page open while we finish connecting your account."
+                : `Keep this page open. You’ll return to ${returnLabel} automatically.`}
             </p>
           )}
         </CardContent>
@@ -129,4 +141,102 @@ export default function GitHubConnectionCallback() {
       </Card>
     </AuthCallbackLayout>
   );
+}
+
+function GitHubSetupResult({
+  agentId,
+  returnTo,
+}: {
+  agentId: string;
+  returnTo: string;
+}) {
+  const router = useRouter();
+  const preflight = useAgentRuntimePreflight(agentId);
+  const checking = preflight.isPending || preflight.isFetching;
+  const failed = preflight.isError || (!checking && !preflight.data);
+  const remaining = [
+    ...(preflight.data?.missing ?? []),
+    ...(preflight.data?.misconfigured ?? []),
+  ];
+  const needsSetup = remaining.length > 0 || !!preflight.data?.incompatible;
+  return (
+    <AuthCallbackLayout>
+      <Card className="w-full max-w-md" aria-live="polite">
+        <CardHeader className="text-center">
+          <div className="mx-auto mb-4 flex size-12 items-center justify-center rounded-xl border bg-muted/30">
+            <Github className="size-6" strokeWidth={1.5} aria-hidden="true" />
+          </div>
+          <CardTitle>
+            <h1>GitHub is connected</h1>
+          </CardTitle>
+          <CardDescription>
+            {checking
+              ? "Checking the remaining setup for your agent."
+              : failed
+                ? "We couldn’t check whether your agent needs anything else."
+                : needsSetup
+                  ? "Finish the remaining setup before trying your message again."
+                  : "Return to your conversation and send your message again."}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {checking ? (
+            <LoadingState
+              variant="inline"
+              label="Checking required credentials"
+            />
+          ) : failed ? (
+            <Button variant="outline" onClick={() => void preflight.refetch()}>
+              Try again
+            </Button>
+          ) : needsSetup ? (
+            <div className="rounded-md border bg-muted/50 p-4">
+              <p className="text-sm font-medium">Still needed</p>
+              <ul className="mt-2 space-y-2 text-sm text-muted-foreground">
+                {remaining.map((credential) => (
+                  <li key={credential.key}>{credential.label}</li>
+                ))}
+              </ul>
+              {preflight.data?.incompatible && (
+                <p className="mt-2 text-sm text-muted-foreground">
+                  {preflight.data.incompatible}
+                </p>
+              )}
+            </div>
+          ) : (
+            <div className="flex items-center gap-3 rounded-md border bg-muted/50 p-4">
+              <CircleCheck
+                className="size-4 shrink-0 text-muted-foreground"
+                aria-hidden="true"
+              />
+              <div>
+                <p className="text-sm font-medium">You’re ready</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  All required credentials are connected. You can close this
+                  tab.
+                </p>
+              </div>
+            </div>
+          )}
+        </CardContent>
+        {!checking && (needsSetup || failed) && (
+          <CardFooter>
+            <Button className="w-full" onClick={() => router.replace(returnTo)}>
+              Finish setup
+            </Button>
+          </CardFooter>
+        )}
+      </Card>
+    </AuthCallbackLayout>
+  );
+}
+
+function setupAgentId(destination: string) {
+  const url = new URL(destination, "http://localhost");
+  if (
+    url.searchParams.get("setup") !== "credentials" &&
+    url.hash !== "#runtime-credentials"
+  )
+    return null;
+  return /^\/agents\/([a-zA-Z0-9-]+)$/.exec(url.pathname)?.[1] ?? null;
 }

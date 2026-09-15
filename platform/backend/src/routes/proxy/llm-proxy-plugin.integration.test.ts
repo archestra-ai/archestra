@@ -131,7 +131,10 @@ describe("LLM proxy plugin lifecycle", () => {
       async onModelResponse({ response }) {
         events.push("response");
         return {
-          response: { ...(response as Record<string, unknown>), plugin: true },
+          response: {
+            ...(response as Record<string, unknown>),
+            model: "gpt-4o-plugin-rewrite",
+          },
         };
       },
       async onComplete() {
@@ -158,6 +161,9 @@ describe("LLM proxy plugin lifecycle", () => {
       });
 
       expect(response.statusCode, response.body).toBe(200);
+      expect(response.json()).toMatchObject({
+        model: "gpt-4o-plugin-rewrite",
+      });
       expect(events).toEqual([
         "prompt",
         "before-model",
@@ -165,6 +171,112 @@ describe("LLM proxy plugin lifecycle", () => {
         "complete",
         "cleanup",
       ]);
+    } finally {
+      unregister();
+    }
+  });
+
+  test("fails closed for invalid plugin response values and releases the request id", async ({
+    makeAgent,
+  }) => {
+    const invalidResponseCases = [
+      { label: "null", response: null, rawContent: "null" },
+      {
+        label: "a string",
+        response: "plugin-secret-string",
+        rawContent: "plugin-secret-string",
+      },
+      { label: "undefined", response: undefined, rawContent: "undefined" },
+      {
+        label: "an array",
+        response: ["plugin-secret-array"],
+        rawContent: "plugin-secret-array",
+      },
+      { label: "a number", response: 8675309, rawContent: "8675309" },
+    ];
+    const events: string[] = [];
+    let returnInvalidResponse = false;
+    let invalidResponse: unknown;
+    const unregister = registerLlmProxyPlugin({
+      id: `test-invalid-response-${crypto.randomUUID()}`,
+      async onModelResponse({ response }) {
+        events.push("response");
+        if (returnInvalidResponse) {
+          returnInvalidResponse = false;
+          return { response: invalidResponse };
+        }
+        return {
+          response: {
+            ...(response as Record<string, unknown>),
+            model: "gpt-4o-plugin-rewrite",
+          },
+        };
+      },
+      async onError() {
+        events.push("error");
+      },
+      async onComplete() {
+        events.push("complete");
+      },
+      async onCleanup() {
+        events.push("cleanup");
+      },
+    });
+    const agent = await makeAgent({ agentType: "llm_proxy", isDefault: true });
+
+    try {
+      for (const invalidCase of invalidResponseCases) {
+        events.length = 0;
+        invalidResponse = invalidCase.response;
+        returnInvalidResponse = true;
+        const failed = await app.inject({
+          method: "POST",
+          url: `/v1/openai/${agent.id}/chat/completions`,
+          headers: {
+            authorization: "Bearer test-key",
+            "content-type": "application/json",
+          },
+          payload: {
+            model: "gpt-4o",
+            messages: [{ role: "user", content: "hello" }],
+          },
+        });
+
+        expect(failed.statusCode, `${invalidCase.label}: ${failed.body}`).toBe(
+          500,
+        );
+        expect(failed.body).toContain(
+          "LLM proxy plugin returned an invalid response",
+        );
+        expect(failed.body).not.toContain(invalidCase.rawContent);
+        expect(events).toEqual(["response", "error", "cleanup"]);
+
+        const retried = await app.inject({
+          method: "POST",
+          url: `/v1/openai/${agent.id}/chat/completions`,
+          headers: {
+            authorization: "Bearer test-key",
+            "content-type": "application/json",
+          },
+          payload: {
+            model: "gpt-4o",
+            messages: [{ role: "user", content: "hello" }],
+          },
+        });
+
+        expect(retried.statusCode, retried.body).toBe(200);
+        expect(retried.json()).toMatchObject({
+          model: "gpt-4o-plugin-rewrite",
+        });
+        expect(events).toEqual([
+          "response",
+          "error",
+          "cleanup",
+          "response",
+          "complete",
+          "cleanup",
+        ]);
+      }
     } finally {
       unregister();
     }

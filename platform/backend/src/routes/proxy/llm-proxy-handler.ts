@@ -2558,13 +2558,23 @@ async function handleNonStreaming<
     rewrittenToolCalls && responseAdapter.withRewrittenToolCalls
       ? responseAdapter.withRewrittenToolCalls(rewrittenToolCalls)
       : responseAdapter.getOriginalResponse();
-  const clientResponse =
-    pluginRegistry && pluginContext
-      ? ((await pluginRegistry.onModelResponse({
-          ...pluginContext,
-          response: unobservedClientResponse,
-        })) as TResponse)
-      : unobservedClientResponse;
+  let clientResponse = unobservedClientResponse;
+  if (pluginRegistry && pluginContext) {
+    const pluginResponse = await pluginRegistry.onModelResponse({
+      ...pluginContext,
+      response: unobservedClientResponse,
+    });
+    // The registry intentionally permits generic transformations. At the HTTP
+    // boundary, provider wire responses must be objects, but are not schema-validated here.
+    if (
+      typeof pluginResponse !== "object" ||
+      pluginResponse === null ||
+      Array.isArray(pluginResponse)
+    ) {
+      throw new ApiError(500, "LLM proxy plugin returned an invalid response");
+    }
+    clientResponse = pluginResponse as TResponse;
+  }
 
   // Note: Token metrics are reported by getObservableFetch() in the HTTP layer
   // for non-streaming requests. We only report cost here to avoid double counting.

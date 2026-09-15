@@ -6,24 +6,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentFormProps } from "@/components/agent-form";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
-import { useAppIconLogo, useAppName } from "@/lib/hooks/use-app-name";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import { AgentCreatePage } from "./agent-create-page";
-
-const { mockConfig } = vi.hoisted(() => ({
-  mockConfig: {
-    enterpriseFeatures: {
-      fullWhiteLabeling: false,
-    },
-  },
-}));
 
 vi.mock("next/navigation");
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/config/config.query");
 vi.mock("@/lib/hooks/use-app-name");
-vi.mock("@/lib/config/config", () => ({
-  default: mockConfig,
-}));
 
 // The form itself is covered by agent-form.test.tsx; here it is a stub whose
 // props are what the page is expected to hand it, plus a way to fire
@@ -90,11 +79,9 @@ function renderAgentCreatePage({
 describe("AgentCreatePage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockConfig.enterpriseFeatures.fullWhiteLabeling = false;
     mockPermissions({ canRead: true });
     vi.mocked(useFeature).mockReturnValue(false);
     vi.mocked(useAppName).mockReturnValue("Archestra");
-    vi.mocked(useAppIconLogo).mockReturnValue("/logo-icon.svg");
     vi.mocked(usePathname).mockReturnValue("/agents/new");
     vi.mocked(useSearchParams).mockReturnValue(
       new URLSearchParams() as ReturnType<typeof useSearchParams>,
@@ -125,7 +112,6 @@ describe("AgentCreatePage", () => {
       screen.queryByRole("heading", { level: 2, name: "Popular agents" }),
     ).toBeNull();
     for (const name of [
-      "Archestra Agent",
       "Claude Code",
       "Codex",
       "OpenCode",
@@ -212,7 +198,6 @@ describe("AgentCreatePage", () => {
         .map((heading) => heading.textContent),
     ).toEqual(["Create your own", "Popular agents", "External agents"]);
     for (const name of [
-      "Archestra Agent",
       "Claude Code",
       "Codex",
       "OpenCode",
@@ -223,6 +208,9 @@ describe("AgentCreatePage", () => {
         screen.getByRole("button", { name: new RegExp(name, "i") }),
       ).toBeInTheDocument();
     }
+    expect(
+      screen.queryByRole("button", { name: /archestra agent/i }),
+    ).toBeNull();
     expect(formProps).not.toHaveBeenCalled();
 
     await user.click(screen.getByRole("button", { name: /codex/i }));
@@ -299,66 +287,6 @@ describe("AgentCreatePage", () => {
       }),
     );
   });
-
-  it("uses the configured product name and sidebar icon for the built-in Agent", async () => {
-    const user = userEvent.setup();
-    vi.mocked(useFeature).mockImplementation((feature) =>
-      feature === "agentRuntime" ? true : undefined,
-    );
-    vi.mocked(useAppName).mockReturnValue("Acme AI");
-    vi.mocked(useAppIconLogo).mockReturnValue("/custom-app-icon.svg");
-
-    const { container } = renderAgentCreatePage();
-
-    expect(
-      screen.getByRole("button", { name: /acme ai agent/i }),
-    ).toHaveTextContent("Acme AI's lightweight agent loop");
-    expect(
-      container.querySelector('img[src="/custom-app-icon.svg"]'),
-    ).not.toBeNull();
-    expect(screen.queryByText(/archestra agent/i)).toBeNull();
-
-    await user.click(screen.getByRole("button", { name: /acme ai agent/i }));
-    expect(formProps).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        initialValues: expect.objectContaining({
-          name: "Acme AI Agent",
-          icon: "/custom-app-icon.svg",
-        }),
-      }),
-    );
-  });
-
-  // SPDX-SnippetBegin
-  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-  it("uses a neutral built-in Agent icon when full white-labeling has no custom icon", async () => {
-    const user = userEvent.setup();
-    mockConfig.enterpriseFeatures.fullWhiteLabeling = true;
-    vi.mocked(useFeature).mockImplementation((feature) =>
-      feature === "agentRuntime" ? true : undefined,
-    );
-    vi.mocked(useAppName).mockReturnValue("Example AI");
-    vi.mocked(useAppIconLogo).mockReturnValue("/logo-icon.svg");
-
-    renderAgentCreatePage();
-
-    const template = screen.getByRole("button", {
-      name: /example ai agent/i,
-    });
-    expect(template.querySelector("img")).toBeNull();
-
-    await user.click(template);
-    expect(formProps).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        initialValues: expect.objectContaining({
-          name: "Example AI Agent",
-          icon: null,
-        }),
-      }),
-    );
-  });
-  // SPDX-SnippetEnd
 
   it("prefills Claude Code with native personal sign-in", async () => {
     const user = userEvent.setup();

@@ -9,14 +9,8 @@ import Image from "next/image";
 import type { AgentFormInitialValues } from "@/components/agent-form";
 import { CatalogSourceCard } from "@/components/catalog-source-card";
 import { ProviderIcon } from "@/components/provider-icon";
-import { Badge } from "@/components/ui/badge";
-import appConfig from "@/lib/config/config";
 import { useFeature } from "@/lib/config/config.query";
-import {
-  DEFAULT_APP_LOGO,
-  useAppIconLogo,
-  useAppName,
-} from "@/lib/hooks/use-app-name";
+import { useAppName } from "@/lib/hooks/use-app-name";
 
 export interface AgentCatalogTemplate {
   id: AgentCatalogId;
@@ -45,21 +39,9 @@ export function getAgentCatalogTemplates(
   archestraImage: string,
   // white-label-ok: test/helper fallback only; shipped UI always passes useAppName().
   appName = "Archestra",
-  appIconLogo: string | null = "/logo-icon.svg",
 ): readonly AgentCatalogTemplate[] {
   const images = getAgentCatalogImages(archestraImage);
   return [
-    template({
-      id: "archestra",
-      name: `${appName} Agent`,
-      icon: appIconLogo,
-      description: `${appName}'s lightweight agent loop with model inference and MCP tools managed by the platform.`,
-      platformName: appName,
-      image: images.archestra,
-      command: null,
-      inferenceProtocol: "openai_responses",
-      steerMode: "pipe",
-    }),
     template({
       id: "claude-code",
       name: AGENT_CATALOG_TEMPLATE_NAMES["claude-code"],
@@ -136,22 +118,11 @@ export function AgentCatalog({
 }) {
   const configuredImage = useFeature("agentRuntimeBaseImage");
   const appName = useAppName();
-  const resolvedAppIconLogo = useAppIconLogo();
-  // SPDX-SnippetBegin
-  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-  const appIconLogo =
-    appConfig.enterpriseFeatures.fullWhiteLabeling &&
-    resolvedAppIconLogo === DEFAULT_APP_LOGO
-      ? null
-      : resolvedAppIconLogo;
-  // SPDX-SnippetEnd
   const templates = getAgentCatalogTemplates(
     typeof configuredImage === "string"
       ? configuredImage
       : getDefaultAgentRuntimeImage("latest"),
     appName,
-    appIconLogo,
   );
   return (
     <div className="space-y-8">
@@ -176,16 +147,9 @@ export function AgentCatalog({
             {templates.map((item) => (
               <CatalogSourceCard
                 key={item.id}
-                icon={
-                  <CatalogAgentIcon id={item.id} appIconLogo={appIconLogo} />
-                }
+                icon={<CatalogAgentIcon id={item.id} />}
                 title={item.name}
                 description={item.description}
-                badge={
-                  item.id === "archestra" ? (
-                    <Badge variant="outline">Built in</Badge>
-                  ) : undefined
-                }
                 onClick={() => onSelect(item)}
                 disabled={!canCreateAgent}
                 disabledReason="Requires permission to create agents."

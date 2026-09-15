@@ -69,8 +69,9 @@ args=(
 if [[ "${ARCHESTRA_AGENT_RUNTIME_CONTINUE:-0}" == "1" ]]; then
   if [[ -s "${runtime_dir}/claude-session-id" ]]; then
     args+=(--resume "$(cat "${runtime_dir}/claude-session-id")")
-  elif [[ "${ARCHESTRA_AGENT_RUNTIME_CLAUDE_AUTH:-}" != "subscription" ]]; then
-    args+=(--continue)
+  else
+    echo "archestra: Cannot resume the saved Claude Code session: its session ID is missing. The workspace is preserved; no new session was started." >&2
+    exit 78
   fi
 fi
 if [[ -n "${ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT:-}" ]]; then
@@ -116,8 +117,17 @@ set -euo pipefail
 runtime_dir="${ARCHESTRA_AGENT_RUNTIME_DIR:-/var/run/archestra}"
 payload="$(cat)"
 native_session_id="$(jq -r '.session_id // empty' <<<"${payload}")"
+session_file="${runtime_dir}/claude-session-id"
 if [[ -n "${native_session_id}" ]]; then
-  printf '%s\n' "${native_session_id}" > "${runtime_dir}/claude-session-id"
+  if [[ -s "${session_file}" && "${native_session_id}" != "$(cat "${session_file}")" ]]; then
+    printf '{}\n'
+    exit 0
+  fi
+  printf '%s\n' "${native_session_id}" > "${session_file}"
+fi
+if [[ "$(jq -r '.hook_event_name // empty' <<<"${payload}")" == "SessionStart" ]]; then
+  printf '{}\n'
+  exit 0
 fi
 transcript="$(jq -r '.transcript_path // empty' <<<"${payload}")"
 last_assistant_message="$(jq -r '.last_assistant_message | strings // empty' <<<"${payload}")"
@@ -208,6 +218,7 @@ jq -n --arg attention_cmd "${attention_hook}" --arg transcript_cmd "${transcript
     matcher:"permission_prompt|idle_prompt|elicitation_dialog|elicitation_complete|elicitation_response|auth_success",
     hooks:[{type:"command",command:$attention_cmd}]
   }],
+  SessionStart:[{matcher:"",hooks:[{type:"command",command:$transcript_cmd}]}],
   UserPromptSubmit:[{matcher:"",hooks:[{type:"command",command:$attention_cmd}]}],
   PostToolUse:[{matcher:"",hooks:[{type:"command",command:$attention_cmd}]}],
   Stop:[{matcher:"",hooks:[{type:"command",command:$transcript_cmd}]}]

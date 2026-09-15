@@ -180,6 +180,18 @@ A local coding client or another system can connect through the MCP Gateway and 
 
 Steering completed work starts another turn in the retained workspace. A2A clients can continue with the same `contextId`. See [A2A and SDKs](/docs/platform-agent-triggers-webhook-a2a#sdks) for direct integrations.
 
+### Client Handoff
+
+The built-in **Agent Runtime Handoff** skill guides work between connected clients and the runtime. Install shared skills from [Connect](/docs/platform-connection). The workflow supports repository work and documents in desktop clients.
+
+Send the current goal, decisions, remaining work, and required files when handing off. Input files arrive before the first turn starts. Local file paths alone do not transfer their contents.
+
+Keep the returned session link when switching clients. Follow-ups use the same workspace and saved conversation. An unavailable session reports an error instead of silently starting another workspace.
+
+For repository work, include the exact base commit and any local changes. Request a return patch relative to the handed-off working tree so it does not repeat existing local edits. Review it against your current working tree before applying it. For documents, retrieve the finished file from the retained workspace.
+
+You can hand off unfinished repository work before closing your laptop. The next morning, retrieve the changes and verification results in your local client. Stop remote editing before continuing locally.
+
 ### Messaging Channels
 
 Assign a foreground coordinator to the channel and give it access to runtime specialists. Its instructions determine when to delegate. Users can name a specialist without knowing Agent IDs or tool syntax.

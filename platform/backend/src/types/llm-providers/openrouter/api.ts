@@ -10,17 +10,26 @@
 import { z } from "zod";
 import {
   ChatCompletionsHeadersSchema,
-  ChatCompletionUsageSchema,
   FinishReasonSchema,
   ChatCompletionRequestSchema as OpenAIChatCompletionRequestSchema,
   ChatCompletionResponseSchema as OpenAIChatCompletionResponseSchema,
+  ChatCompletionUsageSchema as OpenAIChatCompletionUsageSchema,
 } from "../openai/api";
 
-export {
-  ChatCompletionsHeadersSchema,
-  ChatCompletionUsageSchema,
-  FinishReasonSchema,
-};
+export { ChatCompletionsHeadersSchema, FinishReasonSchema };
+
+export const ChatCompletionUsageSchema = OpenAIChatCompletionUsageSchema.extend(
+  {
+    cost: z
+      .number()
+      .nonnegative()
+      .optional()
+      .catch(undefined)
+      .describe(
+        "OpenRouter-reported request cost in USD, separate from the local estimate.",
+      ),
+  },
+);
 
 /**
  * OpenRouter `response_format`. `.passthrough()` preserves the nested
@@ -57,4 +66,6 @@ export const ChatCompletionRequestSchema =
   });
 
 export const ChatCompletionResponseSchema =
-  OpenAIChatCompletionResponseSchema.passthrough();
+  OpenAIChatCompletionResponseSchema.extend({
+    usage: ChatCompletionUsageSchema.optional(),
+  }).passthrough();

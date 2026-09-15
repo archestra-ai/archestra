@@ -11437,14 +11437,18 @@
               },
               "prompt_tokens_details": {
                 "description": "https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L173"
+              },
+              "cost": {
+                "description": "OpenRouter-reported request cost in USD, separate from the local estimate.",
+                "type": "number",
+                "minimum": 0
               }
             },
             "required": [
               "completion_tokens",
               "prompt_tokens",
               "total_tokens"
-            ],
-            "description": "https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L113"
+            ]
           }
         },
         "required": [
@@ -32369,6 +32373,11 @@
               },
               "prompt_tokens_details": {
                 "description": "https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L173"
+              },
+              "cost": {
+                "description": "OpenRouter-reported request cost in USD, separate from the local estimate.",
+                "type": "number",
+                "minimum": 0
               }
             },
             "required": [
@@ -32376,8 +32385,7 @@
               "prompt_tokens",
               "total_tokens"
             ],
-            "additionalProperties": false,
-            "description": "https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L113"
+            "additionalProperties": false
           }
         },
         "required": [

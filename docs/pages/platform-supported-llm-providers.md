@@ -3,7 +3,7 @@ title: Supported LLM Providers
 category: LLM Proxy
 order: 2
 description: LLM providers supported by Archestra Platform
-lastUpdated: 2026-09-11
+lastUpdated: 2026-09-15
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -359,6 +359,12 @@ When an OpenRouter key is added to an organization that has no default model con
 Dynamic-pricing routers (`openrouter/auto`) report no fixed per-token price, so the pricing is dynamic.
 
 Models that generate audio or images also report a zero per-token price, because they bill per second or per image instead. Archestra doesn't mark those free — the "Free models only" filter leaves them out.
+
+### Reported Request Cost
+
+OpenRouter chat-completion request details show its reported charge separately from Archestra's token-price estimate. Use the reported charge when comparing a request with OpenRouter's activity log. Missing charges appear as unavailable, including older requests whose charge was not retained.
+
+Statistics, session totals, savings, and limits continue using Archestra's estimates.
 
 ## Mistral AI
 

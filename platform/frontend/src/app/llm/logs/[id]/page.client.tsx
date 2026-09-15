@@ -8,6 +8,7 @@ import {
 import { Database, Layers } from "lucide-react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { BilledCost } from "@/components/billed-cost";
+import { formatCost } from "@/components/cost";
 import { type DetailFact, DetailFacts } from "@/components/detail-facts";
 import { JsonCodeBlock } from "@/components/json-code-block";
 import { LockedChatContentUnavailable } from "@/components/locked-chat-content-unavailable";
@@ -125,6 +126,20 @@ function LogDetail({
   const backLabel = dynamicInteraction.sessionId
     ? "Back to Session"
     : "Back to Sessions";
+  const isOpenRouter = dynamicInteraction.type === "openrouter:chatCompletions";
+  const response = dynamicInteraction.response;
+  const responseUsage =
+    isOpenRouter && "usage" in response ? response.usage : undefined;
+  const reportedCost =
+    responseUsage &&
+    typeof responseUsage === "object" &&
+    "cost" in responseUsage
+      ? responseUsage.cost
+      : undefined;
+  const hasReportedCost =
+    typeof reportedCost === "number" &&
+    Number.isFinite(reportedCost) &&
+    reportedCost >= 0;
 
   const facts: DetailFact[] = [
     {
@@ -147,8 +162,20 @@ function LogDetail({
         </div>
       ),
     },
+    ...(isOpenRouter
+      ? [
+          {
+            label: "OpenRouter-reported cost",
+            value: (
+              <span className="font-mono tabular-nums">
+                {hasReportedCost ? formatCost(reportedCost) : "Unavailable"}
+              </span>
+            ),
+          },
+        ]
+      : []),
     {
-      label: "Cost",
+      label: isOpenRouter ? "Estimated cost" : "Cost",
       value: dynamicInteraction.cost ? (
         <TooltipProvider>
           <BilledCost

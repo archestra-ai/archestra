@@ -16,14 +16,14 @@ import { openRouterAttributionHeaders } from "@/clients/openrouter-attribution";
 import { applyResponseHealing } from "@/clients/openrouter-response-healing";
 import config from "@/config";
 import { metrics } from "@/observability";
-import type {
-  CreateClientOptions,
-  LLMProvider,
-  LLMRequestAdapter,
-  LLMResponseAdapter,
-  LLMStreamAdapter,
+import {
+  type CreateClientOptions,
+  type LLMProvider,
+  type LLMRequestAdapter,
+  type LLMResponseAdapter,
+  type LLMStreamAdapter,
   Openrouter,
-  StreamAccumulatorState,
+  type StreamAccumulatorState,
 } from "@/types";
 import {
   OpenAIRequestAdapter,
@@ -129,18 +129,21 @@ class OpenrouterResponseAdapter
   getUsage() {
     return this.delegate.getUsage();
   }
-  getOriginalResponse() {
+  getOriginalResponse(): OpenrouterResponse {
     return this.delegate.getOriginalResponse();
   }
   getFinishReasons() {
     return this.delegate.getFinishReasons();
   }
-  toRefusalResponse(refusalMessage: string, contentMessage: string) {
+  toRefusalResponse(
+    refusalMessage: string,
+    contentMessage: string,
+  ): OpenrouterResponse {
     return this.delegate.toRefusalResponse(refusalMessage, contentMessage);
   }
   withRewrittenToolCalls(
     toolCalls: Array<{ id: string; name: string; arguments: string }>,
-  ) {
+  ): OpenrouterResponse {
     return this.delegate.withRewrittenToolCalls(toolCalls);
   }
 }
@@ -150,6 +153,7 @@ class OpenrouterStreamAdapter
 {
   readonly provider = "openrouter" as const;
   private delegate: OpenAIStreamAdapter;
+  private reportedCost: number | undefined;
 
   constructor() {
     this.delegate = new OpenAIStreamAdapter();
@@ -160,6 +164,14 @@ class OpenrouterStreamAdapter
   }
 
   processChunk(chunk: OpenrouterStreamChunk) {
+    if (chunk.usage) {
+      const cost = Openrouter.API.ChatCompletionUsageSchema.shape.cost.parse(
+        chunk.usage.cost,
+      );
+      if (cost !== undefined) {
+        this.reportedCost = cost;
+      }
+    }
     const result = this.delegate.processChunk(chunk);
     assertOpenrouterStreamChunkHasOutput(this.delegate.state, chunk);
     return result;
@@ -180,10 +192,25 @@ class OpenrouterStreamAdapter
     return this.delegate.formatToolCallsSSE(toolCalls);
   }
   formatEndSSE() {
-    return this.delegate.formatEndSSE();
+    const sse = this.delegate.formatEndSSE();
+    if (this.reportedCost === undefined) return sse;
+
+    // Decorate the delegate's final event so its refusal and finish-reason handling stays intact.
+    const [event, ...rest] = sse.split("\n\n");
+    const chunk = JSON.parse(
+      event.slice("data: ".length),
+    ) as OpenrouterStreamChunk;
+    if (chunk.usage) {
+      chunk.usage.cost = this.reportedCost;
+    }
+    return [`data: ${JSON.stringify(chunk)}`, ...rest].join("\n\n");
   }
-  toProviderResponse() {
-    return this.delegate.toProviderResponse();
+  toProviderResponse(): OpenrouterResponse {
+    const response: OpenrouterResponse = this.delegate.toProviderResponse();
+    if (response.usage && this.reportedCost !== undefined) {
+      response.usage.cost = this.reportedCost;
+    }
+    return response;
   }
 }
 

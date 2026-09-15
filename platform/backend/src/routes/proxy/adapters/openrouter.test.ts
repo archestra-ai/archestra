@@ -1,6 +1,6 @@
 import { ApiError, ArchestraInternalErrorCode } from "@archestra/shared";
 import { describe, expect, test } from "@/test";
-import { Openrouter } from "@/types";
+import { OpenAi, Openrouter } from "@/types";
 import { openrouterAdapterFactory } from "./openrouter";
 
 describe("openrouterAdapterFactory.createClient", () => {
@@ -68,6 +68,34 @@ function expectRetryableEmptyResponseError(error: unknown): void {
 }
 
 describe("OpenrouterResponseAdapter", () => {
+  test.each([
+    undefined,
+    null,
+    "0.0123",
+    -1,
+    Number.NaN,
+    Number.POSITIVE_INFINITY,
+  ])("ignores unavailable or invalid reported cost %s without rejecting the response", (cost) => {
+    const response = createResponse({ role: "assistant", content: "hello" });
+    const parsed = Openrouter.API.ChatCompletionResponseSchema.parse({
+      ...response,
+      usage: { ...response.usage, cost },
+    });
+    expect(parsed.usage?.cost).toBeUndefined();
+    expect(
+      openrouterAdapterFactory.createResponseAdapter(parsed).getText(),
+    ).toBe("hello");
+  });
+
+  test("keeps OpenAI usage schema unchanged", () => {
+    const response = createResponse({ role: "assistant", content: "hello" });
+    const parsed = OpenAi.API.ChatCompletionResponseSchema.parse({
+      ...response,
+      usage: { ...response.usage, cost: 0.0123 },
+    });
+    expect(parsed.usage).not.toHaveProperty("cost");
+  });
+
   test("rejects empty stop responses as retryable upstream failures", () => {
     const response = createResponse({
       role: "assistant",
@@ -119,6 +147,72 @@ describe("OpenrouterResponseAdapter", () => {
 });
 
 describe("OpenrouterStreamAdapter", () => {
+  test("retains the latest valid cost across trailing chunks and a replaced response", () => {
+    const adapter = openrouterAdapterFactory.createStreamAdapter();
+    const chunk = {
+      id: "chatcmpl-test",
+      object: "chat.completion.chunk" as const,
+      created: 0,
+      model: "openai/gpt-4o",
+      choices: [],
+    };
+    for (const cost of [
+      0.0123,
+      0,
+      undefined,
+      null,
+      "invalid",
+      -1,
+      Number.NaN,
+      Number.POSITIVE_INFINITY,
+    ]) {
+      adapter.processChunk({
+        ...chunk,
+        usage: {
+          prompt_tokens: 100,
+          completion_tokens: 20,
+          total_tokens: 120,
+          cost,
+        },
+      } as unknown as Openrouter.Types.ChatCompletionChunk);
+    }
+    adapter.formatCompleteTextSSE("A policy blocked this tool call.");
+    const response = Openrouter.API.ChatCompletionResponseSchema.parse(
+      adapter.toProviderResponse(),
+    );
+    expect(response.usage).toMatchObject({
+      cost: 0,
+      prompt_tokens: 100,
+      completion_tokens: 20,
+    });
+    expect(response.choices[0].message.content).toBe(
+      "A policy blocked this tool call.",
+    );
+    const finalChunk = JSON.parse(
+      String(adapter.formatEndSSE()).split("\n")[0].slice(6),
+    );
+    expect(finalChunk.usage.cost).toBe(0);
+    expect(finalChunk.choices[0].finish_reason).toBe("stop");
+    expect(adapter.formatEndSSE()).toMatch(/data: \[DONE\]\n\n$/);
+  });
+
+  test("does not invent a reported cost when the stream only has token usage", () => {
+    const adapter = openrouterAdapterFactory.createStreamAdapter();
+    adapter.processChunk({
+      id: "chatcmpl-test",
+      object: "chat.completion.chunk",
+      created: 0,
+      model: "openai/gpt-4o",
+      choices: [],
+      usage: { prompt_tokens: 100, completion_tokens: 20, total_tokens: 120 },
+    });
+    expect(adapter.toProviderResponse().usage).not.toHaveProperty("cost");
+    const finalChunk = JSON.parse(
+      String(adapter.formatEndSSE()).split("\n")[0].slice(6),
+    );
+    expect(finalChunk.usage).not.toHaveProperty("cost");
+  });
+
   test("rejects empty streamed stop responses before stream end is written", () => {
     const adapter = openrouterAdapterFactory.createStreamAdapter();
 

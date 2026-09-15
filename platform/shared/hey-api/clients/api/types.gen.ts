@@ -3635,9 +3635,6 @@ export type OpenrouterChatCompletionResponseInput = {
     object: 'chat.completion';
     server_tier?: string;
     system_fingerprint?: string | null;
-    /**
-     * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L113
-     */
     usage?: {
         completion_tokens: number;
         prompt_tokens: number;
@@ -3650,6 +3647,10 @@ export type OpenrouterChatCompletionResponseInput = {
          * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L173
          */
         prompt_tokens_details?: unknown;
+        /**
+         * OpenRouter-reported request cost in USD, separate from the local estimate.
+         */
+        cost?: number;
     };
     [key: string]: unknown;
 };
@@ -9926,9 +9927,6 @@ export type OpenrouterChatCompletionResponse = {
     object: 'chat.completion';
     server_tier?: string;
     system_fingerprint?: string | null;
-    /**
-     * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L113
-     */
     usage?: {
         completion_tokens: number;
         prompt_tokens: number;
@@ -9941,6 +9939,10 @@ export type OpenrouterChatCompletionResponse = {
          * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L173
          */
         prompt_tokens_details?: unknown;
+        /**
+         * OpenRouter-reported request cost in USD, separate from the local estimate.
+         */
+        cost?: number;
     };
     [key: string]: unknown;
 };

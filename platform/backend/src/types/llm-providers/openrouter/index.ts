@@ -33,8 +33,10 @@ namespace Openrouter {
     export type Message = z.infer<typeof OpenrouterMessages.MessageParamSchema>;
     export type Role = Message["role"];
 
-    export type ChatCompletionChunk =
-      OpenAIProvider.Chat.Completions.ChatCompletionChunk;
+    export type ChatCompletionChunk = Omit<
+      OpenAIProvider.Chat.Completions.ChatCompletionChunk,
+      "usage"
+    > & { usage?: Usage | null };
   }
 }
 

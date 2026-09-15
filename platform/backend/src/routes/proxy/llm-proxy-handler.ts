@@ -1073,8 +1073,24 @@ export async function handleLLMProxy<
     if (hasProxyPlugins) {
       // APPA recognizes Chat only after the loopback caller's owner,
       // organization, profile, and conversation root have been bound below.
+      // Internal agents (Chat, Slack, A2A, etc.) share the loopback boundary.
+      // External clients still need platform authentication; a session ID or
+      // user attribution header alone is not a credential.
+      const isInternalRequest = isLoopbackRequest(request);
+      if (
+        openappaEnabled() &&
+        !isInternalRequest &&
+        !authenticatedUserId &&
+        !authenticatedApp &&
+        !virtualKeyId
+      ) {
+        throw new ApiError(
+          401,
+          "OpenAPPA requires an authenticated proxy request",
+        );
+      }
       const appaUserId =
-        authenticatedUserId ?? (isInternalChat ? userId : undefined);
+        authenticatedUserId ?? (isInternalRequest ? userId : undefined);
       openappaSession = sessionFromHeaders({
         headers: headersForExtraction,
         organizationId: resolvedAgent.organizationId,

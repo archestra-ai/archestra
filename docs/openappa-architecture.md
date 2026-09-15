@@ -1,8 +1,14 @@
 # Archestra × OpenAPPA
 
 APPA evaluates tool calls and results at the existing LLM-proxy Tool Guardrails
-checkpoints. Chat supplies the user and conversation identity.
+checkpoints. Clients supply a stable session ID; caller identity is optional attribution.
 The special MCP remedy tool also calls the embedded runtime.
+
+Session state is keyed only by session ID. Participants in the same Slack thread
+share trust state and pending calls. Internal agent requests use the local-request
+trust boundary; external requests still require platform authentication.
+The unreleased session-key migration clears old sessions, events, and receipts.
+Saved policies remain intact.
 
 ## Startup configuration
 
@@ -31,7 +37,7 @@ fixed answer without calling a model or accessing user data.
 | Incoming tool results | Existing result policies | APPA admission and saved output |
 | Outgoing calls | Existing invocation policies | APPA decision |
 | Refusal envelope | Existing adapter | Same adapter, APPA explanation and remedies |
-| Session header | No APPA wiring | User and conversation identity |
+| Session header | No APPA wiring | Stable conversation identity |
 | Special MCP remedy | Hidden and unavailable | Existing embedded remedy execution |
 | Runtime | Not loaded or initialized | Lazy native initialization; errors fail closed |
 

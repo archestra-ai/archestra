@@ -1050,6 +1050,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     "chat",
     "chat:tool_call_repair",
     "chat:compaction",
+    "chatops:slack",
   ])("does not authenticate a remote caller claiming %s", async (source) => {
     const response = await app.inject({
       method: "POST",
@@ -1061,6 +1062,41 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     expect(response.statusCode, response.body).toBe(401);
     expect(providerRequests).toHaveLength(0);
     expect(events).toHaveLength(0);
+  });
+
+  test.each([
+    { stream: true, withUser: true },
+    { stream: false, withUser: true },
+    { stream: true, withUser: false },
+    { stream: false, withUser: false },
+  ])("checks internal Slack calls without requiring a user identity (stream=$stream, withUser=$withUser)", async ({
+    stream,
+    withUser,
+  }) => {
+    const { "x-archestra-user-id": _user, ...requestHeaders } = headers();
+    const slackSessionId = "chatops:slack:shared-thread";
+    const response = await app.inject({
+      method: "POST",
+      url: url(),
+      remoteAddress: "127.0.0.1",
+      headers: {
+        ...requestHeaders,
+        ...(withUser ? { "x-archestra-user-id": userId } : {}),
+        "x-archestra-source": "chatops:slack",
+        "x-appa-session-id": slackSessionId,
+      },
+      payload: payload(stream),
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        event: "tool_call",
+        organization_id: agent.organizationId,
+        session_id: slackSessionId,
+      }),
+    );
+    const start = events.find((event) => event.event === "session_start");
+    expect(start?.caller_id).toBe(withUser ? `user:${userId}` : undefined);
   });
 
   test("uses the existing local Chat identity without an APPA signature", async () => {

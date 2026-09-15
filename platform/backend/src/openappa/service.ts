@@ -26,7 +26,7 @@ export type AppaChatSource = (typeof APPA_CHAT_SOURCES)[number];
 type ExecutionOutcome = "success" | "failure" | "unknown";
 export type OpenAppaSession = {
   organization_id: string;
-  caller_id: string;
+  caller_id?: string;
   session_id: string;
   parent_id?: string;
 };
@@ -140,14 +140,9 @@ export function sessionFromHeaders(params: {
       400,
       "OpenAPPA requires valid X-Appa-Session-ID and optional X-Appa-Parent-ID headers",
     );
-  if (!params.callerId)
-    throw new ApiError(
-      401,
-      `OpenAPPA requires an authenticated ${archestraMcpBranding.appName} caller`,
-    );
   return {
     organization_id: params.organizationId,
-    caller_id: params.callerId,
+    ...(params.callerId ? { caller_id: params.callerId } : {}),
     session_id: sessionId,
     ...(parentId ? { parent_id: parentId as string } : {}),
   };

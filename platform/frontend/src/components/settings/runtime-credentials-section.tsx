@@ -158,7 +158,7 @@ export function RuntimeCredentialsSection() {
       {
         id: "actions",
         header: "Actions",
-        size: 96,
+        size: 100,
         cell: ({ row: { original: definition } }) => (
           <CredentialActions
             definition={definition}
@@ -378,7 +378,7 @@ function CredentialActions({
 
   if (primaryActions.length === 0 && dropdownActions.length === 0) return null;
   return (
-    <div className="self-end sm:self-auto">
+    <div className="flex items-center gap-2 self-end sm:self-auto">
       <TableRowActions
         actions={primaryActions}
         dropdownActions={dropdownActions}

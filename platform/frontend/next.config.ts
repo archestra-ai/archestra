@@ -82,11 +82,15 @@ const nextConfig: NextConfig = {
     // messaging-channels restructure, so existing bookmarks and links don't 404.
     // `:path*` matches the bare path and any sub-path.
     return [
-      // Keep registered GitHub App callbacks valid while finishing personal
-      // authorization in the account area. Next preserves the OAuth query.
+      // Keep registered GitHub App callbacks valid. Next preserves the OAuth query.
       {
         source: "/settings/credentials/github/callback",
-        destination: "/account/connections/github/callback",
+        destination: "/github/callback",
+        permanent: false,
+      },
+      {
+        source: "/account/connections/github/callback",
+        destination: "/github/callback",
         permanent: false,
       },
       {

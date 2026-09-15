@@ -6,9 +6,10 @@ The special MCP remedy tool also calls the embedded runtime.
 
 ## Startup configuration
 
-`ARCHESTRA_LLM_PROXY_PLUGINS` defaults to an empty list. Including `appa` enables
-APPA and the policy editor. `ARCHESTRA_BETA` does not activate them.
-The Guardrails editor stores organization policy revisions in PostgreSQL. Restart
+`ARCHESTRA_OPENAPPA_ENABLED` defaults to `false`. Explicit `true` enables APPA
+and the OpenAPPA editor. It automatically registers the proxy plugin.
+`ARCHESTRA_BETA` and the plugin list alone do not activate them.
+The OpenAPPA editor stores organization policy revisions in PostgreSQL. Restart
 the backend when changing the flag; saving a policy requires no restart.
 
 The HTTP API and agent read/validate/update tools share validation and revision
@@ -25,17 +26,17 @@ empty changes and requirements, leaving trust and audience unchanged. Explicit
 tool rules take precedence over the catch-all. The local backend serves this
 fixed answer without calling a model or accessing user data.
 
-| Boundary | APPA omitted | APPA included |
+| Boundary | Flag off | Flag on |
 | --- | --- | --- |
 | Incoming tool results | Existing result policies | APPA admission and saved output |
-| Outgoing calls | Existing invocation policies | APPA decision plus existing invocation policies |
+| Outgoing calls | Existing invocation policies | APPA decision |
 | Refusal envelope | Existing adapter | Same adapter, APPA explanation and remedies |
 | Session header | No APPA wiring | User and conversation identity |
 | Special MCP remedy | Hidden and unavailable | Existing embedded remedy execution |
 | Runtime | Not loaded or initialized | Lazy native initialization; errors fail closed |
 
 Migrations remain additive and deployment-wide; runtime APPA records are accessed
-only when enabled. The existing guardrails remain active with an empty plugin list.
+only when enabled. The existing guardrails remain active with the APPA flag off.
 
 ## Tool calls and results
 
@@ -88,7 +89,7 @@ retains the existing blocking behavior.
 This integration does not send `Prompt` or `TurnEnd`. Abandoned-call recovery,
 unresolved-dispatch cleanup and unused remedy-permit lifetime are unchanged.
 The enabled prototype still refuses locked chats and delegation and disables
-detached tool tasks. These restrictions do not apply with APPA omitted from the plugin list.
+detached tool tasks. These restrictions do not apply with the APPA flag off.
 
 General attachment/final-answer enforcement, child return
 integration, provider-hosted tools and operator recovery remain follow-up work.

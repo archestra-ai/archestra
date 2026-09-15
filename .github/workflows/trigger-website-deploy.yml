@@ -1,13 +1,15 @@
 name: Trigger Website Deploy
 
-# Dispatches the website repo's "Deploy to Vercel" GitHub Actions workflow,
-# which deploys production via the Vercel CLI. We can NOT use a Vercel deploy
-# hook here: deploy hooks create Git-integration deployments, and Vercel
-# blocks those whenever the website's head commit author is not a Vercel team
-# member (archestra-ai/website#659).
+# Rebuild staging with platform docs from the selected branch or commit.
+# Production docs are refreshed separately after stable release publication.
 
 on:
   workflow_call:
+    inputs:
+      docs_ref:
+        description: Platform docs ref to preview (defaults to the triggering commit)
+        type: string
+        default: ""
     secrets:
       ARCHESTRA_WEBSITE_DEPLOY_GITHUB_APP_ID:
         required: true
@@ -16,6 +18,11 @@ on:
         required: true
         description: Private key for the Archestra Website Deploy GitHub App
   workflow_dispatch:
+    inputs:
+      docs_ref:
+        description: Platform docs ref to preview (empty uses the selected workflow branch)
+        type: string
+        default: ""
 
 permissions: {}
 
@@ -27,6 +34,8 @@ jobs:
   trigger-website-deploy:
     name: Trigger Website Vercel Deploy
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: Checkout GitHub App token action
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -47,7 +56,9 @@ jobs:
       - name: Dispatch website deploy workflow
         env:
           GH_TOKEN: ${{ steps.generate-token.outputs.token }}
+          DOCS_REF: ${{ inputs.docs_ref || github.sha }}
         run: |
           gh workflow run deploy-to-vercel.yml \
             --repo archestra-ai/website \
-            --ref main
+            --ref main \
+            -f "docs_ref=$DOCS_REF"

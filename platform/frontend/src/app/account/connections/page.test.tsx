@@ -49,6 +49,7 @@ beforeEach(() => {
     http.get(`${origin}/api/credentials`, () =>
       HttpResponse.json([
         {
+          kind: "github_app_user",
           key: "github",
           name: "GitHub",
           description: "Repository access",
@@ -73,6 +74,22 @@ function renderPage() {
 }
 
 describe("AccountConnectionsPage", () => {
+  it("opens GitHub sign-in from the row action", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(
+      await screen.findByRole("button", { name: "Replace GitHub" }),
+    );
+    expect(
+      screen.getByRole("dialog", { name: "Connect GitHub" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Connect GitHub" }),
+    ).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
   it("confirms before removing a personal connection", async () => {
     const user = userEvent.setup();
     let deleted = false;

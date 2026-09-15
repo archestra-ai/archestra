@@ -1,12 +1,15 @@
 "use client";
 
+import { CircleCheck } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import type { AgentRuntimeConfig } from "@/components/agent-runtime-fields";
 import { ClaudeCodeAccount } from "@/components/claude-code-account";
 import { ExternalSecretReferenceDialog } from "@/components/external-secret-reference-dialog";
+import { GitHubConnectButton } from "@/components/github-connect-button";
 import { QueryLoadError } from "@/components/query-load-error";
+import { RuntimeCredentialConnectionDialog } from "@/components/runtime-credential-connection-dialog";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
 import {
@@ -25,7 +28,10 @@ import {
 } from "@/lib/agent-runtime.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useConfig } from "@/lib/config/config.query";
-import { useRuntimeCredentials } from "@/lib/runtime-credentials.query";
+import {
+  type RuntimeCredentialDefinition,
+  useRuntimeCredentials,
+} from "@/lib/runtime-credentials.query";
 
 /** Accept both new setup links and credential anchors already sent to users. */
 export function AgentRuntimeCredentialsDeepLink(props: {
@@ -48,12 +54,14 @@ export function AgentRuntimeCredentialsDeepLink(props: {
   if (searchParams.get("setup") !== "credentials" && !legacyLink) return null;
 
   return (
-    <MissingCredentialsDialog
+    <AgentRuntimeCredentialsDialog
       {...props}
+      githubConnected={searchParams.get("github") === "connected"}
       onClose={() => {
         setLegacyLink(false);
         const params = new URLSearchParams(searchParams.toString());
         params.delete("setup");
+        params.delete("github");
         params.delete("tab");
         const query = params.toString();
         router.replace(`${pathname}${query ? `?${query}` : ""}`, {
@@ -64,19 +72,23 @@ export function AgentRuntimeCredentialsDeepLink(props: {
   );
 }
 
-function MissingCredentialsDialog({
+export function AgentRuntimeCredentialsDialog({
   agentId,
   declarations,
   canEditAgent,
+  githubConnected = false,
   onClose,
 }: {
   agentId: string;
   declarations: NonNullable<AgentRuntimeConfig["credentials"]>;
   canEditAgent: boolean;
+  githubConnected?: boolean;
   onClose: () => void;
 }) {
   const preflight = useAgentRuntimePreflight(agentId);
   const definitions = useRuntimeCredentials();
+  const [connecting, setConnecting] =
+    useState<RuntimeCredentialDefinition | null>(null);
   const { data: canManageOrganization, isPending: permissionsPending } =
     useHasPermissions({ agentSettings: ["update"] });
   const config = useConfig();
@@ -99,7 +111,15 @@ function MissingCredentialsDialog({
   const canSet = (credential: (typeof declarations)[number]) =>
     credential.scope === "per_user" ||
     (credential.credentialId ? canManageOrganization : canEditAgent);
-  const editable = missing.filter(canSet);
+  const isGitHubUserConnection = (credential: (typeof declarations)[number]) =>
+    definitions.data?.some(
+      (definition) =>
+        definition.key === credential.credentialId &&
+        definition.kind === "github_app_user",
+    );
+  const editable = missing.filter(
+    (credential) => canSet(credential) && !isGitHubUserConnection(credential),
+  );
   const loading =
     preflight.isPending ||
     definitions.isPending ||
@@ -109,6 +129,29 @@ function MissingCredentialsDialog({
   const needsClaudeCodeAccount = missingKeys.has("CLAUDE_CODE_ACCOUNT");
   const complete =
     !loading && !loadFailed && missing.length === 0 && !needsClaudeCodeAccount;
+
+  const singleGitHubConnection =
+    !loading &&
+    !loadFailed &&
+    !needsClaudeCodeAccount &&
+    missing.length === 1 &&
+    canSet(missing[0])
+      ? definitions.data?.find(
+          (definition) =>
+            definition.key === missing[0].credentialId &&
+            definition.kind === "github_app_user",
+        )
+      : undefined;
+  const connectionDefinition = connecting ?? singleGitHubConnection;
+  if (connectionDefinition) {
+    return (
+      <RuntimeCredentialConnectionDialog
+        definition={connectionDefinition}
+        scope="personal"
+        onClose={connecting ? () => setConnecting(null) : onClose}
+      />
+    );
+  }
 
   return (
     <StandardFormDialog
@@ -155,6 +198,15 @@ function MissingCredentialsDialog({
         </>
       }
     >
+      {githubConnected && (
+        <output className="mb-5 flex items-center gap-2 rounded-md border bg-muted/30 px-3 py-2 text-sm">
+          <CircleCheck
+            className="size-4 shrink-0 text-green-600 dark:text-green-400"
+            aria-hidden="true"
+          />
+          <span>GitHub connected</span>
+        </output>
+      )}
       {loading ? (
         <output>Checking missing credentials…</output>
       ) : loadFailed ? (
@@ -179,6 +231,9 @@ function MissingCredentialsDialog({
               const definition = definitions.data?.find(
                 ({ key }) => key === credential.credentialId,
               );
+              const description = definition
+                ? definition.description
+                : credential.description;
               return (
                 <FormField
                   key={credential.key}
@@ -188,6 +243,7 @@ function MissingCredentialsDialog({
                   rules={{
                     validate: (value) =>
                       !canSet(credential) ||
+                      isGitHubUserConnection(credential) ||
                       !!value?.trim() ||
                       "Secret value is required",
                     maxLength: {
@@ -198,34 +254,22 @@ function MissingCredentialsDialog({
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>{credential.label}</FormLabel>
-                      <FormDescription className="space-y-2">
-                        <span className="block">
-                          {credential.key} ·{" "}
-                          {credential.scope === "per_user"
-                            ? "Personal"
-                            : "Organization"}
-                        </span>
-                        {[
-                          ...new Set([
-                            credential.description?.trim(),
-                            definition?.description.trim(),
-                          ]),
-                        ]
-                          .filter(Boolean)
-                          .map((description) => (
-                            <span
-                              key={description}
-                              className="block whitespace-pre-wrap break-words"
-                            >
-                              {description}
-                            </span>
-                          ))}
-                      </FormDescription>
+                      {description?.trim() && (
+                        <FormDescription className="whitespace-pre-wrap break-words">
+                          {description.trim()}
+                        </FormDescription>
+                      )}
                       {!canSet(credential) ? (
                         <p className="text-sm text-muted-foreground">
                           An administrator must configure this organization
                           credential.
                         </p>
+                      ) : definition?.kind === "github_app_user" ? (
+                        <GitHubConnectButton
+                          className="justify-self-start"
+                          disabled={save.isPending}
+                          onClick={() => setConnecting(definition)}
+                        />
                       ) : byosEnabled ? (
                         <FormControl>
                           <Button

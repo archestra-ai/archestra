@@ -3,7 +3,7 @@ title: MCP Gateway
 category: MCP
 order: 1
 description: Unified access point for all MCP servers
-lastUpdated: 2026-09-14
+lastUpdated: 2026-09-15
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -102,6 +102,14 @@ MCP Gateways support four client authentication paths:
 Use OAuth 2.1 for standard MCP clients, ID-JAG or JWKS for enterprise-managed identity, and bearer tokens for direct service integrations or simple local setup.
 
 See [MCP Authentication](/docs/mcp-authentication) for more details.
+
+## Transport
+
+Use Streamable HTTP with `/v1/mcp/{id-or-slug}`. Send MCP requests, including capability discovery, through POST.
+
+Authenticated GET requests return `405 Method Not Allowed` with `Allow: POST`. The gateway does not offer a standalone GET event stream. Missing or invalid credentials receive `401` with the OAuth discovery challenge.
+
+Legacy HTTP+SSE endpoints such as `/sse` and `/message` are not available.
 
 ## Protocol Versions
 

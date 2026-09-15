@@ -455,7 +455,7 @@ jobs:
         if: ${{ github.ref_name != 'main' }}
         env:
           GH_TOKEN: ${{ steps.website-token.outputs.token }}
-        run: gh workflow run deploy-to-vercel.yml --repo archestra-ai/website --ref main
+        run: gh workflow run deploy-docs.yml --repo archestra-ai/website --ref main -f "docs_ref=$TAG_NAME"
 
   notify-release-failure:
     name: Notify release failure

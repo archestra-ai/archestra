@@ -17,6 +17,7 @@ import {
 } from "vitest";
 import { makeSession } from "@/mocks/data/auth";
 import { makeConfig } from "@/mocks/data/config";
+import { AgentRuntimeCredentialPrompt } from "./agent-run-credential-prompt";
 import { AgentRuntimeCredentialsDeepLink } from "./agent-runtime-credentials-dialog";
 
 vi.mock("next/navigation");
@@ -58,6 +59,7 @@ afterAll(() => {
   archestraApiClient.setConfig({ baseUrl: "" });
 });
 afterEach(() => {
+  vi.unstubAllGlobals();
   server.resetHandlers();
   queryClient.clear();
   window.history.replaceState(null, "", "/");
@@ -160,6 +162,109 @@ function show(
 }
 
 describe("credential setup deep links", () => {
+  it.each([
+    false,
+    true,
+  ])("authorizes GitHub user connections instead of requesting a secret (Vault: %s)", async (byosEnabled) => {
+    configured = ["SERVICE_TOKEN"];
+    const authorizationUrl =
+      "https://github.com/login/oauth/authorize?state=test-flow";
+    const assign = vi.fn();
+    let starts = 0;
+    server.use(
+      http.get(`${origin}/api/config`, () =>
+        HttpResponse.json(makeConfig({ features: { byosEnabled } })),
+      ),
+      http.get(`${origin}/api/credentials`, () =>
+        HttpResponse.json([
+          {
+            key: "github",
+            name: "GitHub account",
+            kind: "github_app_user",
+            description: "Authorize your GitHub account",
+            allowPersonal: true,
+            allowOrganization: false,
+            personalConfigured: false,
+            organizationConfigured: false,
+          },
+        ]),
+      ),
+      http.post(`${origin}/api/credentials/github/github/start`, () => {
+        starts++;
+        return HttpResponse.json({ authorizationUrl });
+      }),
+    );
+    const user = userEvent.setup();
+    show();
+    const connect = await screen.findByRole("button", {
+      name: "Connect GitHub",
+    });
+    expect(
+      screen.queryByPlaceholderText("Paste secret"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Select Vault secret")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Save credentials" }),
+    ).not.toBeInTheDocument();
+    vi.stubGlobal("location", { ...window.location, assign });
+    await user.click(connect);
+    await waitFor(() => expect(assign).toHaveBeenCalledWith(authorizationUrl));
+    expect(starts).toBe(1);
+    expect(
+      window.sessionStorage.getItem("github-connection-return:test-flow"),
+    ).toBe("/agents/agent-1?section=advanced&setup=credentials");
+    expect(writes).toEqual([]);
+  });
+
+  it("saves manual secrets without validating or submitting a GitHub user connection", async () => {
+    server.use(
+      http.get(`${origin}/api/credentials`, () =>
+        HttpResponse.json([
+          {
+            key: "github",
+            name: "GitHub account",
+            kind: "github_app_user",
+            description: "Authorize your GitHub account",
+            allowPersonal: true,
+            allowOrganization: false,
+            personalConfigured: false,
+            organizationConfigured: false,
+          },
+        ]),
+      ),
+    );
+    const user = userEvent.setup();
+    show();
+    await user.type(
+      await screen.findByLabelText("Service token"),
+      "example-service-secret",
+    );
+    await user.click(screen.getByRole("button", { name: "Connect GitHub" }));
+    expect(
+      screen.getByRole("dialog", { name: "Connect GitHub" }),
+    ).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.getByLabelText("Service token")).toHaveValue(
+      "example-service-secret",
+    );
+    expect(writes).toEqual([]);
+    await user.click(screen.getByRole("button", { name: "Save credentials" }));
+    await waitFor(() =>
+      expect(writes).toEqual([
+        { key: "SERVICE_TOKEN", value: "example-service-secret" },
+      ]),
+    );
+    await waitFor(() =>
+      expect(screen.queryByLabelText("Service token")).not.toBeInTheDocument(),
+    );
+    expect(
+      screen.getByRole("button", { name: "Connect GitHub" }),
+    ).toBeVisible();
+    expect(
+      screen.queryByText("Secret value is required"),
+    ).not.toBeInTheDocument();
+  });
+
   it.each([
     "?section=advanced&setup=credentials",
     "?tab=overview#runtime-credentials",
@@ -406,7 +511,7 @@ describe("credential setup deep links", () => {
     });
   });
 
-  it("shows full multiline definition and agent-specific instructions for every missing credential", async () => {
+  it("uses shared credential instructions rather than repeated agent descriptions", async () => {
     const githubDescription =
       "Create a token for the example repository.\nChoose the repository permissions required by your workflow.\nKeep the token private and paste it below.";
     const claudeDescription =
@@ -446,12 +551,83 @@ describe("credential setup deep links", () => {
     expect(
       screen.getByText(claudeDescription, { normalizer: (text) => text }),
     ).toBeVisible();
-    expect(screen.getAllByText(instructions)).toHaveLength(2);
+    expect(screen.queryByText(instructions)).not.toBeInTheDocument();
   });
 
   it("does not open for ordinary agent navigation", () => {
     window.history.replaceState(null, "", "/agents/agent-1?section=advanced");
     show();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+});
+
+it.each([
+  1, 2,
+])("opens the same setup from chat for %s missing credentials", async (count) => {
+  const missing = declarations.slice(0, count).map((credential) => ({
+    ...credential,
+    description: "Agent-specific setup instructions.",
+  }));
+  server.use(
+    http.get(`${origin}/api/credentials`, () =>
+      HttpResponse.json([
+        {
+          key: "github",
+          name: "GitHub",
+          description: "Repository access",
+          kind: "github_app_user",
+          allowPersonal: true,
+        },
+      ]),
+    ),
+    http.get(`${origin}/api/agents/agent-1/runtime/preflight`, () =>
+      HttpResponse.json({
+        configured: [],
+        missing,
+        misconfigured: [],
+        incompatible: null,
+        ready: false,
+      }),
+    ),
+  );
+  const user = userEvent.setup();
+  render(
+    <QueryClientProvider client={queryClient}>
+      <AgentRuntimeCredentialPrompt
+        agentId="agent-1"
+        missing={missing}
+        declarations={missing}
+        onConnected={vi.fn()}
+      />
+    </QueryClientProvider>,
+  );
+  await user.click(screen.getByRole("button", { name: "Connect" }));
+  if (count === 1) {
+    expect(
+      await screen.findByRole("dialog", { name: "Connect GitHub" }),
+    ).toHaveTextContent("Repository access");
+  } else {
+    expect(await screen.findByLabelText("Service token")).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Connect GitHub" }));
+    expect(
+      screen.getByRole("dialog", { name: "Connect GitHub" }),
+    ).toBeVisible();
+  }
+});
+
+it("reopens remaining credentials with the GitHub confirmation and clears it on close", async () => {
+  configured = ["GITHUB_TOKEN"];
+  window.history.replaceState(
+    null,
+    "",
+    "/agents/agent-1?section=advanced&setup=credentials&github=connected",
+  );
+  show();
+  expect(await screen.findByLabelText("Service token")).toBeVisible();
+  expect(screen.getByRole("status")).toHaveTextContent("GitHub connected");
+  expect(screen.queryByLabelText("GitHub token")).not.toBeInTheDocument();
+  await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+  expect(replace).toHaveBeenCalledWith("/agents/agent-1?section=advanced", {
+    scroll: false,
   });
 });

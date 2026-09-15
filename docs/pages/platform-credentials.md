@@ -3,7 +3,7 @@ title: Credentials
 category: Administration
 description: Save credentials once and reuse them across agents, MCP servers, skills, and knowledge
 order: 5
-lastUpdated: 2026-09-14
+lastUpdated: 2026-09-15
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -53,6 +53,8 @@ The Credentials page shows connection status without revealing saved values. LLM
 Agent Runtime and MCP environment editors share the same **Secret source** selector. Choose a saved credential and enter the variable name expected by the runtime. One credential can supply `GITHUB_TOKEN` in one resource and `GH_TOKEN` in another.
 
 A resource-specific secret supplies only that resource. Use a saved credential when several resources need the same value.
+
+Conversation setup links check all required credentials after GitHub authorization. Complete any remaining credentials, then send your message again in the original conversation. Connecting credentials does not automatically retry the request.
 
 GitHub skill and plugin imports accept saved secrets as tokens or saved GitHub Apps. GitHub Knowledge connectors select an organization credential. See [Skills](/docs/platform-agent-skills), [Plugins](/docs/platform-agent-plugins), and [Knowledge](/docs/platform-knowledge#github) for repository setup.
 

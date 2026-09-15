@@ -12,7 +12,7 @@ import { vi } from "vitest";
 import { z } from "zod";
 import { executeArchestraTool } from "@/archestra-mcp-server";
 import { withOpenAppaChat } from "@/clients/chat-openappa";
-import config from "@/config";
+import config, { parseLlmProxyPlugins, parseOpenAppaConfig } from "@/config";
 import * as database from "@/database";
 import * as toolInvocation from "@/guardrails/tool-invocation";
 import * as trustedData from "@/guardrails/trusted-data";
@@ -48,8 +48,11 @@ describe("OpenAPPA on the existing LLM proxy", () => {
   let unregisterAppaPlugin: () => void;
 
   beforeEach(async ({ makeAgent, makeConversation, makeMember, makeUser }) => {
-    config.llmProxy.plugins = ["appa"];
-
+    config.openappa = parseOpenAppaConfig("true");
+    config.llmProxy.plugins = parseLlmProxyPlugins(
+      undefined,
+      config.openappa.enabled,
+    );
     unregisterAppaPlugin = registerLlmProxyPlugin(createAppaLlmProxyPlugin());
     vi.spyOn(database, "getDatabaseConnectionString").mockReturnValue(
       "postgresql://test:test@localhost/test?schema=public",
@@ -438,6 +441,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     enabled,
   }) => {
     if (!enabled) {
+      config.openappa.enabled = false;
       config.llmProxy.plugins = [];
       unregisterAppaPlugin();
     }
@@ -586,34 +590,62 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     ]);
   });
 
-  test("keeps platform tool policies additive after APPA allows a call", async ({
-    makeTool,
-    makeToolPolicy,
-  }) => {
-    const tool = await makeTool({ name: "get_weather", agentId: agent.id });
-    await makeToolPolicy(tool.id, {
-      action: "block_always",
-      conditions: [],
-      reason: "Platform weather policy refused this call",
-    });
+  for (const stream of [true, false]) {
+    test(`APPA owns invocation policy only while enabled (stream=${stream})`, async ({
+      makeTool,
+      makeToolPolicy,
+    }) => {
+      const tool = await makeTool({ name: "get_weather", agentId: agent.id });
+      await makeToolPolicy(tool.id, {
+        action: "block_always",
+        conditions: [],
+        reason: "Platform weather policy refused this call",
+      });
+      const evaluatePolicies = vi.spyOn(toolInvocation, "evaluatePolicies");
+      const request = {
+        method: "POST" as const,
+        url: url(),
+        remoteAddress: "127.0.0.1",
+        headers: headers(),
+        payload: payload(stream),
+      };
 
-    const response = await app.inject({
-      method: "POST",
-      url: url(),
-      remoteAddress: "127.0.0.1",
-      headers: headers(),
-      payload: payload(false),
-    });
+      const allowed = await app.inject(request);
+      expect(allowed.statusCode, allowed.body).toBe(200);
+      expect(allowed.body).not.toContain(
+        "Platform weather policy refused this call",
+      );
+      expect(allowed.body).toContain('"type":"tool_use"');
+      expect(events).toContainEqual(
+        expect.objectContaining({ event: "tool_call", tool: "get_weather" }),
+      );
+      expect(evaluatePolicies).not.toHaveBeenCalled();
 
-    expect(response.statusCode, response.body).toBe(200);
-    expect(response.body).toContain(
-      "Platform weather policy refused this call",
-    );
-    expect(response.body).not.toContain('"type":"tool_use"');
-    expect(events).toContainEqual(
-      expect.objectContaining({ event: "tool_call", tool: "get_weather" }),
-    );
-  });
+      config.openappa.enabled = false;
+      config.llmProxy.plugins = parseLlmProxyPlugins("appa", false);
+      unregisterAppaPlugin();
+      // Other plugins allowing a call must still run the ordinary policy check.
+      const unregisterObserver = registerLlmProxyPlugin({
+        id: "test-allow",
+        async onToolCalls({ toolCalls }) {
+          return { decision: "allow", toolCalls };
+        },
+      });
+      const nativeCalls = events.length;
+      try {
+        const blocked = await app.inject(request);
+        expect(blocked.statusCode, blocked.body).toBe(200);
+        expect(blocked.body).toContain(
+          "Platform weather policy refused this call",
+        );
+        expect(blocked.body).not.toContain('"type":"tool_use"');
+        expect(evaluatePolicies).toHaveBeenCalledOnce();
+        expect(events).toHaveLength(nativeCalls);
+      } finally {
+        unregisterObserver();
+      }
+    });
+  }
 
   test("substitutes saved approved results before the provider sees resent history", async () => {
     const evaluateTrustedData = vi.spyOn(
@@ -869,10 +901,11 @@ describe("OpenAPPA on the existing LLM proxy", () => {
   test.each([
     true,
     false,
-  ])("empty plugin list uses existing evaluators without APPA metadata (stream=%s)", async (stream) => {
+  ])("disabled APPA uses existing evaluators without APPA metadata (stream=%s)", async (stream) => {
+    config.openappa.enabled = false;
     config.llmProxy.plugins = [];
     unregisterAppaPlugin();
-    // A configured path and unavailable native runtime must not affect old guardrails.
+    // An unavailable native runtime must not affect old guardrails.
     native.initializeOpenappa.mockRejectedValue(
       new Error("native unavailable"),
     );

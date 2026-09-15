@@ -11,7 +11,7 @@ import routes from "./guardrails-policy.routes";
 describe("catch-all tool annotations", () => {
   let app: FastifyInstanceWithZod;
   beforeEach(async () => {
-    config.llmProxy.plugins = ["appa"];
+    config.openappa.enabled = true;
     app = createFastifyInstance();
     await app.register(authPlugin);
     await app.register(routes);
@@ -87,7 +87,7 @@ describe("catch-all tool annotations", () => {
       payload: { version: 1, kind: "authority" },
     });
     expect(invalid.statusCode).toBe(400);
-    config.llmProxy.plugins = [];
+    config.openappa.enabled = false;
     const disabled = await app.inject({
       method: "POST",
       url: GUARDRAILS_NOOP_ANNOTATOR_PATH,

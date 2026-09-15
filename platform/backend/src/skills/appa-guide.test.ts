@@ -27,12 +27,12 @@ describe("APPA Guide feature availability", () => {
       userId: user.id,
       agent: { id: agent.id, name: agent.name },
     };
-    config.llmProxy.plugins = [];
+    config.openappa.enabled = false;
     await syncBuiltInSkillsForOrganization(org);
     expect(
       await SkillModel.findBuiltIn({ organizationId: org.id, sourceRef }),
     ).toBeNull();
-    config.llmProxy.plugins = ["appa"];
+    config.openappa.enabled = true;
     await syncBuiltInSkillsForOrganization(org);
     const skill = await SkillModel.findBuiltIn({
       organizationId: org.id,
@@ -81,7 +81,7 @@ describe("APPA Guide feature availability", () => {
     const user = await makeUser();
     await makeMember(user.id, org.id, { role: "admin" });
     const agent = await makeAgent({ organizationId: org.id });
-    config.llmProxy.plugins = ["appa"];
+    config.openappa.enabled = true;
     await syncBuiltInSkillsForOrganization(org);
     const skill = await SkillModel.findBuiltIn({
       organizationId: org.id,
@@ -94,7 +94,7 @@ describe("APPA Guide feature availability", () => {
       agentId: agent.id,
       skillIds: [skill.id],
     });
-    config.llmProxy.plugins = [];
+    config.openappa.enabled = false;
     await syncBuiltInSkillsForOrganization(org);
     expect(await SkillModel.findById(skill.id)).toBeNull();
     expect(await SkillModel.findByIds([skill.id])).toEqual([]);
@@ -139,7 +139,7 @@ describe("APPA Guide feature availability", () => {
       },
     );
     expect(loaded.isError).toBe(true);
-    config.llmProxy.plugins = ["appa"];
+    config.openappa.enabled = true;
     await syncBuiltInSkillsForOrganization(org);
     expect((await SkillModel.findById(skill.id))?.content).toBe(content);
     expect(await AgentSkillModel.findSkillIdsByAgent(agent.id)).toEqual([
@@ -148,7 +148,7 @@ describe("APPA Guide feature availability", () => {
   });
 
   test("policy examples compile with the embedded APPA version", async () => {
-    config.llmProxy.plugins = ["appa"];
+    config.openappa.enabled = true;
     const reference = APPA_GUIDE_SKILL.files[0].content;
     const blocks = [...reference.matchAll(/```toml\n([\s\S]*?)```/g)].map(
       (match) => match[1],

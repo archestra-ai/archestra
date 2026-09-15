@@ -3156,8 +3156,6 @@ export type {
   McpGatewayGetData,
   McpGatewayGetError,
   McpGatewayGetErrors,
-  McpGatewayGetResponse,
-  McpGatewayGetResponses,
   McpGatewayPostData,
   McpGatewayPostResponses,
   McpOauthClientLabelKeysData,

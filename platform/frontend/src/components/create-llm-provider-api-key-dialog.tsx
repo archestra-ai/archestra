@@ -9,6 +9,7 @@ import { Loader2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
+import { ConnectionSignInDialog } from "@/components/connection-sign-in-dialog";
 import { FormDialog } from "@/components/form-dialog";
 import {
   LLM_PROVIDER_API_KEY_PLACEHOLDER,
@@ -250,6 +251,40 @@ export function CreateLlmProviderApiKeyDialog({
     );
   }
 
+  const keyForm = (
+    <LlmProviderApiKeyForm
+      mode="full"
+      showConsoleLink={showConsoleLink}
+      form={form}
+      existingKeys={existingKeys ?? EMPTY_EXISTING_KEYS}
+      isPending={createMutation.isPending}
+      allowedProviders={availableProviders}
+      hideUnavailableProviders
+      credentialMode={credentialMode}
+      requiresExactSubscriptionCredential={requiresExactSubscriptionCredential}
+      progressive
+      allowPersonalSubscriptions={credentialMode === "subscription"}
+      onSubscriptionCredential={handleSubscriptionCredential}
+      bedrockIamAuthEnabled={bedrockIamAuthEnabled}
+      geminiVertexAiEnabled={geminiVertexAiEnabled}
+      labels={reconnectKeyId ? undefined : labels}
+      onLabelsChange={reconnectKeyId ? undefined : setLabels}
+      labelsRef={reconnectKeyId ? undefined : labelsRef}
+    />
+  );
+
+  if (credentialMode === "subscription") {
+    return (
+      <ConnectionSignInDialog
+        open={open}
+        onOpenChange={onOpenChange}
+        title={dialogTitle}
+        description={description}
+        action={keyForm}
+      />
+    );
+  }
+
   return (
     <FormDialog
       open={open}
@@ -264,29 +299,7 @@ export function CreateLlmProviderApiKeyDialog({
         onSubmit={handleCreate}
         className="flex min-h-0 flex-1 flex-col"
       >
-        <DialogBody>
-          <LlmProviderApiKeyForm
-            mode="full"
-            showConsoleLink={showConsoleLink}
-            form={form}
-            existingKeys={existingKeys ?? EMPTY_EXISTING_KEYS}
-            isPending={createMutation.isPending}
-            allowedProviders={availableProviders}
-            hideUnavailableProviders
-            credentialMode={credentialMode}
-            requiresExactSubscriptionCredential={
-              requiresExactSubscriptionCredential
-            }
-            progressive
-            allowPersonalSubscriptions={credentialMode === "subscription"}
-            onSubscriptionCredential={handleSubscriptionCredential}
-            bedrockIamAuthEnabled={bedrockIamAuthEnabled}
-            geminiVertexAiEnabled={geminiVertexAiEnabled}
-            labels={reconnectKeyId ? undefined : labels}
-            onLabelsChange={reconnectKeyId ? undefined : setLabels}
-            labelsRef={reconnectKeyId ? undefined : labelsRef}
-          />
-        </DialogBody>
+        <DialogBody>{keyForm}</DialogBody>
         <DialogStickyFooter className="mt-0">
           <DialogCancelButton>Cancel</DialogCancelButton>
           {credentialMode === "api-key" && (

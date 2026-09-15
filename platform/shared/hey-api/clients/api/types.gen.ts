@@ -76330,34 +76330,20 @@ export type McpGatewayGetErrors = {
         error: string;
         message: string;
     };
-};
-
-export type McpGatewayGetError = McpGatewayGetErrors[keyof McpGatewayGetErrors];
-
-export type McpGatewayGetResponses = {
     /**
      * Default Response
      */
-    200: {
-        name: string;
-        version: string;
-        agentId: string;
-        transport: string;
-        protocolVersions: Array<string>;
-        capabilities: {
-            tools: boolean;
+    405: {
+        jsonrpc: '2.0';
+        error: {
+            code: number;
+            message: string;
         };
-        tokenAuth?: {
-            tokenId: string;
-            teamId: string | null;
-            isOrganizationToken: boolean;
-            isUserToken?: boolean;
-            userId?: string;
-        };
+        id: null;
     };
 };
 
-export type McpGatewayGetResponse = McpGatewayGetResponses[keyof McpGatewayGetResponses];
+export type McpGatewayGetError = McpGatewayGetErrors[keyof McpGatewayGetErrors];
 
 export type McpGatewayPostData = {
     body: {

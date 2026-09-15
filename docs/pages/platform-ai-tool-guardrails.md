@@ -18,7 +18,7 @@ With AI tool guardrails, the same agent can operate normally in safe contexts an
 
 ## Guardrails V2 Preview
 
-Set `ARCHESTRA_LLM_PROXY_PLUGINS=appa` to enable the OpenAPPA sidebar entry in Studio. Open OpenAPPA to edit the organization policy as TOML. The Guardrails page keeps its existing controls. Policies are stored in PostgreSQL. Saved revisions apply to new conversations without restarting the backend. Existing conversations retain their original policy.
+Set `ARCHESTRA_OPENAPPA_ENABLED=true` to enable the OpenAPPA sidebar entry in Studio. Open OpenAPPA to edit the organization policy as TOML. The Guardrails page keeps its existing controls. Policies are stored in PostgreSQL. Saved revisions apply to new conversations without restarting the backend. Existing conversations retain their original policy.
 
 The built-in APPA Guide skill helps agents inspect, explain, and edit this policy. It uses the same read, validate, and update tools as the editor. The skill is available only while APPA is enabled.
 

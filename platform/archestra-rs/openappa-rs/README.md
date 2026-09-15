@@ -39,12 +39,13 @@ pnpm --filter @backend db:migrate
 Configure the usual Archestra database and auth secret, then explicitly set:
 
 ```sh
-ARCHESTRA_LLM_PROXY_PLUGINS=appa
+ARCHESTRA_OPENAPPA_ENABLED=true
 ```
 
-The plugin list defaults to empty and does not inherit `ARCHESTRA_BETA`.
-Including `appa` is the only enablement switch; there is no separate flag.
-A policy path alone does not enable APPA. With the list empty, the existing Tool
+The feature flag defaults to false and does not inherit `ARCHESTRA_BETA`.
+Enabling it automatically adds `appa` to the effective proxy plugin list.
+An explicit `appa` entry in `ARCHESTRA_LLM_PROXY_PLUGINS` cannot enable APPA
+while the flag is off. With the flag off, the existing Tool
 Guardrails run unchanged: APPA is not loaded, session headers are not required
 or injected, and the remedy tool is neither advertised nor callable. Additive
 schema migrations still run normally.
@@ -218,4 +219,4 @@ changes. Archestra uses embedded remedies without a human approval context.
 Previous demo/browser results do not qualify this proxy-only refactor; validation
 for this change is reported separately in the PR.
 
-Organization policy text is stored in PostgreSQL and edited in Guardrails. Copy an existing file policy into the editor when upgrading.
+Organization policy text is stored in PostgreSQL and edited in OpenAPPA. Copy an existing file policy into the editor when upgrading.

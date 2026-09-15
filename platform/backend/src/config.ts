@@ -1980,11 +1980,12 @@ const LLM_PROXY_PLUGIN_NAMES = ["appa"] as const;
 type LlmProxyPluginName = (typeof LLM_PROXY_PLUGIN_NAMES)[number];
 
 /**
- * Parses the startup-only LLM proxy extension allowlist.
+ * Parses the startup-only allowlist and registers APPA only through its feature flag.
  * @public — exported for testability
  */
 export function parseLlmProxyPlugins(
   value: string | undefined,
+  appaEnabled = false,
 ): LlmProxyPluginName[] {
   const plugins = parseCommaSeparatedList(value ?? "");
   const invalid = plugins.filter(
@@ -1998,7 +1999,21 @@ export function parseLlmProxyPlugins(
   if (new Set(plugins).size !== plugins.length) {
     throw new Error("ARCHESTRA_LLM_PROXY_PLUGINS must not contain duplicates");
   }
+  if (!appaEnabled) {
+    return plugins.filter(
+      (plugin) => plugin !== "appa",
+    ) as LlmProxyPluginName[];
+  }
+  if (!plugins.includes("appa")) plugins.push("appa");
   return plugins as LlmProxyPluginName[];
+}
+
+/**
+ * Validates APPA settings only when its feature flag is explicitly enabled.
+ * @public — exported for testability
+ */
+export function parseOpenAppaConfig(enabled: string | undefined) {
+  return { enabled: enabled === "true" };
 }
 
 /**
@@ -2188,11 +2203,14 @@ const fileStorageS3Config = parseFileStorageS3Config({
   },
 });
 
+const openappa = parseOpenAppaConfig(process.env.ARCHESTRA_OPENAPPA_ENABLED);
 const llmProxyPlugins = parseLlmProxyPlugins(
   process.env.ARCHESTRA_LLM_PROXY_PLUGINS,
+  openappa.enabled,
 );
 
 const config = {
+  openappa,
   frontendBaseUrl,
   api: {
     host: isDevelopment ? "127.0.0.1" : "0.0.0.0",

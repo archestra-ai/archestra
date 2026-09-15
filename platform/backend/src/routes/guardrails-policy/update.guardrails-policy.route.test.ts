@@ -23,7 +23,7 @@ describe("guardrails policy authoring", () => {
 
   beforeEach(
     async ({ makeOrganization, makeUser, makeMember, makeSession }) => {
-      config.llmProxy.plugins = ["appa"];
+      config.openappa.enabled = true;
       orgId = (await makeOrganization()).id;
       const user = await makeUser();
       userId = user.id;
@@ -190,7 +190,7 @@ describe("guardrails policy authoring", () => {
   });
 
   test("disabled feature hides API and agent tools", async () => {
-    config.llmProxy.plugins = [];
+    config.openappa.enabled = false;
     for (const [method, url, payload] of [
       ["GET", "/api/guardrails-policy", undefined],
       ["PUT", "/api/guardrails-policy", { content, expectedRevision: 0 }],

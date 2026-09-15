@@ -81,6 +81,8 @@ export function AppShell({ children }: AppShellProps) {
   const pathname = usePathname();
   const isBrowserPreview = pathname.startsWith("/chat/browser-preview/");
   const isAuthPage = pathname.startsWith("/auth/");
+  const isAuthCallback =
+    pathname === "/oauth-callback" || pathname === "/github/callback";
   // Full-page app runtimes all live under /a/… (the owned standalone
   // /a/[appId] and the external /a/catalog/[catalogId]), so the whole
   // namespace is chrome-less by construction — no per-route regexes to keep in
@@ -136,7 +138,13 @@ export function AppShell({ children }: AppShellProps) {
 
   // Chromeless surfaces (browser preview, app runtime, video render, review):
   // no sidebar/header/version.
-  if (isBrowserPreview || isAppRuntime || isRecordingRender || isReview) {
+  if (
+    isBrowserPreview ||
+    isAppRuntime ||
+    isRecordingRender ||
+    isReview ||
+    isAuthCallback
+  ) {
     return (
       <>
         <MaintenanceModeOverlay />

@@ -64,7 +64,7 @@ export default function AccountConnectionsPage() {
                   definition={definition}
                   configured={definition.personalConfigured}
                 />
-                <div className="self-end sm:self-auto">
+                <div className="flex items-center gap-2 self-end sm:self-auto">
                   <TableRowActions
                     itemName={definition.name}
                     actions={[

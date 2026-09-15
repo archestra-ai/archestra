@@ -177,14 +177,14 @@ function useCredentialMutation<TInput, TOutput>(
 export function useStartGitHubUserConnection() {
   return useMutation({
     mutationFn: async (key: string) => {
-      const pathname = window.location.pathname;
+      const returnTo = `${window.location.pathname}${window.location.search}${window.location.hash}`;
       const { data, error } = await archestraApiSdk.startGitHubUserConnection({
         path: { key },
       });
       if (error) throw reportApiError(error);
       if (data) {
         const state = new URL(data.authorizationUrl).searchParams.get("state");
-        if (state) rememberGitHubConnectionReturn(state, pathname);
+        if (state) rememberGitHubConnectionReturn(state, returnTo);
       }
       return data;
     },
@@ -211,6 +211,7 @@ export function useCompleteGitHubUserConnection() {
     retry: false,
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: runtimeCredentialsQueryKey });
+      queryClient.invalidateQueries({ queryKey: ["agents"] });
       toast.success(`Connected GitHub${data ? ` as ${data.login}` : ""}`);
     },
   });

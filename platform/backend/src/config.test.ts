@@ -71,6 +71,7 @@ import config, {
   // SPDX-SnippetEnd
   parseMetricsPort,
   parseNonNegativeInt,
+  parseOpenAppaConfig,
   parseOptionalPort,
   parseOtelCaptureContent,
   parseProcessType,
@@ -3469,20 +3470,36 @@ describe("parseOtelCaptureContent", () => {
 });
 
 describe("OpenAPPA feature configuration", () => {
-  test("defaults proxy plugins to empty and accepts only the APPA plugin", () => {
+  test("gates APPA registration on its feature flag, regardless of the explicit plugin list", () => {
     expect(parseLlmProxyPlugins(undefined)).toEqual([]);
-    expect(parseLlmProxyPlugins(" appa ")).toEqual(["appa"]);
-    expect(() => parseLlmProxyPlugins("unknown")).toThrow(
+    expect(parseLlmProxyPlugins(" appa ")).toEqual([]);
+    expect(parseLlmProxyPlugins(undefined, true)).toEqual(["appa"]);
+    expect(parseLlmProxyPlugins("", true)).toEqual(["appa"]);
+    expect(parseLlmProxyPlugins(" appa ", true)).toEqual(["appa"]);
+  });
+
+  test.each([
+    false,
+    true,
+  ])("rejects invalid plugin configuration (APPA enabled=%s)", (enabled) => {
+    expect(() => parseLlmProxyPlugins("unknown", enabled)).toThrow(
       "ARCHESTRA_LLM_PROXY_PLUGINS contains unsupported plugin names",
     );
-    expect(() => parseLlmProxyPlugins("appa,appa")).toThrow(
+    expect(() => parseLlmProxyPlugins("appa,appa", enabled)).toThrow(
       "ARCHESTRA_LLM_PROXY_PLUGINS must not contain duplicates",
     );
   });
 
-  test("enables database policies without a container path or beta fallback", () => {
+  test.each([
+    undefined,
+    "false",
+    "TRUE",
+    "1",
+  ])("requires explicit true to enable APPA (flag=%s)", (enabled) => {
     vi.stubEnv("ARCHESTRA_BETA", "true");
-    expect(parseLlmProxyPlugins(undefined)).toEqual([]);
-    expect(parseLlmProxyPlugins("appa")).toEqual(["appa"]);
+    expect(parseOpenAppaConfig(enabled)).toEqual({ enabled: false });
+  });
+  test("enables database policies without a container path", () => {
+    expect(parseOpenAppaConfig("true")).toEqual({ enabled: true });
   });
 });

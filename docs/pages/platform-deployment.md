@@ -2077,9 +2077,11 @@ To learn more about enterprise licensing, see the [pricing model](/docs/platform
 
 ### OpenAPPA Tool Guardrails (experimental)
 
-- `ARCHESTRA_LLM_PROXY_PLUGINS`: comma-separated plugin list, empty by default. Including `appa` enables OpenAPPA and the policy editor. `ARCHESTRA_BETA` does not enable them.
-Policies are stored in PostgreSQL and edited in Guardrails. Container policy paths are no longer used. Save your existing policy in the editor when upgrading. Saved revisions apply to new conversations. Existing conversations keep their original policy.
+- `ARCHESTRA_OPENAPPA_ENABLED`: defaults to `false`. Explicit `true` enables OpenAPPA and its policy editor.
+- `ARCHESTRA_LLM_PROXY_PLUGINS`: comma-separated plugin list, empty by default. Enabling OpenAPPA automatically registers its plugin. The list alone does not enable APPA.
 
-`ARCHESTRA_BETA` and a policy path alone do not enable OpenAPPA. Restart the backend after changing these settings. Enabling APPA without a policy path fails startup.
+Policies are stored in PostgreSQL and edited in OpenAPPA. Container policy paths are no longer used. Save your existing policy in the editor when upgrading. Saved revisions apply to new conversations. Existing conversations keep their original policy.
 
-With an empty plugin list, existing Tool Guardrails run unchanged. The native APPA runtime and MCP remedy tool remain inactive. When enabled, APPA evaluates tool calls and results; errors fail closed. Chat shows blocked attempts as denied tool calls and returns APPA's feedback to the model. The model can choose a remedy and continue without another user message. Existing approval requirements still apply. External clients receive the existing text refusal; automatic continuation requires client support. See [the integration setup](https://github.com/archestra-ai/archestra/blob/main/platform/archestra-rs/openappa-rs/README.md) for current limitations.
+`ARCHESTRA_BETA` does not enable OpenAPPA. Restart the backend after changing the feature flag.
+
+With the APPA flag off, existing Tool Guardrails run unchanged. The native APPA runtime and MCP remedy tool remain inactive. When enabled, APPA replaces the proxy's existing tool-call and tool-result policy checks. Errors fail closed. Chat shows blocked attempts as denied tool calls and returns APPA's feedback to the model. The model can choose a remedy and continue without another user message. Existing approval requirements still apply. External clients receive the existing text refusal; automatic continuation requires client support. See [the integration setup](https://github.com/archestra-ai/archestra/blob/main/platform/archestra-rs/openappa-rs/README.md) for current limitations.

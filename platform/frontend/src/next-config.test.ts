@@ -78,16 +78,19 @@ describe("next config rewrites", () => {
   });
 });
 
-it("forwards registered GitHub callbacks to personal connections without losing OAuth parameters", async () => {
+it.each([
+  "/settings/credentials/github/callback",
+  "/account/connections/github/callback",
+])("forwards %s to the shared callback without losing OAuth parameters", async (path) => {
   const { default: nextConfig } = await import("../next.config");
   const response = await unstable_getResponseFromNextConfig({
-    url: "https://app.example.com/settings/credentials/github/callback?code=synthetic%2Bcode&state=synthetic%2Fstate",
+    url: `https://app.example.com${path}?code=synthetic%2Bcode&state=synthetic%2Fstate`,
     nextConfig,
   });
   expect(response.status).toBe(307);
   const target = new URL(getRedirectUrl(response) ?? "");
   expect(target.origin).toBe("https://app.example.com");
-  expect(target.pathname).toBe("/account/connections/github/callback");
+  expect(target.pathname).toBe("/github/callback");
   expect(target.searchParams.get("code")).toBe("synthetic+code");
   expect(target.searchParams.get("state")).toBe("synthetic/state");
 });

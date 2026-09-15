@@ -58,16 +58,11 @@ import { isToolRejectedForMcpHeaders } from "@/clients/mcp-param-headers";
 import config from "@/config";
 import { evaluateSingleMcpToolInvocationPolicy } from "@/guardrails/tool-invocation";
 import { buildPolicyBlockedToolResult } from "@/guardrails/tool-policy-link";
-import { knowledgeSourceAccessControlService } from "@/knowledge-base/source-access-control";
 import logger from "@/logging";
 import {
-  AgentConnectorAssignmentModel,
-  AgentKnowledgeBaseModel,
   AgentModel,
   AgentTeamModel,
   InternalMcpCatalogModel,
-  KnowledgeBaseConnectorModel,
-  KnowledgeBaseModel,
   McpOauthClientModel,
   McpToolCallModel,
   MemberModel,
@@ -98,6 +93,8 @@ import {
   findExternalIdentityProviderById,
 } from "@/services/identity-providers/oidc";
 import { jwksValidator } from "@/services/jwks-validator";
+import { buildKnowledgeSearchInstruction } from "@/services/knowledge-search-instruction";
+import { buildKnowledgeSourcesDescription } from "@/services/knowledge-sources-description";
 import { isPlatformSkillUri } from "@/skills/skill-uri";
 import {
   type AgentAccessContext,
@@ -546,6 +543,7 @@ export async function createAgentServer(params: {
       advertisesSearchTools
         ? buildSearchToolsDescription({
             mcpTools,
+            advertisedToolNames: permittedTools.map((tool) => tool.name),
             agentId,
             userId: tokenAuth?.userId,
             organizationId: tokenAuth?.organizationId,
@@ -554,8 +552,14 @@ export async function createAgentServer(params: {
         : null,
     ]);
 
-    const toolsList: McpListTool[] = permittedTools.map(
-      ({ name, description, parameters, meta, catalogId }) => ({
+    const toolsList: McpListTool[] = permittedTools
+      .filter(
+        (tool) =>
+          archestraMcpBranding.getToolShortName(tool.name) !==
+            TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME ||
+          kbToolDescription !== null,
+      )
+      .map(({ name, description, parameters, meta, catalogId }) => ({
         name,
         title:
           archestraToolTitles.get(name) ||
@@ -578,8 +582,7 @@ export async function createAgentServer(params: {
         inputSchema: parameters,
         annotations: meta?.annotations || {},
         _meta: meta?._meta || {},
-      }),
-    );
+      }));
 
     // Log tools/list request
     try {
@@ -2236,90 +2239,6 @@ async function resolveArchestraToken(
 }
 
 /**
- * Build a dynamic description for the query_knowledge_sources tool that includes
- * the agent's actual knowledge base names and connector sources.
- * Audience is resolved on each request so membership changes apply immediately.
- */
-export async function buildKnowledgeSourcesDescription(
-  agentId: string,
-  viewer?: { userId?: string; organizationId: string },
-): Promise<string | null> {
-  const [kbAssignments, directConnectorIds] = await Promise.all([
-    AgentKnowledgeBaseModel.findByAgent(agentId),
-    AgentConnectorAssignmentModel.getConnectorIds(agentId),
-  ]);
-
-  if (kbAssignments.length === 0 && directConnectorIds.length === 0) {
-    return null;
-  }
-
-  const kbIds = kbAssignments.map((a) => a.knowledgeBaseId);
-
-  const assignedKnowledgeBases = kbIds.length
-    ? await KnowledgeBaseModel.findByIds(kbIds)
-    : [];
-  const access = viewer?.userId
-    ? await knowledgeSourceAccessControlService.buildAccessControlContext({
-        userId: viewer.userId,
-        organizationId: viewer.organizationId,
-      })
-    : null;
-  const knowledgeBases = assignedKnowledgeBases.filter(
-    (kb) =>
-      (!viewer || kb.organizationId === viewer.organizationId) &&
-      (access
-        ? knowledgeSourceAccessControlService.canAccessKnowledgeBase(access, kb)
-        : kb.visibility === "org-wide"),
-  );
-  const visibleKbIds = knowledgeBases.map((kb) => kb.id);
-  const [kbConnectors, directConnectors] = await Promise.all([
-    visibleKbIds.length
-      ? KnowledgeBaseConnectorModel.findByKnowledgeBaseIds(visibleKbIds, {
-          visibilityScope: "query",
-        })
-      : [],
-    KnowledgeBaseConnectorModel.findByIds(directConnectorIds),
-  ]);
-
-  const kbNames = knowledgeBases.map((kb) => kb.name);
-  const allConnectors = [...kbConnectors, ...directConnectors];
-  const connectorTypes = [
-    ...new Set(allConnectors.map((c) => c.connectorType)),
-  ];
-
-  // Written as a PROACTIVE trigger, and deliberately naming files/images/photos
-  // and the verbs a user actually uses ("show me", "find"). The previous
-  // reactive wording ("a question you cannot answer from your training data")
-  // excluded imperatives: asked to "show me a man with lobsters" the model went
-  // looking for an image-GENERATION tool and answered that it cannot show
-  // pictures, with the indexed photo one call away. This string is also the
-  // text search_tools ranks on, so the vocabulary matters twice.
-  let description =
-    "Search the organization's indexed knowledge — documents, files, images, photos, " +
-    "and records synced from its connected sources. " +
-    "Use it whenever the user refers to something that may live in this workspace rather " +
-    "than in your training data: a question about internal material, or a request to find, " +
-    "look up, show, open, or describe a document, file, or picture. " +
-    "Prefer searching over answering from memory or replying that you cannot see files or " +
-    "images — this workspace's own content is reachable only through this tool. " +
-    "Pass the user's original query as-is — do not rephrase, summarize, or expand it. " +
-    "The system performs its own query optimization internally.";
-
-  if (kbNames.length > 0) {
-    const kbList = kbNames.join(", ");
-    description +=
-      kbList.length > 500
-        ? ` Available knowledge bases: ${kbList.slice(0, 500)}...`
-        : ` Available knowledge bases: ${kbList}.`;
-  }
-  if (connectorTypes.length > 0) {
-    description += ` Connected sources: ${connectorTypes.join(", ")}.`;
-  }
-
-  return description;
-}
-
-/**
  * The single point where the advertised tool list is finalized. Every
  * contributor (assigned catalog tools, Archestra Apps, built-ins, delegation
  * tools) funnels through here, so a new tool source cannot reintroduce a leak
@@ -2431,6 +2350,7 @@ const SEARCH_TOOLS_DESCRIPTION_MAX_SERVER_DESCRIPTION_LENGTH = 200;
 
 async function buildSearchToolsDescription(params: {
   mcpTools: McpToolForSearchDescription[];
+  advertisedToolNames: string[];
   agentId: string;
   userId?: string;
   organizationId?: string;
@@ -2445,10 +2365,18 @@ async function buildSearchToolsDescription(params: {
       archestraMcpBranding.getToolShortName(tool.name) ===
       TOOL_SEARCH_TOOLS_SHORT_NAME,
   );
-  const baseDescription = searchTool?.description;
-  if (!baseDescription) {
+  if (!searchTool?.description) {
     return null;
   }
+  const knowledgeInstruction = await buildKnowledgeSearchInstruction({
+    agentId,
+    userId,
+    organizationId,
+    toolNames: params.advertisedToolNames,
+  });
+  const baseDescription = [searchTool.description, knowledgeInstruction]
+    .filter(Boolean)
+    .join(" ");
 
   // Mirror search_tools' actual search space: the catalogs backing the
   // assigned tools, widened by the dynamically discoverable ones when the

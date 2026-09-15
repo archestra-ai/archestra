@@ -85,7 +85,7 @@ export function getDisabledBuiltInSkillSourceRefs(): string[] {
 }
 
 function isEnabled(skill: BuiltInSkill): boolean {
-  return !skill.feature || config.llmProxy.plugins.includes(skill.feature);
+  return !skill.feature || config.openappa.enabled;
 }
 
 /**

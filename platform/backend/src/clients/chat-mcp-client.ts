@@ -87,25 +87,10 @@ export function createLoopbackGatewayTransport(
 }
 
 /**
- * Custom fetch for the loopback MCP Gateway transport.
- *
- * The MCP SDK opens an optional standalone GET SSE stream (per spec) to receive
- * server-initiated messages. Our gateway runs stateless (`enableJsonResponse`,
- * no session id) and never pushes on that stream, and its transport is built
- * without an `authProvider`, so the standalone GET SSE stream is the only GET
- * the SDK issues. Worse, the gateway's GET route answers that poll with finite
- * discovery JSON (`200`), which the SDK reads as an empty SSE stream and
- * immediately reconnects — ~once per second per client, each GET running
- * DB-backed profile and auth work. Under many cached clients this alone can
- * saturate the connection pool.
- *
- * Answering the GET with `405` tells the SDK the server offers no GET SSE stream,
- * so it stops polling (the SDK treats 405 as an expected, terminal response).
- * Doing it in the client's fetch — rather than the shared route — keeps the
- * public JSON discovery route unchanged. POST/DELETE, the only requests carrying
- * real JSON-RPC and the Bearer token, pass through to the network unchanged.
- * (If an `authProvider` is ever added here, OAuth metadata is fetched with GET
- * too, so this would need to key on the request URL rather than the method.)
+ * The gateway has no standalone GET SSE stream. Answer the SDK's optional poll
+ * locally to avoid a loopback request and its DB-backed authentication work.
+ * This transport has no authProvider; adding one would require limiting this
+ * shortcut to the gateway URL so OAuth metadata GET requests reach the network.
  */
 const loopbackGatewayFetch: FetchLike = (url, init) => {
   if ((init?.method ?? "GET").toUpperCase() === "GET") {

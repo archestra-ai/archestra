@@ -12,7 +12,6 @@ import {
 } from "@/lib/policy.utils";
 import { handleApiError } from "@/lib/utils";
 import { getServerApiHeaders } from "@/lib/utils/server";
-import { GuardrailsPolicyEditor } from "./guardrails-policy-editor";
 import { ToolGuardrailsClient } from "./page.client";
 import type { ToolsInitialData } from "./types";
 
@@ -37,10 +36,6 @@ export default async function ToolGuardrailsPage() {
   };
   try {
     const headers = await getServerApiHeaders();
-    const config = await archestraApiSdk.getConfig({ headers });
-    if (config.error) throw config.error;
-    if (config.data?.features.openappaEnabled)
-      return <GuardrailsPolicyEditor />;
     const [
       toolsResponse,
       catalogResponse,

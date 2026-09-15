@@ -84,6 +84,7 @@ function routeSidebarMode(pathname: string): SidebarMode | null {
     "/skills",
     "/plugins",
     "/mcp",
+    "/openappa",
     "/llm",
     "/knowledge",
     "/audit",
@@ -497,6 +498,7 @@ export function AppSidebar() {
   });
   const showConnect = Boolean(canReadMcpGateway || canReadLlmProxy);
   const pluginsEnabled = useFeature("plugins");
+  const openappaEnabled = useFeature("openappaEnabled");
 
   const [sidebarMode, pickSidebarMode] = useSidebarMode(pathname);
   const chatListFadeIn = useOnce();
@@ -523,6 +525,9 @@ export function AppSidebar() {
         ...group,
         items: group.items
           .filter((item) => item.url !== "/plugins" || pluginsEnabled === true)
+          .filter(
+            (item) => item.url !== "/openappa" || openappaEnabled === true,
+          )
           // Costs & Limits is one row over two pages, so it has to choose
           // which one it opens: a reader who may read limits but not costs
           // would otherwise land on a page they cannot see.
@@ -539,7 +544,7 @@ export function AppSidebar() {
             return item;
           }),
       })),
-    [pluginsEnabled, permissionMap],
+    [pluginsEnabled, openappaEnabled, permissionMap],
   );
 
   return (

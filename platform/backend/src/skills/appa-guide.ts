@@ -10,7 +10,7 @@ export const APPA_GUIDE_SKILL: BuiltInSkill = {
 
 Use this skill to explain or change Archestra's organization policy. It works
 through Archestra tools, including when those tools are connected to Claude Code.
-The policy is shared with the Guardrails editor and stored in the database.
+The policy is shared with the OpenAPPA editor in Studio and stored in the database.
 A local organization.appa.toml file, Claude Code settings, or a shell command does
 not change it.
 

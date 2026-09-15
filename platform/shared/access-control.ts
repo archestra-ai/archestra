@@ -2247,6 +2247,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
 
   "/mcp/tool-policies": { toolPolicy: ["read"] },
   "/mcp/tool-guardrails": { toolPolicy: ["read"] },
+  "/openappa": { toolPolicy: ["read"] },
 
   // Logs
   "/llm/logs": { log: ["read"] },

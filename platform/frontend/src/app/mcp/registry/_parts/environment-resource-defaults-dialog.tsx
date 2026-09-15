@@ -105,7 +105,7 @@ function ResourceDefaultRow({
         selected?.restricted ? (
           <span>
             Creators without{" "}
-            <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs break-all">
+            <code className="inline-block max-w-full rounded bg-muted px-1 py-0.5 font-mono text-xs break-all align-baseline">
               {resource}:deploy-to-restricted
             </code>{" "}
             permission fall back to {defaultEnvironmentName}.

@@ -1,5 +1,6 @@
 import {
   TOOL_GET_RUN_FULL_NAME,
+  TOOL_LIST_RUNS_FULL_NAME,
   TOOL_START_RUN_FULL_NAME,
   TOOL_STEER_RUN_FULL_NAME,
 } from "@archestra/shared";
@@ -199,6 +200,9 @@ test("an external gateway steers the current turn using the original session han
       externalContext,
     );
     expect(result.isError).not.toBe(true);
+    expect(JSON.parse((result.content[0] as { text: string }).text)).toEqual(
+      result.structuredContent,
+    );
     expect(result.structuredContent).toMatchObject({
       task_id: currentTask.id,
       session_id: previous.taskId,
@@ -222,6 +226,21 @@ test("an external gateway steers the current turn using the original session han
     run: { task_id: currentTask.id },
     run_url: expect.stringContaining(`/chat/runs/${previous.taskId}`),
   });
+  expect(JSON.parse((status.content[0] as { text: string }).text)).toEqual(
+    status.structuredContent,
+  );
+  const listed = await executeArchestraTool(
+    TOOL_LIST_RUNS_FULL_NAME,
+    { agent_id: agent.id },
+    externalContext,
+  );
+  const listedText = JSON.parse((listed.content[0] as { text: string }).text);
+  expect(listedText).toEqual(listed.structuredContent);
+  expect(listedText.runs).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ task_id: currentTask.id }),
+    ]),
+  );
   expect(launch).not.toHaveBeenCalled();
   expect(continuation).not.toHaveBeenCalled();
   expect(
@@ -298,6 +317,9 @@ test("start_run persists handoff files before launching the runtime", async () =
     run: { task_id: string };
   };
   expect(reply.session_id).toBe(reply.run.task_id);
+  expect(JSON.parse((result.content[0] as { text: string }).text)).toEqual(
+    reply,
+  );
   await expect
     .poll(async () => (await A2ATaskModel.findById(reply.run.task_id))?.state)
     .toBe("TASK_STATE_FAILED");

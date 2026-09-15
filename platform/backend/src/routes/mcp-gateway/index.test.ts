@@ -1201,76 +1201,6 @@ describe("MCP Gateway (stateless mode)", () => {
     expect(wwwAuth).toContain("resource_metadata=");
   });
 
-  test("GET endpoint returns 401 with WWW-Authenticate header for missing authorization", async ({
-    makeAgent,
-  }) => {
-    const agent = await makeAgent();
-
-    const response = await app.inject({
-      method: "GET",
-      url: `/v1/mcp/${agent.id}`,
-      headers: {
-        accept: "application/json",
-        // No authorization header
-      },
-    });
-
-    expect(response.statusCode).toBe(401);
-
-    const wwwAuth = response.headers["www-authenticate"];
-    expect(wwwAuth).toBeDefined();
-    expect(wwwAuth).toContain("Bearer");
-    expect(wwwAuth).toContain("resource_metadata=");
-  });
-
-  test("GET endpoint returns server discovery info", async ({
-    makeAgent,
-    makeOrganization,
-  }) => {
-    const agent = await makeAgent();
-    const org = await makeOrganization();
-
-    const token = await TeamTokenModel.create({
-      organizationId: org.id,
-      name: "Org Token",
-      teamId: null,
-      isOrganizationToken: true,
-    });
-
-    const response = await app.inject({
-      method: "GET",
-      url: `/v1/mcp/${agent.id}`,
-      headers: makeMcpHeaders(token.value),
-    });
-
-    expect(response.statusCode).toBe(200);
-    const body = response.json();
-    expect(body).toHaveProperty("name", `archestra-agent-${agent.id}`);
-    expect(body).toHaveProperty("transport", "http");
-    expect(body).toHaveProperty("capabilities");
-    expect(body.capabilities).toHaveProperty("tools", true);
-  });
-
-  test("GET endpoint serves discovery info without tokenAuth for an invalid token", async ({
-    makeAgent,
-  }) => {
-    const agent = await makeAgent();
-
-    const response = await app.inject({
-      method: "GET",
-      url: `/v1/mcp/${agent.id}`,
-      headers: makeMcpHeaders("archestra_invalid_token_12345"),
-    });
-
-    expect(response.statusCode).toBe(200);
-    const body = response.json();
-    expect(body).toHaveProperty("name", `archestra-agent-${agent.id}`);
-    expect(body).toHaveProperty("agentId", agent.id);
-    expect(body).toHaveProperty("transport", "http");
-    expect(body.capabilities).toHaveProperty("tools", true);
-    expect(body.tokenAuth).toBeUndefined();
-  });
-
   test("handles whoami tool call successfully after initialize", async ({
     makeAgent,
     makeOrganization,
@@ -1872,36 +1802,6 @@ describe("MCP Gateway (stateless mode)", () => {
         TOOL_RUN_TOOL_FULL_NAME,
       ]),
     );
-  });
-
-  test("GET endpoint resolves agent by slug", async ({
-    makeAgent,
-    makeOrganization,
-  }) => {
-    const org = await makeOrganization();
-    const agent = await makeAgent({
-      name: "Slug Test Gateway",
-      organizationId: org.id,
-      agentType: "mcp_gateway",
-    });
-
-    const token = await TeamTokenModel.create({
-      organizationId: org.id,
-      name: "Org Token",
-      teamId: null,
-      isOrganizationToken: true,
-    });
-
-    const response = await app.inject({
-      method: "GET",
-      url: `/v1/mcp/${agent.slug}`,
-      headers: makeMcpHeaders(token.value),
-    });
-
-    expect(response.statusCode).toBe(200);
-    const body = response.json();
-    expect(body).toHaveProperty("name", `archestra-agent-${agent.id}`);
-    expect(body).toHaveProperty("agentId", agent.id);
   });
 
   test("POST endpoint resolves agent by slug", async ({

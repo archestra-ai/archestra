@@ -447,7 +447,7 @@ describe("MCP Gateway - protocol revision negotiation", () => {
     expect(names).not.toContain("xh-catalog__bad");
   });
 
-  test("GET discovery advertises both supported revisions", async ({
+  test("GET declines streaming for the stateless revision", async ({
     makeAgent,
     makeOrganization,
   }) => {
@@ -456,13 +456,12 @@ describe("MCP Gateway - protocol revision negotiation", () => {
     const response = await app.inject({
       method: "GET",
       url: `/v1/mcp/${agent.id}`,
-      headers: { authorization: `Bearer ${token.value}` },
+      headers: makeMcpHeaders(token.value, {
+        "mcp-protocol-version": STATELESS_MCP_PROTOCOL_REVISION,
+      }),
     });
 
-    expect(response.statusCode).toBe(200);
-    expect(response.json().protocolVersions).toEqual([
-      STATELESS_MCP_PROTOCOL_REVISION,
-      LEGACY_MCP_PROTOCOL_REVISION,
-    ]);
+    expect(response.statusCode).toBe(405);
+    expect(response.headers.allow).toBe("POST");
   });
 });

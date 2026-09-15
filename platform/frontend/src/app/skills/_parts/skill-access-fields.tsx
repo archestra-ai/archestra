@@ -5,7 +5,7 @@ import {
   ProfileLabels,
   type ProfileLabelsRef,
 } from "@/components/agent-labels";
-import { EnvironmentMultiSelector } from "@/components/environment-multi-selector";
+import { EnvironmentSelector } from "@/components/environment-selector";
 import type { SkillDraft } from "./skill-draft";
 import { SkillScopeSelector } from "./skill-scope-selector";
 
@@ -30,11 +30,12 @@ export const SkillAccessFields = forwardRef<
         userIds={draft.userIds}
         onUserIdsChange={(userIds) => onChange({ userIds })}
       />
-      <EnvironmentMultiSelector
+      <EnvironmentSelector
+        mode="multiple"
         value={draft.environmentIds}
         onChange={(environmentIds) => onChange({ environmentIds })}
         resource="skill"
-        hideWhenNoEnvironments
+        hideWhenOnlyDefault
         helpText="Restrict this skill to specific environments. Leave empty to make it available to agents in every environment."
       />
       <ProfileLabels

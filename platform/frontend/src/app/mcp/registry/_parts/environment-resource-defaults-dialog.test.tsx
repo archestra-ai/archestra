@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
   useEnvironments,
   useUpdateEnvironmentResourceDefaults,
@@ -15,6 +16,7 @@ Element.prototype.setPointerCapture = vi.fn();
 Element.prototype.releasePointerCapture = vi.fn();
 
 vi.mock("@/lib/organization.query");
+vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/environment.query", () => ({
   useEnvironments: vi.fn(),
   useUpdateEnvironmentResourceDefaults: vi.fn(),
@@ -60,6 +62,9 @@ function renderDialog(
 describe("EnvironmentResourceDefaultsDialog", () => {
   beforeEach(() => {
     mutate.mockClear();
+    vi.mocked(useHasPermissions).mockReturnValue({ data: false } as ReturnType<
+      typeof useHasPermissions
+    >);
     vi.mocked(useUpdateEnvironmentResourceDefaults).mockReturnValue({
       mutate,
       isPending: false,
@@ -102,8 +107,8 @@ describe("EnvironmentResourceDefaultsDialog", () => {
     renderDialog();
 
     expect(
-      screen.getByText(/Creators without permission to deploy here fall back/i),
-    ).toBeInTheDocument();
+      screen.getByText("mcpRegistry:deploy-to-restricted").parentElement,
+    ).toHaveTextContent(/Creators without .+ permission fall back to Default/);
   });
 
   test("is read-only without environment:update", () => {

@@ -59,10 +59,10 @@ import { createAppBacking } from "@/services/apps/app-mcp-backing";
 import { DEFAULT_APPS, loadDefaultAppHtml } from "@/services/apps/default-apps";
 import { modelSyncService } from "@/services/model-sync";
 import {
-  BUILT_IN_SKILLS,
   builtInSkillShippedWrite,
   builtInSkillSourceRef,
   builtInSkillVersion,
+  getEnabledBuiltInSkills,
 } from "@/skills/built-in-skills";
 import type { BuiltInAgentConfig, Organization } from "@/types";
 import {
@@ -232,7 +232,7 @@ export async function syncBuiltInSkillsForOrganization(
   // reads the synced singleton, so this must run before it.
   archestraMcpBranding.syncFromOrganization(organization);
 
-  for (const builtInSkill of BUILT_IN_SKILLS) {
+  for (const builtInSkill of getEnabledBuiltInSkills()) {
     const sourceRef = builtInSkillSourceRef(builtInSkill.builtInSkillId);
     const shipped = builtInSkillShippedWrite(builtInSkill);
 

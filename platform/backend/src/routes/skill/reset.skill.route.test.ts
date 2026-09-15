@@ -3,8 +3,8 @@ import { SkillFileModel, SkillModel, SkillVersionModel } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import {
-  BUILT_IN_SKILLS,
   builtInSkillSourceRef,
+  getEnabledBuiltInSkills,
 } from "@/skills/built-in-skills";
 import {
   afterEach,
@@ -17,7 +17,7 @@ import {
 import type { User } from "@/types";
 import skillRoutes from "./skill.routes";
 
-const [BASE_SKILL] = BUILT_IN_SKILLS;
+const [BASE_SKILL] = getEnabledBuiltInSkills();
 
 describe("POST /api/skills/:id/reset", () => {
   let app: FastifyInstanceWithZod;

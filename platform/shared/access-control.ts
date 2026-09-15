@@ -1921,14 +1921,6 @@ export const requiredEndpointPermissionsMap: Partial<
     mcpServerInstallation: ["read"],
   },
   [RouteId.CreateSkill]: { skill: ["create"] },
-  [RouteId.ConvertAgentToSkill]: { skill: ["create"], agent: ["read"] },
-  // chat:read gates spending the agent's configured LLM key — the same gate
-  // every other resolveAgentLlmOrDefault path (chat, compaction) sits behind.
-  [RouteId.SuggestSkillDescription]: {
-    skill: ["create"],
-    agent: ["read"],
-    chat: ["read"],
-  },
   [RouteId.GetSkill]: { skill: ["read"] },
   [RouteId.UpdateSkill]: { skill: ["update"] },
   [RouteId.BulkUpdateSkillsVisibility]: { skill: ["update"] },

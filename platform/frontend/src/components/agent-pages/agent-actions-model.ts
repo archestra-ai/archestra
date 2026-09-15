@@ -17,7 +17,6 @@ export type AgentActionId =
   | "clone"
   | "export"
   | "history"
-  | "convert"
   | "delete";
 
 export interface AgentActionDefinition {
@@ -97,12 +96,6 @@ export function getAgentActionModel({
       label: ACTION_LABEL.versionHistory,
       visible: true,
       permissions: permission(resource, "read"),
-    },
-    {
-      id: "convert",
-      label: "Convert to skill",
-      visible: kind === "agent",
-      permissions: { skill: ["create"] },
     },
     {
       id: "delete",

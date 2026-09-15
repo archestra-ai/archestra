@@ -10,7 +10,6 @@ import {
   MessageSquare,
   MoreHorizontal,
   PackageX,
-  Sparkles,
   TerminalSquare,
   Trash2,
   UserRoundCog,
@@ -19,7 +18,6 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { ConvertToSkillDialog } from "@/app/agents/convert-to-skill-dialog";
 import { AgentBadge } from "@/components/agent-badge";
 import { AgentForm, type AgentFormSection } from "@/components/agent-form";
 import { AgentIcon } from "@/components/agent-icon";
@@ -255,7 +253,6 @@ function AgentDetails({
   const cloneAction = agentAction(actionModel, "clone");
   const exportAction = agentAction(actionModel, "export");
   const historyAction = agentAction(actionModel, "history");
-  const convertAction = agentAction(actionModel, "convert");
   const deleteAction = agentAction(actionModel, "delete");
   const environmentName = agent.environmentId
     ? environmentsData?.environments.find(
@@ -268,7 +265,6 @@ function AgentDetails({
   const { data: canReadResource } = useHasPermissions({
     [resource]: ["read"],
   });
-  const { data: canCreateSkill } = useHasPermissions({ skill: ["create"] });
   // The messaging-channel editor reads the org's channel bindings, so the
   // section only exists for a reader who may see them — the same check the
   // editor's own host used to make inline.
@@ -382,18 +378,16 @@ function AgentDetails({
 
   const [transferring, setTransferring] = useState(false);
   const [cloning, setCloning] = useState(false);
-  const [converting, setConverting] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [deleteRequested, setDeleteRequested] = useState(false);
   const exportAgent = useExportAgent();
   const deleteAgent = useDeleteProfile();
 
-  // Export and Convert to skill exist on the agents family alone, so on the
-  // other two they are absent rather than refused: there is no such action for
-  // the menu to refuse. Everything the family does offer stays in the menu
-  // with its reason.
+  // Export exists on the agents family alone, so on the other two it is
+  // absent rather than refused: there is no such action for the menu to
+  // refuse. Everything the family does offer stays in the menu with its
+  // reason.
   const hasExport = kind === "agent";
-  const hasConvertToSkill = kind === "agent";
   // Why a mutating action is refused, when it is refused. Built-in records
   // belong to nobody and are org-wide, so they answer to the resource admin
   // rather than to the scope check every other record answers to. The name
@@ -415,11 +409,6 @@ function AgentDetails({
   const historyReason = canReadResource
     ? undefined
     : formatPermissionConstraint({ [resource]: ["read"] });
-  const convertReason = isBuiltIn
-    ? `A built-in ${config.singularInSentence} cannot be converted to a skill`
-    : canCreateSkill
-      ? undefined
-      : formatPermissionConstraint({ skill: ["create"] });
   // `canDelete` is the delete permission AND the scope check AND not built-in,
   // so which of the three refused decides which sentence is the true one.
   const deleteReason = canDelete
@@ -577,14 +566,6 @@ function AgentDetails({
                 reason={historyReason}
                 onSelect={() => setHistoryOpen(true)}
               />
-              {hasConvertToSkill && (
-                <KebabItem
-                  icon={<Sparkles className="h-4 w-4" />}
-                  label={convertAction.label}
-                  reason={convertReason}
-                  onSelect={() => setConverting(true)}
-                />
-              )}
               {!isBuiltIn &&
                 !agent.isPersonalGateway &&
                 !agent.isPersonalProxy &&
@@ -733,14 +714,6 @@ function AgentDetails({
           router.push(agentConfigureHref(kind, cloned.id, "configuration"));
         }}
       />
-      {kind === "agent" && (
-        <ConvertToSkillDialog
-          agent={converting ? agent : null}
-          onOpenChange={(open) => {
-            if (!open) setConverting(false);
-          }}
-        />
-      )}
       <AgentVersionHistoryDialog
         agentId={historyOpen ? agent.id : null}
         canModify={canModify}

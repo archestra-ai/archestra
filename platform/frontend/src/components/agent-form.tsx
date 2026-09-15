@@ -3152,6 +3152,9 @@ export function AgentForm({
     canSubmit,
     readOnly,
   };
+  // Keep the popover portaled: choosing a credential changes the model control
+  // while Radix closes its focus scope, and reconciling both in the form tree
+  // can repeatedly detach and reattach the scope's composed refs.
   const providerKeyControl = (
     <>
       <LlmProviderApiKeyDropdown
@@ -3170,7 +3173,6 @@ export function AgentForm({
         triggerVariant="button"
         triggerClassName="h-8 max-w-[250px] text-xs"
         popoverClassName="w-96"
-        popoverPortal={false}
         searchPlaceholder="Search API keys..."
         allowOrganizationDefault
         organizationDefaultSelected={!llmApiKeyId}
@@ -3223,7 +3225,9 @@ export function AgentForm({
           apiKeyId={llmApiKeyId}
           enabled={!!canReadLlmModels}
           modelFilter={runtime ? runtimeModelFilter : undefined}
-          suppressAutoSelect={!!agent}
+          // AgentForm already owns deferred key-to-model selection so it can
+          // wait for the provider catalog and enforce runtime compatibility.
+          suppressAutoSelect
           fallbackModelName={selectedLlmModelRow?.displayName}
           unavailableModelHeading={
             runtime ? "Current model (unavailable)" : undefined

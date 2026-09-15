@@ -22,7 +22,6 @@ import {
   FilterSelect,
   filterSearchClass,
 } from "@/components/filter-bar";
-import { GitHubConnectButton } from "@/components/github-connect-button";
 import { QueryLoadError } from "@/components/query-load-error";
 import { RuntimeCredentialConnectionDialog } from "@/components/runtime-credential-connection-dialog";
 import { RuntimeCredentialDisconnectDialog } from "@/components/runtime-credential-disconnect-dialog";
@@ -159,7 +158,7 @@ export function RuntimeCredentialsSection() {
       {
         id: "actions",
         header: "Actions",
-        size: 180,
+        size: 100,
         cell: ({ row: { original: definition } }) => (
           <CredentialActions
             definition={definition}
@@ -380,14 +379,8 @@ function CredentialActions({
   if (primaryActions.length === 0 && dropdownActions.length === 0) return null;
   return (
     <div className="flex items-center gap-2 self-end sm:self-auto">
-      {definition.kind === "github_app_user" && (
-        <GitHubConnectButton
-          label={connected ? "Reconnect GitHub" : "Connect GitHub"}
-          onClick={onConnect}
-        />
-      )}
       <TableRowActions
-        actions={definition.kind === "github_app_user" ? [] : primaryActions}
+        actions={primaryActions}
         dropdownActions={dropdownActions}
         itemName={definition.name}
       />

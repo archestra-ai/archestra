@@ -429,19 +429,18 @@ describe("OpenAPPA on the existing LLM proxy", () => {
   }
 
   test.each([
-    true,
-    false,
-  ])("withholds the allowed sibling when another call is denied (stream=%s)", async (stream) => {
-    block = true;
-    const dispatch = native.dispatchHook.getMockImplementation();
-    native.dispatchHook.mockImplementation(async (raw: string) => {
-      const event = JSON.parse(raw);
-      if (event.tool === "allowed_first") {
-        events.push(event);
-        return JSON.stringify({ decision: "allow_call" });
-      }
-      return dispatch?.(raw);
-    });
+    { stream: true, enabled: true },
+    { stream: false, enabled: true },
+    { stream: true, enabled: false },
+    { stream: false, enabled: false },
+  ])("rejects batches only with APPA enabled (stream=$stream, enabled=$enabled)", async ({
+    stream,
+    enabled,
+  }) => {
+    if (!enabled) {
+      config.llmProxy.plugins = [];
+      unregisterAppaPlugin();
+    }
     vi.mocked(anthropicAdapterFactory.createClient).mockImplementation(() => {
       const client = createAnthropicTestClient(options);
       const create = client.messages.create;
@@ -512,9 +511,16 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       events
         .filter((event) => event.event === "tool_call")
         .map((event) => event.tool),
-    ).toEqual(["allowed_first", "get_weather"]);
+    ).toEqual([]);
+    if (!enabled) {
+      expect(events).toHaveLength(0);
+      expect(response.body).toContain('"type":"tool_use"');
+      expect(response.body).toContain("allowed_first");
+      expect(response.body).toContain("get_weather");
+      return;
+    }
     expect(response.body).toContain(
-      "NATIVE REFUSAL: archestra__execute_remedy_plan(offer_id: test-offer)",
+      "OpenAPPA requires one tool call at a time",
     );
     expect(response.body).not.toContain('"type":"tool_use"');
     expect(response.body).not.toContain("input_json_delta");

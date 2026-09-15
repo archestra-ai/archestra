@@ -7,7 +7,7 @@ import config from "@/config";
 import * as database from "@/database";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
-import { processProxyResults } from "./service";
+import { checkToolCalls, processProxyResults } from "./service";
 
 const native = vi.hoisted(() => ({
   initializeOpenappa: vi.fn(),
@@ -44,6 +44,23 @@ afterEach(() => {
 });
 
 describe("APPA feature boundary", () => {
+  test("rejects a batch without reserving any call and permits a single-call retry", async () => {
+    native.dispatchHook.mockResolvedValue(
+      JSON.stringify({ decision: "allow_call" }),
+    );
+    const calls = [
+      { id: "first", name: "read_file", arguments: {} },
+      { id: "second", name: "write_file", arguments: {} },
+    ];
+    const blocked = await checkToolCalls(session, calls, (name) => name);
+    expect(blocked?.reason).toContain("None of these calls ran");
+    expect(native.dispatchHook).not.toHaveBeenCalled();
+    expect(
+      await checkToolCalls(session, [calls[0]], (name) => name),
+    ).toBeNull();
+    expect(native.dispatchHook).toHaveBeenCalledTimes(1);
+  });
+
   test("does not initialize or dispatch while disabled, even with a configured path", async () => {
     config.llmProxy.plugins = [];
     await expect(processProxyResults(session, [])).rejects.toThrow(

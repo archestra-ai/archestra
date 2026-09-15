@@ -22,6 +22,8 @@ Set `ARCHESTRA_LLM_PROXY_PLUGINS=appa` to edit the organization policy as TOML. 
 
 The built-in APPA Guide skill helps agents inspect, explain, and edit this policy. It uses the same read, validate, and update tools as the editor. The skill is available only while APPA is enabled.
 
+While APPA is enabled, the proxy rejects responses containing multiple tool calls. No calls in the batch run. The model receives instructions to retry one tool at a time.
+
 The default policy has no rules for specific tools. A catch-all annotator adds no restrictions or label changes. Explicit tool rules take precedence over this fallback.
 
 The assistant can read, validate, and update the same policy through its policy tools. Both editing paths enforce permissions and reject conflicting revisions. Invalid policies leave the saved revision unchanged.

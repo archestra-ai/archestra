@@ -233,6 +233,20 @@ export async function checkToolCalls(
   calls: Array<{ id: string; name: string; arguments: string | object }>,
   canonicalize: (name: string) => string,
 ): Promise<PolicyBlockResult | null> {
+  // APPA reserves an allowed call until its result arrives. Withholding a
+  // partially checked batch would leave that reservation stuck forever.
+  if (openappaEnabled() && calls.length > 1) {
+    const feedback =
+      "OpenAPPA requires one tool call at a time. None of these calls ran. Retry with one tool call, wait for its result, then make the next call.";
+    return {
+      refusalMessage: feedback,
+      contentMessage: feedback,
+      reason: feedback,
+      blockedToolName: calls[0].name,
+      toolInput: {},
+      allToolCallNames: calls.map((call) => call.name),
+    };
+  }
   const normalized = normalizeToolCallsForPolicy(calls, canonicalize);
   for (const [index, call] of calls.entries()) {
     if (typeof call.arguments === "string") {

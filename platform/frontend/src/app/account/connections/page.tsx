@@ -4,6 +4,7 @@ import { Plug, RefreshCw, Unplug } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { ClaudeCodeAccount } from "@/components/claude-code-account";
+import { GitHubConnectButton } from "@/components/github-connect-button";
 import { QueryLoadError } from "@/components/query-load-error";
 import { RuntimeCredentialConnectionDialog } from "@/components/runtime-credential-connection-dialog";
 import { RuntimeCredentialDisconnectDialog } from "@/components/runtime-credential-disconnect-dialog";
@@ -64,22 +65,36 @@ export default function AccountConnectionsPage() {
                   definition={definition}
                   configured={definition.personalConfigured}
                 />
-                <div className="self-end sm:self-auto">
+                <div className="flex items-center gap-2 self-end sm:self-auto">
+                  {definition.kind === "github_app_user" && (
+                    <GitHubConnectButton
+                      label={
+                        definition.personalConfigured
+                          ? "Reconnect GitHub"
+                          : "Connect GitHub"
+                      }
+                      onClick={() => setConnecting(definition)}
+                    />
+                  )}
                   <TableRowActions
                     itemName={definition.name}
-                    actions={[
-                      {
-                        icon: definition.personalConfigured ? (
-                          <RefreshCw className="size-4" />
-                        ) : (
-                          <Plug className="size-4" />
-                        ),
-                        label: definition.personalConfigured
-                          ? "Replace"
-                          : "Connect",
-                        onClick: () => setConnecting(definition),
-                      },
-                    ]}
+                    actions={
+                      definition.kind === "github_app_user"
+                        ? []
+                        : [
+                            {
+                              icon: definition.personalConfigured ? (
+                                <RefreshCw className="size-4" />
+                              ) : (
+                                <Plug className="size-4" />
+                              ),
+                              label: definition.personalConfigured
+                                ? "Replace"
+                                : "Connect",
+                              onClick: () => setConnecting(definition),
+                            },
+                          ]
+                    }
                     dropdownActions={
                       definition.personalConfigured
                         ? [

@@ -1,13 +1,11 @@
 export function rememberGitHubConnectionReturn(
   state: string,
-  pathname: string,
+  returnTo: string,
 ) {
   try {
     window.sessionStorage.setItem(
       `${storagePrefix}${state}`,
-      pathname === organizationCredentials
-        ? organizationCredentials
-        : personalConnections,
+      validatedDestination(returnTo),
     );
   } catch {
     // Sign-in still works when browser storage is unavailable.
@@ -20,9 +18,7 @@ export function consumeGitHubConnectionReturn(state: string | null) {
     const key = `${storagePrefix}${state}`;
     const destination = window.sessionStorage.getItem(key);
     window.sessionStorage.removeItem(key);
-    return destination === organizationCredentials
-      ? organizationCredentials
-      : personalConnections;
+    return validatedDestination(destination);
   } catch {
     return personalConnections;
   }
@@ -31,3 +27,22 @@ export function consumeGitHubConnectionReturn(state: string | null) {
 const personalConnections = "/account/connections";
 const organizationCredentials = "/settings/credentials";
 const storagePrefix = "github-connection-return:";
+
+function validatedDestination(destination: string | null): string {
+  if (!destination?.startsWith("/")) return personalConnections;
+  try {
+    const url = new URL(destination, window.location.origin);
+    if (url.origin !== window.location.origin) return personalConnections;
+    if (
+      url.pathname === personalConnections ||
+      url.pathname === organizationCredentials ||
+      /^\/agents\/[a-zA-Z0-9-]+$/.test(url.pathname) ||
+      url.pathname === "/chat" ||
+      url.pathname.startsWith("/chat/")
+    )
+      return `${url.pathname}${url.search}${url.hash}`;
+  } catch {
+    // Unknown or malformed destinations fall back to personal connections.
+  }
+  return personalConnections;
+}

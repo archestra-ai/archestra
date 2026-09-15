@@ -1,15 +1,14 @@
 "use client";
 
-import { Plug } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import type { AgentRuntimeConfig } from "@/components/agent-runtime-fields";
 import { ClaudeCodeAccount } from "@/components/claude-code-account";
 import { ExternalSecretReferenceDialog } from "@/components/external-secret-reference-dialog";
+import { GitHubConnectButton } from "@/components/github-connect-button";
 import { QueryLoadError } from "@/components/query-load-error";
 import { StandardFormDialog } from "@/components/standard-dialog";
-import { TableRowActions } from "@/components/table-row-actions";
 import { Button } from "@/components/ui/button";
 import {
   Form,
@@ -236,18 +235,10 @@ function MissingCredentialsDialog({
                           credential.
                         </p>
                       ) : definition?.kind === "github_app_user" ? (
-                        <TableRowActions
-                          itemName={definition.name}
-                          actions={[
-                            {
-                              icon: <Plug className="size-4" />,
-                              label: startGitHub.isPending
-                                ? "Connecting…"
-                                : "Connect",
-                              disabled: startGitHub.isPending || save.isPending,
-                              onClick: () => startGitHub.mutate(definition.key),
-                            },
-                          ]}
+                        <GitHubConnectButton
+                          pending={startGitHub.isPending}
+                          disabled={save.isPending}
+                          onClick={() => startGitHub.mutate(definition.key)}
                         />
                       ) : byosEnabled ? (
                         <FormControl>

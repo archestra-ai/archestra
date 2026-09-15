@@ -15,7 +15,6 @@ import {
   it,
   vi,
 } from "vitest";
-import { TooltipProvider } from "@/components/ui/tooltip";
 import { makeSession } from "@/mocks/data/auth";
 import { makeConfig } from "@/mocks/data/config";
 import { AgentRuntimeCredentialsDeepLink } from "./agent-runtime-credentials-dialog";
@@ -151,14 +150,12 @@ function show(
 ) {
   return render(
     <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <AgentRuntimeCredentialsDeepLink
-          agentId="agent-1"
-          declarations={declarations}
-          canEditAgent={false}
-          {...props}
-        />
-      </TooltipProvider>
+      <AgentRuntimeCredentialsDeepLink
+        agentId="agent-1"
+        declarations={declarations}
+        canEditAgent={false}
+        {...props}
+      />
     </QueryClientProvider>,
   );
 }
@@ -199,7 +196,7 @@ describe("credential setup deep links", () => {
     const user = userEvent.setup();
     show();
     const connect = await screen.findByRole("button", {
-      name: "Connect GitHub account",
+      name: "Connect GitHub",
     });
     expect(
       screen.queryByPlaceholderText("Paste secret"),
@@ -208,10 +205,13 @@ describe("credential setup deep links", () => {
     expect(
       screen.queryByRole("button", { name: "Save credentials" }),
     ).not.toBeInTheDocument();
-    vi.stubGlobal("location", { pathname: "/agents/agent-1", assign });
+    vi.stubGlobal("location", { ...window.location, assign });
     await user.click(connect);
     await waitFor(() => expect(assign).toHaveBeenCalledWith(authorizationUrl));
     expect(starts).toBe(1);
+    expect(
+      window.sessionStorage.getItem("github-connection-return:test-flow"),
+    ).toBe("/agents/agent-1?section=advanced&setup=credentials");
     expect(writes).toEqual([]);
   });
 
@@ -248,7 +248,7 @@ describe("credential setup deep links", () => {
       expect(screen.queryByLabelText("Service token")).not.toBeInTheDocument(),
     );
     expect(
-      screen.getByRole("button", { name: "Connect GitHub account" }),
+      screen.getByRole("button", { name: "Connect GitHub" }),
     ).toBeVisible();
     expect(
       screen.queryByText("Secret value is required"),

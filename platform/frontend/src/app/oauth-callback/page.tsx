@@ -2,6 +2,7 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
+import { AuthCallbackLayout } from "@/components/auth-callback-layout";
 import { trackEvent } from "@/lib/analytics";
 import { useHandleOAuthCallback } from "@/lib/auth/oauth.query";
 import {
@@ -212,7 +213,7 @@ function OAuthCallbackContent() {
 
   if (callbackError) {
     return (
-      <OAuthCallbackLayout>
+      <AuthCallbackLayout>
         <OAuthCallbackStatus
           status="error"
           errorTitle={callbackError.title}
@@ -223,30 +224,22 @@ function OAuthCallbackContent() {
             router.push(errorReturnPath ?? "/mcp/registry");
           }}
         />
-      </OAuthCallbackLayout>
+      </AuthCallbackLayout>
     );
   }
 
   return (
-    <OAuthCallbackLayout>
+    <AuthCallbackLayout>
       <OAuthCallbackStatus status="processing" phase="completing" />
-    </OAuthCallbackLayout>
+    </AuthCallbackLayout>
   );
 }
 
 function LoadingFallback() {
   return (
-    <OAuthCallbackLayout>
+    <AuthCallbackLayout>
       <OAuthCallbackStatus status="processing" phase="initializing" />
-    </OAuthCallbackLayout>
-  );
-}
-
-function OAuthCallbackLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="mx-auto flex min-h-[calc(100dvh-8rem)] w-full items-center justify-center p-4">
-      {children}
-    </div>
+    </AuthCallbackLayout>
   );
 }
 

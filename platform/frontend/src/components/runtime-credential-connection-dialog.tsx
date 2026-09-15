@@ -4,6 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { ExternalSecretReferenceDialog } from "@/components/external-secret-reference-dialog";
+import { GitHubConnectButton } from "@/components/github-connect-button";
 import { RuntimeCredentialIcon } from "@/components/runtime-credential-icon";
 import { RuntimeCredentialDescription } from "@/components/runtime-credential-row-content";
 import { StandardFormDialog } from "@/components/standard-dialog";
@@ -79,9 +80,10 @@ export function RuntimeCredentialConnectionDialog({
             <Button type="button" variant="outline" onClick={onClose}>
               Cancel
             </Button>
-            <Button type="submit" disabled={startGitHub.isPending}>
-              {startGitHub.isPending ? "Connecting…" : "Connect GitHub"}
-            </Button>
+            <GitHubConnectButton
+              type="submit"
+              pending={startGitHub.isPending}
+            />
           </>
         }
       >

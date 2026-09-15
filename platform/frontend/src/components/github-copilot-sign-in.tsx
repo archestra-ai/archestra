@@ -2,6 +2,7 @@
 
 import { Check, Copy, Github, Loader2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { GitHubConnectButton } from "@/components/github-connect-button";
 import { Button } from "@/components/ui/button";
 import { copyToClipboard } from "@/lib/clipboard";
 import {
@@ -185,20 +186,12 @@ export function GithubCopilotSignIn({
 
   return (
     <div className="space-y-1">
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        disabled={disabled || start.isPending}
+      <GitHubConnectButton
+        pending={start.isPending}
+        disabled={disabled}
+        label="Sign in with GitHub"
         onClick={begin}
-      >
-        {start.isPending ? (
-          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-        ) : (
-          <Github className="mr-2 h-4 w-4" />
-        )}
-        <span>Sign in with GitHub</span>
-      </Button>
+      />
       {expired && (
         <p className="text-xs text-destructive">
           The sign-in expired before it was authorized — try again.

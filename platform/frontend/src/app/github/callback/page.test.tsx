@@ -25,7 +25,7 @@ beforeEach(() => {
   window.history.replaceState(
     null,
     "",
-    "/account/connections/github/callback?code=synthetic-code&state=synthetic-state",
+    "/github/callback?code=synthetic-code&state=synthetic-state",
   );
 });
 function renderCallback() {
@@ -40,6 +40,7 @@ function renderCallback() {
 it.each([
   "/account/connections",
   "/settings/credentials",
+  "/agents/agent-1?section=advanced&setup=credentials#runtime-credentials",
 ])("completes once in strict mode and returns to %s without leaving authorization in the URL", async (destination) => {
   rememberGitHubConnectionReturn("synthetic-state", destination);
   let calls = 0;
@@ -68,6 +69,7 @@ it.each([
 it.each([
   "/account/connections",
   "/settings/credentials",
+  "/agents/agent-1?section=advanced&setup=credentials#runtime-credentials",
 ])("returns to %s to recover from expired authorization", async (destination) => {
   rememberGitHubConnectionReturn("synthetic-state", destination);
   server.use(
@@ -87,18 +89,43 @@ it.each([
   ).not.toBeInTheDocument();
   fireEvent.click(
     screen.getByRole("button", {
-      name:
-        destination === "/settings/credentials"
+      name: destination.startsWith("/agents/")
+        ? "Back to your agent"
+        : destination === "/settings/credentials"
           ? "Back to credentials"
           : "Back to connections",
     }),
   );
   expect(replace).toHaveBeenCalledWith(destination);
 });
-it("offers a fresh sign-in when opened without authorization parameters", () => {
-  window.history.replaceState(null, "", "/account/connections/github/callback");
+it("offers a fresh sign-in when opened without authorization parameters", async () => {
+  window.history.replaceState(null, "", "/github/callback");
   renderCallback();
   expect(
-    screen.getByRole("button", { name: "Back to connections" }),
+    await screen.findByRole("button", { name: "Back to connections" }),
   ).toBeInTheDocument();
+});
+
+it("returns a declined authorization to the originating Agent without exchanging a code", async () => {
+  const destination = "/agents/agent-1?section=advanced&setup=credentials";
+  rememberGitHubConnectionReturn("synthetic-state", destination);
+  window.history.replaceState(
+    null,
+    "",
+    "/github/callback?error=access_denied&state=synthetic-state",
+  );
+  let calls = 0;
+  server.use(
+    http.post("http://localhost:9000/api/credentials/github/callback", () => {
+      calls++;
+      return HttpResponse.json({});
+    }),
+  );
+  renderCallback();
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Back to your agent" }),
+  );
+  expect(replace).toHaveBeenCalledWith(destination);
+  expect(calls).toBe(0);
+  expect(window.location.search).toBe("");
 });

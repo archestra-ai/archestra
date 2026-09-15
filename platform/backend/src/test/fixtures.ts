@@ -1223,7 +1223,7 @@ async function makeKnowledgeBase(
   overrides: Partial<
     Pick<
       InsertKnowledgeBase,
-      "name" | "status" | "visibility" | "teamIds" | "createdBy"
+      "name" | "description" | "status" | "visibility" | "teamIds" | "createdBy"
     >
   > = {},
 ): Promise<KnowledgeBase> {
@@ -1248,6 +1248,7 @@ async function makeKnowledgeBaseConnector(
     Pick<
       InsertKnowledgeBaseConnector,
       | "name"
+      | "description"
       | "visibility"
       | "teamIds"
       | "connectorType"

@@ -879,7 +879,7 @@ echo "Your existing AWS credentials keep working — only the base URL changed."
 
 function claudeManualMergeMessage(removeVirtualKeyEnv: string[]): string {
   const credentialCleanup = removeVirtualKeyEnv.length
-    ? ` Remove ${removeVirtualKeyEnv.join(" and ")} from env if they contain an Archestra virtual key; keep your provider credentials.`
+    ? ` Remove ${removeVirtualKeyEnv.join(" and ")} from env if their values start with ${ALL_ARCHESTRA_TOKEN_PREFIXES.join(" or ")}; keep your provider credentials.`
     : "";
   return `python3 not found — remove existing ${EXTERNAL_AGENT_ID_HEADER.toLowerCase()} and ${VIRTUAL_KEY_HEADER.toLowerCase()} lines from env.${CLAUDE_CODE_CUSTOM_HEADERS_ENV_KEY}.${credentialCleanup} Then merge this into ~/.claude/settings.json manually:`;
 }

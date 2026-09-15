@@ -15,6 +15,7 @@ import {
   it,
   vi,
 } from "vitest";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { makeSession } from "@/mocks/data/auth";
 import { makeConfig } from "@/mocks/data/config";
 import { AgentRuntimeCredentialsDeepLink } from "./agent-runtime-credentials-dialog";
@@ -150,12 +151,14 @@ function show(
 ) {
   return render(
     <QueryClientProvider client={queryClient}>
-      <AgentRuntimeCredentialsDeepLink
-        agentId="agent-1"
-        declarations={declarations}
-        canEditAgent={false}
-        {...props}
-      />
+      <TooltipProvider>
+        <AgentRuntimeCredentialsDeepLink
+          agentId="agent-1"
+          declarations={declarations}
+          canEditAgent={false}
+          {...props}
+        />
+      </TooltipProvider>
     </QueryClientProvider>,
   );
 }
@@ -196,7 +199,7 @@ describe("credential setup deep links", () => {
     const user = userEvent.setup();
     show();
     const connect = await screen.findByRole("button", {
-      name: "Connect GitHub",
+      name: "Connect GitHub account",
     });
     expect(
       screen.queryByPlaceholderText("Paste secret"),
@@ -245,7 +248,7 @@ describe("credential setup deep links", () => {
       expect(screen.queryByLabelText("Service token")).not.toBeInTheDocument(),
     );
     expect(
-      screen.getByRole("button", { name: "Connect GitHub" }),
+      screen.getByRole("button", { name: "Connect GitHub account" }),
     ).toBeVisible();
     expect(
       screen.queryByText("Secret value is required"),

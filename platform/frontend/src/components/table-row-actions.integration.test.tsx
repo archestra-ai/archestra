@@ -50,4 +50,39 @@ describe("TableRowActions with the real PermissionButton", () => {
       "Available to roles with the Agents (update) permission",
     );
   });
+
+  it.each([
+    false,
+    true,
+  ])("runs an action without submitting its surrounding form (permissions: %s)", (withPermissions) => {
+    vi.mocked(useHasPermissions).mockReturnValue({ data: true } as ReturnType<
+      typeof useHasPermissions
+    >);
+    const onClick = vi.fn();
+    const onSubmit = vi.fn((event) => event.preventDefault());
+    render(
+      <TooltipProvider>
+        <form onSubmit={onSubmit}>
+          <TableRowActions
+            itemName="GitHub account"
+            actions={[
+              {
+                icon: <span>icon</span>,
+                label: "Connect",
+                onClick,
+                permissions: withPermissions
+                  ? { credential: ["read"] }
+                  : undefined,
+              },
+            ]}
+          />
+        </form>
+      </TooltipProvider>,
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Connect GitHub account" }),
+    );
+    expect(onClick).toHaveBeenCalledOnce();
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
 });

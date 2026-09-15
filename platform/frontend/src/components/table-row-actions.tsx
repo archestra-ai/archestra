@@ -165,6 +165,7 @@ function ActionButton({
 
     return (
       <PermissionButton
+        type="button"
         permissions={action.permissions as Permissions}
         tooltip={tooltipText}
         aria-label={accessibleLabel}
@@ -201,6 +202,7 @@ function ActionButton({
       </Button>
     ) : (
       <Button
+        type="button"
         aria-label={accessibleLabel}
         variant="outline"
         size={size}

@@ -1,5 +1,6 @@
 "use client";
 
+import { Plug } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
@@ -8,6 +9,7 @@ import { ClaudeCodeAccount } from "@/components/claude-code-account";
 import { ExternalSecretReferenceDialog } from "@/components/external-secret-reference-dialog";
 import { QueryLoadError } from "@/components/query-load-error";
 import { StandardFormDialog } from "@/components/standard-dialog";
+import { TableRowActions } from "@/components/table-row-actions";
 import { Button } from "@/components/ui/button";
 import {
   Form,
@@ -212,12 +214,6 @@ function MissingCredentialsDialog({
                     <FormItem>
                       <FormLabel>{credential.label}</FormLabel>
                       <FormDescription className="space-y-2">
-                        <span className="block">
-                          {credential.key} ·{" "}
-                          {credential.scope === "per_user"
-                            ? "Personal"
-                            : "Organization"}
-                        </span>
                         {[
                           ...new Set([
                             credential.description?.trim(),
@@ -240,18 +236,19 @@ function MissingCredentialsDialog({
                           credential.
                         </p>
                       ) : definition?.kind === "github_app_user" ? (
-                        <div>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            disabled={startGitHub.isPending || save.isPending}
-                            onClick={() => startGitHub.mutate(definition.key)}
-                          >
-                            {startGitHub.isPending
-                              ? "Connecting…"
-                              : "Connect GitHub"}
-                          </Button>
-                        </div>
+                        <TableRowActions
+                          itemName={definition.name}
+                          actions={[
+                            {
+                              icon: <Plug className="size-4" />,
+                              label: startGitHub.isPending
+                                ? "Connecting…"
+                                : "Connect",
+                              disabled: startGitHub.isPending || save.isPending,
+                              onClick: () => startGitHub.mutate(definition.key),
+                            },
+                          ]}
+                        />
                       ) : byosEnabled ? (
                         <FormControl>
                           <Button

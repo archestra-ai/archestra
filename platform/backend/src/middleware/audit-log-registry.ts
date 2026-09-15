@@ -11,6 +11,7 @@ import EnvironmentDefaultUserLimitModel from "@/models/environment-default-user-
 import EnvironmentResourceDefaultModel from "@/models/environment-resource-default";
 import GithubAppConfigModel from "@/models/github-app-config";
 import GithubPatModel from "@/models/github-pat";
+import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import KbDirectoryModel from "@/models/kb-directory";
 import KbFileModel from "@/models/kb-file";
@@ -137,6 +138,12 @@ export function deriveAction(
  * @public — consumed by audit-log-snapshot.test.ts to verify registry invariants
  */
 export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
+  "/api/guardrails-policy": {
+    resourceType: "guardrailsPolicy",
+    action: "guardrailsPolicy.updated",
+    resourceIdSource: "organizationContext",
+    fetchById: (id, orgId) => GuardrailsPolicyModel.findByIdForAudit(id, orgId),
+  },
   "/api/client-connections/:id/decision": {
     resourceType: "clientConnection",
     action: "clientConnection.updated",

@@ -674,6 +674,9 @@ export const permissionDescriptions: Record<string, string> = {
 export const requiredEndpointPermissionsMap: Partial<
   Record<RouteId, Permissions>
 > = {
+  [RouteId.GetGuardrailsPolicy]: { toolPolicy: ["read"] },
+  [RouteId.ValidateGuardrailsPolicy]: { toolPolicy: ["update"] },
+  [RouteId.UpdateGuardrailsPolicy]: { toolPolicy: ["update"] },
   // Inspecting or mutating arbitrary outbound destinations can configure
   // credential-bearing egress, so those operations remain settings-manager
   // only. Credential-redacted registry summaries require Agent read and are

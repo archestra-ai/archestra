@@ -5,6 +5,7 @@ import {
 } from "@/archestra-mcp-server";
 import config from "@/config";
 import * as database from "@/database";
+import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { processProxyResults } from "./service";
 
@@ -20,7 +21,7 @@ const session = {
 };
 
 beforeEach(() => {
-  config.openappa = { enabled: true, policyPath: "/test/policy.toml" };
+  config.openappa = { enabled: true };
   vi.spyOn(database, "getDatabaseConnectionString").mockReturnValue(
     "postgresql://test:test@localhost/test",
   );
@@ -192,4 +193,39 @@ describe("APPA feature boundary", () => {
       }),
     );
   });
+});
+
+test("dispatch loads the latest saved policy text from the organization database", async ({
+  makeOrganization,
+  makeUser,
+}) => {
+  const organization = await makeOrganization();
+  const user = await makeUser();
+  const content = "[policy]\nversion = 2\n";
+  const scoped = { ...session, organization_id: organization.id };
+  await GuardrailsPolicyModel.save({
+    organizationId: organization.id,
+    updatedBy: user.id,
+    content,
+    contentHash: "first",
+    expectedRevision: 0,
+  });
+  await processProxyResults(scoped, []);
+  expect(native.dispatchHook).toHaveBeenLastCalledWith(
+    expect.any(String),
+    content,
+  );
+  const updated = `${content}# updated`;
+  await GuardrailsPolicyModel.save({
+    organizationId: organization.id,
+    updatedBy: user.id,
+    content: updated,
+    contentHash: "second",
+    expectedRevision: 1,
+  });
+  await processProxyResults(scoped, []);
+  expect(native.dispatchHook).toHaveBeenLastCalledWith(
+    expect.any(String),
+    updated,
+  );
 });

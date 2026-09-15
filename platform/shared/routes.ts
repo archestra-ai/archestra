@@ -1,4 +1,7 @@
 export const RouteId = {
+  GetGuardrailsPolicy: "getGuardrailsPolicy",
+  ValidateGuardrailsPolicy: "validateGuardrailsPolicy",
+  UpdateGuardrailsPolicy: "updateGuardrailsPolicy",
   // Outbound A2A Agent Routes
   InspectA2aRemoteAgent: "inspectA2aRemoteAgent",
   ListA2aRemoteAgents: "listA2aRemoteAgents",

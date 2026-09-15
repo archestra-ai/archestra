@@ -16,6 +16,12 @@ This gives you a middle ground between two extremes:
 
 With AI tool guardrails, the same agent can operate normally in safe contexts and become more restricted only when context or tool output requires it.
 
+## Guardrails V2 Preview
+
+Enable `ARCHESTRA_OPENAPPA_ENABLED` to edit the organization policy as TOML. Policies are stored in PostgreSQL. Saved revisions apply to new conversations without restarting the backend. Existing conversations retain their original policy.
+
+The assistant can read, validate, and update the same policy through its policy tools. Both editing paths enforce permissions and reject conflicting revisions. Invalid policies leave the saved revision unchanged.
+
 ## The Lethal Trifecta
 
 The "lethal trifecta" is a prompt-injection risk that appears when an agent has all three of these at once (a pattern named by security researcher Simon Willison):

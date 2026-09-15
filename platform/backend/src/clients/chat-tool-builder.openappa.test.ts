@@ -30,7 +30,7 @@ for (const enabled of [false, true]) {
     makeConversation,
     seedAndAssignArchestraTools,
   }) => {
-    config.openappa = { enabled, policyPath: "/test/policy.toml" };
+    config.openappa = { enabled };
     const agent = await makeAgent();
     const user = await makeUser();
     await seedAndAssignArchestraTools(agent.id);

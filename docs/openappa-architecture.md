@@ -8,8 +8,20 @@ The special MCP remedy tool also calls the embedded runtime.
 
 `ARCHESTRA_OPENAPPA_ENABLED` defaults to `false`. Only explicit `true` enables
 APPA; a configured policy path and `ARCHESTRA_BETA` do not activate it.
-`ARCHESTRA_OPENAPPA_POLICY_PATH` is required when enabled. Restart the backend
-when changing either setting.
+The Guardrails editor stores organization policy revisions in PostgreSQL. Restart
+the backend when changing the flag; saving a policy requires no restart.
+
+The HTTP API and agent read/validate/update tools share validation and revision
+checks. Edits compile without executing external services. The next dispatch
+loads the latest saved revision under the native runtime lock. New conversations
+use it; existing conversations retain their recorded policy.
+
+The editor accepts `[policy]` and URL/builtin bindings in `[externals]`. File
+includes, local commands, and runtime-owned settings are rejected. Tokens are
+referenced through `token_env`; policy documents must not contain credentials.
+Existing file-based deployments must copy their policy into the editor. An
+unconfigured organization starts with a restrictive policy that admits policy
+authoring and tool discovery; other tools must be explicitly configured.
 
 | Boundary | Flag off | Flag on |
 | --- | --- | --- |
@@ -76,7 +88,7 @@ unresolved-dispatch cleanup and unused remedy-permit lifetime are unchanged.
 The enabled prototype still refuses locked chats and delegation and disables
 detached tool tasks. These restrictions do not apply with the flag off.
 
-Policy reload, general attachment/final-answer enforcement, child return
+General attachment/final-answer enforcement, child return
 integration, provider-hosted tools and operator recovery remain follow-up work.
 Start new conversations when enabling APPA: old tool results have no receipts.
 

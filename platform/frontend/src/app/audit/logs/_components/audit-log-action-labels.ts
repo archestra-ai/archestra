@@ -211,6 +211,7 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   // Tool
   "tool.deleted": "Tool deleted",
   // Tool invocation policy
+  "guardrailsPolicy.updated": "Updated guardrails policy",
   "toolInvocationPolicy.created": "Tool policy created",
   "toolInvocationPolicy.updated": "Tool policy updated",
   "toolInvocationPolicy.deleted": "Tool policy deleted",

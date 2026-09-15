@@ -5,7 +5,7 @@ process.stdin.setEncoding('utf8');
 process.stdin.on('data', (chunk) => { input += chunk; });
 process.stdin.on('end', async () => {
   try {
-    await native.initializeOpenappa(process.env.OPENAPPA_TEST_DATABASE_URL, process.env.OPENAPPA_TEST_POLICY_PATH);
+    await native.initializeOpenappa(process.env.OPENAPPA_TEST_DATABASE_URL, require("node:fs").readFileSync(process.env.OPENAPPA_TEST_POLICY_PATH, "utf8"));
     process.stdout.write(await native.dispatchHook(input));
   } catch (error) {
     process.stderr.write(error.message);

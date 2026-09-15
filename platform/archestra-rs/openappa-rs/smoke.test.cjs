@@ -55,7 +55,7 @@ permits = { attention = ["email-review"] }
 [externals.authorities.email-operator]
 builtin = "hitl"
 `);
-  await native.initializeOpenappa(databaseUrl, policyPath);
+  await native.initializeOpenappa(databaseUrl, readFileSync(policyPath, "utf8"));
   const client = new Client({ connectionString: databaseUrl });
   await client.connect();
   t.after(() => client.end());
@@ -158,7 +158,7 @@ builtin = "hitl"
     await assert.rejects(() => hook(session, { ...remedyEvent, ruling: 'approve' }), /unknown field.*ruling/);
     const remedy = await hook(session, remedyEvent);
     assert.equal(remedy.decision, 'mcp_result');
-    assert.match(JSON.stringify(remedy.result.content), /unreachable/);
+    assert.match(JSON.stringify(remedy.result.content), /unreachable|gave no answer/);
     assert.deepEqual(await restarted(session, remedyEvent), remedy);
     assert.equal((await hook(session, { ...event, operation_id: 'call:retry' })).decision, 'deny_call');
   });

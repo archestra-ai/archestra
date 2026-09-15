@@ -43,7 +43,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
   let fail: boolean;
 
   beforeEach(async ({ makeAgent, makeUser, makeMember }) => {
-    config.openappa = { enabled: true, policyPath: "/test/policy.toml" };
+    config.openappa = { enabled: true };
     vi.spyOn(database, "getDatabaseConnectionString").mockReturnValue(
       "postgresql://test:test@localhost/test?schema=public",
     );

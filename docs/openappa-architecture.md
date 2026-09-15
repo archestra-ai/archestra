@@ -20,8 +20,10 @@ The editor accepts `[policy]` and URL/builtin bindings in `[externals]`. File
 includes, local commands, and runtime-owned settings are rejected. Tokens are
 referenced through `token_env`; policy documents must not contain credentials.
 Existing file-based deployments must copy their policy into the editor. An
-unconfigured organization starts with a restrictive policy that admits policy
-authoring and tool discovery; other tools must be explicitly configured.
+unconfigured organization starts with only a catch-all annotator. It returns
+empty changes and requirements, leaving trust and audience unchanged. Explicit
+tool rules take precedence over the catch-all. The local backend serves this
+fixed answer without calling a model or accessing user data.
 
 | Boundary | APPA omitted | APPA included |
 | --- | --- | --- |

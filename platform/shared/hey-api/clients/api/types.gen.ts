@@ -46228,6 +46228,103 @@ export type GroqChatCompletionsWithAgentResponses = {
 
 export type GroqChatCompletionsWithAgentResponse = GroqChatCompletionsWithAgentResponses[keyof GroqChatCompletionsWithAgentResponses];
 
+export type AnnotateGuardrailsToolData = {
+    body: {
+        version: 1;
+        kind: 'annotation';
+        [key: string]: unknown;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/guardrails-policy/annotators/noop';
+};
+
+export type AnnotateGuardrailsToolErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type AnnotateGuardrailsToolError = AnnotateGuardrailsToolErrors[keyof AnnotateGuardrailsToolErrors];
+
+export type AnnotateGuardrailsToolResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        version: 1;
+        answer: {
+            delta: {
+                [key: string]: never;
+            };
+            requires: {
+                history: Array<unknown>;
+                attention: Array<unknown>;
+            };
+            emits: Array<unknown>;
+        };
+    };
+};
+
+export type AnnotateGuardrailsToolResponse = AnnotateGuardrailsToolResponses[keyof AnnotateGuardrailsToolResponses];
+
 export type GetGuardrailsPolicyData = {
     body?: never;
     path?: never;

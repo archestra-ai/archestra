@@ -29,3 +29,51 @@ test('saved text changes enforcement for new sessions and preserves existing ses
   assert.equal((await hook(next, { event: 'session_start' }, deny)).decision, 'ack');
   assert.notEqual((await hook(next, call, deny)).decision, 'allow_call');
 });
+
+test('catch-all annotations admit unknown tools without changing trust or overriding explicit rules', { skip: !process.env.OPENAPPA_TEST_DATABASE_URL }, async (t) => {
+  const requests = [];
+  const server = require('node:http').createServer(async (req, res) => {
+    let body = '';
+    for await (const chunk of req) body += chunk;
+    requests.push(JSON.parse(body));
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ version: 1, answer: { delta: {}, requires: { history: [], attention: [] }, emits: [] } }));
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise(resolve => server.close(resolve)));
+  const policy = `[policy]
+version = 2
+[[policy.annotator]]
+name = "noop"
+[[policy.tool]]
+name = "*"
+annotator = "noop"
+[[policy.tool]]
+name = "read_untrusted"
+delta = { trust = "suspicious" }
+[[policy.tool]]
+name = "write_trusted"
+delta = {}
+requires = { trust = "trusted" }
+[externals.annotators.noop]
+url = "http://127.0.0.1:${server.address().port}/annotate"
+`;
+  assert.deepEqual(await native.validateOpenappaPolicy(policy), []);
+  await native.initializeOpenappa(process.env.OPENAPPA_TEST_DATABASE_URL, policy);
+  const scope = { organization_id: 'catch-all-test', caller_id: 'user:test', session_id: randomUUID() };
+  const hook = async event => JSON.parse(await native.dispatchHook(JSON.stringify({ ...scope, ...event }), policy));
+  assert.equal((await hook({ event: 'session_start' })).decision, 'ack');
+  const call = async (name, id) => hook({ event: 'tool_call', operation_id: `call:${id}`, tool: name, arguments: {} });
+  const result = async id => hook({ event: 'tool_result', operation_id: `result:${id}`, tool_call_id: id, output: 'result', outcome: 'success' });
+  assert.equal((await call('unknown_before', 'unknown-before')).decision, 'allow_call');
+  await result('unknown-before');
+  const read = await call('read_untrusted', 'read');
+  assert.equal(read.decision, 'deny_call');
+  await hook({ event: 'remedy', operation_id: 'remedy:accept-suspicious', arguments: { offer_id: read.offers[0].offer_id } });
+  assert.equal((await call('read_untrusted', 'read-accepted')).decision, 'allow_call');
+  await result('read-accepted');
+  assert.equal((await call('unknown_after', 'unknown-after')).decision, 'allow_call');
+  await result('unknown-after');
+  assert.notEqual((await call('write_trusted', 'write')).decision, 'allow_call');
+  assert.deepEqual(requests.map(request => request.artifact.args.name), ['unknown_before', 'unknown_after']);
+});

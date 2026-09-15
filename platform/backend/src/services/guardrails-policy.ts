@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import config from "@/config";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
+import { GUARDRAILS_NOOP_ANNOTATOR_PATH } from "@/routes/route-paths";
 import { ApiError } from "@/types";
 import type { GuardrailsPolicy } from "@/types/guardrails-policy";
 
@@ -17,6 +18,18 @@ export const guardrailsPolicyService = {
         updatedBy: null,
       }
     );
+  },
+
+  annotate() {
+    requireEnabled();
+    return {
+      version: 1 as const,
+      answer: {
+        delta: {},
+        requires: { history: [], attention: [] },
+        emits: [],
+      },
+    };
   },
 
   async validate(content: string) {
@@ -62,28 +75,17 @@ function hash(content: string) {
   return createHash("sha256").update(content).digest("hex");
 }
 
-const INITIAL_POLICY = `# Organization policy. Unlisted tools are denied.
-# Saved changes apply to new conversations.
-[policy]
+const INITIAL_POLICY = `[policy]
 version = 2
 
-# Policy administration requires a trusted conversation.
-[[policy.tool]]
-name = "archestra__get_guardrails_policy"
-requires = { trust = "trusted" }
-delta = {}
+[[policy.annotator]]
+name = "noop"
 
+# Tools without a specific rule have no additional restrictions.
 [[policy.tool]]
-name = "archestra__validate_guardrails_policy"
-requires = { trust = "trusted" }
-delta = {}
+name = "*"
+annotator = "noop"
 
-[[policy.tool]]
-name = "archestra__update_guardrails_policy"
-requires = { trust = "trusted" }
-delta = {}
-
-[[policy.tool]]
-name = "archestra__search_tools"
-delta = {}
+[externals.annotators.noop]
+url = "http://127.0.0.1:${config.api.port}${GUARDRAILS_NOOP_ANNOTATOR_PATH}"
 `;

@@ -1,4 +1,5 @@
 export const RouteId = {
+  AnnotateGuardrailsTool: "annotateGuardrailsTool",
   GetGuardrailsPolicy: "getGuardrailsPolicy",
   ValidateGuardrailsPolicy: "validateGuardrailsPolicy",
   UpdateGuardrailsPolicy: "updateGuardrailsPolicy",

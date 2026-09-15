@@ -22,6 +22,7 @@ import {
   AUTH_STATE_PATH,
   CONNECTION_HEALTH_PATH,
   CONNECTION_SETUP_SCRIPT_PREFIX,
+  GUARDRAILS_NOOP_ANNOTATOR_PATH,
   HEALTH_PATH,
   INCOMING_EMAIL_WEBHOOK_PREFIX,
   METRICS_PATH,
@@ -216,6 +217,9 @@ export class Authnz {
       url.startsWith("/_sandbox/") ||
       // Allow fetching public SSO providers list for login page (minimal info, no secrets)
       (method === "GET" && url === "/api/identity-providers/public") ||
+      // The APPA runtime has no browser session. This exact endpoint only
+      // returns a constant empty annotation; it reads and writes no user data.
+      (method === "POST" && url === GUARDRAILS_NOOP_ANNOTATOR_PATH) ||
       // Allow fetching public config for login and invitation UI
       (method === "GET" && url === PUBLIC_CONFIG_PATH) ||
       // Explicit even though the /api/auth prefix check below already covers

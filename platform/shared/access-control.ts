@@ -674,6 +674,8 @@ export const permissionDescriptions: Record<string, string> = {
 export const requiredEndpointPermissionsMap: Partial<
   Record<RouteId, Permissions>
 > = {
+  // Public, stateless APPA endpoint. Returns only an empty annotation.
+  [RouteId.AnnotateGuardrailsTool]: {},
   [RouteId.GetGuardrailsPolicy]: { toolPolicy: ["read"] },
   [RouteId.ValidateGuardrailsPolicy]: { toolPolicy: ["update"] },
   [RouteId.UpdateGuardrailsPolicy]: { toolPolicy: ["update"] },

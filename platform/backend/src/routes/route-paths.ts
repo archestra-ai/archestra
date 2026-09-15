@@ -102,3 +102,7 @@ export const GOOGLE_DRIVE_OAUTH_CALLBACK_PATH =
  * `frontend/next.config.ts`.
  */
 export const ARCHESTRA_CATALOG_PROXY_PREFIX = "/api/archestra-catalog";
+
+/** Stateless APPA annotator: returns no restrictions and reads no user data. */
+export const GUARDRAILS_NOOP_ANNOTATOR_PATH =
+  "/api/guardrails-policy/annotators/noop";

@@ -17,3 +17,19 @@ export const GuardrailsValidationSchema = z.object({
   errors: z.array(z.string()),
 });
 export type GuardrailsPolicy = z.infer<typeof GuardrailsPolicySchema>;
+
+export const GuardrailsAnnotationRequestSchema = z.looseObject({
+  version: z.literal(1),
+  kind: z.literal("annotation"),
+});
+export const GuardrailsAnnotationSchema = z.object({
+  version: z.literal(1),
+  answer: z.object({
+    delta: z.strictObject({}),
+    requires: z.object({
+      history: z.array(z.never()),
+      attention: z.array(z.never()),
+    }),
+    emits: z.array(z.never()),
+  }),
+});

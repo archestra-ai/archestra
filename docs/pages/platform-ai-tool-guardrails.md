@@ -20,6 +20,8 @@ With AI tool guardrails, the same agent can operate normally in safe contexts an
 
 Set `ARCHESTRA_LLM_PROXY_PLUGINS=appa` to edit the organization policy as TOML. Policies are stored in PostgreSQL. Saved revisions apply to new conversations without restarting the backend. Existing conversations retain their original policy.
 
+The default policy has no rules for specific tools. A catch-all annotator adds no restrictions or label changes. Explicit tool rules take precedence over this fallback.
+
 The assistant can read, validate, and update the same policy through its policy tools. Both editing paths enforce permissions and reject conflicting revisions. Invalid policies leave the saved revision unchanged.
 
 ## The Lethal Trifecta

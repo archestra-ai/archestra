@@ -237,7 +237,7 @@ Over the API, `POST /api/agents/:id/versions/:version/restore` does the same. Se
 
 ## System Prompt Templating
 
-Agent system prompts support [Handlebars](https://handlebarsjs.com/) templating. Templates are rendered at runtime before the prompt is sent to the LLM, with the current user's context injected as variables. Agent Skills can opt into the same rendering with a `templated: true` frontmatter field (set automatically when converting a templated agent); their `SKILL.md` body is then rendered with the same variables and helpers each time the skill is loaded.
+Agent system prompts support [Handlebars](https://handlebarsjs.com/) templating. Templates are rendered at runtime before the prompt is sent to the LLM, with the current user's context injected as variables. Agent Skills can opt into the same rendering with a `templated: true` frontmatter field; their `SKILL.md` body is then rendered with the same variables and helpers each time the skill is loaded.
 
 ### Variables
 

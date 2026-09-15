@@ -297448,84 +297448,6 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "name": {
-                      "type": "string"
-                    },
-                    "version": {
-                      "type": "string"
-                    },
-                    "agentId": {
-                      "type": "string"
-                    },
-                    "transport": {
-                      "type": "string"
-                    },
-                    "protocolVersions": {
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      }
-                    },
-                    "capabilities": {
-                      "type": "object",
-                      "properties": {
-                        "tools": {
-                          "type": "boolean"
-                        }
-                      },
-                      "required": [
-                        "tools"
-                      ],
-                      "additionalProperties": false
-                    },
-                    "tokenAuth": {
-                      "type": "object",
-                      "properties": {
-                        "tokenId": {
-                          "type": "string"
-                        },
-                        "teamId": {
-                          "nullable": true,
-                          "type": "string"
-                        },
-                        "isOrganizationToken": {
-                          "type": "boolean"
-                        },
-                        "isUserToken": {
-                          "type": "boolean"
-                        },
-                        "userId": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "tokenId",
-                        "teamId",
-                        "isOrganizationToken"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "name",
-                    "version",
-                    "agentId",
-                    "transport",
-                    "protocolVersions",
-                    "capabilities"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
           "401": {
             "description": "Default Response",
             "content": {
@@ -297543,6 +297465,53 @@
                   "required": [
                     "error",
                     "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "jsonrpc": {
+                      "type": "string",
+                      "enum": [
+                        "2.0"
+                      ]
+                    },
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "number"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "id": {
+                      "type": "string",
+                      "nullable": true,
+                      "enum": [
+                        null
+                      ]
+                    }
+                  },
+                  "required": [
+                    "jsonrpc",
+                    "error",
+                    "id"
                   ],
                   "additionalProperties": false
                 }

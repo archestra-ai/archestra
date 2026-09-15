@@ -3,7 +3,7 @@
  * drives the recurring GET SSE poll against the loopback gateway.
  *
  * Background: the MCP SDK's `StreamableHTTPClientTransport` opens an optional
- * standalone GET SSE stream after `initialized`. The real gateway answers that
+ * standalone GET SSE stream after `initialized`. The gateway previously answered that
  * GET with finite discovery JSON (`200`), which the SDK reads as an empty SSE
  * stream and reconnects roughly once per second — each GET running DB-backed
  * profile/auth work. The transport built by `createLoopbackGatewayTransport`
@@ -11,8 +11,8 @@
  * stops polling and no GET ever reaches the network.
  *
  * This drives the REAL production transport factory against a real stateless
- * streamable-HTTP MCP server (like the gateway) that would happily answer GET
- * with `200` JSON, and asserts the server observes zero GET requests while a
+ * streamable-HTTP MCP server that reproduces the gateway's former `200` JSON
+ * response to GET, and asserts the server observes zero GET requests while a
  * POST-based `tools/list` still succeeds AND still carries the Bearer token
  * (proving the JSON-RPC POST path passes through the custom fetch untouched).
  *
@@ -27,7 +27,7 @@ import { ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { expect, test } from "vitest";
 import { createLoopbackGatewayTransport } from "@/clients/chat-mcp-client";
 
-/** A real stateless streamable-HTTP MCP server that mirrors the gateway: POST
+/** A real stateless streamable-HTTP MCP server that reproduces the old gateway: POST
  * carries JSON-RPC, and GET is answered with a `200` JSON body (the exact shape
  * that makes the SDK loop). Records GET arrivals and the last POST's bearer. */
 async function startGatewayLikeServer(): Promise<{
@@ -42,7 +42,7 @@ async function startGatewayLikeServer(): Promise<{
     try {
       if (req.method === "GET") {
         getRequests += 1;
-        // Mimic the discovery route: finite JSON, not SSE. A client that does
+        // Reproduce the former discovery route: finite JSON, not SSE. A client that does
         // NOT short-circuit its GET would receive this and reconnect forever.
         res.writeHead(200, { "content-type": "application/json" }).end("{}");
         return;

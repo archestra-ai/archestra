@@ -1889,7 +1889,7 @@ const MessageTool = memo(
       return (
         <PolicyDeniedTool
           policyDenied={toolAuthState.policyDenied}
-          {...(agentId
+          {...(agentId && !mcpOutput?._meta?.appaBlockedReceipt
             ? { editable: true, profileId: agentId }
             : { editable: false })}
         />

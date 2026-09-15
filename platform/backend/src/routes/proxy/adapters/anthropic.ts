@@ -605,7 +605,7 @@ class AnthropicResponseAdapter
         {
           type: "text",
           text: contentMessage,
-          citations: null,
+          citations: [],
         },
       ],
       stop_reason: "end_turn",

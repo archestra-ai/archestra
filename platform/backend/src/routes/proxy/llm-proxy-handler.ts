@@ -78,7 +78,13 @@ import {
   type SpanTeamInfo,
 } from "@/observability/tracing";
 import {
+  APPA_CHAT_BLOCK_HEADER,
+  APPA_CHAT_BLOCK_VERSION,
+  encodeChatBlock,
+} from "@/openappa/chat-block";
+import {
   isAppaChatSource,
+  type OpenAppaSession,
   openappaEnabled,
   sessionFromHeaders,
 } from "@/openappa/service";
@@ -157,6 +163,8 @@ const {
  * for maintainability and readability.
  */
 export interface LLMProxyContext<TRequest> {
+  openappaSession?: OpenAppaSession;
+  openappaChatRequestId?: string;
   pluginRegistry?: LlmProxyPluginRegistry;
   pluginContext?: LlmProxyRequestContext;
   /** Captured by the host after binding an authenticated APPA session. */
@@ -1059,14 +1067,15 @@ export async function handleLLMProxy<
     let pluginToolResultsOutcome:
       | Awaited<ReturnType<LlmProxyPluginRegistry["onToolResults"]>>
       | undefined;
+    let openappaSession: OpenAppaSession | undefined;
+    const isInternalChat =
+      isAppaChatSource(source) && isLoopbackRequest(request);
     if (hasProxyPlugins) {
       // APPA recognizes Chat only after the loopback caller's owner,
       // organization, profile, and conversation root have been bound below.
-      const isInternalChat =
-        isAppaChatSource(source) && isLoopbackRequest(request);
       const appaUserId =
         authenticatedUserId ?? (isInternalChat ? userId : undefined);
-      const openappaSession = sessionFromHeaders({
+      openappaSession = sessionFromHeaders({
         headers: headersForExtraction,
         organizationId: resolvedAgent.organizationId,
         callerId: appaUserId
@@ -1417,7 +1426,17 @@ export async function handleLLMProxy<
       }
     }
 
+    const chatBlockCapability = headersForExtraction[APPA_CHAT_BLOCK_HEADER];
     const ctx: LLMProxyContext<TRequest> = {
+      openappaSession,
+      openappaChatRequestId:
+        openappaSession &&
+        isInternalChat &&
+        typeof chatBlockCapability === "string" &&
+        chatBlockCapability.startsWith(`${APPA_CHAT_BLOCK_VERSION}:`) &&
+        isUuid(chatBlockCapability.slice(3))
+          ? chatBlockCapability.slice(3)
+          : undefined,
       ...(pluginContext ? { pluginRegistry, pluginContext } : {}),
       usesAppaPolicies,
       agent: resolvedAgent,
@@ -1955,7 +1974,17 @@ async function handleStreaming<
         toolInvocationRefusal;
 
       // Drop the held tool-call events and use the existing refusal format.
-      const refusalEvents = streamAdapter.formatCompleteTextSSE(contentMessage);
+      // Its text comes from APPA when enabled.
+      const chatBlock =
+        ctx.openappaChatRequestId && ctx.openappaSession
+          ? encodeChatBlock({
+              session: ctx.openappaSession,
+              requestId: ctx.openappaChatRequestId,
+              feedback: contentMessage,
+              calls: rewrittenToolCalls ?? toolCalls,
+            })
+          : contentMessage;
+      const refusalEvents = streamAdapter.formatCompleteTextSSE(chatBlock);
       for (const event of refusalEvents) {
         writeToClient(event);
       }
@@ -2475,9 +2504,18 @@ async function handleNonStreaming<
         `[${providerName}Proxy] Tool invocation blocked by policy`,
       );
 
+      const chatBlock =
+        ctx.openappaChatRequestId && ctx.openappaSession
+          ? encodeChatBlock({
+              session: ctx.openappaSession,
+              requestId: ctx.openappaChatRequestId,
+              feedback: contentMessage,
+              calls: rewrittenToolCalls ?? toolCalls,
+            })
+          : contentMessage;
       const refusalResponse = responseAdapter.toRefusalResponse(
-        refusalMessage,
-        contentMessage,
+        ctx.openappaChatRequestId ? chatBlock : refusalMessage,
+        chatBlock,
       );
 
       recordBlockedToolCallMetrics({

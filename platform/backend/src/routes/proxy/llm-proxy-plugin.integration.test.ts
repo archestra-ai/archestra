@@ -350,6 +350,59 @@ describe("LLM proxy plugin lifecycle", () => {
     }
   });
 
+  test("preserves a provider error when plugin error cleanup also fails", async ({
+    makeAgent,
+  }) => {
+    const events: string[] = [];
+    const unregister = registerLlmProxyPlugin({
+      id: `test-error-cleanup-${crypto.randomUUID()}`,
+      async onSessionInit() {
+        events.push("init");
+      },
+      async onError() {
+        events.push("error");
+        throw new Error("plugin error cleanup failed");
+      },
+      async onCleanup() {
+        events.push("cleanup");
+      },
+    });
+    const agent = await makeAgent({ agentType: "llm_proxy", isDefault: true });
+    const client = createOpenAiTestClient({});
+    client.chat.completions.create = async () => {
+      throw new Error("provider unavailable");
+    };
+    vi.spyOn(openaiAdapterFactory, "createClient").mockImplementation(
+      () => client as never,
+    );
+
+    try {
+      for (const stream of [false, true]) {
+        events.length = 0;
+        const response = await app.inject({
+          method: "POST",
+          url: `/v1/openai/${agent.id}/chat/completions`,
+          headers: {
+            authorization: "Bearer test-key",
+            "content-type": "application/json",
+          },
+          payload: {
+            model: "gpt-4o",
+            messages: [{ role: "user", content: "hello" }],
+            stream,
+          },
+        });
+
+        expect(response.statusCode, response.body).toBeGreaterThanOrEqual(400);
+        expect(response.body).toContain("provider unavailable");
+        expect(response.body).not.toContain("plugin error cleanup failed");
+        expect(events).toEqual(["init", "error", "cleanup"]);
+      }
+    } finally {
+      unregister();
+    }
+  });
+
   test("cleans an initialized tool-result hook failure before invoking the provider", async ({
     makeAgent,
   }) => {

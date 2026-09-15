@@ -1472,13 +1472,16 @@ export async function handleLLMProxy<
     // captured as unhandled server exceptions.
     return await handleNonStreaming(client, finalRequest, reply, provider, ctx);
   } catch (error) {
-    let lifecycleError = error;
+    const lifecycleError = error;
     if (pluginContext && pluginSessionInitialized) {
       try {
         pluginSessionInitialized = false;
         await pluginRegistry.fail({ ...pluginContext, error });
       } catch (pluginError) {
-        lifecycleError = pluginError;
+        logger.warn(
+          { err: pluginError },
+          "Plugin cleanup failed while handling proxy error",
+        );
       }
     }
     // Persist failed interactions so they appear in LLM logs
@@ -2013,13 +2016,16 @@ async function handleStreaming<
     streamCompleted = true;
     return reply;
   } catch (error) {
-    let lifecycleError = error;
+    const lifecycleError = error;
     try {
       if (pluginRegistry && pluginContext) {
         await pluginRegistry.fail({ ...pluginContext, error });
       }
     } catch (pluginError) {
-      lifecycleError = pluginError;
+      logger.warn(
+        { err: pluginError },
+        "Plugin cleanup failed while handling proxy error",
+      );
     }
     // If the stream never established (e.g. a provider 400 rejecting the
     // request), record the duration here for providers we instrument in the

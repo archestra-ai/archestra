@@ -7,7 +7,7 @@ export const RUNTIME_HANDOFF_SKILL: BuiltInSkill = {
     "Move ongoing work between a local client and Agent Runtime, let it continue while you are away, and pick it up later. Use for repository work, research, documents, and other long-running tasks; preserve the same runtime session for every follow-up.",
   content: `# Agent Runtime Handoff
 
-Use Archestra's connected tools to move work between clients and a retained runtime session. The local client's conversation does not automatically transfer: send a concise handoff with the goal, decisions, completed work, remaining steps, constraints, and acceptance criteria.
+Use the connected tools to move work between clients and a retained runtime session. The local client's conversation does not automatically transfer: send a concise handoff with the goal, decisions, completed work, remaining steps, constraints, and acceptance criteria.
 
 ## Discover once
 

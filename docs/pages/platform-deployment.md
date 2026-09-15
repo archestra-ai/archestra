@@ -2077,9 +2077,10 @@ To learn more about enterprise licensing, see the [pricing model](/docs/platform
 
 ### OpenAPPA Tool Guardrails (experimental)
 
-- `ARCHESTRA_LLM_PROXY_PLUGINS`: comma-separated startup allowlist, empty by default. Including `appa` enables OpenAPPA; omitting it disables the integration. No separate enable flag is needed.
-- `ARCHESTRA_OPENAPPA_POLICY_PATH`: absolute deployment TOML path, required when the plugin list includes `appa`.
+- `ARCHESTRA_OPENAPPA_ENABLED`: defaults to `false`. Explicit `true` enables OpenAPPA and automatically registers its proxy plugin.
+- `ARCHESTRA_LLM_PROXY_PLUGINS`: comma-separated startup allowlist, empty by default. An explicit `appa` entry remains inactive unless the APPA feature flag is enabled.
+- `ARCHESTRA_OPENAPPA_POLICY_PATH`: absolute deployment TOML path, required when `ARCHESTRA_OPENAPPA_ENABLED=true`.
 
 `ARCHESTRA_BETA` and a policy path alone do not enable OpenAPPA. Restart the backend after changing these settings. Enabling APPA without a policy path fails startup.
 
-With an empty plugin list, existing Tool Guardrails run unchanged. The native APPA runtime and MCP remedy tool remain inactive. When enabled, APPA evaluates tool calls and results; errors fail closed. The existing refusal envelope carries APPA's explanation and remedy text. The special MCP remedy tool is available, but interactive APPA human approval is not integrated. See [the integration setup](https://github.com/archestra-ai/archestra/blob/main/platform/archestra-rs/openappa-rs/README.md) for current limitations.
+With the APPA flag off, existing Tool Guardrails run unchanged. The native APPA runtime and MCP remedy tool remain inactive. When enabled, APPA replaces the proxy’s existing tool-call and tool-result policy checks. Errors fail closed. The existing refusal envelope carries APPA's explanation and remedy text. The special MCP remedy tool is available, but interactive APPA human approval is not integrated. See [the integration setup](https://github.com/archestra-ai/archestra/blob/main/platform/archestra-rs/openappa-rs/README.md) for current limitations.

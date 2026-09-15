@@ -3470,32 +3470,49 @@ describe("parseOtelCaptureContent", () => {
 });
 
 describe("OpenAPPA feature configuration", () => {
-  test("defaults proxy plugins to empty and accepts only the APPA plugin", () => {
+  test("gates APPA registration on its feature flag, regardless of the explicit plugin list", () => {
     expect(parseLlmProxyPlugins(undefined)).toEqual([]);
-    expect(parseLlmProxyPlugins(" appa ")).toEqual(["appa"]);
-    expect(() => parseLlmProxyPlugins("unknown")).toThrow(
+    expect(parseLlmProxyPlugins(" appa ")).toEqual([]);
+    expect(parseLlmProxyPlugins(undefined, true)).toEqual(["appa"]);
+    expect(parseLlmProxyPlugins("", true)).toEqual(["appa"]);
+    expect(parseLlmProxyPlugins(" appa ", true)).toEqual(["appa"]);
+  });
+
+  test.each([
+    false,
+    true,
+  ])("rejects invalid plugin configuration (APPA enabled=%s)", (enabled) => {
+    expect(() => parseLlmProxyPlugins("unknown", enabled)).toThrow(
       "ARCHESTRA_LLM_PROXY_PLUGINS contains unsupported plugin names",
     );
-    expect(() => parseLlmProxyPlugins("appa,appa")).toThrow(
+    expect(() => parseLlmProxyPlugins("appa,appa", enabled)).toThrow(
       "ARCHESTRA_LLM_PROXY_PLUGINS must not contain duplicates",
     );
   });
 
-  test("accepts an empty plugin list with or without a policy path", () => {
+  test.each([
+    undefined,
+    "false",
+    "TRUE",
+    "1",
+  ])("requires explicit true to enable APPA (flag=%s)", (enabled) => {
     vi.stubEnv("ARCHESTRA_BETA", "true");
-    expect(parseOpenAppaConfig([], undefined)).toEqual({
+    expect(parseOpenAppaConfig(enabled, undefined)).toEqual({
+      enabled: false,
       policyPath: undefined,
     });
-    expect(parseOpenAppaConfig([], "/policy.toml")).toEqual({
+    expect(parseOpenAppaConfig(enabled, "/policy.toml")).toEqual({
+      enabled: false,
       policyPath: "/policy.toml",
     });
   });
-  test("requires a policy path when the plugin list includes APPA", () => {
-    expect(parseOpenAppaConfig(["appa"], " /policy.toml ")).toEqual({
+  test("requires a policy path when the APPA feature flag is enabled", () => {
+    expect(parseOpenAppaConfig("true", " /policy.toml ")).toEqual({
+      enabled: true,
       policyPath: "/policy.toml",
     });
     for (const path of [undefined, "", "   "]) {
-      expect(() => parseOpenAppaConfig(["appa"], path)).toThrow(
+      expect(() => parseOpenAppaConfig("true", path)).toThrow(
         "ARCHESTRA_OPENAPPA_POLICY_PATH is required",
       );
     }

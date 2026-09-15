@@ -54,7 +54,7 @@ const Decision = z.object({
 
 let native: Promise<typeof import("@archestra/openappa-rs")> | undefined;
 export function openappaEnabled(): boolean {
-  return config.llmProxy.plugins.includes("appa");
+  return config.openappa.enabled;
 }
 
 export function isAppaChatSource(

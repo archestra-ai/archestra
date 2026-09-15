@@ -108,6 +108,7 @@ import { reportAbnormalPreviousTermination } from "@/observability/previous-term
 import { rumExporter } from "@/observability/rum/exporter.ee";
 import { createCachedOpenApiRouteHandler } from "@/openapi/cached-openapi-route";
 import { enrichOpenApiWithRbac } from "@/openapi/enrich-openapi-with-rbac";
+import { initializeLlmProxyPlugins } from "@/proxy/plugins/registry";
 import { activeChatRunService } from "@/services/active-chat-run";
 import { agentRunReconciler } from "@/services/agent-runtime/reconciler";
 import { warmRenderRuntime } from "@/services/apps/app-recording-render-runtime";
@@ -360,6 +361,7 @@ export async function registerSwaggerPlugin(fastify: FastifyInstanceWithZod) {
  * @param fastify - The Fastify instance to register routes on
  */
 export async function registerApiRoutes(fastify: FastifyInstanceWithZod) {
+  await initializeLlmProxyPlugins();
   for (const route of Object.values(routes)) {
     fastify.register(route);
   }
@@ -374,6 +376,7 @@ export async function registerApiRoutes(fastify: FastifyInstanceWithZod) {
  * externally — the K8s Service only targets platform pods, not worker pods.
  */
 export async function registerWorkerRoutes(fastify: FastifyInstanceWithZod) {
+  await initializeLlmProxyPlugins();
   // LLM Proxy routes (all providers)
   fastify.register(routes.anthropicProxyRoutes);
   fastify.register(routes.archestraProxyRoutes);

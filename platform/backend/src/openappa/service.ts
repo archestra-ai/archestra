@@ -15,6 +15,12 @@ import { ApiError, type CommonToolResult } from "@/types";
 export const APPA_SESSION_HEADER = "X-Appa-Session-ID";
 export const APPA_PARENT_HEADER = "X-Appa-Parent-ID";
 export const OPENAPPA_REMEDY_TOOL = "archestra__execute_remedy_plan";
+export const APPA_CHAT_SOURCES = [
+  "chat",
+  "chat:tool_call_repair",
+  "chat:compaction",
+] as const;
+export type AppaChatSource = (typeof APPA_CHAT_SOURCES)[number];
 type ExecutionOutcome = "success" | "failure" | "unknown";
 export type OpenAppaSession = {
   organization_id: string;
@@ -48,7 +54,13 @@ const Decision = z.object({
 
 let native: Promise<typeof import("@archestra/openappa-rs")> | undefined;
 export function openappaEnabled(): boolean {
-  return config.openappa.enabled;
+  return config.llmProxy.plugins.includes("appa");
+}
+
+export function isAppaChatSource(
+  source: string | undefined,
+): source is AppaChatSource {
+  return (APPA_CHAT_SOURCES as readonly string[]).includes(source ?? "");
 }
 
 async function binding() {

@@ -29,6 +29,7 @@ import logger from "@/logging";
 import { metrics } from "@/observability";
 import { SESSION_ID_KEY } from "@/observability/request-context";
 import type { SpanTeamInfo, SpanUserInfo } from "@/observability/tracing";
+import type { LlmProxyToolCallRefusal } from "@/proxy/plugins/registry";
 import { getTokenizer } from "@/tokenizers";
 import type {
   CommonMcpToolDefinition,
@@ -526,7 +527,7 @@ export function buildInteractionRecord(params: {
  * overwhelming majority of rows.
  */
 export function toToolCallBlock(
-  refusal: utils.toolInvocation.PolicyBlockResult | null,
+  refusal: LlmProxyToolCallRefusal | null,
 ): ToolCallBlock | undefined {
   if (!refusal) {
     return undefined;

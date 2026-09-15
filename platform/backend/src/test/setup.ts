@@ -48,7 +48,7 @@ process.env.ARCHESTRA_GEMINI_VERTEX_AI_PROJECT = "";
 process.env.ARCHESTRA_GEMINI_VERTEX_AI_LOCATION = "";
 // Native/OpenAPPA tests opt in explicitly; local policy settings must not
 // switch unrelated PGlite suites away from the existing guardrails.
-process.env.ARCHESTRA_OPENAPPA_ENABLED = "false";
+process.env.ARCHESTRA_LLM_PROXY_PLUGINS = "";
 process.env.ARCHESTRA_OPENAPPA_POLICY_PATH = "";
 
 // Set auth secret for tests

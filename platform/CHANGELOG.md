@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.4.0-beta.10](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-beta.9...platform-v1.4.0-beta.10) (2026-09-15)
+
+
+### Features
+
+* add Guardrails v2 policy editor and agent guide ([#7935](https://github.com/archestra-ai/archestra/issues/7935)) ([cafa9f2](https://github.com/archestra-ai/archestra/commit/cafa9f2a8a36e19e1c2ab3b9a6b8acc1cf79576c))
+
+
+### Bug Fixes
+
+* **chat:** continue the tool loop after OpenAPPA denials ([#7911](https://github.com/archestra-ai/archestra/issues/7911)) ([e1c3168](https://github.com/archestra-ai/archestra/commit/e1c31682a9269bd1b169c4a4248f5bb978171343))
+* describe available knowledge sources in agent discovery ([#7941](https://github.com/archestra-ai/archestra/issues/7941)) ([8fee243](https://github.com/archestra-ai/archestra/commit/8fee243b2ded2fd60e84f7af89f7a36298168ae8))
+* **frontend:** preserve and unify environment selections ([#7944](https://github.com/archestra-ai/archestra/issues/7944)) ([e13d02f](https://github.com/archestra-ai/archestra/commit/e13d02f3d54f07c62fb2b2deb4e4a51ac2ae06ca))
+* **helm:** preserve upgrades without an explicit connection budget ([#7929](https://github.com/archestra-ai/archestra/issues/7929)) ([da5c78c](https://github.com/archestra-ai/archestra/commit/da5c78c51f4d97afede4c52b270508e92f39cf1b))
+* **mcp-gateway:** return 405 for unsupported GET streams ([#7938](https://github.com/archestra-ai/archestra/issues/7938)) ([8dd2c37](https://github.com/archestra-ai/archestra/commit/8dd2c37407e5531485574767f0b498f02adfab56))
+* **proxy:** restore APPA feature flag and exclusive policy checks ([#7934](https://github.com/archestra-ai/archestra/issues/7934)) ([e7b6a35](https://github.com/archestra-ai/archestra/commit/e7b6a357a23c69c62e194b8308a2de73b554c5c7))
+* unify GitHub credential setup and callback navigation ([#7930](https://github.com/archestra-ai/archestra/issues/7930)) ([07181f8](https://github.com/archestra-ai/archestra/commit/07181f808caf21c15af6107aa2a0bb68d2d54a73))
+
 ## [1.4.0-beta.9](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-beta.8...platform-v1.4.0-beta.9) (2026-09-15)
 
 

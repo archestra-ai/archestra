@@ -147,12 +147,6 @@ export function AgentRuntimeCredentialsDialog({
     return (
       <RuntimeCredentialConnectionDialog
         definition={connectionDefinition}
-        description={
-          missing.find(
-            (credential) =>
-              credential.credentialId === connectionDefinition.key,
-          )?.description
-        }
         scope="personal"
         onClose={connecting ? () => setConnecting(null) : onClose}
       />
@@ -237,6 +231,9 @@ export function AgentRuntimeCredentialsDialog({
               const definition = definitions.data?.find(
                 ({ key }) => key === credential.credentialId,
               );
+              const description = definition
+                ? definition.description
+                : credential.description;
               return (
                 <FormField
                   key={credential.key}
@@ -257,9 +254,9 @@ export function AgentRuntimeCredentialsDialog({
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>{credential.label}</FormLabel>
-                      {credential.description?.trim() && (
+                      {description?.trim() && (
                         <FormDescription className="whitespace-pre-wrap break-words">
-                          {credential.description.trim()}
+                          {description.trim()}
                         </FormDescription>
                       )}
                       {!canSet(credential) ? (

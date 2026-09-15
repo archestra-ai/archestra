@@ -511,7 +511,7 @@ describe("credential setup deep links", () => {
     });
   });
 
-  it("uses agent-specific instructions rather than shared credential descriptions", async () => {
+  it("uses shared credential instructions rather than repeated agent descriptions", async () => {
     const githubDescription =
       "Create a token for the example repository.\nChoose the repository permissions required by your workflow.\nKeep the token private and paste it below.";
     const claudeDescription =
@@ -546,12 +546,12 @@ describe("credential setup deep links", () => {
     });
     await screen.findByLabelText("GitHub token");
     expect(
-      screen.queryByText(githubDescription, { normalizer: (text) => text }),
-    ).not.toBeInTheDocument();
+      screen.getByText(githubDescription, { normalizer: (text) => text }),
+    ).toBeVisible();
     expect(
-      screen.queryByText(claudeDescription, { normalizer: (text) => text }),
-    ).not.toBeInTheDocument();
-    expect(screen.getAllByText(instructions)).toHaveLength(2);
+      screen.getByText(claudeDescription, { normalizer: (text) => text }),
+    ).toBeVisible();
+    expect(screen.queryByText(instructions)).not.toBeInTheDocument();
   });
 
   it("does not open for ordinary agent navigation", () => {
@@ -605,7 +605,7 @@ it.each([
   if (count === 1) {
     expect(
       await screen.findByRole("dialog", { name: "Connect GitHub" }),
-    ).toHaveTextContent("Agent-specific setup instructions.");
+    ).toHaveTextContent("Repository access");
   } else {
     expect(await screen.findByLabelText("Service token")).toBeVisible();
     await user.click(screen.getByRole("button", { name: "Connect GitHub" }));

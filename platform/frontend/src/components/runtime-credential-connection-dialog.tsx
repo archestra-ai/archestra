@@ -27,14 +27,12 @@ import {
 
 export function RuntimeCredentialConnectionDialog({
   definition,
-  description,
   scope,
   useExternalSecretsManager = false,
   onClose,
   onConnected,
 }: {
   definition: RuntimeCredentialDefinition;
-  description?: string;
   scope: "personal" | "organization";
   useExternalSecretsManager?: boolean;
   onClose: () => void;
@@ -74,7 +72,7 @@ export function RuntimeCredentialConnectionDialog({
         title="Connect GitHub"
         description={
           <span className="whitespace-pre-wrap break-words">
-            {description?.trim() ||
+            {definition.description?.trim() ||
               "Connect your GitHub account to use it with your agents."}
           </span>
         }

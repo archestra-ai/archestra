@@ -9,9 +9,8 @@
  * the client's side, a dead stream for exactly that long.
  *
  * These tests drive the real routes over a real TCP socket (not `app.inject`,
- * which buffers the whole body) and timestamp every chunk the client receives,
- * so they measure the property the client actually cares about: the longest
- * gap between successive bytes.
+ * which buffers the whole body). The SSE test holds the withheld tool payload
+ * until it observes a keep-alive comment on that socket.
  */
 
 import type Anthropic from "@anthropic-ai/sdk";
@@ -76,7 +75,9 @@ const messageStart: StreamEvent = {
  * Every fragment is a withheld chunk, so nothing the adapter emits reaches
  * the client between `message_start` and the post-policy flush.
  */
-async function* slowAnthropicToolCall(): AsyncGenerator<StreamEvent> {
+async function* slowAnthropicToolCall(
+  release?: Promise<void>,
+): AsyncGenerator<StreamEvent> {
   yield messageStart;
   yield {
     type: "content_block_start",
@@ -94,6 +95,7 @@ async function* slowAnthropicToolCall(): AsyncGenerator<StreamEvent> {
     index: 0,
     delta: { type: "input_json_delta", partial_json: '{"content":"' },
   };
+  await release;
   for (let i = 0; i < DELTA_COUNT; i++) {
     await sleep(DELTA_GAP_MS);
     yield {
@@ -152,7 +154,11 @@ type TimedChunk = { at: number; bytes: Uint8Array };
 /** Read the whole body, timestamping each chunk as it arrives. */
 async function readTimedChunks(response: Response): Promise<TimedChunk[]> {
   const chunks: TimedChunk[] = [];
-  const reader = response.body!.getReader();
+  const body = response.body;
+  if (!body) {
+    throw new Error("Expected streaming response body");
+  }
+  const reader = body.getReader();
   for (;;) {
     const { value, done } = await reader.read();
     if (done) break;
@@ -167,6 +173,15 @@ function maxGapMs(chunks: TimedChunk[]): number {
     max = Math.max(max, chunks[i].at - chunks[i - 1].at);
   }
   return max;
+}
+
+/** A promise the test resolves by hand to keep the tool call withheld. */
+function deferred() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((r) => {
+    resolve = r;
+  });
+  return { promise, resolve };
 }
 
 function concatText(chunks: TimedChunk[]): string {
@@ -226,9 +241,10 @@ describe("LLM proxy stream keep-alive", () => {
       baseUrl = await app.listen({ port: 0, host: "127.0.0.1" });
     });
 
-    const postMessages = () =>
+    const postMessages = (signal?: AbortSignal) =>
       fetch(`${baseUrl}/v1/anthropic/${testAgent.id}/v1/messages`, {
         method: "POST",
+        signal,
         headers: {
           "content-type": "application/json",
           "x-api-key": "test-key",
@@ -252,20 +268,38 @@ describe("LLM proxy stream keep-alive", () => {
         }),
       });
 
-    test("a withheld tool call never leaves the client without bytes for longer than the keep-alive interval", async () => {
-      const response = await postMessages();
+    test("writes a keep-alive before releasing a withheld tool call", async () => {
+      const releaseToolCall = deferred();
+      createStream = async () => slowAnthropicToolCall(releaseToolCall.promise);
+
+      // Bound the wait so a missing keep-alive fails and releases the generator.
+      const response = await postMessages(AbortSignal.timeout(5_000));
       expect(response.status).toBe(200);
       expect(response.headers.get("content-type")).toBe("text/event-stream");
 
-      const chunks = await readTimedChunks(response);
-      const body = concatText(chunks);
+      const body = response.body;
+      if (!body) {
+        throw new Error("Expected streaming response body");
+      }
+      const reader = body.getReader();
+      const decoder = new TextDecoder();
+      let bodyBeforeRelease = "";
+      try {
+        for (;;) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          bodyBeforeRelease += decoder.decode(value, { stream: true });
+          if (bodyBeforeRelease.includes(STREAM_KEEPALIVE_SSE_COMMENT)) break;
+        }
 
-      // Without the keep-alive the client sees `message_start` and then
-      // nothing until the flush: two chunks, one gap the size of the window.
-      expect(body).toContain(STREAM_KEEPALIVE_SSE_COMMENT);
-      // Leave slack for event-loop scheduling: the bound that matters is
-      // "well inside the withheld window", not the exact interval.
-      expect(maxGapMs(chunks)).toBeLessThan(WITHHELD_WINDOW_MS / 2);
+        // The tool payload cannot have flushed yet: this is a comment written
+        // by the keep-alive while the upstream generator remains blocked.
+        expect(bodyBeforeRelease).toContain(STREAM_KEEPALIVE_SSE_COMMENT);
+        expect(bodyBeforeRelease).not.toContain("write_file");
+      } finally {
+        releaseToolCall.resolve();
+        await reader.cancel();
+      }
     });
 
     test("the SDK's own SSE parser reads through the keep-alive comments to the released tool call", async () => {

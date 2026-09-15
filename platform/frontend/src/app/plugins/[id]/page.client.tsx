@@ -24,7 +24,6 @@ import { CreatedByCell } from "@/components/created-by-cell";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
-import { FloatingActionBar } from "@/components/settings/settings-block";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -42,6 +41,8 @@ import {
   useGuardedInAppNavigation,
   useUnsavedChangesGuard,
 } from "@/components/unsaved-changes-guard";
+import { useResourceOwnershipTransfer } from "@/components/use-resource-ownership-transfer";
+import { WizardFooter } from "@/components/wizard-footer";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { formatPermissionConstraint } from "@/lib/auth/auth.utils";
 import { useFeature } from "@/lib/config/config.query";
@@ -205,6 +206,12 @@ function PluginDetailView({
   const [base, setBase] = useState<PluginDraft>(seed);
   const labelsRef = useRef<ProfileLabelsRef>(null);
   const isDirty = isPluginDraftDirty(draft, base);
+  const ownership = useResourceOwnershipTransfer({
+    kind: "plugin",
+    resource: { ...plugin, name: plugin.displayName },
+    disabledReason: isDirty ? "Save or discard your changes first" : undefined,
+    onTransferred: () => router.push("/plugins"),
+  });
 
   useEffect(() => {
     if (isDirty) return;
@@ -377,6 +384,7 @@ function PluginDetailView({
       backLink={<PluginBackLink href="/plugins" label="Plugins" />}
       maxWidth="wizard"
       minWidth="phone"
+      contentOverflowX="clip"
       actionButton={
         // Editing is the page itself now, so the header carries only what the
         // page cannot: installing the plugin, and the actions that act on it
@@ -440,6 +448,7 @@ function PluginDetailView({
                   )}
                 </DropdownMenuItem>
               )}
+              {ownership.menuItem}
               {isGithubPlugin && <DropdownMenuSeparator />}
               <DropdownMenuItem
                 variant="destructive"
@@ -475,6 +484,7 @@ function PluginDetailView({
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          {ownership.dialog}
         </div>
       }
     >
@@ -508,32 +518,36 @@ function PluginDetailView({
           githubAppConfigs={githubAppConfigOptions}
         />
 
-        {/* The save row floats at the foot of the form so it is in reach
-            without scrolling to the bottom of a long plugin, the same bar the
-            settings pages use. A reader who cannot change the plugin has no
-            save row at all — the alert above already says why. */}
         {!isReadOnly && (
-          <FloatingActionBar>
-            <PermissionButton
-              permissions={{ plugin: ["update", "admin"] }}
-              disabled={!isDirty || !isComplete || isGone || isSaving}
-              onClick={handleSave}
-            >
-              {isSaving ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  <span>Saving...</span>
-                </>
-              ) : (
-                <span>Save changes</span>
+          <WizardFooter>
+            <div>
+              {isDirty && !isSaving && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={discardChanges}
+                >
+                  Discard changes
+                </Button>
               )}
-            </PermissionButton>
-            {isDirty && !isSaving && (
-              <Button type="button" variant="outline" onClick={discardChanges}>
-                Discard changes
-              </Button>
-            )}
-          </FloatingActionBar>
+            </div>
+            <div className="flex items-center gap-2">
+              <PermissionButton
+                permissions={{ plugin: ["update", "admin"] }}
+                disabled={!isDirty || !isComplete || isGone || isSaving}
+                onClick={handleSave}
+              >
+                {isSaving ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span>Saving...</span>
+                  </>
+                ) : (
+                  <span>Save</span>
+                )}
+              </PermissionButton>
+            </div>
+          </WizardFooter>
         )}
       </div>
 

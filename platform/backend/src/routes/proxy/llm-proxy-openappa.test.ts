@@ -10,6 +10,7 @@ import {
 } from "fastify-type-provider-zod";
 import { vi } from "vitest";
 import { z } from "zod";
+import { executeArchestraTool } from "@/archestra-mcp-server";
 import { withOpenAppaChat } from "@/clients/chat-openappa";
 import config from "@/config";
 import * as database from "@/database";
@@ -17,6 +18,8 @@ import * as toolInvocation from "@/guardrails/tool-invocation";
 import * as trustedData from "@/guardrails/trusted-data";
 import { ModelModel } from "@/models";
 import { APPA_CHAT_BLOCK_HEADER, decodeChatBlock } from "@/openappa/chat-block";
+import { createAppaLlmProxyPlugin } from "@/proxy/plugins/appa-plugin-archestra";
+import { registerLlmProxyPlugin } from "@/proxy/plugins/registry";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import {
   type AnthropicStubOptions,
@@ -36,14 +39,18 @@ describe("OpenAPPA on the existing LLM proxy", () => {
   let app: FastifyInstance;
   let agent: Agent;
   let userId: string;
+  let sessionId: string;
   let options: AnthropicStubOptions;
   let providerRequests: unknown[];
   let events: Array<Record<string, unknown>>;
   let block: boolean;
   let fail: boolean;
+  let unregisterAppaPlugin: () => void;
 
-  beforeEach(async ({ makeAgent, makeUser, makeMember }) => {
-    config.openappa = { enabled: true, policyPath: "/test/policy.toml" };
+  beforeEach(async ({ makeAgent, makeConversation, makeMember, makeUser }) => {
+    config.llmProxy.plugins = ["appa"];
+    config.openappa = { policyPath: "/test/policy.toml" };
+    unregisterAppaPlugin = registerLlmProxyPlugin(createAppaLlmProxyPlugin());
     vi.spyOn(database, "getDatabaseConnectionString").mockReturnValue(
       "postgresql://test:test@localhost/test?schema=public",
     );
@@ -65,6 +72,12 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     agent = await makeAgent({ name: "Native proxy test" });
     userId = (await makeUser()).id;
     await makeMember(userId, agent.organizationId);
+    sessionId = (
+      await makeConversation(agent.id, {
+        userId,
+        organizationId: agent.organizationId,
+      })
+    ).id;
     options = {
       includeToolUse: true,
       streamStopReason: "tool_use",
@@ -119,6 +132,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
   });
 
   afterEach(async () => {
+    unregisterAppaPlugin();
     vi.restoreAllMocks();
     vi.unstubAllEnvs();
     await app.close();
@@ -148,7 +162,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     "anthropic-version": "2023-06-01",
     "x-archestra-source": "chat",
     "x-archestra-user-id": userId,
-    "x-appa-session-id": "stable-session",
+    "x-appa-session-id": sessionId,
   });
   const url = () => `/v1/anthropic/${agent.id}/v1/messages`;
 
@@ -179,7 +193,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     const session = {
       organization_id: agent.organizationId,
       caller_id: `user:${userId}`,
-      session_id: "stable-session",
+      session_id: sessionId,
     };
     let inference = 0;
     vi.mocked(anthropicAdapterFactory.createClient).mockImplementation(() => {
@@ -330,7 +344,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     const session = {
       organization_id: agent.organizationId,
       caller_id: `user:${userId}`,
-      session_id: "stable-session",
+      session_id: sessionId,
     };
     const blockResult = decodeChatBlock(response.body, session);
     expect(blockResult?.calls[0].name).toBe("get_weather");
@@ -393,9 +407,20 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       expect(response.statusCode, response.body).toBe(200);
       expect(response.body).not.toContain('"type":"tool_use"');
       expect(response.body).not.toContain("input_json_delta");
-      expect(response.body).toContain(
-        "NATIVE REFUSAL: archestra__execute_remedy_plan(offer_id: test-offer)",
-      );
+      const refusal =
+        "NATIVE REFUSAL: archestra__execute_remedy_plan(offer_id: test-offer)";
+      expect(response.body).toContain(refusal);
+      if (stream) {
+        expect(response.body).toContain(`"text":"${refusal}"`);
+      } else {
+        expect(response.json().content).toEqual([
+          {
+            type: "text",
+            text: refusal,
+            citations: [],
+          },
+        ]);
+      }
       expect(response.body).not.toContain("tool call policy violated");
       expect(
         events.filter((event) => event.event === "tool_call"),
@@ -514,7 +539,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       expect.objectContaining({
         organization_id: agent.organizationId,
         caller_id: `user:${userId}`,
-        session_id: "stable-session",
+        session_id: sessionId,
         operation_id: "call:toolu_test_weather",
         tool: "get_weather",
         arguments: { location: "San Francisco", unit: "fahrenheit" },
@@ -555,7 +580,40 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     ]);
   });
 
+  test("keeps platform tool policies additive after APPA allows a call", async ({
+    makeTool,
+    makeToolPolicy,
+  }) => {
+    const tool = await makeTool({ name: "get_weather", agentId: agent.id });
+    await makeToolPolicy(tool.id, {
+      action: "block_always",
+      conditions: [],
+      reason: "Platform weather policy refused this call",
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: url(),
+      remoteAddress: "127.0.0.1",
+      headers: headers(),
+      payload: payload(false),
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.body).toContain(
+      "Platform weather policy refused this call",
+    );
+    expect(response.body).not.toContain('"type":"tool_use"');
+    expect(events).toContainEqual(
+      expect.objectContaining({ event: "tool_call", tool: "get_weather" }),
+    );
+  });
+
   test("substitutes saved approved results before the provider sees resent history", async () => {
+    const evaluateTrustedData = vi.spyOn(
+      trustedData,
+      "evaluateIfContextIsTrusted",
+    );
     for (const raw of ["RAW SECRET", "ALTERED RAW SECRET"]) {
       const messages = [
         { role: "user", content: "Weather" },
@@ -602,6 +660,189 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         outcome: "success",
       }),
     ]);
+    expect(evaluateTrustedData).not.toHaveBeenCalled();
+  });
+
+  test("executes an explicit remedy, then accepts a separate retry on the same APPA root", async () => {
+    block = true;
+    const denied = await app.inject({
+      method: "POST",
+      url: url(),
+      remoteAddress: "127.0.0.1",
+      headers: headers(),
+      payload: payload(false),
+    });
+
+    expect(denied.statusCode, denied.body).toBe(200);
+    expect(denied.body).toContain("NATIVE REFUSAL");
+    expect(events.map((event) => event.event)).toEqual([
+      "session_start",
+      "tool_call",
+    ]);
+
+    native.dispatchHook.mockImplementation(async (raw: string) => {
+      const event = JSON.parse(raw);
+      events.push(event);
+      return JSON.stringify(
+        event.event === "remedy"
+          ? {
+              decision: "mcp_result",
+              result: { content: [{ type: "text", text: "Remedy applied" }] },
+            }
+          : event.event === "session_start"
+            ? { decision: "ack" }
+            : { decision: "allow_call" },
+      );
+    });
+    await expect(
+      executeArchestraTool(
+        "archestra__execute_remedy_plan",
+        { offer_id: "test-offer" },
+        {
+          agent: { id: agent.id, name: agent.name },
+          agentId: agent.id,
+          organizationId: agent.organizationId,
+          userId,
+          sessionId,
+          currentToolCallId: "remedy-call",
+        },
+      ),
+    ).resolves.toEqual({
+      content: [{ type: "text", text: "Remedy applied" }],
+    });
+
+    const retried = await app.inject({
+      method: "POST",
+      url: url(),
+      remoteAddress: "127.0.0.1",
+      headers: headers(),
+      payload: payload(false),
+    });
+
+    expect(retried.statusCode, retried.body).toBe(200);
+    expect(retried.body).toContain('"type":"tool_use"');
+    expect(events.filter((event) => event.event === "remedy")).toEqual([
+      expect.objectContaining({
+        session_id: sessionId,
+        operation_id: "remedy:remedy-call",
+      }),
+    ]);
+    expect(
+      events
+        .filter((event) => event.event === "tool_call")
+        .map((event) => event.session_id),
+    ).toEqual([sessionId, sessionId]);
+  });
+
+  test.each([
+    ["Chat", {}, "get_weather"],
+    [
+      "Claude Code",
+      {
+        "user-agent": "Claude-Code/1",
+        "x-claude-code-session-id": "native-client-session",
+      },
+      "host/claude-code/get_weather",
+    ],
+    ["Codex", { originator: "codex" }, "builtin:get_weather"],
+    [
+      "OpenCode",
+      { "x-opencode-session": "native-client-session" },
+      "builtin:get_weather",
+    ],
+  ])("binds the explicit APPA root exactly once for authenticated %s calls", async (_client, clientHeaders, expectedTool) => {
+    const response = await app.inject({
+      method: "POST",
+      url: url(),
+      remoteAddress: "127.0.0.1",
+      headers: { ...headers(), ...clientHeaders },
+      payload: payload(false),
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(events.filter((event) => event.event === "session_start")).toEqual([
+      expect.objectContaining({
+        organization_id: agent.organizationId,
+        caller_id: `user:${userId}`,
+        session_id: sessionId,
+      }),
+    ]);
+    expect(events.filter((event) => event.event === "tool_call")).toEqual([
+      expect.objectContaining({ tool: expectedTool, session_id: sessionId }),
+    ]);
+  });
+
+  test.each([
+    "chat:tool_call_repair",
+    "chat:compaction",
+  ])("binds authenticated Chat %s calls to the conversation root", async (source) => {
+    const response = await app.inject({
+      method: "POST",
+      url: url(),
+      remoteAddress: "127.0.0.1",
+      headers: { ...headers(), "x-archestra-source": source },
+      payload: payload(false),
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        event: "tool_call",
+        session_id: sessionId,
+        tool: "get_weather",
+      }),
+    );
+  });
+
+  test("rejects a Chat APPA root bound to another profile", async ({
+    makeAgent,
+    makeConversation,
+  }) => {
+    const otherAgent = await makeAgent({
+      organizationId: agent.organizationId,
+    });
+    const otherConversation = await makeConversation(otherAgent.id, {
+      userId,
+      organizationId: agent.organizationId,
+    });
+    const response = await app.inject({
+      method: "POST",
+      url: url(),
+      remoteAddress: "127.0.0.1",
+      headers: {
+        ...headers(),
+        "x-appa-session-id": otherConversation.id,
+      },
+      payload: payload(false),
+    });
+
+    expect(response.statusCode, response.body).toBe(403);
+    expect(providerRequests).toHaveLength(0);
+    expect(events).toHaveLength(0);
+  });
+
+  test("allows Chat compaction to retain its owner conversation root", async ({
+    makeAgent,
+  }) => {
+    const compactionAgent = await makeAgent({
+      organizationId: agent.organizationId,
+    });
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/anthropic/${compactionAgent.id}/v1/messages`,
+      remoteAddress: "127.0.0.1",
+      headers: { ...headers(), "x-archestra-source": "chat:compaction" },
+      payload: payload(false),
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        event: "session_start",
+        session_id: sessionId,
+        caller_id: `user:${userId}`,
+      }),
+    );
   });
 
   test("native failures do not release tool deltas or private diagnostics", async () => {
@@ -622,8 +863,9 @@ describe("OpenAPPA on the existing LLM proxy", () => {
   test.each([
     true,
     false,
-  ])("flag off uses existing evaluators without APPA metadata (stream=%s)", async (stream) => {
-    config.openappa.enabled = false;
+  ])("empty plugin list uses existing evaluators without APPA metadata (stream=%s)", async (stream) => {
+    config.llmProxy.plugins = [];
+    unregisterAppaPlugin();
     // A configured path and unavailable native runtime must not affect old guardrails.
     native.initializeOpenappa.mockRejectedValue(
       new Error("native unavailable"),
@@ -765,12 +1007,16 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     expect(events).toHaveLength(0);
   });
 
-  test("does not authenticate a remote caller from Chat attribution headers", async () => {
+  test.each([
+    "chat",
+    "chat:tool_call_repair",
+    "chat:compaction",
+  ])("does not authenticate a remote caller claiming %s", async (source) => {
     const response = await app.inject({
       method: "POST",
       url: url(),
       remoteAddress: "203.0.113.20",
-      headers: headers(),
+      headers: { ...headers(), "x-archestra-source": source },
       payload: payload(false),
     });
     expect(response.statusCode, response.body).toBe(401);
@@ -792,7 +1038,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         event: "session_start",
         organization_id: agent.organizationId,
         caller_id: `user:${userId}`,
-        session_id: "stable-session",
+        session_id: sessionId,
       }),
     );
   });

@@ -239,7 +239,6 @@ import {
   shouldOfferAppCatalogs,
   shouldShowDescriptionField,
 } from "./agent-form.utils";
-import { AgentRuntimeCredentialCard } from "./agent-pages/agent-runtime-credential-card";
 
 type Agent = archestraApiTypes.GetAllAgentsResponses["200"][number];
 type ToolExposureMode = Agent["toolExposureMode"];
@@ -4098,16 +4097,6 @@ export function AgentForm({
                     value={runtime}
                     onChange={setAgentRuntime}
                   />
-                  {agent?.runtime && runtime && (
-                    <AgentRuntimeCredentialCard
-                      agentId={agent.id}
-                      credentials={(agent.runtime.credentials ?? []).filter(
-                        ({ key }) =>
-                          !isClaudeCodeRuntime ||
-                          key !== "CLAUDE_CODE_OAUTH_TOKEN",
-                      )}
-                    />
-                  )}
                 </SettingsSection>
               </SettingsSectionGroup>
             )}

@@ -29,6 +29,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { DataTable } from "@/components/ui/data-table";
+import { useResourceOwnershipTransfer } from "@/components/use-resource-ownership-transfer";
 import {
   useOpenAppInChat,
   useOpenExternalAppInChat,
@@ -215,9 +216,27 @@ export function AppsTable({
             ? ownedAppActions(app)
             : externalAppActions(app)),
         ];
+        const isPrimaryAction = (action: TableRowAction) =>
+          action.label === "Settings" || action.label === "Open in new tab";
+        const primaryActions = actions.filter(isPrimaryAction);
+        const dropdownActions = actions.filter(
+          (action) => !isPrimaryAction(action),
+        );
         return (
           <div className="flex justify-end">
-            <TableRowActions actions={actions} />
+            {app.source === "owned" ? (
+              <OwnedAppActions
+                app={app}
+                actions={primaryActions}
+                dropdownActions={dropdownActions}
+              />
+            ) : (
+              <TableRowActions
+                actions={primaryActions}
+                dropdownActions={dropdownActions}
+                itemName={app.name}
+              />
+            )}
           </div>
         );
       },
@@ -345,4 +364,30 @@ export function getAppRowKey(app: AppListItem): string {
   return app.source === "owned"
     ? app.id
     : `${app.mcpServerId}:${app.resourceUri}:${app.name}`;
+}
+
+function OwnedAppActions({
+  app,
+  actions,
+  dropdownActions,
+}: {
+  app: OwnedApp;
+  actions: TableRowAction[];
+  dropdownActions: TableRowAction[];
+}) {
+  const ownership = useResourceOwnershipTransfer({
+    kind: "app",
+    resource: app,
+  });
+  return (
+    <>
+      <TableRowActions
+        actions={actions}
+        dropdownActions={dropdownActions}
+        dropdownContent={ownership.menuItem}
+        itemName={app.name}
+      />
+      {ownership.dialog}
+    </>
+  );
 }

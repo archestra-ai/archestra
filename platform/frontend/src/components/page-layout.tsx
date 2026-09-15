@@ -118,6 +118,7 @@ export function PageLayout({
    * Floor for the shared header/content column. `phone` is 20rem — wide
    * enough to read body copy, narrow enough that a phone does not
    * horizontally scroll the whole page. Tables inside still scroll.
+   * Clipped form layouts fit the viewport instead of enforcing this floor.
    */
   minWidth?: keyof typeof MIN_WIDTH_CLASSES;
   /** Clip without creating a nested scroll container, so form footers can stick to the page. */
@@ -141,7 +142,12 @@ export function PageLayout({
   const maxWidth = MAX_WIDTH_CLASSES[maxWidthKey];
   const resolvedMinWidthKey =
     minWidthKey === "none" && maxWidthKey === "wizard" ? "phone" : minWidthKey;
-  const minWidth = MIN_WIDTH_CLASSES[resolvedMinWidthKey];
+  // Clipped forms must fit even below the usual phone-width floor: unlike
+  // tables, they cannot scroll horizontally to reveal overflowing controls.
+  const minWidth =
+    contentOverflowX === "clip"
+      ? "min-w-0"
+      : MIN_WIDTH_CLASSES[resolvedMinWidthKey];
   const [overflowOpen, setOverflowOpen] = useState(false);
   // The top of the content area, into which PageHeaderBanner portals a
   // page-level notice without changing the header or tab layout.
@@ -251,7 +257,16 @@ export function PageLayout({
                   </div>
                 )}
               </div>
-              {actionButton && <div className="shrink-0">{actionButton}</div>}
+              {actionButton && (
+                <div
+                  className={cn(
+                    "shrink-0",
+                    contentOverflowX === "clip" && "max-w-full overflow-x-auto",
+                  )}
+                >
+                  {actionButton}
+                </div>
+              )}
             </div>
             {tabs.length > 0 && (
               <>

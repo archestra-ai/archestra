@@ -11,4 +11,11 @@ describe("AgentIcon", () => {
     expect(screen.getByRole("img", { name: "Agent icon" })).toBeVisible();
     expect(container).not.toHaveTextContent("/agent-logos/hermes.png");
   });
+
+  it("renders a built-in service logo token as an SVG mark, not literal text", () => {
+    const { container } = render(<AgentIcon icon="logo:github" size={20} />);
+
+    expect(container.querySelector("svg > path")).not.toBeNull();
+    expect(container).not.toHaveTextContent("logo:github");
+  });
 });

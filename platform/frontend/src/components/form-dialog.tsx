@@ -36,6 +36,7 @@ export type FormDialogProps = {
    */
   isDirty?: boolean;
   className?: string;
+  onClick?: React.MouseEventHandler<HTMLDivElement>;
   /** Extra classes for the header block, e.g. `border-b-0` to drop its rule. */
   headerClassName?: string;
   /** Receives focus when the dialog opens instead of the first body control. */
@@ -62,6 +63,7 @@ export function FormDialog({
   className,
   headerClassName,
   initialFocusRef,
+  onClick,
 }: FormDialogProps) {
   const guard = useUnsavedChangesGuard({ isDirty, onOpenChange });
 
@@ -70,6 +72,7 @@ export function FormDialog({
       <Dialog open={open} onOpenChange={guard.handleOpenChange}>
         <DialogContent
           className={cn(sizeClasses[size], className)}
+          onClick={onClick}
           onInteractOutside={
             preventCloseOnInteractOutside
               ? (e) => e.preventDefault()

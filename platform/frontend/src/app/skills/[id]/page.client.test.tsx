@@ -107,7 +107,7 @@ const editor = () =>
 
 const save = async () => {
   const user = userEvent.setup();
-  await user.click(screen.getByRole("button", { name: "Save changes" }));
+  await user.click(screen.getByRole("button", { name: "Save" }));
 };
 
 describe("SkillDetailPage", () => {
@@ -164,7 +164,7 @@ describe("SkillDetailPage", () => {
     expect(screen.queryByRole("link", { name: /^Edit\b/ })).toBeNull();
     expect(screen.queryByRole("link", { name: /Configuration/ })).toBeNull();
     // Clean: there is nothing to write yet.
-    expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
   });
 
   it("writes the name and description fields back into the manifest", async () => {
@@ -207,7 +207,7 @@ describe("SkillDetailPage", () => {
     );
     // The page it saved from is the page it stays on.
     expect(push).not.toHaveBeenCalled();
-    expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
   });
 
   it("saves a visibility change made at the bottom of the same page", async () => {
@@ -332,7 +332,7 @@ describe("SkillDetailPage", () => {
     } as any);
     renderPage();
 
-    expect(screen.queryByRole("button", { name: "Save changes" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
     expect(
       screen.getByText(/view this skill's configuration but not change it/i),
     ).toBeInTheDocument();
@@ -342,7 +342,7 @@ describe("SkillDetailPage", () => {
   it("keeps usage a section of the same page, including its older URL", () => {
     const { unmount } = renderPage("section=usage");
     expect(screen.getByTestId("skill-usage-panel")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Save changes" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
     unmount();
 
     // `?tab=usage` is the shape this view shipped with and is still pasted
@@ -360,6 +360,6 @@ describe("SkillDetailPage", () => {
     renderPage();
 
     expect(screen.getByText("Skill not found")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Save changes" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
   });
 });

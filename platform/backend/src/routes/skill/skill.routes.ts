@@ -49,6 +49,7 @@ import {
 } from "@/models";
 import { publishesSkills } from "@/services/agent-skill-resolution";
 import { assertCanAssignEnvironment } from "@/services/environments/environment";
+import { transferResourceOwnership } from "@/services/resource-ownership";
 import { agentToSkill, SCOPE_FIELD } from "@/skills/agent-migration";
 import {
   builtInSkillShippedWrite,
@@ -351,6 +352,30 @@ const DiscoveredSkillSchema = z.object({
 });
 
 const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  fastify.post(
+    "/api/skills/:id/transfer-ownership",
+    {
+      schema: {
+        operationId: RouteId.TransferSkillOwnership,
+        description: "Transfer ownership to another organization member",
+        tags: ["Ownership"],
+        params: z.object({ id: z.string().uuid() }),
+        body: z.object({ ownerId: z.string().min(1) }),
+        response: constructResponseSchema(z.object({ success: z.boolean() })),
+      },
+    },
+    async ({ params, body, user, organizationId }) => {
+      await transferResourceOwnership({
+        kind: "skill",
+        id: params.id,
+        ownerId: body.ownerId,
+        userId: user.id,
+        organizationId,
+      });
+      return { success: true };
+    },
+  );
+
   registerEntityLabelRoutes(fastify, {
     basePath: "/api/skills",
     tag: "Skills",

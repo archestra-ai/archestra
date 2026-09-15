@@ -10,6 +10,8 @@ import {
 export type { UserSelectOption };
 
 export interface UserSearchableSelectProps {
+  id?: string;
+  ariaLabel?: string;
   value: string;
   onValueChange: (userId: string) => void;
   users: UserSelectOption[];
@@ -29,6 +31,8 @@ export interface UserSearchableSelectProps {
 }
 
 export function UserSearchableSelect({
+  id,
+  ariaLabel,
   value,
   onValueChange,
   users,
@@ -52,6 +56,8 @@ export function UserSearchableSelect({
 
   return (
     <SearchableSelect
+      id={id}
+      ariaLabel={ariaLabel}
       value={value}
       onValueChange={onValueChange}
       pinnedItems={

@@ -13,10 +13,11 @@ import {
   Sparkles,
   TerminalSquare,
   Trash2,
+  UserRoundCog,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ConvertToSkillDialog } from "@/app/agents/convert-to-skill-dialog";
 import { AgentBadge } from "@/components/agent-badge";
@@ -29,16 +30,17 @@ import { CloneAgentDialog } from "@/components/clone-agent-dialog";
 import { CreatedByCell } from "@/components/created-by-cell";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ExternalDocsLink } from "@/components/external-docs-link";
+import { KebabItem } from "@/components/kebab-item";
 import { PageBackLink } from "@/components/page-back-link";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
+import { TransferAgentOwnershipDialog } from "@/components/transfer-agent-ownership-dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -236,6 +238,7 @@ function AgentDetails({
     resource,
     canModify,
     canEdit,
+    canTransferOwnership,
     canCreate,
     canDelete,
     isBuiltIn,
@@ -377,6 +380,7 @@ function AgentDetails({
     searchParams.get("openTools") === "true" &&
     !agent.accessAllTools;
 
+  const [transferring, setTransferring] = useState(false);
   const [cloning, setCloning] = useState(false);
   const [converting, setConverting] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -520,29 +524,11 @@ function AgentDetails({
         // what the page cannot: chatting with the record, and the actions
         // that act on it as a whole.
         <div className="flex shrink-0 items-center gap-2">
-          {/* Who to ask about this record. Like a project, and unlike a skill
-              or a registry item, this page has no facts row to put it in — it
-              is the record's configuration, top to bottom — so the creator
-              sits in the header beside the actions rather than in a card of
-              its own above the first field. One fact does not make a panel:
-              the box read as a container waiting for content that never came.
-              A built-in belongs to nobody, so it is absent there rather than
-              present-but-empty, which would read as missing data.
-
-              The same goes for a record with no creator recorded — one made
-              before the platform tracked it, made by the platform itself, or
-              whose author's account has since been deleted. The label used to
-              stay and carry an em dash, which read as a name that had failed
-              to load rather than as a question with no answer. */}
           {!isBuiltIn && agent.createdBy && (
             // Dropped on phones, where the header has no room to spare beside
             // the title and the actions that act on the record.
             <p className="mr-1 hidden items-center gap-1.5 text-xs text-muted-foreground md:flex">
-              {/* Labelled, unlike the project header's bare name: the sidebar
-                  shows the signed-in user's own avatar and name, so a second
-                  avatar alone in the header reads as "you" or as an assignee
-                  rather than as who made this. */}
-              <span className="shrink-0">Created by</span>
+              <span className="shrink-0">Owner</span>
               <CreatedByCell createdBy={agent.createdBy} />
             </p>
           )}
@@ -599,6 +585,23 @@ function AgentDetails({
                   onSelect={() => setConverting(true)}
                 />
               )}
+              {!isBuiltIn &&
+                !agent.isPersonalGateway &&
+                !agent.isPersonalProxy &&
+                agent.agentType !== "llm_proxy" && (
+                  <KebabItem
+                    icon={<UserRoundCog className="h-4 w-4" />}
+                    label="Transfer ownership"
+                    reason={
+                      !canTransferOwnership
+                        ? "Only the owner or a resource admin can transfer ownership"
+                        : isDirty
+                          ? "Save or discard your changes first"
+                          : undefined
+                    }
+                    onSelect={() => setTransferring(true)}
+                  />
+                )}
               <DropdownMenuSeparator />
               <KebabItem
                 variant="destructive"
@@ -612,6 +615,16 @@ function AgentDetails({
         </div>
       }
     >
+      {transferring && (
+        <TransferAgentOwnershipDialog
+          agent={agent}
+          onClose={() => setTransferring(false)}
+          onTransferred={() => {
+            setTransferring(false);
+            router.push(backHref);
+          }}
+        />
+      )}
       <div className="min-w-0">
         {section === "runs" ? (
           <AgentRuns agentId={agent.id} />
@@ -774,56 +787,6 @@ function AgentDetails({
  * reason out of reach of exactly the users it is written for. The refusal is
  * enforced by preventing the select and the click instead.
  */
-function KebabItem({
-  icon,
-  label,
-  reason,
-  isBusy,
-  variant,
-  onSelect,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  reason?: string;
-  /** Permitted, but already running: taking it again would export twice. */
-  isBusy?: boolean;
-  variant?: "destructive";
-  onSelect: () => void;
-}) {
-  const reasonId = useId();
-  const isDisabled = !!reason || !!isBusy;
-
-  return (
-    <DropdownMenuItem
-      variant={variant}
-      aria-disabled={isDisabled || undefined}
-      aria-describedby={reason ? reasonId : undefined}
-      className={isDisabled ? "cursor-not-allowed opacity-50" : undefined}
-      onSelect={(event) => {
-        if (isDisabled) event.preventDefault();
-      }}
-      onClick={(event) => {
-        if (isDisabled) {
-          event.preventDefault();
-          return;
-        }
-        onSelect();
-      }}
-    >
-      {icon}
-      {label}
-      {/* The reason as text, not only as a tooltip: a menu item reached by
-          keyboard never opens one. `aria-hidden` keeps it out of the accessible
-          name, where it would duplicate the description a screen reader already
-          reads from `aria-describedby`. */}
-      {reason && (
-        <span id={reasonId} aria-hidden="true" className="sr-only">
-          {reason}
-        </span>
-      )}
-    </DropdownMenuItem>
-  );
-}
 
 /**
  * What a section is called on this record's page. Connect is the exception:

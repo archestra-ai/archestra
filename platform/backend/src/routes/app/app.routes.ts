@@ -61,6 +61,7 @@ import {
   assertCanAssignEnvironment,
   resolveDefaultEnvironmentForNewResource,
 } from "@/services/environments/environment";
+import { transferResourceOwnership } from "@/services/resource-ownership";
 import {
   ApiError,
   type App,
@@ -168,6 +169,30 @@ const AppWithTeamsSchema = PublicAppSchema.extend({
 });
 
 const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  fastify.post(
+    "/api/apps/:id/transfer-ownership",
+    {
+      schema: {
+        operationId: RouteId.TransferAppOwnership,
+        description: "Transfer ownership to another organization member",
+        tags: ["Ownership"],
+        params: z.object({ id: z.string().uuid() }),
+        body: z.object({ ownerId: z.string().min(1) }),
+        response: constructResponseSchema(z.object({ success: z.boolean() })),
+      },
+    },
+    async ({ params, body, user, organizationId }) => {
+      await transferResourceOwnership({
+        kind: "app",
+        id: params.id,
+        ownerId: body.ownerId,
+        userId: user.id,
+        organizationId,
+      });
+      return { success: true };
+    },
+  );
+
   fastify.get(
     "/api/apps",
     {

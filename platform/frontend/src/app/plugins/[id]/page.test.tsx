@@ -190,10 +190,10 @@ describe("PluginDetailPage", () => {
     expect(screen.queryByText("GitHub source")).not.toBeInTheDocument();
 
     // Clean: there is nothing to write yet.
-    expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
     await user.clear(screen.getByLabelText("Display name"));
     await user.type(screen.getByLabelText("Display name"), "Session sentry");
-    await user.click(screen.getByRole("button", { name: "Save changes" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
     expect(updateMutateAsync).toHaveBeenCalledWith(
       expect.objectContaining({ displayName: "Session sentry" }),
     );
@@ -231,7 +231,7 @@ describe("PluginDetailPage", () => {
     renderPage(BASE_PLUGIN);
 
     expect(
-      screen.queryByRole("button", { name: "Save changes" }),
+      screen.queryByRole("button", { name: "Save" }),
     ).not.toBeInTheDocument();
     expect(
       screen.getByText(/view this plugin's configuration but not change it/i),

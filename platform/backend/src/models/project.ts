@@ -34,6 +34,35 @@ import ProjectShareModel from "./project-share";
  * restore brings them back; chats and execution sessions detach. See that method.
  */
 class ProjectModel {
+  static async transferOwnership(params: {
+    id: string;
+    organizationId: string;
+    previousOwnerId: string | null;
+    updatedAt: Date;
+    ownerId: string;
+  }): Promise<boolean> {
+    const rows = await db
+      .update(schema.projectsTable)
+      .set({
+        userId: params.ownerId,
+
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(schema.projectsTable.id, params.id),
+          eq(schema.projectsTable.organizationId, params.organizationId),
+          params.previousOwnerId === null
+            ? isNull(schema.projectsTable.userId)
+            : eq(schema.projectsTable.userId, params.previousOwnerId),
+          sql`date_trunc('milliseconds', ${schema.projectsTable.updatedAt}) = ${params.updatedAt.toISOString()}::timestamp`,
+          notDeleted(schema.projectsTable),
+        ),
+      )
+      .returning({ id: schema.projectsTable.id });
+    return rows.length === 1;
+  }
+
   static async create(project: InsertProject): Promise<Project> {
     const slug = await ProjectModel.generateUniqueSlug({
       name: project.name,

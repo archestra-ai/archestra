@@ -3,7 +3,7 @@ title: Plugins (Beta)
 category: Agents
 order: 4
 description: Client-native extensions for Claude Code, Codex, Copilot CLI, and Cursor
-lastUpdated: 2026-09-03
+lastUpdated: 2026-09-15
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -18,13 +18,17 @@ Review every file before you approve an import or update.
 
 Go to **Studio → Plugins** to create or import a plugin.
 
+## Ownership
+
+Plugin administrators can transfer a plugin to another plugin administrator. Approved files, pending updates, source configuration, and sharing stay intact.
+
 ## Creating a Plugin
 
 You can start from a blank template or import a GitHub marketplace.
 
 A blank plugin starts with `hooks/hooks.json`. Hooks are optional. You can replace that file with any payload the target client supports.
 
-The plugin form is one page: what the plugin is, the files it installs, and who can discover it. Every plugin has a page of its own that shows the same form. Change anything there and **Save changes** — there is no separate edit screen to open.
+The plugin form is one page: what the plugin is, the files it installs, and who can discover it. Every plugin has a page of its own that shows the same form. Change anything there and **Save** — there is no separate edit screen to open.
 
 Every plugin targets one client: Claude Code, Codex, Copilot CLI, or Cursor. It also declares macOS/Linux, Windows, or both, so a setup command skips an incompatible payload.
 

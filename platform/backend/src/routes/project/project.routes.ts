@@ -11,6 +11,7 @@ import { z } from "zod";
 import { userHasPermission } from "@/auth";
 import { ProjectLabelModel, ProjectModel } from "@/models";
 import { projectService } from "@/services/project";
+import { transferResourceOwnership } from "@/services/resource-ownership";
 import {
   constructResponseSchema,
   GetAgentRunResponseSchema,
@@ -52,6 +53,30 @@ const PROJECT_UPLOAD_BODY_LIMIT =
  * owner-only and "not yours" is indistinguishable from 404.
  */
 const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  fastify.post(
+    "/api/projects/:id/transfer-ownership",
+    {
+      schema: {
+        operationId: RouteId.TransferProjectOwnership,
+        description: "Transfer ownership to another organization member",
+        tags: ["Ownership"],
+        params: z.object({ id: z.string().uuid() }),
+        body: z.object({ ownerId: z.string().min(1) }),
+        response: constructResponseSchema(z.object({ success: z.boolean() })),
+      },
+    },
+    async ({ params, body, user, organizationId }) => {
+      await transferResourceOwnership({
+        kind: "project",
+        id: params.id,
+        ownerId: body.ownerId,
+        userId: user.id,
+        organizationId,
+      });
+      return { success: true };
+    },
+  );
+
   registerEntityLabelRoutes(fastify, {
     basePath: "/api/projects",
     tag: "Projects",

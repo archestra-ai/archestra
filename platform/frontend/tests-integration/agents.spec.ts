@@ -647,6 +647,11 @@ test.describe("Agents", () => {
     });
     await mswControl.use({
       method: "get",
+      url: "/api/agents/agent-created",
+      body: newAgent,
+    });
+    await mswControl.use({
+      method: "get",
       url: "/api/agent-catalog",
       query: { pinned: "true" },
       body: makeAgentCatalog(),
@@ -680,7 +685,19 @@ test.describe("Agents", () => {
       await expect(submitButton).toBeVisible({ timeout: 3_000 });
     }).toPass({ timeout: 20_000 });
     await submitButton.click();
-    await page.waitForURL(/\/agents\/agent-created\?section=connect$/);
+    await page.waitForURL(/\/agents\/agent-created\/created$/);
+    await expect(
+      page.getByRole("heading", { name: "Agent created", exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: NAME, exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByText("No messaging channels are configured for this agent."),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("link", { name: "Chat", exact: true }),
+    ).toHaveAttribute("href", "/chat?agentId=agent-created");
 
     await agentsPage.goto();
 

@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useAppAccess } from "@/lib/apps/use-app-access";
-import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { takePendingProjectChatHandoff } from "@/lib/chat/pending-project-chat-handoff";
 import { AppCard } from "./app-card";
 
@@ -114,6 +114,9 @@ vi.mock("@/components/ui/dropdown-menu", () => ({
 }));
 
 beforeEach(() => {
+  vi.mocked(useSession).mockReturnValue({
+    data: { user: { id: "owner-1" } },
+  } as ReturnType<typeof useSession>);
   vi.mocked(useHasPermissions).mockReturnValue({ data: true } as ReturnType<
     typeof useHasPermissions
   >);

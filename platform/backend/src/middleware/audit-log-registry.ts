@@ -137,6 +137,43 @@ export function deriveAction(
  * @public — consumed by audit-log-snapshot.test.ts to verify registry invariants
  */
 export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
+  "/api/a2a/remote-agents/:id/transfer-ownership": {
+    resourceType: "agent",
+    action: "agent.updated",
+    fetchById: (id, orgId) => A2aRemoteAgentModel.findByIdForAudit(id, orgId),
+    onlyWhenChanged: true,
+  },
+  "/api/internal_mcp_catalog/:id/transfer-ownership": {
+    resourceType: "internalMcpCatalog",
+    action: "internalMcpCatalog.updated",
+    fetchById: (id, orgId) =>
+      InternalMcpCatalogModel.findByIdForAudit(id, orgId),
+    onlyWhenChanged: true,
+  },
+  "/api/apps/:id/transfer-ownership": {
+    resourceType: "app",
+    action: "app.updated",
+    fetchById: (id, orgId) => AppModel.findByIdForAudit(id, orgId),
+    onlyWhenChanged: true,
+  },
+  "/api/projects/:id/transfer-ownership": {
+    resourceType: "project",
+    action: "project.updated",
+    fetchById: (id, orgId) => ProjectModel.findByIdForAudit(id, orgId),
+    onlyWhenChanged: true,
+  },
+  "/api/plugins/:id/transfer-ownership": {
+    resourceType: "plugin",
+    action: "plugin.updated",
+    fetchById: (id, orgId) => PluginModel.findByIdForAudit(id, orgId),
+    onlyWhenChanged: true,
+  },
+  "/api/skills/:id/transfer-ownership": {
+    resourceType: "skill",
+    action: "skill.updated",
+    fetchById: (id, orgId) => SkillModel.findByIdForAudit(id, orgId),
+    onlyWhenChanged: true,
+  },
   "/api/client-connections/:id/decision": {
     resourceType: "clientConnection",
     action: "clientConnection.updated",
@@ -149,6 +186,12 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
   "/api/agents/:id": {
     resourceType: "agent",
     fetchById: (id, orgId) => AgentModel.findByIdForAudit(id, orgId),
+  },
+  "/api/agents/:id/transfer-ownership": {
+    resourceType: "agent",
+    action: "agent.updated",
+    fetchById: (id, orgId) => AgentModel.findByIdForAudit(id, orgId),
+    onlyWhenChanged: true,
   },
   "/api/agents/:id/runtime/credentials/:key": {
     resourceType: "agent",

@@ -5,6 +5,7 @@ import {
   getAgentActionModel,
 } from "@/components/agent-pages/agent-actions-model";
 import { permanentDeleteRowAction } from "@/components/permanent-delete";
+import { ResourceTableRowActions } from "@/components/resource-table-row-actions";
 import {
   type TableRowAction,
   TableRowActions,
@@ -150,7 +151,9 @@ export function McpGatewayActions({
   ];
 
   return (
-    <TableRowActions
+    <ResourceTableRowActions
+      kind="mcp_gateway"
+      resource={agent}
       itemName={agent.name}
       actions={primaryActions}
       dropdownActions={dropdownActions}

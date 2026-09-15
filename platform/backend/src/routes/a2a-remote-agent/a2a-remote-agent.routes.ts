@@ -27,6 +27,7 @@ import {
   listA2aRemoteAgents,
   updateA2aRemoteAgent,
 } from "@/services/a2a-outbound-registry";
+import { transferResourceOwnership } from "@/services/resource-ownership";
 import {
   A2aDelegationTargetSchema,
   A2aOutboundRunSummarySchema,
@@ -45,6 +46,30 @@ import {
 } from "@/types";
 
 const a2aRemoteAgentRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  fastify.post(
+    "/api/a2a/remote-agents/:id/transfer-ownership",
+    {
+      schema: {
+        operationId: RouteId.TransferRemoteAgentOwnership,
+        description: "Transfer ownership to another organization member",
+        tags: ["Ownership"],
+        params: z.object({ id: z.string().uuid() }),
+        body: z.object({ ownerId: z.string().min(1) }),
+        response: constructResponseSchema(z.object({ success: z.boolean() })),
+      },
+    },
+    async ({ params, body, user, organizationId }) => {
+      await transferResourceOwnership({
+        kind: "remoteAgent",
+        id: params.id,
+        ownerId: body.ownerId,
+        userId: user.id,
+        organizationId,
+      });
+      return { success: true };
+    },
+  );
+
   fastify.get(
     "/api/agents/:agentId/a2a-delegations",
     {

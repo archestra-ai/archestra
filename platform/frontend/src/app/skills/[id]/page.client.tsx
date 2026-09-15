@@ -15,7 +15,6 @@ import { AgentBadge } from "@/components/agent-badge";
 import type { ProfileLabelsRef } from "@/components/agent-labels";
 import { CreatedByCell } from "@/components/created-by-cell";
 import { PageLayout } from "@/components/page-layout";
-import { FloatingActionBar } from "@/components/settings/settings-block";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -33,6 +32,8 @@ import {
   useGuardedInAppNavigation,
   useUnsavedChangesGuard,
 } from "@/components/unsaved-changes-guard";
+import { useResourceOwnershipTransfer } from "@/components/use-resource-ownership-transfer";
+import { WizardFooter } from "@/components/wizard-footer";
 import { formatPermissionConstraint } from "@/lib/auth/auth.utils";
 import {
   backToListLabel,
@@ -202,6 +203,12 @@ function SkillDetailView({
   });
   const labelsRef = useRef<ProfileLabelsRef>(null);
   const isDirty = isSkillDraftDirty(draft, base.draft);
+  const ownership = useResourceOwnershipTransfer({
+    kind: "skill",
+    resource: skill,
+    disabledReason: isDirty ? "Save or discard your changes first" : undefined,
+    onTransferred: () => router.push("/skills"),
+  });
 
   // Adopt a read only when there is nothing to lose and it is not older than
   // what this page has already written. Both guards earn their keep:
@@ -326,6 +333,7 @@ function SkillDetailView({
         <SkillBackLink href="/skills" label={backToListLabel("skill")} />
       }
       maxWidth="wizard"
+      contentOverflowX="clip"
       minWidth="phone"
       tabs={SKILL_DETAIL_SECTIONS.map((entry) => ({
         label: SKILL_SECTION_LABELS[entry],
@@ -366,6 +374,7 @@ function SkillDetailView({
                 <History className="h-4 w-4" />
                 {historyAction.label}
               </DropdownMenuItem>
+              {ownership.menuItem}
               <DropdownMenuSeparator />
               {/* `aria-disabled` rather than Radix's `disabled`, so the item
                   keeps its place in the menu's roving focus and the reason
@@ -407,6 +416,7 @@ function SkillDetailView({
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          {ownership.dialog}
         </div>
       }
     >
@@ -454,36 +464,36 @@ function SkillDetailView({
             }
           />
 
-          {/* The save row floats at the foot of the form so it is in reach
-              without scrolling to the bottom of a long skill, the same bar the
-              settings pages use. A reader who cannot change the skill has no
-              save row at all — the alert above already says why. */}
           {!isReadOnly && (
-            <FloatingActionBar>
-              <PermissionButton
-                permissions={{ skill: ["update"] }}
-                disabled={!isDirty || !contentComplete || isGone || isSaving}
-                onClick={handleSave}
-              >
-                {isSaving ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    <span>Saving...</span>
-                  </>
-                ) : (
-                  <span>Save changes</span>
+            <WizardFooter>
+              <div>
+                {isDirty && !isSaving && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={discardChanges}
+                  >
+                    Discard changes
+                  </Button>
                 )}
-              </PermissionButton>
-              {isDirty && !isSaving && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={discardChanges}
+              </div>
+              <div className="flex items-center gap-2">
+                <PermissionButton
+                  permissions={{ skill: ["update"] }}
+                  disabled={!isDirty || !contentComplete || isGone || isSaving}
+                  onClick={handleSave}
                 >
-                  Discard changes
-                </Button>
-              )}
-            </FloatingActionBar>
+                  {isSaving ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span>Saving...</span>
+                    </>
+                  ) : (
+                    <span>Save</span>
+                  )}
+                </PermissionButton>
+              </div>
+            </WizardFooter>
           )}
         </div>
       )}

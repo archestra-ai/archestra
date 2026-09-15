@@ -108,6 +108,8 @@ archestra:
     # BETA: auto-sync-permissions connectors — required by the
     # knowledge-permission-sync e2e spec (off by default).
     ARCHESTRA_KNOWLEDGE_BASE_AUTO_SYNC_PERMISSIONS_ENABLED: "true"
+    # Exercise plugin create/edit alongside the other sticky form footers.
+    ARCHESTRA_PLUGINS_ENABLED: "true"
     # Enable test MCP server seeding
     ENABLE_TEST_MCP_SERVER: "true"
     # Disable better-auth rate limit for e2e tests

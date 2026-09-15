@@ -36,7 +36,6 @@ import {
   resolveProtocolRevision,
   SERVER_DISCOVER_METHOD,
   STATELESS_MCP_PROTOCOL_REVISION,
-  SUPPORTED_MCP_PROTOCOL_REVISIONS,
   validateRoutingHeaders,
   withCompleteResultEnvelope,
 } from "./protocol";
@@ -304,7 +303,7 @@ async function handleMcpPostRequest(
 const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const { endpoint } = config.mcpGateway;
 
-  // GET endpoint for server discovery with profile ID in URL
+  // Stateless gateways have no standalone SSE stream; MCP clients need 405 to stop polling.
   fastify.get(
     `${endpoint}/:profileId`,
     {
@@ -315,24 +314,13 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
           profileId: UuidOrSlugSchema,
         }),
         response: {
-          200: z.object({
-            name: z.string(),
-            version: z.string(),
-            agentId: z.string(),
-            transport: z.string(),
-            protocolVersions: z.array(z.string()),
-            capabilities: z.object({
-              tools: z.boolean(),
+          405: z.object({
+            jsonrpc: z.literal("2.0"),
+            error: z.object({
+              code: z.number(),
+              message: z.string(),
             }),
-            tokenAuth: z
-              .object({
-                tokenId: z.string(),
-                teamId: z.string().nullable(),
-                isOrganizationToken: z.boolean(),
-                isUserToken: z.boolean().optional(),
-                userId: z.string().optional(),
-              })
-              .optional(),
+            id: z.null(),
           }),
           401: z.object({
             error: z.string(),
@@ -355,27 +343,28 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
         };
       }
 
-      const tokenAuth = await validateMCPGatewayToken(profileId, token);
+      const { result: tokenAuth, reason } = await authenticateMCPGatewayRequest(
+        profileId,
+        token,
+      );
+      if (!tokenAuth) {
+        setWWWAuthenticateHeader(request, reply);
+        reply.status(401);
+        return {
+          error: "Unauthorized",
+          message: describeGatewayAuthFailure(reason),
+        };
+      }
 
-      reply.type("application/json");
+      reply.header("Allow", "POST");
+      reply.status(405);
       return {
-        name: `archestra-agent-${profileId}`,
-        version: config.api.version,
-        agentId: profileId,
-        transport: "http",
-        protocolVersions: [...SUPPORTED_MCP_PROTOCOL_REVISIONS],
-        capabilities: {
-          tools: true,
+        jsonrpc: "2.0" as const,
+        error: {
+          code: -32000,
+          message: "Method not allowed. Use POST for MCP requests.",
         },
-        ...(tokenAuth && {
-          tokenAuth: {
-            tokenId: tokenAuth.tokenId,
-            teamId: tokenAuth.teamId,
-            isOrganizationToken: tokenAuth.isOrganizationToken,
-            ...(tokenAuth.isUserToken && { isUserToken: true }),
-            ...(tokenAuth.userId && { userId: tokenAuth.userId }),
-          },
-        }),
+        id: null,
       };
     },
   );

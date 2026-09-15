@@ -114,8 +114,23 @@ export function EnvironmentSelector(props: EnvironmentSelectorProps) {
   return (
     <div className={cn("grid min-w-0 content-start gap-2", props.className)}>
       {showLabel && <Label htmlFor={id}>{label}</Label>}
-      {props.helpText && props.mode !== "default" ? (
-        <FieldDescription>{props.helpText}</FieldDescription>
+      {(props.helpText || (multiple && canManageEnvironments)) &&
+      props.mode !== "default" ? (
+        <FieldDescription>
+          {props.helpText}
+          {multiple && canManageEnvironments ? (
+            <>
+              <span> </span>
+              <Link
+                href="/settings/environments"
+                className="underline underline-offset-2"
+              >
+                Manage environments
+              </Link>
+              .
+            </>
+          ) : null}
+        </FieldDescription>
       ) : null}
       {selectedDescription ? (
         <FieldDescription>{selectedDescription}</FieldDescription>

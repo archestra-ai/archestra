@@ -611,3 +611,20 @@ it.each([
     ).toBeVisible();
   }
 });
+
+it("reopens remaining credentials with the GitHub confirmation and clears it on close", async () => {
+  configured = ["GITHUB_TOKEN"];
+  window.history.replaceState(
+    null,
+    "",
+    "/agents/agent-1?section=advanced&setup=credentials&github=connected",
+  );
+  show();
+  expect(await screen.findByLabelText("Service token")).toBeVisible();
+  expect(screen.getByRole("status")).toHaveTextContent("GitHub connected");
+  expect(screen.queryByLabelText("GitHub token")).not.toBeInTheDocument();
+  await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+  expect(replace).toHaveBeenCalledWith("/agents/agent-1?section=advanced", {
+    scroll: false,
+  });
+});

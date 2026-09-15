@@ -159,6 +159,15 @@ function GitHubSetupResult({
     ...(preflight.data?.misconfigured ?? []),
   ];
   const needsSetup = remaining.length > 0 || !!preflight.data?.incompatible;
+  useEffect(() => {
+    if (checking || failed || !needsSetup) return;
+    const destination = new URL(returnTo, window.location.origin);
+    destination.searchParams.set("github", "connected");
+    router.replace(
+      `${destination.pathname}${destination.search}${destination.hash}`,
+    );
+  }, [checking, failed, needsSetup, returnTo, router]);
+
   return (
     <AuthCallbackLayout>
       <Card className="w-full max-w-md" aria-live="polite">
@@ -175,7 +184,7 @@ function GitHubSetupResult({
               : failed
                 ? "We couldn’t check whether your agent needs anything else."
                 : needsSetup
-                  ? "Finish the remaining setup before trying your message again."
+                  ? "Returning to your remaining credentials…"
                   : "Return to your conversation and send your message again."}
           </CardDescription>
         </CardHeader>
@@ -190,19 +199,7 @@ function GitHubSetupResult({
               Try again
             </Button>
           ) : needsSetup ? (
-            <div className="rounded-md border bg-muted/50 p-4">
-              <p className="text-sm font-medium">Still needed</p>
-              <ul className="mt-2 space-y-2 text-sm text-muted-foreground">
-                {remaining.map((credential) => (
-                  <li key={credential.key}>{credential.label}</li>
-                ))}
-              </ul>
-              {preflight.data?.incompatible && (
-                <p className="mt-2 text-sm text-muted-foreground">
-                  {preflight.data.incompatible}
-                </p>
-              )}
-            </div>
+            <LoadingState variant="inline" label="Opening credential setup" />
           ) : (
             <div className="flex items-center gap-3 rounded-md border bg-muted/50 p-4">
               <CircleCheck
@@ -219,7 +216,7 @@ function GitHubSetupResult({
             </div>
           )}
         </CardContent>
-        {!checking && (needsSetup || failed) && (
+        {!checking && failed && (
           <CardFooter>
             <Button className="w-full" onClick={() => router.replace(returnTo)}>
               Finish setup

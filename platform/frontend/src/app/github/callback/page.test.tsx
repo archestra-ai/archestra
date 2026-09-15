@@ -135,7 +135,7 @@ it("returns a declined authorization to the originating Agent without exchanging
 it.each([
   false,
   true,
-])("keeps conversation setup on the callback with remaining credentials: %s", async (stillMissing) => {
+])("chooses completion or automatic remaining setup: %s", async (stillMissing) => {
   const destination = "/agents/agent-1?section=advanced&setup=credentials";
   rememberGitHubConnectionReturn("synthetic-state", destination);
   server.use(
@@ -156,11 +156,13 @@ it.each([
   );
   renderCallback();
   if (stillMissing) {
-    expect(await screen.findByText("Service token")).toBeVisible();
+    await waitFor(() =>
+      expect(replace).toHaveBeenCalledWith(`${destination}&github=connected`),
+    );
     expect(screen.queryByText("You’re ready")).not.toBeInTheDocument();
-    expect(replace).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "Finish setup" }));
-    expect(replace).toHaveBeenCalledWith(destination);
+    expect(
+      screen.queryByRole("button", { name: "Finish setup" }),
+    ).not.toBeInTheDocument();
   } else {
     expect(await screen.findByText("You’re ready")).toBeVisible();
     expect(
@@ -224,6 +226,10 @@ it("rechecks credentials after authorization instead of trusting cached readines
     ),
   );
   renderCallback(client);
-  expect(await screen.findByText("Service token")).toBeVisible();
+  await waitFor(() =>
+    expect(replace).toHaveBeenCalledWith(
+      "/agents/agent-1?setup=credentials&github=connected",
+    ),
+  );
   expect(screen.queryByText("You’re ready")).not.toBeInTheDocument();
 });

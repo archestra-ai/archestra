@@ -1,5 +1,6 @@
 "use client";
 
+import { CircleCheck } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
@@ -55,10 +56,12 @@ export function AgentRuntimeCredentialsDeepLink(props: {
   return (
     <AgentRuntimeCredentialsDialog
       {...props}
+      githubConnected={searchParams.get("github") === "connected"}
       onClose={() => {
         setLegacyLink(false);
         const params = new URLSearchParams(searchParams.toString());
         params.delete("setup");
+        params.delete("github");
         params.delete("tab");
         const query = params.toString();
         router.replace(`${pathname}${query ? `?${query}` : ""}`, {
@@ -73,11 +76,13 @@ export function AgentRuntimeCredentialsDialog({
   agentId,
   declarations,
   canEditAgent,
+  githubConnected = false,
   onClose,
 }: {
   agentId: string;
   declarations: NonNullable<AgentRuntimeConfig["credentials"]>;
   canEditAgent: boolean;
+  githubConnected?: boolean;
   onClose: () => void;
 }) {
   const preflight = useAgentRuntimePreflight(agentId);
@@ -193,6 +198,15 @@ export function AgentRuntimeCredentialsDialog({
         </>
       }
     >
+      {githubConnected && (
+        <output className="mb-5 flex items-center gap-2 rounded-md border bg-muted/30 px-3 py-2 text-sm">
+          <CircleCheck
+            className="size-4 shrink-0 text-green-600 dark:text-green-400"
+            aria-hidden="true"
+          />
+          <span>GitHub connected</span>
+        </output>
+      )}
       {loading ? (
         <output>Checking missing credentials…</output>
       ) : loadFailed ? (

@@ -3,16 +3,14 @@ title: Agent Runtime (Beta)
 category: Agents
 order: 7
 description: Configure isolated workspaces for coding agents and delegated tasks
-lastUpdated: "2026-09-14"
+lastUpdated: "2026-09-15"
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
 Agent Runtime gives an Agent an isolated workspace for coding, running commands, and long-running tasks. You can follow its terminal output, send instructions, and continue work in the same workspace.
 
-![Available Agent Runtime templates](/docs/automated_screenshots/platform-agent-runtime_catalog.webp)
-
-A dedicated runtime belongs to an existing Agent. It uses that Agent's instructions, tools, Environment, and access rules. Choose Archestra Agent, Claude Code, Codex, OpenCode, Hermes, OpenClaw, or your own image.
+A dedicated runtime belongs to an existing Agent. It uses that Agent's instructions, tools, Environment, and access rules. Choose Claude Code, Codex, OpenCode, Hermes, OpenClaw, or your own image.
 
 Chat and Projects open an interactive terminal for Agents with a dedicated runtime. Delegation, A2A, email, and schedules start unattended tasks that return a result when finished. Ordinary messaging-channel conversations stay in the foreground unless the channel Agent delegates work.
 
@@ -46,7 +44,7 @@ See [Network Egress Policies](/docs/platform-environments#network-egress-policie
 
 ### Built-In Archestra Agent
 
-The Archestra Agent template includes a shell tool, the Agent's assigned MCP tools, and its system prompt. It supports OpenAI Responses, OpenAI Chat Completions, and Anthropic Messages. Follow-up instructions are consumed between model turns.
+Choose **Start from scratch**, then enable **Dedicated runtime** under **Advanced** and leave the image and command at their defaults to use Archestra's own agent loop. It includes a shell tool, the Agent's assigned MCP tools, and its system prompt. It supports OpenAI Responses, OpenAI Chat Completions, and Anthropic Messages. Follow-up instructions are consumed between model turns.
 
 Use it when you need a general coding loop without a specific third-party client's behavior. The [runtime-agent source](https://github.com/archestra-ai/archestra/tree/main/platform/runtime-agent) provides a working integration example.
 

@@ -340,6 +340,16 @@ function CredentialActions({
     },
   ];
   const dropdownActions = [
+    ...(!definition.builtIn
+      ? [
+          {
+            icon: <Pencil className="size-4" />,
+            label: "Edit",
+            onClick: onEdit,
+            permissions: MANAGE_CREDENTIALS_PERMISSION,
+          },
+        ]
+      : []),
     ...(connected
       ? [
           {
@@ -355,12 +365,6 @@ function CredentialActions({
       : []),
     ...(!definition.builtIn
       ? [
-          {
-            icon: <Pencil className="size-4" />,
-            label: "Edit",
-            onClick: onEdit,
-            permissions: MANAGE_CREDENTIALS_PERMISSION,
-          },
           {
             icon: <Trash2 className="size-4" />,
             label: "Delete",

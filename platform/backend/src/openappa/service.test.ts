@@ -21,7 +21,7 @@ const session = {
 
 beforeEach(() => {
   config.llmProxy.plugins = ["appa"];
-  config.openappa = { policyPath: "/test/policy.toml" };
+  config.openappa = { enabled: true, policyPath: "/test/policy.toml" };
   vi.spyOn(database, "getDatabaseConnectionString").mockReturnValue(
     "postgresql://test:test@localhost/test",
   );
@@ -44,7 +44,9 @@ afterEach(() => {
 
 describe("APPA feature boundary", () => {
   test("does not initialize or dispatch while disabled, even with a configured path", async () => {
-    config.llmProxy.plugins = [];
+    config.openappa.enabled = false;
+    // An explicit plugin entry must not override the feature flag.
+    config.llmProxy.plugins = ["appa"];
     await expect(processProxyResults(session, [])).rejects.toThrow(
       "OpenAPPA could not safely complete",
     );
@@ -53,7 +55,9 @@ describe("APPA feature boundary", () => {
     expect(database.getDatabaseConnectionString).not.toHaveBeenCalled();
   });
   test("hides the remedy tool and rejects direct calls without an agent while disabled", async () => {
-    config.llmProxy.plugins = [];
+    config.openappa.enabled = false;
+    // An explicit plugin entry must not override the feature flag.
+    config.llmProxy.plugins = ["appa"];
     expect(
       getArchestraMcpTools().some((tool) =>
         tool.name.endsWith("__execute_remedy_plan"),

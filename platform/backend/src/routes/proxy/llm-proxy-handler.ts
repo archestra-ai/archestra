@@ -167,6 +167,8 @@ export interface LLMProxyContext<TRequest> {
   openappaChatRequestId?: string;
   pluginRegistry?: LlmProxyPluginRegistry;
   pluginContext?: LlmProxyRequestContext;
+  /** Captured by the host after binding an authenticated APPA session. */
+  usesAppaPolicies: boolean;
   agent: GatewayAgent;
   originalRequest: TRequest;
   actualModel: string;
@@ -311,6 +313,7 @@ export async function handleLLMProxy<
   const hasProxyPlugins = pluginRegistry.hasPlugins();
   let pluginContext: LlmProxyRequestContext | undefined;
   let pluginSessionInitialized = false;
+  let usesAppaPolicies = false;
 
   // Extract header-based context
   const headersForExtraction = headers as Record<
@@ -1129,6 +1132,7 @@ export async function handleLLMProxy<
         ...pluginContext,
         toolResults: requestAdapter.getToolResults(),
       });
+      usesAppaPolicies = openappaSession !== undefined;
     }
     const trustedDataOutcome =
       pluginToolResultsOutcome?.contextTrust ??
@@ -1434,6 +1438,7 @@ export async function handleLLMProxy<
           ? chatBlockCapability.slice(3)
           : undefined,
       ...(pluginContext ? { pluginRegistry, pluginContext } : {}),
+      usesAppaPolicies,
       agent: resolvedAgent,
       originalRequest: requestAdapter.getOriginalRequest(),
       actualModel,
@@ -1935,21 +1940,26 @@ async function handleStreaming<
       // dispatch the model wrote itself would have faced.
       toolInvocationRefusal =
         pluginRefusal ??
-        (await utils.toolInvocation.evaluatePolicies(
-          normalizeToolCallsForPolicy(policyToolCalls, canonicalizeToolName),
-          agent.id,
-          {
-            teamIds: teamIds ?? [],
-            externalAgentId,
-            sensitiveContextOrigin:
-              utils.trustedData.sensitiveContextOriginFromBoundary(
-                unsafeContextBoundary,
+        (ctx.usesAppaPolicies
+          ? null
+          : await utils.toolInvocation.evaluatePolicies(
+              normalizeToolCallsForPolicy(
+                policyToolCalls,
+                canonicalizeToolName,
               ),
-          },
-          contextIsTrusted,
-          enabledToolNames,
-          { surface: "llm-proxy", sessionId: sessionId ?? undefined },
-        ));
+              agent.id,
+              {
+                teamIds: teamIds ?? [],
+                externalAgentId,
+                sensitiveContextOrigin:
+                  utils.trustedData.sensitiveContextOriginFromBoundary(
+                    unsafeContextBoundary,
+                  ),
+              },
+              contextIsTrusted,
+              enabledToolNames,
+              { surface: "llm-proxy", sessionId: sessionId ?? undefined },
+            ));
 
       logger.info(
         { refused: !!toolInvocationRefusal },
@@ -2468,21 +2478,23 @@ async function handleNonStreaming<
 
     const toolInvocationRefusal: LlmProxyToolCallRefusal | null =
       pluginRefusal ??
-      (await utils.toolInvocation.evaluatePolicies(
-        normalizeToolCallsForPolicy(policyToolCalls, canonicalizeToolName),
-        agent.id,
-        {
-          teamIds: teamIds ?? [],
-          externalAgentId,
-          sensitiveContextOrigin:
-            utils.trustedData.sensitiveContextOriginFromBoundary(
-              unsafeContextBoundary,
-            ),
-        },
-        contextIsTrusted,
-        enabledToolNames,
-        { surface: "llm-proxy", sessionId: sessionId ?? undefined },
-      ));
+      (ctx.usesAppaPolicies
+        ? null
+        : await utils.toolInvocation.evaluatePolicies(
+            normalizeToolCallsForPolicy(policyToolCalls, canonicalizeToolName),
+            agent.id,
+            {
+              teamIds: teamIds ?? [],
+              externalAgentId,
+              sensitiveContextOrigin:
+                utils.trustedData.sensitiveContextOriginFromBoundary(
+                  unsafeContextBoundary,
+                ),
+            },
+            contextIsTrusted,
+            enabledToolNames,
+            { surface: "llm-proxy", sessionId: sessionId ?? undefined },
+          ));
 
     if (toolInvocationRefusal) {
       const { refusalMessage, contentMessage, reason, allToolCallNames } =

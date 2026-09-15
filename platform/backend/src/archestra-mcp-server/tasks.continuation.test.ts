@@ -1,4 +1,5 @@
 import {
+  TOOL_GET_RUN_FULL_NAME,
   TOOL_START_RUN_FULL_NAME,
   TOOL_STEER_RUN_FULL_NAME,
 } from "@archestra/shared";
@@ -10,6 +11,7 @@ import { claudeCodeAccountRuntime } from "@/k8s/agent-runtime/claude-code-accoun
 import {
   A2AContextModel,
   A2ATaskModel,
+  AgentRunInputModel,
   AgentRunModel,
   AgentWorkspaceModel,
 } from "@/models";
@@ -147,6 +149,190 @@ test("a continuation reuses the account after an image change and reports a late
   );
 });
 
+test("an external gateway steers the current turn using the original session handle", async ({
+  makeAgent,
+}) => {
+  const previous = await retainedRun();
+  const previousTask = await A2ATaskModel.findById(previous.taskId);
+  if (!previousTask) throw new Error("Missing task fixture");
+  const currentTask = await A2ATaskModel.create({
+    contextId: previousTask.contextId,
+    agentId: agent.id,
+    state: "TASK_STATE_WORKING",
+  });
+  const current = await AgentRunModel.create({
+    organizationId: agent.organizationId,
+    agentId: agent.id,
+    taskId: currentTask.id,
+    actorKind: "user",
+    actorId: userId,
+    actorUserId: userId,
+    workloadName: previous.workloadName,
+    backend: "kubernetes",
+    runtimeScope: previous.runtimeScope,
+  });
+  await AgentWorkspaceModel.claim({
+    id: previous.taskId,
+    organizationId: agent.organizationId,
+    actorKind: "user",
+    actorId: userId,
+    agentId: agent.id,
+    taskId: currentTask.id,
+  });
+  const gateway = await makeAgent({
+    organizationId: agent.organizationId,
+    agentType: "mcp_gateway",
+  });
+  const externalContext = {
+    ...context,
+    agentId: gateway.id,
+    agent: { id: gateway.id, name: gateway.name },
+    sessionId: "another-client-conversation",
+  };
+  const steer = vi.spyOn(backend, "steer").mockResolvedValue();
+  const launch = vi.spyOn(backend, "launch");
+  const continuation = vi.spyOn(backend, "continueRun");
+  for (const taskId of [previous.taskId, currentTask.id, previous.taskId]) {
+    const result = await executeArchestraTool(
+      TOOL_STEER_RUN_FULL_NAME,
+      { task_id: taskId, message: "Keep working on the existing draft" },
+      externalContext,
+    );
+    expect(result.isError).not.toBe(true);
+    expect(result.structuredContent).toMatchObject({
+      task_id: currentTask.id,
+      session_id: previous.taskId,
+    });
+    expect(steer).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        session: expect.objectContaining({
+          id: current.id,
+          workloadName: previous.workloadName,
+        }),
+      }),
+    );
+  }
+  const status = await executeArchestraTool(
+    TOOL_GET_RUN_FULL_NAME,
+    { task_id: previous.taskId },
+    externalContext,
+  );
+  expect(status.structuredContent).toMatchObject({
+    session_id: previous.taskId,
+    run: { task_id: currentTask.id },
+    run_url: expect.stringContaining(`/chat/runs/${previous.taskId}`),
+  });
+  expect(launch).not.toHaveBeenCalled();
+  expect(continuation).not.toHaveBeenCalled();
+  expect(
+    (
+      await A2ATaskModel.listForActor({
+        actorKind: "user",
+        actorId: userId,
+        agentId: agent.id,
+        pageSize: 100,
+      })
+    ).tasks,
+  ).toHaveLength(2);
+});
+
+test("an expired session rejects steering without creating a replacement task", async () => {
+  const previous = await retainedRun();
+  vi.useFakeTimers({ toFake: ["Date"] });
+  onTestFinished(() => {
+    vi.useRealTimers();
+  });
+  vi.setSystemTime(Date.now() + 7200_000);
+  const result = await executeArchestraTool(
+    TOOL_STEER_RUN_FULL_NAME,
+    { task_id: previous.taskId, message: "Continue the draft" },
+    context,
+  );
+  expect(result.isError).toBe(true);
+  expect(JSON.stringify(result.content)).toContain(
+    "No new session was started",
+  );
+  expect(
+    (
+      await A2ATaskModel.listForActor({
+        actorKind: "user",
+        actorId: userId,
+        agentId: agent.id,
+        pageSize: 100,
+      })
+    ).tasks,
+  ).toHaveLength(1);
+});
+
+test("start_run persists handoff files before launching the runtime", async () => {
+  await connect(runtime);
+  const contents = "Draft for the next turn\n";
+  let stagedBeforeLaunch = false;
+  vi.spyOn(backend, "launch").mockImplementation(async (spec) => {
+    const files = await AgentRunInputModel.findByTaskId(spec.taskId);
+    stagedBeforeLaunch =
+      files.length === 1 && files[0].fileData.toString() === contents;
+    throw new Error("Test launch stopped after checking inputs");
+  });
+  vi.spyOn(backend, "stopRun").mockResolvedValue(undefined);
+  vi.spyOn(backend, "releaseRun").mockResolvedValue();
+  vi.spyOn(backend, "deleteWorkspace").mockResolvedValue();
+  const result = await executeArchestraTool(
+    TOOL_START_RUN_FULL_NAME,
+    {
+      agent_id: agent.id,
+      message: "Continue the attached document",
+      attachments: [
+        {
+          name: "draft.txt",
+          contentType: "text/plain",
+          contentBase64: Buffer.from(contents).toString("base64"),
+        },
+      ],
+    },
+    context,
+  );
+  expect(result.isError).not.toBe(true);
+  const reply = result.structuredContent as {
+    session_id: string;
+    run: { task_id: string };
+  };
+  expect(reply.session_id).toBe(reply.run.task_id);
+  await expect
+    .poll(async () => (await A2ATaskModel.findById(reply.run.task_id))?.state)
+    .toBe("TASK_STATE_FAILED");
+  expect(stagedBeforeLaunch).toBe(true);
+});
+
+test("invalid handoff attachment data is rejected before creating a run", async () => {
+  const result = await executeArchestraTool(
+    TOOL_START_RUN_FULL_NAME,
+    {
+      agent_id: agent.id,
+      message: "Read the attachment",
+      attachments: [
+        {
+          name: "draft.txt",
+          contentType: "text/plain",
+          contentBase64: "not base64",
+        },
+      ],
+    },
+    context,
+  );
+  expect(result.isError).toBe(true);
+  expect(
+    (
+      await A2ATaskModel.listForActor({
+        actorKind: "user",
+        actorId: userId,
+        agentId: agent.id,
+        pageSize: 100,
+      })
+    ).tasks,
+  ).toHaveLength(0);
+});
+
 async function connect(approvedRuntime: ResolvedAgentRuntime) {
   vi.spyOn(claudeCodeAccountRuntime, "create").mockResolvedValue();
   vi.spyOn(claudeCodeAccountRuntime, "delete").mockResolvedValue();
@@ -194,6 +380,7 @@ async function retainedRun() {
   });
   await AgentRunModel.close({ id: session.id });
   await AgentWorkspaceModel.create({
+    id: task.id,
     organizationId: agent.organizationId,
     agentId: agent.id,
     actorKind: "user",

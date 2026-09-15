@@ -209,6 +209,22 @@ describe("run tools", () => {
     );
 
     expect(result.isError).not.toBe(true);
+    const started = result.structuredContent as { run: { task_id: string } };
+    expect(started).toMatchObject({
+      runtime: "foreground",
+      session_id: null,
+      run_url: null,
+    });
+    const read = await executeArchestraTool(
+      TOOL_GET_RUN_FULL_NAME,
+      { task_id: started.run.task_id },
+      chatContext,
+    );
+    expect(read.isError).not.toBe(true);
+    expect(read.structuredContent).toMatchObject({
+      session_id: null,
+      run_url: null,
+    });
     expect(sendMessage).toHaveBeenCalledWith(
       expect.objectContaining({
         agentId: target.id,

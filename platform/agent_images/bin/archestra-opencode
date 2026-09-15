@@ -85,7 +85,7 @@ PLUGIN
 chmod 0600 "${attention_plugin}"
 
 cat > "${transcript_plugin}" <<'PLUGIN'
-import { writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { rename, writeFile } from "node:fs/promises";
 
 function timestamp(info) {
@@ -150,6 +150,15 @@ function entriesForMessage(message) {
 
 export const ArchestraTranscript = async ({ client, directory }) => ({
   event: async ({ event }) => {
+    const runtimeDir = process.env.ARCHESTRA_AGENT_RUNTIME_DIR ?? "/var/run/archestra";
+    const sessionFile = `${runtimeDir}/opencode-main-session`;
+    if (event.type === "session.created") {
+      const info = event.properties?.info;
+      if (info?.id && !info.parentID && !existsSync(sessionFile)) {
+        writeFileSync(sessionFile, `${info.id}\n`, "utf8");
+      }
+      return;
+    }
     if (event.type !== "session.idle") return;
 
     const sessionID = event.properties?.sessionID;
@@ -159,13 +168,17 @@ export const ArchestraTranscript = async ({ client, directory }) => ({
       query: { directory },
     });
     if (sessionResponse.data?.parentID) return;
+    if (existsSync(sessionFile)) {
+      if (readFileSync(sessionFile, "utf8").trim() !== sessionID) return;
+    } else {
+      writeFileSync(sessionFile, `${sessionID}\n`, "utf8");
+    }
 
     const response = await client.session.messages({
       path: { id: sessionID },
       query: { directory },
     });
     const messages = response.data ?? [];
-    const runtimeDir = process.env.ARCHESTRA_AGENT_RUNTIME_DIR ?? "/var/run/archestra";
     const transcript = {
       version: 1,
       provider: "opencode",
@@ -254,14 +267,19 @@ chmod 0600 "${config_file}" "${instructions_file}" "${task_file}"
 
 resume_args=()
 if [[ "${ARCHESTRA_AGENT_RUNTIME_CONTINUE:-0}" == "1" ]]; then
-  resume_args=(--continue)
+  session_file="${runtime_dir}/opencode-main-session"
+  if [[ ! -s "${session_file}" ]]; then
+    echo "archestra: Cannot resume the saved OpenCode session: its session ID is missing. The workspace is preserved; no new session was started." >&2
+    exit 78
+  fi
+  resume_args=(--session "$(cat "${session_file}")")
 fi
 terminal_command=(opencode --auto --model "archestra/${model}" --prompt "$(cat "${task_file}")")
 if [[ "${ARCHESTRA_AGENT_RUNTIME_CONTINUE:-0}" == "1" ]]; then
   # The full-screen TUI drops --prompt when restoring an existing session.
   # The native interactive run command both restores it and submits the new
   # instruction, while keeping terminal input available for live steering.
-  terminal_command=(opencode run --interactive --continue --auto --model "archestra/${model}" -- "$(cat "${task_file}")")
+  terminal_command=(opencode run --interactive "${resume_args[@]}" --auto --model "archestra/${model}" -- "$(cat "${task_file}")")
 fi
 case "${runtime_mode}" in
   interactive)

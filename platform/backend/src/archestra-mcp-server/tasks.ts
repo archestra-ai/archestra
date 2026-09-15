@@ -12,6 +12,7 @@ import {
 } from "@archestra/shared";
 import { z } from "zod";
 import { type A2AActor, A2AError, A2AErrorKind } from "@/agents/a2a/a2a-base";
+import type { A2AAttachment } from "@/agents/a2a-executor";
 import { watchChatOpsTask } from "@/agents/chatops/chatops-task-watcher";
 import { watchTaskCompletion } from "@/agents/task-completion-watcher";
 import { userHasPermission } from "@/auth/utils";
@@ -40,6 +41,7 @@ import {
   AgentRunAttentionStateSchema,
   AgentWorkspaceStateSchema,
 } from "@/types";
+import { agentRunAttachmentsSchema } from "@/types/agent-run-attachments";
 import {
   catchError,
   defineArchestraTool,
@@ -57,6 +59,7 @@ import type { ArchestraContext } from "./types";
 export async function startDelegatedTask(params: {
   agentId: string;
   message: string;
+  attachments?: A2AAttachment[];
   context: ArchestraContext;
 }) {
   const { agentId, message, context } = params;
@@ -119,6 +122,7 @@ export async function startDelegatedTask(params: {
       actor,
       agentId: agent.id,
       message,
+      attachments: params.attachments,
       systemParams: {
         sessionId:
           context.sessionId || context.conversationId || context.isolationKey,
@@ -149,6 +153,10 @@ export async function startDelegatedTask(params: {
     return structuredSuccessResult(
       {
         run: runSummary(taskRow),
+        session_id: runtime ? taskRow.id : null,
+        run_url: runtime
+          ? `${config.frontendBaseUrl}/chat/runs/${taskRow.id}`
+          : null,
         runtime: runtime ? "dedicated" : "foreground",
       },
       `Run ${taskRow.id} started on ${agent.name}` +
@@ -194,6 +202,18 @@ const RunSummarySchema = z.object({
 
 const StartRunOutputSchema = z.object({
   run: RunSummarySchema,
+  session_id: z
+    .string()
+    .nullable()
+    .describe(
+      "Stable runtime session handle. Keep this ID for every follow-up, including from another client.",
+    ),
+  run_url: z
+    .string()
+    .nullable()
+    .describe(
+      "Open the runtime and its workspace in the browser; null for foreground work.",
+    ),
   runtime: z
     .enum(["dedicated", "foreground"])
     .describe("Where the delegated run executes."),
@@ -201,6 +221,13 @@ const StartRunOutputSchema = z.object({
 
 const GetRunOutputSchema = z.object({
   run: RunSummarySchema,
+  session_id: z
+    .string()
+    .nullable()
+    .describe(
+      "Stable runtime session handle; use as task_id for steering and later handoffs.",
+    ),
+  run_url: z.string().nullable(),
   output: z
     .string()
     .describe("The run's response artifact so far (tail, capped)."),
@@ -391,20 +418,28 @@ const registry = defineArchestraTools([
     description:
       "Start long-running work on an agent as a durable run and return immediately with its id. " +
       "If the Agent has Agent Runtime configured, the work executes in its runtime. " +
-      "Poll get_run for progress, steer_run to interject, cancel_run to stop.",
+      "Use this only for NEW work. To hand off existing runtime work or send a follow-up, use steer_run with its saved session_id as task_id; never start another run. " +
+      "Include context, goals, decisions and remaining work in message. Optional attachments are staged before execution (repository patches or documents). " +
+      "Keep session_id and run_url so any connected client can pick up the same session. Poll get_run for progress.",
     schema: z.object({
       agent_id: z.string().describe("The agent to do the work."),
       message: z
         .string()
         .trim()
         .min(1, "message is required.")
-        .describe("What the agent should do."),
+        .describe(
+          "What the agent should do, including handoff context and acceptance criteria.",
+        ),
+      attachments: agentRunAttachmentsSchema().describe(
+        "Input files staged before the first turn. For repository work, include a patch for uncommitted changes and identify the base commit in message. Never include credentials.",
+      ),
     }),
     outputSchema: StartRunOutputSchema,
     handler: ({ args, context }) =>
       startDelegatedTask({
         agentId: args.agent_id,
         message: args.message,
+        attachments: args.attachments,
         context,
       }),
   }),
@@ -414,7 +449,10 @@ const registry = defineArchestraTools([
     title: "Get Run",
     description:
       "Read a run's state and the output it has produced so far. " +
-      "A run in state 'working' is still going — poll again rather than assuming it stalled.",
+      "Accepts the stable session_id or any prior task_id and resolves the current turn. " +
+      "Use this when picking up work from another client. Keep session_id and run_url. " +
+      "A run in state 'working' is still going — poll again rather than assuming it stalled. " +
+      "Use read_workspace_file for deliverables and steer_run for follow-ups in the SAME session.",
     schema: z.object({
       task_id: z.string().uuid().describe("From start_run or list_runs."),
     }),
@@ -453,6 +491,10 @@ const registry = defineArchestraTools([
         return structuredSuccessResult(
           {
             run: runSummary(task.row),
+            session_id: workspace?.id ?? (session ? session.taskId : null),
+            run_url: session
+              ? `${config.frontendBaseUrl}/chat/runs/${workspace?.id ?? task.row.id}`
+              : null,
             // The tail: the newest output is what a poller wants to see.
             output: truncated ? text.slice(-MAX_INLINED_OUTPUT_CHARS) : text,
             output_truncated: truncated,
@@ -639,7 +681,9 @@ const registry = defineArchestraTools([
     description:
       "Interject one message into a live run's container session — a course correction " +
       "without stopping the work. If the run has finished and its workspace is retained, " +
-      "start a continuation there with the same Agent. Only Agent Runtime runs can be steered.",
+      "continue the SAME session and saved conversation there with the same Agent. " +
+      "Pass the original session_id as task_id, even after switching clients or completing earlier turns. " +
+      "Never use start_run as a fallback: unavailable or expired sessions return an error, not a new workspace. Only Agent Runtime runs can be steered.",
     schema: z.object({
       task_id: z.string().uuid(),
       message: z.string().trim().min(1, "message is required."),
@@ -677,6 +721,16 @@ const registry = defineArchestraTools([
           session.workloadName,
         );
         if (session.endedAt) {
+          if (
+            !workspace ||
+            workspace.expiresAt.getTime() <= Date.now() ||
+            !["idle", "suspended"].includes(workspace.state) ||
+            workspace.activeTaskId
+          ) {
+            return errorResult(
+              "The existing session is unavailable, busy, or expired. No new session was started. Read get_run for its current state; do not use start_run as a retry.",
+            );
+          }
           const continuation = await startDetachedAgentTask({
             actor,
             agentId: session.agentId,
@@ -704,7 +758,8 @@ const registry = defineArchestraTools([
             status: "accepted",
             task_id: continuation.id,
             previous_task_id: session.taskId,
-            session_id: workspace?.id ?? session.taskId,
+            session_id: workspace.id,
+            run_url: `${config.frontendBaseUrl}/chat/runs/${workspace.id}`,
             message:
               "Continuation accepted in the retained workspace. Poll get_run with task_id to verify startup and report any failure.",
           });
@@ -720,6 +775,7 @@ const registry = defineArchestraTools([
             success: true,
             task_id: task.row.id,
             session_id: workspace?.id ?? session.taskId,
+            run_url: `${config.frontendBaseUrl}/chat/runs/${workspace?.id ?? session.taskId}`,
           },
           "Steer delivered. It lands at the loop's next turn boundary (pipe) or is typed into the session (tmux keys).",
         );

@@ -23,9 +23,10 @@ import {
   TOOL_WHOAMI_FULL_NAME,
 } from "@archestra/shared";
 import type { ListToolsResult } from "@modelcontextprotocol/sdk/types.js";
-import { vi } from "vitest";
+import { onTestFinished, vi } from "vitest";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
 import mcpClient from "@/clients/mcp-client";
+import config from "@/config";
 import {
   AgentTeamModel,
   McpCatalogLabelModel,
@@ -1411,6 +1412,57 @@ describe("createAgentServer tools/list", () => {
     ).toBe(false);
   });
 
+  test("a client without start tools can discover existing-session controls", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const previousEnabled = config.agentRuntime.enabled;
+    config.agentRuntime.enabled = true;
+    onTestFinished(() => {
+      config.agentRuntime.enabled = previousEnabled;
+    });
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
+    const agent = await makeAgent({
+      organizationId: org.id,
+      agentType: "mcp_gateway",
+      toolExposureMode: "search_and_run_only",
+    });
+    const { server } = await createAgentServer({
+      agentId: agent.id,
+      tokenAuth: {
+        tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
+        teamId: null,
+        isOrganizationToken: false,
+        organizationId: org.id,
+        isUserToken: true,
+        userId: user.id,
+      },
+    });
+    const handlers = (
+      server.server as unknown as {
+        _requestHandlers: Map<string, TestListToolsHandler>;
+      }
+    )._requestHandlers;
+    const list = handlers.get("tools/list");
+    if (!list) throw new Error("Missing tool list handler");
+    const names = (await list({ method: "tools/list", params: {} })).tools.map(
+      (tool) => tool.name,
+    );
+    expect(names).toEqual(
+      expect.arrayContaining([
+        TOOL_GET_RUN_FULL_NAME,
+        TOOL_LIST_RUNS_FULL_NAME,
+        TOOL_STEER_RUN_FULL_NAME,
+        TOOL_CANCEL_RUN_FULL_NAME,
+      ]),
+    );
+    expect(names).not.toContain("archestra__start_run");
+  });
+
   test("advertises task controls when the gateway can start delegated tasks", async ({
     makeAgent,
     makeAgentTool,
@@ -1846,6 +1898,11 @@ describe("createAgentServer tools/list", () => {
     makeUser,
     makeMember,
   }) => {
+    const runtimeEnabled = config.agentRuntime.enabled;
+    config.agentRuntime.enabled = false;
+    onTestFinished(() => {
+      config.agentRuntime.enabled = runtimeEnabled;
+    });
     const org = await makeOrganization();
     const user = await makeUser();
     await makeMember(user.id, org.id, { role: "admin" });

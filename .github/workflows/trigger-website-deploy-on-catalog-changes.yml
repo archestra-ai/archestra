@@ -1,20 +1,26 @@
-name: Trigger Website Deploy on Catalog Changes
+name: Deploy Staging Docs and Catalog
 
-# The website (archestra.ai) pulls mcp-catalog/data from this repository at
-# build time, so catalog changes only become visible after a redeploy.
+# Staging pulls docs and catalog data at build time. Production docs refresh
+# only after a stable platform release is published.
 
 on:
   push:
     branches:
       - main
+      - release/1.3
     paths:
       - "mcp-catalog/data/**"
+      - "docs/**"
+      - ".github/workflows/trigger-website-deploy.yml"
+      - ".github/workflows/trigger-website-deploy-on-catalog-changes.yml"
 
 permissions: {}
 
 jobs:
   trigger-website-deploy:
     name: Trigger Website Deploy
+    permissions:
+      contents: read
     uses: ./.github/workflows/trigger-website-deploy.yml
     secrets:
       ARCHESTRA_WEBSITE_DEPLOY_GITHUB_APP_ID: ${{ secrets.ARCHESTRA_WEBSITE_DEPLOY_GITHUB_APP_ID }}

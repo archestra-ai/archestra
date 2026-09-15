@@ -2673,7 +2673,8 @@ const CHATOPS_PROVIDER_SOURCES: Record<ChatOpsProviderType, InteractionSource> =
  * Build a deterministic session ID for chatops messages.
  * Uses the thread ID when available (threaded conversations), otherwise
  * falls back to the channel ID (non-threaded DMs/channels).
- * Prefixed with provider to avoid collisions across providers.
+ * Prefixed with provider to avoid collisions across providers. Slack thread
+ * timestamps are channel-scoped, so include the channel for Slack threads.
  *
  * MS Teams DM channel IDs can be 100+ chars. Long session IDs overflow the
  * 128-char Prometheus exemplar label budget, so we hash identifiers that
@@ -2685,7 +2686,10 @@ export function buildChatOpsSessionId(
   channelId: string,
   threadId?: string,
 ): string {
-  const id = threadId ?? channelId;
+  const id =
+    providerId === "slack" && threadId !== undefined
+      ? `${channelId}:${threadId}`
+      : (threadId ?? channelId);
   const prefix = `chatops:${providerId}:`;
   if (prefix.length + id.length <= MAX_SESSION_ID_LENGTH) {
     return `${prefix}${id}`;

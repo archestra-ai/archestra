@@ -91,13 +91,15 @@ APPA is not enabled.
 
 Chat sends `X-Appa-Session-ID` using the conversation ID. The model constructor
 also supports `X-Appa-Parent-ID`; the initial top-level Chat flow omits it.
-The proxy derives the organization from the resolved agent. Internal Chat uses
-the existing local-request trust boundary and forwards the user from its
-authenticated Chat route. External callers must identify themselves through the
+The proxy derives the organization from the resolved agent. Internal agent runs,
+including Chat, Slack and A2A, use the existing local-request trust boundary.
+Caller identity is optional audit attribution. External callers authenticate through the
 proxy's existing authentication; a raw provider key and user headers alone are
 not sufficient. There is no APPA-specific signed identity header.
 
-The native actor ID hashes the organization/caller/session tuple. A changed
+The native actor ID hashes only the session ID. Everyone in a shared thread
+uses the same guardrail state, regardless of caller or organization attribution.
+Session IDs must identify a conversation uniquely within this deployment. A changed
 parent is refused. `SessionStart` restores the existing trajectory. This version
 does not submit `Prompt` or `TurnEnd` from Chat or infer them in the proxy.
 Abandoned-call cleanup and unused remedy-permit lifetime are unchanged.
@@ -145,8 +147,8 @@ the completed receipt/approved output. Success commits both; errors roll back
 both and discard tentative in-memory runtime state. A durable pending receipt
 blocks further work in that family after an interruption.
 
-Completed result keys are organization + authenticated caller + session +
-tool-call ID. Resending different bytes under the same key still receives the
+Completed result keys are session ID + tool-call ID. Operation keys are
+session ID + operation ID. Resending different bytes under the same key still receives the
 saved approved output, without another hook, sanitizer, or annotator call.
 Calls with reused operation IDs and changed arguments are refused. Result
 correlation uses the original checked call even after compaction removes it.
@@ -163,7 +165,7 @@ behavior, not exactly-once execution of arbitrary external services.
 `archestra__execute_remedy_plan` uses the existing built-in registry, gateway
 dispatch, schemas, and branding. It is implicit protocol support, like existing
 run controls. The native gate checks the control call and the existing Rust MCP
-implementation validates the offer against the authenticated actor. Registered
+implementation validates the offer against the session actor. Registered
 remote authorities and sanitizers work. Narrowing offers remain model decisions.
 This integration does not support human approval. Calls requiring it stay blocked,
 and remedies requiring an unavailable human authority return APPA explanations.
@@ -220,3 +222,6 @@ Previous demo/browser results do not qualify this proxy-only refactor; validatio
 for this change is reported separately in the PR.
 
 Organization policy text is stored in PostgreSQL and edited in OpenAPPA. Copy an existing file policy into the editor when upgrading.
+
+The session-key migration clears old OpenAPPA sessions, events, and processing receipts.
+Saved organization policies and policy files are preserved.

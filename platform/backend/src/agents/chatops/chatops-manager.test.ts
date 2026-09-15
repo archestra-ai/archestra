@@ -4393,9 +4393,12 @@ describe("ChatOpsManager Slack conversation context", () => {
 });
 
 describe("buildChatOpsSessionId", () => {
-  test("uses threadId when provided", () => {
+  test("scopes Slack thread IDs to their channel", () => {
     expect(buildChatOpsSessionId("slack", "C123", "T456")).toBe(
-      "chatops:slack:T456",
+      "chatops:slack:C123:T456",
+    );
+    expect(buildChatOpsSessionId("slack", "C123", "T456")).not.toBe(
+      buildChatOpsSessionId("slack", "C789", "T456"),
     );
   });
 

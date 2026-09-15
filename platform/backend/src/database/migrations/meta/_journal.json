@@ -3326,6 +3326,13 @@
       "when": 1789419085483,
       "tag": "0474_white_demogoblin",
       "breakpoints": true
+    },
+    {
+      "idx": 475,
+      "version": "7",
+      "when": 1789494122731,
+      "tag": "0475_powerful_cannonball",
+      "breakpoints": true
     }
   ]
 }

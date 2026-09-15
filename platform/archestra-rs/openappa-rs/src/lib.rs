@@ -36,7 +36,8 @@ struct State {
 #[serde(deny_unknown_fields)]
 struct Input {
     organization_id: String,
-    caller_id: String,
+    #[serde(default)]
+    caller_id: Option<String>,
     session_id: String,
     #[serde(default)]
     parent_id: Option<String>,
@@ -70,9 +71,10 @@ fn wire(decision: &HookDecision) -> Value {
     serde_json::to_value(WireDecision::of(decision)).expect("wire decision serializes")
 }
 fn identity(input: &Input) -> String {
-    let bytes = serde_json::to_vec(&(&input.organization_id, &input.caller_id, &input.session_id))
-        .expect("identity serializes");
-    format!("archestra:{:x}", Sha256::digest(bytes))
+    format!(
+        "archestra:{:x}",
+        Sha256::digest(input.session_id.as_bytes())
+    )
 }
 
 #[napi(js_name = "initializeOpenappa")]
@@ -117,7 +119,6 @@ pub async fn dispatch_hook(input: String, policy_content: Option<String>) -> nap
     let input: Input = serde_json::from_str(&input).map_err(error)?;
     for (name, value) in [
         ("organization", &input.organization_id),
-        ("caller", &input.caller_id),
         ("session", &input.session_id),
     ] {
         if value.is_empty() || value.len() > 512 || value.chars().any(char::is_control) {
@@ -125,6 +126,7 @@ pub async fn dispatch_hook(input: String, policy_content: Option<String>) -> nap
         }
     }
     for (name, value) in [
+        ("caller", &input.caller_id),
         ("parent", &input.parent_id),
         ("operation", &input.operation_id),
         ("tool call", &input.tool_call_id),
@@ -407,14 +409,9 @@ impl State {
         actor: &Actor,
     ) -> napi::Result<Value> {
         let call_id = required(&input.tool_call_id, "tool_call_id")?.to_owned();
-        let key = (
-            input.organization_id.clone(),
-            input.caller_id.clone(),
-            input.session_id.clone(),
-            call_id.clone(),
-        );
+        let key = (input.session_id.clone(), call_id.clone());
         let lookup = key.clone();
-        let cached = pg.with_client(move |client| Ok(client.query_opt("SELECT approved_output, decision FROM openappa_processed_results WHERE organization_id=$1 AND caller_id=$2 AND session_id=$3 AND tool_call_id=$4 AND status='complete'", &[&lookup.0,&lookup.1,&lookup.2,&lookup.3])?
+        let cached = pg.with_client(move |client| Ok(client.query_opt("SELECT approved_output, decision FROM openappa_processed_results WHERE session_id=$1 AND tool_call_id=$2 AND status='complete'", &[&lookup.0,&lookup.1])?
             .map(|row| (row.get::<_, String>(0), row.get::<_, Value>(1))))).map_err(error)?;
         if let Some((output, mut decision)) = cached {
             decision["approved_output"] = json!(output);
@@ -465,9 +462,11 @@ impl State {
             _ => return Err(error("invalid tool outcome")),
         };
         let claim = key.clone();
+        let caller_id = input.caller_id.clone();
+        let organization_id = input.organization_id.clone();
         let root = actor.root.0.clone();
         pg.with_client(move |client| {
-            client.execute("INSERT INTO openappa_processed_results (organization_id,caller_id,session_id,tool_call_id,root,status) VALUES ($1,$2,$3,$4,$5,'pending')", &[&claim.0,&claim.1,&claim.2,&claim.3,&root])?;
+            client.execute("INSERT INTO openappa_processed_results (organization_id,caller_id,session_id,tool_call_id,root,status) VALUES ($1,$2,$3,$4,$5,'pending')", &[&organization_id,&caller_id,&claim.0,&claim.1,&root])?;
             Ok(())
         }).map_err(error)?;
         let tx = pg.begin().map_err(error)?;
@@ -512,7 +511,7 @@ impl State {
         response["approved_output"] = json!(approved);
         let saved_response = response.clone();
         pg.with_client(move |client| {
-            client.execute("UPDATE openappa_processed_results SET status='complete', approved_output=$5, decision=$6 WHERE organization_id=$1 AND caller_id=$2 AND session_id=$3 AND tool_call_id=$4", &[&key.0,&key.1,&key.2,&key.3,&approved,&saved_response])?;
+            client.execute("UPDATE openappa_processed_results SET status='complete', approved_output=$3, decision=$4 WHERE session_id=$1 AND tool_call_id=$2", &[&key.0,&key.1,&approved,&saved_response])?;
             Ok(())
         }).map_err(error)?;
         tx.commit().map_err(error)?;
@@ -552,7 +551,7 @@ fn lookup_operation(
     operation: &str,
 ) -> napi::Result<Option<(Value, Value)>> {
     let (input, operation) = (input.clone(), operation.to_owned());
-    pg.with_client(move |client| Ok(client.query_opt("SELECT input, decision FROM openappa_operations WHERE organization_id=$1 AND caller_id=$2 AND session_id=$3 AND operation_id=$4 AND status='complete'", &[&input.organization_id,&input.caller_id,&input.session_id,&operation])?.map(|row| (row.get(0), row.get(1))))).map_err(error)
+    pg.with_client(move |client| Ok(client.query_opt("SELECT input, decision FROM openappa_operations WHERE session_id=$1 AND operation_id=$2 AND status='complete'", &[&input.session_id,&operation])?.map(|row| (row.get(0), row.get(1))))).map_err(error)
 }
 fn claim_operation(
     pg: &PostgresStore,
@@ -580,7 +579,7 @@ fn finish_operation(
 ) -> napi::Result<()> {
     let (input, operation, decision) = (input.clone(), operation.to_owned(), decision.clone());
     pg.with_client(move |client| {
-        client.execute("UPDATE openappa_operations SET status='complete', decision=$5 WHERE organization_id=$1 AND caller_id=$2 AND session_id=$3 AND operation_id=$4", &[&input.organization_id,&input.caller_id,&input.session_id,&operation,&decision])?;
+        client.execute("UPDATE openappa_operations SET status='complete', decision=$3 WHERE session_id=$1 AND operation_id=$2", &[&input.session_id,&operation,&decision])?;
         Ok(())
     }).map_err(error)
 }

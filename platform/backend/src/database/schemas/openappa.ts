@@ -36,7 +36,8 @@ export const openappaPolicyFilesTable = pgTable("openappa_policy_files", {
 
 const scope = () => ({
   organizationId: text("organization_id").notNull(),
-  callerId: text("caller_id").notNull(),
+  // Optional audit attribution; participants share one session.
+  callerId: text("caller_id"),
   sessionId: text("session_id").notNull(),
 });
 
@@ -68,12 +69,7 @@ export const openappaOperationsTable = pgTable(
   (table) => [
     primaryKey({
       name: "openappa_operations_pk",
-      columns: [
-        table.organizationId,
-        table.callerId,
-        table.sessionId,
-        table.operationId,
-      ],
+      columns: [table.sessionId, table.operationId],
     }),
     index("openappa_operations_pending_idx")
       .on(table.root)
@@ -101,12 +97,7 @@ export const openappaProcessedResultsTable = pgTable(
   (table) => [
     primaryKey({
       name: "openappa_results_pk",
-      columns: [
-        table.organizationId,
-        table.callerId,
-        table.sessionId,
-        table.toolCallId,
-      ],
+      columns: [table.sessionId, table.toolCallId],
     }),
     index("openappa_results_pending_idx")
       .on(table.root)

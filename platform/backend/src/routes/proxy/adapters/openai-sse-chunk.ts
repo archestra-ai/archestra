@@ -34,9 +34,9 @@ export interface OpenAiStreamUsage {
  * prompt count. It is NOT universal, and the exceptions are the rule for every
  * cache-aware provider: `inputTokens` is normalized to *uncached* input, so an
  * adapter whose provider reports cache tokens outside its input count
- * (anthropic, bedrock, gemini) must map its own numbers instead — otherwise a
- * heavily cached turn reports only the handful of tokens that missed the cache
- * as its entire prompt.
+ * (openai, anthropic, bedrock, gemini) must use `toOpenAiStreamUsageWithCache`
+ * instead — otherwise a heavily cached turn reports only the handful of
+ * tokens that missed the cache as its entire prompt.
  */
 export function toOpenAiStreamUsage(
   usage: UsageView | null | undefined,
@@ -48,6 +48,38 @@ export function toOpenAiStreamUsage(
     prompt_tokens: usage.inputTokens,
     completion_tokens: usage.outputTokens,
     total_tokens: usage.inputTokens + usage.outputTokens,
+  };
+}
+
+/**
+ * Map a cache-aware `UsageView` onto the OpenAI wire fields.
+ *
+ * `UsageView.inputTokens` is normalized to the *uncached* remainder (see
+ * `toOpenAiStreamUsage`'s doc comment), so this recombines cache reads and
+ * writes back into a gross `prompt_tokens` and publishes the cache-read
+ * subset via `prompt_tokens_details.cached_tokens` — the shape
+ * `@ai-sdk/openai` (and any OpenAI-compatible client) reads cache hits from.
+ * Cache *writes* have no OpenAI counterpart, so they land in the uncached
+ * remainder: a cache write is billed at more than the input rate, never less.
+ */
+export function toOpenAiStreamUsageWithCache(
+  usage: UsageView | null | undefined,
+): OpenAiStreamUsage | undefined {
+  if (!usage) {
+    return undefined;
+  }
+  const cacheReadTokens = usage.cacheReadTokens ?? 0;
+  const cacheWriteTokens = usage.cacheWriteTokens ?? 0;
+  const promptTokens = usage.inputTokens + cacheReadTokens + cacheWriteTokens;
+  return {
+    prompt_tokens: promptTokens,
+    completion_tokens: usage.outputTokens,
+    total_tokens: promptTokens + usage.outputTokens,
+    // Omitted rather than zeroed when nothing was cached, so the field's
+    // presence still means "this provider reported cache hits".
+    ...(cacheReadTokens > 0
+      ? { prompt_tokens_details: { cached_tokens: cacheReadTokens } }
+      : {}),
   };
 }
 

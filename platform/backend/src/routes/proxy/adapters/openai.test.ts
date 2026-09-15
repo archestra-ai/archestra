@@ -908,7 +908,7 @@ describe("OpenAIStreamAdapter", () => {
     expect(message.content).toBe("the answer");
   });
 
-  test("carries the trailing usage chunk into the final SSE (net of cache)", () => {
+  test("carries the trailing usage chunk into the final SSE as gross prompt_tokens with cache detail", () => {
     const adapter = openaiAdapterFactory.createStreamAdapter();
     adapter.processChunk({
       id: "chatcmpl-1",
@@ -939,11 +939,69 @@ describe("OpenAIStreamAdapter", () => {
       },
     } as Chunk);
 
-    // prompt_tokens is net of cache (100 - 10), mirroring the non-streaming response shape.
+    // The upstream's own prompt_tokens (100, already gross) is round-tripped as-is,
+    // with the cache-read subset republished via prompt_tokens_details.
     expect(usageOf(adapter.formatEndSSE())).toEqual({
-      prompt_tokens: 90,
+      prompt_tokens: 100,
       completion_tokens: 42,
-      total_tokens: 132,
+      total_tokens: 142,
+      prompt_tokens_details: { cached_tokens: 10 },
+    });
+  });
+
+  test("omits prompt_tokens_details in the final SSE when nothing was cached", () => {
+    const adapter = openaiAdapterFactory.createStreamAdapter();
+    adapter.processChunk({
+      id: "chatcmpl-4",
+      object: "chat.completion.chunk",
+      created: 0,
+      model: "gpt-x",
+      choices: [{ index: 0, delta: { content: "hi" }, finish_reason: "stop" }],
+    } as Chunk);
+    adapter.processChunk({
+      id: "chatcmpl-4",
+      object: "chat.completion.chunk",
+      created: 0,
+      model: "gpt-x",
+      choices: [],
+      usage: { prompt_tokens: 100, completion_tokens: 42, total_tokens: 142 },
+    } as Chunk);
+
+    expect(usageOf(adapter.formatEndSSE())).toEqual({
+      prompt_tokens: 100,
+      completion_tokens: 42,
+      total_tokens: 142,
+    });
+  });
+
+  test("toProviderResponse reports gross prompt_tokens with cache detail (non-streaming path)", () => {
+    const adapter = openaiAdapterFactory.createStreamAdapter();
+    adapter.processChunk({
+      id: "chatcmpl-5",
+      object: "chat.completion.chunk",
+      created: 0,
+      model: "gpt-x",
+      choices: [{ index: 0, delta: { content: "hi" }, finish_reason: "stop" }],
+    } as Chunk);
+    adapter.processChunk({
+      id: "chatcmpl-5",
+      object: "chat.completion.chunk",
+      created: 0,
+      model: "gpt-x",
+      choices: [],
+      usage: {
+        prompt_tokens: 4000,
+        completion_tokens: 100,
+        total_tokens: 4100,
+        prompt_tokens_details: { cached_tokens: 3900 },
+      },
+    } as Chunk);
+
+    expect(adapter.toProviderResponse().usage).toEqual({
+      prompt_tokens: 4000,
+      completion_tokens: 100,
+      total_tokens: 4100,
+      prompt_tokens_details: { cached_tokens: 3900 },
     });
   });
 

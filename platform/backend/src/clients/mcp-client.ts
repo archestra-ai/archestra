@@ -5358,7 +5358,9 @@ const WAKE_RETRY_DELAY_MS = 1_000;
  * into a failed tool call for any client that does not retry, so this loop IS
  * that retry: it re-enters the wake until the server is up or the budget is
  * spent, and only then answers. What still surfaces immediately: an abort,
- * and failures a retry cannot help (a deployment that cannot start).
+ * failures a retry cannot help (a deployment that cannot start), and a wake
+ * that ran to a verdict rather than losing a race — re-entering on those
+ * only trades the reason for a generic "still starting up".
  */
 async function waitForMcpServerWake(params: {
   mcpServerId: string;
@@ -5392,6 +5394,18 @@ async function waitForMcpServerWake(params: {
         error instanceof McpServerWakePendingError ||
         !(error instanceof McpServerWakeError)
       ) {
+        throw error;
+      }
+      // The wake did not lose a race — it ran to the end of its readiness
+      // budget and came back with a verdict about the cluster (no capacity to
+      // place the pod, an image that never pulled). Re-entering would spend
+      // what is left of the reply budget re-deriving the same answer and then
+      // report the generic "still starting up" instead, which is how a full
+      // cluster and an unpullable image both reached callers as "retry
+      // shortly" and nothing else. Hand the verdict over as-is: it is already
+      // retryable-shaped, and it is the only form of this answer that says
+      // what is actually wrong.
+      if (error.concluded) {
         throw error;
       }
       // Too little budget left for another attempt to observe anything new:

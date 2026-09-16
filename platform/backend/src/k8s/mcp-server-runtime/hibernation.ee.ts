@@ -50,11 +50,25 @@ import {
  * safe to retry shortly. `detail` replaces the generic reason when the wake
  * knows more — a cluster with no free capacity, an attempt cut by its
  * deadline — while keeping the same retryable shape for callers.
+ *
+ * `concluded` separates the two very different things this one retryable
+ * shape carries. A wake can fail because it LOST A RACE it is allowed to lose
+ * (a superseded transition, a lease another replica still holds) — those
+ * settle in seconds, and the demand path is right to re-enter the wake rather
+ * than answer. Or it can fail because it RAN TO THE END of its readiness
+ * budget and reached a verdict about the cluster: no capacity to place the
+ * pod, an image the kubelet never managed to pull. Re-entering on a verdict
+ * only spends the caller's remaining budget to arrive at the same answer, and
+ * costs the caller the one thing worth having — the reason. Verdicts set this
+ * flag so {@link McpServerWakeError} consumers can tell them apart.
  */
 export class McpServerWakeError extends Error {
+  /** The wake reached a verdict rather than losing a retryable race. */
+  readonly concluded: boolean;
+
   constructor(
     serverName: string,
-    options?: ErrorOptions & { detail?: string },
+    options?: ErrorOptions & { detail?: string; concluded?: boolean },
   ) {
     super(
       `MCP server ${serverName} is waking from idle hibernation but ${
@@ -63,6 +77,7 @@ export class McpServerWakeError extends Error {
       options,
     );
     this.name = "McpServerWakeError";
+    this.concluded = options?.concluded ?? false;
   }
 }
 
@@ -440,6 +455,7 @@ export async function wakeDeployment(params: {
       );
       throw new McpServerWakeError(deployment.statusSummary.serverName, {
         cause: error,
+        concluded: true,
         detail: `the cluster has no free capacity to schedule its pod (${error.schedulerMessage}). The pod stays queued and starts when capacity frees`,
       });
     }
@@ -449,6 +465,7 @@ export async function wakeDeployment(params: {
     );
     throw new McpServerWakeError(deployment.statusSummary.serverName, {
       cause: error,
+      concluded: true,
     });
   }
 

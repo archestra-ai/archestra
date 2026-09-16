@@ -263,6 +263,15 @@ export type ConnectableAuthState = Extract<
   { kind: "auth-required" | "auth-expired" }
 >;
 
+export function toConnectableAuthState(
+  authState: ToolAuthState | null,
+): ConnectableAuthState | null {
+  return authState?.kind === "auth-required" ||
+    authState?.kind === "auth-expired"
+    ? authState
+    : null;
+}
+
 /**
  * Auth state of a `tools/call` result proxied for an MCP App. Reads the
  * structured `archestraError` the gateway attaches (`_meta` /
@@ -301,24 +310,7 @@ export function resolveMcpAppToolCallAuthState(
     rawOutput: result,
   });
 
-  return authState?.kind === "auth-required" ||
-    authState?.kind === "auth-expired"
-    ? authState
-    : null;
-}
-
-export function resolveAssistantTextAuthState(
-  text: string,
-): Extract<ToolAuthState, { kind: "auth-required" | "auth-expired" }> | null {
-  const authState = resolveToolAuthState({ errorText: text });
-  if (
-    authState?.kind === "auth-required" ||
-    authState?.kind === "auth-expired"
-  ) {
-    return authState;
-  }
-
-  return null;
+  return toConnectableAuthState(authState);
 }
 
 /**
@@ -388,7 +380,7 @@ function extractProviderIdFromSsoUrl(actionUrl: string): string | null {
 }
 
 export function isAuthInstructionText(text: string): boolean {
-  if (resolveAssistantTextAuthState(text)) {
+  if (toConnectableAuthState(resolveToolAuthState({ errorText: text }))) {
     return true;
   }
 

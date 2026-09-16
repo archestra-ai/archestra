@@ -6,9 +6,9 @@ import { useAppName } from "@/lib/hooks/use-app-name";
 import { ChatProvider, useGlobalChat } from "./global-chat.context";
 
 // These exercise the REAL `ai` / `@ai-sdk/react` against a scripted stream: the
-// defect lives in how the SDK turns wire chunks into its message list, which a
-// mocked `useChat` (see global-chat.context.test.tsx) cannot reproduce. Only
-// `fetch` is stubbed.
+// regressions involve message-list updates and their rendering priority, which
+// a mocked `useChat` (see global-chat.context.test.tsx) cannot reproduce. The
+// SDK consumes a real SSE response; `fetch` supplies the scripted chunks.
 
 const mocks = vi.hoisted(() => ({
   clearChatErrors: vi.fn(),
@@ -148,34 +148,14 @@ function RegisterAndSend({ prompt }: { prompt: string }) {
   return null;
 }
 
-describe("phantom assistant messages", () => {
-  let sessions: Array<
-    ReturnType<ReturnType<typeof useGlobalChat>["getSession"]>
-  >;
-  let chatRequests: Array<{ url: string; body: Record<string, unknown> }>;
+beforeEach(() => {
+  vi.clearAllMocks();
+  vi.mocked(useAppName).mockReturnValue("Archestra");
+  mocks.clearChatErrors.mockResolvedValue({ success: true });
+  mocks.mutateAsync.mockResolvedValue({});
+});
 
-  const latestMessages = () => sessions.at(-1)?.messages ?? [];
-
-  function CaptureSession() {
-    const { getSession } = useGlobalChat();
-    const session = getSession(CONVERSATION_ID);
-    useEffect(() => {
-      if (session) {
-        sessions.push(session);
-      }
-    }, [session]);
-    return null;
-  }
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-    vi.mocked(useAppName).mockReturnValue("Archestra");
-    mocks.clearChatErrors.mockResolvedValue({ success: true });
-    mocks.mutateAsync.mockResolvedValue({});
-    sessions = [];
-    chatRequests = [];
-  });
-
+describe("streamed transcript update priority", () => {
   it("keeps the composer usable while a streamed transcript update is pending", async () => {
     const { response, stream } = sseResponse();
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response));
@@ -235,6 +215,31 @@ describe("phantom assistant messages", () => {
     finishTurn(stream);
     await waitFor(() => expect(screen.getByText("the answer")).toBeVisible());
     expect(input).toHaveValue("My next question");
+  });
+});
+
+describe("phantom assistant messages", () => {
+  let sessions: Array<
+    ReturnType<ReturnType<typeof useGlobalChat>["getSession"]>
+  >;
+  let chatRequests: Array<{ url: string; body: Record<string, unknown> }>;
+
+  const latestMessages = () => sessions.at(-1)?.messages ?? [];
+
+  function CaptureSession() {
+    const { getSession } = useGlobalChat();
+    const session = getSession(CONVERSATION_ID);
+    useEffect(() => {
+      if (session) {
+        sessions.push(session);
+      }
+    }, [session]);
+    return null;
+  }
+
+  beforeEach(() => {
+    sessions = [];
+    chatRequests = [];
   });
 
   it("keeps a single assistant message when telemetry arrives before the stream's start chunk", async () => {

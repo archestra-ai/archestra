@@ -86,13 +86,14 @@ import {
 import { useGlobalChat } from "@/lib/chat/global-chat.context";
 import { isActionAvailableForConversation } from "@/lib/chat/locked-chat";
 import {
+  type ConnectableAuthState,
   hasToolPartsWithAuthErrors,
   isAuthInstructionText,
   isInstallAuthResolved,
   parsePolicyDenied,
-  type resolveAssistantTextAuthState,
   resolveToolAuthState,
   type ToolAuthState,
+  toConnectableAuthState,
 } from "@/lib/chat/mcp-error-ui";
 import { hasThinkingTags, parseThinkingTags } from "@/lib/chat/parse-thinking";
 import { UPSTREAM_IDLE_THRESHOLD_SECONDS } from "@/lib/chat/stream-stall.hook";
@@ -808,10 +809,7 @@ export function ChatMessages({
                             errorText: part.text,
                           });
                           const assistantAuthState =
-                            textToolAuthState?.kind === "auth-required" ||
-                            textToolAuthState?.kind === "auth-expired"
-                              ? textToolAuthState
-                              : null;
+                            toConnectableAuthState(textToolAuthState);
                           if (textToolAuthState?.kind === "policy-denied") {
                             const shouldRenderPolicyDeniedUnsafeBoundary =
                               !!canReadToolPolicy &&
@@ -2843,7 +2841,7 @@ function renderToolAuthPart(params: {
 
 function renderAssistantAuthPart(params: {
   toolName: string;
-  authState: ReturnType<typeof resolveAssistantTextAuthState>;
+  authState: ConnectableAuthState | null;
   connectedCatalogIds: ReadonlySet<string>;
   onInstallMcp?: (catalogId: string) => void;
   onReauthMcp?: (catalogId: string, serverId: string) => void;

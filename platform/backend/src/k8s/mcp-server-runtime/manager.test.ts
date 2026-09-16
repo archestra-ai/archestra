@@ -391,6 +391,20 @@ vi.mock("./k8s-deployment", () => {
         this.name = "McpServerUnschedulableError";
       }
     },
+    // A readiness wait that spent every attempt. It carries the kubelet's last
+    // pull failure so the wake can say so instead of "retry shortly" again.
+    McpServerReadinessTimeoutError: class McpServerReadinessTimeoutError extends Error {
+      constructor(
+        deploymentName: string,
+        maxAttempts: number,
+        readonly imagePullError: string | null,
+      ) {
+        super(
+          `Deployment ${deploymentName} did not become ready after ${maxAttempts} attempts`,
+        );
+        this.name = "McpServerReadinessTimeoutError";
+      }
+    },
     // SPDX-SnippetEnd
   };
 });
@@ -4033,6 +4047,35 @@ describe("McpServerRuntimeManager idle hibernation", () => {
       expect(deployment.beginWake).toHaveBeenCalledTimes(1);
       expect(deployment.completeWake).toHaveBeenCalledTimes(1);
       expect(deployment.state).toBe("running");
+    });
+
+    test("a wake exhausted by an image that never pulled says so, after the sentence callers match on", async () => {
+      const { manager, internals, McpServerWakeError } = await makeManager();
+      const { McpServerReadinessTimeoutError } = await import(
+        "./k8s-deployment"
+      );
+      const deployment = makeDeployment({ state: "hibernated" });
+      const pullError =
+        'ImagePullBackOff - Back-off pulling image "registry.invalid/nope:1"';
+      deployment.waitForDeploymentReady.mockRejectedValueOnce(
+        new McpServerReadinessTimeoutError("mcp-wedged", 22, pullError),
+      );
+      internals.mcpServerIdToDeploymentMap.set("server-1", deployment);
+
+      const wakeError = await manager.ensureAwake("server-1").then(
+        () => null,
+        (error) => error,
+      );
+
+      expect(wakeError).toBeInstanceOf(McpServerWakeError);
+      // The generic clause is load-bearing: mcp-hibernation-recovery.spec.ts
+      // matches it to tell THIS failure from a full cluster, so the pull
+      // reason is appended after the sentence rather than replacing it.
+      expect(wakeError.message).toContain(
+        "did not become ready in time; retry shortly.",
+      );
+      expect(wakeError.message).toContain(pullError);
+      expect(wakeError.concluded).toBe(true);
     });
 
     test("a full cluster is retryable, not a failed deployment: the wake rides out Unschedulable and resumes later", async () => {

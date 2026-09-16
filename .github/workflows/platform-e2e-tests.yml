@@ -1451,16 +1451,21 @@ jobs:
           HIBERNATION_RESULT: ${{ needs.platform-e2e-hibernation-tests.result }}
           LITE_RESULT: ${{ needs.platform-e2e-lite-tests.result }}
           QUICKSTART_RESULT: ${{ needs.platform-quickstart-e2e-tests.result }}
-          EVENT_NAME: ${{ github.event_name }}
           RUN_HIBERNATION: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event.label.name == 'run-e2e' }}
         run: |
           failed=0
           for pair in "k8s:$K8S_RESULT" "lite:$LITE_RESULT" "quickstart:$QUICKSTART_RESULT"; do
             name="${pair%%:*}"; result="${pair##*:}"
             echo "$name: $result"
-            if [ "$EVENT_NAME" = "merge_group" ] && [ "$result" != "success" ]; then
-              failed=1
-            elif [ "$EVENT_NAME" != "merge_group" ] && [ "$result" != "success" ] && [ "$result" != "skipped" ]; then
+            # `skipped` is NOT tolerated here, on any event. Every event that
+            # runs this gate runs these three legs too — the gate's `if` and
+            # theirs are the same expression — so a skipped leg means one
+            # never started, and accepting that let it satisfy the required
+            # check under its own name: the exact masking the NOTE at the top
+            # of this file forbids. Hibernation is the one leg that really
+            # does skip on some gate-running events, and RUN_HIBERNATION
+            # below is what makes that legitimate rather than assumed.
+            if [ "$result" != "success" ]; then
               failed=1
             fi
           done

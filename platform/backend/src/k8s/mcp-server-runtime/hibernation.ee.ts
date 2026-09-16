@@ -29,6 +29,7 @@ import { deriveDeploymentState } from "./hibernation-state-machine.ee";
 import type K8sDeployment from "./k8s-deployment";
 import {
   McpServerDeploymentFailedError,
+  McpServerReadinessTimeoutError,
   McpServerUnschedulableError,
 } from "./k8s-deployment";
 
@@ -73,20 +74,33 @@ export class McpServerWakeError extends Error {
    * and needs the reason without the other install's name baked in.
    */
   readonly detail?: string;
+  /**
+   * Extra sentence appended AFTER the message's own, never spliced into it.
+   * `detail` replaces the reason clause, so anything routed through it changes
+   * a sentence that callers — and the hibernation e2e specs — match on to tell
+   * one wake failure from another. A suffix adds what the wake learned without
+   * moving what was already there.
+   */
+  readonly suffix?: string;
 
   constructor(
     serverName: string,
-    options?: ErrorOptions & { detail?: string; concluded?: boolean },
+    options?: ErrorOptions & {
+      detail?: string;
+      concluded?: boolean;
+      suffix?: string;
+    },
   ) {
     super(
       `MCP server ${serverName} is waking from idle hibernation but ${
         options?.detail ?? "did not become ready in time"
-      }; retry shortly.`,
+      }; retry shortly.${options?.suffix ? ` ${options.suffix}` : ""}`,
       options,
     );
     this.name = "McpServerWakeError";
     this.concluded = options?.concluded ?? false;
     this.detail = options?.detail;
+    this.suffix = options?.suffix;
   }
 }
 
@@ -472,9 +486,20 @@ export async function wakeDeployment(params: {
       { err: error, mcpServerId },
       "MCP server wake did not reach ready within the wait budget",
     );
+    // A pull the kubelet kept retrying and never completed is the one thing
+    // this exhausted wait can still explain. It is deliberately a SUFFIX: the
+    // sentence before it is what separates "ran out of time" from "no free
+    // capacity", and callers match on it.
+    const imagePullError =
+      error instanceof McpServerReadinessTimeoutError
+        ? error.imagePullError
+        : null;
     throw new McpServerWakeError(deployment.statusSummary.serverName, {
       cause: error,
       concluded: true,
+      suffix: imagePullError
+        ? `The pod has not managed to pull its image (${imagePullError}); if that does not clear on its own, the image or its credentials need fixing.`
+        : undefined,
     });
   }
 

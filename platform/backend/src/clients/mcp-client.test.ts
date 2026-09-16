@@ -150,18 +150,20 @@ vi.mock("@/k8s/mcp-server-runtime", () => {
   class McpServerWakeError extends Error {
     readonly concluded: boolean;
     readonly detail?: string;
+    readonly suffix?: string;
     constructor(
       serverName: string,
-      options?: { detail?: string; concluded?: boolean },
+      options?: { detail?: string; concluded?: boolean; suffix?: string },
     ) {
       super(
         `MCP server ${serverName} is waking from idle hibernation but ${
           options?.detail ?? "did not become ready in time"
-        }; retry shortly.`,
+        }; retry shortly.${options?.suffix ? ` ${options.suffix}` : ""}`,
       );
       this.name = "McpServerWakeError";
       this.concluded = options?.concluded ?? false;
       this.detail = options?.detail;
+      this.suffix = options?.suffix;
     }
   }
   class McpServerWakePendingError extends McpServerWakeError {
@@ -2886,6 +2888,7 @@ describe("McpClient", () => {
               concluded: true,
               detail:
                 "the cluster has no free capacity to schedule its pod (0/1 nodes are available: 1 Insufficient cpu). The pod stays queued and starts when capacity frees",
+              suffix: "An operator can free capacity or raise the quota.",
             }),
           )
           .mockReturnValue(new Promise(() => {}));
@@ -2902,8 +2905,12 @@ describe("McpClient", () => {
         expect(result.isError).toBe(true);
         expect(result.error).not.toContain("someone-elses-install");
         expect(result.error).toContain("local-streamable-http-server");
-        // The reason still survives the re-addressing.
+        // Everything the wake learned survives the re-addressing — only the
+        // server name is replaced.
         expect(result.error).toContain("no free capacity to schedule its pod");
+        expect(result.error).toContain(
+          "An operator can free capacity or raise the quota.",
+        );
       });
 
       test("with too little budget left for another attempt, the race's own retryable reason is the answer", async () => {

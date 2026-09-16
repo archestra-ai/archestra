@@ -5383,13 +5383,17 @@ async function waitForMcpServerWake(params: {
   // deployment, so its error names whichever install loaded that deployment,
   // which for a multitenant sibling is someone else. Re-addressing it here
   // keeps one install's name out of another install's answer.
-  let verdict: { detail: string | undefined } | null = null;
+  let verdict: {
+    detail: string | undefined;
+    suffix: string | undefined;
+  } | null = null;
   const verdictForCaller = () =>
     verdict === null
       ? null
       : new McpServerWakeError(params.mcpServerName, {
           concluded: true,
           detail: verdict.detail,
+          suffix: verdict.suffix,
         });
 
   for (;;) {
@@ -5427,7 +5431,7 @@ async function waitForMcpServerWake(params: {
       // a woken server instead of any error at all. Only the budget itself
       // ends the wait, and by then `lastVerdict` is what it expires into.
       if (error.concluded) {
-        verdict = { detail: error.detail };
+        verdict = { detail: error.detail, suffix: error.suffix };
       }
       // Too little budget left for another attempt to observe anything new:
       // answer with this attempt's own reason, which is already

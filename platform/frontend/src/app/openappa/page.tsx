@@ -25,8 +25,10 @@ export default async function OpenAppaPage() {
       title="OpenAPPA"
       description="Edit the policy that governs tool calls and their results."
     >
-      <AppaGithubSyncPanel />
-      <GuardrailsPolicyEditor />
+      <div className="space-y-6">
+        <GuardrailsPolicyEditor />
+        <AppaGithubSyncPanel />
+      </div>
     </PageLayout>
   );
 }

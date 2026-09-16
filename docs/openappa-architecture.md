@@ -46,7 +46,7 @@ only when enabled. The existing guardrails remain active with the APPA flag off.
 
 ## GitHub policy sync
 
-Open **OpenAPPA** (`/openappa`) and select **Connect GitHub** above the policy
+Open **OpenAPPA** (`/openappa`) and select **Connect GitHub** below the policy
 editor. `/guardrails-v2` redirects to this page. With APPA enabled, organization
 administrators can choose an `owner/repository`, branch or tag (blank uses the
 default branch), and a repository-relative TOML file. Public repositories need no

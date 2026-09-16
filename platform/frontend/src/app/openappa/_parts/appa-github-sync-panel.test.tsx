@@ -100,7 +100,7 @@ test("confirms disconnect, stops automatic updates and preserves the accepted po
     await screen.findByRole("button", { name: "Reconnect GitHub" }),
   ).toBeVisible();
   expect(
-    screen.getByText(/You can edit the current policy below/),
+    screen.getByText(/You can edit the current policy above/),
   ).toBeVisible();
 });
 

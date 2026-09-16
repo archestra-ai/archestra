@@ -101,11 +101,9 @@ function PolicyForm({
           <div className="flex items-center gap-3">
             <FileCode2 className="size-4 text-muted-foreground" />
             <div>
-              <h2 className="font-mono text-sm font-medium">
-                organization.appa.toml
-              </h2>
+              <h2 className="text-sm font-medium">Policy editor</h2>
               <p className="mt-0.5 text-xs text-muted-foreground">
-                Organization policy
+                organization.appa.toml
               </p>
             </div>
           </div>
@@ -154,7 +152,7 @@ function PolicyForm({
           </div>
         </div>
         <Editor
-          height="min(65vh, 760px)"
+          height="min(50vh, 560px)"
           language="ini"
           value={content}
           onChange={(value) => {

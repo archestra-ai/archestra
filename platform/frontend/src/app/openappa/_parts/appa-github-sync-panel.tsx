@@ -12,15 +12,9 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { QueryLoadError } from "@/components/query-load-error";
+import { StandardFormDialog } from "@/components/standard-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -31,6 +25,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { DialogCancelButton } from "@/components/unsaved-changes-guard";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
   useAppaGithubSync,
@@ -69,7 +64,7 @@ export function AppaGithubSyncPanel() {
   return (
     <section
       aria-label="APPA GitHub sync"
-      className="mb-6 overflow-hidden rounded-lg border bg-card"
+      className="overflow-hidden rounded-lg border bg-card"
     >
       <div className="flex flex-wrap items-start justify-between gap-4 border-b px-5 py-4">
         <div className="flex items-start gap-3">
@@ -77,7 +72,7 @@ export function AppaGithubSyncPanel() {
             <ShieldCheck className="size-5 text-primary" />
           </div>
           <div>
-            <h2 className="font-semibold">APPA policy</h2>
+            <h2 className="font-semibold">GitHub sync</h2>
             <p className="mt-0.5 text-sm text-muted-foreground">
               Keep your guardrails in GitHub. Pull validated updates on a
               schedule.
@@ -195,7 +190,7 @@ export function AppaGithubSyncPanel() {
                 {hasPolicy
                   ? connected
                     ? "New trajectories use the last accepted policy. Existing trajectories keep their pinned policy."
-                    : "Automatic updates are stopped. You can edit the current policy below."
+                    : "Automatic updates are stopped. You can edit the current policy above."
                   : "The current policy stays active until a valid GitHub policy is accepted."}
               </p>
               {canManage && (
@@ -235,20 +230,7 @@ export function AppaGithubSyncPanel() {
           </div>
         )}
       </div>
-      <Dialog open={editing} onOpenChange={setEditing}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Connect APPA to GitHub</DialogTitle>
-            <DialogDescription>
-              GitHub is the source of truth. Updates are pulled into the policy;
-              changes are never pushed back.
-            </DialogDescription>
-          </DialogHeader>
-          {editing && (
-            <SourceForm source={source} onSaved={() => setEditing(false)} />
-          )}
-        </DialogContent>
-      </Dialog>
+      {editing && <SourceForm source={source} onOpenChange={setEditing} />}
       <DeleteConfirmDialog
         open={disconnecting}
         onOpenChange={setDisconnecting}
@@ -268,10 +250,10 @@ export function AppaGithubSyncPanel() {
 
 function SourceForm({
   source,
-  onSaved,
+  onOpenChange,
 }: {
   source: Source | null;
-  onSaved: () => void;
+  onOpenChange: (open: boolean) => void;
 }) {
   const mutation = useConfigureAppaGithubSync();
   const { data: canReadCredentials } = useHasPermissions({
@@ -312,11 +294,30 @@ function SourceForm({
           ? values.credential.slice(4)
           : null,
       },
-      { onSuccess: onSaved },
+      { onSuccess: () => onOpenChange(false) },
     ),
   );
   return (
-    <form onSubmit={submit} className="space-y-4">
+    <StandardFormDialog
+      open
+      onOpenChange={onOpenChange}
+      title={source ? "Edit GitHub source" : "Connect APPA to GitHub"}
+      description="Pull a policy file from GitHub. Your current policy stays active until a valid update is accepted."
+      size="medium"
+      className="w-[calc(100%-2rem)] sm:max-w-xl"
+      bodyClassName="space-y-5"
+      onSubmit={submit}
+      footer={
+        <>
+          <DialogCancelButton disabled={mutation.isPending} />
+          <Button type="submit" disabled={mutation.isPending}>
+            <span>
+              {mutation.isPending ? "Saving…" : "Save source and sync"}
+            </span>
+          </Button>
+        </>
+      }
+    >
       <div className="space-y-2">
         <Label htmlFor="appa-repo">Repository</Label>
         <Input
@@ -334,7 +335,7 @@ function SourceForm({
           </p>
         )}
       </div>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="space-y-2">
           <Label htmlFor="appa-ref">Branch or tag</Label>
           <Input
@@ -357,7 +358,7 @@ function SourceForm({
           value={form.watch("credential")}
           onValueChange={(value) => form.setValue("credential", value)}
         >
-          <SelectTrigger id="appa-credential">
+          <SelectTrigger id="appa-credential" className="w-full">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -385,7 +386,7 @@ function SourceForm({
             form.setValue("interval", value as "15m" | "1h" | "1d")
           }
         >
-          <SelectTrigger id="appa-frequency">
+          <SelectTrigger id="appa-frequency" className="w-full">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -402,9 +403,6 @@ function SourceForm({
         command bindings are unsupported. APPA validates every update before
         accepting it.
       </p>
-      <Button type="submit" disabled={mutation.isPending} className="w-full">
-        {mutation.isPending ? "Saving…" : "Save source and sync"}
-      </Button>
-    </form>
+    </StandardFormDialog>
   );
 }

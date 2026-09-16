@@ -1,0 +1,88 @@
+import { RouteId } from "@archestra/shared";
+import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
+import { userHasPermission } from "@/auth";
+import {
+  configureAppaGithubSync,
+  getAppaGithubSync,
+  updateAppaGithubSync,
+} from "@/services/openappa-github-sync";
+import { ApiError, constructResponseSchema } from "@/types";
+import {
+  AppaGithubSourceSchema,
+  AppaGithubSyncActionSchema,
+  AppaGithubSyncStatusSchema,
+} from "@/types/openappa-github-sync";
+
+const routes: FastifyPluginAsyncZod = async (app) => {
+  // This changes organization policy, so require organization management as well as the endpoint permission.
+  app.addHook("preHandler", async (request) => {
+    if (
+      request.method !== "GET" &&
+      !(await userHasPermission(
+        request.user.id,
+        request.organizationId,
+        "organization",
+        "update",
+      ))
+    )
+      throw new ApiError(
+        403,
+        "Organization update permission is required to manage APPA sync",
+      );
+  });
+  app.get(
+    "/api/openappa/github-sync",
+    {
+      schema: {
+        operationId: RouteId.GetAppaGithubSync,
+        tags: ["OpenAPPA"],
+        response: constructResponseSchema(AppaGithubSyncStatusSchema),
+      },
+    },
+    async (request, reply) =>
+      reply.send(await getAppaGithubSync(request.organizationId)),
+  );
+  app.put(
+    "/api/openappa/github-sync",
+    {
+      schema: {
+        operationId: RouteId.ConfigureAppaGithubSync,
+        tags: ["OpenAPPA"],
+        body: AppaGithubSourceSchema,
+        response: constructResponseSchema(AppaGithubSyncStatusSchema),
+      },
+    },
+    async (request, reply) =>
+      reply.send(
+        await configureAppaGithubSync({
+          organizationId: request.organizationId,
+          userId: request.user.id,
+          source: request.body,
+        }),
+      ),
+  );
+  app.patch(
+    "/api/openappa/github-sync",
+    {
+      schema: {
+        operationId: RouteId.UpdateAppaGithubSync,
+        tags: ["OpenAPPA"],
+        body: AppaGithubSyncActionSchema,
+        response: constructResponseSchema(AppaGithubSyncStatusSchema),
+      },
+    },
+    async (request, reply) => {
+      if (request.body.action === "sync") {
+        request.auditBefore = { syncRequested: false };
+        request.auditAfter = { syncRequested: true };
+      }
+      return reply.send(
+        await updateAppaGithubSync({
+          organizationId: request.organizationId,
+          ...request.body,
+        }),
+      );
+    },
+  );
+};
+export default routes;

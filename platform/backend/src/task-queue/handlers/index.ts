@@ -1,3 +1,7 @@
+import {
+  checkDueAppaGithubSyncs,
+  syncAppaGithubPolicy,
+} from "@/services/openappa-github-sync";
 import type { TaskQueueService } from "../task-queue";
 import { handleAuditLogCleanup } from "./audit-log-cleanup-handler";
 import { handleBatchEmbedding } from "./batch-embedding-handler";
@@ -57,6 +61,15 @@ export function registerTaskHandlers(taskQueueService: TaskQueueService): void {
     "check_due_skill_github_syncs",
     handleCheckDueSkillGithubSyncs,
   );
+  taskQueueService.registerHandler(
+    "check_due_openappa_github_syncs",
+    checkDueAppaGithubSyncs,
+  );
+  taskQueueService.registerHandler("openappa_github_sync", async (payload) => {
+    if (typeof payload.organizationId !== "string")
+      throw new Error("Missing organizationId");
+    await syncAppaGithubPolicy(payload.organizationId);
+  });
   taskQueueService.registerHandler("skill_github_sync", handleSkillGithubSync);
   taskQueueService.registerHandler(
     "check_due_plugin_github_syncs",

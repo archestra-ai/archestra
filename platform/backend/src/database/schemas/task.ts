@@ -58,6 +58,11 @@ const tasksTable = pgTable(
       .where(
         sql`${table.taskType} = 'batch_embedding' AND ${table.status} IN ('pending', 'processing')`,
       ),
+    uniqueIndex("tasks_openappa_github_sync_single_flight_idx")
+      .on(sql`(${table.payload} ->> 'organizationId')`)
+      .where(
+        sql`${table.taskType} = 'openappa_github_sync' AND ${table.status} IN ('pending', 'processing')`,
+      ),
     uniqueIndex("tasks_plugin_github_sync_single_flight_idx")
       .on(sql`(${table.payload} ->> 'pluginId')`)
       .where(

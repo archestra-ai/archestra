@@ -193,6 +193,7 @@ export { default as oauthClientTeamsTable } from "./oauth-client-team";
 export { default as oauthConsentsTable } from "./oauth-consent";
 export { default as oauthRefreshTokensTable } from "./oauth-refresh-token";
 export * from "./openappa";
+export * from "./openappa-github-sync";
 export { default as organizationsTable } from "./organization";
 export { organizationRole as organizationRolesTable } from "./organization-role";
 export { default as pluginsTable } from "./plugin";

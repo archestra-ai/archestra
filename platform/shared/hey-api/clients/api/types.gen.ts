@@ -84754,6 +84754,311 @@ export type OpenaiCodexDeviceAuthPollResponses = {
 
 export type OpenaiCodexDeviceAuthPollResponse = OpenaiCodexDeviceAuthPollResponses[keyof OpenaiCodexDeviceAuthPollResponses];
 
+export type GetAppaGithubSyncData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/openappa/github-sync';
+};
+
+export type GetAppaGithubSyncErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAppaGithubSyncError = GetAppaGithubSyncErrors[keyof GetAppaGithubSyncErrors];
+
+export type GetAppaGithubSyncResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        enabled: boolean;
+        source: {
+            organizationId: string;
+            repo: string;
+            ref: string | null;
+            path: string;
+            interval: '15m' | '1h' | '1d' | null;
+            githubPatId: string | null;
+            githubAppConfigId: string | null;
+            revision: string;
+            sourceCommit: string | null;
+            lastSyncedAt: string | null;
+            lastSyncError: string | null;
+        } | null;
+        hasPolicy: boolean;
+    };
+};
+
+export type GetAppaGithubSyncResponse = GetAppaGithubSyncResponses[keyof GetAppaGithubSyncResponses];
+
+export type UpdateAppaGithubSyncData = {
+    body: {
+        action: 'sync';
+    } | {
+        action: 'disconnect';
+    } | {
+        action: 'schedule';
+        interval: '15m' | '1h' | '1d';
+    };
+    path?: never;
+    query?: never;
+    url: '/api/openappa/github-sync';
+};
+
+export type UpdateAppaGithubSyncErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UpdateAppaGithubSyncError = UpdateAppaGithubSyncErrors[keyof UpdateAppaGithubSyncErrors];
+
+export type UpdateAppaGithubSyncResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        enabled: boolean;
+        source: {
+            organizationId: string;
+            repo: string;
+            ref: string | null;
+            path: string;
+            interval: '15m' | '1h' | '1d' | null;
+            githubPatId: string | null;
+            githubAppConfigId: string | null;
+            revision: string;
+            sourceCommit: string | null;
+            lastSyncedAt: string | null;
+            lastSyncError: string | null;
+        } | null;
+        hasPolicy: boolean;
+    };
+};
+
+export type UpdateAppaGithubSyncResponse = UpdateAppaGithubSyncResponses[keyof UpdateAppaGithubSyncResponses];
+
+export type ConfigureAppaGithubSyncData = {
+    body: {
+        repo: string;
+        ref?: string | null;
+        path: string;
+        interval: '15m' | '1h' | '1d';
+        githubPatId?: string | null;
+        githubAppConfigId?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/openappa/github-sync';
+};
+
+export type ConfigureAppaGithubSyncErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ConfigureAppaGithubSyncError = ConfigureAppaGithubSyncErrors[keyof ConfigureAppaGithubSyncErrors];
+
+export type ConfigureAppaGithubSyncResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        enabled: boolean;
+        source: {
+            organizationId: string;
+            repo: string;
+            ref: string | null;
+            path: string;
+            interval: '15m' | '1h' | '1d' | null;
+            githubPatId: string | null;
+            githubAppConfigId: string | null;
+            revision: string;
+            sourceCommit: string | null;
+            lastSyncedAt: string | null;
+            lastSyncError: string | null;
+        } | null;
+        hasPolicy: boolean;
+    };
+};
+
+export type ConfigureAppaGithubSyncResponse = ConfigureAppaGithubSyncResponses[keyof ConfigureAppaGithubSyncResponses];
+
 export type OpenrouterChatCompletionsWithDefaultAgentData = {
     body: OpenrouterChatCompletionRequestInput;
     headers: {

@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { ServerErrorFallback } from "@/components/error-fallback";
 import { PageLayout } from "@/components/page-layout";
 import { getServerApiHeaders } from "@/lib/utils/server";
+import { AppaGithubSyncPanel } from "./_parts/appa-github-sync-panel";
 import { GuardrailsPolicyEditor } from "./guardrails-policy-editor";
 
 export const dynamic = "force-dynamic";
@@ -24,6 +25,7 @@ export default async function OpenAppaPage() {
       title="OpenAPPA"
       description="Edit the policy that governs tool calls and their results."
     >
+      <AppaGithubSyncPanel />
       <GuardrailsPolicyEditor />
     </PageLayout>
   );

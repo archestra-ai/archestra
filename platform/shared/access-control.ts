@@ -1932,6 +1932,9 @@ export const requiredEndpointPermissionsMap: Partial<
   // you past the trash.
   [RouteId.PermanentlyDeleteSkill]: { skill: ["delete"] },
   [RouteId.ResetSkill]: { skill: ["update"] },
+  [RouteId.GetAppaGithubSync]: { toolPolicy: ["read"] },
+  [RouteId.ConfigureAppaGithubSync]: { organization: ["update"] },
+  [RouteId.UpdateAppaGithubSync]: { organization: ["update"] },
   [RouteId.UpdateSkillGithubSync]: { skill: ["update"] },
   [RouteId.GetPlugins]: { plugin: ["read"] },
   [RouteId.GetPluginLabelKeys]: { plugin: ["read"] },

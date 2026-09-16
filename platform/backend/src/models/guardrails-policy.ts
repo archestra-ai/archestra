@@ -1,5 +1,5 @@
 import { desc, eq, sql } from "drizzle-orm";
-import db from "@/database";
+import db, { schema } from "@/database";
 import { guardrailsPolicyRevisionsTable as table } from "@/database/schemas/guardrails-policy";
 import type { GuardrailsPolicy } from "@/types/guardrails-policy";
 
@@ -26,6 +26,16 @@ class GuardrailsPolicyModel {
       await tx.execute(
         sql`select pg_advisory_xact_lock(hashtextextended(${`guardrails-policy:${params.organizationId}`}, 0))`,
       );
+      const [source] = await tx
+        .select()
+        .from(schema.openappaGithubSyncTable)
+        .where(
+          eq(
+            schema.openappaGithubSyncTable.organizationId,
+            params.organizationId,
+          ),
+        );
+      if (source?.interval) return null;
       const [current] = await tx
         .select()
         .from(table)

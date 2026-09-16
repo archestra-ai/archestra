@@ -53,6 +53,7 @@ export { default as oauthRoutes } from "./oauth";
 export { default as oauthServerRoutes } from "./oauth-server";
 export { default as onboardingRoutes } from "./onboarding/onboarding.routes";
 export { default as openaiCodexAuthRoutes } from "./openai-codex-auth/openai-codex-auth.routes";
+export { default as openappaGithubSyncRoutes } from "./openappa-github-sync/openappa-github-sync.routes";
 export { default as organizationRoutes } from "./organization";
 export { default as organizationRoleRoutes } from "./organization-role";
 export { default as pluginRoutes } from "./plugin/plugin.routes";

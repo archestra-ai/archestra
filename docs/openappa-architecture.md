@@ -44,6 +44,32 @@ fixed answer without calling a model or accessing user data.
 Migrations remain additive and deployment-wide; runtime APPA records are accessed
 only when enabled. The existing guardrails remain active with the APPA flag off.
 
+## GitHub policy sync
+
+Open **OpenAPPA** (`/openappa`) and select **Connect GitHub** above the policy
+editor. `/guardrails-v2` redirects to this page. With APPA enabled, organization
+administrators can choose an `owner/repository`, branch or tag (blank uses the
+default branch), and a repository-relative TOML file. Public repositories need no
+credential; private repositories use an existing organization token or GitHub App
+credential, with credential-read permission required to select one.
+
+Saving the source queues the first pull. Choose every 15 minutes, every hour, or
+once a day; **Sync now** requests an immediate pull. The panel shows the last
+check, accepted commit, and any error. The scheduler checks for due sources every
+minute and deduplicates queued/running pulls per organization.
+
+Each pull resolves a commit before downloading the file, limits the policy to
+1 MiB of UTF-8, and runs the native policy validator. Accepted changes atomically
+create an organization policy revision and record source metadata. Unchanged
+bytes create no additional revision. Failed pulls preserve the active policy;
+a source edit or disconnect prevents an in-flight stale pull from publishing.
+
+While connected, the policy editor is read only and manual API/agent updates are
+rejected. **Stop syncing** keeps the current policy and enables local editing.
+GitHub sync only pulls changes; it does not push editor changes to the repository.
+New conversations use the accepted revision; existing conversations retain theirs.
+Migration `0476_appa_github_sync` adds source storage and task deduplication.
+
 ## Tool calls and results
 
 ```mermaid

@@ -34,6 +34,9 @@ beforeEach(() => {
   archestraApiClient.setConfig({ baseUrl: origin });
   server.use(
     http.get(url, () => HttpResponse.json(policy)),
+    http.get(`${origin}/api/openappa/github-sync`, () =>
+      HttpResponse.json({ enabled: true, source: null, hasPolicy: false }),
+    ),
     http.get(`${origin}/api/user/permissions`, () =>
       HttpResponse.json({ toolPolicy: ["read", "update"] }),
     ),
@@ -143,4 +146,37 @@ test("read-only users can inspect the policy without editing controls", async ()
   expect(
     screen.queryByRole("button", { name: "Validate" }),
   ).not.toBeInTheDocument();
+});
+
+test("GitHub-owned policy is read-only and becomes editable after disconnect", async () => {
+  server.use(
+    http.get(`${origin}/api/openappa/github-sync`, () =>
+      HttpResponse.json({
+        enabled: true,
+        source: { interval: "1h" },
+        hasPolicy: true,
+      }),
+    ),
+  );
+  const client = mount();
+  expect(await screen.findByText("Synced from GitHub")).toBeVisible();
+  expect(
+    screen.getByRole("textbox", { name: "Organization guardrails policy" }),
+  ).toHaveAttribute("readonly");
+  expect(
+    screen.queryByRole("button", { name: "Save & apply" }),
+  ).not.toBeInTheDocument();
+  server.use(
+    http.get(`${origin}/api/openappa/github-sync`, () =>
+      HttpResponse.json({
+        enabled: true,
+        source: { interval: null },
+        hasPolicy: true,
+      }),
+    ),
+  );
+  await client.invalidateQueries({ queryKey: ["openappa-github-sync"] });
+  expect(
+    await screen.findByRole("button", { name: "Save & apply" }),
+  ).toBeVisible();
 });

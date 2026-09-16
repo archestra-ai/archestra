@@ -21,6 +21,7 @@ import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
 import McpServerModel from "@/models/mcp-server";
 import MemberModel from "@/models/member";
 import ModelModel from "@/models/model";
+import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import OrganizationModel from "@/models/organization";
 import OrganizationRoleModel from "@/models/organization-role";
 import PluginModel from "@/models/plugin";
@@ -942,6 +943,7 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "ephemeral in-app notifications; per-user UI state",
   },
+  openappaGithubSyncTable: { audited: true, model: OpenAppaGithubSyncModel },
   openappaEventsTable: {
     audited: false,
     reason: "OpenAPPA owns its immutable policy event history",

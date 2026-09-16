@@ -16,22 +16,39 @@ import {
   useUpdateGuardrailsPolicy,
   useValidateGuardrailsPolicy,
 } from "@/lib/guardrails-policy.query";
+import { useAppaGithubSync } from "@/lib/openappa-github-sync.query";
 
 export function GuardrailsPolicyEditor() {
   const policy = useGuardrailsPolicy();
-  if (policy.isLoading) return <Skeleton className="h-[65vh] w-full" />;
-  if (policy.isError || !policy.data)
+  const sync = useAppaGithubSync();
+  if (policy.isLoading || sync.isPending)
+    return <Skeleton className="h-[65vh] w-full" />;
+  if (policy.isError || !policy.data || sync.isError)
     return (
       <QueryLoadError
         title="Could not load policy"
-        onRetry={() => policy.refetch()}
+        onRetry={() => {
+          policy.refetch();
+          sync.refetch();
+        }}
       />
     );
-  return <PolicyForm policy={policy.data} />;
+  return (
+    <PolicyForm policy={policy.data} synced={!!sync.data?.source?.interval} />
+  );
 }
 
-function PolicyForm({ policy }: { policy: GuardrailsPolicy }) {
-  const { data: canEdit } = useHasPermissions({ toolPolicy: ["update"] });
+function PolicyForm({
+  policy,
+  synced,
+}: {
+  policy: GuardrailsPolicy;
+  synced: boolean;
+}) {
+  const { data: hasEditPermission } = useHasPermissions({
+    toolPolicy: ["update"],
+  });
+  const canEdit = hasEditPermission && !synced;
   const form = useForm({
     defaultValues: {
       content: policy.content,
@@ -103,7 +120,7 @@ function PolicyForm({ policy }: { policy: GuardrailsPolicy }) {
             {!canEdit && (
               <Badge variant="secondary">
                 <LockKeyhole className="mr-1 size-3" />
-                <span>Read only</span>
+                <span>{synced ? "Synced from GitHub" : "Read only"}</span>
               </Badge>
             )}
             {canEdit && (

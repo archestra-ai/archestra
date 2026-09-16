@@ -141,6 +141,12 @@ jobs:
           python3 -m unittest discover -s .github/scripts -p "test_*.py"
           python3 .github/scripts/check-supply-chain-policy.py
 
+      - name: Check new Cargo dependency release ages
+        uses: archestra-ai/.github/actions/cargo-release-age@f9b82a1ae0c8d73088513454aa46cf5a4021df82
+        with:
+          base-sha: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+          lockfiles: ai-labs/Cargo.lock
+
   docs-image-policy:
     name: Docs Image Policy
     runs-on: ubuntu-latest
@@ -571,6 +577,7 @@ jobs:
 
   ai-labs-rust-checks:
     name: AI Labs Rust Checks
+    needs: supply-chain-policy
     # bot-pr-guard (see comment above platform-lint-and-unit-tests)
     if: github.event_name != 'pull_request' || ((github.event.pull_request.user.login != 'archestra-ci[bot]' || startsWith(github.event.pull_request.head.ref, 'backport/')) && github.event.pull_request.user.login != 'archestra-contributor-pr-bot[bot]')
     # mac-mini routing (see comment above platform-rust-checks)

@@ -11,11 +11,37 @@ import { rumClient } from "@/lib/rum.ee";
 // standard Core Web Vitals are part of the RUM taxonomy.
 const WEB_VITAL_NAMES = new Set(["LCP", "CLS", "INP", "FCP", "TTFB"]);
 
+function handleWebVital(metric: {
+  name: string;
+  value: number;
+  rating: "good" | "needs-improvement" | "poor";
+}) {
+  if (WEB_VITAL_NAMES.has(metric.name)) {
+    rumClient.trackWebVital({
+      name: metric.name,
+      value: metric.value,
+      rating: metric.rating,
+    });
+  }
+}
+
+/**
+ * Subscribes to Core Web Vitals via Next.js useReportWebVitals.
+ * Isolated in a child component so that subscriptions are only registered
+ * when RUM is enabled and a user is signed in, and using a module-level
+ * static callback so the hook's effect runs once on mount instead of
+ * accumulating listeners on every render.
+ */
+export function RumWebVitals() {
+  useReportWebVitals(handleWebVital);
+  return null;
+}
+
 /**
  * Starts the RUM client when the deployment has a RUM export endpoint
  * configured and a user is signed in, and reports a page view per App Router
  * navigation (route changes never remount the layout, so the pathname effect
- * is the navigation hook). Renders nothing.
+ * is the navigation hook).
  */
 export function RumTracker() {
   const { data: publicConfig } = usePublicConfig();
@@ -25,18 +51,6 @@ export function RumTracker() {
   const enabled = Boolean(publicConfig?.rum?.enabled);
   const userId = session?.user?.id;
   const isSignedIn = Boolean(userId);
-
-  // Registered unconditionally (hooks can't be conditional); the client
-  // buffers a few pre-start metrics and drops everything while stopped.
-  useReportWebVitals((metric) => {
-    if (WEB_VITAL_NAMES.has(metric.name)) {
-      rumClient.trackWebVital({
-        name: metric.name,
-        value: metric.value,
-        rating: metric.rating,
-      });
-    }
-  });
 
   useEffect(() => {
     if (!enabled || !isSignedIn) {
@@ -65,5 +79,9 @@ export function RumTracker() {
     }
   }, [enabled, isSignedIn, pathname]);
 
-  return null;
+  if (!enabled || !isSignedIn) {
+    return null;
+  }
+
+  return <RumWebVitals />;
 }

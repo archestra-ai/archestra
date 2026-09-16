@@ -12,14 +12,22 @@ vi.mock("@/lib/auth/auth.query");
 
 vi.mock("@/lib/config/config.query");
 
+const useReportWebVitalsMock = vi.fn();
+vi.mock("next/web-vitals", () => ({
+  useReportWebVitals: (cb: unknown) => useReportWebVitalsMock(cb),
+}));
+
 // Spies (not a module mock) keep the singleton's real types; the no-op
 // implementations keep the real client's timers and network flushes out of
-// the test. The tracker renders null, so the spies are the only observable.
+// the test.
 const startSpy = vi.spyOn(rumClient, "start").mockImplementation(() => {});
 const stopSpy = vi.spyOn(rumClient, "stop").mockImplementation(() => {});
 const setUserSpy = vi.spyOn(rumClient, "setUser").mockImplementation(() => {});
 const trackPageViewSpy = vi
   .spyOn(rumClient, "trackPageView")
+  .mockImplementation(() => {});
+const trackWebVitalSpy = vi
+  .spyOn(rumClient, "trackWebVital")
   .mockImplementation(() => {});
 
 describe("RumTracker", () => {
@@ -152,5 +160,59 @@ describe("RumTracker", () => {
 
     expect(stopSpy).toHaveBeenCalled();
     expect(startSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not register web vitals when RUM is disabled in config", () => {
+    vi.mocked(usePublicConfig).mockReturnValue(
+      makePublicConfigResult({ enabled: false }),
+    );
+
+    render(<RumTracker />);
+
+    expect(useReportWebVitalsMock).not.toHaveBeenCalled();
+  });
+
+  it("does not register web vitals while signed out", () => {
+    vi.mocked(useSession).mockReturnValue(makeSessionResult(null));
+
+    render(<RumTracker />);
+
+    expect(useReportWebVitalsMock).not.toHaveBeenCalled();
+  });
+
+  it("registers web vitals with a stable callback reference across rerenders", () => {
+    const { rerender } = render(<RumTracker />);
+
+    expect(useReportWebVitalsMock).toHaveBeenCalledTimes(1);
+    const firstCallback = useReportWebVitalsMock.mock.calls[0][0];
+
+    // Rerendering RumTracker must pass the identical function reference so
+    // that useReportWebVitals effect does not re-run and accumulate DOM listeners.
+    rerender(<RumTracker />);
+    expect(useReportWebVitalsMock).toHaveBeenCalledTimes(2);
+    const secondCallback = useReportWebVitalsMock.mock.calls[1][0];
+
+    expect(firstCallback).toBe(secondCallback);
+  });
+
+  it("routes Core Web Vitals to rumClient while ignoring non-taxonomy metrics", () => {
+    render(<RumTracker />);
+
+    expect(useReportWebVitalsMock).toHaveBeenCalledTimes(1);
+    const callback = useReportWebVitalsMock.mock.calls[0][0] as (metric: {
+      name: string;
+      value: number;
+      rating: "good" | "needs-improvement" | "poor";
+    }) => void;
+
+    callback({ name: "INP", value: 45, rating: "good" });
+    expect(trackWebVitalSpy).toHaveBeenCalledWith({
+      name: "INP",
+      value: 45,
+      rating: "good",
+    });
+
+    callback({ name: "Next.js-hydration", value: 300, rating: "good" });
+    expect(trackWebVitalSpy).toHaveBeenCalledTimes(1);
   });
 });

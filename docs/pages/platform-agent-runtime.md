@@ -88,6 +88,14 @@ The [maintained images](https://github.com/archestra-ai/archestra/blob/main/plat
 
 Read `ARCHESTRA_AGENT_RUNTIME_MODE` to support interactive and unattended work. Interactive clients remain available for follow-ups; unattended clients finish the task and exit.
 
+### Reporting Failures
+
+Your image can supply an actionable error message before exiting non-zero. Runtime carries that message into task results, notifications, and run details.
+
+Publish a JSON envelope containing `version`, `code`, and `message` to `${ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX}.failure`. Your image defines the code and wording; no platform registration is required. Remove credentials and private details before publishing. Without a valid envelope, Runtime reports the exit status.
+
+See the [failure contract](https://github.com/archestra-ai/archestra/blob/main/platform/agent_images/runtime-contract.md#failure-reasons) for the format, limits, and a shell example.
+
 ### SDK Integration
 
 You can package an SDK-based Agent loop in a custom image. Configure its model client with the injected proxy URL, protocol, virtual key, and model. Connect its MCP client to the injected gateway URL and token.

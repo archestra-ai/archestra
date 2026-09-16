@@ -16,6 +16,13 @@ location directly. Both clients discover root skills when launched in
 `platform/`; do not add another skills link there. Check out Git symlinks as
 symlinks on systems that require explicit symlink support.
 
+When Claude Code starts in `platform/`, the root `CLAUDE.md` imports a file
+outside the working directory. Claude can ask to allow this external import;
+accept it for this trusted repository and confirm the root `AGENTS.md` appears
+in `/context`. In a fresh non-interactive `claude -p` session before approval,
+the root import can be skipped even though `platform/AGENTS.md` and all shared
+skills load. Do not treat finding `CLAUDE.md` alone as proof its imports loaded.
+
 The root `.claude/settings.json` disables Claude attribution in commits and PRs.
 `platform/.claude/settings.json` symlinks to it so the same setting applies when
 Claude starts from `platform/`. Only the settings file is linked; skills continue

@@ -2314,7 +2314,7 @@ Required RBAC permission: `plugin:admin`
 | `delete_workspace` | Permanently delete a retained runtime workspace and all of its files. | `agent:read` |
 | `read_workspace_file` | Read a file from your Agent Runtime's retained workspace using a run ID. | `agent:read` |
 | `write_workspace_file` | Create a file in your Agent Runtime's retained workspace using a run ID. | `agent:read` |
-| `start_run` | Hand local work over to Archestra, or spin it up there, as a durable agent run and return immediately with its id. | `agent:read` |
+| `start_run` | Create a NEW run only for work that has no prior runtime session. | `agent:read` |
 | `get_run` | Read a run's state and the output it has produced so far. | `agent:read` |
 | `list_runs` | List your runs on one agent, newest activity first. | `agent:read` |
 | `list_agent_runs` | List recent runs across one or more accessible Agents for a read-only operations dashboard. | `agent:read` |
@@ -2425,6 +2425,7 @@ Required RBAC permission: `agent:read`
 | `workspace.state` | `"active" \| "idle" \| "suspending" \| "suspended" \| "resuming" \| "deleting" \| "deleted"` | Yes |  |
 | `workspace.retained_until` | `string` | Yes |  |
 | `workspace.can_continue` | `boolean` | Yes | Whether steer_run can accept a follow-up in this workspace, including while work is running. |
+| `workspace.continuation_error` | `string \| null` | Yes | Why this workspace cannot accept steering, or null when available. |
 | `workspace.connection` | `object \| null` | Yes |  |
 | `workspace.connection.hostname` | `string` | Yes |  |
 | `workspace.connection.shellCommand` | `string` | Yes |  |

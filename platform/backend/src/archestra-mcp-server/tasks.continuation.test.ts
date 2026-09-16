@@ -241,7 +241,7 @@ test("an external gateway steers the current turn using the original session han
     session_id: previous.taskId,
     run: { task_id: currentTask.id },
     run_url: expect.stringContaining(`/chat/runs/${previous.taskId}`),
-    workspace: { can_continue: true },
+    workspace: { can_continue: true, continuation_error: null },
     requests: [
       {
         task_id: previous.taskId,
@@ -284,7 +284,10 @@ test("an external gateway steers the current turn using the original session han
   ).toHaveLength(2);
 });
 
-test("an expired session rejects steering without creating a replacement task", async () => {
+test.for([
+  "expired",
+  "deleted",
+] as const)("a %s session rejects steering without creating a replacement task", async (unavailable) => {
   const previous = await retainedRun();
   const retained = await executeArchestraTool(
     TOOL_GET_RUN_FULL_NAME,
@@ -292,20 +295,33 @@ test("an expired session rejects steering without creating a replacement task", 
     context,
   );
   expect(retained.structuredContent).toMatchObject({
-    workspace: { can_continue: true },
+    workspace: { can_continue: true, continuation_error: null },
   });
-  vi.useFakeTimers({ toFake: ["Date"] });
-  onTestFinished(() => {
-    vi.useRealTimers();
-  });
-  vi.setSystemTime(Date.now() + 7200_000);
+  if (unavailable === "expired") {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
+    vi.setSystemTime(Date.now() + 7200_000);
+  } else {
+    await AgentWorkspaceModel.transition({
+      id: previous.taskId,
+      from: "idle",
+      to: "deleted",
+    });
+  }
   const expired = await executeArchestraTool(
     TOOL_GET_RUN_FULL_NAME,
     { task_id: previous.taskId },
     context,
   );
   expect(expired.structuredContent).toMatchObject({
-    workspace: { can_continue: false },
+    workspace: {
+      can_continue: false,
+      continuation_error: expect.stringContaining(
+        unavailable === "expired" ? "session expired" : "workspace was removed",
+      ),
+    },
   });
   const result = await executeArchestraTool(
     TOOL_STEER_RUN_FULL_NAME,

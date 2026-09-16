@@ -249,6 +249,12 @@ const GetRunOutputSchema = z.object({
         .describe(
           "Whether steer_run can accept a follow-up in this workspace, including while work is running.",
         ),
+      continuation_error: z
+        .string()
+        .nullable()
+        .describe(
+          "Why this workspace cannot accept steering, or null when available.",
+        ),
       connection: z
         .object({ hostname: z.string(), shellCommand: z.string() })
         .nullable(),
@@ -423,11 +429,13 @@ const registry = defineArchestraTools([
   }),
   defineArchestraTool({
     shortName: TOOL_START_RUN_SHORT_NAME,
-    title: "Start Run",
+    title: "Start New Run",
     description:
+      "Create a NEW run only for work that has no prior runtime session. Never use this to resume, steer, or replace an expired or deleted session. " +
       `Hand local work over to ${DEFAULT_APP_NAME}, or spin it up there, as a durable agent run and return immediately with its id. ` +
       "If the Agent has Agent Runtime configured, the work executes in its runtime. " +
       "Use this only when the work has NO runtime session yet, including unfinished local work. For an existing runtime task or follow-up, use steer_run with its saved session_id as task_id; never start another run. " +
+      "For repository handoffs, first load the Agent Runtime Handoff skill using load_skill. Include the repository URL, exact base commit, local changes, and return-patch baseline; local paths are not accessible remotely. " +
       "Include context, goals, decisions and remaining work in message. Optional attachments are staged before execution (repository patches or documents). " +
       "Keep session_id and run_url so any connected client can pick up the same session. Poll get_run for progress.",
     schema: z.object({
@@ -497,6 +505,23 @@ const registry = defineArchestraTools([
           session.actorId === actor.id
             ? await AgentWorkspaceModel.findByWorkloadName(session.workloadName)
             : null;
+        const canContinue = Boolean(
+          workspace &&
+            ((workspace.state === "active" &&
+              !session?.endedAt &&
+              workspace.activeTaskId === task.row.id) ||
+              (["idle", "suspended"].includes(workspace.state) &&
+                !workspace.activeTaskId)) &&
+            workspace.expiresAt.getTime() > Date.now(),
+        );
+        const continuationError =
+          !workspace || canContinue
+            ? null
+            : workspace.expiresAt.getTime() <= Date.now()
+              ? "This session expired and cannot resume. Do not call start_run to replace it. Recover available run history and explain the blocker."
+              : workspace.state === "deleted"
+                ? "This session's workspace was removed and cannot resume. Do not call start_run to replace it. Recover available run history and explain the blocker."
+                : "This workspace is not ready for continuation. Check get_run again and use steer_run with the same session_id when available; do not start a replacement run.";
         const requestTaskIds = [
           ...new Set([workspace?.id ?? task.row.id, task.row.id]),
         ];
@@ -538,13 +563,8 @@ const registry = defineArchestraTools([
             ? {
                 state: workspace.state,
                 retained_until: workspace.expiresAt.toISOString(),
-                can_continue:
-                  ((workspace.state === "active" &&
-                    !session?.endedAt &&
-                    workspace.activeTaskId === task.row.id) ||
-                    (["idle", "suspended"].includes(workspace.state) &&
-                      !workspace.activeTaskId)) &&
-                  workspace.expiresAt.getTime() > Date.now(),
+                can_continue: canContinue,
+                continuation_error: continuationError,
                 connection:
                   session && ["active", "idle"].includes(workspace.state)
                     ? resolveAgentRuntimeBackendDriver(

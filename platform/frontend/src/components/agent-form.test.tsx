@@ -26,6 +26,9 @@ import {
   type AgentFormProps,
   AgentForm as AgentFormWithoutFooter,
 } from "./agent-form";
+import { getAgentCatalogTemplates } from "./agent-pages/agent-catalog";
+
+HTMLElement.prototype.scrollIntoView = vi.fn();
 
 global.ResizeObserver = class ResizeObserver {
   observe() {}
@@ -333,6 +336,13 @@ vi.mock("@/lib/agent-tools.query", () => ({
   useBulkUpdateAgentTools: useBulkUpdateAgentToolsMock,
 }));
 
+vi.mock("@/lib/claude-code-account.query", () => ({
+  useClaudeCodeAccount: () => ({ data: undefined, isPending: false }),
+  useClaudeCodeModels: () => ({ data: [] }),
+  useClaudeCodeSignIn: () => ({ mutate: vi.fn(), isPending: false }),
+  useDisconnectClaudeCodeAccount: () => ({ mutate: vi.fn(), isPending: false }),
+}));
+
 vi.mock("@/lib/agent-runtime.query", () => ({
   useAgentRuntimePreflight: useAgentRuntimePreflightMock,
 }));
@@ -524,7 +534,22 @@ vi.mock("@/components/permission-requirement-hint", () => ({
 }));
 
 vi.mock("@/components/system-prompt-editor", () => ({
-  SystemPromptEditor: () => <div>Mock Instruction Editor</div>,
+  SystemPromptEditor: ({
+    value,
+    onChange,
+  }: {
+    value?: string;
+    onChange?: (value: string) => void;
+  }) => (
+    <div>
+      Mock Instruction Editor
+      <textarea
+        aria-label="Instructions"
+        value={value ?? ""}
+        onChange={(event) => onChange?.(event.target.value)}
+      />
+    </div>
+  ),
 }));
 
 vi.mock("@/components/agent-chat-apps", () => ({
@@ -547,7 +572,8 @@ vi.mock("@/components/agent-chat-apps", () => ({
   },
 }));
 
-vi.mock("./agent-runtime-fields", () => ({
+vi.mock("./agent-runtime-fields", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./agent-runtime-fields")>()),
   AgentRuntimeFields: ({
     value,
     onChange,
@@ -817,12 +843,6 @@ vi.mock("@/components/ui/expandable-text", () => ({
 vi.mock("@/components/ui/input", () => ({
   Input: (props: React.InputHTMLAttributes<HTMLInputElement>) => (
     <input {...props} />
-  ),
-}));
-
-vi.mock("@/components/ui/label", () => ({
-  Label: ({ children }: React.LabelHTMLAttributes<HTMLLabelElement>) => (
-    <span>{children}</span>
   ),
 }));
 
@@ -2858,6 +2878,12 @@ describe("AgentForm save payload and failure handling", () => {
     });
     useAvailableLlmProviderApiKeysMock.mockReturnValue({ data: [] });
     useLlmModelsByProviderMock.mockReturnValue({ modelsByProvider: {} });
+    useAgentRuntimePreflightMock.mockReturnValue({ data: undefined });
+    useOrganizationDefaultModelMock.mockReturnValue({
+      isSet: false,
+      model: null,
+      label: null,
+    });
   });
 
   /**
@@ -3711,15 +3737,24 @@ describe("AgentForm save payload and failure handling", () => {
       ],
     });
     useLlmModelsByProviderMock.mockReturnValue({ modelsByProvider: {} });
+    vi.mocked(useFeature).mockImplementation((flag) => flag === "agentRuntime");
+    const codex = getAgentCatalogTemplates("example.com/runtime:latest").find(
+      (template) => template.id === "codex",
+    );
     const user = userEvent.setup();
     const view = render(
       <AgentForm
         agentType="agent"
-        initialValues={{ requiredSubscriptionKind: "chatgpt" }}
+        initialRuntimeId="codex"
+        initialValues={codex?.initialValues}
         sections={["configuration"]}
       />,
     );
 
+    expect(screen.getByRole("button", { name: /^Model/ })).toHaveTextContent(
+      "Connected",
+    );
+    expect(screen.getByTestId("selected-model")).toBeEmptyDOMElement();
     await user.click(screen.getByRole("button", { name: "Pick API key" }));
     useLlmModelsByProviderMock.mockReturnValue({
       modelsByProvider: {
@@ -3744,7 +3779,8 @@ describe("AgentForm save payload and failure handling", () => {
     view.rerender(
       <AgentForm
         agentType="agent"
-        initialValues={{ requiredSubscriptionKind: "chatgpt" }}
+        initialRuntimeId="codex"
+        initialValues={codex?.initialValues}
         sections={["configuration"]}
       />,
     );
@@ -3950,8 +3986,6 @@ describe("AgentForm save payload and failure handling", () => {
       <AgentForm agentType="agent" agent={baseAgent} sections={["advanced"]} />,
     );
 
-    // The Switch and Label mocks above leave the control unlabelled, so it
-    // is reached by the id the label points at.
     await screen.findByText("Security");
     expect(screen.queryByTestId("agent-runtime")).not.toBeInTheDocument();
     const securitySwitch = container.querySelector<HTMLInputElement>(
@@ -4079,8 +4113,9 @@ describe("AgentForm save payload and failure handling", () => {
         agentType="agent"
         sections={["configuration"]}
         initialValues={{
-          name: "Codex",
-          requiredSubscriptionKind: "chatgpt",
+          ...getAgentCatalogTemplates("example.com/runtime:latest").find(
+            (template) => template.id === "codex",
+          )?.initialValues,
         }}
       />,
     );
@@ -4117,8 +4152,9 @@ describe("AgentForm save payload and failure handling", () => {
         agentType="agent"
         sections={["configuration"]}
         initialValues={{
-          name: "Codex",
-          requiredSubscriptionKind: "chatgpt",
+          ...getAgentCatalogTemplates("example.com/runtime:latest").find(
+            (template) => template.id === "codex",
+          )?.initialValues,
         }}
       />,
     );
@@ -4130,6 +4166,299 @@ describe("AgentForm save payload and failure handling", () => {
       screen.getByRole("link", { name: "Sign in with ChatGPT" }),
     ).toHaveAttribute("href", "/llm/model-providers?connect=chatgpt");
     expect(screen.getByRole("button", { name: /create/i })).toBeDisabled();
+  });
+
+  it("preserves the entered identity and instructions while switching runtime and reapplying the Codex subscription gate", async () => {
+    vi.mocked(useFeature).mockImplementation((flag) => flag === "agentRuntime");
+    const user = userEvent.setup();
+    const claude = getAgentCatalogTemplates("example.com/runtime:latest").find(
+      (template) => template.id === "claude-code",
+    );
+    render(
+      <AgentForm
+        agentType="agent"
+        sections={["configuration"]}
+        initialRuntimeId="claude-code"
+        initialValues={claude?.initialValues}
+      />,
+    );
+
+    const name = screen.getByPlaceholderText("Enter agent name");
+    await user.clear(name);
+    await user.type(name, "Incident helper");
+    const description = screen.getByLabelText("Description");
+    await user.clear(description);
+    await user.type(description, "Investigate build failures");
+    const instructions = screen.getByRole("textbox", { name: "Instructions" });
+    await user.clear(instructions);
+    await user.type(instructions, "Start with the failing build logs.");
+
+    await user.click(screen.getByRole("radio", { name: /Codex/ }));
+    expect(screen.getByRole("button", { name: "Create" })).toBeDisabled();
+    expect(
+      screen.getByRole("img", {
+        name: "Connect your ChatGPT subscription before creating the agent",
+      }),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("radio", { name: "OpenCode" }));
+    expect(screen.getByRole("button", { name: "Create" })).toBeEnabled();
+    expect(
+      screen.queryByText("Connect your ChatGPT subscription"),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("radio", { name: /Codex/ }));
+    expect(screen.getByRole("button", { name: "Create" })).toBeDisabled();
+    await user.click(screen.getByRole("radio", { name: "OpenCode" }));
+
+    expect(name).toHaveValue("Incident helper");
+    expect(description).toHaveValue("Investigate build failures");
+    expect(instructions).toHaveValue("Start with the failing build logs.");
+    await user.click(screen.getByRole("button", { name: "Create" }));
+    await waitFor(() => expect(createAgent).toHaveBeenCalled());
+    expect(createAgent.mock.calls[0][0]).toMatchObject({
+      name: "Incident helper",
+      description: "Investigate build failures",
+      systemPrompt: "Start with the failing build logs.",
+      runtime: {
+        command: ["archestra-opencode"],
+        inferenceProtocol: "openai_responses",
+      },
+    });
+  });
+
+  it("unblocks a selected Codex runtime when a new ChatGPT connection arrives", async () => {
+    vi.mocked(useFeature).mockImplementation((flag) => flag === "agentRuntime");
+    useLlmModelsByProviderMock.mockReturnValue({
+      modelsByProvider: {
+        openai: [
+          {
+            dbId: "codex-model",
+            id: "gpt-5.3-codex",
+            displayName: "Codex",
+            provider: "openai",
+            isFree: false,
+          },
+        ],
+      },
+    });
+    const user = userEvent.setup();
+    const initialValues = { name: "Codex helper" };
+    const { rerender } = render(
+      <AgentForm
+        agentType="agent"
+        sections={["configuration"]}
+        initialValues={initialValues}
+      />,
+    );
+    await user.click(screen.getByRole("radio", { name: /Codex/ }));
+    expect(screen.getByRole("button", { name: "Create" })).toBeDisabled();
+    expect(
+      screen.getByRole("img", {
+        name: "Connect your ChatGPT subscription before creating the agent",
+      }),
+    ).toBeVisible();
+
+    useAvailableLlmProviderApiKeysMock.mockReturnValue({
+      data: [
+        {
+          id: "new-subscription",
+          name: "ChatGPT subscription",
+          provider: "openai",
+          scope: "personal",
+          bestModelId: "codex-model",
+          subscriptionKind: "chatgpt",
+        },
+      ],
+    });
+    rerender(
+      <AgentForm
+        agentType="agent"
+        sections={["configuration"]}
+        initialValues={initialValues}
+      />,
+    );
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Create" })).toBeEnabled(),
+    );
+    expect(
+      screen.queryByRole("img", {
+        name: "Connect your ChatGPT subscription before creating the agent",
+      }),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Create" }));
+    await waitFor(() => expect(createAgent).toHaveBeenCalled());
+    expect(createAgent.mock.calls[0][0]).toMatchObject({
+      llmApiKeyId: "new-subscription",
+      modelId: "codex-model",
+      runtime: { command: ["archestra-codex"] },
+    });
+  });
+
+  it("requires an explicit compatible connection after switching Claude billing to a provider", async () => {
+    vi.mocked(useFeature).mockImplementation((flag) => flag === "agentRuntime");
+    useAvailableLlmProviderApiKeysMock.mockReturnValue({
+      data: [
+        {
+          id: "key-1",
+          name: "Anthropic key",
+          provider: "anthropic",
+          scope: "org",
+          bestModelId: "claude-model",
+        },
+      ],
+    });
+    useLlmModelsByProviderMock.mockReturnValue({
+      modelsByProvider: {
+        anthropic: [
+          {
+            dbId: "claude-model",
+            id: "claude-sonnet-4-6",
+            displayName: "Claude Sonnet",
+            provider: "anthropic",
+            isFree: false,
+          },
+        ],
+      },
+    });
+    useOrganizationDefaultModelMock.mockReturnValue({
+      isSet: true,
+      model: {
+        dbId: "gpt-default",
+        id: "gpt-5.6-luna",
+        displayName: "GPT-5.6 Luna",
+        provider: "openai",
+        isFree: false,
+      },
+      label: "OpenAI · GPT-5.6 Luna",
+    } as never);
+    const user = userEvent.setup();
+    const claude = getAgentCatalogTemplates("example.com/runtime:latest").find(
+      (template) => template.id === "claude-code",
+    );
+    render(
+      <AgentForm
+        agentType="agent"
+        sections={["configuration"]}
+        initialRuntimeId="claude-code"
+        initialValues={claude?.initialValues}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Create" })).toBeEnabled();
+    expect(
+      screen.queryByRole("img", { name: /Connect your Claude account/ }),
+    ).not.toBeInTheDocument();
+    await user.click(
+      screen.getByRole("radio", { name: /API key or cloud provider/ }),
+    );
+    expect(screen.getByRole("button", { name: "Create" })).toBeDisabled();
+    expect(screen.queryByText(/GPT-5.6 Luna/)).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("img", {
+        name: "Select a provider and Claude model",
+      }),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /^Authentication/ }));
+    expect(
+      screen.queryByRole("button", { name: "Pick API key" }),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /^Authentication/ }));
+    await user.click(screen.getByRole("button", { name: "Pick API key" }));
+    expect(screen.getByRole("button", { name: "Create" })).toBeEnabled();
+    expect(
+      screen.queryByRole("img", {
+        name: "Select a provider and Claude model",
+      }),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Create" }));
+    await waitFor(() => expect(createAgent).toHaveBeenCalled());
+    expect(createAgent.mock.calls[0][0]).toMatchObject({
+      llmApiKeyId: "key-1",
+      modelId: "claude-model",
+      runtime: { claudeCode: { authentication: "provider" } },
+    });
+  });
+
+  it("keeps authentication flagged when a provider has no compatible model to select", async () => {
+    vi.mocked(useFeature).mockImplementation((flag) => flag === "agentRuntime");
+    useAvailableLlmProviderApiKeysMock.mockReturnValue({
+      data: [
+        {
+          id: "key-1",
+          name: "Anthropic key",
+          provider: "anthropic",
+          scope: "org",
+          bestModelId: "",
+        },
+      ],
+    });
+    const claude = getAgentCatalogTemplates("example.com/runtime:latest").find(
+      (template) => template.id === "claude-code",
+    );
+    const user = userEvent.setup();
+    render(
+      <AgentForm
+        agentType="agent"
+        sections={["configuration"]}
+        initialRuntimeId="claude-code"
+        initialValues={claude?.initialValues}
+      />,
+    );
+    await user.click(
+      screen.getByRole("radio", { name: /API key or cloud provider/ }),
+    );
+    await user.click(screen.getByRole("button", { name: "Pick API key" }));
+    expect(
+      screen.getByRole("img", {
+        name: "Select a model for the selected provider",
+      }),
+    ).toBeVisible();
+    expect(screen.getByRole("button", { name: "Create" })).toBeDisabled();
+    await user.click(
+      screen.getByRole("radio", { name: /Personal Claude subscription/ }),
+    );
+    expect(
+      screen.queryByRole("img", { name: /Select a model/ }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Create" })).toBeEnabled();
+  });
+
+  it("marks the image row until a required container image is supplied", async () => {
+    vi.mocked(useFeature).mockImplementation((flag) => flag === "agentRuntime");
+    const user = userEvent.setup();
+    render(
+      <AgentForm
+        agentType="agent"
+        sections={["configuration"]}
+        initialValues={{ name: "Custom runtime" }}
+      />,
+    );
+
+    await user.click(screen.getByRole("radio", { name: "Custom image" }));
+    await user.clear(screen.getByLabelText(/Container image/));
+    expect(screen.getByRole("button", { name: "Create" })).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: /^Image/ }));
+    expect(screen.queryByLabelText(/Container image/)).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("img", {
+        name: "Set a container image before creating the agent",
+      }),
+    ).toBeVisible();
+    await user.click(screen.getByRole("button", { name: /^Image/ }));
+    await user.type(
+      screen.getByLabelText(/Container image/),
+      "example.com/custom:v1",
+    );
+    expect(screen.getByRole("button", { name: "Create" })).toBeEnabled();
+    expect(
+      screen.queryByRole("img", {
+        name: "Set a container image before creating the agent",
+      }),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Create" }));
+    await waitFor(() => expect(createAgent).toHaveBeenCalled());
+    expect(createAgent.mock.calls[0][0]).toMatchObject({
+      runtime: { image: "example.com/custom:v1" },
+    });
   });
 
   it("leaves a refused update to the toast the query layer already showed", async () => {
@@ -4316,12 +4645,10 @@ describe("AgentForm save payload and failure handling", () => {
       />,
     );
 
-    const runtimeSection = screen.getByRole("region", {
-      name: "Agent runtime",
-    });
+    const runtimeSection = screen.getByTestId(E2eTestId.AgentRuntimePicker);
     expect(runtimeSection).toBeVisible();
     await user.click(
-      within(runtimeSection).getByRole("button", { name: "Disable runtime" }),
+      within(runtimeSection).getByRole("radio", { name: "Archestra" }),
     );
 
     const toolsEditor = await screen.findByText("Mock Tools Editor");

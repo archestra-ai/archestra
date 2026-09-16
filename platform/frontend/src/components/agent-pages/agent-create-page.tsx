@@ -212,6 +212,7 @@ export function AgentCreatePage({
           agentType={kind}
           defaultIconType={config.defaultIconType}
           initialValues={selectedTemplate?.initialValues}
+          initialRuntimeId={selectedTemplate?.id}
           // One mount for the whole wizard: the steps show one group at a
           // time, and what was picked on a step stays on the form until the
           // create at the end.

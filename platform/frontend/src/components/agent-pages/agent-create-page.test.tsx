@@ -221,7 +221,6 @@ describe("AgentCreatePage", () => {
         initialValues: expect.objectContaining({
           name: "Codex",
           icon: "/model-logos/openai.svg",
-          requiredSubscriptionKind: "chatgpt",
           runtime: expect.objectContaining({
             command: ["archestra-codex"],
             image: "agent-codex:dev",

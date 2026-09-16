@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  type AgentCatalogId,
   type AgentScope,
   type AgentType,
   type archestraApiTypes,
@@ -21,8 +22,8 @@ import {
   MAX_SUGGESTED_PROMPT_TEXT_LENGTH,
   MAX_SUGGESTED_PROMPT_TITLE_LENGTH,
   MAX_SUGGESTED_PROMPTS,
+  resolveAgentCatalogId,
   SUBSCRIPTION_CREDENTIALS,
-  type SubscriptionCredentialKind,
   type SupportedProvider,
   SupportedProviders,
 } from "@archestra/shared";
@@ -72,6 +73,7 @@ import {
   type AgentRuntimeConfig,
   AgentRuntimeFields,
 } from "@/components/agent-runtime-fields";
+import { AgentRuntimePicker } from "@/components/agent-runtime-picker";
 import { AgentSelector } from "@/components/agent-selector";
 import {
   AgentSkillsEditor,
@@ -1165,7 +1167,6 @@ export interface AgentFormInitialValues {
   runtime?: AgentRuntimeConfig | null;
   accessAllTools?: boolean;
   /** Catalog runtimes that must bill an acting user's own subscription. */
-  requiredSubscriptionKind?: SubscriptionCredentialKind;
 }
 
 export interface AgentFormProps {
@@ -1176,6 +1177,7 @@ export interface AgentFormProps {
   defaultIconType?: AgentIconVariant;
   /** Catalog/template defaults for a new Agent. Ignored in edit mode. */
   initialValues?: AgentFormInitialValues;
+  initialRuntimeId?: AgentCatalogId;
   /** Callback when a new agent/profile is created (not called for updates) */
   onCreated?: (created: { id: string; name: string }) => void;
   /** Callback after an existing agent was saved (not called for creates). */
@@ -1229,6 +1231,7 @@ export function AgentForm({
   agentType = "profile",
   defaultIconType = "agent",
   initialValues,
+  initialRuntimeId,
   onCreated,
   onSaved,
   onDirtyChange,
@@ -1555,6 +1558,14 @@ export function AgentForm({
   );
   const [passthroughHeaders, setPassthroughHeaders] = useState<string[]>([]);
   const [runtime, setAgentRuntime] = useState<AgentRuntimeConfig | null>(null);
+  const originalRuntimeId =
+    initialRuntimeId ??
+    (initialValues?.runtime
+      ? (resolveAgentCatalogId(initialValues.runtime) ?? "custom")
+      : "chat");
+  const [selectedRuntimeId, setSelectedRuntimeId] = useState<
+    AgentCatalogId | "chat" | "custom"
+  >(originalRuntimeId);
   const [channelAssignmentsDirty, setChannelAssignmentsDirty] = useState(false);
   const [activationSkillsDirty, setActivationSkillsDirty] = useState(false);
   const [activationSkillsReady, setActivationSkillsReady] = useState(false);
@@ -2197,7 +2208,10 @@ export function AgentForm({
     () => availableApiKeys.find((k) => k.id === llmApiKeyId),
     [availableApiKeys, llmApiKeyId],
   );
-  const requiredSubscriptionKind = initialValues?.requiredSubscriptionKind;
+  const requiredSubscriptionKind =
+    !agent && runtime?.command?.[0] === "archestra-codex"
+      ? "chatgpt"
+      : undefined;
   const requiredSubscription = requiredSubscriptionKind
     ? SUBSCRIPTION_CREDENTIALS[requiredSubscriptionKind]
     : null;
@@ -2447,6 +2461,12 @@ export function AgentForm({
     ((llmApiKeyId ?? null) !== (persistedAgent.llmApiKeyId ?? null) ||
       (llmModel ?? null) !== (persistedAgent.modelId ?? null));
   const hasCompleteLlmSelection = Boolean(llmApiKeyId) === Boolean(llmModel);
+  const needsClaudeProviderKey =
+    !agent &&
+    isClaudeCodeRuntime &&
+    !usesClaudeSubscription &&
+    (!selectedApiKey || !runtimeProviderFilter(selectedApiKey.provider));
+  const needsRuntimeImage = !agent && !!runtime && !runtime.image.trim();
 
   // Moving an agent out of the environment its tools belong to strands them.
   // The tools editor refuses that itself, but the Configuration step does not
@@ -2985,6 +3005,15 @@ export function AgentForm({
       toast.error("Please select at least one team");
       return;
     }
+    if (
+      !requiredSubscriptionSatisfied ||
+      needsClaudeProviderKey ||
+      needsRuntimeImage ||
+      runtimeModelIncompatibility
+    ) {
+      toast.error("Complete the runtime setup before saving");
+      return;
+    }
     if (!hasCompleteLlmSelection) {
       toast.error(
         llmApiKeyId
@@ -3018,6 +3047,10 @@ export function AgentForm({
     scope,
     assignedTeamIds,
     hasCompleteLlmSelection,
+    requiredSubscriptionSatisfied,
+    needsClaudeProviderKey,
+    needsRuntimeImage,
+    runtimeModelIncompatibility,
     llmApiKeyId,
     channelAssignmentsDirty,
     performSave,
@@ -3140,6 +3173,8 @@ export function AgentForm({
     !requiresTeamSelection &&
     requiredSubscriptionSatisfied &&
     hasCompleteLlmSelection &&
+    !needsClaudeProviderKey &&
+    !needsRuntimeImage &&
     !runtimeModelIncompatibility &&
     mcpEnvConflicts.length === 0 &&
     !environmentConflicts.blocksSave &&
@@ -3174,7 +3209,9 @@ export function AgentForm({
         triggerClassName="h-8 max-w-[250px] text-xs"
         popoverClassName="w-96"
         searchPlaceholder="Search API keys..."
-        allowOrganizationDefault
+        allowOrganizationDefault={
+          !!agent || !isClaudeCodeRuntime || usesClaudeSubscription
+        }
         organizationDefaultSelected={!llmApiKeyId}
         onSelectOrganizationDefault={() => {
           cancelPendingCreatedKeySelection();
@@ -3200,10 +3237,11 @@ export function AgentForm({
                   disabled
                   variant="outline"
                   enabled={false}
-                  // The model the organization default
-                  // resolves to today; the runtime's own
-                  // fallback when no default is set.
-                  placeholder={organizationDefaultModel.label ?? undefined}
+                  placeholder={
+                    isClaudeCodeRuntime && !agent
+                      ? "Select a Claude model"
+                      : (organizationDefaultModel.label ?? undefined)
+                  }
                 />
               </div>
             </TooltipTrigger>
@@ -3215,6 +3253,9 @@ export function AgentForm({
       ) : (
         <ModelSelector
           selectedModel={llmModel || ""}
+          placeholder={
+            isClaudeCodeRuntime ? "Select a Claude model" : "Select a model"
+          }
           onModelChange={(modelId) => handleLlmModelChange(modelId)}
           onClear={() => {
             setLlmModel(null);
@@ -3235,6 +3276,163 @@ export function AgentForm({
         />
       )}
     </>
+  );
+
+  const modelAttention = usesClaudeSubscription
+    ? undefined
+    : needsClaudeProviderKey
+      ? "Select a provider and Claude model"
+      : !requiredSubscriptionSatisfied
+        ? "Connect your ChatGPT subscription before creating the agent"
+        : !hasCompleteLlmSelection
+          ? llmApiKeyId
+            ? "Select a model for the selected provider"
+            : "Select a provider for the selected model"
+          : runtimeModelIncompatibility || undefined;
+  const modelSummary = usesClaudeSubscription
+    ? "Personal Claude subscription. Connect after saving."
+    : requiredSubscription
+      ? `${requiredSubscription.label}. ${requiredSubscriptionSatisfied ? "Connected" : "Not connected yet"}`
+      : needsClaudeProviderKey
+        ? "Select a provider and Claude model"
+        : `${selectedApiKey?.name ?? "Organization default key"}, ${selectedLlmModelRow?.displayName ?? (llmApiKeyId ? "Select a model" : (organizationDefaultModel.label ?? "default model"))}`;
+  const modelBlock = (
+    <div className="space-y-2">
+      {(agent || !isInternalAgent || !agentRuntimeEnabled) && (
+        <Label>{isClaudeCodeRuntime ? "Authentication" : "Model"}</Label>
+      )}
+      {cannotReadLlmConfiguration && !isClaudeCodeRuntime ? (
+        <Alert>
+          <AlertDescription className="text-sm text-muted-foreground">
+            You do not have permission to view LLM API keys or models. This
+            agent will use the organization&apos;s default model configuration.
+          </AlertDescription>
+        </Alert>
+      ) : (
+        <>
+          {requiredSubscription && !requiredSubscriptionSatisfied && (
+            <Alert>
+              <InfoIcon className="h-4 w-4" />
+              <AlertTitle>{requiredSubscription.label} required</AlertTitle>
+              <AlertDescription className="space-y-2">
+                <p>
+                  This maintained runtime uses your existing subscription and
+                  does not fall back to usage-based API billing.
+                </p>
+                {!requiredSubscriptionKey && (
+                  <Button type="button" variant="outline" size="sm" asChild>
+                    <Link
+                      href={`/llm/model-providers?connect=${requiredSubscriptionKind}`}
+                      target="_blank"
+                    >
+                      {requiredSubscription.connect.signInTitle}
+                    </Link>
+                  </Button>
+                )}
+              </AlertDescription>
+            </Alert>
+          )}
+          {!isClaudeCodeRuntime &&
+            (selectedApiKeyIsSubscription ? (
+              <Alert>
+                <InfoIcon className="h-4 w-4" />
+                <AlertDescription>
+                  Each person using this agent must connect their own
+                  subscription account. No credential is shared.
+                </AlertDescription>
+              </Alert>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                {selectedApiKey && selectedApiKey.scope !== "org" ? (
+                  <span>
+                    Selected key will be available to everyone who has access to
+                    this agent.
+                  </span>
+                ) : null}
+              </p>
+            ))}
+          {isClaudeCodeRuntime ? (
+            <ClaudeCodeInferenceSettings
+              agentId={agent?.id ?? ""}
+              authentication={
+                usesClaudeSubscription ? "subscription" : "provider"
+              }
+              onAuthenticationChange={(authentication) => {
+                if (!runtime) return;
+                setAgentRuntime({
+                  ...runtime,
+                  claudeCode: {
+                    ...runtime.claudeCode,
+                    authentication,
+                  },
+                  credentials:
+                    runtime.credentials?.filter(
+                      ({ key }) => key !== "CLAUDE_CODE_OAUTH_TOKEN",
+                    ) ?? null,
+                });
+                if (authentication === "subscription") {
+                  handleLlmApiKeyChange(null);
+                  setLlmModel(null);
+                }
+              }}
+              model={runtime?.claudeCode?.model}
+              onModelChange={(model) => {
+                if (!runtime) return;
+                setAgentRuntime({
+                  ...runtime,
+                  claudeCode: {
+                    authentication: "subscription",
+                    model,
+                  },
+                  credentials:
+                    runtime.credentials?.filter(
+                      ({ key }) => key !== "CLAUDE_CODE_OAUTH_TOKEN",
+                    ) ?? null,
+                });
+              }}
+              provider={
+                selectedApiKey?.provider ??
+                effectiveLlmModelRow?.provider ??
+                null
+              }
+              vertexEnabled={anthropicVertexAiEnabled}
+              apiKeySelector={providerKeyControl}
+              modelSelector={modelControl}
+            />
+          ) : (
+            <div className="flex flex-wrap items-center gap-2">
+              {providerKeyControl}
+              {modelControl}
+            </div>
+          )}
+          {runtimeModelIncompatibility &&
+            !needsClaudeProviderKey &&
+            hasCompleteLlmSelection && (
+              <output
+                aria-live="polite"
+                className="flex items-start gap-1.5 text-xs text-muted-foreground"
+              >
+                <InfoIcon
+                  className="mt-0.5 size-3 shrink-0"
+                  aria-hidden="true"
+                />
+                <span>Choose a compatible model or runtime to save.</span>
+              </output>
+            )}
+          {showNoToolsModelNotice && (
+            <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
+              <InfoIcon className="mt-0.5 size-3 shrink-0" aria-hidden="true" />
+              <span>
+                This model doesn&apos;t support tools, so this{" "}
+                {agentTypeDisplayName[agentType] || "agent"}
+                &apos;s tools won&apos;t be used in its chats. Pick a different
+                model to use tools.
+              </span>
+            </p>
+          )}
+        </>
+      )}
+    </div>
   );
 
   return (
@@ -3295,168 +3493,9 @@ export function AgentForm({
                     </IdentityFields>
                   )}
 
-                  {/* Model, beside the name: which model answers is part of
-                      what an agent is, not an afterthought below its prompt.
-                      It carried its own section title until it moved here, so
-                      it needs the field label the others have. */}
-                  {showsModelControl && (
-                    <div className="space-y-2">
-                      <Label>
-                        {isClaudeCodeRuntime ? "Authentication" : "Model"}
-                      </Label>
-                      {cannotReadLlmConfiguration && !isClaudeCodeRuntime ? (
-                        <Alert>
-                          <AlertDescription className="text-sm text-muted-foreground">
-                            You do not have permission to view LLM API keys or
-                            models. This agent will use the organization&apos;s
-                            default model configuration.
-                          </AlertDescription>
-                        </Alert>
-                      ) : (
-                        <>
-                          {requiredSubscription &&
-                            !requiredSubscriptionSatisfied && (
-                              <Alert>
-                                <InfoIcon className="h-4 w-4" />
-                                <AlertTitle>
-                                  {requiredSubscription.label} required
-                                </AlertTitle>
-                                <AlertDescription className="space-y-2">
-                                  <p>
-                                    This maintained runtime uses your existing
-                                    subscription and does not fall back to
-                                    usage-based API billing.
-                                  </p>
-                                  {!requiredSubscriptionKey && (
-                                    <Button
-                                      type="button"
-                                      variant="outline"
-                                      size="sm"
-                                      asChild
-                                    >
-                                      <Link
-                                        href={`/llm/model-providers?connect=${requiredSubscriptionKind}`}
-                                        target="_blank"
-                                      >
-                                        {
-                                          requiredSubscription.connect
-                                            .signInTitle
-                                        }
-                                      </Link>
-                                    </Button>
-                                  )}
-                                </AlertDescription>
-                              </Alert>
-                            )}
-                          {!isClaudeCodeRuntime &&
-                            (selectedApiKeyIsSubscription ? (
-                              <Alert>
-                                <InfoIcon className="h-4 w-4" />
-                                <AlertDescription>
-                                  Each person using this agent must connect
-                                  their own subscription account. No credential
-                                  is shared.
-                                </AlertDescription>
-                              </Alert>
-                            ) : (
-                              <p className="text-sm text-muted-foreground">
-                                {selectedApiKey &&
-                                selectedApiKey.scope !== "org" ? (
-                                  <span>
-                                    Selected key will be available to everyone
-                                    who has access to this agent.
-                                  </span>
-                                ) : null}
-                              </p>
-                            ))}
-                          {isClaudeCodeRuntime ? (
-                            <ClaudeCodeInferenceSettings
-                              agentId={agent?.id ?? ""}
-                              authentication={
-                                usesClaudeSubscription
-                                  ? "subscription"
-                                  : "provider"
-                              }
-                              onAuthenticationChange={(authentication) => {
-                                if (!runtime) return;
-                                setAgentRuntime({
-                                  ...runtime,
-                                  claudeCode: {
-                                    ...runtime.claudeCode,
-                                    authentication,
-                                  },
-                                  credentials:
-                                    runtime.credentials?.filter(
-                                      ({ key }) =>
-                                        key !== "CLAUDE_CODE_OAUTH_TOKEN",
-                                    ) ?? null,
-                                });
-                                if (authentication === "subscription")
-                                  handleLlmApiKeyChange(null);
-                              }}
-                              model={runtime?.claudeCode?.model}
-                              onModelChange={(model) => {
-                                if (!runtime) return;
-                                setAgentRuntime({
-                                  ...runtime,
-                                  claudeCode: {
-                                    authentication: "subscription",
-                                    model,
-                                  },
-                                  credentials:
-                                    runtime.credentials?.filter(
-                                      ({ key }) =>
-                                        key !== "CLAUDE_CODE_OAUTH_TOKEN",
-                                    ) ?? null,
-                                });
-                              }}
-                              provider={
-                                selectedApiKey?.provider ??
-                                effectiveLlmModelRow?.provider ??
-                                null
-                              }
-                              vertexEnabled={anthropicVertexAiEnabled}
-                              apiKeySelector={providerKeyControl}
-                              modelSelector={modelControl}
-                            />
-                          ) : (
-                            <div className="flex flex-wrap items-center gap-2">
-                              {providerKeyControl}
-                              {modelControl}
-                            </div>
-                          )}
-                          {runtimeModelIncompatibility && (
-                            <output
-                              aria-live="polite"
-                              className="flex items-start gap-1.5 text-xs text-muted-foreground"
-                            >
-                              <InfoIcon
-                                className="mt-0.5 size-3 shrink-0"
-                                aria-hidden="true"
-                              />
-                              <span>
-                                Choose a compatible model or runtime to save.
-                              </span>
-                            </output>
-                          )}
-                          {showNoToolsModelNotice && (
-                            <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
-                              <InfoIcon
-                                className="mt-0.5 size-3 shrink-0"
-                                aria-hidden="true"
-                              />
-                              <span>
-                                This model doesn&apos;t support tools, so this{" "}
-                                {agentTypeDisplayName[agentType] || "agent"}
-                                &apos;s tools won&apos;t be used in its chats.
-                                Pick a different model to use tools.
-                              </span>
-                            </p>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  )}
+                  {showsModelControl &&
+                    (agent || !isInternalAgent || !agentRuntimeEnabled) &&
+                    modelBlock}
 
                   {/* Description (hidden for built-in agents) */}
                   {shouldShowDescriptionField({ agentType, isBuiltIn }) && (
@@ -3505,18 +3544,6 @@ export function AgentForm({
                     </div>
                   )}
 
-                  {!agent && agentType === "agent" && agentRuntimeEnabled && (
-                    <section
-                      className="space-y-4 border-y py-6"
-                      aria-label="Agent runtime"
-                    >
-                      <AgentRuntimeFields
-                        value={runtime}
-                        onChange={setAgentRuntime}
-                      />
-                    </section>
-                  )}
-
                   {/* Visibility: an ordinary field of the record, not a
                       section of its own — who may use it is as much a part of
                       what it is as its name. */}
@@ -3542,6 +3569,42 @@ export function AgentForm({
                         onUserIdsChange={setAssignedUserIds}
                         hasNoAvailableTeams={hasNoAvailableTeams}
                         showTeamRequired={true}
+                      />
+                    </div>
+                  )}
+
+                  {!agent && isInternalAgent && agentRuntimeEnabled && (
+                    <div className="space-y-4 border-t pt-6">
+                      <AgentRuntimePicker
+                        selectedId={selectedRuntimeId}
+                        value={runtime}
+                        onSelect={(id, nextRuntime) => {
+                          setSelectedRuntimeId(id);
+                          setAgentRuntime(nextRuntime);
+                          catalogSubscriptionAppliedRef.current = false;
+                          cancelPendingCreatedKeySelection();
+                          pendingModelAutoSelectionRef.current = null;
+                          lastAutoSelectedProviderRef.current = null;
+                          if (
+                            nextRuntime?.claudeCode?.authentication ===
+                              "subscription" ||
+                            (nextRuntime &&
+                              selectedApiKey &&
+                              !getAgentRuntimeProviderCompatibility({
+                                inferenceProtocol:
+                                  nextRuntime.inferenceProtocol,
+                                runtimeCommand: nextRuntime.command,
+                                provider: selectedApiKey.provider,
+                              }).compatible)
+                          ) {
+                            setLlmApiKeyId(null);
+                            setLlmModel(null);
+                          }
+                        }}
+                        onChange={setAgentRuntime}
+                        modelBlock={showsModelControl ? modelBlock : null}
+                        modelSummary={modelSummary}
+                        modelAttention={modelAttention}
                       />
                     </div>
                   )}

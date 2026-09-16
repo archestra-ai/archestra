@@ -38,9 +38,18 @@ const agent = {
   name: "Release Assistant",
   agentType: "agent",
   incomingEmailEnabled: true,
+  teams: [],
+  scope: "personal",
+  authorId: "user-1",
 } satisfies Pick<
   archestraApiTypes.GetAgentResponses["200"],
-  "id" | "name" | "agentType" | "incomingEmailEnabled"
+  | "id"
+  | "name"
+  | "agentType"
+  | "incomingEmailEnabled"
+  | "teams"
+  | "scope"
+  | "authorId"
 >;
 const email = {
   providerEnabled: true,
@@ -75,10 +84,23 @@ beforeEach(() => {
       HttpResponse.json({ features: { chatopsTelegramEnabled: false } }),
     ),
     http.get(PERMISSIONS_URL, () =>
-      HttpResponse.json({ chat: ["read", "create"], agentTrigger: ["read"] }),
+      HttpResponse.json({
+        chat: ["read", "create"],
+        agentTrigger: ["read"],
+        llmProviderApiKey: ["read"],
+      }),
     ),
     http.get(`${API_ORIGIN}/api/agents/${AGENT_ID}`, () =>
       HttpResponse.json(agent),
+    ),
+    http.get(`${API_ORIGIN}/api/agents/${AGENT_ID}/runtime/preflight`, () =>
+      HttpResponse.json({
+        ready: true,
+        configured: [],
+        missing: [],
+        misconfigured: [],
+        incompatible: null,
+      }),
     ),
     http.get(EMAIL_URL, () => HttpResponse.json(email)),
     http.get(BINDINGS_URL, () => HttpResponse.json(bindingPage([]))),
@@ -91,6 +113,270 @@ afterAll(() => {
 });
 
 describe("AgentCreatedPage", () => {
+  it("connects Claude from the saved page and resolves setup live", async () => {
+    const user = userEvent.setup();
+    let connected = false;
+    const accountUrl = `${API_ORIGIN}/api/agents/${AGENT_ID}/runtime/claude-code/account`;
+    server.use(
+      http.get(`${API_ORIGIN}/api/agents/${AGENT_ID}`, () =>
+        HttpResponse.json({
+          ...agent,
+          runtime: {
+            command: ["archestra-claude-code"],
+            claudeCode: { authentication: "subscription" },
+          },
+        }),
+      ),
+      http.get(`${API_ORIGIN}/api/agents/${AGENT_ID}/runtime/preflight`, () =>
+        HttpResponse.json({
+          ready: connected,
+          configured: [],
+          missing: connected
+            ? []
+            : [{ key: "CLAUDE_CODE_ACCOUNT", label: "Claude account" }],
+          misconfigured: [],
+          incompatible: null,
+        }),
+      ),
+      http.get(accountUrl, () =>
+        HttpResponse.json({ state: connected ? "connected" : "disconnected" }),
+      ),
+      http.post(accountUrl, () => {
+        connected = true;
+        return HttpResponse.json({ state: "connected" });
+      }),
+    );
+    renderPage();
+    expect(await screen.findByText("Before this agent can run")).toBeVisible();
+    expect(screen.queryByText("Ready to run.")).toBeNull();
+    await user.click(await screen.findByRole("button", { name: "Sign in" }));
+    await user.click(
+      screen.getByRole("button", { name: "Sign in with Claude" }),
+    );
+    expect(await screen.findByText("Ready to run.")).toBeVisible();
+    expect(screen.getByText("Connect your Claude account")).toBeVisible();
+    expect(screen.getByText("Done")).toBeVisible();
+  });
+
+  it("waits for preflight and exposes missing, misconfigured, and incompatible setup together", async () => {
+    let finishCheck = () => {};
+    const pendingCheck = new Promise<void>((resolve) => {
+      finishCheck = resolve;
+    });
+    server.use(
+      http.get(`${API_ORIGIN}/api/agents/${AGENT_ID}`, () =>
+        HttpResponse.json({ ...agent, runtime: { command: ["custom-agent"] } }),
+      ),
+      http.get(
+        `${API_ORIGIN}/api/agents/${AGENT_ID}/runtime/preflight`,
+        async () => {
+          await pendingCheck;
+          return HttpResponse.json({
+            ready: false,
+            configured: [],
+            missing: [{ key: "TOKEN", label: "Service token" }],
+            misconfigured: [{ key: "SECRET", label: "Shared connection" }],
+            incompatible:
+              "The selected model does not support this inference API.",
+          });
+        },
+      ),
+    );
+    renderPage();
+    expect(await screen.findByText("Checking agent setup…")).toBeVisible();
+    expect(screen.queryByText("Ready to run.")).toBeNull();
+    finishCheck();
+    expect(
+      await screen.findByText(
+        "Provide a value for Service token, or connect Service token",
+      ),
+    ).toBeVisible();
+    expect(
+      screen.getByText(
+        "Provide a value for Shared connection, or connect Shared connection",
+      ),
+    ).toBeVisible();
+    expect(
+      screen.getByText(
+        "The selected model does not support this inference API.",
+      ),
+    ).toBeVisible();
+    expect(screen.getByRole("link", { name: "Review model" })).toHaveAttribute(
+      "href",
+      `/agents/${AGENT_ID}?section=general`,
+    );
+    expect(screen.queryByText("Ready to run.")).toBeNull();
+  });
+
+  it("does not claim readiness when preflight fails and recovers on retry", async () => {
+    let failed = true;
+    server.use(
+      http.get(`${API_ORIGIN}/api/agents/${AGENT_ID}`, () =>
+        HttpResponse.json({ ...agent, runtime: { command: ["custom-agent"] } }),
+      ),
+      http.get(`${API_ORIGIN}/api/agents/${AGENT_ID}/runtime/preflight`, () =>
+        failed
+          ? apiError()
+          : HttpResponse.json({
+              ready: true,
+              configured: [],
+              missing: [],
+              misconfigured: [],
+              incompatible: null,
+            }),
+      ),
+    );
+    renderPage();
+    expect(await screen.findByText("Cannot check agent setup")).toBeVisible();
+    expect(screen.queryByText("Ready to run.")).toBeNull();
+    failed = false;
+    await userEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(await screen.findByText("Ready to run.")).toBeVisible();
+  });
+
+  it("requires the selected Codex key to be a ChatGPT subscription even when preflight is ready", async () => {
+    server.use(
+      http.get(`${API_ORIGIN}/api/agents/${AGENT_ID}`, () =>
+        HttpResponse.json({
+          ...agent,
+          llmApiKeyId: "api-key",
+          runtime: { command: ["archestra-codex"] },
+        }),
+      ),
+      http.get(`${API_ORIGIN}/api/llm-provider-api-keys/available`, () =>
+        HttpResponse.json([
+          { id: "api-key", subscriptionKind: null },
+          {
+            id: "subscription",
+            subscriptionKind: "chatgpt",
+            scope: "personal",
+          },
+        ]),
+      ),
+    );
+    renderPage();
+    expect(
+      await screen.findByText("Select a ChatGPT subscription for this agent"),
+    ).toBeVisible();
+    expect(screen.queryByText("Ready to run.")).toBeNull();
+  });
+
+  it("requires the caller's own subscription when an agent pins someone else's ChatGPT key", async () => {
+    server.use(
+      http.get(`${API_ORIGIN}/api/agents/${AGENT_ID}`, () =>
+        HttpResponse.json({
+          ...agent,
+          llmApiKeyId: "pinned-key",
+          runtime: { command: ["archestra-codex"] },
+        }),
+      ),
+      http.get(`${API_ORIGIN}/api/llm-provider-api-keys/available`, () =>
+        HttpResponse.json([
+          {
+            id: "pinned-key",
+            subscriptionKind: "chatgpt",
+            scope: "personal",
+            isAgentKey: true,
+          },
+        ]),
+      ),
+    );
+    renderPage();
+    expect(
+      await screen.findByText("Connect your own ChatGPT subscription"),
+    ).toBeVisible();
+    expect(screen.getByRole("link", { name: "Sign in" })).toHaveAttribute(
+      "href",
+      "/llm/model-providers?connect=chatgpt",
+    );
+    expect(screen.getByRole("link", { name: "Sign in" })).toHaveAttribute(
+      "target",
+      "_blank",
+    );
+    expect(screen.queryByText("Ready to run.")).toBeNull();
+  });
+
+  it("accepts a pinned subscription when the caller also has their own personal subscription", async () => {
+    server.use(
+      http.get(`${API_ORIGIN}/api/agents/${AGENT_ID}`, () =>
+        HttpResponse.json({
+          ...agent,
+          llmApiKeyId: "pinned-key",
+          runtime: { command: ["archestra-codex"] },
+        }),
+      ),
+      http.get(`${API_ORIGIN}/api/llm-provider-api-keys/available`, () =>
+        HttpResponse.json([
+          {
+            id: "pinned-key",
+            subscriptionKind: "chatgpt",
+            scope: "personal",
+            isAgentKey: true,
+          },
+          {
+            id: "my-key",
+            subscriptionKind: "chatgpt",
+            scope: "personal",
+            isAgentKey: false,
+          },
+        ]),
+      ),
+    );
+    renderPage();
+    expect(await screen.findByText("Ready to run.")).toBeVisible();
+    expect(
+      screen.queryByText("Connect your own ChatGPT subscription"),
+    ).toBeNull();
+  });
+
+  it.each([
+    "denied",
+    "failed",
+  ])("retains runtime setup when subscription verification is %s", async (failure) => {
+    const readKeys = vi.fn();
+    server.use(
+      http.get(PERMISSIONS_URL, () =>
+        HttpResponse.json({
+          chat: ["read", "create"],
+          agentTrigger: ["read"],
+          llmProviderApiKey: failure === "denied" ? [] : ["read"],
+        }),
+      ),
+      http.get(`${API_ORIGIN}/api/agents/${AGENT_ID}`, () =>
+        HttpResponse.json({
+          ...agent,
+          llmApiKeyId: "pinned-key",
+          runtime: { command: ["archestra-codex"] },
+        }),
+      ),
+      http.get(`${API_ORIGIN}/api/agents/${AGENT_ID}/runtime/preflight`, () =>
+        HttpResponse.json({
+          ready: false,
+          configured: [],
+          missing: [{ key: "TOKEN", label: "Service token" }],
+          misconfigured: [],
+          incompatible: null,
+        }),
+      ),
+      http.get(`${API_ORIGIN}/api/llm-provider-api-keys/available`, () => {
+        readKeys();
+        return apiError();
+      }),
+    );
+    renderPage();
+    expect(
+      await screen.findByText(/Subscription verification is unavailable/),
+    ).toBeVisible();
+    expect(
+      screen.getByText(
+        "Provide a value for Service token, or connect Service token",
+      ),
+    ).toBeVisible();
+    expect(screen.queryByText("Ready to run.")).toBeNull();
+    if (failure === "denied") expect(readKeys).not.toHaveBeenCalled();
+    else expect(readKeys).toHaveBeenCalledOnce();
+  });
+
   it("summarizes the saved email and only channels assigned to this agent", async () => {
     server.use(
       http.get(BINDINGS_URL, () =>
@@ -412,10 +698,7 @@ describe("AgentCreatedPage", () => {
     renderPage();
     expect(
       await screen.findByRole("link", {
-        name:
-          authentication === "subscription"
-            ? "Claude account settings"
-            : "View agent",
+        name: "View agent",
       }),
     ).toHaveAttribute("href", `/agents/${AGENT_ID}`);
     expect(await screen.findByRole("link", { name: "Chat" })).toHaveAttribute(

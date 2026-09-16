@@ -22,6 +22,7 @@ import { AgentBadge } from "@/components/agent-badge";
 import { AgentForm, type AgentFormSection } from "@/components/agent-form";
 import { AgentIcon } from "@/components/agent-icon";
 import { AgentRuntimeCredentialsDeepLink } from "@/components/agent-runtime-credentials-dialog";
+import { AgentSavedSetupBanner } from "@/components/agent-saved-setup-banner";
 import { AgentVersionHistoryDialog } from "@/components/agent-version-history-dialog";
 import { RuntimeCapableIndicator } from "@/components/chat/runtime-capable-indicator";
 import { CloneAgentDialog } from "@/components/clone-agent-dialog";
@@ -596,6 +597,9 @@ function AgentDetails({
         </div>
       }
     >
+      {hasAgentRuntime && !isGone && (
+        <AgentSavedSetupBanner agentId={agent.id} canEditAgent={canEdit} />
+      )}
       {transferring && (
         <TransferAgentOwnershipDialog
           agent={agent}

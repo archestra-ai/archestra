@@ -10,7 +10,7 @@ lastUpdated: "2026-09-16"
 
 Agent Runtime gives an Agent an isolated workspace for coding, running commands, and long-running tasks. You can follow its terminal output, send instructions, and continue work in the same workspace.
 
-A dedicated runtime belongs to an existing Agent. It uses that Agent's instructions, tools, Environment, and access rules. Choose Claude Code, Codex, OpenCode, Hermes, OpenClaw, or your own image.
+A dedicated runtime belongs to an existing Agent. It uses that Agent's instructions, tools, Environment, and access rules. Choose the built-in agent, Claude Code, Codex, OpenCode, Hermes, OpenClaw, or your own image.
 
 Chat and Projects open an interactive terminal for Agents with a dedicated runtime. Delegation, A2A, email, and schedules start unattended tasks that return a result when finished. Ordinary messaging-channel conversations stay in the foreground unless the channel Agent delegates work.
 
@@ -24,7 +24,15 @@ Your administrator must enable Agent Runtime on a Kubernetes cluster with persis
 
 ## Configure Agent Runtime
 
-Choose a maintained template from **Create Agent**, then configure its instructions, model, tools, and connections. For an existing Agent, enable **Dedicated runtime** under **Edit → Advanced**.
+Choose a maintained template from **Create Agent**. The **Runtime** picker sits below Visibility in Configuration. Switching runtimes keeps your name, description, and instructions. It replaces the image, command, inference settings, environment variables, and credential declarations.
+
+Maintained runtimes arrive preconfigured. Model or Authentication settings open by default; other settings are collapsed for review. **Archestra** uses the platform’s native agent loop with the selected model and tools, without a dedicated runtime. **Custom image** opens the model, image, and inference settings.
+
+An attention icon marks missing or incompatible settings that need to be fixed before creation, even when the section is collapsed. Hover over the icon to see what needs to change. Claude personal accounts connect after saving. Codex requires your ChatGPT subscription before creation. Claude provider billing requires an explicit compatible connection.
+
+The created page and Agent header show remaining setup requirements. Connection changes refresh the banner automatically. Each person connects their own subscription before running a shared Agent.
+
+For an existing Agent, configure **Dedicated Agent runtime** in its **Agent Runtime** tab.
 
 Select the Agent in Chat or a Project and send your first task. Its live terminal opens so you can follow progress and provide input. See [Work With Runs In Chat](#work-with-runs-in-chat) for continuing work.
 
@@ -44,7 +52,7 @@ See [Network Egress Policies](/docs/platform-environments#network-egress-policie
 
 ### Built-In Archestra Agent
 
-Choose **Start from scratch**, then enable **Dedicated runtime** under **Advanced** and leave the image and command at their defaults to use Archestra's own agent loop. It includes a shell tool, the Agent's assigned MCP tools, and its system prompt. It supports OpenAI Responses, OpenAI Chat Completions, and Anthropic Messages. Follow-up instructions are consumed between model turns.
+The built-in agent loop is available through **Custom image** using the default runtime image. It includes a shell tool, the Agent's assigned MCP tools, and its system prompt. It supports OpenAI Responses, OpenAI Chat Completions, and Anthropic Messages. Follow-up instructions are consumed between model turns.
 
 Use it when you need a general coding loop without a specific third-party client's behavior. The [runtime-agent source](https://github.com/archestra-ai/archestra/tree/main/platform/runtime-agent) provides a working integration example.
 
@@ -67,7 +75,7 @@ With read-only Vault, generate a token using `claude setup-token`, store it in V
 
 **Codex** requires the initiating user's connected ChatGPT subscription. Connect it under **Model Providers**; an ordinary OpenAI API key does not replace it. Each teammate uses their own connection.
 
-The **Inference API** must match the client in your image. Maintained templates select it for you. Custom clients can use OpenAI Responses, OpenAI Chat Completions, or Anthropic Messages.
+The **Inference API** must match the client in your image. Maintained templates select it for you. Claude Code uses Anthropic Messages. Codex offers the two OpenAI protocols. Other runtimes can use OpenAI Responses, OpenAI Chat Completions, or Anthropic Messages.
 
 ### Skills
 

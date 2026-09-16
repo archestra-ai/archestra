@@ -1,5 +1,6 @@
 "use client";
 
+import { getAgentRuntimeAllowedProtocols } from "@archestra/shared";
 import Link from "next/link";
 import { useId } from "react";
 import { ContainerDeploymentFields } from "@/components/container-deployment-fields";
@@ -82,18 +83,11 @@ export function AgentRuntimeFields({
   onChange: (value: AgentRuntimeConfig | null) => void;
 }) {
   const enabledId = useId();
-  const appName = useAppName();
   const runtimeEnabled = useFeature("agentRuntime");
-  const runtimeCredentials = useRuntimeCredentials(runtimeEnabled === true);
-  const runtimeDefaults = useFeature("agentRuntimeBackend");
   const configuredDefaultImage = useFeature("agentRuntimeBaseImage");
   const defaultImage =
     typeof configuredDefaultImage === "string" ? configuredDefaultImage : "";
   const config = value ?? defaultAgentRuntime(defaultImage);
-  const update = (patch: Partial<AgentRuntimeConfig>) =>
-    onChange({ ...config, ...patch });
-  const command = config.command?.[0] ?? "";
-  const argumentsValue = (config.command ?? []).slice(1).join("\n");
 
   return (
     <div className="space-y-4" data-testid="agent-runtime">
@@ -132,92 +126,10 @@ export function AgentRuntimeFields({
                 network egress policy and image pull configuration.
               </p>
             </div>
-            <ContainerDeploymentFields
-              ids={{
-                image: "agent-runtime-image",
-                command: "agent-runtime-command",
-                arguments: "agent-runtime-arguments",
-              }}
-              value={{
-                image: config.image,
-                command,
-                arguments: argumentsValue,
-              }}
-              onChange={(next) =>
-                update({
-                  image: next.image,
-                  command: toCommand(next.command, next.arguments),
-                })
-              }
-              image={{ placeholder: defaultImage }}
-              command={{
-                placeholder: "Use the image's default command",
-                description: "Leave blank to use the image's default command.",
-              }}
-              arguments={{
-                placeholder: "--permission-mode\nbypassPermissions",
-              }}
-            />
+            <AgentRuntimeImageFields value={config} onChange={onChange} />
           </div>
 
-          <DeploymentEnvironmentVariablesEditor
-            value={toEnvironmentDrafts(config)}
-            onChange={(drafts) => update(fromEnvironmentDrafts(config, drafts))}
-            description={
-              <>
-                Add plain configuration or declare static secrets for this
-                Agent. Secret values are provided after saving. Manage reusable
-                organization or per-user credentials on the{" "}
-                <Link
-                  href="/settings/credentials"
-                  className="font-medium text-foreground underline underline-offset-4"
-                >
-                  Credentials
-                </Link>{" "}
-                page, then select them as a secret source.
-              </>
-            }
-            targetLabel="dedicated runtime"
-            installationLabel="Per user"
-            staticLabel="Shared"
-            installationDescription="Each user provides their own value."
-            staticDescription="The same value is used for every run."
-            installationCalloutTitle="Each user provides their own value"
-            requiredDescription="Required credentials are checked before every run. Chat prompts the user to connect a missing value; other callers receive an error and can retry after it is connected."
-            promptedValueLabel="per-user"
-            deferStaticSecretValue
-            installationOnlyForSecrets
-            allowRequiredStaticSecret
-            normalizeKey={uppercase}
-            credentialBindingOptions={(runtimeCredentials.data ?? []).map(
-              (definition) => ({
-                id: definition.key,
-                label: definition.name,
-                icon:
-                  definition.icon ??
-                  (definition.kind === "github_app_user" ||
-                  definition.kind === "github_app"
-                    ? "logo:github"
-                    : null),
-                sourceLabel:
-                  definition.kind === "github_app_user"
-                    ? "GitHub connection"
-                    : definition.kind === "github_app"
-                      ? "GitHub App connection"
-                      : undefined,
-                defaultKey: defaultCredentialEnvironmentKey(definition.key),
-                description: definition.description,
-                allowedScopes: [
-                  ...(definition.allowPersonal
-                    ? (["installation"] as const)
-                    : []),
-                  ...(definition.allowOrganization
-                    ? (["static"] as const)
-                    : []),
-                ],
-              }),
-            )}
-          />
+          <AgentRuntimeEnvironmentFields value={config} onChange={onChange} />
 
           <div className="space-y-4">
             <div className="space-y-1">
@@ -228,63 +140,8 @@ export function AgentRuntimeFields({
               </p>
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="agent-runtime-inference-protocol">
-                  Inference API
-                </Label>
-                <FieldDescription>
-                  Choose the API protocol the container&apos;s Agent client
-                  expects. Every option stays behind the {appName} LLM proxy.
-                </FieldDescription>
-                <Select
-                  value={config.inferenceProtocol}
-                  onValueChange={(
-                    inferenceProtocol:
-                      | "openai_responses"
-                      | "openai_chat"
-                      | "anthropic",
-                  ) => update({ inferenceProtocol })}
-                >
-                  <SelectTrigger
-                    id="agent-runtime-inference-protocol"
-                    className="w-full"
-                  >
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="openai_responses">
-                      OpenAI Responses
-                    </SelectItem>
-                    <SelectItem value="openai_chat">
-                      OpenAI Chat Completions
-                    </SelectItem>
-                    <SelectItem value="anthropic">
-                      Anthropic Messages
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="agent-runtime-steering">Steering</Label>
-                <FieldDescription>
-                  Turn boundary delivers follow-up instructions between Agent
-                  turns. Terminal input types directly into an interactive CLI.
-                </FieldDescription>
-                <Select
-                  value={config.steerMode}
-                  onValueChange={(steerMode: "pipe" | "tmux_keys") =>
-                    update({ steerMode })
-                  }
-                >
-                  <SelectTrigger id="agent-runtime-steering" className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="pipe">Turn boundary</SelectItem>
-                    <SelectItem value="tmux_keys">Terminal input</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              <AgentRuntimeProtocolField value={config} onChange={onChange} />
+              <AgentRuntimeSteeringField value={config} onChange={onChange} />
             </div>
             <Accordion type="single" collapsible>
               <AccordionItem
@@ -293,111 +150,336 @@ export function AgentRuntimeFields({
               >
                 <AccordionTrigger>Advanced</AccordionTrigger>
                 <AccordionContent className="space-y-4">
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <NumberField
-                      id="runtime-idle-timeout"
-                      label="Idle timeout (minutes)"
-                      value={config.idleTimeoutMinutes}
-                      defaultValue={runtimeDefaults?.defaultIdleTimeoutMinutes}
-                      min={1}
-                      max={1440}
-                      onChange={(idleTimeoutMinutes) =>
-                        update({ idleTimeoutMinutes })
-                      }
-                      description="Stops the run after it finishes a task and receives no follow-up instructions for this long."
-                    />
-                  </div>
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <NumberField
-                      id="agent-runtime-max-duration"
-                      label="Maximum duration (hours)"
-                      value={config.ttlHours}
-                      defaultValue={runtimeDefaults?.defaultTtlHours}
-                      min={1}
-                      max={720}
-                      onChange={(ttlHours) => update({ ttlHours })}
-                      description="Hard lifetime cap for a run, including active and idle time."
-                    />
-                    <NumberField
-                      id="agent-runtime-cost-budget"
-                      label="Metered LLM budget (USD)"
-                      value={config.maxCostUsd}
-                      defaultValue="No limit"
-                      min={1}
-                      max={100000}
-                      onChange={(maxCostUsd) => update({ maxCostUsd })}
-                      description="Blocks further metered model calls after this run reaches the spend ceiling."
-                    />
-                  </div>
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <ResourceField
-                      id="agent-runtime-cpu-request"
-                      label="CPU request"
-                      placeholder={installationDefaultPlaceholder(
-                        runtimeDefaults?.resources.cpuRequest,
-                      )}
-                      value={config.resources?.cpuRequest}
-                      onChange={(cpuRequest) =>
-                        updateResource(config, update, { cpuRequest })
-                      }
-                    />
-                    <ResourceField
-                      id="agent-runtime-memory-request"
-                      label="Memory request"
-                      placeholder={installationDefaultPlaceholder(
-                        runtimeDefaults?.resources.memoryRequest,
-                      )}
-                      value={config.resources?.memoryRequest}
-                      onChange={(memoryRequest) =>
-                        updateResource(config, update, { memoryRequest })
-                      }
-                    />
-                    <ResourceField
-                      id="agent-runtime-cpu-limit"
-                      label="CPU limit"
-                      placeholder={installationDefaultPlaceholder("No limit")}
-                      value={config.resources?.cpuLimit}
-                      onChange={(cpuLimit) =>
-                        updateResource(config, update, { cpuLimit })
-                      }
-                    />
-                    <ResourceField
-                      id="agent-runtime-memory-limit"
-                      label="Memory limit"
-                      placeholder={installationDefaultPlaceholder(
-                        runtimeDefaults?.resources.memoryLimit,
-                      )}
-                      value={config.resources?.memoryLimit}
-                      onChange={(memoryLimit) =>
-                        updateResource(config, update, { memoryLimit })
-                      }
-                    />
-                  </div>
-
-                  <div className="flex items-start justify-between gap-6 border-t pt-4">
-                    <div className="min-w-0 space-y-1">
-                      <Label htmlFor="agent-runtime-privileged">
-                        Privileged mode
-                      </Label>
-                      <FieldDescription>
-                        Gives the container elevated access to its host. Enable
-                        it only for workloads that require host-level
-                        capabilities. Only Agent administrators can turn it on.
-                      </FieldDescription>
-                    </div>
-                    <Switch
-                      id="agent-runtime-privileged"
-                      className="mt-0.5 shrink-0"
-                      checked={config.privileged}
-                      onCheckedChange={(privileged) => update({ privileged })}
-                    />
-                  </div>
+                  <AgentRuntimeRunControls value={config} onChange={onChange} />
                 </AccordionContent>
               </AccordionItem>
             </Accordion>
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+type RuntimeSectionProps = {
+  value: AgentRuntimeConfig;
+  onChange: (value: AgentRuntimeConfig) => void;
+};
+
+export const AGENT_RUNTIME_PROTOCOL_LABELS = {
+  openai_responses: "OpenAI Responses",
+  openai_chat: "OpenAI Chat Completions",
+  anthropic: "Anthropic Messages",
+};
+
+export function AgentRuntimeImageFields({
+  value,
+  onChange,
+}: RuntimeSectionProps) {
+  const config = value;
+  const update = (patch: Partial<AgentRuntimeConfig>) =>
+    onChange({ ...config, ...patch });
+  const configuredDefaultImage = useFeature("agentRuntimeBaseImage");
+  const defaultImage =
+    typeof configuredDefaultImage === "string" ? configuredDefaultImage : "";
+  const command = config.command?.[0] ?? "";
+  const argumentsValue = (config.command ?? []).slice(1).join("\n");
+  return (
+    <ContainerDeploymentFields
+      ids={{
+        image: "agent-runtime-image",
+        command: "agent-runtime-command",
+        arguments: "agent-runtime-arguments",
+      }}
+      value={{
+        image: config.image,
+        command,
+        arguments: argumentsValue,
+      }}
+      onChange={(next) =>
+        update({
+          image: next.image,
+          command: toCommand(next.command, next.arguments),
+        })
+      }
+      image={{ placeholder: defaultImage }}
+      command={{
+        placeholder: "Use the image's default command",
+        description: "Leave blank to use the image's default command.",
+      }}
+      arguments={{
+        placeholder: "--permission-mode\nbypassPermissions",
+      }}
+    />
+  );
+}
+
+export function AgentRuntimeEnvironmentFields({
+  value,
+  onChange,
+  hideLabel = false,
+}: RuntimeSectionProps & { hideLabel?: boolean }) {
+  const config = value;
+  const update = (patch: Partial<AgentRuntimeConfig>) =>
+    onChange({ ...config, ...patch });
+  const runtimeEnabled = useFeature("agentRuntime");
+  const runtimeCredentials = useRuntimeCredentials(runtimeEnabled === true);
+  return (
+    <DeploymentEnvironmentVariablesEditor
+      hideHeading={hideLabel}
+      value={toEnvironmentDrafts(config)}
+      onChange={(drafts) => update(fromEnvironmentDrafts(config, drafts))}
+      description={
+        <>
+          Add plain configuration or declare static secrets for this Agent.
+          Secret values are provided after saving. Manage reusable organization
+          or per-user credentials on the{" "}
+          <Link
+            href="/settings/credentials"
+            className="font-medium text-foreground underline underline-offset-4"
+          >
+            Credentials
+          </Link>{" "}
+          page, then select them as a secret source.
+        </>
+      }
+      targetLabel="dedicated runtime"
+      installationLabel="Per user"
+      staticLabel="Shared"
+      installationDescription="Each user provides their own value."
+      staticDescription="The same value is used for every run."
+      installationCalloutTitle="Each user provides their own value"
+      requiredDescription="Required credentials are checked before every run. Chat prompts the user to connect a missing value; other callers receive an error and can retry after it is connected."
+      promptedValueLabel="per-user"
+      deferStaticSecretValue
+      installationOnlyForSecrets
+      allowRequiredStaticSecret
+      normalizeKey={uppercase}
+      credentialBindingOptions={(runtimeCredentials.data ?? []).map(
+        (definition) => ({
+          id: definition.key,
+          label: definition.name,
+          icon:
+            definition.icon ??
+            (definition.kind === "github_app_user" ||
+            definition.kind === "github_app"
+              ? "logo:github"
+              : null),
+          sourceLabel:
+            definition.kind === "github_app_user"
+              ? "GitHub connection"
+              : definition.kind === "github_app"
+                ? "GitHub App connection"
+                : undefined,
+          defaultKey: defaultCredentialEnvironmentKey(definition.key),
+          description: definition.description,
+          allowedScopes: [
+            ...(definition.allowPersonal ? (["installation"] as const) : []),
+            ...(definition.allowOrganization ? (["static"] as const) : []),
+          ],
+        }),
+      )}
+    />
+  );
+}
+
+export function AgentRuntimeProtocolField({
+  value,
+  onChange,
+  constrainToHarness = false,
+  hideLabel = false,
+}: RuntimeSectionProps & {
+  constrainToHarness?: boolean;
+  hideLabel?: boolean;
+}) {
+  const config = value;
+  const update = (patch: Partial<AgentRuntimeConfig>) =>
+    onChange({ ...config, ...patch });
+  const appName = useAppName();
+  const allowedProtocols = getAgentRuntimeAllowedProtocols(
+    constrainToHarness ? value.command : null,
+  );
+  return (
+    <div className="space-y-2">
+      <Label
+        htmlFor="agent-runtime-inference-protocol"
+        className={hideLabel ? "sr-only" : undefined}
+      >
+        Inference API
+      </Label>
+      <FieldDescription>
+        Choose the API protocol the container&apos;s Agent client expects. Every
+        option stays behind the {appName} LLM proxy.
+      </FieldDescription>
+      {constrainToHarness && allowedProtocols.length === 1 && (
+        <FieldDescription>
+          Claude Code only speaks the Anthropic Messages API, so this cannot be
+          changed.
+        </FieldDescription>
+      )}
+      <Select
+        disabled={allowedProtocols.length === 1}
+        value={config.inferenceProtocol}
+        onValueChange={(
+          inferenceProtocol: "openai_responses" | "openai_chat" | "anthropic",
+        ) => update({ inferenceProtocol })}
+      >
+        <SelectTrigger id="agent-runtime-inference-protocol" className="w-full">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {allowedProtocols.map((protocol) => (
+            <SelectItem key={protocol} value={protocol}>
+              {AGENT_RUNTIME_PROTOCOL_LABELS[protocol]}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
+export function AgentRuntimeSteeringField({
+  value,
+  onChange,
+  hideLabel = false,
+}: RuntimeSectionProps & { hideLabel?: boolean }) {
+  const config = value;
+  const update = (patch: Partial<AgentRuntimeConfig>) =>
+    onChange({ ...config, ...patch });
+  return (
+    <div className="space-y-2">
+      <Label
+        htmlFor="agent-runtime-steering"
+        className={hideLabel ? "sr-only" : undefined}
+      >
+        Steering
+      </Label>
+      <FieldDescription>
+        Turn boundary delivers follow-up instructions between Agent turns.
+        Terminal input types directly into an interactive CLI.
+      </FieldDescription>
+      <Select
+        value={config.steerMode}
+        onValueChange={(steerMode: "pipe" | "tmux_keys") =>
+          update({ steerMode })
+        }
+      >
+        <SelectTrigger id="agent-runtime-steering" className="w-full">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="pipe">Turn boundary</SelectItem>
+          <SelectItem value="tmux_keys">Terminal input</SelectItem>
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
+export function AgentRuntimeRunControls({
+  value,
+  onChange,
+}: RuntimeSectionProps) {
+  const config = value;
+  const update = (patch: Partial<AgentRuntimeConfig>) =>
+    onChange({ ...config, ...patch });
+  const runtimeDefaults = useFeature("agentRuntimeBackend");
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-4 sm:grid-cols-2">
+        <NumberField
+          id="runtime-idle-timeout"
+          label="Idle timeout (minutes)"
+          value={config.idleTimeoutMinutes}
+          defaultValue={runtimeDefaults?.defaultIdleTimeoutMinutes}
+          min={1}
+          max={1440}
+          onChange={(idleTimeoutMinutes) => update({ idleTimeoutMinutes })}
+          description="Stops the run after it finishes a task and receives no follow-up instructions for this long."
+        />
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <NumberField
+          id="agent-runtime-max-duration"
+          label="Maximum duration (hours)"
+          value={config.ttlHours}
+          defaultValue={runtimeDefaults?.defaultTtlHours}
+          min={1}
+          max={720}
+          onChange={(ttlHours) => update({ ttlHours })}
+          description="Hard lifetime cap for a run, including active and idle time."
+        />
+        <NumberField
+          id="agent-runtime-cost-budget"
+          label="Metered LLM budget (USD)"
+          value={config.maxCostUsd}
+          defaultValue="No limit"
+          min={1}
+          max={100000}
+          onChange={(maxCostUsd) => update({ maxCostUsd })}
+          description="Blocks further metered model calls after this run reaches the spend ceiling."
+        />
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <ResourceField
+          id="agent-runtime-cpu-request"
+          label="CPU request"
+          placeholder={installationDefaultPlaceholder(
+            runtimeDefaults?.resources.cpuRequest,
+          )}
+          value={config.resources?.cpuRequest}
+          onChange={(cpuRequest) =>
+            updateResource(config, update, { cpuRequest })
+          }
+        />
+        <ResourceField
+          id="agent-runtime-memory-request"
+          label="Memory request"
+          placeholder={installationDefaultPlaceholder(
+            runtimeDefaults?.resources.memoryRequest,
+          )}
+          value={config.resources?.memoryRequest}
+          onChange={(memoryRequest) =>
+            updateResource(config, update, { memoryRequest })
+          }
+        />
+        <ResourceField
+          id="agent-runtime-cpu-limit"
+          label="CPU limit"
+          placeholder={installationDefaultPlaceholder("No limit")}
+          value={config.resources?.cpuLimit}
+          onChange={(cpuLimit) => updateResource(config, update, { cpuLimit })}
+        />
+        <ResourceField
+          id="agent-runtime-memory-limit"
+          label="Memory limit"
+          placeholder={installationDefaultPlaceholder(
+            runtimeDefaults?.resources.memoryLimit,
+          )}
+          value={config.resources?.memoryLimit}
+          onChange={(memoryLimit) =>
+            updateResource(config, update, { memoryLimit })
+          }
+        />
+      </div>
+
+      <div className="flex items-start justify-between gap-6 border-t pt-4">
+        <div className="min-w-0 space-y-1">
+          <Label htmlFor="agent-runtime-privileged">Privileged mode</Label>
+          <FieldDescription>
+            Gives the container elevated access to its host. Enable it only for
+            workloads that require host-level capabilities. Only Agent
+            administrators can turn it on.
+          </FieldDescription>
+        </div>
+        <Switch
+          id="agent-runtime-privileged"
+          className="mt-0.5 shrink-0"
+          checked={config.privileged}
+          onCheckedChange={(privileged) => update({ privileged })}
+        />
+      </div>
     </div>
   );
 }

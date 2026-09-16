@@ -481,6 +481,20 @@ export function isModelRouterSupportedProvider(
   );
 }
 
+/** Protocols supported by the maintained runtime entrypoint, or all for custom images. */
+export function getAgentRuntimeAllowedProtocols(
+  runtimeCommand?: readonly string[] | null,
+): readonly ("openai_responses" | "openai_chat" | "anthropic")[] {
+  switch (runtimeCommand?.[0]) {
+    case "archestra-claude-code":
+      return ["anthropic"];
+    case "archestra-codex":
+      return ["openai_responses", "openai_chat"];
+    default:
+      return ["openai_responses", "openai_chat", "anthropic"];
+  }
+}
+
 /**
  * Determines whether a provider can be served by an Agent Runtime image's
  * inference protocol. Model-specific restrictions intentionally live below so
@@ -494,7 +508,11 @@ export function getAgentRuntimeProviderCompatibility(params: {
 }): { compatible: true } | { compatible: false; message: string } {
   const runtimeCommand = params.runtimeCommand?.[0];
   if (runtimeCommand === "archestra-claude-code") {
-    if (params.inferenceProtocol !== "anthropic") {
+    if (
+      !getAgentRuntimeAllowedProtocols(params.runtimeCommand).includes(
+        params.inferenceProtocol,
+      )
+    ) {
       return {
         compatible: false,
         message:

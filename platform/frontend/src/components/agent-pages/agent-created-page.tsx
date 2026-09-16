@@ -5,6 +5,7 @@ import { CircleCheck, MessageSquare } from "lucide-react";
 import Link from "next/link";
 import { useEffect } from "react";
 import { channelDisplayName } from "@/app/settings/messaging-channels/_components/channel-details-dialog";
+import { AgentSavedSetupBanner } from "@/components/agent-saved-setup-banner";
 import { ChannelIcon } from "@/components/channel-icon";
 import { CopyButton } from "@/components/copy-button";
 import { QueryLoadError } from "@/components/query-load-error";
@@ -19,6 +20,7 @@ import { useConfig } from "@/lib/config/config.query";
 import { useMessagingChannelCatalog } from "@/lib/integration-overrides";
 import { agentDetailHref } from "./agent-page-config";
 import { AgentPageShell } from "./agent-page-shell";
+import { useAgentAccess } from "./use-agent-access";
 
 export function AgentCreatedPage({ id }: { id: string }) {
   const { data: agent, isPending, isError, refetch } = useProfile(id);
@@ -33,9 +35,7 @@ export function AgentCreatedPage({ id }: { id: string }) {
     agentTrigger: ["read"],
   });
   const catalog = useMessagingChannelCatalog();
-  const usesClaudeSubscription =
-    agent?.runtime?.command?.[0] === "archestra-claude-code" &&
-    agent.runtime.claudeCode?.authentication === "subscription";
+  const { canEdit } = useAgentAccess(agent, "agent");
 
   return (
     <AgentPageShell
@@ -60,6 +60,11 @@ export function AgentCreatedPage({ id }: { id: string }) {
         <p className="text-muted-foreground">Agent not found.</p>
       ) : (
         <div className="space-y-6">
+          <AgentSavedSetupBanner
+            agentId={id}
+            canEditAgent={canEdit}
+            showReady
+          />
           <div className="flex flex-col items-start justify-between gap-4 border-b pb-6 sm:flex-row sm:items-center">
             <div className="min-w-0 flex-1">
               <div className="min-w-0 space-y-1">
@@ -88,9 +93,7 @@ export function AgentCreatedPage({ id }: { id: string }) {
               )}
               <Button asChild variant="outline" size="sm">
                 <Link href={agentDetailHref("agent", agent.id)}>
-                  {usesClaudeSubscription
-                    ? "Claude account settings"
-                    : "View agent"}
+                  View agent
                 </Link>
               </Button>
             </div>

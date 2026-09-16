@@ -87,7 +87,11 @@ vi.mock("@/components/chat/message-actions", () => ({
 }));
 
 vi.mock("@/components/chat/policy-denied-tool", () => ({
-  PolicyDeniedTool: () => null,
+  PolicyDeniedTool: ({ policyDenied }: { policyDenied?: { toolName: string } }) => (
+    <div data-testid="policy-denied-card">
+      Denied: {policyDenied?.toolName}
+    </div>
+  ),
 }));
 
 vi.mock("@/components/divider", () => ({
@@ -420,5 +424,49 @@ describe("MessageThread", () => {
     );
 
     expect(screen.getAllByText("Sensitive context below")).toHaveLength(1);
+  });
+  it("does not render policy denial card for system-role prompt prose (#7593)", () => {
+    const systemPromptProse =
+      'Determine WHEN the tool may be invoked based on whether the conversation context contains sensitive data. - "allow_when_context_is_sensitive": The tool is safe to run. - "deny": The tool must be BLOCKED: Examples: - "require_approval": Ask user.';
+
+    const messages: PartialUIMessage[] = [
+      {
+        id: "system-1",
+        role: "system",
+        parts: [
+          {
+            type: "text",
+            text: systemPromptProse,
+          },
+        ],
+      },
+    ];
+
+    render(<MessageThread messages={messages} />);
+
+    expect(screen.queryByTestId("policy-denied-card")).toBeNull();
+    expect(screen.getByText(systemPromptProse)).toBeInTheDocument();
+  });
+
+  it("still renders policy denial card for assistant-role messages (#7593)", () => {
+    const assistantDenial =
+      "I tried to invoke the send_email tool with the following arguments: {}. However, I was denied by a tool invocation policy: Tool invocation blocked: context contains sensitive data";
+
+    const messages: PartialUIMessage[] = [
+      {
+        id: "assistant-denied",
+        role: "assistant",
+        parts: [
+          {
+            type: "text",
+            text: assistantDenial,
+          },
+        ],
+      },
+    ];
+
+    render(<MessageThread messages={messages} />);
+
+    expect(screen.getByTestId("policy-denied-card")).toBeInTheDocument();
   });
 });

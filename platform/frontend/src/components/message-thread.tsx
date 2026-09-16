@@ -270,7 +270,14 @@ const MessageThread = ({
                             if (!part.text.trim()) {
                               return null;
                             }
-                            const policyDenied = parsePolicyDenied(part.text);
+                            // System-role messages (e.g. policy-configuration
+                            // subagent prompts) can carry a refusal; running
+                            // the detector over their prose produces false
+                            // "Denied" cards from the legacy word heuristics.
+                            const policyDenied =
+                              message.role !== "system"
+                                ? parsePolicyDenied(part.text)
+                                : null;
                             const shouldRenderUnsafeContextDivider =
                               message.role === "assistant" &&
                               shouldRenderToolResultUnsafeBoundary({
@@ -1007,6 +1014,7 @@ function hasUnsafeBoundaryBefore(params: {
       }
 
       if (
+        message.role !== "system" &&
         part.type === "text" &&
         parsePolicyDenied(part.text)?.unsafeContextActiveAtRequestStart
       ) {

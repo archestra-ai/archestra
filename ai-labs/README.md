@@ -463,3 +463,23 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace                    # harness + analyzer unit/integration tests (no live backend)
 cargo deny check
 ```
+
+## Dependency Release Age
+
+Dependabot waits seven days before proposing Cargo version updates. CI also checks
+new registry versions in `Cargo.lock`, including transitive dependencies, against
+the target branch. Crates.io versions must be at least seven days old. Missing
+publication metadata, registry failures, and unsupported registries fail the check.
+Existing target-branch versions are grandfathered; local and git dependencies have
+no registry publication age and are outside this check.
+
+Run the same check before building a dependency update, from `platform/`:
+
+```sh
+python3 ../.github/scripts/check-cargo-release-age.py --base-ref origin/main --lockfile ai-labs/Cargo.lock
+```
+
+Use a freshly fetched target branch as the baseline (`origin/release/1.3` for a
+release backport). Stable Cargo does not enforce this policy during local installs.
+Cargo's native [minimum publish age](https://doc.rust-lang.org/cargo/reference/unstable.html#min-publish-age)
+requires nightly and `-Zmin-publish-age`; this workspace keeps its stable toolchain.

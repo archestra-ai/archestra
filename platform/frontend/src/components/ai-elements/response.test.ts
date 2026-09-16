@@ -167,3 +167,23 @@ describe("Response app-link canonicalization", () => {
     expect(container.querySelector("code")?.textContent).toBe(`a/${APP_ID}`);
   });
 });
+
+describe("Response LaTeX math rendering", () => {
+  it("renders display math ($$ ... $$) via KaTeX", () => {
+    const markdown = `$$
+x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}
+$$`;
+    const { container } = renderResponse(markdown);
+    const katexEl = container.querySelector(".katex");
+    expect(katexEl).not.toBeNull();
+    const displayEl = container.querySelector(".katex-display");
+    expect(displayEl).not.toBeNull();
+  });
+
+  it("renders inline math ($ ... $) via KaTeX", () => {
+    const { container } = renderResponse("The equation $E=mc^2$ is famous.");
+    const katexEl = container.querySelector(".katex");
+    expect(katexEl).not.toBeNull();
+    expect(katexEl?.textContent).toContain("E=mc");
+  });
+});

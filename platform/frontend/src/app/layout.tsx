@@ -10,6 +10,7 @@ import { RumTracker } from "./_parts/rum-tracker.ee";
 import { ThemeProvider } from "./_parts/theme-provider";
 import { VisualViewportHeight } from "./_parts/visual-viewport-height";
 import "./globals.css";
+import "katex/dist/katex.min.css";
 import { DEFAULT_APP_DESCRIPTION } from "@archestra/shared";
 import { DynamicHead } from "@/components/dynamic-head";
 import { OrgThemeLoader } from "@/components/org-theme-loader";

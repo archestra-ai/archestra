@@ -1,3 +1,4 @@
+import { createMathPlugin } from "@streamdown/math";
 "use client";
 
 import { type ComponentProps, memo, useMemo } from "react";
@@ -45,6 +46,9 @@ function canonicalizeAppLinkNode(node: unknown): void {
 
 const remarkCanonicalizeAppLinks = () => (tree: unknown) =>
   canonicalizeAppLinkNode(tree);
+
+const MATH_PLUGIN = createMathPlugin({ singleDollarTextMath: true });
+
 
 // streamdown exports its defaults as a name-keyed record; passing remarkPlugins
 // replaces them, so re-include the defaults and append our repair.
@@ -183,6 +187,7 @@ export const Response = memo(
         )}
         remarkPlugins={REMARK_PLUGINS}
         rehypePlugins={REHYPE_PLUGINS}
+        plugins={{ math: MATH_PLUGIN }}
         linkSafety={mergedLinkSafety}
         {...props}
       />

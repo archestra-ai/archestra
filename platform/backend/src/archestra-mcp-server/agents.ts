@@ -8,6 +8,7 @@ import {
 } from "@archestra/shared";
 import { z } from "zod";
 import { isAgentTypeAdmin } from "@/auth/agent-type-permissions";
+import config from "@/config";
 import { knowledgeSourceAccessControlService } from "@/knowledge-base/source-access-control";
 import logger from "@/logging";
 import {
@@ -194,6 +195,11 @@ const ListAgentsOutputSchema = z.object({
       id: z.string().describe("The agent ID."),
       name: z.string().describe("The agent name."),
       scope: AgentScopeSchema.describe("The agent scope."),
+      executionMode: z
+        .enum(["runtime", "foreground"])
+        .describe(
+          "Runtime agents retain a workspace and support steering; foreground agents do not.",
+        ),
       description: z
         .string()
         .nullable()
@@ -350,6 +356,10 @@ const registry = defineArchestraTools([
             id: agent.id,
             name: agent.name,
             scope: agent.scope,
+            executionMode:
+              config.agentRuntime.enabled && agent.runtime
+                ? "runtime"
+                : "foreground",
             description: agent.description,
             resolvedLlmProviderKeyName:
               agent.resolvedLlmProviderKeyName ?? null,

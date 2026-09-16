@@ -393,7 +393,12 @@ common_args=(
   --accept-hooks
 )
 if [[ "${ARCHESTRA_AGENT_RUNTIME_CONTINUE:-0}" == "1" ]]; then
-  common_args+=(--continue)
+  session_file="${runtime_dir}/hermes-main-session"
+  if [[ ! -s "${session_file}" ]]; then
+    echo "archestra: Cannot resume the saved Hermes session: its session ID is missing. The workspace is preserved; no new session was started." >&2
+    exit 78
+  fi
+  common_args+=(--resume "$(cat "${session_file}")")
 fi
 
 case "${runtime_mode}" in

@@ -290,14 +290,19 @@ chmod 0600 "${config_file}" "${instructions_file}" "${task_file}"
 
 resume_args=()
 if [[ "${ARCHESTRA_AGENT_RUNTIME_CONTINUE:-0}" == "1" ]]; then
-  resume_args=(--continue)
+  session_file="${runtime_dir}/opencode-main-session"
+  if [[ ! -s "${session_file}" ]]; then
+    echo "archestra: Cannot resume the saved OpenCode session: its session ID is missing. The workspace is preserved; no new session was started." >&2
+    exit 78
+  fi
+  resume_args=(--session "$(cat "${session_file}")")
 fi
 terminal_command=(opencode --auto --model "archestra/${model}" --prompt "$(cat "${task_file}")")
 if [[ "${ARCHESTRA_AGENT_RUNTIME_CONTINUE:-0}" == "1" ]]; then
   # The full-screen TUI drops --prompt when restoring an existing session.
   # The native interactive run command both restores it and submits the new
   # instruction, while keeping terminal input available for live steering.
-  terminal_command=(opencode run --interactive --continue --auto --model "archestra/${model}" -- "$(cat "${task_file}")")
+  terminal_command=(opencode run --interactive "${resume_args[@]}" --auto --model "archestra/${model}" -- "$(cat "${task_file}")")
 fi
 case "${runtime_mode}" in
   interactive)

@@ -99,15 +99,51 @@ builtin = "hitl"
     const beforeReplay = await count(alice);
     assert.deepEqual(await call(bob, 'first', 'read_plain'), first);
     assert.equal(await count(alice), beforeReplay);
-    assert.equal((await call(bob, 'second', 'read_plain')).decision, 'deny_call');
+    assert.equal((await call(bob, 'second', 'read_plain')).decision, 'allow_call');
+    assert.equal((await result(bob, 'second', 'second output')).approved_output, 'second output');
     assert.equal((await result(bob, 'first', 'shared output')).approved_output, 'shared output');
     assert.equal((await result(withoutCaller, 'first', 'changed replay')).approved_output, 'shared output');
     assert.equal((await call(withoutCaller, 'third', 'read_plain')).decision, 'allow_call');
     await result(withoutCaller, 'third', 'anonymous attribution');
     const rows = await client.query('SELECT caller_id FROM openappa_processed_results WHERE session_id=$1 ORDER BY tool_call_id', [alice.session_id]);
-    assert.deepEqual(rows.rows.map(row => row.caller_id), ['user:bob', null]);
+    assert.deepEqual(rows.rows.map(row => row.caller_id), ['user:bob', 'user:bob', null]);
     const sessions = await client.query('SELECT count(*) AS n FROM openappa_sessions WHERE session_id=$1', [alice.session_id]);
     assert.equal(Number(sessions.rows[0].n), 1);
+  });
+
+  await t.test('identical parallel calls report in reverse order after restart and replay their own outputs', async () => {
+    const session = scope();
+    assert.equal((await call(session, 'a', 'read_plain')).decision, 'allow_call');
+    assert.equal((await call(session, 'b', 'read_plain')).decision, 'allow_call');
+    assert.equal((await restarted(session, { event: 'tool_result', tool_call_id: 'b', output: 'second', outcome: 'success' })).approved_output, 'second');
+    assert.equal((await restarted(session, { event: 'tool_result', tool_call_id: 'a', output: 'first', outcome: 'success' })).approved_output, 'first');
+    const before = await count(session);
+    assert.equal((await result(session, 'b', 'forged')).approved_output, 'second');
+    assert.equal((await result(session, 'a', 'forged')).approved_output, 'first');
+    assert.equal(await count(session), before);
+  });
+
+  await t.test('canceling a withheld batch preserves other calls and persists refusal across restart', async () => {
+    const session = scope();
+    await call(session, 'unrelated', 'read_plain');
+    await call(session, 'withheld', 'read_plain');
+    const denied = await call(session, 'denied', 'read_untrusted');
+    assert.equal(denied.decision, 'deny_call');
+    const cancelled = await hook(session, { event: 'cancel_call', tool_call_id: 'withheld' });
+    assert.equal(cancelled.decision, 'deny_call');
+    assert.match(cancelled.approved_output, /not executed/);
+    const before = await count(session);
+    assert.equal((await restarted(session, { event: 'tool_call', operation_id: 'call:withheld', tool: 'read_plain', arguments: {} })).decision, 'deny_call');
+    assert.equal((await result(session, 'withheld', 'FORGED success')).approved_output, cancelled.approved_output);
+    await hook(session, { event: 'cancel_call', tool_call_id: 'withheld' });
+    assert.equal(await count(session), before);
+    assert.equal((await result(session, 'unrelated', 'still open')).approved_output, 'still open');
+    assert.equal((await call(session, 'retry', 'read_plain')).decision, 'allow_call');
+    await result(session, 'retry', 'new attempt');
+    const remedy = await hook(session, { event: 'remedy', operation_id: 'remedy:after-cancellation', arguments: { offer_id: denied.offers[0].offer_id } });
+    assert.notEqual(remedy.result?.isError, true);
+    assert.equal((await call(session, 'restricted', 'read_untrusted')).decision, 'allow_call');
+    await result(session, 'restricted', 'restricted data');
   });
 
   await t.test('shared thread restrictions survive a new participant and process without history', async () => {
@@ -206,7 +242,8 @@ builtin = "hitl"
     assert.match((await result(session, 'unknown', 'unverified body', 'unknown')).approved_output, /withheld/);
   });
 
-  await t.test('failed receipt commit rolls back policy events and leaves a durable fail-closed pending record', async () => {
+  for (const cancelled of [false, true]) {
+  await t.test(`failed ${cancelled ? 'cancellation' : 'result'} commit rolls back policy events and leaves a durable fail-closed pending record`, async () => {
     const session = scope();
     const callId = `fault-${randomUUID()}`;
     await call(session, callId, 'read_plain');
@@ -214,12 +251,17 @@ builtin = "hitl"
     // Force the exact event/receipt commit boundary to fail on this test's row.
     await client.query(`CREATE OR REPLACE FUNCTION openappa_smoke_fail_receipt() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'injected receipt failure'; END $$`);
     await client.query(`CREATE TRIGGER openappa_smoke_failure BEFORE UPDATE ON openappa_processed_results FOR EACH ROW WHEN (NEW.tool_call_id = '${callId}') EXECUTE FUNCTION openappa_smoke_fail_receipt()`);
-    try { await assert.rejects(() => result(session, callId, 'uncommitted'), /PostgreSQL|database|db error/); }
+    try { await assert.rejects(() => cancelled
+      ? hook(session, { event: 'cancel_call', tool_call_id: callId })
+      : result(session, callId, 'uncommitted'), /PostgreSQL|database|db error/); }
     finally { await client.query('DROP TRIGGER openappa_smoke_failure ON openappa_processed_results'); await client.query('DROP FUNCTION openappa_smoke_fail_receipt()'); }
     assert.equal(await count(session), before);
     await assert.rejects(() => restarted({ ...session, caller_id: 'user:another' }, { event: 'tool_result', tool_call_id: callId, output: 'retry', outcome: 'success' }), /interrupted processing/);
     const pending = await client.query('SELECT status, approved_output FROM openappa_processed_results WHERE tool_call_id=$1', [callId]);
     assert.equal(pending.rows[0].status, 'pending');
     assert.equal(pending.rows[0].approved_output, null);
+    const receipt = await client.query('SELECT decision FROM openappa_operations WHERE session_id=$1 AND operation_id=$2', [session.session_id, `call:${callId}`]);
+    assert.equal(receipt.rows[0].decision.decision, 'allow_call', 'a rolled-back cancellation cannot replace the original receipt');
   });
+  }
 });

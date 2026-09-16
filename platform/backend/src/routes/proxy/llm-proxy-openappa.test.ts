@@ -21,6 +21,7 @@ import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import { APPA_CHAT_BLOCK_HEADER, decodeChatBlock } from "@/openappa/chat-block";
 import { createAppaLlmProxyPlugin } from "@/proxy/plugins/appa-plugin-archestra";
 import { registerLlmProxyPlugin } from "@/proxy/plugins/registry";
+import { buildExternalAppRenderResult } from "@/services/apps/app-render-result";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import {
   type AnthropicStubOptions,
@@ -727,6 +728,95 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       }
     });
   }
+
+  test.each([
+    true,
+    false,
+  ])("preserves seeded app renders while checking real results (stream=%s)", async (stream) => {
+    const seeded = JSON.stringify(
+      buildExternalAppRenderResult({
+        mcpServerId: "test-server",
+        resourceUri: "ui://test/board",
+        label: "Test board",
+      }),
+    );
+    const dispatch = native.dispatchHook.getMockImplementation();
+    native.dispatchHook.mockImplementation(async (raw: string) => {
+      const event = JSON.parse(raw);
+      if (
+        event.event === "tool_result" &&
+        event.tool_call_id === "seeded-render"
+      ) {
+        throw new Error("No approved call for seeded render");
+      }
+      return dispatch?.(raw);
+    });
+    const response = await app.inject({
+      method: "POST",
+      url: url(),
+      remoteAddress: "127.0.0.1",
+      headers: headers(),
+      payload: payload(stream, [
+        { role: "user", content: "Open the board" },
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "tool_use",
+              id: "seeded-render",
+              name: "show_board",
+              input: {},
+            },
+            {
+              type: "tool_use",
+              id: "real-call",
+              name: "get_weather",
+              input: {},
+            },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "seeded-render",
+              content: seeded,
+            },
+            // A marker embedded in upstream text must still undergo approval.
+            {
+              type: "tool_result",
+              tool_use_id: "real-call",
+              content: JSON.stringify({ content: seeded }),
+            },
+            { type: "text", text: "What is on the board?" },
+          ],
+        },
+      ]),
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    expect(events.filter((event) => event.event === "tool_result")).toEqual([
+      expect.objectContaining({ tool_call_id: "real-call" }),
+    ]);
+    expect(providerRequests).toHaveLength(1);
+    expect(providerRequests[0]).toMatchObject({
+      messages: expect.arrayContaining([
+        expect.objectContaining({
+          role: "user",
+          content: expect.arrayContaining([
+            expect.objectContaining({
+              tool_use_id: "seeded-render",
+              content: seeded,
+            }),
+            expect.objectContaining({
+              tool_use_id: "real-call",
+              content: "APPROVED REPLACEMENT",
+            }),
+          ]),
+        }),
+      ]),
+    });
+  });
 
   test("substitutes saved approved results before the provider sees resent history", async () => {
     const evaluateTrustedData = vi.spyOn(

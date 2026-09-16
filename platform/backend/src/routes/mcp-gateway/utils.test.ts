@@ -1412,7 +1412,10 @@ describe("createAgentServer tools/list", () => {
     ).toBe(false);
   });
 
-  test("a client without start tools can discover existing-session controls", async ({
+  test.for([
+    null,
+    "Example Workspace",
+  ])("a client discovers branded handoff and existing-session controls (%s)", async (appName, {
     makeAgent,
     makeMember,
     makeOrganization,
@@ -1422,6 +1425,7 @@ describe("createAgentServer tools/list", () => {
     config.agentRuntime.enabled = true;
     onTestFinished(() => {
       config.agentRuntime.enabled = previousEnabled;
+      archestraMcpBranding.syncFromOrganization(null);
     });
     const org = await makeOrganization();
     const user = await makeUser();
@@ -1447,20 +1451,30 @@ describe("createAgentServer tools/list", () => {
         _requestHandlers: Map<string, TestListToolsHandler>;
       }
     )._requestHandlers;
+    archestraMcpBranding.syncFromOrganization({ appName, iconLogo: null });
     const list = handlers.get("tools/list");
     if (!list) throw new Error("Missing tool list handler");
-    const names = (await list({ method: "tools/list", params: {} })).tools.map(
-      (tool) => tool.name,
-    );
+    const response = await list({ method: "tools/list", params: {} });
+    const names = response.tools.map((tool) => tool.name);
     expect(names).toEqual(
       expect.arrayContaining([
-        TOOL_GET_RUN_FULL_NAME,
-        TOOL_LIST_RUNS_FULL_NAME,
-        TOOL_STEER_RUN_FULL_NAME,
-        TOOL_CANCEL_RUN_FULL_NAME,
+        archestraMcpBranding.getToolName("get_run"),
+        archestraMcpBranding.getToolName("list_runs"),
+        archestraMcpBranding.getToolName("steer_run"),
+        archestraMcpBranding.getToolName("cancel_run"),
       ]),
     );
-    expect(names).not.toContain("archestra__start_run");
+    expect(names).not.toContain(archestraMcpBranding.getToolName("start_run"));
+    const discovery = response.tools.find(
+      (tool) => tool.name === archestraMcpBranding.getToolName("search_tools"),
+    );
+    expect(discovery?.description).toContain(
+      `hand this work over to ${appName ?? archestraMcpBranding.appName}`,
+    );
+    expect(discovery?.description).toContain(
+      `spin this up in ${appName ?? archestraMcpBranding.appName}`,
+    );
+    expect(discovery?.description).toContain("resume locally");
   });
 
   test("advertises task controls when the gateway can start delegated tasks", async ({

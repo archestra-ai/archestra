@@ -3,7 +3,7 @@ title: Agent Runtime (Beta)
 category: Agents
 order: 7
 description: Configure isolated workspaces for coding agents and delegated tasks
-lastUpdated: "2026-09-15"
+lastUpdated: "2026-09-16"
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -190,7 +190,9 @@ Keep the returned session link when switching clients. The connected client can 
 
 For repository work, include the exact base commit and any local changes. Request a return patch relative to the handed-off working tree so it does not repeat existing local edits. Review it against your current working tree before applying it. For documents, retrieve the finished file from the retained workspace.
 
-You can hand off unfinished repository work before closing your laptop. The next morning, retrieve the changes and verification results in your local client. Stop remote editing before continuing locally.
+You can hand off unfinished repository work before closing your laptop. Check that the workspace retention deadline covers your planned return. The repository workflow saves a local handoff note outside tracked source files. A fresh conversation can use it to recover the task and session link.
+
+Ask your client to “bring it back and continue here” to resume locally. It retrieves changes, checks for conflicts, and runs the relevant checks. Stop remote editing before continuing locally. Expired workspaces retain run history, but their files are unavailable.
 
 ### Messaging Channels
 

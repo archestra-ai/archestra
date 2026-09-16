@@ -2373,7 +2373,17 @@ async function buildSearchToolsDescription(params: {
     organizationId,
     toolNames: params.advertisedToolNames,
   });
-  const baseDescription = [searchTool.description, knowledgeInstruction]
+  const runtimeInstruction = params.advertisedToolNames.some(
+    (name) =>
+      archestraMcpBranding.getToolShortName(name) === TOOL_STEER_RUN_SHORT_NAME,
+  )
+    ? `For requests such as "hand this work over to ${sanitizeAppNameForToolMetadata(archestraMcpBranding.appName)}" or "spin this up in ${sanitizeAppNameForToolMetadata(archestraMcpBranding.appName)}", discover Agent Runtime handoff tools and skills here. Discover an agent with list_agents; use start_run only when this work has no runtime session. Otherwise steer_run reuses its saved session. "Bring it back" or "resume locally" means retrieve changes and context, stop remote editing, and continue in the local client.`
+    : null;
+  const baseDescription = [
+    searchTool.description,
+    knowledgeInstruction,
+    runtimeInstruction,
+  ]
     .filter(Boolean)
     .join(" ");
 

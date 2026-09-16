@@ -1,4 +1,5 @@
 import {
+  DEFAULT_APP_NAME,
   TOOL_CANCEL_RUN_SHORT_NAME,
   TOOL_DELETE_WORKSPACE_SHORT_NAME,
   TOOL_GET_RUN_SHORT_NAME,
@@ -424,9 +425,9 @@ const registry = defineArchestraTools([
     shortName: TOOL_START_RUN_SHORT_NAME,
     title: "Start Run",
     description:
-      "Start long-running work on an agent as a durable run and return immediately with its id. " +
+      `Hand local work over to ${DEFAULT_APP_NAME}, or spin it up there, as a durable agent run and return immediately with its id. ` +
       "If the Agent has Agent Runtime configured, the work executes in its runtime. " +
-      "Use this only for NEW work. To hand off existing runtime work or send a follow-up, use steer_run with its saved session_id as task_id; never start another run. " +
+      "Use this only when the work has NO runtime session yet, including unfinished local work. For an existing runtime task or follow-up, use steer_run with its saved session_id as task_id; never start another run. " +
       "Include context, goals, decisions and remaining work in message. Optional attachments are staged before execution (repository patches or documents). " +
       "Keep session_id and run_url so any connected client can pick up the same session. Poll get_run for progress.",
     schema: z.object({

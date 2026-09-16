@@ -52,8 +52,28 @@ const Decision = z.object({
 });
 
 let native: Promise<typeof import("@archestra/openappa-rs")> | undefined;
+export function openappaYellEnabled(): boolean {
+  return config.openappa.enabled && config.openappa.yellEnabled;
+}
+
 export function openappaEnabled(): boolean {
   return config.openappa.enabled;
+}
+
+export async function executeYell(params: {
+  session: OpenAppaSession;
+  toolCallId: string;
+  args: { message: string; with_trajectory: boolean };
+}): Promise<CallToolResult> {
+  if (!openappaYellEnabled())
+    throw new ApiError(404, "OpenAPPA reporting is disabled");
+  return runtimeToolResult(
+    await dispatch(params.session, {
+      event: "yell",
+      operation_id: `yell:${params.toolCallId}`,
+      arguments: params.args,
+    }),
+  );
 }
 
 /** The A2A executor identifies nested runs with a chain of agent UUIDs. */
@@ -84,7 +104,16 @@ async function binding(content: string) {
     const url = new URL(getDatabaseConnectionString());
     // pg ignores Prisma's legacy schema parameter; rust-postgres rejects it.
     url.searchParams.delete("schema");
-    await module.initializeOpenappa(url.toString(), content);
+    await module.initializeOpenappa(
+      url.toString(),
+      content,
+      openappaYellEnabled()
+        ? {
+            endpoint: "https://appa-yell-wkjbuewj5a-ew.a.run.app",
+            hostname: new URL(config.frontendBaseUrl).hostname,
+          }
+        : undefined,
+    );
     return module;
   })().catch((error) => {
     native = undefined;
@@ -264,12 +293,15 @@ export async function checkToolCalls(
   try {
     for (const [index, call] of calls.entries()) {
       const target = normalized[index];
+      const shortName = archestraMcpBranding.getToolShortName(
+        canonicalize(target.toolCallName),
+      );
       const tool =
-        archestraMcpBranding.getToolShortName(
-          canonicalize(target.toolCallName),
-        ) === "execute_remedy_plan"
+        shortName === "execute_remedy_plan"
           ? "appa/execute_remedy_plan"
-          : target.toolCallName;
+          : shortName === "yell"
+            ? "yell"
+            : target.toolCallName;
       const event = {
         event: "tool_call",
         operation_id: `call:${call.id}`,
@@ -323,7 +355,7 @@ export async function checkToolCalls(
   }
 }
 
-function remedyResult(decision: z.infer<typeof Decision>): CallToolResult {
+function runtimeToolResult(decision: z.infer<typeof Decision>): CallToolResult {
   if (decision.decision !== "mcp_result")
     return {
       isError: true,
@@ -331,7 +363,9 @@ function remedyResult(decision: z.infer<typeof Decision>): CallToolResult {
         {
           type: "text",
           text:
-            decision.feedback ?? decision.detail ?? "OpenAPPA remedy refused",
+            decision.feedback ??
+            decision.detail ??
+            "OpenAPPA refused this operation",
         },
       ],
     };
@@ -350,5 +384,5 @@ export async function executeRemedy(
     operation_id: `remedy:${toolCallId}`,
     arguments: args,
   });
-  return remedyResult(decision);
+  return runtimeToolResult(decision);
 }

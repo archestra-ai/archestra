@@ -3470,6 +3470,17 @@ describe("parseOtelCaptureContent", () => {
 });
 
 describe("OpenAPPA feature configuration", () => {
+  test("reporting requires both explicit opt-ins", () => {
+    expect(parseOpenAppaConfig("true", "true").yellEnabled).toBe(true);
+    for (const [enabled, reporting] of [
+      [undefined, "true"],
+      ["false", "true"],
+      ["true", undefined],
+      ["true", "TRUE"],
+    ]) {
+      expect(parseOpenAppaConfig(enabled, reporting).yellEnabled).toBe(false);
+    }
+  });
   test("gates APPA registration on its feature flag, regardless of the explicit plugin list", () => {
     expect(parseLlmProxyPlugins(undefined)).toEqual([]);
     expect(parseLlmProxyPlugins(" appa ")).toEqual([]);
@@ -3497,9 +3508,15 @@ describe("OpenAPPA feature configuration", () => {
     "1",
   ])("requires explicit true to enable APPA (flag=%s)", (enabled) => {
     vi.stubEnv("ARCHESTRA_BETA", "true");
-    expect(parseOpenAppaConfig(enabled)).toEqual({ enabled: false });
+    expect(parseOpenAppaConfig(enabled)).toEqual({
+      enabled: false,
+      yellEnabled: false,
+    });
   });
   test("enables database policies without a container path", () => {
-    expect(parseOpenAppaConfig("true")).toEqual({ enabled: true });
+    expect(parseOpenAppaConfig("true")).toEqual({
+      enabled: true,
+      yellEnabled: false,
+    });
   });
 });

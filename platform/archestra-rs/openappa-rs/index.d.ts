@@ -2,6 +2,11 @@
 /* eslint-disable */
 export declare function dispatchHook(input: string, policyContent?: string | undefined | null): Promise<string>
 
-export declare function initializeOpenappa(databaseUrl: string, policyContent: string): Promise<void>
+export declare function initializeOpenappa(databaseUrl: string, policyContent: string, reporting?: ReportingOptions | undefined | null): Promise<void>
+
+export interface ReportingOptions {
+  endpoint: string
+  hostname?: string
+}
 
 export declare function validateOpenappaPolicy(content: string): Promise<Array<string>>

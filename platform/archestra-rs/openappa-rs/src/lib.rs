@@ -23,13 +23,21 @@ use std::{
 };
 use tokio::sync::Mutex;
 
+#[napi(object)]
+#[derive(Clone)]
+pub struct ReportingOptions {
+    pub endpoint: String,
+    pub hostname: Option<String>,
+}
+
 static STATE: OnceLock<Mutex<Option<State>>> = OnceLock::new();
 
 struct State {
-    runtime: Runtime,
+    runtime: Arc<Runtime>,
     config: Config,
     store: Arc<LogStore>,
     policy_content: String,
+    reporting: Option<ReportingOptions>,
 }
 
 #[derive(Clone, Deserialize)]
@@ -78,23 +86,29 @@ fn identity(input: &Input) -> String {
 }
 
 #[napi(js_name = "initializeOpenappa")]
-pub async fn initialize_openappa(database_url: String, policy_content: String) -> napi::Result<()> {
+pub async fn initialize_openappa(
+    database_url: String,
+    policy_content: String,
+    reporting: Option<ReportingOptions>,
+) -> napi::Result<()> {
     let mut slot = STATE.get_or_init(|| Mutex::new(None)).lock().await;
     if slot.is_some() {
         return Ok(());
     }
     let state = tokio::task::spawn_blocking(move || -> napi::Result<State> {
         appa_runtime::tls::install_crypto_provider();
-        let config = policy::compile(&policy_content).map_err(error)?;
+        let mut config = policy::compile(&policy_content).map_err(error)?;
+        config.reporting.agent_yell = reporting.is_some();
         let store =
             Arc::new(LogStore::open(Backend::Postgres { url: database_url }).map_err(error)?);
         let runtime =
             Runtime::open_with_store(config.clone(), store.clone(), None).map_err(error)?;
         Ok(State {
-            runtime,
+            runtime: Arc::new(runtime),
             config,
             store,
             policy_content,
+            reporting,
         })
     })
     .await
@@ -163,6 +177,11 @@ pub async fn dispatch_hook(input: String, policy_content: Option<String>) -> nap
             }
             proposed(&input)?;
         }
+        "yell" => {
+            required(&input.operation_id, "operation_id")?;
+            let _: YellArguments =
+                serde_json::from_str(required_arguments(&input)?).map_err(error)?;
+        }
         "remedy" => {
             required(&input.operation_id, "operation_id")?;
             let _: mcp::ExecuteRemedyPlanArgs =
@@ -181,7 +200,8 @@ pub async fn dispatch_hook(input: String, policy_content: Option<String>) -> nap
         if let Some(content) = policy_content
             && content != state.policy_content
         {
-            let config = policy::compile(&content).map_err(error)?;
+            let mut config = policy::compile(&content).map_err(error)?;
+            config.reporting.agent_yell = state.reporting.is_some();
             state.runtime.reload(config.clone()).map_err(error)?;
             state.config = config;
             state.policy_content = content;
@@ -197,7 +217,7 @@ pub async fn dispatch_hook(input: String, policy_content: Option<String>) -> nap
             // turn markers. Durable pending receipts remain fail-closed.
             let rebuilt = Runtime::open_with_store(state.config.clone(), state.store.clone(), None)
                 .map_err(error)?;
-            state.runtime = rebuilt;
+            state.runtime = Arc::new(rebuilt);
             match failure {
                 Ok(Err(error)) => Err(error),
                 _ => Err(error("OpenAPPA panicked; operation was not released")),
@@ -364,7 +384,30 @@ impl State {
         }
         claim_operation(pg, &input, &root, &operation, &request)?;
         let tx = pg.begin().map_err(error)?;
-        let decision = if input.event == "remedy" {
+        let decision = if input.event == "yell" {
+            let reporting = self
+                .reporting
+                .as_ref()
+                .ok_or_else(|| error("OpenAPPA reporting is disabled"))?;
+            let args: YellArguments =
+                serde_json::from_str(required_arguments(&input)?).map_err(error)?;
+            let result = appa_runtime::yell::embedded::send(
+                &self.runtime,
+                appa_runtime::yell::embedded::Request {
+                    actor: actor.clone(),
+                    endpoint: reporting.endpoint.clone(),
+                    hostname: reporting.hostname.clone(),
+                    message: args.message,
+                    with_trajectory: args.with_trajectory,
+                },
+            )
+            .await;
+            let (is_error, message) = match result {
+                Ok(receipt) => (false, format!("[appa] Reported. Receipt {receipt}.")),
+                Err(reason) => (true, format!("[appa] Not reported: {reason}")),
+            };
+            json!({ "decision": "mcp_result", "result": { "isError": is_error, "content": [{ "type": "text", "text": message }] } })
+        } else if input.event == "remedy" {
             let call = ProposedCall {
                 tool: appa_runtime_api::CONTROL_TOOL.into(),
                 arguments: input
@@ -626,4 +669,11 @@ fn finish_operation(
         client.execute("UPDATE openappa_operations SET status='complete', decision=$3 WHERE session_id=$1 AND operation_id=$2", &[&input.session_id,&operation,&decision])?;
         Ok(())
     }).map_err(error)
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct YellArguments {
+    message: String,
+    with_trajectory: bool,
 }

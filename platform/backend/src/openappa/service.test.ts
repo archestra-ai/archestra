@@ -46,21 +46,103 @@ afterEach(() => {
 });
 
 describe("APPA feature boundary", () => {
-  test("rejects a batch without reserving any call and permits a single-call retry", async () => {
+  test("admits multiple calls before any result arrives", async () => {
     native.dispatchHook.mockResolvedValue(
       JSON.stringify({ decision: "allow_call" }),
     );
     const calls = [
       { id: "first", name: "read_file", arguments: {} },
-      { id: "second", name: "write_file", arguments: {} },
+      { id: "second", name: "read_file", arguments: {} },
     ];
-    const blocked = await checkToolCalls(session, calls, (name) => name);
-    expect(blocked?.reason).toContain("None of these calls ran");
-    expect(native.dispatchHook).not.toHaveBeenCalled();
+    expect(await checkToolCalls(session, calls, (name) => name)).toBeNull();
     expect(
-      await checkToolCalls(session, [calls[0]], (name) => name),
+      native.dispatchHook.mock.calls.map(
+        ([raw]) => JSON.parse(raw).operation_id,
+      ),
+    ).toEqual(["call:first", "call:second"]);
+  });
+
+  test.each([
+    false,
+    true,
+  ])("settles only admissions from a withheld batch (throws=%s)", async (throws) => {
+    const open = new Set<string>(["unrelated"]);
+    native.dispatchHook.mockImplementation(async (raw: string) => {
+      const event = JSON.parse(raw);
+      if (event.event === "cancel_call") {
+        open.delete(event.tool_call_id);
+        return JSON.stringify({ decision: "deny_call" });
+      }
+      if (event.tool === "blocked") {
+        if (throws) throw new Error("native failure");
+        return JSON.stringify({
+          decision: "deny_call",
+          feedback: "Policy denied",
+        });
+      }
+      open.add(event.operation_id.slice("call:".length));
+      return JSON.stringify({ decision: "allow_call" });
+    });
+    const check = checkToolCalls(
+      session,
+      [
+        { id: "first", name: "read_file", arguments: {} },
+        { id: "second", name: "blocked", arguments: {} },
+        { id: "third", name: "read_file", arguments: {} },
+      ],
+      (name) => name,
+    );
+    if (throws) {
+      await expect(check).rejects.toThrow("OpenAPPA could not safely complete");
+    } else {
+      expect((await check)?.reason).toBe("Policy denied");
+    }
+    expect([...open]).toEqual(["unrelated"]);
+    expect(
+      native.dispatchHook.mock.calls.map(([raw]) => JSON.parse(raw).event),
+    ).toEqual(["tool_call", "tool_call", "cancel_call"]);
+    expect(
+      await checkToolCalls(
+        session,
+        [{ id: "retry", name: "read_file", arguments: {} }],
+        (name) => name,
+      ),
     ).toBeNull();
-    expect(native.dispatchHook).toHaveBeenCalledTimes(1);
+  });
+
+  test("refuses malformed arguments and duplicate IDs before admitting any call", async () => {
+    const first = { id: "first", name: "read_file", arguments: {} };
+    for (const second of [
+      { id: "second", name: "read_file", arguments: "{" },
+      first,
+    ]) {
+      await expect(
+        checkToolCalls(session, [first, second], (name) => name),
+      ).rejects.toMatchObject({ statusCode: 400 });
+    }
+    expect(native.dispatchHook).not.toHaveBeenCalled();
+  });
+
+  test("fails closed when a withheld admission cannot be settled", async () => {
+    native.dispatchHook.mockImplementation(async (raw: string) => {
+      const event = JSON.parse(raw);
+      if (event.event === "cancel_call") throw new Error("storage unavailable");
+      return JSON.stringify(
+        event.tool === "blocked"
+          ? { decision: "deny_call", feedback: "Policy denied" }
+          : { decision: "allow_call" },
+      );
+    });
+    await expect(
+      checkToolCalls(
+        session,
+        [
+          { id: "first", name: "read_file", arguments: {} },
+          { id: "second", name: "blocked", arguments: {} },
+        ],
+        (name) => name,
+      ),
+    ).rejects.toThrow("OpenAPPA could not safely complete");
   });
 
   test.each([

@@ -99,7 +99,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       if (event.event === "tool_call") {
         if (fail) throw new Error("private native database error");
         return JSON.stringify(
-          block
+          block && event.tool !== "allowed_first"
             ? {
                 decision: "deny_call",
                 feedback:
@@ -434,14 +434,18 @@ describe("OpenAPPA on the existing LLM proxy", () => {
   }
 
   test.each([
-    { stream: true, enabled: true },
-    { stream: false, enabled: true },
-    { stream: true, enabled: false },
-    { stream: false, enabled: false },
-  ])("rejects batches only with APPA enabled (stream=$stream, enabled=$enabled)", async ({
+    { stream: true, enabled: true, denied: false },
+    { stream: false, enabled: true, denied: false },
+    { stream: true, enabled: true, denied: true },
+    { stream: false, enabled: true, denied: true },
+    { stream: true, enabled: false, denied: false },
+    { stream: false, enabled: false, denied: false },
+  ])("gates complete batches (stream=$stream, enabled=$enabled, denied=$denied)", async ({
     stream,
     enabled,
+    denied,
   }) => {
+    block = denied;
     if (!enabled) {
       config.openappa.enabled = false;
       config.llmProxy.plugins = [];
@@ -517,7 +521,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       events
         .filter((event) => event.event === "tool_call")
         .map((event) => event.tool),
-    ).toEqual([]);
+    ).toEqual(enabled ? ["allowed_first", "get_weather"] : []);
     if (!enabled) {
       expect(events).toHaveLength(0);
       expect(response.body).toContain('"type":"tool_use"');
@@ -525,12 +529,20 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       expect(response.body).toContain("get_weather");
       return;
     }
-    expect(response.body).toContain(
-      "OpenAPPA requires one tool call at a time",
-    );
-    expect(response.body).not.toContain('"type":"tool_use"');
-    expect(response.body).not.toContain("input_json_delta");
-    expect(response.body).not.toContain("PRIVATE ALLOWED ARGUMENT");
+    if (denied) {
+      expect(response.body).toContain("NATIVE REFUSAL");
+      expect(response.body).not.toContain('"type":"tool_use"');
+      expect(response.body).not.toContain("input_json_delta");
+      expect(response.body).not.toContain("PRIVATE ALLOWED ARGUMENT");
+      expect(events.filter((event) => event.event === "cancel_call")).toEqual([
+        expect.objectContaining({ tool_call_id: "allowed-first" }),
+      ]);
+      return;
+    }
+    expect(response.body).toContain('"type":"tool_use"');
+    expect(response.body).toContain("allowed_first");
+    expect(response.body).toContain("get_weather");
+    expect(events.map((event) => event.event)).not.toContain("cancel_call");
   });
 
   test("withholds every streamed tool delta until the completed native call is allowed", async () => {

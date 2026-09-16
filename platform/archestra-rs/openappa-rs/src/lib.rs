@@ -153,8 +153,14 @@ pub async fn dispatch_hook(input: String, policy_content: Option<String>) -> nap
                 return Err(error("invalid tool outcome"));
             }
         }
+        "cancel_call" => {
+            required(&input.tool_call_id, "tool_call_id")?;
+        }
         "tool_call" => {
-            required(&input.operation_id, "operation_id")?;
+            let operation = required(&input.operation_id, "operation_id")?;
+            if !operation.starts_with("call:") || operation == "call:" {
+                return Err(error("tool call operation_id must be call:<tool-call-id>"));
+            }
             proposed(&input)?;
         }
         "remedy" => {
@@ -327,7 +333,7 @@ impl State {
                 })
                 .map_err(error);
         }
-        if input.event == "tool_result" {
+        if matches!(input.event.as_str(), "tool_result" | "cancel_call") {
             return self.result(pg, &input, &actor).await;
         }
 
@@ -335,9 +341,22 @@ impl State {
             .operation_id
             .clone()
             .ok_or_else(|| error("an operation id is required"))?;
-        let request = json!({ "event": input.event, "tool": input.tool, "arguments": input.arguments, "spawn": input.spawn, "output": input.output });
+        let mut request = json!({ "event": input.event, "tool": input.tool, "arguments": input.arguments, "spawn": input.spawn, "output": input.output });
+        if input.event == "tool_call" {
+            // The receipt key is also the host call identity. Results reconstruct
+            // the same namespace from the provider's tool-call ID.
+            request["call_id"] = json!(operation);
+        }
         let cached = lookup_operation(pg, &input, &operation)?;
         if let Some((saved, decision)) = cached {
+            // Receipts created before call bindings have no call_id. They keep
+            // their original decision; their result uses the unbound protocol.
+            if saved.get("call_id").is_none() {
+                request
+                    .as_object_mut()
+                    .ok_or_else(|| error("invalid call receipt"))?
+                    .remove("call_id");
+            }
             if saved != request {
                 return Err(error("operation id was reused with different input"));
             }
@@ -356,9 +375,9 @@ impl State {
             let gate = hooks::handle(
                 &self.runtime,
                 HookEvent::ToolCall {
-                    call_id: None,
                     actor: actor.clone(),
                     call,
+                    call_id: None,
                     spawn: false,
                     ruling: None,
                 },
@@ -374,9 +393,9 @@ impl State {
         } else {
             let event = match input.event.as_str() {
                 "tool_call" => HookEvent::ToolCall {
-                    call_id: None,
                     actor: actor.clone(),
                     call: proposed(&input)?,
+                    call_id: Some(operation.clone()),
                     spawn: input.spawn,
                     ruling: None,
                 },
@@ -449,18 +468,26 @@ impl State {
                 .into(),
             arguments: serde_json::value::to_raw_value(&saved["arguments"]).map_err(error)?,
         };
-        let output = input
-            .output
-            .clone()
-            .ok_or_else(|| error("missing tool output"))?;
-        let outcome = match input.outcome.as_deref() {
-            Some("success") => ToolOutcome::Success {
-                body: OutcomeBody::Available(output.clone()),
-            },
-            Some("failure") => ToolOutcome::Failure {
+        let cancelled = input.event == "cancel_call";
+        let output = if cancelled {
+            "OpenAPPA withheld the tool-call batch. This tool was not executed. Retry with a new tool-call ID.".to_owned()
+        } else {
+            input
+                .output
+                .clone()
+                .ok_or_else(|| error("missing tool output"))?
+        };
+        let outcome = match (cancelled, input.outcome.as_deref()) {
+            (true, _) => ToolOutcome::Failure {
                 message: output.clone(),
             },
-            Some("unknown") | None => ToolOutcome::Indeterminate,
+            (false, Some("success")) => ToolOutcome::Success {
+                body: OutcomeBody::Available(output.clone()),
+            },
+            (false, Some("failure")) => ToolOutcome::Failure {
+                message: output.clone(),
+            },
+            (false, Some("unknown") | None) => ToolOutcome::Indeterminate,
             _ => return Err(error("invalid tool outcome")),
         };
         let claim = key.clone();
@@ -472,29 +499,34 @@ impl State {
             Ok(())
         }).map_err(error)?;
         let tx = pg.begin().map_err(error)?;
+        let host_call_id = saved["call_id"].as_str().map(str::to_owned);
         let event = if saved["spawn"] == true {
             // No child return is guessed from an opaque tool result. The child
             // must have reported ChildEnd through its adapter first.
             HookEvent::SpawnResult {
-                call_id: None,
                 actor: actor.clone(),
                 call,
+                call_id: host_call_id,
                 outcome,
                 child: None,
                 value: None,
             }
         } else {
             HookEvent::ToolResult {
-                call_id: None,
                 actor: actor.clone(),
                 call,
+                call_id: host_call_id,
                 outcome,
             }
         };
         let decision = hooks::handle(&self.runtime, event).await;
+        if cancelled && !matches!(decision, HookDecision::Ack) {
+            return Err(error("OpenAPPA could not settle a withheld tool call"));
+        }
         let approved = match &decision {
             HookDecision::Ack
-                if input.outcome.as_deref() == Some("unknown") || input.outcome.is_none() =>
+                if !cancelled
+                    && (input.outcome.as_deref() == Some("unknown") || input.outcome.is_none()) =>
             {
                 "[appa] Tool output withheld: execution outcome is unknown.".into()
             }
@@ -511,7 +543,15 @@ impl State {
             }
             _ => return Err(error("unexpected tool result decision")),
         };
-        let mut response = wire(&decision);
+        let mut response = if cancelled {
+            // Never replay an admission for a dispatch we have closed without
+            // execution. Persist the refusal with the closing facts and result.
+            let refusal = json!({ "decision": "deny_call", "feedback": approved });
+            finish_operation(pg, input, &format!("call:{call_id}"), &refusal)?;
+            refusal
+        } else {
+            wire(&decision)
+        };
         response["approved_output"] = json!(approved);
         let saved_response = response.clone();
         pg.with_client(move |client| {

@@ -115,6 +115,9 @@ describe("request adapter", () => {
         ],
       }),
     );
+    expect(adapter.toProviderRequest().messages.at(-1)?.content).toBe(
+      '{"ok":true}',
+    );
     const results = adapter.getToolResults();
     expect(results).toEqual([
       {
@@ -130,7 +133,7 @@ describe("request adapter", () => {
     expect(toolMsg?.toolCalls?.[0]?.name).toBe("read_file");
   });
 
-  test("toProviderRequest applies tool-result updates (TOON / trusted-data)", () => {
+  test("toProviderRequest applies tool-result updates (trusted-data)", () => {
     const adapter = factory.createRequestAdapter(
       request({
         messages: [
@@ -145,10 +148,10 @@ describe("request adapter", () => {
         ],
       }),
     );
-    adapter.applyToolResultUpdates({ c1: "compressed" });
+    adapter.applyToolResultUpdates({ c1: "filtered" });
     const out = adapter.toProviderRequest();
     const toolMsg = out.messages.find((m) => m.role === "tool");
-    expect(toolMsg?.content).toBe("compressed");
+    expect(toolMsg?.content).toBe("filtered");
   });
 });
 

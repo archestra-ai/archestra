@@ -83,10 +83,6 @@ class TeamModel {
               parentId: input.parentId ?? null,
               organizationId: input.organizationId,
               createdBy: input.createdBy,
-              // Default of `false` is enforced by the column; passing `undefined`
-              // omits the field from the INSERT so the column default applies.
-              convertToolResultsToToon:
-                input.convertToolResultsToToon ?? undefined,
               createdAt: now,
               updatedAt: now,
             },
@@ -1443,7 +1439,6 @@ class TeamModel {
       roles: team.roles,
       organizationId: team.organizationId,
       parentId: team.parentId,
-      convertToolResultsToToon: team.convertToolResultsToToon,
       // Include role so a member role change (not just add/remove) diffs.
       members: members.map((m) => `${m.name} (${m.email}) [${m.role}]`).sort(),
       hasVaultFolder: vaultFolderRows.length > 0,

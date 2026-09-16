@@ -113,9 +113,6 @@ class AzureRequestAdapter
   applyToolResultUpdates(updates: Record<string, string>) {
     return this.delegate.applyToolResultUpdates(updates);
   }
-  applyToonCompression(model: string) {
-    return this.delegate.applyToonCompression(model);
-  }
   convertToolResultContent(messages: AzureMessages) {
     return this.delegate.convertToolResultContent(messages);
   }

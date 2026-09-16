@@ -12,4 +12,3 @@ export * as gatewayToolNames from "./gateway-tool-names";
 export * as headers from "./headers";
 export { checkModelTeamAccess } from "./model-team-access";
 export * as tools from "./tools";
-export * as toonConversion from "./toon-conversion";

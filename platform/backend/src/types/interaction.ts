@@ -37,7 +37,6 @@ import {
   Xai,
   Zhipuai,
 } from "./llm-providers";
-import { ToonSkipReasonSchema } from "./tool-result-compression";
 import { VirtualApiKeyTypeSchema } from "./virtual-api-key";
 import { ResourceVisibilityScopeSchema } from "./visibility";
 
@@ -249,7 +248,6 @@ const LockedChatUnavailableContentSchema = z.union([
 const extendedFields = {
   source: InteractionSourceSchema.nullable().optional(),
   authMethod: InteractionAuthMethodSchema.nullable().optional(),
-  toonSkipReason: ToonSkipReasonSchema.nullable().optional(),
   dualLlmAnalyses: z.array(DualLlmAnalysisSchema).nullable().optional(),
   unsafeContextBoundary: UnsafeContextBoundarySchema.nullable().optional(),
   toolCallBlock: ToolCallBlockSchema.nullable().optional(),
@@ -346,10 +344,6 @@ export const InteractionSummarySchema = BaseSelectInteractionSchema.pick({
   cacheWriteTokens: true,
   cost: true,
   baselineCost: true,
-  toonTokensBefore: true,
-  toonTokensAfter: true,
-  toonCostSavings: true,
-  toonSkipReason: true,
   createdAt: true,
 }).extend({
   type: SupportedProvidersDiscriminatorSchema,
@@ -782,16 +776,6 @@ export type InteractionAuthMethod = z.infer<typeof InteractionAuthMethodSchema>;
 export type InteractionRequest = z.infer<typeof InteractionRequestSchema>;
 export type InteractionResponse = z.infer<typeof InteractionResponseSchema>;
 
-/**
- * TOON skip reason counts for session summaries
- */
-export const ToonSkipReasonCountsSchema = z.object({
-  applied: z.number(),
-  notEnabled: z.number(),
-  notEffective: z.number(),
-  noToolResults: z.number(),
-});
-
 /** Max length of `lastUserMessagePreview` on session summaries. */
 export const LAST_USER_MESSAGE_PREVIEW_MAX_LENGTH = 200;
 
@@ -816,9 +800,7 @@ export const SessionSummarySchema = z.object({
   /** Would-be list-price cost of subscription-covered rows (null when none). */
   totalSubscriptionCost: z.string().nullable(),
   totalBaselineCost: z.string().nullable(),
-  totalToonCostSavings: z.string().nullable(),
   totalCacheSavings: z.string().nullable(),
-  toonSkipReasonCounts: ToonSkipReasonCountsSchema,
   firstRequestTime: z.date(),
   lastRequestTime: z.date(),
   models: z.array(z.string()),

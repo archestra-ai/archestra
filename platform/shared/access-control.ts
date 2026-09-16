@@ -558,7 +558,7 @@ export const permissionDescriptions: Record<string, string> = {
   "llmLimit:create": "Create new usage limits",
   "llmLimit:update": "Modify existing usage limits",
   "llmLimit:delete": "Remove usage limits",
-  "llmSettings:read": "View LLM settings (compression, cleanup interval)",
+  "llmSettings:read": "View LLM settings",
   "llmSettings:update": "Modify LLM settings",
   "mcpSettings:read": "View MCP settings (online catalog availability)",
   "mcpSettings:update": "Modify MCP settings",
@@ -1494,9 +1494,6 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   [RouteId.UpdateSecuritySettings]: {
     agentSettings: ["update"],
-  },
-  [RouteId.UpdateLlmSettings]: {
-    llmSettings: ["update"],
   },
   [RouteId.UpdateMcpSettings]: {
     mcpSettings: ["update"],

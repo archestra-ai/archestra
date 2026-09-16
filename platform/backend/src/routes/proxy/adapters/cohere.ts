@@ -1,12 +1,9 @@
 import { randomUUID } from "node:crypto";
 import type { ArchestraInternalErrorCode } from "@archestra/shared";
-import { encode as toonEncode } from "@toon-format/toon";
 import { get } from "lodash-es";
 import config from "@/config";
 import logger from "@/logging";
-import { ModelModel } from "@/models";
 import { metrics } from "@/observability";
-import { getTokenizer } from "@/tokenizers";
 import type {
   ChunkProcessingResult,
   Cohere,
@@ -20,15 +17,12 @@ import type {
   LLMResponseAdapter,
   LLMStreamAdapter,
   StreamAccumulatorState,
-  ToolCompressionStats,
   UsageView,
 } from "@/types";
 import {
   extractCommonMessageText,
   extractCommonToolCallArguments,
 } from "@/types";
-import type { ToolCompressionStats as CompressionStats } from "../utils/toon-conversion";
-import { unwrapToolContent } from "../utils/unwrap-tool-content";
 import { upstreamHttpError } from "./upstream-http-error";
 
 // =============================================================================
@@ -148,16 +142,6 @@ class CohereRequestAdapter
 
   applyToolResultUpdates(updates: Record<string, string>): void {
     Object.assign(this.toolResultUpdates, updates);
-  }
-
-  async applyToonCompression(model: string): Promise<ToolCompressionStats> {
-    const { messages: compressedMessages, stats } =
-      await convertToolResultsToToon(this.request.messages, model);
-    this.request = {
-      ...this.request,
-      messages: compressedMessages,
-    };
-    return stats;
   }
 
   convertToolResultContent(messages: CohereMessages): CohereMessages {
@@ -788,125 +772,6 @@ class CohereStreamAdapter
       },
     };
   }
-}
-
-// =============================================================================
-// TOON COMPRESSION
-// =============================================================================
-
-export async function convertToolResultsToToon(
-  messages: CohereMessages,
-  model: string,
-): Promise<{
-  messages: CohereMessages;
-  stats: CompressionStats;
-}> {
-  const tokenizer = getTokenizer("cohere");
-
-  let totalTokensBefore = 0;
-  let totalTokensAfter = 0;
-
-  const result = messages.map((message) => {
-    if (message.role === "tool") {
-      const toolMsg = message as Cohere.Types.ToolMessage;
-
-      try {
-        const unwrapped = unwrapToolContent(toolMsg.content);
-        const parsedRes = safeJsonParse(unwrapped);
-        if (!parsedRes.ok) {
-          logger.debug(
-            {
-              toolCallId: toolMsg.tool_call_id,
-              contentPreview: toolMsg.content.substring(0, 100),
-            },
-            "convertToolResultsToToon: skipping - content is not JSON",
-          );
-          return message;
-        }
-
-        const parsed = parsedRes.value as unknown;
-        const noncompressed = unwrapped;
-        const compressed = toonEncode(parsed);
-
-        const tokensBefore = tokenizer.countTokens([
-          { role: "user", content: noncompressed },
-        ]);
-        const tokensAfter = tokenizer.countTokens([
-          { role: "user", content: compressed },
-        ]);
-
-        // Only use TOON compression if it actually saves tokens
-        if (tokensAfter < tokensBefore) {
-          totalTokensBefore += tokensBefore;
-          totalTokensAfter += tokensAfter;
-
-          logger.debug(
-            {
-              toolCallId: toolMsg.tool_call_id,
-              beforeLength: noncompressed.length,
-              afterLength: compressed.length,
-              tokensBefore,
-              tokensAfter,
-              tokensSaved: tokensBefore - tokensAfter,
-              provider: "cohere",
-            },
-            "convertToolResultsToToon: compressed",
-          );
-
-          return {
-            ...toolMsg,
-            content: compressed,
-          };
-        } else {
-          logger.debug(
-            {
-              toolCallId: toolMsg.tool_call_id,
-              beforeLength: noncompressed.length,
-              afterLength: compressed.length,
-              tokensBefore,
-              tokensAfter,
-              tokensDiff: tokensAfter - tokensBefore,
-              provider: "cohere",
-            },
-            "convertToolResultsToToon: skipping - compression increases tokens",
-          );
-          return message;
-        }
-      } catch {
-        logger.debug(
-          {
-            toolCallId: toolMsg.tool_call_id,
-            contentPreview: toolMsg.content.substring(0, 100),
-          },
-          "convertToolResultsToToon: skipping - content is not JSON",
-        );
-        return message;
-      }
-    }
-    return message;
-  });
-
-  // Calculate cost savings
-  let costSavings = 0;
-  if (totalTokensBefore > 0) {
-    const savedTokens = totalTokensBefore - totalTokensAfter;
-    costSavings = await ModelModel.calculateCostSavings(
-      model,
-      savedTokens,
-      "cohere",
-    );
-  }
-
-  return {
-    messages: result,
-    stats: {
-      tokensBefore: totalTokensBefore,
-      tokensAfter: totalTokensAfter,
-      costSavings: costSavings,
-      wasEffective: totalTokensAfter < totalTokensBefore,
-      hadToolResults: totalTokensBefore > 0,
-    },
-  };
 }
 
 // =============================================================================

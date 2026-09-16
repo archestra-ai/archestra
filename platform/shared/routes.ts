@@ -601,9 +601,6 @@ export const RouteId = {
   // Security Settings Routes
   UpdateSecuritySettings: "updateSecuritySettings",
 
-  // LLM Settings Routes (organization-level)
-  UpdateLlmSettings: "updateLlmSettings",
-
   // MCP Settings Routes (organization-level)
   UpdateMcpSettings: "updateMcpSettings",
 

@@ -10,7 +10,7 @@
  * the Codex persona in `instructions`. The Codex adapter's duck-typed client
  * (see ./openai-codex-client) builds the request with `buildCodexResponsesRequest`,
  * calls the Responses API, and maps the streamed events back to OpenAI chat
- * chunks with these helpers so the rest of the proxy (cost, policies, TOON,
+ * chunks with these helpers so the rest of the proxy (cost, policies,
  * metrics) keeps operating on chat-completions shapes.
  */
 import { randomUUID } from "node:crypto";

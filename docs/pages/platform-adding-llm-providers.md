@@ -3,7 +3,7 @@ title: Adding LLM Providers
 category: Development
 order: 2
 description: Developer guide for implementing new LLM provider support in Archestra Platform
-lastUpdated: 2026-09-03
+lastUpdated: 2026-09-16
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -138,31 +138,13 @@ Base URL configuration allows routing to custom endpoints (e.g., Azure OpenAI, l
 
 > **Note:** This is a known abstraction leak that we're planning to address in future versions. Thanks for bearing with us!
 
-Tokenizers estimate token counts for provider messages. Used by token cost limits and Tool Results Compression.
+Tokenizers estimate token counts for provider messages. Token cost limits use these estimates.
 
 | File                              | Description                                                                                                   |
 | --------------------------------- | ------------------------------------------------------------------------------------------------------------- |
 | `backend/src/tokenizers/base.ts`  | Add provider message type to `ProviderMessage` union                                                          |
 | `backend/src/tokenizers/base.ts`  | Update `BaseTokenizer.getMessageText()` if provider has a different message format                            |
 | `backend/src/tokenizers/index.ts` | Add entry to `tokenizerFactories` record - return appropriate tokenizer (or fall back to `TiktokenTokenizer`) |
-
-### Tool Results Compression
-
-> **Note:** This is a known abstraction leak that we're planning to address in future versions. Thanks for bearing with us!
-
-TOON (Token-Oriented Object Notation) compression converts JSON tool results to a more token-efficient format. Each provider needs its own implementation because message structures differ.
-
-| File                                               | Description                                                                                                                       |
-| -------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| `backend/src/routes/proxy/adapters/{provider}.ts` | Implement `convertToolResultsToToon()` function that traverses provider-specific message array and compresses tool result content |
-
-The function must:
-
-1. Iterate through provider-specific message array structure
-2. Find tool result messages (e.g., `role: "tool"` in OpenAI, `tool_result` blocks in Anthropic, `functionResponse` parts in Gemini)
-3. Parse JSON content and convert to TOON format using `@toon-format/toon`
-4. Calculate token savings using the appropriate tokenizer
-5. Return compressed messages and compression statistics
 
 ### Metrics
 
@@ -203,7 +185,7 @@ The backend matrix covers:
 - run ID persistence
 - streaming tool call handling
 - token cost limit enforcement
-- TOON compression
+- structured tool result forwarding
 
 The preferred test seam is the provider client created by `adapterFactory.createClient()`. Return a fake SDK-shaped client from the test and let the real route, handler, policy, persistence, and metrics code run around it.
 

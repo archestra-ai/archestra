@@ -455,7 +455,6 @@ function SessionsTable() {
                 baselineCost={
                   row.original.totalBaselineCost || row.original.totalCost
                 }
-                toonCostSavings={row.original.totalToonCostSavings}
                 format="percent"
                 tooltip="hover"
                 variant="session"

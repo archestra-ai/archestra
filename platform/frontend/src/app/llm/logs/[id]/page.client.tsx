@@ -157,10 +157,6 @@ function LogDetail({
             baselineCost={
               dynamicInteraction.baselineCost || dynamicInteraction.cost
             }
-            toonCostSavings={dynamicInteraction.toonCostSavings}
-            toonTokensBefore={dynamicInteraction.toonTokensBefore}
-            toonTokensAfter={dynamicInteraction.toonTokensAfter}
-            toonSkipReason={dynamicInteraction.toonSkipReason}
             format="percent"
             tooltip="always"
             variant="interaction"
@@ -399,8 +395,8 @@ function LogDetail({
                     />
                   )}
                   <p className="text-xs text-muted-foreground mt-2">
-                    This shows the request after processing (e.g., TOON
-                    conversion, trusted data filtering, etc.)
+                    This shows the request after trusted data filtering and
+                    other policy updates.
                   </p>
                 </AccordionContent>
               </AccordionItem>

@@ -109,8 +109,6 @@ import {
   type LLMProvider,
   type LLMStreamAdapter,
   type ToolCallBlock,
-  type ToolCompressionStats,
-  type ToonSkipReason,
   UNSAFE_CONTEXT_BOUNDARY_REASON,
   type UnsafeContextBoundary,
 } from "@/types";
@@ -176,8 +174,6 @@ export interface LLMProxyContext<TRequest> {
   enabledToolNames: Set<string>;
   /** Maps client-decorated gateway tool names to the platform's own names. */
   canonicalizeToolName: utils.gatewayToolNames.ToolNameCanonicalizer;
-  toonStats: ToolCompressionStats;
-  toonSkipReason: ToonSkipReason | null;
   dualLlmAnalyses: DualLlmAnalysis[];
   unsafeContextBoundary?: UnsafeContextBoundary;
   /**
@@ -1209,41 +1205,6 @@ export async function handleLLMProxy<
       "Messages filtered after trusted data evaluation",
     );
 
-    // Apply TOON compression if enabled
-    let toonStats: ToolCompressionStats = {
-      tokensBefore: 0,
-      tokensAfter: 0,
-      costSavings: 0,
-      wasEffective: false,
-      hadToolResults: false,
-    };
-    let toonSkipReason: ToonSkipReason | null = null;
-
-    const shouldApplyToonCompression =
-      await utils.toonConversion.shouldApplyToonCompression(resolvedAgentId);
-
-    if (shouldApplyToonCompression) {
-      toonStats = await requestAdapter.applyToonCompression(actualModel);
-      if (!toonStats.hadToolResults) {
-        toonSkipReason = "no_tool_results";
-      } else if (!toonStats.wasEffective) {
-        toonSkipReason = "not_effective";
-      }
-    } else {
-      toonSkipReason = "not_enabled";
-    }
-
-    logger.info(
-      {
-        shouldApplyToonCompression,
-        toonTokensBefore: toonStats.tokensBefore,
-        toonTokensAfter: toonStats.tokensAfter,
-        toonCostSavings: toonStats.costSavings,
-        toonSkipReason,
-      },
-      `${providerName} proxy: tool results compression completed`,
-    );
-
     // Read per-key base URL override from header, but ONLY from internal (localhost) requests.
     // External clients must NOT be able to set this header — it would be an SSRF vector
     // (attacker could redirect the proxy to arbitrary URLs like cloud metadata endpoints).
@@ -1461,8 +1422,6 @@ export async function handleLLMProxy<
       contextIsTrusted,
       enabledToolNames,
       canonicalizeToolName,
-      toonStats,
-      toonSkipReason,
       dualLlmAnalyses,
       unsafeContextBoundary,
       suppressContent,
@@ -1607,8 +1566,6 @@ async function handleStreaming<
     contextIsTrusted,
     enabledToolNames,
     canonicalizeToolName,
-    toonStats,
-    toonSkipReason,
     dualLlmAnalyses,
     unsafeContextBoundary,
     suppressContent,
@@ -2220,8 +2177,6 @@ async function handleStreaming<
           actualModel,
           usage,
           costs,
-          toonStats,
-          toonSkipReason,
           dualLlmAnalyses,
           unsafeContextBoundary,
           toolCallBlock,
@@ -2271,8 +2226,6 @@ async function handleNonStreaming<
     contextIsTrusted,
     enabledToolNames,
     canonicalizeToolName,
-    toonStats,
-    toonSkipReason,
     dualLlmAnalyses,
     unsafeContextBoundary,
     suppressContent,
@@ -2598,8 +2551,6 @@ async function handleNonStreaming<
         actualModel,
         usage,
         costs,
-        toonStats,
-        toonSkipReason,
         dualLlmAnalyses,
         unsafeContextBoundary,
         toolCallBlock: toToolCallBlock(toolInvocationRefusal),
@@ -2713,8 +2664,6 @@ async function handleNonStreaming<
       actualModel,
       usage,
       costs,
-      toonStats,
-      toonSkipReason,
       dualLlmAnalyses,
       unsafeContextBoundary,
     });

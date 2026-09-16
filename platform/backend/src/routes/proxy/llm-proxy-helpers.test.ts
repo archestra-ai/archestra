@@ -10,7 +10,7 @@ import type { FastifyReply } from "fastify";
 import { vi } from "vitest";
 import { SESSION_ID_KEY } from "@/observability/request-context";
 import { describe, expect, test } from "@/test";
-import type { Agent, ToolCompressionStats } from "@/types";
+import type { Agent } from "@/types";
 
 // Mock prom-client (required by metrics)
 vi.mock("prom-client", () => ({
@@ -565,14 +565,6 @@ describe("buildInteractionRecord", () => {
       cacheCost: 0.0002,
       cacheSavings: 0.0018,
     },
-    toonStats: {
-      tokensBefore: 500,
-      tokensAfter: 300,
-      costSavings: 0.00012,
-      wasEffective: true,
-      hadToolResults: true,
-    } satisfies ToolCompressionStats,
-    toonSkipReason: null,
     dualLlmAnalyses: [],
     billingMode: "metered" as const,
   };
@@ -604,9 +596,6 @@ describe("buildInteractionRecord", () => {
     expect(record.billingMode).toBe("metered");
     expect(record.inputTokens).toBe(100);
     expect(record.outputTokens).toBe(50);
-    expect(record.toonTokensBefore).toBe(500);
-    expect(record.toonTokensAfter).toBe(300);
-    expect(record.toonSkipReason).toBeNull();
     expect(record.unsafeContextBoundary).toEqual({
       kind: "tool_result",
       reason: "tool_result_marked_untrusted",
@@ -652,24 +641,6 @@ describe("buildInteractionRecord", () => {
     expect(record.baselineCost).toBeNull();
     expect(record.cacheCost).toBeNull();
     expect(record.cacheSavings).toBeNull();
-  });
-
-  test("handles null toonCostSavings", () => {
-    const record = buildInteractionRecord({
-      ...baseParams,
-      toonStats: {
-        ...baseParams.toonStats,
-        costSavings: 0,
-      },
-    });
-
-    // 0 is falsy, so costSavings?.toFixed(10) returns "0.0000000000"
-    expect(record.toonCostSavings).toBe("0.0000000000");
-  });
-
-  test("formats toonCostSavings to 10 decimal places", () => {
-    const record = buildInteractionRecord(baseParams);
-    expect(record.toonCostSavings).toBe("0.0001200000");
   });
 
   test("passes source through when provided, undefined otherwise", () => {

@@ -455,36 +455,6 @@ export function useUpdateSecuritySettings(
 }
 
 /**
- * Update LLM settings (TOON compression, compression scope, limit cleanup interval)
- */
-export function useUpdateLlmSettings(
-  onSuccessMessage: string,
-  onErrorMessage: string,
-) {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (
-      data: archestraApiTypes.UpdateLlmSettingsData["body"],
-    ) => {
-      const { data: updatedOrganization, error } =
-        await archestraApiSdk.updateLlmSettings({ body: data });
-
-      if (error) {
-        toast.error(onErrorMessage);
-        return null;
-      }
-
-      return updatedOrganization;
-    },
-    onSuccess: (updatedOrganization) => {
-      if (!updatedOrganization) return;
-      queryClient.setQueryData(organizationKeys.details(), updatedOrganization);
-      toast.success(onSuccessMessage);
-    },
-  });
-}
-
-/**
  * Update MCP settings (online catalog availability)
  */
 export function useUpdateMcpSettings(

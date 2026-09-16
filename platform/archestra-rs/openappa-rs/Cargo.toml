@@ -9,9 +9,9 @@ publish = false
 crate-type = ["cdylib"]
 
 [dependencies]
-appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "e9b2bf6f666a78785cdd24403fa0f4cfdf9b2369" }
-appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "e9b2bf6f666a78785cdd24403fa0f4cfdf9b2369" }
-appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "e9b2bf6f666a78785cdd24403fa0f4cfdf9b2369", features = ["postgres"] }
+appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "73cee3a21f3ad1a677acb46da594c94923ea3f38" }
+appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "73cee3a21f3ad1a677acb46da594c94923ea3f38" }
+appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "73cee3a21f3ad1a677acb46da594c94923ea3f38", features = ["postgres"] }
 napi = { version = "3", features = ["tokio_rt"] }
 napi-derive = "3"
 serde = { version = "1", features = ["derive"] }

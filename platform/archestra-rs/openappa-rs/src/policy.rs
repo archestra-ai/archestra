@@ -130,6 +130,7 @@ requires = { audience = { within = ["internal"] } }
             HookDecision::Ack
         );
         let call = || HookEvent::ToolCall {
+            call_id: None,
             actor: actor.clone(),
             call: ProposedCall {
                 tool: "read_internal".into(),
@@ -146,6 +147,7 @@ requires = { audience = { within = ["internal"] } }
             hooks::handle(
                 &runtime,
                 HookEvent::ToolCall {
+                    call_id: None,
                     actor: actor.clone(),
                     call: ProposedCall {
                         tool: appa_runtime_api::CONTROL_TOOL.into(),

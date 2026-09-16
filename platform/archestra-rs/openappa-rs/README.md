@@ -24,7 +24,7 @@ flowchart LR
 ## Build and run
 
 Cargo fetches OpenAPPA from its public Git repository at commit
-`e9b2bf6f666a78785cdd24403fa0f4cfdf9b2369`, pinned in this package's manifest and
+`73cee3a21f3ad1a677acb46da594c94923ea3f38`, pinned in this package's manifest and
 the workspace lockfile. A sibling checkout is not required. Update the revision
 and lockfile together when adopting a newer runtime.
 

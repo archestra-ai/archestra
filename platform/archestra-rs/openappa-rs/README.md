@@ -24,9 +24,11 @@ flowchart LR
 ## Build and run
 
 Cargo fetches OpenAPPA from its public Git repository at commit
-`581124c212860713010522971afbd7ab4677cb8d`, pinned in this package's manifest and
+`dd06bda1cbc72f5c5e5bec9edb635b080920eb27`, pinned in this package's manifest and
 the workspace lockfile. A sibling checkout is not required. Update the revision
-and lockfile together when adopting a newer runtime.
+and lockfile together when adopting a newer runtime. The lockfile also selects
+`rmcp` 3.4.0, matching the runtime's MCP API. Rebuild the native addon and
+restart the backend after updating; production uses the normal Archestra image build.
 
 From `archestra/platform`:
 
@@ -108,7 +110,10 @@ Detached MCP task execution remains disabled only while the flag is enabled.
 Both streaming and non-streaming proxy paths call `ToolCall`; existing streaming
 buffers retain tool deltas until the decision completes. Existing name
 normalization unwraps `run_tool` and client decorations. Chat does not check
-APPA again before execution.
+APPA again before execution. Each call uses `call:<provider-tool-call-id>` as its
+host identity, persisted with the dispatch. Several calls can remain open and
+return in any order, including after a backend restart. Hook processing remains
+serialized; tool execution can overlap.
 
 On the next model request, the proxy reads the provider adapter's tool results,
 including explicit protocol error flags. Ordinary results are client-reported
@@ -172,7 +177,13 @@ and remedies requiring an unavailable human authority return APPA explanations.
 The binding accepts no host approval ruling and has no review/resume events.
 
 A denied call follows the existing proxy refusal envelope. If one proposed
-call is denied, none of that response's tool calls reach the client. Refusal text
+call is denied, none of that response's tool calls reach the client. The proxy
+settles earlier admissions from that batch with `cancel_call`, reporting known
+non-execution as failure. Closing facts, a refusal replacing the original call
+receipt, and the result receipt commit together. Replaying a canceled call ID
+therefore cannot release it again. Other in-flight calls remain open. Cleanup
+failure refuses the response; an interrupted native transaction retains the
+existing pending-receipt recovery requirement. Refusal text
 and remedy information come from APPA, with existing tool-name translation;
 they are not replaced by legacy Tool Guardrails explanations. There is no
 Chat-specific denied-call execution wrapper or automatic model retry.
@@ -206,7 +217,8 @@ OPENAPPA_TEST_DATABASE_URL=postgresql://... pnpm test
 
 The native tests use real hooks, a real PostgreSQL database, two Node processes,
 and a local HTTP sanitizer. They cover changed resends, concurrent duplicates,
-tenant isolation, remedy acceptance, restriction persistence without model
+session isolation, parallel identical calls, reverse-order results after restart,
+canceled-batch replay, remedy acceptance, restriction persistence without model
 history, one-time sanitizer execution, unknown outcomes, and injected receipt
 commit failure with event rollback. The storage test in the OpenAPPA tree is:
 

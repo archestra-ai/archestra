@@ -240,22 +240,13 @@ export async function checkToolCalls(
   calls: Array<{ id: string; name: string; arguments: string | object }>,
   canonicalize: (name: string) => string,
 ): Promise<PolicyBlockResult | null> {
-  // APPA reserves an allowed call until its result arrives. Withholding a
-  // partially checked batch would leave that reservation stuck forever.
-  if (openappaEnabled() && calls.length > 1) {
-    const feedback =
-      "OpenAPPA requires one tool call at a time. None of these calls ran. Retry with one tool call, wait for its result, then make the next call.";
-    return {
-      refusalMessage: feedback,
-      contentMessage: feedback,
-      reason: feedback,
-      blockedToolName: calls[0].name,
-      toolInput: {},
-      allToolCallNames: calls.map((call) => call.name),
-    };
-  }
-  const normalized = normalizeToolCallsForPolicy(calls, canonicalize);
-  for (const [index, call] of calls.entries()) {
+  const ids = new Set<string>();
+  // Validate the whole response before any call acquires a native dispatch.
+  for (const call of calls) {
+    if (!call.id || ids.has(call.id)) {
+      throw new ApiError(400, "OpenAPPA requires distinct tool-call IDs");
+    }
+    ids.add(call.id);
     if (typeof call.arguments === "string") {
       try {
         JSON.parse(call.arguments);
@@ -266,52 +257,70 @@ export async function checkToolCalls(
         );
       }
     }
-    const target = normalized[index];
-    const tool =
-      archestraMcpBranding.getToolShortName(
-        canonicalize(target.toolCallName),
-      ) === "execute_remedy_plan"
-        ? "appa/execute_remedy_plan"
-        : target.toolCallName;
-    const event = {
-      event: "tool_call",
-      operation_id: `call:${call.id}`,
-      tool,
-      arguments: JSON.parse(target.toolCallArgs),
-      // Delegation is an ordinary tool until the child-return adapter exists.
-      // Its request and output still pass through the parent's policy.
-      spawn: false,
-    };
-    const decision = await dispatch(session, event);
-    if (
-      decision.decision === "allow_call" ||
-      decision.decision === "pass_control"
-    )
-      continue;
-    const feedback = (
-      decision.feedback ??
-      decision.reason ??
-      decision.detail ??
-      "OpenAPPA blocked this tool call"
-    )
-      .replaceAll(
-        "appa/execute_remedy_plan",
-        archestraMcpBranding.getToolName("execute_remedy_plan"),
-      )
-      .replace(
-        /(?<![\w/])execute_remedy_plan\b/g,
-        archestraMcpBranding.getToolName("execute_remedy_plan"),
-      );
-    return {
-      refusalMessage: feedback,
-      contentMessage: feedback,
-      reason: feedback,
-      blockedToolName: call.name,
-      toolInput: JSON.parse(target.toolCallArgs),
-      allToolCallNames: calls.map((call) => call.name),
-    };
   }
-  return null;
+  const normalized = normalizeToolCallsForPolicy(calls, canonicalize);
+  const admitted: string[] = [];
+  let released = false;
+  try {
+    for (const [index, call] of calls.entries()) {
+      const target = normalized[index];
+      const tool =
+        archestraMcpBranding.getToolShortName(
+          canonicalize(target.toolCallName),
+        ) === "execute_remedy_plan"
+          ? "appa/execute_remedy_plan"
+          : target.toolCallName;
+      const event = {
+        event: "tool_call",
+        operation_id: `call:${call.id}`,
+        tool,
+        arguments: JSON.parse(target.toolCallArgs),
+        // Delegation is an ordinary tool until the child-return adapter exists.
+        // Its request and output still pass through the parent's policy.
+        spawn: false,
+      };
+      const decision = await dispatch(session, event);
+      if (
+        decision.decision === "allow_call" ||
+        decision.decision === "pass_control"
+      ) {
+        admitted.push(call.id);
+        continue;
+      }
+      const feedback = (
+        decision.feedback ??
+        decision.reason ??
+        decision.detail ??
+        "OpenAPPA blocked this tool call"
+      )
+        .replaceAll(
+          "appa/execute_remedy_plan",
+          archestraMcpBranding.getToolName("execute_remedy_plan"),
+        )
+        .replace(
+          /(?<![\w/])execute_remedy_plan\b/g,
+          archestraMcpBranding.getToolName("execute_remedy_plan"),
+        );
+      return {
+        refusalMessage: feedback,
+        contentMessage: feedback,
+        reason: feedback,
+        blockedToolName: call.name,
+        toolInput: JSON.parse(target.toolCallArgs),
+        allToolCallNames: calls.map((call) => call.name),
+      };
+    }
+    released = true;
+    return null;
+  } finally {
+    if (!released) {
+      // The proxy withholds the entire response on refusal or error. Settle
+      // only this batch's admissions; other in-flight calls must remain open.
+      for (const id of admitted) {
+        await dispatch(session, { event: "cancel_call", tool_call_id: id });
+      }
+    }
+  }
 }
 
 function remedyResult(decision: z.infer<typeof Decision>): CallToolResult {

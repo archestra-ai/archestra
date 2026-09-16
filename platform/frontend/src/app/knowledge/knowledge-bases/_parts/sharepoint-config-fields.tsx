@@ -125,26 +125,41 @@ export function SharePointConfigFields({
           render={({ field }) => (
             <FormItem>
               <FormLabel>Page publication status</FormLabel>
-              <Select
-                value={field.value ?? "both"}
-                onValueChange={field.onChange}
-              >
-                <FormControl>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                </FormControl>
-                <SelectContent>
-                  <SelectItem value="published">Published only</SelectItem>
-                  <SelectItem value="draft">Draft only</SelectItem>
-                  <SelectItem value="both">Both</SelectItem>
-                </SelectContent>
-              </Select>
               <FormDescription>
                 Filters the current page version, not earlier published
                 versions. Previously indexed pages outside this selection are
                 removed on the next sync. Document library files are unaffected.
               </FormDescription>
+              <Select
+                value={field.value ?? "both"}
+                onValueChange={field.onChange}
+              >
+                <FormControl>
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  <SelectItem
+                    value="published"
+                    description="Sync pages whose current version is published."
+                  >
+                    Published only
+                  </SelectItem>
+                  <SelectItem
+                    value="draft"
+                    description="Sync pages whose current version is a draft."
+                  >
+                    Draft only
+                  </SelectItem>
+                  <SelectItem
+                    value="both"
+                    description="Sync all accessible pages, regardless of publication status."
+                  >
+                    Both
+                  </SelectItem>
+                </SelectContent>
+              </Select>
               <FormMessage />
             </FormItem>
           )}

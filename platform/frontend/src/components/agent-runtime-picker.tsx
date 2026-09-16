@@ -6,7 +6,7 @@ import {
   getAgentRuntimeAllowedProtocols,
   getDefaultAgentRuntimeImage,
 } from "@archestra/shared";
-import { CircleAlert, Code, MessageSquare } from "lucide-react";
+import { CircleAlert, Code } from "lucide-react";
 import { type ReactNode, useEffect, useId, useState } from "react";
 import {
   CatalogAgentIcon,
@@ -36,7 +36,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useFeature } from "@/lib/config/config.query";
-import { useAppName } from "@/lib/hooks/use-app-name";
+import { useAppIconLogo, useAppName } from "@/lib/hooks/use-app-name";
 import { cn } from "@/lib/utils";
 
 export type AgentRuntimeSelection = "chat" | "custom" | AgentCatalogId;
@@ -63,6 +63,7 @@ export function AgentRuntimePicker({
 }) {
   const id = useId();
   const appName = useAppName();
+  const appIconLogo = useAppIconLogo();
   const runtimeEnabled = useFeature("agentRuntime");
   const configuredImage = useFeature("agentRuntimeBaseImage");
   const defaultImage =
@@ -75,7 +76,7 @@ export function AgentRuntimePicker({
     name: string;
     runtime: AgentRuntimeConfig | null;
   }> = [
-    { id: "chat", name: "Chat only", runtime: null },
+    { id: "chat", name: appName, runtime: null },
     ...templates.map((template) => ({
       id: template.id,
       name: template.name,
@@ -108,8 +109,8 @@ export function AgentRuntimePicker({
       <div className="space-y-1">
         <h3 className="text-sm font-medium">Runtime</h3>
         <p className="text-sm text-muted-foreground">
-          Where this agent does its work. A popular agent brings a maintained
-          image. Chat only replies directly in Chat.
+          Choose what runs your agent. {appName} uses its built-in harness;
+          other options run their harness in a container.
         </p>
       </div>
       <RadioGroup
@@ -147,7 +148,11 @@ export function AgentRuntimePicker({
               className="flex size-6 items-center justify-center rounded bg-muted"
             >
               {option.id === "chat" ? (
-                <MessageSquare className="size-4" />
+                <CatalogAgentIcon
+                  id="archestra"
+                  appIconLogo={appIconLogo}
+                  size={16}
+                />
               ) : option.id === "custom" ? (
                 <Code className="size-4" />
               ) : (

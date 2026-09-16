@@ -4648,7 +4648,7 @@ describe("AgentForm save payload and failure handling", () => {
     const runtimeSection = screen.getByTestId(E2eTestId.AgentRuntimePicker);
     expect(runtimeSection).toBeVisible();
     await user.click(
-      within(runtimeSection).getByRole("radio", { name: "Chat only" }),
+      within(runtimeSection).getByRole("radio", { name: "Archestra" }),
     );
 
     const toolsEditor = await screen.findByText("Mock Tools Editor");

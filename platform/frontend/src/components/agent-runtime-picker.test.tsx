@@ -16,7 +16,7 @@ import {
   vi,
 } from "vitest";
 import { useFeature } from "@/lib/config/config.query";
-import { useAppName } from "@/lib/hooks/use-app-name";
+import { useAppIconLogo, useAppName } from "@/lib/hooks/use-app-name";
 import { getAgentCatalogTemplates } from "./agent-pages/agent-catalog";
 import {
   type AgentRuntimeConfig,
@@ -51,6 +51,7 @@ const defaultImage = "registry.example.com/agent:1.2.3";
 beforeEach(() => {
   archestraApiClient.setConfig({ baseUrl: "http://localhost:9000" });
   vi.mocked(useAppName).mockReturnValue("Test Platform");
+  vi.mocked(useAppIconLogo).mockReturnValue("/logo-icon.svg");
   vi.mocked(useFeature).mockImplementation((flag) =>
     flag === "agentRuntime"
       ? true
@@ -61,7 +62,7 @@ beforeEach(() => {
 });
 
 describe("AgentRuntimePicker", () => {
-  it("replaces the complete runtime when switching harnesses and removes it for Chat only", async () => {
+  it("replaces the complete runtime when switching harnesses and removes it for the native platform agent", async () => {
     const user = userEvent.setup();
     renderPicker("claude-code", {
       ...runtimeFor("claude-code"),
@@ -79,7 +80,7 @@ describe("AgentRuntimePicker", () => {
     expect(savedRuntime()).toEqual(runtimeFor("opencode"));
     expect(savedRuntime().claudeCode).toBeUndefined();
     await user.click(screen.getByRole("radio", { name: "Codex" }));
-    await user.click(screen.getByRole("radio", { name: "Chat only" }));
+    await user.click(screen.getByRole("radio", { name: "Test Platform" }));
     expect(savedRuntime()).toBeNull();
     expect(screen.getByText("Model settings content")).toBeVisible();
     expect(

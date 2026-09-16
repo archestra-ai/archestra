@@ -26,7 +26,7 @@ Your administrator must enable Agent Runtime on a Kubernetes cluster with persis
 
 Choose a maintained template from **Create Agent**. The **Runtime** picker sits below Visibility in Configuration. Switching runtimes keeps your name, description, and instructions. It replaces the image, command, inference settings, environment variables, and credential declarations.
 
-Maintained runtimes arrive preconfigured. Model or Authentication settings open by default; other settings are collapsed for review. **Chat only** uses a foreground conversation without a dedicated runtime. **Custom image** opens the model, image, and inference settings.
+Maintained runtimes arrive preconfigured. Model or Authentication settings open by default; other settings are collapsed for review. **Archestra** uses the platform’s native agent loop with the selected model and tools, without a dedicated runtime. **Custom image** opens the model, image, and inference settings.
 
 An attention icon marks missing or incompatible settings that need to be fixed before creation, even when the section is collapsed. Hover over the icon to see what needs to change. Claude personal accounts connect after saving. Codex requires your ChatGPT subscription before creation. Claude provider billing requires an explicit compatible connection.
 

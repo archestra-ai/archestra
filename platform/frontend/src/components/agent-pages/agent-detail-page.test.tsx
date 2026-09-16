@@ -65,6 +65,9 @@ vi.mock("./agent-connect-content", () => ({
 vi.mock("./agent-runs", () => ({
   AgentRuns: () => <div>run history</div>,
 }));
+vi.mock("@/components/agent-saved-setup-banner", () => ({
+  AgentSavedSetupBanner: () => null,
+}));
 vi.mock("@/components/clone-agent-dialog", () => ({
   CloneAgentDialog: () => null,
 }));

@@ -1,4 +1,5 @@
 export const E2eTestId = {
+  AgentRuntimePicker: "agent-runtime-picker",
   AgentsTable: "agents-table",
   CreateAgentButton: "create-agent-button",
   CreateAgentCloseHowToConnectButton: "create-agent-how-to-connect-button",

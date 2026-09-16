@@ -2,7 +2,6 @@ import {
   type AgentCatalogId,
   getAgentCatalogImages,
   getDefaultAgentRuntimeImage,
-  type SubscriptionCredentialKind,
 } from "@archestra/shared";
 import { Bot, Network } from "lucide-react";
 import Image from "next/image";
@@ -63,7 +62,6 @@ export function getAgentCatalogTemplates(
       command: ["archestra-codex"],
       inferenceProtocol: "openai_responses",
       steerMode: "tmux_keys",
-      requiredSubscriptionKind: "chatgpt",
     }),
     template({
       id: "opencode",
@@ -255,7 +253,6 @@ function template(params: {
   command: string[] | null;
   inferenceProtocol: "openai_responses" | "openai_chat" | "anthropic";
   steerMode: "pipe" | "tmux_keys";
-  requiredSubscriptionKind?: SubscriptionCredentialKind;
 }): AgentCatalogTemplate {
   return {
     id: params.id,
@@ -268,7 +265,6 @@ function template(params: {
       description: params.description,
       systemPrompt: `You are ${params.name}, an autonomous coding agent. Complete delegated tasks carefully, use the tools available through ${params.platformName}, verify your work, and report the concrete result.`,
       accessAllTools: true,
-      requiredSubscriptionKind: params.requiredSubscriptionKind,
       runtime: {
         image: params.image,
         command: params.command,

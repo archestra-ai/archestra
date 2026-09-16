@@ -14,6 +14,7 @@ import {
 import { Button } from "@/components/ui/button";
 
 interface DeploymentEnvironmentVariablesEditorProps {
+  hideHeading?: boolean;
   value: EnvVarDraft[];
   onChange: (value: EnvVarDraft[]) => void;
   description: ReactNode;
@@ -33,6 +34,7 @@ interface DeploymentEnvironmentVariablesEditorProps {
 }
 
 export function DeploymentEnvironmentVariablesEditor({
+  hideHeading = false,
   value,
   onChange,
   description,
@@ -63,7 +65,9 @@ export function DeploymentEnvironmentVariablesEditor({
     <div className="space-y-1">
       <div className="flex items-start justify-between gap-4">
         <div className="space-y-1">
-          <h3 className="font-semibold text-base">Environment variables</h3>
+          {!hideHeading && (
+            <h3 className="font-semibold text-base">Environment variables</h3>
+          )}
           <p className="text-xs text-muted-foreground">{description}</p>
         </div>
         <Button

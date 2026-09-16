@@ -20,12 +20,14 @@ import {
   AgentModel,
   LimitModel,
   LlmProviderApiKeyModel,
+  LlmProviderApiKeyModelLinkModel,
   ModelModel,
   TeamTokenModel,
   VirtualApiKeyModel,
 } from "@/models";
 import { claudeCodeAccountManager } from "@/services/agent-runtime/claude-code-account";
 import { archestraMarkWithText } from "@/services/archestra-mark";
+import { modelSyncService } from "@/services/model-sync";
 import { buildSkillDiscoveryPreview } from "@/services/skill-discovery-preview";
 import type {
   AgentRunInput,
@@ -474,6 +476,36 @@ async function createProviderBackedVirtualKey(params: {
       409,
       `No ${providerDisplayNames[params.provider]} credential is available for this Agent and user, so the Agent Runtime run cannot use its selected model.`,
     );
+  }
+
+  if (requiredSubscription && params.requiredSubscriptionKind) {
+    // The runtime uses the actor's subscription, which may have been synced
+    // before the selected model was released (or before another user's key).
+    // Refresh that connection rather than bypassing the router's model links.
+    const hasSelectedModel = async () => {
+      const models = await LlmProviderApiKeyModelLinkModel.getModelsForApiKey(
+        providerApiKey.id,
+      );
+      return models.some(
+        (model) =>
+          model.provider === params.provider &&
+          model.modelId === params.model &&
+          ModelModel.supportsTextChat(model),
+      );
+    };
+    if (!(await hasSelectedModel())) {
+      await modelSyncService.syncModelsForApiKey({
+        apiKeyId: providerApiKey.id,
+        provider: providerApiKey.provider,
+        apiKeyValue: requiredSubscription.apiKeyValue,
+      });
+      if (!(await hasSelectedModel())) {
+        throw new ApiError(
+          409,
+          `The selected model "${params.model}" is not available through your ${SUBSCRIPTION_CREDENTIALS[params.requiredSubscriptionKind].label}. Choose a model supported by that connection.`,
+        );
+      }
+    }
   }
 
   return VirtualApiKeyModel.create({

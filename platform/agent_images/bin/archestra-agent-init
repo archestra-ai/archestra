@@ -2,9 +2,9 @@
 set -eu
 
 fail_github_setup() {
-  # A fixed code is safe for task notifications; gh output may contain tokens.
+  # Publish an image-owned, safe message; gh output may contain tokens.
   if [ -n "${ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX:-}" ]; then
-    printf '%s\n' github_configuration > "${ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX}.failure.tmp"
+    jq -n '{version:1,code:"github_configuration",message:"GitHub authentication could not be configured. Check the GitHub credential and runtime image."}' > "${ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX}.failure.tmp"
     mv "${ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX}.failure.tmp" "${ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX}.failure"
   fi
   echo "archestra: GitHub authentication setup failed; check the GitHub credential and runtime image" >&2

@@ -1048,7 +1048,7 @@ class AgentRuntimeManager {
             command: [
               "/bin/sh",
               "-c",
-              'file="/var/run/archestra/turns/$1"; if [ -f "$file.exit" ]; then cat "$file.exit"; printf "\\n"; if [ -f "$file.failure" ]; then head -c 128 "$file.failure" 2>/dev/null || true; fi; fi',
+              'file="/var/run/archestra/turns/$1"; if [ -f "$file.exit" ]; then status="$(cat "$file.exit")"; printf "%s\\n" "$status"; if [ -f "$file.failure" ]; then head -c 4097 "$file.failure" 2>/dev/null || true; fi; fi',
               "read-turn-result",
               params.session.taskId,
             ],

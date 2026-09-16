@@ -3,7 +3,7 @@ title: Agent Runtime (Beta)
 category: Agents
 order: 7
 description: Configure isolated workspaces for coding agents and delegated tasks
-lastUpdated: "2026-09-15"
+lastUpdated: "2026-09-16"
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -87,6 +87,14 @@ The [maintained images](https://github.com/archestra-ai/archestra/blob/main/plat
 | Storage | Keep working files and saved client sessions under `/home/node`. Other container paths may be ephemeral. |
 
 Read `ARCHESTRA_AGENT_RUNTIME_MODE` to support interactive and unattended work. Interactive clients remain available for follow-ups; unattended clients finish the task and exit.
+
+### Reporting Failures
+
+Your image can supply an actionable error message before exiting non-zero. Runtime carries that message into task results, notifications, and run details.
+
+Publish a JSON envelope containing `version`, `code`, and `message` to `${ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX}.failure`. Your image defines the code and wording; no platform registration is required. Remove credentials and private details before publishing. Without a valid envelope, Runtime reports the exit status.
+
+See the [failure contract](https://github.com/archestra-ai/archestra/blob/main/platform/agent_images/runtime-contract.md#failure-reasons) for the format, limits, and a shell example.
 
 ### SDK Integration
 

@@ -117,9 +117,12 @@ fi
     expect(result.code).toBe(78);
     expect(result.stderr).toContain("GitHub authentication setup failed");
     expect(result.stderr).not.toContain("synthetic-secret");
-    expect(await readFile(path.join(root, "turn.failure"), "utf8")).toBe(
-      "github_configuration\n",
+    const failure = JSON.parse(
+      await readFile(path.join(root, "turn.failure"), "utf8"),
     );
+    expect(failure).toMatchObject({ version: 1, code: "github_configuration" });
+    expect(failure.message).toContain("GitHub credential");
+    expect(JSON.stringify(failure)).not.toContain("synthetic-secret");
   } finally {
     await rm(root, { recursive: true, force: true });
   }

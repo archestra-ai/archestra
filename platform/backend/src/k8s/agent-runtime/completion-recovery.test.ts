@@ -239,39 +239,33 @@ test.for([
   );
 });
 
-test.for([
-  [
-    "78\n\ngithub_repository_access\n",
-    "GitHub could not access the selected repository.",
-  ],
-  ["1\n\nclaude_authentication\n", "Claude Code authentication failed."],
-])("reports a safe actionable failure from %s", async ([result, reason], {
+test("propagates a custom image failure without a platform code registry", async ({
   run,
 }) => {
-  completeExec(result);
-  const completion = await manager.waitForCompletion({
-    session: run,
-    pollIntervalMs: 1,
-  });
-  expect(completion.outcome).toBe("failed");
-  expect(completion.reason).toContain(reason);
-  expect(completion.reason).toContain(
-    `Runtime exit status ${result.split("\n")[0]}.`,
+  completeExec(
+    `42\n${JSON.stringify({ version: 1, code: "custom_indexer.dataset_missing", message: "The selected dataset is unavailable. Choose an existing dataset." })}`,
   );
+  await expect(manager.waitForCompletion({ session: run })).resolves.toEqual({
+    outcome: "failed",
+    reason:
+      "The selected dataset is unavailable. Choose an existing dataset. (Runtime exit status 42.)",
+  });
 });
 
-test("does not expose unknown failure payloads", async ({ run }) => {
-  completeExec("78\n\nsynthetic-secret-and-private-diagnostics");
+test("does not expose malformed failure payloads", async ({ run }) => {
+  completeExec("78\nsynthetic-secret-and-private-diagnostics");
   await expect(manager.waitForCompletion({ session: run })).resolves.toEqual({
     outcome: "failed",
     reason: "The Agent Runtime turn exited with status 78",
   });
 });
 
-test("a successful exit ignores an optional failure sidecar", async ({
+test("a successful exit ignores an optional failure envelope", async ({
   run,
 }) => {
-  completeExec("0\n\nclaude_authentication");
+  completeExec(
+    `0\n${JSON.stringify({ version: 1, code: "custom_error", message: "Earlier error" })}`,
+  );
   await expect(manager.waitForCompletion({ session: run })).resolves.toEqual({
     outcome: "succeeded",
   });

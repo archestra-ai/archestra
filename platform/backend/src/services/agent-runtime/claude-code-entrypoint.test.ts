@@ -93,12 +93,16 @@ while :; do sleep 0.1; done
       }
       expect(result.code).toBe(1);
       expect(result.killed).not.toBe(true);
-      expect(
+      const failure = JSON.parse(
         await readFile(path.join(runtime, "test-turn.failure"), "utf8"),
-      ).toBe(`${code}\n`);
+      );
+      expect(failure).toMatchObject({ version: 1, code });
+      expect(failure.message).toContain("Claude Code");
+      expect(JSON.stringify(failure)).not.toContain("synthetic-secret");
+      expect(JSON.stringify(failure)).not.toContain("unrecognized-secret");
       expect(result.stdout).not.toContain("synthetic-secret");
       expect(result.stderr).not.toContain("synthetic-secret");
-      expect(result.stdout).toContain("could not complete the API request");
+      expect(result.stdout).toContain(failure.message);
     } finally {
       await rm(root, { recursive: true, force: true });
     }

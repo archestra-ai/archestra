@@ -19,19 +19,33 @@ The initial task is supplied in `ARCHESTRA_AGENT_RUNTIME_TASK`. The Agent system
 
 ## Failure Reasons
 
-A runtime can write a failure code to `${ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX}.failure` before exiting. The supervisor provides this turn-specific prefix. Publish the file with an atomic rename. Do not write raw stderr, tokens, URLs, or account details into it.
+Custom images can publish a user-facing failure before exiting non-zero. Write a versioned JSON envelope to `${ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX}.failure`. The supervisor supplies this turn-specific prefix before initialization and client startup.
 
-The backend maps recognized codes to fixed task failure messages. The message includes the runtime's exit status. Unknown codes and older images retain the exit-status-only message. A failure file never overrides a successful exit.
+```sh
+failure="${ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX}.failure"
+jq -n \
+  --arg code "my_agent.input_missing" \
+  --arg message "Select an input file and retry." \
+  '{version:1,code:$code,message:$message}' > "$failure.tmp"
+mv "$failure.tmp" "$failure"
+exit 1
+```
 
-| Codes | Meaning |
+Use an atomic rename to publish the complete file. The image owns the code and message. Codes need no platform registration. The backend validates the envelope, appends the runtime exit status, and propagates the message through task results, notifications, and run details.
+
+Version `1` accepts exactly these fields:
+
+| Field | Contract |
 | --- | --- |
-| `github_authentication`, `github_repository_access`, `github_permissions`, `github_sso` | Rejected credential, inaccessible repository, denied permissions, or required SSO authorization. |
-| `github_rate_limit`, `github_unavailable`, `github_configuration` | Rate limit, connectivity failure, or GitHub CLI setup failure. |
-| `repository_setup` | A repository bootstrap step failed. |
-| `claude_authentication`, `claude_billing`, `claude_rate_limit` | Claude authentication, account access, or capacity failure. |
-| `claude_unavailable`, `claude_request`, `claude_api_error` | Provider outage, rejected request, or other API failure. |
+| `version` | The number `1`. |
+| `code` | An image-defined identifier of 1–128 ASCII letters, digits, dots, underscores, or hyphens. |
+| `message` | Non-empty plain text, at most 2,000 characters after trimming. Newlines and tabs are allowed; other ASCII control characters are rejected. |
 
-The maintained Claude Code image handles `StopFailure` separately from successful completion. Delegated API failures end the run. Interactive sessions remain open and request attention.
+The entire UTF-8 file must not exceed 4,096 bytes. Missing files, malformed JSON, unsupported versions, and invalid fields retain the exit-status-only fallback. A failure envelope never overrides a successful exit. Older platforms ignore this optional file.
+
+Treat `message` as public task output. Image authors must remove credentials and private details before publishing it. Prefer safe messages constructed from structured client errors; never copy raw stderr or provider response bodies. Schema validation cannot detect secrets in otherwise valid text.
+
+The maintained Claude Code wrapper publishes its own messages from `StopFailure` events. Delegated API failures end the run. Interactive sessions remain open and request attention. Other images implement the same envelope using their own error handling.
 
 ## Readable Transcript
 

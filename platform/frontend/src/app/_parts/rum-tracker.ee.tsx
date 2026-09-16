@@ -12,6 +12,34 @@ import { rumClient } from "@/lib/rum.ee";
 const WEB_VITAL_NAMES = new Set(["LCP", "CLS", "INP", "FCP", "TTFB"]);
 
 /**
+ * Stable module-scope callback: `useReportWebVitals` re-runs its effect (and
+ * re-registers the web-vitals observers, which leak listeners) whenever its
+ * callback identity changes, so the callback must not be an inline arrow
+ * recreated per render. Defined at module scope, it is created exactly once
+ * for the lifetime of the bundle. See https://github.com/archestra-ai/archestra/issues/7928
+ */
+function handleReportWebVital(metric: Parameters<typeof useReportWebVitals>[0]) {
+  if (WEB_VITAL_NAMES.has(metric.name)) {
+    rumClient.trackWebVital({
+      name: metric.name,
+      value: metric.value,
+      rating: metric.rating,
+    });
+  }
+}
+
+/**
+ * Subscribes to web vitals. Split into its own component so the registration
+ * only happens when RUM is actually on — when RUM is disabled the observer
+ * set is never registered at all, rather than registered and dropped.
+ * Renders nothing.
+ */
+function WebVitalsReporter() {
+  useReportWebVitals(handleReportWebVital);
+  return null;
+}
+
+/**
  * Starts the RUM client when the deployment has a RUM export endpoint
  * configured and a user is signed in, and reports a page view per App Router
  * navigation (route changes never remount the layout, so the pathname effect
@@ -25,18 +53,6 @@ export function RumTracker() {
   const enabled = Boolean(publicConfig?.rum?.enabled);
   const userId = session?.user?.id;
   const isSignedIn = Boolean(userId);
-
-  // Registered unconditionally (hooks can't be conditional); the client
-  // buffers a few pre-start metrics and drops everything while stopped.
-  useReportWebVitals((metric) => {
-    if (WEB_VITAL_NAMES.has(metric.name)) {
-      rumClient.trackWebVital({
-        name: metric.name,
-        value: metric.value,
-        rating: metric.rating,
-      });
-    }
-  });
 
   useEffect(() => {
     if (!enabled || !isSignedIn) {
@@ -65,5 +81,9 @@ export function RumTracker() {
     }
   }, [enabled, isSignedIn, pathname]);
 
-  return null;
+  if (!enabled || !isSignedIn) {
+    return null;
+  }
+
+  return <WebVitalsReporter />;
 }

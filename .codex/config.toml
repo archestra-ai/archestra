@@ -1,0 +1,2 @@
+# Keep the platform guide and nested AGENTS.md files within the combined budget.
+project_doc_max_bytes = 65536

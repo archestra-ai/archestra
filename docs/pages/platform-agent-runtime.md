@@ -73,7 +73,7 @@ The **Inference API** must match the client in your image. Maintained templates 
 
 The Agent's [Skills policy](/docs/platform-agents#skills) applies to every maintained runtime template. Skills use the configured MCP gateway; they need no separate installation in the client. The caller's access and the Agent's environment still apply.
 
-Clients load instructions and bundled resources on demand. Scripts return as text; binary assets return as base64. Clients can save these files and run them using their own tools. The image must contain any dependencies the skill requires.
+Runtime startup instructions include a compact preview of available skill names and descriptions. The MCP discovery tool also advertises this preview to connected clients. Clients load full instructions and bundled resources on demand. Scripts return as text; binary assets return as base64. Clients can save these files and run them using their own tools. The image must contain any dependencies the skill requires.
 
 The [Code Sandbox](/docs/platform-code-sandbox) is separate from the Agent Runtime workspace. Its `/skills` paths are available through sandbox tools, not the runtime's local shell.
 

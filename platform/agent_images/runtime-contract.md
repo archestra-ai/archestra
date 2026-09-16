@@ -51,6 +51,8 @@ The built-in Archestra image reports configuration, startup, and session failure
 
 Agent skills are exposed as MCP tools through `ARCHESTRA_MCP_GATEWAY_URL`, authenticated with `ARCHESTRA_MCP_GATEWAY_TOKEN`. A custom client must support MCP `tools/list` and `tools/call`, expose the returned tools to its model, and return tool results to the model. No separate Archestra SDK or skill installation is required.
 
+Pass `ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT` to the model. It includes a bounded preview of accessible skill names and descriptions. The gateway also adds this preview to the `list_skills` tool description. Treat previews as discovery hints; call `list_skills` for the complete current catalog.
+
 Use the gateway's advertised tool names: `list_skills` discovers the Agent's effective catalog; `load_skill` loads instructions or a bundled file by `name` and optional `path`. Names carry the deployment's tool prefix. When the gateway uses tool search, discover these tools there first. The Agent's skill policy, environment, and caller permissions apply to every request.
 
 Bundled text files are returned as text. A `<skill_file encoding="base64">` contains bytes to decode before saving. Preserve resource paths relative to the skill root and provide the runtimes and dependencies its scripts require. Files are not automatically installed in native client skill directories. `/skills` mounts mentioned by sandbox-enabled tools belong to the separate Code Sandbox, not this container.

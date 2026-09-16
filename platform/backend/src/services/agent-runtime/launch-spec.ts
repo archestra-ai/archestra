@@ -26,6 +26,7 @@ import {
 } from "@/models";
 import { claudeCodeAccountManager } from "@/services/agent-runtime/claude-code-account";
 import { archestraMarkWithText } from "@/services/archestra-mark";
+import { buildSkillDiscoveryPreview } from "@/services/skill-discovery-preview";
 import type {
   AgentRunInput,
   EffectiveNetworkPolicy,
@@ -122,6 +123,11 @@ export async function buildAgentRunLaunchSpec(params: {
       "The Agent for this Agent Runtime run no longer exists",
     );
   }
+  const skillPreview = await buildSkillDiscoveryPreview({
+    agentId: params.agentId,
+    organizationId: params.organizationId,
+    userId: actorUserId ?? undefined,
+  });
   const { llm, selectedModel, usesClaudeCodeSubscription } =
     await preflightAgentRuntimeModelCompatibility({
       runtime: params.runtime,
@@ -296,6 +302,7 @@ export async function buildAgentRunLaunchSpec(params: {
       : {}),
     ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT: [
       agent.systemPrompt,
+      skillPreview,
       "Skills configured for this Agent are available through its MCP gateway, " +
         "not necessarily in this client's native skill directories. " +
         `Use ${archestraMcpBranding.getToolName(TOOL_LIST_SKILLS_SHORT_NAME)} ` +

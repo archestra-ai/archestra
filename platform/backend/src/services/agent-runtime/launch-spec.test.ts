@@ -1,4 +1,8 @@
-import type { SupportedProvider } from "@archestra/shared";
+import {
+  ARCHESTRA_MCP_CATALOG_ID,
+  type SupportedProvider,
+  TOOL_LOAD_SKILL_FULL_NAME,
+} from "@archestra/shared";
 import { assert, vi } from "vitest";
 import config from "@/config";
 import {
@@ -6,7 +10,9 @@ import {
   LlmProviderApiKeyModel,
   LlmProviderApiKeyModelLinkModel,
   ModelModel,
+  SkillModel,
   TeamTokenModel,
+  ToolModel,
   UserCredentialModel,
   VirtualApiKeyModel,
 } from "@/models";
@@ -51,6 +57,7 @@ describe("buildAgentRunLaunchSpec", () => {
     makeSecret,
     makeLlmProviderApiKey,
     makeAgent,
+    makeAgentTool,
   }) => {
     const setup = await makeConfiguredAgent({
       provider: "gemini",
@@ -60,6 +67,22 @@ describe("buildAgentRunLaunchSpec", () => {
       makeSecret,
       makeLlmProviderApiKey,
       makeAgent,
+    });
+    await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+    const loadTool = await ToolModel.findByName(TOOL_LOAD_SKILL_FULL_NAME);
+    assert(loadTool);
+    await makeAgentTool(setup.agent.id, loadTool.id);
+    await SkillModel.createWithFiles({
+      skill: {
+        organizationId: setup.agent.organizationId,
+        name: "release-review",
+        description: "Evaluate changes against the release checklist.",
+        content: "PRIVATE_INSTRUCTIONS_LOADED_ON_DEMAND",
+        metadata: {},
+        sourceType: "manual",
+        scope: "org",
+      },
+      files: [],
     });
     const systemPrompt = "Review the repository's release instructions.";
     await AgentModel.update(setup.agent.id, { systemPrompt });
@@ -122,6 +145,16 @@ describe("buildAgentRunLaunchSpec", () => {
     );
     expect(spec.secretEnv.ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT).not.toContain(
       "stale instructions",
+    );
+
+    expect(spec.secretEnv.ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT).toContain(
+      'name="release-review"',
+    );
+    expect(spec.secretEnv.ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT).toContain(
+      "Evaluate changes against the release checklist.",
+    );
+    expect(spec.secretEnv.ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT).not.toContain(
+      "PRIVATE_INSTRUCTIONS_LOADED_ON_DEMAND",
     );
 
     assert(virtualApiKeyId);

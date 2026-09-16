@@ -17,6 +17,7 @@ import {
   TOOL_COPY_FILE_SHORT_NAME,
   TOOL_GET_RUN_SHORT_NAME,
   TOOL_LIST_RUNS_SHORT_NAME,
+  TOOL_LIST_SKILLS_SHORT_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
   TOOL_RENDER_APP_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
@@ -96,6 +97,7 @@ import {
 import { jwksValidator } from "@/services/jwks-validator";
 import { buildKnowledgeSearchInstruction } from "@/services/knowledge-search-instruction";
 import { buildKnowledgeSourcesDescription } from "@/services/knowledge-sources-description";
+import { buildSkillDiscoveryPreview } from "@/services/skill-discovery-preview";
 import { isPlatformSkillUri } from "@/skills/skill-uri";
 import {
   type AgentAccessContext,
@@ -530,27 +532,39 @@ export async function createAgentServer(params: {
         archestraMcpBranding.getToolShortName(tool.name) ===
         TOOL_SEARCH_TOOLS_SHORT_NAME,
     );
-    const [kbToolDescription, searchToolsDescription] = await Promise.all([
-      buildKnowledgeSourcesDescription(
-        agentId,
+    const listSkillsName = archestraMcpBranding.getToolName(
+      TOOL_LIST_SKILLS_SHORT_NAME,
+    );
+    const [kbToolDescription, searchToolsDescription, skillPreview] =
+      await Promise.all([
+        buildKnowledgeSourcesDescription(
+          agentId,
+          tokenAuth?.organizationId
+            ? {
+                userId: tokenAuth.userId,
+                organizationId: tokenAuth.organizationId,
+              }
+            : undefined,
+        ),
+        advertisesSearchTools
+          ? buildSearchToolsDescription({
+              mcpTools,
+              advertisedToolNames: permittedTools.map((tool) => tool.name),
+              agentId,
+              userId: tokenAuth?.userId,
+              organizationId: tokenAuth?.organizationId,
+              prefetchedCatalogs: catalogsById,
+            })
+          : null,
+        permittedTools.some((tool) => tool.name === listSkillsName) &&
         tokenAuth?.organizationId
-          ? {
-              userId: tokenAuth.userId,
+          ? buildSkillDiscoveryPreview({
+              agentId,
               organizationId: tokenAuth.organizationId,
-            }
-          : undefined,
-      ),
-      advertisesSearchTools
-        ? buildSearchToolsDescription({
-            mcpTools,
-            advertisedToolNames: permittedTools.map((tool) => tool.name),
-            agentId,
-            userId: tokenAuth?.userId,
-            organizationId: tokenAuth?.organizationId,
-            prefetchedCatalogs: catalogsById,
-          })
-        : null,
-    ]);
+              userId: tokenAuth.userId,
+            })
+          : null,
+      ]);
 
     const toolsList: McpListTool[] = permittedTools
       .filter(
@@ -566,19 +580,21 @@ export async function createAgentServer(params: {
           appLaunchTitle(catalogId, name) ||
           name,
         description:
-          name ===
-            archestraMcpBranding.getToolName(
-              TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
-            ) && kbToolDescription
-            ? kbToolDescription
+          name === listSkillsName && skillPreview
+            ? `${description ?? ""}\n\n${skillPreview}`
             : name ===
                   archestraMcpBranding.getToolName(
-                    TOOL_SEARCH_TOOLS_SHORT_NAME,
-                  ) && searchToolsDescription
-              ? searchToolsDescription
-              : (appLaunchDescription(catalogId, name) ??
-                description ??
-                undefined),
+                    TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+                  ) && kbToolDescription
+              ? kbToolDescription
+              : name ===
+                    archestraMcpBranding.getToolName(
+                      TOOL_SEARCH_TOOLS_SHORT_NAME,
+                    ) && searchToolsDescription
+                ? searchToolsDescription
+                : (appLaunchDescription(catalogId, name) ??
+                  description ??
+                  undefined),
         inputSchema: parameters,
         annotations: meta?.annotations || {},
         _meta: meta?._meta || {},

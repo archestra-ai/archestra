@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+
 import { act, cleanup, render } from "@testing-library/react";
 
 import { StrictMode } from "react";

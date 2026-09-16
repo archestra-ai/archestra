@@ -3,6 +3,7 @@
 import os
 import re
 import signal
+import shutil
 import subprocess
 import sys
 import time
@@ -36,6 +37,7 @@ def main() -> int:
     turn_prefix = os.environ.get("ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX")
     completed_version = None
     child_status: int | None = None
+    completion_error: BaseException | None = None
     try:
         while child_status is None:
             exited_pid, status = os.waitpid(child_pid, os.WNOHANG)
@@ -46,11 +48,20 @@ def main() -> int:
                 version = completion_marker.stat().st_mtime_ns
                 if version != completed_version:
                     time.sleep(2)
-                    capture_frame(frame_file)
-                    if turn_prefix and not Path(str(completion_marker) + ".failed").exists():
-                        publish_completed_turn(turn_prefix, frame_file)
-                        completed_version = version
-                    else:
+                    try:
+                        capture_frame(frame_file)
+                        if turn_prefix and not Path(str(completion_marker) + ".failed").exists():
+                            publish_completed_turn(turn_prefix, frame_file)
+                            completed_version = version
+                        else:
+                            child_status = stop_process_group(child_pid)
+                            break
+                    except (OSError, RuntimeError, subprocess.CalledProcessError) as error:
+                        print(
+                            f"archestra: unable to capture or retain completed Herdr turn: {error}",
+                            file=sys.stderr,
+                        )
+                        completion_error = error
                         child_status = stop_process_group(child_pid)
                         break
             time.sleep(0.2)
@@ -58,6 +69,8 @@ def main() -> int:
         signal.signal(signal.SIGTTOU, signal.SIG_IGN)
         os.tcsetpgrp(0, parent_process_group)
 
+    if completion_error is not None:
+        return 1
     if completion_marker.exists():
         return 0
     return os.waitstatus_to_exitcode(child_status)
@@ -81,10 +94,19 @@ def publish_completed_turn(turn_prefix: str, frame_file: Path) -> None:
         )
         if frame_file.exists():
             log.write(b"\x1b[2J\x1b[H" + frame_file.read_bytes())
-    subprocess.run(
-        ["tmux", "set-option", "-t", "agent", "@archestra_retained_task", prefix.name],
-        check=True,
-    )
+    if herdr_helper_available():
+        # The helper owns the live-task/pane identity check. Keep this before
+        # the result marker so a stale completion cannot settle a new turn.
+        subprocess.run(
+            ["archestra-terminal", "retain", prefix.name],
+            check=True,
+            stdout=subprocess.DEVNULL,
+        )
+    else:
+        subprocess.run(
+            ["tmux", "set-option", "-t", "agent", "@archestra_retained_task", prefix.name],
+            check=True,
+        )
     if not Path(turn_prefix + ".exit").exists():
         temporary = Path(turn_prefix + ".result.tmp")
         temporary.write_text("0\n")
@@ -92,6 +114,15 @@ def publish_completed_turn(turn_prefix: str, frame_file: Path) -> None:
 
 
 def capture_frame(frame_file: Path) -> None:
+    if herdr_helper_available():
+        with frame_file.open("wb") as output:
+            subprocess.run(
+                ["archestra-terminal", "capture"],
+                check=True,
+                stdout=output,
+            )
+        return
+
     pane = os.environ.get("TMUX_PANE")
     if not pane:
         return
@@ -124,6 +155,19 @@ def capture_frame(frame_file: Path) -> None:
         line for line in result.stdout.splitlines(keepends=True) if b"?1;2c" not in line
     ]
     frame_file.write_bytes(metadata + b"".join(clean_lines))
+
+
+def herdr_helper_available() -> bool:
+    """Use the Herdr adapter only in a Herdr-capable runtime.
+
+    The image intentionally retains the tmux path for old pods and custom
+    images. Presence of HERDR_ENV alone is insufficient while the helper is
+    being rolled out or bind-mounted during migration.
+    """
+
+    return bool(os.environ.get("HERDR_ENV")) and shutil.which(
+        "archestra-terminal"
+    ) is not None
 
 
 def stop_process_group(child_pid: int) -> int:

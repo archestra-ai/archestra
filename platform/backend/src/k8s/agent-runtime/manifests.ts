@@ -9,9 +9,12 @@ import {
   AGENT_RUNTIME_CREDENTIALS_FILE,
   AGENT_RUNTIME_CREDENTIALS_SECRET_KEY,
   AGENT_RUNTIME_DIR,
+  AGENT_RUNTIME_HERDR_BINARY,
   AGENT_RUNTIME_INPUTS_READY_FILE,
   AGENT_RUNTIME_SHELL_INIT_SCRIPT,
   AGENT_RUNTIME_STEER_FIFO,
+  AGENT_RUNTIME_TERMINAL_BACKEND_FILE,
+  AGENT_RUNTIME_TERMINAL_HELPER,
 } from "@/services/agent-runtime/runtime-contract";
 import type { AgentRuntimeResources } from "@/types";
 import {
@@ -83,13 +86,14 @@ export function buildAgentRuntimeTurnScript(
       AGENT_RUNTIME_ATTACHMENTS_MANIFEST,
     ...spec.env,
     ...spec.secretEnv,
+    ARCHESTRA_AGENT_RUNTIME_TASK_ID: spec.taskId,
     ARCHESTRA_AGENT_RUNTIME_CONTINUE: "1",
     ARCHESTRA_AGENT_RUNTIME_CREDENTIALS_FILE: AGENT_RUNTIME_CREDENTIALS_FILE,
   };
   return [
     "set -eu",
-    // A retained tmux server inherits the initial Pod environment. Remove its
-    // managed variables before applying this turn, including removed credentials.
+    // A retained terminal backend inherits the initial Pod environment. Remove
+    // its managed variables before applying this turn, including credentials.
     ...inheritedVariableNames.map((name) => {
       if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name))
         throw new Error("Invalid runtime environment variable name");
@@ -114,9 +118,9 @@ export function buildAgentRuntimeTurnScript(
  */
 export function buildAgentRuntimeTerminalIntegrationScript(): string {
   return [
-    `printf '%s\\n' '#!/bin/sh' 'tmux set-option -t ${AGENT_RUNTIME_TMUX_SESSION} mouse on' 'exec tmux attach -t ${AGENT_RUNTIME_TMUX_SESSION}' > ${AGENT_RUNTIME_ATTACH_SCRIPT}`,
+    `printf '%s\\n' '#!/bin/sh' 'if command -v ${AGENT_RUNTIME_TERMINAL_HELPER} >/dev/null 2>&1 && command -v ${AGENT_RUNTIME_HERDR_BINARY} >/dev/null 2>&1 && [ -f ${AGENT_RUNTIME_TERMINAL_BACKEND_FILE} ] && [ "$(cat ${AGENT_RUNTIME_TERMINAL_BACKEND_FILE} 2>/dev/null)" = herdr ] && ${AGENT_RUNTIME_TERMINAL_HELPER} ready >/dev/null 2>&1; then exec ${AGENT_RUNTIME_TERMINAL_HELPER} attach; fi' 'if command -v tmux >/dev/null 2>&1 && tmux has-session -t ${AGENT_RUNTIME_TMUX_SESSION} 2>/dev/null; then tmux set-option -t ${AGENT_RUNTIME_TMUX_SESSION} mouse on; exec tmux attach -t ${AGENT_RUNTIME_TMUX_SESSION}; fi' 'echo "agent-runtime: no attachable terminal backend" >&2; exit 78' > ${AGENT_RUNTIME_ATTACH_SCRIPT}`,
     `chmod 755 ${AGENT_RUNTIME_ATTACH_SCRIPT}`,
-    `printf '%s\\n' 'if [ -t 0 ] && [ -t 1 ]; then date +%s > /var/run/archestra/development-activity; fi' 'if [ "\${ARCHESTRA_AGENT_RUNTIME_AUTO_ATTACH:-1}" = "1" ] && [ -t 0 ] && [ -t 1 ] && [ -z "\${TMUX:-}" ] && tmux has-session -t ${AGENT_RUNTIME_TMUX_SESSION} 2>/dev/null; then exec ${AGENT_RUNTIME_ATTACH_SCRIPT}; fi' > ${AGENT_RUNTIME_SHELL_INIT_SCRIPT}`,
+    `printf '%s\\n' 'if [ -t 0 ] && [ -t 1 ]; then date +%s > /var/run/archestra/development-activity; fi' 'if [ "\${ARCHESTRA_AGENT_RUNTIME_AUTO_ATTACH:-1}" = "1" ] && [ -t 0 ] && [ -t 1 ] && [ -z "\${TMUX:-}" ] && [ -z "\${HERDR_ENV:-}" ] && [ -z "\${ARCHESTRA_AGENT_RUNTIME_INTERNAL:-}" ] && { { command -v ${AGENT_RUNTIME_TERMINAL_HELPER} >/dev/null 2>&1 && command -v ${AGENT_RUNTIME_HERDR_BINARY} >/dev/null 2>&1 && [ -f ${AGENT_RUNTIME_TERMINAL_BACKEND_FILE} ] && [ "$(cat ${AGENT_RUNTIME_TERMINAL_BACKEND_FILE} 2>/dev/null)" = herdr ] && ${AGENT_RUNTIME_TERMINAL_HELPER} ready >/dev/null 2>&1; } || { command -v tmux >/dev/null 2>&1 && tmux has-session -t ${AGENT_RUNTIME_TMUX_SESSION} 2>/dev/null; }; }; then exec ${AGENT_RUNTIME_ATTACH_SCRIPT}; fi' > ${AGENT_RUNTIME_SHELL_INIT_SCRIPT}`,
     `chmod 644 ${AGENT_RUNTIME_SHELL_INIT_SCRIPT}`,
   ].join("\n");
 }
@@ -146,12 +150,11 @@ export type KubernetesAgentRunLaunchSpec = Omit<
 /**
  * PID 1 for every Agent Runtime run, whatever the image.
  *
- * tmux is what makes a session attachable and steerable: a human can attach
- * from the browser and type into the same session the agent is using, and a
- * steer can be delivered without a terminal attached at all. The FIFO is the
+ * The selected terminal backend keeps one attachable pane for the workspace:
+ * Herdr supplies a persistent PTY and native attach hub, while tmux remains
+ * the compatibility path for old and custom images. The FIFO is the
  * turn-boundary channel the Archestra runtime-agent reads; bring-your-own-image
- * CLIs that own their own input loop are steered with `tmux send-keys`
- * instead, which needs no cooperation from the process.
+ * CLIs that own their own input loop are steered through the selected backend.
  *
  * The workspace supervisor owns PID 1; agent command completion is independent
  * of Pod completion. Durable request markers prevent replay after replacement.
@@ -171,11 +174,34 @@ function buildAgentRuntimeBootstrapScript(): string {
     "  done",
     "fi",
     `[ -p "${AGENT_RUNTIME_STEER_FIFO}" ] || mkfifo -m 600 "${AGENT_RUNTIME_STEER_FIFO}"`,
-    "if ! command -v tmux >/dev/null 2>&1; then",
-    '  echo "agent-runtime: this image has no tmux, which Agent Runtime runs require for attach and steering" >&2',
-    `  exit ${AGENT_RUNTIME_UNUSABLE_IMAGE_EXIT_CODE}`,
-    "fi",
     'case "$ARCHESTRA_AGENT_RUNTIME_TASK_ID" in ""|*[!a-zA-Z0-9-]*) echo "Invalid runtime task ID" >&2; exit 78;; esac',
+    `terminal_backend=tmux
+terminal_pid=
+if command -v ${AGENT_RUNTIME_TERMINAL_HELPER} >/dev/null 2>&1 && command -v ${AGENT_RUNTIME_HERDR_BINARY} >/dev/null 2>&1; then
+  terminal_backend=herdr
+  rm -f ${AGENT_RUNTIME_TERMINAL_BACKEND_FILE}
+  ${AGENT_RUNTIME_TERMINAL_HELPER} serve >>/proc/1/fd/1 2>>/proc/1/fd/2 &
+  terminal_pid=$!
+  terminal_polls=0
+  until ${AGENT_RUNTIME_TERMINAL_HELPER} ready >/dev/null 2>&1; do
+    terminal_polls=$((terminal_polls + 1))
+    if ! kill -0 "$terminal_pid" 2>/dev/null || [ "$terminal_polls" -ge 120 ]; then
+      echo "agent-runtime: Herdr terminal helper did not become ready" >&2
+      kill "$terminal_pid" 2>/dev/null || true
+      exit ${AGENT_RUNTIME_UNUSABLE_IMAGE_EXIT_CODE}
+    fi
+    sleep 0.5
+  done
+  printf '%s\\n' herdr > ${AGENT_RUNTIME_TERMINAL_BACKEND_FILE}
+elif command -v ${AGENT_RUNTIME_TERMINAL_HELPER} >/dev/null 2>&1 || command -v ${AGENT_RUNTIME_HERDR_BINARY} >/dev/null 2>&1; then
+  echo "agent-runtime: Herdr images must provide both ${AGENT_RUNTIME_TERMINAL_HELPER} and ${AGENT_RUNTIME_HERDR_BINARY}" >&2
+  exit ${AGENT_RUNTIME_UNUSABLE_IMAGE_EXIT_CODE}
+elif command -v tmux >/dev/null 2>&1; then
+  printf '%s\\n' tmux > ${AGENT_RUNTIME_TERMINAL_BACKEND_FILE}
+else
+  echo "agent-runtime: image has neither ${AGENT_RUNTIME_TERMINAL_HELPER}+${AGENT_RUNTIME_HERDR_BINARY} nor tmux" >&2
+  exit ${AGENT_RUNTIME_UNUSABLE_IMAGE_EXIT_CODE}
+fi`,
     `mkdir -p ${AGENT_RUNTIME_DIR}/turns`,
     `request=${AGENT_RUNTIME_DIR}/turns/$ARCHESTRA_AGENT_RUNTIME_TASK_ID.request`,
     `if [ ! -f "$request" ] && [ ! -f "${AGENT_RUNTIME_DIR}/turns/$ARCHESTRA_AGENT_RUNTIME_TASK_ID.exit" ]; then`,
@@ -305,15 +331,13 @@ export function buildAgentRuntimeSandbox(
               command: ["/bin/sh", "-c", buildAgentRuntimeBootstrapScript()],
               env: [
                 ...Object.entries({
-                  // tmux decides whether a client supports Unicode from its
-                  // locale. Kubernetes does not provide one by default, which
-                  // made Claude Code replace bullets, emoji, and line art with
-                  // underscores in both kubectl and the browser terminal.
+                  // Kubernetes does not supply a UTF-8 locale by default.
+                  // Native clients need one for Unicode text and line art.
                   LANG: "C.UTF-8",
                   LC_ALL: "C.UTF-8",
                   TERM: "xterm-256color",
                   // k9s opens `bash` or `sh` directly. These standard shell
-                  // hooks join the already-running tmux pane on first prompt.
+                  // hooks join the running agent pane on first prompt.
                   ENV: AGENT_RUNTIME_SHELL_INIT_SCRIPT,
                   PROMPT_COMMAND: `. ${AGENT_RUNTIME_SHELL_INIT_SCRIPT}`,
                   ARCHESTRA_AGENT_RUNTIME_AUTO_ATTACH: "1",

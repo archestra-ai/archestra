@@ -1,6 +1,9 @@
 import {
+  AGENT_RUNTIME_HERDR_BINARY,
   AGENT_RUNTIME_READABLE_TRANSCRIPT_FILE,
   AGENT_RUNTIME_READABLE_TRANSCRIPT_MAX_BYTES,
+  AGENT_RUNTIME_TERMINAL_BACKEND_FILE,
+  AGENT_RUNTIME_TERMINAL_HELPER,
 } from "@/services/agent-runtime/runtime-contract";
 
 /**
@@ -13,20 +16,32 @@ export function buildSandboxSupervisorScript(): string {
 umask 077
 root=/var/run/archestra
 mkdir -p "$root/turns"
-command -v tmux >/dev/null 2>&1 || { echo 'Agent Runtime requires tmux' >&2; exit 78; }
-trap 'tmux kill-server 2>/dev/null || true; exit 0' TERM INT
+backend=tmux
+if [ -f ${AGENT_RUNTIME_TERMINAL_BACKEND_FILE} ] && [ "$(cat ${AGENT_RUNTIME_TERMINAL_BACKEND_FILE} 2>/dev/null)" = herdr ] && command -v ${AGENT_RUNTIME_TERMINAL_HELPER} >/dev/null 2>&1 && command -v ${AGENT_RUNTIME_HERDR_BINARY} >/dev/null 2>&1; then
+  backend=herdr
+else
+  command -v tmux >/dev/null 2>&1 || { echo 'Agent Runtime requires tmux or a ready Herdr terminal helper' >&2; exit 78; }
+fi
+trap 'if [ "$backend" = herdr ]; then ${AGENT_RUNTIME_TERMINAL_HELPER} stop >/dev/null 2>&1 || true; [ -z "${"$"}{terminal_pid:-}" ] || kill "$terminal_pid" 2>/dev/null || true; else tmux kill-server 2>/dev/null || true; fi; exit 0' TERM INT
 
-tmux new-session -d -x 120 -y 40 -s agent 'while :; do sleep 1; done'
-tmux set-option -t agent mouse on
-tmux set-option -t agent remain-on-exit on
-tmux set-option -t agent @archestra_attention 0
-tmux set-option -t agent status-left '#{?#{==:#{@archestra_attention},1},#[fg=yellow,bold]#{@archestra_attention_label}#[default] ,}[#S] '
-tmux set-hook -g client-detached 'run-shell "date +%s > /var/run/archestra/development-activity"'
+if [ "$backend" = tmux ]; then
+  tmux new-session -d -x 120 -y 40 -s agent 'while :; do sleep 1; done'
+  tmux set-option -t agent mouse on
+  tmux set-option -t agent remain-on-exit on
+  tmux set-option -t agent @archestra_attention 0
+  tmux set-option -t agent status-left '#{?#{==:#{@archestra_attention},1},#[fg=yellow,bold]#{@archestra_attention_label}#[default] ,}[#S] '
+  tmux set-hook -g client-detached 'run-shell "date +%s > /var/run/archestra/development-activity"'
+fi
 
 while :; do
+  if [ "$backend" = herdr ] && ! kill -0 "$terminal_pid" 2>/dev/null; then
+    echo 'Agent Runtime Herdr terminal helper exited' >&2
+    exit 78
+  fi
   # Record human input, not pane output: a logging daemon must not keep an idle
   # workspace alive. Persist it so detached clients still count at reaping time.
-  activity="$(tmux list-clients -F '#{client_activity}' 2>/dev/null | sort -nr | head -1)"
+  activity=
+  if [ "$backend" = tmux ]; then activity="$(tmux list-clients -F '#{client_activity}' 2>/dev/null | sort -nr | head -1)"; fi
   case "$activity" in
     ''|*[!0-9]*) ;;
     *)
@@ -52,27 +67,50 @@ while :; do
       continue
     fi
     touch "$turn.started"
-    touch "$turn.log"
-    tmux set-option -t agent @archestra_retained_task ""
-    tmux respawn-pane -k -t agent 'while :; do sleep 1; done'
-    tmux pipe-pane -t agent
-    tmux pipe-pane -t agent "tee -a '$turn.log' >> /proc/1/fd/1"
+    : > "$turn.log"
+    if [ "$backend" = tmux ]; then
+      tmux set-option -t agent @archestra_retained_task ""
+      tmux respawn-pane -k -t agent 'while :; do sleep 1; done'
+      tmux pipe-pane -t agent
+      tmux pipe-pane -t agent "tee -a '$turn.log' >> /proc/1/fd/1"
+    fi
     rm -f ${AGENT_RUNTIME_READABLE_TRANSCRIPT_FILE}
-    printf '%s\n' "touch '$turn.running'; export ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX='$turn'; /bin/sh '$request'; status=\$?; sleep 2; printf '%s\\n' \"\$status\" > '$turn.result.tmp'; mv '$turn.result.tmp' '$turn.result'; exit \"\$status\"" > "$turn.session"
-    tmux respawn-pane -k -t agent "/bin/sh '$turn.session'"
+    if [ "$backend" = herdr ]; then
+      printf '%s\n' "touch '$turn.running'; export ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX='$turn'; export ARCHESTRA_AGENT_RUNTIME_INTERNAL=1; export HERDR_ENV=1; /bin/sh '$request'; status=\$?; sleep 2; printf '%s\\n' \"\$status\" > '$turn.result.tmp'; mv '$turn.result.tmp' '$turn.result'; exit \"\$status\"" > "$turn.session"
+      start_failed=0
+      if ! ${AGENT_RUNTIME_TERMINAL_HELPER} start "$turn" >>/proc/1/fd/1 2>>/proc/1/fd/2; then start_failed=1; fi
+      if [ "$start_failed" = 1 ]; then
+        printf '75\n' > "$turn.result.tmp"
+        mv "$turn.result.tmp" "$turn.result"
+      fi
+    else
+      printf '%s\n' "touch '$turn.running'; export ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX='$turn'; /bin/sh '$turn.request'; status=\$?; sleep 2; printf '%s\\n' \"\$status\" > '$turn.result.tmp'; mv '$turn.result.tmp' '$turn.result'; exit \"\$status\"" > "$turn.session"
+      tmux respawn-pane -k -t agent "/bin/sh '$turn.session'"
+    fi
     startup_polls=0
     dead_polls=0
     while [ ! -f "$turn.result" ]; do
       if [ -f "$turn.cancel" ]; then
-        tmux respawn-pane -k -t agent 'while :; do sleep 1; done'
+        if [ "$backend" = herdr ]; then
+          ${AGENT_RUNTIME_TERMINAL_HELPER} stop >/dev/null 2>&1 || true
+        else
+          tmux respawn-pane -k -t agent 'while :; do sleep 1; done'
+        fi
         printf '130\n' > "$turn.result.tmp"
         mv "$turn.result.tmp" "$turn.result"
         break
       fi
-      # A crashed pane must fail the turn rather than leave it working forever.
-      # tmux may still report the previous dead process just after respawn.
+      # A crashed terminal child must fail the turn rather than leave it
+      # working forever. tmux may still report the previous dead process just
+      # after respawn, while the helper reports the recorder identity directly.
       startup_polls=$((startup_polls + 1))
-      if { [ -f "$turn.running" ] || [ "$startup_polls" -ge 30 ]; } && [ "$(tmux display-message -p -t agent '#{pane_dead}' 2>/dev/null || echo 1)" = 1 ]; then
+      pane_dead=0
+      if [ "$backend" = herdr ]; then
+        if ! ${AGENT_RUNTIME_TERMINAL_HELPER} alive >/dev/null 2>&1; then pane_dead=1; fi
+      elif [ "$(tmux display-message -p -t agent '#{pane_dead}' 2>/dev/null || echo 1)" = 1 ]; then
+        pane_dead=1
+      fi
+      if { [ -f "$turn.running" ] || [ "$startup_polls" -ge 30 ]; } && [ "$pane_dead" = 1 ]; then
         dead_polls=$((dead_polls + 1))
         if [ "$dead_polls" -ge 3 ] && [ ! -f "$turn.result" ]; then
           printf '75\n' > "$turn.result.tmp"

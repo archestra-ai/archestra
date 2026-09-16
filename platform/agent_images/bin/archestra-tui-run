@@ -10,12 +10,17 @@ done_marker="$1"
 answer_file="$2"
 failed_marker="${done_marker}.failed"
 completed_frame="${done_marker}.frame"
+watcher_failed_marker="${done_marker}.watcher-failed"
 shift 2
 
-rm -f "${done_marker}" "${failed_marker}" "${completed_frame}" "${answer_file}"
+rm -f "${done_marker}" "${failed_marker}" "${completed_frame}" "${watcher_failed_marker}" "${answer_file}"
 
 child_pid=""
 child_target=""
+
+herdr_helper_available() {
+  [[ -n "${HERDR_ENV:-}" ]] && command -v archestra-terminal >/dev/null 2>&1
+}
 
 stop_child() {
   if [[ -n "${child_pid}" ]]; then
@@ -41,7 +46,7 @@ reset_terminal() {
   # Full-screen clients can leave origin mode, a restricted scroll region, or
   # DECLRMM horizontal margins active. Spell out the reset for terminal
   # players that do not implement RIS (ESC c) completely.
-  printf '\033[?1000l\033[?1002l\033[?1003l\033[?1006l\033[?69l\033[?6l\033[r\033[0m\033[2J\033[H'
+  printf '\033[?1000l\033[?1002l\033[?1003l\033[?1015l\033[?1006l\033[?69l\033[?6l\033[r\033[0m\033[2J\033[H'
 }
 
 watch_for_completion() {
@@ -50,12 +55,21 @@ watch_for_completion() {
   # persistent TUI process.
   while kill -0 "${child_pid}" 2>/dev/null; do
     if [[ -f "${done_marker}" ]]; then
-      # Keep the completed frame visible long enough for tmux's pipe-pane to
-      # capture it before closing the client. Save the visible pane as well:
+      # Keep the completed frame visible long enough for the terminal backend
+      # to capture it before closing the client. Save the visible pane as well:
       # full-screen clients restore the shell screen during shutdown, but the
       # retained transcript should finish on the native interface the user saw.
       sleep 2
-      if [[ -n "${TMUX_PANE:-}" ]] && command -v tmux >/dev/null 2>&1; then
+      if herdr_helper_available; then
+        # The Herdr helper emits the ANSI snapshot and its OSC geometry
+        # record on stdout. Keep this as a byte stream; filtering or
+        # reconstructing it here loses native redraw information.
+        if ! archestra-terminal capture > "${completed_frame}"; then
+          echo "archestra: Herdr terminal capture failed" >&2
+          : > "${completed_frame}"
+          : > "${watcher_failed_marker}"
+        fi
+      elif [[ -n "${TMUX_PANE:-}" ]] && command -v tmux >/dev/null 2>&1; then
         # Some clients probe terminal capabilities during teardown. tmux can
         # briefly paint the terminal's device-attribute reply as text; it is not
         # part of the interface and should not survive in the completed frame.
@@ -78,9 +92,10 @@ watch_for_completion() {
 }
 
 if [[ -t 0 ]]; then
-  # Give the client the actual tmux pty so it receives browser resizes and
+  # Give the client the actual terminal pty so it receives browser resizes and
   # input. The supervisor keeps it in the foreground while independently
-  # watching for completion.
+  # watching for completion. Python returns zero for normal completion and a
+  # nonzero status when capture or retain fails; preserve that distinction.
   script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
   set +e
   ARCHESTRA_AGENT_RUNTIME_ANSWER_FILE="${answer_file}" "${script_dir}/archestra-tui-exec" \
@@ -90,6 +105,9 @@ if [[ -t 0 ]]; then
   status=$?
   set -e
 else
+  # The non-TTY watcher intentionally stops a normally completed child, which
+  # commonly makes wait return 143. Its explicit failure marker carries the
+  # meaningful status for capture failures.
   "$@" &
   child_pid=$!
   child_target="${child_pid}"
@@ -100,6 +118,14 @@ else
   status=$?
   wait "${completion_watcher_pid}" 2>/dev/null || true
   set -e
+  if [[ -f "${watcher_failed_marker}" ]]; then
+    status=1
+  elif [[ -f "${done_marker}" ]]; then
+    # A normal completion watcher intentionally terminates the child, so its
+    # wait status is not the turn result. Preserve the child's status for an
+    # early exit that never produced a completion marker.
+    status=0
+  fi
 fi
 
 if [[ ! -f "${done_marker}" ]]; then
@@ -125,6 +151,6 @@ if [[ -s "${completed_frame}" ]]; then
   reset_terminal
   cat "${completed_frame}"
 fi
-if [[ -f "${failed_marker}" ]]; then
+if [[ ${status} -ne 0 || -f "${failed_marker}" || -f "${watcher_failed_marker}" ]]; then
   exit 1
 fi

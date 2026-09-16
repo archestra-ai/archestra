@@ -14,32 +14,89 @@ import time
 import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+ACCOUNT_COMMAND = str(Path(__file__).resolve().parents[1] / "bin/archestra-claude-account")
+if not Path(ACCOUNT_COMMAND).exists():
+    ACCOUNT_COMMAND = "/usr/local/bin/archestra-claude-account"
+CODE_COMMAND = str(Path(__file__).resolve().parents[1] / "bin/archestra-claude-code")
+if not Path(CODE_COMMAND).exists():
+    CODE_COMMAND = "archestra-claude-code"
+
 
 class ClaudeAuthTest(unittest.TestCase):
-    def test_native_setup_token_exposes_browser_authorization(self):
+    def test_native_setup_token_exposes_browser_authorization_through_herdr(self):
         with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fake_bin = root / "bin"
+            fake_bin.mkdir()
+            write_fake_herdr(fake_bin / "herdr")
             env = {
-                "PATH": os.environ["PATH"], "HOME": directory,
-                "CLAUDE_CONFIG_DIR": str(Path(directory) / "config"),
+                "PATH": f"{fake_bin}:{os.environ['PATH']}",
+                "HOME": directory,
+                "CLAUDE_CONFIG_DIR": str(root / "config"),
                 "ARCHESTRA_AGENT_RUNTIME_CLAUDE_FLOW_ID": "example-flow",
                 "DISABLE_AUTOUPDATER": "1",
                 "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
                 "TERM": "xterm-256color",
+                "ARCHESTRA_TEST_SEND_COUNT": str(root / "send-count"),
             }
+            cleanup = subprocess.run(
+                [ACCOUNT_COMMAND, "cleanup"],
+                env=env,
+                capture_output=True,
+                timeout=30,
+            )
+            self.assertIn(cleanup.returncode, (0, 1))
             try:
-                subprocess.run(["archestra-claude-account", "start"], env=env, check=True, capture_output=True, timeout=30)
-                state = {}
-                for _ in range(20):
-                    result = subprocess.run(["archestra-claude-account", "status"], env=env, check=True, capture_output=True, timeout=10)
-                    state = json.loads(result.stdout)
-                    if state["state"] == "awaiting_code":
-                        break
-                    time.sleep(0.5)
+                result = subprocess.run(
+                    [ACCOUNT_COMMAND, "start"],
+                    env=env,
+                    check=True,
+                    capture_output=True,
+                    timeout=30,
+                )
+                state = json.loads(result.stdout)
                 self.assertEqual(state["state"], "awaiting_code", state)
                 self.assertEqual(state["flowId"], "example-flow")
-                self.assertTrue(state["authorizationUrl"].startswith(("https://claude.ai/oauth/authorize?", "https://claude.com/cai/oauth/authorize?")))
+                self.assertGreater(len(state["authorizationUrl"]), 1000)
+                self.assertTrue(
+                    state["authorizationUrl"].startswith(
+                        (
+                            "https://claude.ai/oauth/authorize?",
+                            "https://claude.com/cai/oauth/authorize?",
+                        )
+                    )
+                )
+
+                code = "one-time-code"
+                for _ in range(2):
+                    completed = subprocess.run(
+                        [ACCOUNT_COMMAND, "complete"],
+                        env=env,
+                        input=json.dumps({"flowId": "example-flow", "code": code}),
+                        text=True,
+                        capture_output=True,
+                        check=True,
+                        timeout=30,
+                    )
+                    self.assertEqual(json.loads(completed.stdout), {"state": "connecting"})
+                    self.assertNotIn(code, completed.stdout)
+                    self.assertNotIn(code, completed.stderr)
+                self.assertEqual(
+                    (root / "send-count").read_text(encoding="utf-8"), "1"
+                )
+                config = Path("/tmp/archestra-claude-account/herdr-config.toml")
+                self.assertIn("headless_cols = 500", config.read_text())
+                self.assertIn("headless_rows = 40", config.read_text())
+                self.assertIn("version_check = false", config.read_text())
+                self.assertIn("manifest_check = false", config.read_text())
             finally:
-                subprocess.run(["tmux", "kill-session", "-t", "archestra-claude-login"], env=env, capture_output=True)
+                subprocess.run(
+                    [ACCOUNT_COMMAND, "cleanup"],
+                    env=env,
+                    capture_output=True,
+                    timeout=30,
+                )
+                (root / "send-count").unlink(missing_ok=True)
 
     def test_subscription_token_transport_and_model_discovery(self):
         token = "sk-ant-oat01-" + "example" * 8
@@ -51,7 +108,7 @@ class ClaudeAuthTest(unittest.TestCase):
                 "DISABLE_AUTOUPDATER": "1",
                 "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
             }
-            result = subprocess.run(["archestra-claude-account", "models"], input=json.dumps({"token": token}), text=True, capture_output=True, env=env, timeout=40)
+            result = subprocess.run([ACCOUNT_COMMAND, "models"], input=json.dumps({"token": token}), text=True, capture_output=True, env=env, timeout=40)
             self.assertEqual(result.returncode, 0, result.stderr)
             metadata = json.loads(result.stdout)
             self.assertTrue(metadata["models"])
@@ -128,7 +185,7 @@ class ClaudeAuthTest(unittest.TestCase):
                 }
                 try:
                     process = subprocess.Popen(
-                        ["archestra-claude-code"],
+                        [CODE_COMMAND],
                         cwd=root,
                         env=env,
                         stdout=subprocess.DEVNULL,
@@ -212,6 +269,57 @@ class CaptureHandler(BaseHTTPRequestHandler):
 
     def log_message(self, *_args):
         pass
+
+
+def write_fake_herdr(path):
+    path.write_text(
+        r'''#!/usr/bin/env python3
+import json
+import os
+from pathlib import Path
+import socket
+
+socket_path = Path(os.environ["HERDR_SOCKET_PATH"])
+socket_path.parent.mkdir(parents=True, exist_ok=True)
+socket_path.unlink(missing_ok=True)
+server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+server.bind(str(socket_path))
+server.listen(8)
+send_count = Path(os.environ.get("ARCHESTRA_TEST_SEND_COUNT", "/tmp/archestra-claude-account/send-count"))
+long_url = "https://claude.com/cai/oauth/authorize?state=" + "a" * 520 + "&code_challenge=" + "b" * 520
+running = True
+while running:
+    connection, _ = server.accept()
+    with connection:
+        request = json.loads(connection.makefile("rb").readline())
+        method = request["method"]
+        params = request.get("params", {})
+        if method == "layout.apply":
+            raw = Path("/tmp/archestra-claude-account/terminal.raw")
+            wrapped = "\n".join(long_url[index:index + 500] for index in range(0, len(long_url), 500))
+            raw.write_text("setup-token\n" + wrapped + "\n", encoding="utf-8")
+            result = {"type": "layout_apply", "layout": {"root": {"type": "pane", "pane_id": "pane-1"}}}
+        elif method == "pane.send_text":
+            send_count.write_text(str(int(send_count.read_text()) + 1) if send_count.exists() else "1")
+            result = {"type": "pane_info"}
+        elif method == "ping":
+            result = {"type": "pong"}
+        elif method == "server.stop":
+            result = {"type": "server_stopped"}
+            running = False
+        elif method == "workspace.create":
+            result = {"type": "workspace_created", "workspace": {"workspace_id": "workspace-1"}, "tab": {"tab_id": "tab-1"}, "root_pane": {"pane_id": "pane-shell"}}
+        elif method == "pane.get":
+            result = {"type": "pane_info", "pane": {"terminal_id": "term-1"}}
+        else:
+            result = {"type": method.replace(".", "_")}
+        connection.sendall((json.dumps({"id": request["id"], "result": result}) + "\n").encode())
+server.close()
+socket_path.unlink(missing_ok=True)
+''',
+        encoding="utf-8",
+    )
+    path.chmod(0o700)
 
 
 if __name__ == "__main__":

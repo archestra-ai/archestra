@@ -36,7 +36,10 @@ import {
   AGENT_RUNTIME_ATTACH_SCRIPT,
   AGENT_RUNTIME_ATTACHMENTS_MANIFEST,
   AGENT_RUNTIME_CREDENTIALS_SECRET_KEY,
+  AGENT_RUNTIME_HERDR_BINARY,
   AGENT_RUNTIME_INPUTS_READY_FILE,
+  AGENT_RUNTIME_TERMINAL_BACKEND_FILE,
+  AGENT_RUNTIME_TERMINAL_HELPER,
 } from "@/services/agent-runtime/runtime-contract";
 import { resolveCredential } from "@/services/credentials";
 import { resolveEffectiveNetworkPolicy } from "@/services/environments/network-policy";
@@ -553,6 +556,17 @@ class AgentRuntimeManager {
   ): Promise<boolean> {
     const pod = await this.findPod(session);
     if (pod?.status?.phase !== "Running" || !pod.metadata?.name) return false;
+    const herdrSelected = await this.hasHerdrMarker(session, pod.metadata.name);
+    if (herdrSelected) {
+      if (!(await this.hasHerdrBackend(session, pod.metadata.name)))
+        return false;
+      const output = await this.execInPod({
+        session,
+        podName: pod.metadata.name,
+        command: [AGENT_RUNTIME_TERMINAL_HELPER, "retained"],
+      }).catch(() => "");
+      return output.trim() === `0:${session.taskId}`;
+    }
     const output = await execAgentRuntimeCommand({
       exec: this.requireClients().exec,
       namespace: session.runtimeScope,
@@ -568,6 +582,46 @@ class AgentRuntimeManager {
       ],
     }).catch(() => "");
     return output.trim() === `0:${session.taskId}`;
+  }
+
+  /**
+   * Presence of the binaries is only an image capability. The marker and a
+   * live `ready` probe identify the backend actually serving this Pod, which
+   * keeps old Pods on their tmux control path during a rolling migration.
+   */
+  private async hasHerdrBackend(
+    session: Pick<AgentRunRecord, "runtimeScope">,
+    podName: string,
+  ): Promise<boolean> {
+    return this.execInPod({
+      session,
+      podName,
+      command: [
+        "/bin/sh",
+        "-c",
+        `command -v ${AGENT_RUNTIME_TERMINAL_HELPER} >/dev/null 2>&1 && command -v ${AGENT_RUNTIME_HERDR_BINARY} >/dev/null 2>&1 && [ -f ${AGENT_RUNTIME_TERMINAL_BACKEND_FILE} ] && [ "$(cat ${AGENT_RUNTIME_TERMINAL_BACKEND_FILE} 2>/dev/null)" = herdr ] && ${AGENT_RUNTIME_TERMINAL_HELPER} ready >/dev/null 2>&1`,
+      ],
+    })
+      .then(() => true)
+      .catch(() => false);
+  }
+
+  /** The marker prevents a Herdr Pod from silently falling back to tmux. */
+  private async hasHerdrMarker(
+    session: Pick<AgentRunRecord, "runtimeScope">,
+    podName: string,
+  ): Promise<boolean> {
+    return this.execInPod({
+      session,
+      podName,
+      command: [
+        "/bin/sh",
+        "-c",
+        `command -v ${AGENT_RUNTIME_TERMINAL_HELPER} >/dev/null 2>&1 && command -v ${AGENT_RUNTIME_HERDR_BINARY} >/dev/null 2>&1 && [ -f ${AGENT_RUNTIME_TERMINAL_BACKEND_FILE} ] && [ "$(cat ${AGENT_RUNTIME_TERMINAL_BACKEND_FILE} 2>/dev/null)" = herdr ]`,
+      ],
+    })
+      .then(() => true)
+      .catch(() => false);
   }
 
   async releaseRun(
@@ -633,6 +687,7 @@ class AgentRuntimeManager {
       await this.suspendWorkspace(session);
       return "suspended";
     }
+    const herdr = await this.hasHerdrBackend(session, pod.metadata.name);
     await this.execInPod({
       session,
       podName: pod.metadata.name,
@@ -641,8 +696,11 @@ class AgentRuntimeManager {
         "-c",
         [
           'set -eu; base="/var/run/archestra/turns/$1"',
-          '[ ! -f "$base.exit" ] || exit 0',
           'touch "$base.cancel"',
+          ...(herdr
+            ? [`${AGENT_RUNTIME_TERMINAL_HELPER} stop >/dev/null 2>&1 || true`]
+            : []),
+          '[ ! -f "$base.exit" ] || exit 0',
           'if [ ! -f "$base.request" ] && [ ! -f "$base.started" ]; then printf "130\\n" > "$base.exit.tmp"; mv "$base.exit.tmp" "$base.exit"; fi',
           'attempt=0; while [ ! -f "$base.exit" ]; do attempt=$((attempt + 1)); [ "$attempt" -lt 15 ] || exit 1; sleep 1; done',
         ].join("\n"),
@@ -671,13 +729,16 @@ class AgentRuntimeManager {
   ): Promise<Date | null> {
     const podName = await this.findPodName(session);
     if (!podName) return null;
+    const herdrSelected = await this.hasHerdrMarker(session, podName);
     const output = await this.execInPod({
       session,
       podName,
       command: [
         "/bin/sh",
         "-c",
-        "{ cat /var/run/archestra/development-activity 2>/dev/null; tmux list-clients -F '#{client_activity}' 2>/dev/null; } | sort -nr | head -1",
+        herdrSelected
+          ? "cat /var/run/archestra/development-activity 2>/dev/null"
+          : "{ cat /var/run/archestra/development-activity 2>/dev/null; tmux list-clients -F '#{client_activity}' 2>/dev/null; } | sort -nr | head -1",
       ],
     });
     if (!/^\d+$/.test(output.trim())) return null;
@@ -771,7 +832,7 @@ class AgentRuntimeManager {
    * `pipe` writes to the FIFO the runtime-agent reads, so the message lands at a
    * turn boundary and can never interleave with a tool call in flight.
    * `tmux_keys` types into the session, the only option for a CLI that owns its
-   * own input loop.
+   * own input loop. Herdr's equivalent is a literal helper stdin request.
    */
   async steer(params: {
     session: AgentRunRecord;
@@ -790,8 +851,20 @@ class AgentRuntimeManager {
       throw new Error("A steer message cannot be only whitespace");
     }
 
-    const command =
-      params.steerMode === "tmux_keys"
+    const herdrSelected =
+      params.steerMode === "tmux_keys" &&
+      (await this.hasHerdrMarker(params.session, podName));
+    const herdr =
+      params.steerMode === "tmux_keys" &&
+      (herdrSelected || (await this.hasHerdrBackend(params.session, podName)));
+    const command = herdr
+      ? [
+          AGENT_RUNTIME_TERMINAL_HELPER,
+          "steer",
+          "--task",
+          params.session.taskId,
+        ]
+      : params.steerMode === "tmux_keys"
         ? [
             "/bin/sh",
             "-c",
@@ -808,16 +881,21 @@ class AgentRuntimeManager {
             `printf '%s\\n' ${shellQuote(message)} > "$ARCHESTRA_AGENT_RUNTIME_STEER_FIFO"`,
           ];
 
-    await this.execInPod({ session: params.session, podName, command });
+    await this.execInPod({
+      session: params.session,
+      podName,
+      command,
+      ...(herdr ? { stdin: NodeReadable.from([message]) } : {}),
+    });
     reportAgentRuntimeSteer(params.steerMode);
   }
 
   /**
-   * Attach a caller's streams to the live tmux session.
+   * Attach a caller's streams to the live terminal backend.
    *
-   * `tmux attach` rather than a fresh shell: the point is to land in the pane
-   * the agent is already working in. Detaching leaves it running, so closing a
-   * browser tab never ends a session mid-task.
+   * The backend attach command lands in the pane the agent is already working
+   * in. Detaching leaves it running, so closing a browser tab never ends a
+   * session mid-task.
    */
   async attach(params: {
     session: AgentRunRecord;
@@ -860,7 +938,7 @@ class AgentRuntimeManager {
     if (!podName) {
       throw new Error("This session has no running pod to attach to");
     }
-    await this.waitForTmuxSession({
+    await this.waitForTerminalBackend({
       session: params.session,
       podName,
       onProgress: params.onProgress,
@@ -1494,7 +1572,7 @@ done`
   }
 
   private async execInPod(params: {
-    session: AgentRunRecord;
+    session: Pick<AgentRunRecord, "runtimeScope">;
     podName: string;
     command: string[];
     stdin?: Readable;
@@ -1539,10 +1617,11 @@ done`
 
   /**
    * Pod Running only means the container process was accepted by Kubernetes;
-   * its bootstrap may still be creating tmux. Wait for the actual attachable
-   * session so the first browser connection is as reliable as a refresh.
+   * its bootstrap may still be creating the selected terminal backend. Wait
+   * for an actual attachable session so the first browser connection is as
+   * reliable as a refresh.
    */
-  private async waitForTmuxSession(params: {
+  private async waitForTerminalBackend(params: {
     session: AgentRunRecord;
     podName: string;
     onProgress?: AgentRuntimeStartupProgressReporter;
@@ -1555,18 +1634,26 @@ done`
       resourceName: params.podName,
     });
     while (Date.now() < deadline) {
-      const ready = await this.execInPod({
-        session: params.session,
-        podName: params.podName,
-        command: [
-          "/bin/sh",
-          "-c",
-          `tmux has-session -t ${AGENT_RUNTIME_TMUX_SESSION} 2>/dev/null`,
-        ],
-      })
-        .then(() => true)
-        .catch(() => false);
-      if (ready) return;
+      const herdrSelected = await this.hasHerdrMarker(
+        params.session,
+        params.podName,
+      );
+      if (herdrSelected) {
+        if (await this.hasHerdrBackend(params.session, params.podName)) return;
+      } else {
+        const ready = await this.execInPod({
+          session: params.session,
+          podName: params.podName,
+          command: [
+            "/bin/sh",
+            "-c",
+            `tmux has-session -t ${AGENT_RUNTIME_TMUX_SESSION} 2>/dev/null`,
+          ],
+        })
+          .then(() => true)
+          .catch(() => false);
+        if (ready) return;
+      }
 
       const pod = await this.findPodPhase(params.session);
       if (!pod || pod.phase === "Succeeded" || pod.phase === "Failed") {

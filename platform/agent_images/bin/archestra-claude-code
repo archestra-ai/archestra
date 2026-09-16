@@ -78,9 +78,7 @@ if [[ -n "${ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT:-}" ]]; then
   args+=(--append-system-prompt "${ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT}")
 fi
 
-# Claude Code knows when it is waiting for a person. Reflect its native hook
-# events in tmux rather than guessing from terminal contents. The platform's
-# tmux status-left format reads these user options for every attached client.
+# Claude's native hooks supply authoritative input-attention events.
 attention_hook="${runtime_dir}/attention-hook.sh"
 settings_file="${runtime_dir}/claude-settings.json"
 cat > "${attention_hook}" <<'HOOK'

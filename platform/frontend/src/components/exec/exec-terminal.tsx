@@ -188,7 +188,7 @@ export function ExecTerminal({
 
       // FitAddon can resize xterm for reasons other than an element resize
       // (font metrics settling is the common one). Drive the remote PTY from
-      // xterm's authoritative dimensions so tmux can never remain at a stale
+      // xterm's authoritative dimensions so the remote PTY never keeps a stale
       // width while the browser terminal has already expanded.
       terminal.onResize(({ cols, rows }) => {
         if (!disposed && isUsableTerminalDimensions({ cols, rows })) {
@@ -220,7 +220,7 @@ export function ExecTerminal({
         setErrorMessage(null);
 
         // Do not subscribe until the terminal has a real grid. Otherwise the
-        // first tmux frame can arrive at a transient 1-column tab width and
+        // first terminal frame can arrive at a transient 1-column tab width and
         // remain scrambled in scrollback after the panel finishes laying out.
         closeSession = transportRef.current.open({
           onProgress: (sessionProgress) => {
@@ -450,12 +450,10 @@ function withoutTmuxExitNotice(data: string): string {
     ALTERNATE_SCREEN_EXIT_SEQUENCE,
     exitNoticeIndex,
   );
-  const visibleOutput = data.slice(
-    0,
-    alternateScreenExitIndex === -1
-      ? exitNoticeIndex
-      : alternateScreenExitIndex,
-  );
+  // Plain agent output can contain this text. Only a legacy terminal client's
+  // alternate-screen teardown identifies the notice as transport output.
+  if (alternateScreenExitIndex === -1) return data;
+  const visibleOutput = data.slice(0, alternateScreenExitIndex);
   return visibleOutput.replace(/\r?\n$/, "");
 }
 

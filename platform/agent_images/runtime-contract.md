@@ -7,8 +7,8 @@ This reference is for custom image authors. For maintained image targets and bui
 | Requirement | Contract |
 | --- | --- |
 | Shell | `/bin/sh` must exist. Archestra uses it for the bootstrap and configured command. |
-| Live terminal | `tmux` must be on `PATH`. The process runs in one tmux session so the run can accept terminal input and a user can attach from the Runs tab. |
-| Input attention | Set the tmux user option `@archestra_attention` to `1` when the client needs input. Set `@archestra_attention_label` to a short reason, such as `Permission needed`. Clear both options when work resumes. |
+| Live terminal | Derive from a maintained image to inherit pinned Herdr, Python 3, `archestra-terminal`, and `archestra-pty-record`. Archestra owns one headless server per runtime. Attachments display only the agent terminal. Existing images containing `tmux` remain supported. |
+| Input attention | Run `archestra-agent-attention set "Permission needed"` when the client needs input, and `archestra-agent-attention clear` when work resumes. The helper updates attached terminals and the task callback. |
 | Command | Set **Command** and **Arguments** to the executable and arguments for the Agent client. If Command is blank, `archestra-runtime-agent` must be on `PATH`. |
 | Initialization | An optional `archestra-agent-init` executable is called immediately before the Agent command. Use it for runtime-only setup such as Git credential configuration. |
 | Output | Write progress and the final result to stdout or stderr. Archestra streams and retains that output as the run log. Do not print credentials. |
@@ -112,7 +112,7 @@ Files attached to initial runs or API/A2A follow-ups are staged before the Agent
 
 The files are task inputs, not shell keystrokes and not model-provider attachments. The Agent reads them from disk with its normal file or shell tools. Kubernetes holds the Agent entrypoint until every file and the manifest have been written. If the control plane restarts during staging, reconciliation finishes the same durable inputs before releasing the command.
 
-For **Turn boundary** steering, read newline-delimited messages from the FIFO at `ARCHESTRA_AGENT_RUNTIME_STEER_FIFO` and consume them only between model turns. For **Terminal input**, Archestra sends keystrokes to the tmux session; the process must expose an interactive input loop. A custom client that supports neither mode can still run one-shot tasks, but cannot accept useful follow-up instructions.
+For **Turn boundary** steering, read newline-delimited messages from the FIFO at `ARCHESTRA_AGENT_RUNTIME_STEER_FIFO` and consume them only between model turns. For **Terminal input**, Archestra sends text followed by Enter to the agent terminal; the process must expose an interactive input loop. A custom client that supports neither mode can still run one-shot tasks, but cannot accept useful follow-up instructions.
 
 ## Runtime Environment
 
@@ -146,3 +146,9 @@ Archestra supplies the applicable variables below when launching a run. You do n
 Send `X-Archestra-Run-Id` and `X-Archestra-Session-Id`, both set to `ARCHESTRA_AGENT_RUNTIME_TASK_ID`, on every LLM proxy and MCP gateway request. This groups model interactions and tool calls with the run in logs and traces. The maintained catalog images configure these headers automatically.
 
 Use the injected proxy and gateway endpoints for custom images. Direct connections bypass platform controls. The maintained Claude Code subscription mode deliberately connects directly to Anthropic; its MCP calls still use the gateway.
+
+## Terminal backend compatibility
+
+Deploy a backend that supports Herdr before selecting a new maintained image. Existing tmux images and running tmux workspaces continue through the compatibility path; a workspace keeps its original image and process until it is replaced. The saved `tmux_keys` steering value also supports Herdr terminal input, so existing Agent configurations need no migration.
+
+For a rollback to an older backend, select the previous tmux-capable image for new workspaces as well. An older backend cannot launch a Herdr-only image or attach to an existing Herdr workspace. Finish or stop active Herdr turns before rolling back, and start fresh workspaces with the compatible image. Existing tmux workspaces can still resume normally.

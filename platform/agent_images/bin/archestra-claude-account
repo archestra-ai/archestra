@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
-"""Run the native setup-token flow; return its token only to the secrets backend.
+"""Run Claude's setup-token flow in a disposable Herdr sign-in Job.
 
-Status responses and errors never include terminal output or credentials.
-All files live in the disposable sign-in Job, never a persistent volume.
+The helper's stdout is a small JSON status envelope consumed by the account
+route. Terminal bytes stay in a mode-600 raw log in the disposable Job, and
+the authorization code is sent over Herdr's private Unix socket rather than
+appearing in a child argv or a public log.
 """
 
 import fcntl
@@ -11,124 +13,515 @@ import os
 from pathlib import Path
 import re
 import selectors
+import shlex
+import shutil
+import socket
 import subprocess
 import sys
 import time
 
 
+WIDTH = 500
+HEIGHT = 40
+API_TIMEOUT = 20
+# Leave five seconds for CLI cleanup inside the backend's 30-second exec budget.
+MODEL_METADATA_TIMEOUT = 24
+MAX_API_RESPONSE = 1024 * 1024
+MAX_INPUT = 4096
+TOKEN = re.compile(r"sk-ant-oat[0-9]+-[A-Za-z0-9_-]{32,8192}")
+URL_START = re.compile(r"https://(?:claude\.com/cai|claude\.ai)/oauth/authorize\?")
+URL_PART = re.compile(r"[A-Za-z0-9:/?#\[\]@!$&'()*+,;=%._~-]+")
+
+directory = Path("/tmp/archestra-claude-account")
+submitted = directory / "submitted"
+started = directory / "started"
+exit_file = directory / "exit-status"
+state_file = directory / "herdr-state.json"
+raw_log = directory / "terminal.raw"
+config_file = directory / "herdr-config.toml"
+socket_file = directory / "herdr.sock"
+client_socket_file = directory / "herdr-client.sock"
+flow_id = os.environ.get("ARCHESTRA_AGENT_RUNTIME_CLAUDE_FLOW_ID", "")
+
+
 def main():
     os.umask(0o077)
-    directory.mkdir(mode=0o700, exist_ok=True)
-    Path(os.environ["CLAUDE_CONFIG_DIR"]).mkdir(mode=0o700, exist_ok=True)
+    ensure_directories()
+    if len(sys.argv) != 2:
+        raise ValueError("Unknown account operation")
+
     operation = sys.argv[1]
     with (directory / "lock").open("w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         if operation == "start":
-            if not login_running():
-                run([
-                    "tmux", "new-session", "-d", "-s", session,
-                    "-x", "500", "-y", "40",
-                    "claude setup-token; printf '%s' $? > /tmp/archestra-claude-account/exit-status; sleep 600",
-                ])
-            result = status()
+            result = start_login()
         elif operation == "status":
             result = status()
         elif operation == "complete":
-            request = json.loads(sys.stdin.read(16384))
-            if request.get("flowId") != flow_id:
-                raise ValueError("The sign-in expired")
-            code = request.get("code", "").strip()
-            if code and not submitted.exists():
-                if (len(code) > 4096 or any(ord(char) < 32 or ord(char) > 126 for char in code) or not login_running()):
-                    raise ValueError("Invalid authorization code")
-                run(["tmux", "load-buffer", "-b", session, "-"], input=code)
-                run(["tmux", "paste-buffer", "-d", "-b", session, "-t", session])
-                run(["tmux", "send-keys", "-t", session, "Enter"])
-                submitted.touch(mode=0o600)
-            token = captured_token()
-            if token:
-                result = {"state": "connected", "token": token, "models": supported_models(token)}
-            else:
-                result = {"state": "failed" if exit_file.exists() else "connecting"}
+            result = complete()
         elif operation == "models":
-            request = json.loads(sys.stdin.read(16384))
-            token = request.get("token", "")
-            if not TOKEN.fullmatch(token):
-                raise ValueError("Invalid subscription token")
-            result = {"state": "connected", "models": supported_models(token)}
+            result = models()
+        elif operation == "cleanup":
+            cleanup()
+            result = {"state": "failed"}
         else:
             raise ValueError("Unknown account operation")
     print(json.dumps(result))
 
 
-def run(command, **kwargs):
-    kwargs.setdefault("check", True)
-    return subprocess.run(command, text=True, stdout=subprocess.PIPE,
-                          stderr=subprocess.DEVNULL, timeout=20, **kwargs)
+def ensure_directories():
+    directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+    (directory / "home").mkdir(mode=0o700, exist_ok=True)
+    (directory / "tmp").mkdir(mode=0o700, exist_ok=True)
+    (directory / "claude-config").mkdir(mode=0o700, exist_ok=True)
+    (directory / "xdg-config").mkdir(mode=0o700, exist_ok=True)
+    (directory / "xdg-data").mkdir(mode=0o700, exist_ok=True)
+    if not config_file.exists():
+        config_file.write_text(
+            "[server]\n"
+            f"headless_cols = {WIDTH}\n"
+            f"headless_rows = {HEIGHT}\n\n"
+            "[session]\n"
+            "resume_agents_on_restore = false\n\n"
+            "[update]\n"
+            "version_check = false\n"
+            "manifest_check = false\n",
+            encoding="utf-8",
+        )
+        config_file.chmod(0o600)
+
+
+def start_login():
+    ensure_directories()
+    # A started flow is never replayed after a helper/server restart. The
+    # disposable Job can be retried by the caller with a new flowId instead.
+    if started.exists():
+        return status()
+    started.touch(mode=0o600)
+
+    ensure_server()
+    workspace = api_request(
+        "workspace.create",
+        {
+            "cwd": str(directory),
+            "label": "Claude sign-in",
+            "focus": False,
+            "env": {"TERM": "xterm-256color"},
+        },
+        "signin-workspace",
+    )
+    workspace_id = workspace["workspace"]["workspace_id"]
+    tab_id = workspace["tab"]["tab_id"]
+    layout = api_request(
+        "layout.apply",
+        {
+            "workspace_id": workspace_id,
+            "tab_label": "Claude sign-in",
+            "focus": False,
+            "root": {
+                "type": "pane",
+                "label": "Claude sign-in",
+                "cwd": str(directory),
+                "command": login_command(),
+                "env": {},
+            },
+        },
+        "signin-layout",
+    )
+    api_request("tab.close", {"tab_id": tab_id}, "signin-close-shell")
+    tab_id = layout.get("layout", {}).get("tab_id", tab_id)
+    pane_id = pane_id_from_layout(layout) or workspace["root_pane"]["pane_id"]
+    pane = api_request("pane.get", {"pane_id": pane_id}, "signin-pane").get(
+        "pane", {}
+    )
+    write_state(
+        {
+            "flowId": flow_id,
+            "workspaceId": workspace_id,
+            "tabId": tab_id,
+            "paneId": pane_id,
+            "terminalId": pane.get("terminal_id", ""),
+        }
+    )
+    return status()
+
+
+def login_command():
+    recorder = os.environ.get("ARCHESTRA_TERMINAL_BIN", "archestra-terminal")
+    path = os.environ.get("PATH", "/usr/local/bin:/usr/bin:/bin")
+    record = shlex.join(
+        [recorder, "record", str(raw_log), "--", "claude", "setup-token"]
+    )
+    # Keep a stable shell occupant after the recorder exits so the account
+    # route can inspect exit-status and return the final token on a later call.
+    shell = (
+        f"{record}; rc=$?; printf '%s' \"$rc\" > {shlex.quote(str(exit_file))}; "
+        "sleep 600"
+    )
+    # env -i prevents provider credentials from the Job's parent environment
+    # from entering the sign-in command. The code itself is never here.
+    return [
+        "/usr/bin/env",
+        "-i",
+        f"PATH={path}",
+        f"HOME={directory / 'home'}",
+        f"TMPDIR={directory / 'tmp'}",
+        f"CLAUDE_CONFIG_DIR={directory / 'claude-config'}",
+        "TERM=xterm-256color",
+        "DISABLE_AUTOUPDATER=1",
+        "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1",
+        "/bin/sh",
+        "-c",
+        shell,
+    ]
+
+
+def ensure_server():
+    try:
+        api_request("ping", {}, "signin-ping")
+        return
+    except Exception:
+        pass
+
+    try:
+        subprocess.Popen(
+            [os.environ.get("ARCHESTRA_HERDR_BIN", "herdr"), "server"],
+            env=herdr_environment(),
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+    except OSError as error:
+        raise RuntimeError("Unable to start the Herdr sign-in server") from error
+
+    deadline = time.monotonic() + API_TIMEOUT
+    while time.monotonic() < deadline:
+        try:
+            api_request("ping", {}, "signin-ping")
+            return
+        except Exception:
+            time.sleep(0.05)
+    raise RuntimeError("Herdr sign-in server did not become ready")
+
+
+def herdr_environment():
+    env = os.environ.copy()
+    env.update(
+        {
+            "HOME": str(directory / "home"),
+            "XDG_CONFIG_HOME": str(directory / "xdg-config"),
+            "XDG_DATA_HOME": str(directory / "xdg-data"),
+            "HERDR_CONFIG_PATH": str(config_file),
+            "HERDR_SOCKET_PATH": str(socket_file),
+        }
+    )
+    return env
+
+
+def api_request(method, params, request_id):
+    request = {"id": request_id, "method": method, "params": params}
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
+            connection.settimeout(API_TIMEOUT)
+            connection.connect(str(socket_file))
+            connection.sendall(
+                json.dumps(request, separators=(",", ":")).encode() + b"\n"
+            )
+            response = read_api_response(connection)
+    except Exception as error:
+        # Herdr errors and logs must never echo an input payload. Callers only
+        # need to know that the operation failed in order to report a safe
+        # account envelope.
+        raise RuntimeError(f"Herdr API request failed: {method}") from error
+    if not isinstance(response, dict) or "result" not in response:
+        raise RuntimeError(f"Herdr API request failed: {method}")
+    if "error" in response:
+        raise RuntimeError(f"Herdr API request failed: {method}")
+    result = response["result"]
+    return result if isinstance(result, dict) else {}
+
+
+def read_api_response(connection):
+    data = bytearray()
+    while len(data) <= MAX_API_RESPONSE:
+        chunk = connection.recv(65536)
+        if not chunk:
+            break
+        data.extend(chunk)
+        if b"\n" in data:
+            line = bytes(data).split(b"\n", 1)[0]
+            return json.loads(line)
+    raise RuntimeError("invalid Herdr API response")
+
+
+def pane_id_from_layout(layout):
+    node = layout.get("layout", {}).get("root", {})
+    while isinstance(node, dict):
+        if node.get("type") == "pane":
+            return node.get("pane_id")
+        node = node.get("first") or node.get("second")
+    return None
+
+
+def complete():
+    request = json.loads(sys.stdin.read(16384))
+    if request.get("flowId") != flow_id:
+        raise ValueError("The sign-in expired")
+    code = request.get("code", "")
+    if not isinstance(code, str):
+        raise ValueError("Invalid authorization code")
+    code = code.strip()
+    state = read_state()
+    if code and not submitted.exists():
+        if (
+            len(code) > MAX_INPUT
+            or any(ord(char) < 32 or ord(char) > 126 for char in code)
+            or not login_running()
+            or not state
+        ):
+            raise ValueError("Invalid authorization code")
+        # Claim before sending: an acknowledged send followed by a crashed
+        # helper must never be retried and submit the code twice.
+        claim_submission()
+        api_request(
+            "pane.send_text",
+            {"pane_id": state["paneId"], "text": code},
+            "signin-code",
+        )
+        api_request(
+            "pane.send_keys",
+            {"pane_id": state["paneId"], "keys": ["Enter"]},
+            "signin-submit",
+        )
+
+    token = captured_token()
+    if token:
+        return {
+            "state": "connected",
+            "token": token,
+            "models": supported_models(token),
+        }
+    return {"state": "failed" if exit_file.exists() else "connecting"}
+
+
+def models():
+    request = json.loads(sys.stdin.read(16384))
+    token = request.get("token", "")
+    if not isinstance(token, str) or not TOKEN.fullmatch(token):
+        raise ValueError("Invalid subscription token")
+    return {"state": "connected", "models": supported_models(token)}
+
+
+def claim_submission():
+    try:
+        fd = os.open(submitted, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    except FileExistsError:
+        return False
+    os.close(fd)
+    return True
 
 
 def login_running():
-    return run(["tmux", "has-session", "-t", session], check=False).returncode == 0
+    if exit_file.exists():
+        return False
+    state = read_state()
+    if not state or state.get("flowId") != flow_id:
+        return False
+    try:
+        api_request("pane.get", {"pane_id": state["paneId"]}, "signin-live")
+    except RuntimeError:
+        return False
+    return True
 
 
 def pane():
-    if not login_running():
+    # The raw recorder is authoritative. pane.read is intentionally not used
+    # as a fallback because Herdr snapshots clamp history at 1,000 rows.
+    try:
+        return raw_log.read_text(encoding="utf-8", errors="replace")
+    except FileNotFoundError:
         return ""
-    text = run(["tmux", "capture-pane", "-p", "-J", "-S", "-", "-t", session]).stdout
-    return re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", text)
 
 
 def captured_token():
-    tokens = set(TOKEN.findall(pane()))
+    tokens = set(TOKEN.findall(re.sub(r"\s+", "", strip_ansi(pane()))))
     if len(tokens) > 1:
         raise ValueError("Ambiguous subscription credential")
     return next(iter(tokens), None)
 
 
 def status():
-    captured = pane()
-    if TOKEN.search(captured):
+    captured = strip_ansi(pane())
+    if TOKEN.search(re.sub(r"\s+", "", captured)):
         return {"state": "connecting", "flowId": flow_id}
     if exit_file.exists() or not login_running():
         return {"state": "failed"}
     if submitted.exists():
         return {"state": "connecting", "flowId": flow_id}
-    match = re.search(r"https://(?:claude\.com/cai|claude\.ai)/oauth/authorize\?[^\s\x1b]+", captured)
-    if match:
-        return {"state": "awaiting_code", "flowId": flow_id, "authorizationUrl": match.group(0)}
+    authorization_url = authorization_url_from(captured)
+    if authorization_url:
+        return {
+            "state": "awaiting_code",
+            "flowId": flow_id,
+            "authorizationUrl": authorization_url,
+        }
     return {"state": "starting", "flowId": flow_id}
+
+
+def authorization_url_from(text):
+    for match in URL_START.finditer(text):
+        suffix = text[match.start() :]
+        lines = suffix.splitlines()
+        candidate = take_url_part(lines[0])
+        for line_number, line in enumerate(lines[1:], start=1):
+            continuation = line.lstrip()
+            if not continuation:
+                continue
+            prior_line_was_full = len(lines[line_number - 1].rstrip()) >= WIDTH - 2
+            starts_with_query = continuation.startswith(
+                ("&", "?", "%", "=", "/", "#")
+            )
+            has_parameter = "=" in continuation.split(None, 1)[0]
+            if not (prior_line_was_full or starts_with_query or has_parameter):
+                break
+            piece = take_url_part(continuation)
+            if not piece:
+                break
+            candidate += piece
+        candidate = candidate.rstrip(".,)")
+        if candidate:
+            return candidate
+    return None
+
+
+def take_url_part(text):
+    match = URL_PART.match(text)
+    return match.group(0) if match else ""
+
+
+def strip_ansi(text):
+    text = re.sub(r"\x1b\][^\x07]*(?:\x07|\x1b\\)", "", text)
+    text = re.sub(r"\x1bP.*?\x1b\\", "", text, flags=re.DOTALL)
+    return re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", text).replace("\r", "")
+
+
+def read_state():
+    try:
+        state = json.loads(state_file.read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError):
+        return None
+    return state if isinstance(state, dict) else None
+
+
+def write_state(state):
+    temporary = state_file.with_suffix(".tmp")
+    temporary.write_text(json.dumps(state, separators=(",", ":")), encoding="utf-8")
+    temporary.chmod(0o600)
+    temporary.replace(state_file)
+
+
+def cleanup():
+    state = read_state()
+    if state:
+        try:
+            api_request(
+                "workspace.close",
+                {"workspace_id": state["workspaceId"]},
+                "signin-cleanup-workspace",
+            )
+        except RuntimeError:
+            pass
+    try:
+        api_request("server.stop", {}, "signin-cleanup-server")
+    except RuntimeError:
+        pass
+    for path in (
+        submitted,
+        started,
+        exit_file,
+        state_file,
+        raw_log,
+        config_file,
+        socket_file,
+        client_socket_file,
+    ):
+        try:
+            path.unlink()
+        except FileNotFoundError:
+            pass
+    shutil.rmtree(directory, ignore_errors=True)
 
 
 def cli_environment(token):
     env = os.environ.copy()
-    for key in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL", "ANTHROPIC_CUSTOM_HEADERS", "CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX", "CLAUDE_CODE_USE_FOUNDRY", "CLAUDE_CODE_OAUTH_REFRESH_TOKEN"):
+    for key in (
+        "ANTHROPIC_API_KEY",
+        "ANTHROPIC_AUTH_TOKEN",
+        "ANTHROPIC_BASE_URL",
+        "ANTHROPIC_CUSTOM_HEADERS",
+        "CLAUDE_CODE_USE_BEDROCK",
+        "CLAUDE_CODE_USE_VERTEX",
+        "CLAUDE_CODE_USE_FOUNDRY",
+        "CLAUDE_CODE_OAUTH_REFRESH_TOKEN",
+    ):
         env.pop(key, None)
-    env["CLAUDE_CODE_OAUTH_TOKEN"] = token
+    env.update(
+        {
+            "HOME": str(directory / "home"),
+            "CLAUDE_CONFIG_DIR": str(directory / "claude-config"),
+            "XDG_CONFIG_HOME": str(directory / "xdg-config"),
+            "XDG_DATA_HOME": str(directory / "xdg-data"),
+            "CLAUDE_CODE_OAUTH_TOKEN": token,
+        }
+    )
     return env
 
 
 def supported_models(token):
     process = subprocess.Popen(
-        ["claude", "--print", "--input-format", "stream-json",
-         "--output-format", "stream-json", "--verbose", "--tools", "",
-         "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}',
-         "--setting-sources", ""],
+        [
+            "claude",
+            "--print",
+            "--input-format",
+            "stream-json",
+            "--output-format",
+            "stream-json",
+            "--verbose",
+            "--tools",
+            "",
+            "--strict-mcp-config",
+            "--mcp-config",
+            '{"mcpServers":{}}',
+            "--setting-sources",
+            "",
+        ],
         env=cli_environment(token),
-        stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
         stderr=subprocess.DEVNULL,
     )
     try:
-        process.stdin.write(json.dumps({
-            "type": "control_request", "request_id": "runtime-models",
-            "request": {"subtype": "initialize"},
-        }).encode() + b"\n")
+        process.stdin.write(
+            json.dumps(
+                {
+                    "type": "control_request",
+                    "request_id": "runtime-models",
+                    "request": {"subtype": "initialize"},
+                }
+            ).encode()
+            + b"\n"
+        )
         process.stdin.flush()
-        deadline = time.monotonic() + 20
+        deadline = time.monotonic() + MODEL_METADATA_TIMEOUT
         buffer = b""
         with selectors.DefaultSelector() as selector:
             selector.register(process.stdout, selectors.EVENT_READ)
-            while time.monotonic() < deadline:
-                if not selector.select(timeout=1):
+            while True:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    break
+                if not selector.select(timeout=min(1, remaining)):
                     continue
                 chunk = os.read(process.stdout.fileno(), 65536)
                 if not chunk:
@@ -144,8 +537,11 @@ def supported_models(token):
                         continue
                     models = response.get("response", {}).get("models", [])
                     return [
-                        {"value": entry["value"], "displayName": entry["displayName"],
-                         "description": entry.get("description", "")}
+                        {
+                            "value": entry["value"],
+                            "displayName": entry["displayName"],
+                            "description": entry.get("description", ""),
+                        }
                         for entry in models
                         if isinstance(entry.get("value"), str)
                         and isinstance(entry.get("displayName"), str)
@@ -159,13 +555,6 @@ def supported_models(token):
             process.kill()
             process.wait()
 
-
-TOKEN = re.compile(r"sk-ant-oat[0-9]+-[A-Za-z0-9_-]{32,8192}")
-directory = Path("/tmp/archestra-claude-account")
-submitted = directory / "submitted"
-exit_file = directory / "exit-status"
-flow_id = os.environ.get("ARCHESTRA_AGENT_RUNTIME_CLAUDE_FLOW_ID", "")
-session = "archestra-claude-login"
 
 if __name__ == "__main__":
     try:

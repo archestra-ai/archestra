@@ -118,6 +118,100 @@ describe("buildAgentRuntimeSandbox", () => {
     );
   });
 
+  it("includes the immutable task identity in each turn environment", () => {
+    expect(
+      buildAgentRuntimeTurnScript({ ...SPEC, runtimeScope: SPEC.namespace }),
+    ).toContain(`export ARCHESTRA_AGENT_RUNTIME_TASK_ID='${SPEC.taskId}'`);
+  });
+
+  it("seeds the first child and refreshes credentials on the next turn", () => {
+    const initialSpec = {
+      ...SPEC,
+      env: {
+        ...SPEC.env,
+        ARCHESTRA_AGENT_RUNTIME_TASK_ID: SPEC.taskId,
+        TASK_SETTING: "initial-config",
+        ARCHESTRA_MCP_GATEWAY_URL: "https://initial-gateway.test",
+      },
+      secretEnv: {
+        OPENAI_API_KEY: "initial-secret",
+        ARCHESTRA_MCP_GATEWAY_TOKEN: "initial-token",
+      },
+      command: [
+        "/bin/sh",
+        "-c",
+        'printf "%s|%s|%s|%s" "$ARCHESTRA_AGENT_RUNTIME_TASK_ID" "$TASK_SETTING" "$ARCHESTRA_MCP_GATEWAY_URL" "$OPENAI_API_KEY"',
+      ],
+    } satisfies KubernetesAgentRunLaunchSpec;
+    const container =
+      buildAgentRuntimeSandbox(initialSpec).spec.podTemplate.spec
+        ?.containers[0];
+    if (!container) throw new Error("Agent Runtime container was not rendered");
+    const initialEnv: Record<string, string> = Object.fromEntries(
+      (container.env ?? []).map(({ name, value }) => [name, value ?? ""]),
+    );
+    const secret = buildAgentRuntimeSecret(initialSpec);
+    const projectedSecrets = Object.fromEntries(
+      Object.entries(secret.data ?? {}).map(([name, value]) => [
+        name,
+        Buffer.from(value, "base64").toString("utf8"),
+      ]),
+    );
+    const first = execFileSync(
+      "/bin/sh",
+      ["-c", initialEnv.ARCHESTRA_AGENT_RUNTIME_ENTRYPOINT],
+      {
+        encoding: "utf8",
+        env: {
+          PATH: "/usr/bin:/bin",
+          IMAGE_SETTING: "preserved-image-default",
+          ...initialEnv,
+          ...projectedSecrets,
+        },
+      },
+    );
+    expect(first).toBe(
+      `${SPEC.taskId}|initial-config|https://initial-gateway.test|initial-secret`,
+    );
+
+    const nextSpec = {
+      ...initialSpec,
+      env: {
+        ...initialSpec.env,
+        TASK_SETTING: "next-config",
+        ARCHESTRA_MCP_GATEWAY_URL: "https://next-gateway.test",
+      },
+      secretEnv: {
+        OPENAI_API_KEY: "next-secret",
+        ARCHESTRA_MCP_GATEWAY_TOKEN: "next-token",
+      },
+      command: initialSpec.command,
+      runtimeScope: SPEC.namespace,
+    };
+    const next = execFileSync(
+      "/bin/sh",
+      [
+        "-c",
+        buildAgentRuntimeTurnScript(nextSpec, [
+          ...(container.env ?? []).map(({ name }) => name),
+          ...Object.keys(projectedSecrets),
+        ]),
+      ],
+      {
+        encoding: "utf8",
+        env: {
+          PATH: "/usr/bin:/bin",
+          IMAGE_SETTING: "preserved-image-default",
+          ...initialEnv,
+          ...projectedSecrets,
+        },
+      },
+    );
+    expect(next).toBe(
+      `${SPEC.taskId}|next-config|https://next-gateway.test|next-secret`,
+    );
+  });
+
   it("makes direct interactive shells join the agent session", () => {
     const env =
       buildAgentRuntimeSandbox(SPEC).spec?.podTemplate.spec?.containers[0]?.env;
@@ -298,6 +392,16 @@ describe("the container bootstrap", () => {
     // has no tmux" never reads as "your agent failed".
     expect(script()).toContain("command -v tmux");
     expect(script()).toContain("exit 78");
+  });
+
+  it("starts Herdr only after the helper is ready and records the backend", () => {
+    const bootstrap = script();
+    expect(bootstrap).toContain("archestra-terminal serve");
+    expect(bootstrap).toContain("archestra-terminal ready");
+    expect(bootstrap).toContain("terminal-backend");
+    expect(bootstrap).toContain(
+      "must provide both archestra-terminal and herdr",
+    );
   });
 
   it("creates the steer FIFO and retains the workspace supervisor", () => {

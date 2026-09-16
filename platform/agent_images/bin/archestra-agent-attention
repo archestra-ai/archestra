@@ -5,6 +5,10 @@ action="${1:-}"
 label="${2:-}"
 target="${TMUX_PANE:-agent}"
 
+herdr_helper_available() {
+  [[ -n "${HERDR_ENV:-}" ]] && command -v archestra-terminal >/dev/null 2>&1
+}
+
 report_attention() {
   local attention_state="${1:-}"
   if ! command -v curl >/dev/null 2>&1; then
@@ -29,26 +33,51 @@ report_attention() {
     "${ARCHESTRA_MCP_GATEWAY_URL:?}/runtime-status" >/dev/null 2>&1 || true
 }
 
-current="$(tmux show-option -t "${target}" -qv @archestra_attention 2>/dev/null || true)"
-current_label="$(tmux show-option -t "${target}" -qv @archestra_attention_label 2>/dev/null || true)"
-
 case "${action}" in
   set)
     if [[ -z "${label}" ]]; then
       echo "usage: archestra-agent-attention set <label>" >&2
       exit 64
     fi
-    tmux set-option -t "${target}" @archestra_attention 1 >/dev/null 2>&1 || true
-    tmux set-option -t "${target}" @archestra_attention_label "${label}" >/dev/null 2>&1 || true
-    if [[ "${current}" != "1" || "${current_label}" != "${label}" ]]; then
-      report_attention "input_required"
+    if herdr_helper_available; then
+      current_state="$(archestra-terminal attention get)" || {
+        echo "archestra: unable to read Herdr attention state" >&2
+        exit 1
+      }
+      current="$(jq -r 'if .active == true then "1" else "0" end' <<<"${current_state}")"
+      current_label="$(jq -r '.label // ""' <<<"${current_state}")"
+      archestra-terminal attention set "${label}" >/dev/null
+      if [[ "${current}" != "1" || "${current_label}" != "${label}" ]]; then
+        report_attention "input_required"
+      fi
+    else
+      current="$(tmux show-option -t "${target}" -qv @archestra_attention 2>/dev/null || true)"
+      current_label="$(tmux show-option -t "${target}" -qv @archestra_attention_label 2>/dev/null || true)"
+      tmux set-option -t "${target}" @archestra_attention 1 >/dev/null 2>&1 || true
+      tmux set-option -t "${target}" @archestra_attention_label "${label}" >/dev/null 2>&1 || true
+      if [[ "${current}" != "1" || "${current_label}" != "${label}" ]]; then
+        report_attention "input_required"
+      fi
     fi
     ;;
   clear)
-    tmux set-option -t "${target}" @archestra_attention 0 >/dev/null 2>&1 || true
-    tmux set-option -t "${target}" @archestra_attention_label "" >/dev/null 2>&1 || true
-    if [[ "${current}" == "1" ]]; then
-      report_attention ""
+    if herdr_helper_available; then
+      current_state="$(archestra-terminal attention get)" || {
+        echo "archestra: unable to read Herdr attention state" >&2
+        exit 1
+      }
+      current="$(jq -r 'if .active == true then "1" else "0" end' <<<"${current_state}")"
+      archestra-terminal attention clear >/dev/null
+      if [[ "${current}" == "1" ]]; then
+        report_attention ""
+      fi
+    else
+      current="$(tmux show-option -t "${target}" -qv @archestra_attention 2>/dev/null || true)"
+      tmux set-option -t "${target}" @archestra_attention 0 >/dev/null 2>&1 || true
+      tmux set-option -t "${target}" @archestra_attention_label "" >/dev/null 2>&1 || true
+      if [[ "${current}" == "1" ]]; then
+        report_attention ""
+      fi
     fi
     ;;
   *)

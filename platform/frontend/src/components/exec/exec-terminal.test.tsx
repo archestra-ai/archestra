@@ -440,7 +440,7 @@ describe("ExecTerminal", () => {
     expect(transport.sendInput).toHaveBeenNthCalledWith(2, "j");
   });
 
-  it("does not render tmux's exit notice into the completed frame", async () => {
+  it("preserves literal exit text from the agent", async () => {
     const session: { handlers: ExecSessionHandlers | null } = {
       handlers: null,
     };
@@ -461,7 +461,7 @@ describe("ExecTerminal", () => {
 
     act(() => session.handlers?.onOutput("done\r\n[exited]\r\n"));
 
-    expect(terminalHarness.write).toHaveBeenCalledWith("done");
+    expect(terminalHarness.write).toHaveBeenCalledWith("done\r\n[exited]\r\n");
   });
 
   it("keeps the last TUI frame when tmux exits its alternate screen", async () => {

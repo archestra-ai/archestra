@@ -1,5 +1,15 @@
+import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { Writable } from "node:stream";
 import { CoreV1Api, Exec, KubeConfig } from "@kubernetes/client-node";
 import { vi } from "vitest";
@@ -10,7 +20,10 @@ import {
   AgentRunModel,
   VirtualApiKeyModel,
 } from "@/models";
-import { AGENT_RUNTIME_CREDENTIALS_SECRET_KEY } from "@/services/agent-runtime/runtime-contract";
+import {
+  AGENT_RUNTIME_CREDENTIALS_SECRET_KEY,
+  AGENT_RUNTIME_TERMINAL_BACKEND_FILE,
+} from "@/services/agent-runtime/runtime-contract";
 import { expect, test } from "@/test";
 import manager from "./manager";
 
@@ -183,7 +196,16 @@ test("retains access only for the same live CLI and revokes it on workspace clea
   );
   vi.spyOn(CoreV1Api.prototype, "deleteNamespacedSecret").mockResolvedValue({});
   let pane = `0:${run.taskId}`;
+  let markerProbe: string | undefined;
   vi.spyOn(Exec.prototype, "exec").mockImplementation(async (...args) => {
+    const command = args[3];
+    if (
+      Array.isArray(command) &&
+      command[2]?.includes("terminal-backend") &&
+      !markerProbe
+    ) {
+      markerProbe = command[2];
+    }
     args[4]?.write(pane);
     setTimeout(() => args[8]?.({ status: "Success" }), 0);
     return Object.assign(new EventEmitter(), {
@@ -192,6 +214,33 @@ test("retains access only for the same live CLI and revokes it on workspace clea
     }) as unknown as WebSocket;
   });
   await expect(manager.hasRetainedTerminal(run)).resolves.toBe(true);
+  expect(markerProbe).toBeDefined();
+  if (!markerProbe) throw new Error("Herdr marker probe was not executed");
+  const probeRoot = mkdtempSync(path.join(tmpdir(), "agent-runtime-probe-"));
+  const probeBin = path.join(probeRoot, "bin");
+  const probeMarker = path.join(probeRoot, "terminal-backend");
+  const probeCommand = path.join(probeBin, "archestra-terminal");
+  const probeHerdr = path.join(probeBin, "herdr");
+  mkdirSync(probeBin);
+  writeFileSync(probeMarker, "herdr\n");
+  for (const command of [probeCommand, probeHerdr]) {
+    writeFileSync(command, "#!/bin/sh\nexit 0\n");
+    chmodSync(command, 0o755);
+  }
+  const executableProbe = markerProbe.replaceAll(
+    AGENT_RUNTIME_TERMINAL_BACKEND_FILE,
+    probeMarker,
+  );
+  execFileSync("/bin/sh", ["-c", executableProbe], {
+    env: { PATH: `${probeBin}:/usr/bin:/bin` },
+  });
+  writeFileSync(probeMarker, "tmux\n");
+  expect(() =>
+    execFileSync("/bin/sh", ["-c", executableProbe], {
+      env: { PATH: `${probeBin}:/usr/bin:/bin` },
+    }),
+  ).toThrow();
+  rmSync(probeRoot, { recursive: true, force: true });
   pane = `1:${run.taskId}`;
   await expect(manager.hasRetainedTerminal(run)).resolves.toBe(false);
   pane = `0:${randomUUID()}`;

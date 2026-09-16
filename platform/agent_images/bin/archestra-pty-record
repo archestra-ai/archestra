@@ -1,0 +1,236 @@
+#!/usr/bin/env python3
+"""Record original command output while preserving its controlling terminal."""
+
+import argparse
+import ctypes
+import fcntl
+import json
+import os
+from pathlib import Path
+import pty
+import select
+import signal
+import sys
+import termios
+import time
+import tty
+
+
+def process_identity(pid):
+    try:
+        fields = Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()
+        return {"pid": pid, "parent": int(fields[1]), "start": fields[19], "state": fields[0]}
+    except (FileNotFoundError, ProcessLookupError):
+        return None
+
+
+def descendants(pid):
+    found = {pid: process_identity(pid)}
+    processes = [process_identity(int(path.name)) for path in Path('/proc').iterdir()
+                 if path.name.isdigit()]
+    while True:
+        children = {p['pid']: p for p in processes
+                    if p and p['parent'] in found and p['pid'] not in found}
+        if not children:
+            return [p for p in found.values() if p]
+        found.update(children)
+
+
+def owned_processes(pid, owner_pid=None):
+    """Return the command tree plus children adopted by the recorder."""
+    owned = {p['pid']: p for p in descendants(pid) if p}
+    if owner_pid is not None and owner_pid != pid:
+        owned.update({p['pid']: p for p in descendants(owner_pid)
+                      if p and p['pid'] != owner_pid})
+    return owned
+
+
+def stop_tree(pid, owner_pid=None):
+    # Collect before terminating parents so daemonized grandchildren cannot
+    # disappear from the ownership tree as they are reparented. When called by
+    # the recorder, include descendants adopted by its subreaper boundary.
+    owned = owned_processes(pid, owner_pid)
+    for sig in (signal.SIGTERM, signal.SIGKILL):
+        owned.update(owned_processes(pid, owner_pid))
+        for identity in reversed(list(owned.values())):
+            current = process_identity(identity['pid'])
+            if current and current['start'] == identity['start']:
+                try:
+                    os.kill(identity['pid'], sig)
+                except ProcessLookupError:
+                    pass
+        current = process_identity(pid)
+        if current and pid in owned and current['start'] == owned[pid]['start']:
+            try:
+                if os.getpgid(pid) == pid:
+                    os.killpg(pid, sig)
+            except ProcessLookupError:
+                pass
+        if sig == signal.SIGTERM:
+            time.sleep(0.25)
+
+
+def reap_owned(pid, owner_pid, preserve_pid=None):
+    """Reap children adopted by this recorder without blocking indefinitely."""
+    pending = {}
+    empty_scans = 0
+    deadline = time.monotonic() + 1
+    while time.monotonic() < deadline:
+        pending.update(owned_processes(pid, owner_pid))
+        if preserve_pid is not None:
+            pending.pop(preserve_pid, None)
+        for child_pid in list(pending):
+            try:
+                waited, _ = os.waitpid(child_pid, os.WNOHANG)
+            except (ChildProcessError, ProcessLookupError):
+                pending.pop(child_pid, None)
+                continue
+            if waited == child_pid:
+                pending.pop(child_pid, None)
+        if pending:
+            empty_scans = 0
+            time.sleep(.05)
+        elif empty_scans < 2:
+            # A killed child can become an adopted child between /proc scans.
+            empty_scans += 1
+            time.sleep(.05)
+        else:
+            break
+
+
+def set_child_subreaper():
+    """Keep daemonized turn descendants owned by this unprivileged recorder."""
+    if sys.platform != 'linux':
+        return False
+    try:
+        libc = ctypes.CDLL(None, use_errno=True)
+        prctl = libc.prctl
+        prctl.argtypes = [ctypes.c_int, ctypes.c_ulong, ctypes.c_ulong,
+                          ctypes.c_ulong, ctypes.c_ulong]
+        prctl.restype = ctypes.c_int
+        return prctl(36, 1, 0, 0, 0) == 0  # PR_SET_CHILD_SUBREAPER
+    except (AttributeError, OSError):
+        return False
+
+
+def stop_owned_tree(pid, preserve_pid=None):
+    owner_pid = os.getpid()
+    stop_tree(pid, owner_pid)
+    reap_owned(pid, owner_pid, preserve_pid)
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--pid-file')
+    parser.add_argument('--mirror')
+    parser.add_argument('--hold', action='store_true')
+    parser.add_argument('log')
+    parser.add_argument('command', nargs=argparse.REMAINDER)
+    args = parser.parse_args()
+    command = args.command[1:] if args.command[:1] == ['--'] else args.command
+    if not command:
+        parser.error('a command is required')
+    os.umask(0o077)
+    if sys.platform == 'linux' and not set_child_subreaper():
+        raise RuntimeError('Linux PTY recorder requires PR_SET_CHILD_SUBREAPER')
+    log = open(args.log, 'ab', buffering=0)
+    mirror = open(args.mirror, 'ab', buffering=0) if args.mirror else None
+    ready_read, ready_write = os.pipe()
+    pid, master = pty.fork()
+    if pid == 0:
+        os.close(ready_write)
+        os.read(ready_read, 1)
+        os.close(ready_read)
+        try:
+            os.execvp(command[0], command)
+        except OSError as error:
+            print(f'Unable to start agent command: {error.strerror}', file=sys.stderr)
+            os._exit(127)
+    os.close(ready_read)
+    original = termios.tcgetattr(0) if os.isatty(0) else None
+    stopping = False
+
+    def resize(*_):
+        if os.isatty(0):
+            size = fcntl.ioctl(0, termios.TIOCGWINSZ, b'\0' * 8)
+            fcntl.ioctl(master, termios.TIOCSWINSZ, size)
+
+    def stop(*_):
+        nonlocal stopping
+        stopping = True
+
+    signal.signal(signal.SIGWINCH, resize)
+    for sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
+        signal.signal(sig, stop)
+    resize()
+    if original:
+        tty.setraw(0)
+    identity = {'recorder': process_identity(os.getpid()), 'child': process_identity(pid)}
+    if args.pid_file:
+        temporary = Path(args.pid_file + '.tmp')
+        temporary.write_text(json.dumps(identity))
+        temporary.replace(args.pid_file)
+    os.write(ready_write, b'1')
+    os.close(ready_write)
+    status = None
+    input_open = True
+    try:
+        while True:
+            if stopping:
+                # Leave the primary child waitable so its original exit
+                # status is still returned below.
+                stop_owned_tree(pid, preserve_pid=pid)
+                stopping = False
+            readable, _, _ = select.select([master] + ([0] if input_open else []), [], [], .1)
+            if master in readable:
+                try:
+                    data = os.read(master, 65536)
+                except OSError as error:
+                    if error.errno != 5:
+                        raise
+                    data = b''
+                if not data:
+                    break
+                write_all(log.fileno(), data)
+                if mirror:
+                    write_all(mirror.fileno(), data)
+                write_all(1, data)
+            if 0 in readable:
+                data = os.read(0, 65536)
+                if data:
+                    write_all(master, data)
+                else:
+                    input_open = False
+            if status is None:
+                exited, result = os.waitpid(pid, os.WNOHANG)
+                if exited:
+                    status = result
+                    # A command that exits while a daemonized descendant
+                    # still owns the PTY must not leave that descendant behind
+                    # or keep the recorder alive forever.
+                    stop_owned_tree(pid)
+        if status is None:
+            _, status = os.waitpid(pid, 0)
+        if args.pid_file:
+            identity['exit'] = os.waitstatus_to_exitcode(status)
+            Path(args.pid_file).write_text(json.dumps(identity))
+        while args.hold and not stopping:
+            time.sleep(.1)
+        return os.waitstatus_to_exitcode(status)
+    finally:
+        stop_owned_tree(pid)
+        os.close(master)
+        if original:
+            termios.tcsetattr(0, termios.TCSANOW, original)
+        log.close()
+        if mirror:
+            mirror.close()
+
+
+def write_all(fd, data):
+    while data:
+        data = data[os.write(fd, data):]
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())

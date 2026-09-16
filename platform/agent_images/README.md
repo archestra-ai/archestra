@@ -1,7 +1,7 @@
 # Curated Agent images
 
 These are the maintained container images behind the Agent catalog. Every
-image satisfies the same runtime contract: a POSIX shell and `tmux`, a
+image satisfies the same runtime contract: a POSIX shell, the pinned Herdr terminal and Archestra helpers, a
 non-root working directory and the invoking user's Agent-scoped MCP gateway endpoint. Provider-backed runs also receive an Archestra LLM proxy virtual key.
 
 | Target | Agent command | Inference API |
@@ -18,6 +18,10 @@ Build a target from `platform/`:
 ```bash
 docker build -f agent_images/Dockerfile --target agent-codex -t agent-codex:dev .
 ```
+
+Every target runs the shared recorder and terminal contract tests during its
+build, offline and as the runtime user. The maintained images contain Herdr;
+the backend also supports older and custom images that still use tmux.
 
 Tilt pulls the public GAR images by default. Set
 `ARCHESTRA_AGENT_RUNTIME_BASE_IMAGE=agent-archestra:dev` to build

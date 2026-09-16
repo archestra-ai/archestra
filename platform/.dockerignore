@@ -35,6 +35,8 @@ e2e-tests
 **/*.test.tsx
 
 # Misc
+**/__pycache__
+**/*.pyc
 .DS_Store
 *.log
 npm-debug.log*

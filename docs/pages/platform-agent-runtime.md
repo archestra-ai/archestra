@@ -97,7 +97,7 @@ The [maintained images](https://github.com/archestra-ai/archestra/blob/main/plat
 
 | Requirement | What To Provide |
 | --- | --- |
-| Shell and terminal | `/bin/sh` and `tmux` on `PATH`. |
+| Shell and terminal | Derive from a maintained image for its shell and terminal helpers. Existing tmux images remain supported. |
 | Command | Your client executable, or `archestra-runtime-agent` when Command is blank. |
 | Initialization | Optional `archestra-agent-init` for setup before the client starts. |
 | Output | Progress and results on stdout or stderr. Never print credentials. |

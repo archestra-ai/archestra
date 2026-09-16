@@ -1,0 +1,1117 @@
+#!/usr/bin/env python3
+"""Private runtime terminal operations; attachments expose only the agent pane."""
+
+import asyncio
+import base64
+import codecs
+import fcntl
+import runpy
+import json
+import os
+from pathlib import Path
+import pty
+import re
+import select
+import shutil
+import signal
+import socket
+import struct
+import subprocess
+import sys
+import termios
+import time
+import unicodedata
+import tty
+import uuid
+from types import SimpleNamespace
+
+ROOT = Path('/var/run/archestra')
+STATE = ROOT / 'terminal'
+SOCKET = STATE / 'control.sock'
+LAUNCH_LOCK = STATE / 'launch.lock'
+SELF = str(Path(__file__).resolve())
+RECORDER = str(Path(__file__).with_name('archestra-pty-record'))
+SYNC_END = b'\x1b[?2026l'
+RESPONSE_LIMIT = 32 * 1024 * 1024
+STEER_LIMIT = 512 * 1024
+SPAWN_METADATA_TIMEOUT = 5
+PASTE_CLOSE_TIMEOUT = .5
+ATTACH_OUTPUT_LIMIT = 4 * 1024 * 1024
+# Leave any alternate screen selected by the native client without clearing
+# the screen. The browser retains its completed frame separately, while a
+# direct exec client returns to the user's original terminal buffer.
+RESET = (b'\x1b[?1049l\x1b[?1047l\x1b[?47l\x1b[?1000l\x1b[?1002l\x1b[?1003l'
+         b'\x1b[?1015l\x1b[?1006l\x1b[?2004l\x1b[?69l\x1b[?6l\x1b[r\x1b[?7h\x1b[?25h\x1b[0m')
+IDENTITY_OPERATIONS = frozenset(('capture', 'steer', 'attention', 'retain'))
+
+processes = SimpleNamespace(**runpy.run_path(RECORDER))
+
+
+def save(path, value):
+    temporary = path.with_suffix(path.suffix + '.tmp')
+    temporary.write_text(json.dumps(value))
+    temporary.replace(path)
+
+
+def read(path, default=None):
+    try:
+        return json.loads(path.read_text())
+    except (FileNotFoundError, json.JSONDecodeError):
+        return default
+
+
+def acquire_launch_lock():
+    """Serialize launch publication with pane spawn and stop cleanup.
+
+    The pane holds this only through recorder identity publication, never for
+    the lifetime of the command. Controller callers acquire it in a worker
+    thread so the asyncio server remains responsive while a spawn is settling.
+    """
+    fd = os.open(LAUNCH_LOCK, os.O_RDWR | os.O_CREAT, 0o600)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+    except BaseException:
+        os.close(fd)
+        raise
+    return fd
+
+
+def release_launch_lock(fd):
+    try:
+        fcntl.flock(fd, fcntl.LOCK_UN)
+    finally:
+        os.close(fd)
+
+
+def stop_spawn(process):
+    """Kill and reap a recorder that never published its child metadata."""
+    try:
+        processes.stop_tree(process.pid)
+    except (OSError, ProcessLookupError):
+        pass
+    try:
+        process.wait(timeout=3)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait(timeout=1)
+
+
+def live(identity):
+    if not identity:
+        return False
+    current = processes.process_identity(identity['pid'])
+    return bool(current and current['state'] != 'Z' and current['start'] == identity['start'])
+
+
+async def wait_for_dead(identity, timeout):
+    deadline = time.monotonic() + timeout
+    while live(identity) and time.monotonic() < deadline:
+        await asyncio.sleep(.05)
+    return not live(identity)
+
+
+def activity():
+    (ROOT / 'development-activity').write_text(str(int(time.time())) + '\n')
+
+
+def request(operation, **params):
+    if operation in IDENTITY_OPERATIONS:
+        inherited_prefix = os.environ.get('ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX')
+        inherited_task = os.environ.get('ARCHESTRA_AGENT_RUNTIME_TASK_ID')
+        if inherited_prefix:
+            params.setdefault('prefix', inherited_prefix)
+            params.setdefault('task', inherited_task or Path(inherited_prefix).name)
+        elif inherited_task:
+            params.setdefault('task', inherited_task)
+    with socket.socket(socket.AF_UNIX) as connection:
+        connection.settimeout(20)
+        connection.connect(str(SOCKET))
+        connection.sendall(json.dumps({'op': operation, **params}).encode() + b'\n')
+        response_line = connection.makefile('rb').readline(RESPONSE_LIMIT + 1)
+        if len(response_line) > RESPONSE_LIMIT or not response_line.endswith(b'\n'):
+            raise RuntimeError('Terminal control response exceeded 32 MiB')
+        response = json.loads(response_line)
+        if 'error' in response:
+            raise RuntimeError(response['error'])
+        return response.get('result')
+
+
+async def api(environment, method, **params):
+    reader, writer = await asyncio.wait_for(
+        asyncio.open_unix_connection(environment['HERDR_SOCKET_PATH'], limit=RESPONSE_LIMIT), 5)
+    try:
+        writer.write(json.dumps({'id': uuid.uuid4().hex, 'method': method, 'params': params}).encode() + b'\n')
+        await writer.drain()
+        try:
+            response_line = await asyncio.wait_for(reader.readline(), 5)
+        except asyncio.LimitOverrunError as error:
+            raise RuntimeError('Terminal API response exceeded 32 MiB') from error
+        response = json.loads(response_line)
+        if 'error' in response:
+            raise RuntimeError(f'Terminal operation {method} failed')
+        return response['result']
+    finally:
+        writer.close()
+        await writer.wait_closed()
+
+
+class Runtime:
+    def __init__(self):
+        self.environment = {**os.environ, 'HERDR_SOCKET_PATH': str(STATE / 'herdr.sock'),
+                            'XDG_CONFIG_HOME': str(STATE / 'config'),
+                            'XDG_STATE_HOME': str(STATE / 'state')}
+        # Herdr itself may normalize TERM for its native owner/pane runtime.
+        # Carry the resolved pod values through a private handoff so the
+        # recorder's first child still inherits the caller's environment.
+        for name, default in (('TERM', 'xterm-256color'),
+                              ('LANG', 'C.UTF-8'), ('LC_ALL', 'C.UTF-8')):
+            self.environment.setdefault(name, default)
+            self.environment[f'ARCHESTRA_CHILD_{name}'] = self.environment[name]
+        self.environment.pop('ARCHESTRA_AGENT_RUNTIME_ENTRYPOINT', None)
+        self.environment['HERDR_CONFIG_PATH'] = str(STATE / 'config.toml')
+        self.clients = set()
+        self.paste_owner = None
+        self.paste_owner_task = None
+        self.paste_decoder = None
+        self.paste_finished = None
+        self.aborted_paste_writers = set()
+        self.owner = None
+        self.owner_fd = None
+        self.owner_task = None
+        self.size = (120, 40)
+        self.client_sizes = {}
+        self.prefix = None
+        self.claimed = set()
+        self.retained = None
+        self.attention = {'active': False, 'label': ''}
+        self.lock = asyncio.Lock()
+        self.input_lock = asyncio.Lock()
+        self.done = asyncio.Event()
+
+    async def boot(self):
+        STATE.mkdir(parents=True, exist_ok=True, mode=0o700)
+        (STATE / 'config.toml').write_text(
+            '[session]\nresume_agents_on_restore = false\n'
+            '[experimental]\npane_history = false\n'
+            '[update]\nversion_check = false\nmanifest_check = false\n'
+            '[ui]\nmouse_scroll_lines = 1\n')
+        self.server_log = open(STATE / 'server.log', 'ab', buffering=0)
+        self.server = await asyncio.create_subprocess_exec('herdr', 'server', env=self.environment,
+            stdin=subprocess.DEVNULL, stdout=self.server_log, stderr=self.server_log)
+        for _ in range(100):
+            try:
+                version = await api(self.environment, 'ping')
+                if version.get('version') != '0.9.0' or version.get('protocol') != 22:
+                    raise ValueError('This image requires terminal server version 0.9.0 (protocol 22)')
+                break
+            except (OSError, RuntimeError, asyncio.TimeoutError):
+                if self.server.returncode is not None:
+                    raise RuntimeError('Terminal server exited during startup')
+                await asyncio.sleep(.1)
+        else:
+            raise RuntimeError('Terminal server did not become ready')
+        workspace = await api(self.environment, 'workspace.create', cwd=os.getcwd(), label='agent')
+        layout = await api(self.environment, 'layout.apply',
+            workspace_id=workspace['workspace']['workspace_id'],
+            root={'type': 'pane', 'cwd': os.getcwd(), 'command': [SELF, 'pane']})
+        self.pane_id = layout['layout']['root']['pane_id']
+        await api(self.environment, 'tab.close', tab_id=workspace['tab']['tab_id'])
+        pane = await api(self.environment, 'pane.get', pane_id=self.pane_id)
+        self.terminal_id = pane['pane']['terminal_id']
+        process = await api(self.environment, 'pane.process_info', pane_id=self.pane_id)
+        self.pane_identity = processes.process_identity(process['process_info']['shell_pid'])
+        await self.restart_owner()
+        self.listener = await asyncio.start_unix_server(self.connection, path=SOCKET, limit=1024 * 1024)
+        os.chmod(SOCKET, 0o600)
+        self.monitor = asyncio.create_task(self.watch_server())
+
+    async def watch_server(self):
+        while self.server.returncode is None and live(self.pane_identity):
+            child = self.child()
+            recorder = child.get('recorder')
+            if (self.prefix and child.get('prefix') == self.prefix and recorder
+                    and 'exit' not in child and not live(recorder)):
+                # A recorder is the ownership boundary for the turn command.
+                # If it disappears without publishing an exit, stop serving so
+                # PID 1 can reap any descendants left by an abrupt death.
+                self.done.set()
+                return
+            await asyncio.sleep(.2)
+        self.done.set()
+
+    def child(self):
+        return read(STATE / 'child.json', {})
+
+    def alive(self):
+        child = self.child()
+        return bool(self.prefix and child.get('prefix') == self.prefix
+                    and 'exit' not in child and live(child.get('child')))
+
+    def require_current_identity(self, message):
+        if not self.alive():
+            raise ValueError('The current task terminal is no longer running')
+        task = message.get('task')
+        prefix = message.get('prefix')
+        if not task and not prefix:
+            raise ValueError('A current task identity is required')
+        if task and Path(self.prefix).name != task:
+            raise ValueError('The task terminal identity is stale')
+        if prefix and self.prefix != prefix:
+            raise ValueError('The turn terminal identity is stale')
+
+    async def stop(self):
+        launch_lock = await asyncio.to_thread(acquire_launch_lock)
+        try:
+            self.retained = None
+            launch = STATE / 'launch.json'
+            launch.unlink(missing_ok=True)
+            await self.abort_paste()
+            child = self.child()
+            command_identity = child.get('child')
+            recorder_identity = child.get('recorder')
+            identities = [command_identity, recorder_identity]
+            forced = False
+
+            # Let the recorder's subreaper boundary terminate and reap the
+            # command tree first. Killing the recorder immediately would
+            # orphan adopted daemon descendants before it can clean them up.
+            if live(recorder_identity):
+                try:
+                    os.kill(recorder_identity['pid'], signal.SIGTERM)
+                except ProcessLookupError:
+                    pass
+                if not await wait_for_dead(recorder_identity, 3):
+                    forced = True
+                    await asyncio.to_thread(processes.stop_tree, recorder_identity['pid'])
+
+            # A recorder that died abruptly cannot clean up its command tree;
+            # use the helper's identity-aware fallback before declaring the
+            # runtime stopped.
+            if live(command_identity):
+                forced = True
+                await asyncio.to_thread(processes.stop_tree, command_identity['pid'])
+            deadline = time.monotonic() + 3
+            while any(live(identity) for identity in identities) and time.monotonic() < deadline:
+                await asyncio.sleep(.05)
+            if any(live(identity) for identity in identities):
+                raise RuntimeError('Previous terminal process did not stop')
+            if forced:
+                self.done.set()
+                raise RuntimeError('Previous terminal recorder required forced cleanup')
+            self.prefix = None
+            (STATE / 'child.json').unlink(missing_ok=True)
+        finally:
+            await asyncio.to_thread(release_launch_lock, launch_lock)
+
+    async def abort_paste(self):
+        """Cancel an abandoned paste before replacing its turn child."""
+        owner = self.paste_owner
+        if owner is None:
+            return
+        self.aborted_paste_writers.add(owner)
+        owner.close()
+        owner_task = self.paste_owner_task
+        finished = self.paste_finished
+        current = asyncio.current_task()
+        if owner_task and owner_task is not current:
+            owner_task.cancel()
+        try:
+            # A queued attachment may acquire input_lock and then wait for
+            # the runtime lock held by stop. Wait only for this paste's
+            # cleanup, which runs before its connection takes that lock.
+            await asyncio.wait_for(finished.wait(), PASTE_CLOSE_TIMEOUT + .25)
+        except asyncio.TimeoutError:
+            self.done.set()
+            raise RuntimeError('Previous terminal paste did not stop')
+
+    async def start(self, prefix):
+        if not re.fullmatch(r'/var/run/archestra/turns/[a-zA-Z0-9-]+', prefix):
+            raise ValueError('Invalid turn path')
+        if not Path(prefix + '.session').is_file():
+            raise ValueError('Turn session is missing')
+        if prefix in self.claimed:
+            raise ValueError('A started turn cannot be replayed')
+        self.claimed.add(prefix)
+        await self.stop()
+        self.attention = {'active': False, 'label': ''}
+        self.prefix = prefix
+        save(STATE / 'launch.json', {'prefix': prefix, 'nonce': uuid.uuid4().hex})
+        for _ in range(100):
+            child = self.child()
+            # A recorder can publish a valid child identity and its exit
+            # status before this poll observes the metadata.  That is still a
+            # successful launch: callers need the turn result rather than a
+            # spurious "did not start" error.  Metadata timeout records have
+            # no child identity and therefore remain failures.
+            if child.get('prefix') == prefix and child.get('child'):
+                return
+            if child.get('prefix') == prefix and 'exit' in child:
+                break
+            if self.server.returncode is not None:
+                break
+            await asyncio.sleep(.05)
+        # A failed or timed-out spawn must not leave a launch request that a
+        # later pane iteration could execute after this operation has failed.
+        await self.stop()
+        raise RuntimeError('Terminal command did not start')
+
+    async def restart_owner(self):
+        # A fresh native client supplies both a complete screen and terminal
+        # modes to every viewer; the agent and its PTY remain untouched.
+        if self.owner_task:
+            self.owner_task.cancel()
+            try:
+                await self.owner_task
+            except asyncio.CancelledError:
+                pass
+            self.owner_task = None
+        if self.owner_fd is not None:
+            os.close(self.owner_fd)
+            self.owner_fd = None
+        if self.owner:
+            owner = self.owner
+            self.owner = None
+            try:
+                os.kill(owner, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
+            await reap_process(owner)
+        pid, descriptor = pty.fork()
+        if pid == 0:
+            os.execvpe('herdr', ['herdr', 'terminal', 'attach', self.terminal_id], self.environment)
+        self.owner, self.owner_fd = pid, descriptor
+        fcntl.ioctl(descriptor, termios.TIOCSWINSZ, struct.pack('HHHH', self.size[1] - 1, self.size[0], 0, 0))
+        os.set_blocking(descriptor, False)
+        self.owner_task = asyncio.create_task(self.output(descriptor))
+
+    def footer(self):
+        label = re.sub(r'[\x00-\x1f\x7f-\x9f]', ' ', self.attention['label']) if self.attention['active'] else ''
+        return (f'\x1b7\x1b[{self.size[1]};1H\x1b[0m\x1b[2K\x1b[33;1m'
+                + clip_cells(label, self.size[0]) + '\x1b[0m\x1b8').encode()
+
+    async def output(self, descriptor):
+        loop = asyncio.get_running_loop()
+        pending = b''
+        try:
+            while True:
+                ready = loop.create_future()
+                loop.add_reader(descriptor, lambda: None if ready.done() else ready.set_result(None))
+                try:
+                    await ready
+                finally:
+                    loop.remove_reader(descriptor)
+                try:
+                    data = os.read(descriptor, 65536)
+                except BlockingIOError:
+                    continue
+                except OSError:
+                    data = b''
+                if not data:
+                    if not self.done.is_set():
+                        asyncio.create_task(self.recover_owner(descriptor))
+                    return
+                pending += data
+                while SYNC_END in pending:
+                    frame, pending = pending.split(SYNC_END, 1)
+                    self.broadcast(frame + SYNC_END + self.footer())
+                # Keep only a possible split synchronized-output terminator.
+                keep = max((n for n in range(1, len(SYNC_END)) if pending.endswith(SYNC_END[:n])), default=0)
+                if len(pending) > keep:
+                    self.broadcast(pending[:-keep] if keep else pending)
+                    pending = pending[-keep:] if keep else b''
+        finally:
+            loop.remove_reader(descriptor)
+
+    def broadcast(self, data):
+        if not data:
+            return
+        message = json.dumps({'bytes': base64.b64encode(data).decode()}).encode() + b'\n'
+        for client in tuple(self.clients):
+            if client.is_closing() or client.transport.get_write_buffer_size() > 1024 * 1024:
+                client.close()
+                self.clients.discard(client)
+            else:
+                client.write(message)
+
+    async def recover_owner(self, descriptor):
+        # Input transactions may span many socket reads. Take input_lock
+        # before the runtime lock so a resize or disconnect can run while a
+        # second client waits for the paste owner.
+        async with self.input_lock, self.lock:
+            if self.owner_fd == descriptor and not self.done.is_set():
+                await self.restart_owner()
+
+    async def input(self, data, human):
+        async with self.input_lock:
+            await self.write_client_input(data, human)
+
+    async def write_client_input(self, data, human):
+        if human:
+            activity()
+        # The native client's detach prefix belongs to the outer helper.
+        data = data.replace(b'\x02', b'\x02\x02')
+        await self.write_input(data)
+
+    async def paste_input(self, writer, data, phase):
+        owns_paste = self.paste_owner is writer
+        if not owns_paste and phase == 'end':
+            raise ValueError('Terminal paste has no active owner')
+        if owns_paste and phase in ('start', 'start-end'):
+            raise ValueError('Terminal paste already started')
+        if not owns_paste:
+            await self.input_lock.acquire()
+            if phase is None:
+                try:
+                    await self.write_client_input(data, True)
+                finally:
+                    self.input_lock.release()
+                return
+            self.paste_owner = writer
+            self.paste_owner_task = asyncio.current_task()
+            self.paste_decoder = codecs.getincrementaldecoder('utf-8')()
+            self.paste_finished = asyncio.Event()
+        ending = phase in ('end', 'start-end')
+        await self.write_paste(data, final=ending)
+        if ending:
+            self.release_paste()
+
+    async def write_paste(self, data, final=False):
+        # Native attach buffers complete pastes and rejects them above 1 MiB.
+        # The socket API writes raw text; keep the original delimiters and
+        # stream UTF-8 chunks under one input transaction instead.
+        text = self.paste_decoder.decode(data, final=final)
+        activity()
+        if not text:
+            return
+        try:
+            await api(self.environment, 'pane.send_text', pane_id=self.pane_id, text=text)
+        except (OSError, RuntimeError, asyncio.TimeoutError):
+            # A missing acknowledgement cannot be retried without duplicating
+            # input. End this runtime instead of reusing an uncertain stream.
+            self.done.set()
+            raise
+
+    def release_paste(self):
+        self.paste_finished.set()
+        self.paste_finished = None
+        self.paste_owner = None
+        self.paste_owner_task = None
+        self.paste_decoder = None
+        self.input_lock.release()
+
+    async def write_input(self, data):
+        while data:
+            try:
+                count = os.write(self.owner_fd, data)
+                data = data[count:]
+            except BlockingIOError:
+                await asyncio.sleep(.01)
+
+    async def connection(self, reader, writer):
+        attached = False
+        try:
+            message = json.loads(await asyncio.wait_for(reader.readline(), 10))
+            if message['op'] == 'attach':
+                attached = True
+                activity()
+                async with self.input_lock, self.lock:
+                    self.clients.add(writer)
+                    self.client_sizes[writer] = geometry(message)
+                    self.size = self.common_size()
+                    self.broadcast(RESET)
+                    await self.restart_owner()
+                while not writer.is_closing() and (line := await reader.readline()):
+                    event = json.loads(line)
+                    if event['op'] == 'input':
+                        data = base64.b64decode(event['bytes'], validate=True)
+                        phase = event.get('paste')
+                        if phase not in (None, 'start', 'end', 'start-end'):
+                            raise ValueError('Invalid terminal paste phase')
+                        if phase is not None or self.paste_owner is not None:
+                            await self.paste_input(writer, data, phase)
+                        else:
+                            await self.input(data, True)
+                    elif event['op'] == 'resize':
+                        async with self.lock:
+                            self.client_sizes[writer] = geometry(event)
+                            size = self.common_size()
+                            self.size = size
+                            self.resize_owner()
+                    else:
+                        raise ValueError('Invalid terminal event')
+            else:
+                # Steering waits for any in-flight paste. Do that before
+                # taking the runtime lock, otherwise a resize from the paste
+                # owner could be unable to reach its end event.
+                if message.get('op') == 'steer':
+                    self.require_current_identity(message)
+                    async with self.input_lock:
+                        async with self.lock:
+                            result = await self.operation(message, input_locked=True)
+                else:
+                    async with self.lock:
+                        result = await self.operation(message)
+                writer.write(json.dumps({'result': result}).encode() + b'\n')
+                await writer.drain()
+        except (ValueError, OSError, RuntimeError, KeyError, asyncio.TimeoutError) as error:
+            if not writer.is_closing():
+                writer.write(json.dumps({'error': str(error)}).encode() + b'\n')
+                try:
+                    await writer.drain()
+                except (OSError, ConnectionError):
+                    pass
+        finally:
+            if attached:
+                # Release a paste transaction before taking the runtime lock:
+                # an operation can hold that lock while waiting for input.
+                if self.paste_owner is writer:
+                    # Do not leave the child in bracketed-paste mode when the
+                    # browser transport disappears between chunks.
+                    try:
+                        if self.alive() and writer not in self.aborted_paste_writers:
+                            await asyncio.wait_for(
+                                api(self.environment, 'pane.send_text',
+                                    pane_id=self.pane_id, text='\x1b[201~'),
+                                PASTE_CLOSE_TIMEOUT,
+                            )
+                    except (OSError, RuntimeError, asyncio.TimeoutError):
+                        self.done.set()
+                    finally:
+                        self.release_paste()
+                self.aborted_paste_writers.discard(writer)
+                async with self.lock:
+                    self.clients.discard(writer)
+                    self.client_sizes.pop(writer, None)
+                    size = self.common_size()
+                    if size != self.size:
+                        self.size = size
+                        self.resize_owner()
+                activity()
+            writer.close()
+
+    def common_size(self):
+        if not self.client_sizes:
+            return self.size
+        return (min(size[0] for size in self.client_sizes.values()),
+                min(size[1] for size in self.client_sizes.values()))
+
+    def resize_owner(self):
+        if self.owner_fd is None or self.owner is None:
+            return
+        fcntl.ioctl(self.owner_fd, termios.TIOCSWINSZ,
+                    struct.pack('HHHH', self.size[1] - 1, self.size[0], 0, 0))
+        try:
+            os.kill(self.owner, signal.SIGWINCH)
+        except ProcessLookupError:
+            pass
+
+    async def operation(self, message, input_locked=False):
+        op = message['op']
+        if op == 'ready':
+            await api(self.environment, 'pane.get', pane_id=self.pane_id)
+            return True
+        if op == 'start':
+            await self.start(message['prefix'])
+        elif op == 'stop':
+            await self.stop()
+        elif op == 'alive':
+            return self.alive()
+        elif op == 'retained':
+            return f'0:{self.retained}' if self.retained and self.alive() else '1:'
+        elif op == 'retain':
+            self.require_current_identity(message)
+            self.retained = message['task']
+        elif op == 'capture':
+            self.require_current_identity(message)
+            pane = await api(self.environment, 'pane.read', pane_id=self.pane_id, source='visible', format='ansi')
+            size = f'\x1b]777;archestra-terminal-size={self.size[0]}x{self.size[1]-1}\x07'
+            return size + pane['read']['text']
+        elif op == 'steer':
+            self.require_current_identity(message)
+            async def steer_input():
+                await self.write_input(message['text'].encode().replace(b'\x02', b'\x02\x02'))
+                await asyncio.sleep(1)
+                await self.write_input(b'\r')
+            if input_locked:
+                await steer_input()
+            else:
+                async with self.input_lock:
+                    await steer_input()
+        elif op == 'attention':
+            self.require_current_identity(message)
+            action = message['action']
+            if action != 'get':
+                self.attention = {'active': action == 'set', 'label': message.get('label', '') if action == 'set' else ''}
+                os.kill(self.owner, signal.SIGWINCH)
+            return self.attention
+        else:
+            raise ValueError('Unknown terminal operation')
+
+    async def close(self):
+        stop_error = None
+        try:
+            await self.stop()
+        except RuntimeError as error:
+            # Continue tearing down the native owner and Herdr server before
+            # surfacing a failed recorder cleanup to the runtime supervisor.
+            stop_error = error
+        for writer in self.clients:
+            writer.close()
+        if self.owner_task:
+            owner_task = self.owner_task
+            self.owner_task = None
+            owner_task.cancel()
+            try:
+                await owner_task
+            except asyncio.CancelledError:
+                pass
+        if self.owner_fd is not None:
+            os.close(self.owner_fd)
+        if self.owner:
+            owner = self.owner
+            self.owner = None
+            try:
+                os.kill(owner, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
+            await reap_process(owner)
+        if self.server.returncode is None:
+            self.server.terminate()
+            try:
+                await asyncio.wait_for(self.server.wait(), 5)
+            except asyncio.TimeoutError:
+                self.server.kill()
+                await self.server.wait()
+        self.server_log.close()
+        if stop_error is not None:
+            raise stop_error
+
+
+def geometry(message):
+    return (max(2, min(1000, int(message['cols']))), max(2, min(1000, int(message['rows']))))
+
+
+def clip_cells(text, width):
+    """Clip an attention footer without wrapping wide or combining glyphs."""
+    result = []
+    cells = 0
+    for character in text:
+        category = unicodedata.category(character)
+        if category.startswith('C') or unicodedata.combining(character):
+            character_width = 0
+        else:
+            character_width = 2 if unicodedata.east_asian_width(character) in ('W', 'F') else 1
+        if character_width and cells + character_width > width:
+            break
+        result.append(character)
+        cells += character_width
+    return ''.join(result)
+
+
+async def reap_process(pid, grace=.75):
+    """Terminate and reap a native attach owner within a bounded interval."""
+    async def wait_until(deadline):
+        while time.monotonic() < deadline:
+            try:
+                waited, _ = os.waitpid(pid, os.WNOHANG)
+            except ChildProcessError:
+                return True
+            if waited == pid:
+                return True
+            await asyncio.sleep(.05)
+        return False
+
+    if await wait_until(time.monotonic() + grace):
+        return
+    try:
+        os.kill(pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+    if not await wait_until(time.monotonic() + grace):
+        raise RuntimeError('Native terminal attach owner did not exit')
+
+
+async def serve():
+    ROOT.mkdir(exist_ok=True, parents=True)
+    with (ROOT / 'terminal.lock').open('w') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        shutil.rmtree(STATE, ignore_errors=True)
+        runtime = Runtime()
+        loop = asyncio.get_running_loop()
+        for sig in (signal.SIGTERM, signal.SIGINT):
+            loop.add_signal_handler(sig, runtime.done.set)
+        try:
+            await runtime.boot()
+            await runtime.done.wait()
+        finally:
+            if hasattr(runtime, 'server'):
+                await runtime.close()
+
+
+def pane():
+    previous = None
+    while True:
+        # Keep the idle poll outside the launch lock. The pane is long-lived,
+        # so an empty queue must not repeatedly take the same flock in a
+        # tight loop or block a controller operation that is publishing a
+        # launch.
+        time.sleep(.05)
+        launch_lock = acquire_launch_lock()
+        process = None
+        try:
+            launch = read(STATE / 'launch.json')
+            if not launch or launch['nonce'] == previous:
+                continue
+            previous = launch['nonce']
+            launch_nonce = launch['nonce']
+            prefix = launch['prefix']
+            # Each command starts with normal PTY modes even after an interrupted TUI.
+            subprocess.run(['stty', 'sane'], check=True)
+            # Drop bytes queued on the persistent pane PTY by a cancelled
+            # client before handing that PTY to the next recorder.
+            try:
+                termios.tcflush(0, termios.TCIFLUSH)
+            except OSError:
+                pass
+            (STATE / 'record.json').unlink(missing_ok=True)
+            child_environment = os.environ.copy()
+            for name in ('TERM', 'LANG', 'LC_ALL'):
+                handoff_name = f'ARCHESTRA_CHILD_{name}'
+                if handoff_name in os.environ:
+                    child_environment[name] = os.environ[handoff_name]
+                child_environment.pop(handoff_name, None)
+            process = subprocess.Popen([RECORDER, '--pid-file', str(STATE / 'record.json'),
+                '--mirror', '/proc/1/fd/1', prefix + '.log', '--', '/bin/sh', prefix + '.session'],
+                env=child_environment)
+            recorder = processes.process_identity(process.pid)
+            if not recorder:
+                stop_spawn(process)
+                process = None
+                continue
+            # Publish the recorder immediately so stop cannot return while a
+            # newly-spawned process is still invisible to its ownership scan.
+            save(STATE / 'child.json', {**recorder, 'prefix': prefix, 'starting': True})
+            deadline = time.monotonic() + SPAWN_METADATA_TIMEOUT
+            record = {}
+            while time.monotonic() < deadline:
+                record = read(STATE / 'record.json', {})
+                if record.get('recorder', {}).get('pid') == process.pid:
+                    if record.get('child'):
+                        save(STATE / 'child.json', {**record, 'prefix': prefix})
+                        break
+                if process.poll() is not None:
+                    break
+                time.sleep(.05)
+            else:
+                record = read(STATE / 'record.json', record)
+            if not record.get('child'):
+                stop_spawn(process)
+                process = None
+                current_launch = read(STATE / 'launch.json')
+                if current_launch and current_launch.get('nonce') == launch_nonce:
+                    save(STATE / 'child.json', {**recorder, 'prefix': prefix,
+                                                'exit': 75, 'error': 'metadata timeout'})
+                continue
+        finally:
+            release_launch_lock(launch_lock)
+        record = read(STATE / 'record.json', {})
+        while process is not None and process.poll() is None:
+            record = read(STATE / 'record.json', {})
+            if record.get('recorder', {}).get('pid') == process.pid:
+                save(STATE / 'child.json', {**record, 'prefix': prefix})
+            time.sleep(.05)
+        if process is None:
+            continue
+        record = read(STATE / 'record.json', record)
+        if 'exit' not in record:
+            # Only the recorder can certify that its command tree was reaped.
+            # End this permanent pane if it died before publishing an exit;
+            # the controller then closes the runtime even if stop has already
+            # cleared the turn metadata.
+            raise RuntimeError('Terminal recorder exited without publishing its status')
+        current_launch = read(STATE / 'launch.json')
+        if current_launch and current_launch.get('nonce') == launch_nonce:
+            save(STATE / 'child.json', {**record, 'prefix': prefix, 'exit': process.returncode})
+        (STATE / 'record.json').unlink(missing_ok=True)
+
+
+class TerminalInput:
+    """Stream bracketed paste bytes while retaining only delimiter prefixes."""
+    def __init__(self):
+        self.pending = b''
+        self.in_paste = False
+
+    def feed(self, data):
+        events, detached = self.feed_events(data)
+        output = b''.join(item[0] for item in events)
+        phases = {item[1] for item in events}
+        return output, detached, bool(phases & {'start', 'start-end'}), bool(phases & {'end', 'start-end'})
+
+    def feed_events(self, data):
+        """Return input chunks with one paste phase per protocol event.
+
+        A native read may contain the end of one paste immediately followed by
+        the start of another. Keep those boundaries as separate events so the
+        controller can release and reacquire its input transaction lock in the
+        same order as the client stream. ``pending`` is only ever a delimiter
+        prefix, keeping large browser pastes streaming instead of buffering
+        them in the parser.
+        """
+        start, end = b'\x1b[200~', b'\x1b[201~'
+        remaining = self.pending + data
+        self.pending = b''
+        output = bytearray()
+        started = False
+        ended = False
+        events = []
+        offset = 0
+
+        def flush():
+            nonlocal output, started, ended
+            if not output:
+                return
+            if started and ended:
+                phase = 'start-end'
+            elif started:
+                phase = 'start'
+            elif ended:
+                phase = 'end'
+            else:
+                phase = None
+            events.append((bytes(output), phase))
+            output = bytearray()
+            started = ended = False
+
+        while offset < len(remaining):
+            delimiter = end if self.in_paste else start
+            boundary = remaining.find(delimiter, offset)
+            if boundary < 0:
+                # Preserve only a suffix that could become the next
+                # delimiter; all preceding bytes are safe to forward now.
+                suffix_length = max(
+                    (length for length in range(1, len(delimiter))
+                     if remaining.endswith(delimiter[:length])),
+                    default=0,
+                )
+                segment_end = len(remaining) - suffix_length
+            else:
+                suffix_length = 0
+                segment_end = boundary
+
+            # Scan the safe portion for the outer client's detach chord. A
+            # detach prefix must take precedence over ordinary bytes even if
+            # a paste boundary follows in the same native read.
+            while not self.in_paste and offset < segment_end:
+                if remaining[offset] != 2:
+                    output.append(remaining[offset])
+                    offset += 1
+                    continue
+                if offset + 1 >= len(remaining):
+                    self.pending = b'\x02'
+                    flush()
+                    return events, False
+                following = remaining[offset + 1]
+                if following in (ord('d'), ord('q')):
+                    flush()
+                    return events, True
+                if boundary >= 0 and offset + 1 >= boundary:
+                    # The Ctrl-B pair consumed the first byte of the
+                    # candidate paste delimiter, so that delimiter is now
+                    # literal and must not be appended a second time below.
+                    output.extend(remaining[offset:offset + 2])
+                    offset += 2
+                    boundary = -1
+                    segment_end = len(remaining)
+                    continue
+                output.append(2)
+                if following != 2:
+                    output.append(following)
+                offset += 2
+
+            if self.in_paste and offset < segment_end:
+                output.extend(remaining[offset:segment_end])
+                offset = segment_end
+
+            if boundary < 0:
+                if suffix_length:
+                    self.pending = remaining[offset:]
+                break
+
+            output.extend(delimiter)
+            offset = boundary + len(delimiter)
+            if self.in_paste:
+                self.in_paste = False
+                ended = True
+            else:
+                self.in_paste = True
+                started = True
+            # A paste boundary ends an input transaction. This split is what
+            # makes adjacent end/start boundaries independently visible to
+            # the controller.
+            flush()
+        flush()
+        return events, False
+
+
+def attach():
+    original = termios.tcgetattr(0)
+    output = bytearray()
+    output_blocking = os.get_blocking(1)
+    os.set_blocking(1, False)
+
+    def drain_output():
+        if not output:
+            return
+        try:
+            written = os.write(1, output)
+        except BlockingIOError:
+            return
+        del output[:written]
+
+    with socket.socket(socket.AF_UNIX) as connection:
+        connection.connect(str(SOCKET))
+        def send(message):
+            connection.sendall(json.dumps(message).encode() + b'\n')
+        def resize(*_):
+            size = os.get_terminal_size(0)
+            send({'op': 'resize', 'cols': size.columns, 'rows': size.lines})
+        size = os.get_terminal_size(0)
+        send({'op': 'attach', 'cols': size.columns or 120, 'rows': size.lines or 40})
+        signal.signal(signal.SIGWINCH, resize)
+        tty.setraw(0)
+        incoming = b''
+        input_parser = TerminalInput()
+        try:
+            while True:
+                readable, writable, _ = select.select(
+                    [connection, 0], [1] if output else [], [])
+                if 1 in writable:
+                    drain_output()
+                if connection in readable:
+                    data = connection.recv(65536)
+                    if not data:
+                        return
+                    incoming += data
+                    while b'\n' in incoming:
+                        line, incoming = incoming.split(b'\n', 1)
+                        event = json.loads(line)
+                        if 'error' in event:
+                            raise RuntimeError(event['error'])
+                        output.extend(base64.b64decode(event['bytes']))
+                        if len(output) > ATTACH_OUTPUT_LIMIT:
+                            raise RuntimeError('Terminal attach output is not draining')
+                if 0 in readable:
+                    data = os.read(0, 65536)
+                    if not data:
+                        return
+                    events, detached = input_parser.feed_events(data)
+                    for data, phase in events:
+                        if not data:
+                            continue
+                        event = {'op': 'input', 'bytes': base64.b64encode(data).decode()}
+                        if phase:
+                            event['paste'] = phase
+                        send(event)
+                    if detached:
+                        return
+        finally:
+            termios.tcsetattr(0, termios.TCSANOW, original)
+            output.extend(RESET)
+            deadline = time.monotonic() + PASTE_CLOSE_TIMEOUT
+            while output and time.monotonic() < deadline:
+                drain_output()
+                if output:
+                    select.select([], [1], [], .05)
+            os.set_blocking(1, output_blocking)
+
+
+def main():
+    os.umask(0o077)
+    op = sys.argv[1]
+    if op == 'record':
+        os.execv(RECORDER, [RECORDER, *sys.argv[2:]])
+    if op == 'serve':
+        asyncio.run(serve())
+    elif op == 'pane':
+        pane()
+    elif op == 'attach':
+        attach()
+    else:
+        params = {}
+        if op == 'start':
+            params['prefix'] = sys.argv[2]
+        elif op == 'retain':
+            args = sys.argv[2:]
+            if len(args) != 1:
+                raise ValueError('usage: archestra-terminal retain <task>')
+            params['task'] = args[0]
+        elif op == 'steer':
+            task, args = task_option(sys.argv[2:])
+            if args:
+                raise ValueError('usage: archestra-terminal steer [--task <task>]')
+            if task:
+                params['task'] = task
+            params['text'] = sys.stdin.read(STEER_LIMIT + 1)
+            if len(params['text']) > STEER_LIMIT:
+                raise ValueError('Steering input exceeds 512 KiB')
+        elif op == 'attention':
+            task, args = task_option(sys.argv[2:])
+            if not args or args[0] not in ('get', 'set', 'clear'):
+                raise ValueError('usage: archestra-terminal attention {get|set <label>|clear} [--task <task>]')
+            action = args[0]
+            if action == 'set':
+                if len(args) != 2:
+                    raise ValueError('usage: archestra-terminal attention set <label> [--task <task>]')
+                params = {'action': action, 'label': args[1]}
+            elif len(args) != 1:
+                raise ValueError('usage: archestra-terminal attention {get|clear} [--task <task>]')
+            else:
+                params = {'action': action, 'label': ''}
+            if task:
+                params['task'] = task
+        elif op == 'capture':
+            task, args = task_option(sys.argv[2:])
+            if args:
+                raise ValueError('usage: archestra-terminal capture [--task <task>]')
+            if task:
+                params['task'] = task
+        result = request(op, **params)
+        if op in ('ready', 'alive'):
+            return 0 if result else 1
+        if isinstance(result, str):
+            print(result)
+        elif result is not None:
+            print(json.dumps(result))
+    return 0
+
+
+def task_option(arguments):
+    """Extract an optional backend-supplied task identity from CLI arguments."""
+    remaining = []
+    task = None
+    index = 0
+    while index < len(arguments):
+        argument = arguments[index]
+        if argument == '--task':
+            if task is not None or index + 1 == len(arguments):
+                raise ValueError('A task identity must be supplied once')
+            task = arguments[index + 1]
+            index += 2
+            continue
+        if argument.startswith('--task='):
+            if task is not None or not argument[7:]:
+                raise ValueError('A task identity must be supplied once')
+            task = argument[7:]
+            index += 1
+            continue
+        remaining.append(argument)
+        index += 1
+    return task, remaining
+
+
+if __name__ == '__main__':
+    try:
+        raise SystemExit(main())
+    except (OSError, RuntimeError, ValueError, KeyError) as error:
+        print(f'Agent terminal: {error}', file=sys.stderr)
+        raise SystemExit(1)

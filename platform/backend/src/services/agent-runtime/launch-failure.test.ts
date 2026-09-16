@@ -1,3 +1,4 @@
+import { HttpResponse, http } from "msw";
 import config from "@/config";
 import {
   A2AContextModel,
@@ -7,10 +8,23 @@ import {
   LlmProviderApiKeyModelLinkModel,
   ModelModel,
 } from "@/models";
-import { expect, test, vi } from "@/test";
+import { afterEach, expect, test, vi } from "@/test";
+import { useMswServer } from "@/test/msw";
 import type { ResolvedAgentRuntime } from "@/types";
+import { drainBackgroundWork } from "@/utils/background-work";
 import { kubernetesAgentRuntimeBackendDriver as backend } from "./backends/kubernetes";
 import { runTaskInAgentRuntime } from "./pod-run";
+
+// biome-ignore lint/correctness/useHookAtTopLevel: Vitest lifecycle helper.
+useMswServer(
+  http.post("http://127.0.0.1:9000/v1/openai/:agentId/chat/completions", () =>
+    HttpResponse.json(
+      { error: { message: "Title unavailable" } },
+      { status: 400 },
+    ),
+  ),
+);
+afterEach(drainBackgroundWork);
 
 test.for([
   "initial",

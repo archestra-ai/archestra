@@ -193,6 +193,31 @@ export class McpServerDeploymentFailedError extends Error {
  *
  * @public — the wake path maps it onto a capacity-flavored retryable error
  */
+/**
+ * Thrown when a readiness wait spends every attempt without the deployment
+ * becoming ready, and nothing more specific explained why. `imagePullError`
+ * carries the kubelet's last pull failure when there was one: a pull that
+ * keeps backing off is the difference between a pod that is merely slow and
+ * one that will never start, and the wake path turns it into something the
+ * caller can act on rather than another "retry shortly".
+ *
+ * @public — the wake path reads `imagePullError` to phrase its answer
+ */
+export class McpServerReadinessTimeoutError extends Error {
+  constructor(
+    deploymentName: string,
+    maxAttempts: number,
+    readonly imagePullError: string | null,
+  ) {
+    super(
+      `Deployment ${deploymentName} did not become ready after ${maxAttempts} attempts${
+        imagePullError ? ` (last image pull error: ${imagePullError})` : ""
+      }`,
+    );
+    this.name = "McpServerReadinessTimeoutError";
+  }
+}
+
 export class McpServerUnschedulableError extends Error {
   constructor(
     deploymentName: string,
@@ -4652,12 +4677,10 @@ export default class K8sDeployment {
       );
     }
     // SPDX-SnippetEnd
-    throw new Error(
-      `Deployment ${this.deploymentName} did not become ready after ${maxAttempts} attempts${
-        lastImagePullError
-          ? ` (last image pull error: ${lastImagePullError})`
-          : ""
-      }`,
+    throw new McpServerReadinessTimeoutError(
+      this.deploymentName,
+      maxAttempts,
+      lastImagePullError,
     );
   }
 

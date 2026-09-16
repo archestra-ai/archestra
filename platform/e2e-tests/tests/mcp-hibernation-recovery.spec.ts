@@ -97,6 +97,26 @@ const TOOL_CALL_TIMEOUT_MS = 120_000;
  */
 const WEDGED_WAKE_ATTEMPT_BUDGET_MS = 240_000;
 
+/**
+ * How long to let an in-flight wake finish before this file's next test runs.
+ *
+ * A tool call that reports a wake it could not finish returns as soon as its
+ * own reply budget is spent; the wake it re-entered keeps running under the
+ * runtime's single-flight entry and holds the deployment-transition lease for
+ * the rest of its readiness budget (WAKE_READY_MAX_ATTEMPTS 22 x
+ * WAKE_READY_POLL_INTERVAL_MS 2000 = 44 s, plus the scale-up before it). The
+ * hard-reset test below waits only ~20 s for that lease and answers 500 when
+ * it cannot get it, which would fail it for something that is not about hard
+ * reset at all.
+ *
+ * A wait rather than a poll because the wake exposes no completion signal a
+ * test can observe: the lease lives in the database, the deployment's shape is
+ * identical during and after a failed wake, and the state that does change is
+ * published over the deployment-status WebSocket rather than any REST route.
+ * The wake IS hard-bounded, so waiting out that bound is deterministic.
+ */
+const WAKE_SETTLE_MS = 60_000;
+
 /** Retry budget for "call the tool until the rebuilt server answers". */
 const SERVING_RETRY_TIMEOUT_MS = 150_000;
 const SERVING_RETRY_INTERVALS = [2_000, 5_000, 10_000];
@@ -755,6 +775,9 @@ test.describe("MCP hibernation - administrator recovery", () => {
       containerStatuses.some((status) => status.ready),
       "no pod may be serving while the image cannot be pulled",
     ).toBe(false);
+
+    // Leave nothing mid-flight for the next test (see WAKE_SETTLE_MS).
+    await new Promise((resolve) => setTimeout(resolve, WAKE_SETTLE_MS));
   });
 
   test("hard reset recreates the wedged deployment and the server serves again", async ({

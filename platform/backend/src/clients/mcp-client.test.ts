@@ -148,13 +148,22 @@ vi.mock("@/k8s/mcp-server-runtime", () => {
   // so a pending error that did not inherit from it would be reported to the
   // agent as "unexpected" — the opposite of what it means.
   class McpServerWakeError extends Error {
-    constructor(serverName: string, options?: { detail?: string }) {
+    readonly concluded: boolean;
+    readonly detail?: string;
+    readonly suffix?: string;
+    constructor(
+      serverName: string,
+      options?: { detail?: string; concluded?: boolean; suffix?: string },
+    ) {
       super(
         `MCP server ${serverName} is waking from idle hibernation but ${
           options?.detail ?? "did not become ready in time"
-        }; retry shortly.`,
+        }; retry shortly.${options?.suffix ? ` ${options.suffix}` : ""}`,
       );
       this.name = "McpServerWakeError";
+      this.concluded = options?.concluded ?? false;
+      this.detail = options?.detail;
+      this.suffix = options?.suffix;
     }
   }
   class McpServerWakePendingError extends McpServerWakeError {
@@ -2760,6 +2769,148 @@ describe("McpClient", () => {
           { type: "text", text: "served after the race" },
         ]);
         expect(mockEnsureAwake).toHaveBeenCalledTimes(2);
+      });
+
+      test("a concluded verdict does not cost the caller the rest of its budget", async () => {
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "local-streamable-http-server__test_tool",
+          description: "Test tool",
+          parameters: {},
+          catalogId: localCatalogId,
+        });
+        await AgentToolModel.create(agentId, tool.id, {
+          mcpServerId: localMcpServerId,
+        });
+
+        // A verdict names a condition that CAN clear — capacity frees, a pull
+        // succeeds. Answering the caller the moment one arrives would fail a
+        // tool call that the remaining budget could still have served, so the
+        // wake is re-entered and this call goes through.
+        WAKE_BUDGET.ms = 30_000;
+        const { McpServerWakeError } = await import("@/k8s/mcp-server-runtime");
+        mockEnsureAwake
+          .mockRejectedValueOnce(
+            new McpServerWakeError("local-streamable-http-server", {
+              concluded: true,
+              detail:
+                "the cluster has no free capacity to schedule its pod (0/1 nodes are available: 1 Insufficient cpu). The pod stays queued and starts when capacity frees",
+            }),
+          )
+          .mockResolvedValue(undefined);
+        mockUsesStreamableHttp.mockResolvedValue(true);
+        mockGetHttpEndpointUrl.mockReturnValue("http://localhost:30123/mcp");
+        mockCallTool.mockResolvedValue({
+          content: [{ type: "text", text: "served once capacity freed" }],
+          isError: false,
+        });
+
+        const result = await mcpClient.executeToolCallForOwner(
+          {
+            id: "call_wake_verdict_recovers",
+            name: "local-streamable-http-server__test_tool",
+            arguments: {},
+          },
+          agentOwner(agentId),
+        );
+
+        expect(result.isError).toBe(false);
+        expect(result.content).toEqual([
+          { type: "text", text: "served once capacity freed" },
+        ]);
+        expect(mockEnsureAwake).toHaveBeenCalledTimes(2);
+      });
+
+      test("a budget that expires after a verdict answers with the verdict, not the generic pending reason", async () => {
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "local-streamable-http-server__test_tool",
+          description: "Test tool",
+          parameters: {},
+          catalogId: localCatalogId,
+        });
+        await AgentToolModel.create(agentId, tool.id, {
+          mcpServerId: localMcpServerId,
+        });
+
+        // First attempt comes back with the scheduler's reason; the second
+        // never settles, so the reply budget is what ends the wait. The
+        // answer must still be that reason — expiring into "it is still
+        // starting up" would throw away the only part the caller can act on.
+        WAKE_BUDGET.ms = 3_000;
+        const { McpServerWakeError } = await import("@/k8s/mcp-server-runtime");
+        mockEnsureAwake
+          .mockRejectedValueOnce(
+            new McpServerWakeError("local-streamable-http-server", {
+              concluded: true,
+              detail:
+                "the cluster has no free capacity to schedule its pod (0/1 nodes are available: 1 Insufficient cpu). The pod stays queued and starts when capacity frees",
+            }),
+          )
+          .mockReturnValue(new Promise(() => {}));
+
+        const result = await mcpClient.executeToolCallForOwner(
+          {
+            id: "call_wake_verdict_expires",
+            name: "local-streamable-http-server__test_tool",
+            arguments: {},
+          },
+          agentOwner(agentId),
+        );
+
+        expect(result.isError).toBe(true);
+        expect(result.error).toContain("no free capacity to schedule its pod");
+        expect(result.error).not.toContain("it is still starting up");
+        expect(result.error).toContain("retry shortly");
+        expect(result.error).not.toContain("retrying will not help");
+        expect(mockEnsureAwake).toHaveBeenCalledTimes(2);
+      });
+
+      test("a verdict raised for a sibling install is re-addressed to this caller", async () => {
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "local-streamable-http-server__test_tool",
+          description: "Test tool",
+          parameters: {},
+          catalogId: localCatalogId,
+        });
+        await AgentToolModel.create(agentId, tool.id, {
+          mcpServerId: localMcpServerId,
+        });
+
+        // Wakes are single-flighted per PHYSICAL deployment, so the error a
+        // multitenant sibling receives was raised for whichever install
+        // loaded it — here "someone-elses-install". The caller must be told
+        // about its OWN server; the other install's name is not its business
+        // and not something it can act on.
+        WAKE_BUDGET.ms = 3_000;
+        const { McpServerWakeError } = await import("@/k8s/mcp-server-runtime");
+        mockEnsureAwake
+          .mockRejectedValueOnce(
+            new McpServerWakeError("someone-elses-install", {
+              concluded: true,
+              detail:
+                "the cluster has no free capacity to schedule its pod (0/1 nodes are available: 1 Insufficient cpu). The pod stays queued and starts when capacity frees",
+              suffix: "An operator can free capacity or raise the quota.",
+            }),
+          )
+          .mockReturnValue(new Promise(() => {}));
+
+        const result = await mcpClient.executeToolCallForOwner(
+          {
+            id: "call_wake_verdict_readdressed",
+            name: "local-streamable-http-server__test_tool",
+            arguments: {},
+          },
+          agentOwner(agentId),
+        );
+
+        expect(result.isError).toBe(true);
+        expect(result.error).not.toContain("someone-elses-install");
+        expect(result.error).toContain("local-streamable-http-server");
+        // Everything the wake learned survives the re-addressing — only the
+        // server name is replaced.
+        expect(result.error).toContain("no free capacity to schedule its pod");
+        expect(result.error).toContain(
+          "An operator can free capacity or raise the quota.",
+        );
       });
 
       test("with too little budget left for another attempt, the race's own retryable reason is the answer", async () => {

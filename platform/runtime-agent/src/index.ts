@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { renameSync, writeFileSync } from "node:fs";
 import { createInterface } from "node:readline";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAI } from "@ai-sdk/openai";
@@ -32,6 +33,11 @@ async function main(): Promise<number> {
   } catch (error: unknown) {
     if (error instanceof RuntimeAgentConfigError) {
       write(`runtime: ${error.message}`);
+      reportFailure({
+        code: "archestra_configuration",
+        message:
+          "The Agent runtime configuration is incomplete or invalid. Check the image environment and configured model protocol.",
+      });
       return 78;
     }
     throw error;
@@ -173,6 +179,11 @@ async function main(): Promise<number> {
       // user-visible terminal generic rather than persisting those details in
       // the run's scrollback and logs.
       write("\nruntime: the session failed.");
+      reportFailure({
+        code: "archestra_session_failed",
+        message:
+          "The Agent session failed. Check the configured provider credential, model availability, and network access, then retry.",
+      });
       exitCode = 1;
     }
   } finally {
@@ -275,6 +286,20 @@ function write(line: string): void {
   process.stdout.write(`${line}\n`);
 }
 
+function reportFailure(failure: { code: string; message: string }): void {
+  const prefix = process.env.ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX;
+  if (!prefix) return;
+  try {
+    writeFileSync(
+      `${prefix}.failure.tmp`,
+      JSON.stringify({ version: 1, ...failure }),
+    );
+    renameSync(`${prefix}.failure.tmp`, `${prefix}.failure`);
+  } catch {
+    // Reporting must not mask the native failure or prevent process cleanup.
+  }
+}
+
 function describe(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
@@ -318,6 +343,11 @@ main()
   })
   .catch(() => {
     write("runtime: the session could not start.");
+    reportFailure({
+      code: "archestra_startup",
+      message:
+        "The Agent session could not start. Check the MCP gateway connection, runtime configuration, and credentials, then retry.",
+    });
     // An MCP transport may retain internal fetch handles after a failed
     // handshake. This is a task process, so a startup failure is terminal: do
     // not leave the run pod looking alive after surfacing the error.

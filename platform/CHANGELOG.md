@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.62](https://github.com/archestra-ai/archestra/compare/platform-v1.3.61...platform-v1.3.62) (2026-09-16)
+
+
+### Bug Fixes
+
+* **frontend:** backport RUM listener leak fix to release/1.3 ([#7963](https://github.com/archestra-ai/archestra/issues/7963)) ([a9e754d](https://github.com/archestra-ai/archestra/commit/a9e754d9acda212aa488ab368904e0ed1ac737b7))
+
 ## [1.3.61](https://github.com/archestra-ai/archestra/compare/platform-v1.3.60...platform-v1.3.61) (2026-09-15)
 
 

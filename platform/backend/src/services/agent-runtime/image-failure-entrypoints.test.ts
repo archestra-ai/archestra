@@ -112,11 +112,14 @@ const fs = require("node:fs");
     const plugin = await import("file://" + runtime + "/opencode-transcript.js");
     const hooks = await plugin.ArchestraTranscript({ client: { session: {
       get: async ({ path }) => ({ data: { parentID: path.id === "child" ? "main" : undefined } }),
-      messages: async () => { throw new Error("failure handling should not depend on fetching messages"); },
+      messages: async () => ({ data: [{ info: { role: "assistant" }, parts: [{ type: "text", text: "stale partial answer" }] }] }),
     } }, directory: process.cwd() });
     await hooks.event({ event: { type: "session.error", properties: { sessionID: "main", error: { name: "ContextOverflowError" } } } });
     if (fs.existsSync(process.env.ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX + ".failure") || fs.existsSync(runtime + "/turn-complete")) throw new Error("automatic compaction settled the run");
-    send = (child) => hooks.event({ event: { type: "session.error", properties: { sessionID: child ? "child" : "main", error: { name: "APIError", data: { message: "synthetic-secret" } } } } });
+    send = async (child) => {
+      await hooks.event({ event: { type: "session.error", properties: { sessionID: child ? "child" : "main", error: { name: "APIError", data: { message: "synthetic-secret" } } } } });
+      if (!child) await hooks.event({ event: { type: "session.idle", properties: { sessionID: "main" } } });
+    };
   } else {
     const plugin = await import("file://" + runtime + "/openclaw-transcript/index.mjs");
     let handler;

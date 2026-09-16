@@ -87,7 +87,7 @@ PLUGIN
 chmod 0600 "${attention_plugin}"
 
 cat > "${transcript_plugin}" <<'PLUGIN'
-import { renameSync, writeFileSync } from "node:fs";
+import { existsSync, renameSync, writeFileSync } from "node:fs";
 import { rename, writeFile } from "node:fs/promises";
 
 function timestamp(info) {
@@ -212,7 +212,7 @@ export const ArchestraTranscript = async ({ client, directory }) => ({
       .map((part) => part.text)
       .join("")
       .trim();
-    if (!answer) return;
+    if (!answer || existsSync(`${runtimeDir}/turn-complete.failed`)) return;
 
     // Native run can exit immediately after its idle event. Publish the answer
     // and completion marker in the same callback tick, without an async gap.

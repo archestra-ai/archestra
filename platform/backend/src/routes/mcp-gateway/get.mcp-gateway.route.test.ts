@@ -7,11 +7,18 @@ import {
   validatorCompiler,
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
+import { vi } from "vitest";
 import { TeamTokenModel } from "@/models";
 import { MCP_RESOURCE_REFERENCE_PREFIX } from "@/services/identity-providers/enterprise-managed/authorization";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import oauthServerRoutes from "../oauth-server";
 import mcpGatewayRoutes from "./index";
+
+// The standalone GET stream records its session in the shared cache, which is
+// Keyv over a real PostgreSQL connection — the unit suite runs on PGlite and
+// never starts it, so the real manager would throw on the first write. The
+// canonical fake has real cache semantics.
+vi.mock("@/cache-manager");
 
 describe("MCP Gateway GET transport", () => {
   let app: FastifyInstance;
@@ -59,7 +66,7 @@ describe("MCP Gateway GET transport", () => {
         url: `/v1/mcp/${agent.slug}`,
         headers: {
           authorization: `Bearer ${token}`,
-          accept: "text/event-stream",
+          accept: "application/json",
         },
       });
       expect(response.statusCode, scenario).toBe(
@@ -88,7 +95,7 @@ describe("MCP Gateway GET transport", () => {
     await app.close();
   });
 
-  test("declines standalone GET for UUID and slug URLs regardless of Accept", async ({
+  test("declines GET for UUID and slug URLs unless an event stream is requested", async ({
     makeAgent,
     makeOrganization,
   }) => {
@@ -105,13 +112,7 @@ describe("MCP Gateway GET transport", () => {
     });
 
     for (const identifier of [agent.id, agent.slug]) {
-      for (const accept of [
-        "text/event-stream",
-        "application/json, text/event-stream",
-        "application/json",
-        "*/*",
-        undefined,
-      ]) {
+      for (const accept of ["application/json", "*/*", undefined]) {
         const response = await app.inject({
           method: "GET",
           url: `/v1/mcp/${identifier}`,
@@ -181,9 +182,11 @@ describe("MCP Gateway GET transport", () => {
       token: createHash("sha256").update(token).digest("base64url"),
       referenceId: `${MCP_RESOURCE_REFERENCE_PREFIX}${agent.id}`,
     });
-    const getStatuses: number[] = [];
-    app.addHook("onResponse", async (request, reply) => {
-      if (request.method === "GET") getStatuses.push(reply.statusCode);
+    // The standalone GET the SDK opens after `initialized` is held open as a
+    // stream (hijacked, so response hooks never see it): count requests.
+    let getRequests = 0;
+    app.addHook("onRequest", async (request) => {
+      if (request.method === "GET") getRequests += 1;
     });
     const origin = await app.listen({ host: "127.0.0.1", port: 0 });
     const client = new Client({ name: "gateway-test", version: "1.0.0" });
@@ -207,7 +210,7 @@ describe("MCP Gateway GET transport", () => {
           },
         ),
       );
-      await expect.poll(() => getStatuses).toEqual([405]);
+      await expect.poll(() => getRequests).toBe(1);
 
       const { tools } = await client.listTools();
       expect(tools.map((tool) => tool.name)).toContain("archestra__whoami");
@@ -224,9 +227,10 @@ describe("MCP Gateway GET transport", () => {
           }),
         ]),
       );
-      // Observe beyond the configured retry delay while the client stays open.
+      // Observe beyond the configured retry delay while the client stays open:
+      // one held stream, no reconnect loop.
       await new Promise((resolve) => setTimeout(resolve, 150));
-      expect(getStatuses).toEqual([405]);
+      expect(getRequests).toBe(1);
       expect(errors).toEqual([]);
     } finally {
       await client.close();

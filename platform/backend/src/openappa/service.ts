@@ -1,4 +1,7 @@
-import { extractMcpToolError } from "@archestra/shared";
+import {
+  extractMcpToolError,
+  isSeededAppRenderToolResult,
+} from "@archestra/shared";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
@@ -198,6 +201,10 @@ export async function processProxyResults(
   await startSession(session);
   const updates: Record<string, string> = {};
   for (const result of results) {
+    // Opening an app seeds a platform-authored render, not an executed call.
+    // It has no APPA admission to settle. Live MCP results have this reserved
+    // marker stripped, matching the trusted-data guardrail's exemption.
+    if (isSeededAppRenderToolResult(result.content)) continue;
     // A signed proxy refusal is feedback, not an executed tool result.
     if (
       isChatBlockResult({

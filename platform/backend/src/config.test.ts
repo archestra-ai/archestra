@@ -3470,12 +3470,14 @@ describe("parseOtelCaptureContent", () => {
 });
 
 describe("OpenAPPA feature configuration", () => {
-  test("reporting requires both explicit opt-ins", () => {
+  test("reporting defaults on for OpenAPPA and supports an explicit opt-out", () => {
+    expect(parseOpenAppaConfig("true").yellEnabled).toBe(true);
     expect(parseOpenAppaConfig("true", "true").yellEnabled).toBe(true);
     for (const [enabled, reporting] of [
       [undefined, "true"],
       ["false", "true"],
-      ["true", undefined],
+      ["true", "false"],
+      ["true", ""],
       ["true", "TRUE"],
     ]) {
       expect(parseOpenAppaConfig(enabled, reporting).yellEnabled).toBe(false);
@@ -3516,7 +3518,7 @@ describe("OpenAPPA feature configuration", () => {
   test("enables database policies without a container path", () => {
     expect(parseOpenAppaConfig("true")).toEqual({
       enabled: true,
-      yellEnabled: false,
+      yellEnabled: true,
     });
   });
 });

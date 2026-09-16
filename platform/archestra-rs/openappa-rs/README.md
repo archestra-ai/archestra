@@ -251,8 +251,9 @@ Saved organization policies and policy files are preserved.
 
 ## Agent feedback reporting
 
-`ARCHESTRA_OPENAPPA_YELL_ENABLED=true` opts the deployment into the shared
-OpenAPPA reporting receiver. OpenAPPA and Guardrails v2 must also be enabled.
+Agent feedback reporting defaults to enabled when OpenAPPA and Guardrails v2
+are enabled. Set `ARCHESTRA_OPENAPPA_YELL_ENABLED=false` to disable reports
+to the shared OpenAPPA receiver.
 The `archestra__yell` tool is available to protected sessions; its hook is
 checked as `yell` against the active policy. The receiver destination is set
 by the host, never by tool arguments. The report identifies Archestra and the configured frontend hostname. The host passes the authenticated actor
@@ -263,5 +264,5 @@ transport. The receiver has create-only access to a private GCS bucket and
 notifies Slack. The public signature is not authentication; incoming reports
 remain untrusted. Raw prompts, tool arguments, outputs, and session identifiers
 are omitted from diagnostics. Policy names and the free-text message are sent;
-messages must not contain secrets or task content. The deployment opt-in is
-separate from policy editing and cannot be enabled through policy TOML.
+messages must not contain secrets or task content. The deployment reporting flag is
+separate from policy editing and cannot be changed through policy TOML.

@@ -2018,7 +2018,7 @@ export function parseOpenAppaConfig(
 ) {
   return {
     enabled: enabled === "true",
-    yellEnabled: enabled === "true" && yellEnabled === "true",
+    yellEnabled: enabled === "true" && (yellEnabled ?? "true") === "true",
   };
 }
 

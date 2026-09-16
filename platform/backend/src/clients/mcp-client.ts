@@ -5377,16 +5377,27 @@ async function waitForMcpServerWake(params: {
   }
   const budgetMs = wakeResponseBudgetMs();
   const deadlineAt = Date.now() + budgetMs;
-  // The most recent verdict a wake came back with, kept so the budget can
-  // still expire into a reason rather than the generic "still starting up".
-  let lastVerdict: McpServerWakeError | null = null;
+  // The most recent reason a wake came back with, kept so the wait can end in
+  // that reason rather than the generic "still starting up". Held as the
+  // REASON, not the wake's own error: a wake is single-flighted per physical
+  // deployment, so its error names whichever install loaded that deployment,
+  // which for a multitenant sibling is someone else. Re-addressing it here
+  // keeps one install's name out of another install's answer.
+  let verdict: { detail: string | undefined } | null = null;
+  const verdictForCaller = () =>
+    verdict === null
+      ? null
+      : new McpServerWakeError(params.mcpServerName, {
+          concluded: true,
+          detail: verdict.detail,
+        });
 
   for (;;) {
     const attempt = withDeadline(
       McpServerRuntimeManager.ensureAwake(params.mcpServerId),
       Math.max(1, deadlineAt - Date.now()),
       () =>
-        lastVerdict ??
+        verdictForCaller() ??
         new McpServerWakePendingError(params.mcpServerName, budgetMs),
     );
     try {
@@ -5416,13 +5427,15 @@ async function waitForMcpServerWake(params: {
       // a woken server instead of any error at all. Only the budget itself
       // ends the wait, and by then `lastVerdict` is what it expires into.
       if (error.concluded) {
-        lastVerdict = error;
+        verdict = { detail: error.detail };
       }
-      // Too little budget left for another attempt to observe anything new:
-      // answer with this attempt's own reason, which is already
-      // retryable-shaped and names more than a generic "still pending" would.
+      // Too little budget left for another attempt to observe anything new.
+      // A verdict already seen outranks this attempt's own reason: a race
+      // lost on the last beat says nothing the caller can act on, while the
+      // verdict says why the server is not up. Either beats a generic
+      // "still pending".
       if (deadlineAt - Date.now() <= WAKE_RETRY_DELAY_MS) {
-        throw error;
+        throw verdictForCaller() ?? error;
       }
       logger.debug(
         { err: error, mcpServerId: params.mcpServerId },

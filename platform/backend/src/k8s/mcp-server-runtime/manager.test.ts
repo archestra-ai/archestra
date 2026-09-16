@@ -4065,6 +4065,9 @@ describe("McpServerRuntimeManager idle hibernation", () => {
       // indistinguishable from a wake hung on something nobody is fixing.
       expect(wakeError.message).toContain("no free capacity");
       expect(wakeError.message).toContain(schedulerMessage);
+      // Marked as a verdict, not a lost race: the demand path answers on this
+      // rather than spending the caller's budget re-deriving it.
+      expect(wakeError.concluded).toBe(true);
 
       // Nothing is marked broken: completeWake never ran, so the hibernation
       // annotation stays put, and the cache goes back to "hibernated" so the

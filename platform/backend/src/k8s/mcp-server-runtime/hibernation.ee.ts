@@ -65,6 +65,14 @@ import {
 export class McpServerWakeError extends Error {
   /** The wake reached a verdict rather than losing a retryable race. */
   readonly concluded: boolean;
+  /**
+   * The reason, kept apart from the rendered message. A wake is single-flighted
+   * per PHYSICAL deployment, so its error is addressed to whichever install
+   * loaded that deployment — not necessarily the caller who receives it. A
+   * consumer that re-reports a wake's reason re-addresses it to its own server
+   * and needs the reason without the other install's name baked in.
+   */
+  readonly detail?: string;
 
   constructor(
     serverName: string,
@@ -78,6 +86,7 @@ export class McpServerWakeError extends Error {
     );
     this.name = "McpServerWakeError";
     this.concluded = options?.concluded ?? false;
+    this.detail = options?.detail;
   }
 }
 

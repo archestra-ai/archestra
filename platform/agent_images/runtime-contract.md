@@ -45,7 +45,7 @@ The entire UTF-8 file must not exceed 4,096 bytes. Missing files, malformed JSON
 
 Treat `message` as public task output. Image authors must remove credentials and private details before publishing it. Prefer safe messages constructed from structured client errors; never copy raw stderr or provider response bodies. Schema validation cannot detect secrets in otherwise valid text.
 
-The maintained Claude Code wrapper publishes its own messages from `StopFailure` events. Delegated API failures end the run. Interactive sessions remain open and request attention. Other images implement the same envelope using their own error handling.
+The built-in Archestra image reports configuration, startup, and session failures. The maintained Claude Code wrapper publishes its own messages from `StopFailure` events. Delegated API failures end the run. Interactive sessions remain open and request attention. The OpenCode and OpenClaw wrappers also publish safe messages for terminal one-shot errors. OpenCode context compaction remains recoverable. Shared initialization reports proxy connectivity and GitHub setup failures. Codex, Hermes, OpenCode, and OpenClaw publish protocol configuration errors through the same envelope. Native errors without an adapter retain exit-status-only reporting.
 
 ## Readable Transcript
 

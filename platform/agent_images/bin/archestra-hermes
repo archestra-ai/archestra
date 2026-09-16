@@ -3,6 +3,8 @@ set -euo pipefail
 
 if [[ "${ARCHESTRA_LLM_PROXY_PROTOCOL:-}" != "openai_chat" ]]; then
   echo "archestra: Hermes requires an Agent configured for OpenAI Chat Completions" >&2
+  "$(dirname "${BASH_SOURCE[0]}")/archestra-agent-failure" \
+    "hermes_protocol" "Hermes requires an Agent configured for OpenAI Chat Completions."
   exit 78
 fi
 

@@ -3,10 +3,8 @@ set -eu
 
 fail_github_setup() {
   # Publish an image-owned, safe message; gh output may contain tokens.
-  if [ -n "${ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX:-}" ]; then
-    jq -n '{version:1,code:"github_configuration",message:"GitHub authentication could not be configured. Check the GitHub credential and runtime image."}' > "${ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX}.failure.tmp"
-    mv "${ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX}.failure.tmp" "${ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX}.failure"
-  fi
+  "$(dirname "$0")/archestra-agent-failure" github_configuration \
+    "GitHub authentication could not be configured. Check the GitHub credential and runtime image."
   echo "archestra: GitHub authentication setup failed; check the GitHub credential and runtime image" >&2
   exit 78
 }
@@ -29,6 +27,8 @@ if [ -n "${OPENAI_BASE_URL:-}" ] && [ -n "${OPENAI_API_KEY:-}" ]; then
   done
   if [ "${platform_ready}" != true ]; then
     echo "archestra: the Agent runtime could not reach the platform proxy" >&2
+    "$(dirname "$0")/archestra-agent-failure" proxy_unavailable \
+      "The Agent could not connect to the platform proxy. Check proxy availability, network access, and the configured provider credential, then retry."
     exit 69
   fi
 fi

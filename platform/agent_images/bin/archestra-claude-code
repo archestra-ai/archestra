@@ -119,6 +119,32 @@ native_session_id="$(jq -r '.session_id // empty' <<<"${payload}")"
 if [[ -n "${native_session_id}" ]]; then
   printf '%s\n' "${native_session_id}" > "${runtime_dir}/claude-session-id"
 fi
+# API failures fire StopFailure instead of Stop. Without this hook a delegated
+# TUI stays open forever, even though the provider has already rejected the turn.
+if [[ "$(jq -r '.hook_event_name // empty' <<<"${payload}")" == "StopFailure" ]]; then
+  if [[ "${ARCHESTRA_AGENT_RUNTIME_MODE:-one_shot}" != "one_shot" ]]; then
+    "${ARCHESTRA_AGENT_ATTENTION_COMMAND:-archestra-agent-attention}" set "API error: check terminal" || true
+    exit 0
+  fi
+  case "$(jq -r '.error // empty' <<<"${payload}")" in
+    authentication_failed|cloud_credential_error) code=claude_authentication ;;
+    oauth_org_not_allowed|account_on_hold|billing_error) code=claude_billing ;;
+    rate_limit) code=claude_rate_limit ;;
+    overloaded|server_error) code=claude_unavailable ;;
+    invalid_request|model_not_found|max_output_tokens) code=claude_request ;;
+    *) code=claude_api_error ;;
+  esac
+  # Only a fixed code crosses into task notifications. API error details can
+  # contain credentials; leave those in the native terminal, not the summary.
+  if [[ -n "${ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX:-}" ]]; then
+    printf '%s\n' "$code" > "${ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX}.failure.tmp"
+    mv "${ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX}.failure.tmp" "${ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX}.failure"
+  fi
+  printf '%s\n' 'Claude Code could not complete the API request. See the run failure details.' > "${runtime_dir}/final-answer.txt"
+  touch "${runtime_dir}/turn-complete.failed"
+  touch "${runtime_dir}/turn-complete"
+  exit 0
+fi
 transcript="$(jq -r '.transcript_path // empty' <<<"${payload}")"
 last_assistant_message="$(jq -r '.last_assistant_message | strings // empty' <<<"${payload}")"
 printf '%s\n' '{"hook_event_name":"Stop"}' \
@@ -210,7 +236,8 @@ jq -n --arg attention_cmd "${attention_hook}" --arg transcript_cmd "${transcript
   }],
   UserPromptSubmit:[{matcher:"",hooks:[{type:"command",command:$attention_cmd}]}],
   PostToolUse:[{matcher:"",hooks:[{type:"command",command:$attention_cmd}]}],
-  Stop:[{matcher:"",hooks:[{type:"command",command:$transcript_cmd}]}]
+  Stop:[{matcher:"",hooks:[{type:"command",command:$transcript_cmd}]}],
+  StopFailure:[{matcher:"",hooks:[{type:"command",command:$transcript_cmd}]}]
 }}' > "${settings_file}"
 args+=(--settings "${settings_file}")
 

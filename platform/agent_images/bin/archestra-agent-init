@@ -1,6 +1,16 @@
 #!/bin/sh
 set -eu
 
+fail_github_setup() {
+  # A fixed code is safe for task notifications; gh output may contain tokens.
+  if [ -n "${ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX:-}" ]; then
+    printf '%s\n' github_configuration > "${ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX}.failure.tmp"
+    mv "${ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX}.failure.tmp" "${ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX}.failure"
+  fi
+  echo "archestra: GitHub authentication setup failed; check the GitHub credential and runtime image" >&2
+  exit 78
+}
+
 # A pod can become runnable a moment before the platform endpoint is reachable
 # (notably while a local Tilt backend restarts). Native clients retry transport
 # errors inconsistently, so establish the shared runtime contract once here.
@@ -43,9 +53,9 @@ if [ -n "${GH_TOKEN:-${GITHUB_TOKEN:-}}" ] && command -v gh >/dev/null 2>&1; the
     printf '%s\n' "${github_token}" |
     env -u GH_TOKEN -u GITHUB_TOKEN gh auth login \
       --hostname github.com \
-      --with-token >/dev/null 2>&1
+      --with-token >/dev/null 2>&1 || fail_github_setup
   fi
-  gh auth setup-git >/dev/null 2>&1
+  gh auth setup-git >/dev/null 2>&1 || fail_github_setup
   # gh records its resolved executable, which bypasses our script wrapper.
   # Redirect each configured host back through the renewable credential reader.
   git config --global --get-regexp '^credential\..*\.helper$' |

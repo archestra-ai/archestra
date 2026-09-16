@@ -17,6 +17,22 @@ This reference is for custom image authors. For maintained image targets and bui
 
 The initial task is supplied in `ARCHESTRA_AGENT_RUNTIME_TASK`. The Agent system prompt is supplied in `ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT`. A custom client decides how to combine them. It should read `ARCHESTRA_AGENT_RUNTIME_MODE`: `interactive` means expose its input loop and remain available for follow-ups, while `one_shot` means finish the supplied task and exit. Images that support only unattended work can ignore interactive mode, but they will not provide a useful Chat terminal.
 
+## Failure Reasons
+
+A runtime can write a failure code to `${ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX}.failure` before exiting. The supervisor provides this turn-specific prefix. Publish the file with an atomic rename. Do not write raw stderr, tokens, URLs, or account details into it.
+
+The backend maps recognized codes to fixed task failure messages. The message includes the runtime's exit status. Unknown codes and older images retain the exit-status-only message. A failure file never overrides a successful exit.
+
+| Codes | Meaning |
+| --- | --- |
+| `github_authentication`, `github_repository_access`, `github_permissions`, `github_sso` | Rejected credential, inaccessible repository, denied permissions, or required SSO authorization. |
+| `github_rate_limit`, `github_unavailable`, `github_configuration` | Rate limit, connectivity failure, or GitHub CLI setup failure. |
+| `repository_setup` | A repository bootstrap step failed. |
+| `claude_authentication`, `claude_billing`, `claude_rate_limit` | Claude authentication, account access, or capacity failure. |
+| `claude_unavailable`, `claude_request`, `claude_api_error` | Provider outage, rejected request, or other API failure. |
+
+The maintained Claude Code image handles `StopFailure` separately from successful completion. Delegated API failures end the run. Interactive sessions remain open and request attention.
+
 ## Readable Transcript
 
 The maintained Archestra Agent, Claude Code, Codex, OpenCode, Hermes, and OpenClaw images export their native message and tool history as a readable transcript. A custom image can provide the same completed-run experience by writing `$ARCHESTRA_AGENT_RUNTIME_DIR/readable-transcript.json` (normally `/var/run/archestra/readable-transcript.json`) before its process exits.

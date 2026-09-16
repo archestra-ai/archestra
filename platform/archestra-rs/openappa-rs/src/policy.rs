@@ -98,6 +98,77 @@ struct External {
 mod tests {
     use super::*;
 
+    #[tokio::test]
+    async fn embedded_remedy_accepts_symbolic_audience_without_sources() {
+        use appa_runtime::{hooks, mcp};
+        use appa_runtime_api::{Actor, HookDecision, HookEvent, ProposedCall, TrajectoryId};
+
+        let config = compile(
+            r#"[policy]
+version = 2
+[[policy.tool]]
+name = "read_internal"
+delta = { audience = ["internal"] }
+requires = { audience = { within = ["internal"] } }
+"#,
+        )
+        .unwrap();
+        let store = Arc::new(LogStore::open(Backend::Memory).unwrap());
+        let runtime = Runtime::open_with_store(config, store, None).unwrap();
+        let actor = Actor {
+            root: TrajectoryId("symbolic-approval".into()),
+            child: None,
+        };
+        assert_eq!(
+            hooks::handle(
+                &runtime,
+                HookEvent::SessionStart {
+                    root: actor.root.clone()
+                }
+            )
+            .await,
+            HookDecision::Ack
+        );
+        let call = || HookEvent::ToolCall {
+            actor: actor.clone(),
+            call: ProposedCall {
+                tool: "read_internal".into(),
+                arguments: serde_json::value::RawValue::from_string("{}".into()).unwrap(),
+            },
+            spawn: false,
+            ruling: None,
+        };
+        let HookDecision::DenyCall { offers, .. } = hooks::handle(&runtime, call()).await else {
+            panic!("the read must require acceptance before executing");
+        };
+        let args = serde_json::json!({ "offer_id": offers[0].id });
+        assert_eq!(
+            hooks::handle(
+                &runtime,
+                HookEvent::ToolCall {
+                    actor: actor.clone(),
+                    call: ProposedCall {
+                        tool: appa_runtime_api::CONTROL_TOOL.into(),
+                        arguments: serde_json::value::RawValue::from_string(args.to_string())
+                            .unwrap(),
+                    },
+                    spawn: false,
+                    ruling: None,
+                }
+            )
+            .await,
+            HookDecision::PassControl
+        );
+        let result =
+            mcp::execute_embedded_remedy(&runtime, &actor, serde_json::from_value(args).unwrap())
+                .await;
+        assert_ne!(result.is_error, Some(true), "{result:?}");
+        assert!(matches!(
+            hooks::handle(&runtime, call()).await,
+            HookDecision::AllowCall { .. }
+        ));
+    }
+
     #[test]
     fn validates_contracts_not_just_toml() {
         assert!(

@@ -1,5 +1,6 @@
-import { createMathPlugin } from "@streamdown/math";
 "use client";
+
+import { createMathPlugin } from "@streamdown/math";
 
 import { type ComponentProps, memo, useMemo } from "react";
 import {

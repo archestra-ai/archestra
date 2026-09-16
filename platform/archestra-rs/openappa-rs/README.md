@@ -42,6 +42,14 @@ Configure the usual Archestra database and auth secret, then explicitly set:
 ARCHESTRA_OPENAPPA_ENABLED=true
 ```
 
+With this flag enabled in `platform/.env`, `tilt up` builds and load-checks the
+native addon before starting the development backend. Changes to its Rust
+sources, build configuration, or the workspace Cargo manifest/lockfile rebuild
+the addon and restart the backend after a successful build. Failed builds leave
+the previous backend running and appear as errors in Tilt. With the flag off,
+Tilt skips this build. The build uses the same pinned OpenAPPA dependency as
+Docker; it does not use a sibling OpenAPPA checkout.
+
 The feature flag defaults to false and does not inherit `ARCHESTRA_BETA`.
 Enabling it automatically adds `appa` to the effective proxy plugin list.
 An explicit `appa` entry in `ARCHESTRA_LLM_PROXY_PLUGINS` cannot enable APPA

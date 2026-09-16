@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 "use client";
 
 import type { UseFormReturn } from "react-hook-form";
@@ -10,6 +11,13 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 
 interface SharePointConfigFieldsProps {
@@ -22,6 +30,7 @@ export function SharePointConfigFields({
   form,
   prefix = "config",
 }: SharePointConfigFieldsProps) {
+  const includePages = form.watch(`${prefix}.includePages`) !== false;
   return (
     <div className="space-y-4">
       <FormField
@@ -109,6 +118,38 @@ export function SharePointConfigFields({
           </FormItem>
         )}
       />
+      {includePages && (
+        <FormField
+          control={form.control}
+          name={`${prefix}.pagePublicationStatus`}
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Page publication status</FormLabel>
+              <Select
+                value={field.value ?? "both"}
+                onValueChange={field.onChange}
+              >
+                <FormControl>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  <SelectItem value="published">Published only</SelectItem>
+                  <SelectItem value="draft">Draft only</SelectItem>
+                  <SelectItem value="both">Both</SelectItem>
+                </SelectContent>
+              </Select>
+              <FormDescription>
+                Filters the current page version, not earlier published
+                versions. Previously indexed pages outside this selection are
+                removed on the next sync. Document library files are unaffected.
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+      )}
     </div>
   );
 }

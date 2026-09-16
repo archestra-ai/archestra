@@ -67055,6 +67055,10 @@ export type GetConnectorsResponses = {
                 recursive?: boolean;
                 maxDepth?: number;
                 includePages?: boolean;
+                /**
+                 * Site pages to sync by current publication status. Omitted means both for compatibility.
+                 */
+                pagePublicationStatus?: 'published' | 'draft' | 'both';
                 batchSize?: number;
             } | {
                 type: 'gdrive';
@@ -67281,6 +67285,10 @@ export type CreateConnectorData = {
             recursive?: boolean;
             maxDepth?: number;
             includePages?: boolean;
+            /**
+             * Site pages to sync by current publication status. Omitted means both for compatibility.
+             */
+            pagePublicationStatus?: 'published' | 'draft' | 'both';
             batchSize?: number;
         } | {
             type: 'gdrive';
@@ -67561,6 +67569,10 @@ export type CreateConnectorResponses = {
             recursive?: boolean;
             maxDepth?: number;
             includePages?: boolean;
+            /**
+             * Site pages to sync by current publication status. Omitted means both for compatibility.
+             */
+            pagePublicationStatus?: 'published' | 'draft' | 'both';
             batchSize?: number;
         } | {
             type: 'gdrive';
@@ -67935,6 +67947,10 @@ export type GetConnectorResponses = {
             recursive?: boolean;
             maxDepth?: number;
             includePages?: boolean;
+            /**
+             * Site pages to sync by current publication status. Omitted means both for compatibility.
+             */
+            pagePublicationStatus?: 'published' | 'draft' | 'both';
             batchSize?: number;
         } | {
             type: 'gdrive';
@@ -68147,6 +68163,10 @@ export type UpdateConnectorData = {
             recursive?: boolean;
             maxDepth?: number;
             includePages?: boolean;
+            /**
+             * Site pages to sync by current publication status. Omitted means both for compatibility.
+             */
+            pagePublicationStatus?: 'published' | 'draft' | 'both';
             batchSize?: number;
         } | {
             type: 'gdrive';
@@ -68428,6 +68448,10 @@ export type UpdateConnectorResponses = {
             recursive?: boolean;
             maxDepth?: number;
             includePages?: boolean;
+            /**
+             * Site pages to sync by current publication status. Omitted means both for compatibility.
+             */
+            pagePublicationStatus?: 'published' | 'draft' | 'both';
             batchSize?: number;
         } | {
             type: 'gdrive';

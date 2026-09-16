@@ -152,6 +152,37 @@ describe("CreateConnectorDialog", () => {
     vi.mocked(usePathname).mockReturnValue("/knowledge/knowledge-bases");
   });
 
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  it("creates SharePoint connectors with published-only pages by default", async () => {
+    mockMutateAsync.mockResolvedValue({ id: "connector-1" });
+    const user = userEvent.setup();
+    renderDialog();
+    await user.click(screen.getByText("SharePoint"));
+    for (const [label, value] of [
+      [/^Name$/, "Team handbook"],
+      [/^Site URL$/, "https://tenant.sharepoint.com"],
+      [/^Tenant ID$/, "test-tenant"],
+      [/^Client ID$/, "test-client"],
+      [/^Client Secret$/, "test-secret"],
+    ] as const) {
+      fireEvent.change(screen.getByLabelText(label), { target: { value } });
+    }
+    await user.click(screen.getByRole("button", { name: /Advanced/ }));
+    expect(
+      screen.getByRole("combobox", { name: "Page publication status" }),
+    ).toHaveTextContent("Published only");
+    await user.click(screen.getByRole("button", { name: "Create Connector" }));
+    await waitFor(() => expect(mockMutateAsync).toHaveBeenCalledTimes(1));
+    expect(mockMutateAsync.mock.calls[0][0].config).toMatchObject({
+      type: "sharepoint",
+      pagePublicationStatus: "published",
+      includePages: true,
+    });
+  });
+  // SPDX-SnippetEnd
+
   describe("rendering", () => {
     it("renders connector type selection on first step", () => {
       renderDialog();

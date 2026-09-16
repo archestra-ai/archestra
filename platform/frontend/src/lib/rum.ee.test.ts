@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 vi.mock("@archestra/shared", async (importOriginal) => {

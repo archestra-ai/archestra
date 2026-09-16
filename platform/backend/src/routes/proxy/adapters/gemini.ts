@@ -960,12 +960,24 @@ class GeminiStreamAdapter
           index: 0,
         },
       ],
+      // `state.usage.inputTokens` is net of the cache read (see processChunk
+      // above, which subtracts `cachedContentTokenCount`), so this recombines
+      // it into a gross `promptTokenCount` and republishes the cache read via
+      // `cachedContentTokenCount` — otherwise a heavily cached turn reports
+      // only the uncached remainder as its entire prompt.
       usageMetadata: this.state.usage
         ? {
-            promptTokenCount: this.state.usage.inputTokens,
+            promptTokenCount:
+              this.state.usage.inputTokens +
+              (this.state.usage.cacheReadTokens ?? 0),
             candidatesTokenCount: this.state.usage.outputTokens,
             totalTokenCount:
-              this.state.usage.inputTokens + this.state.usage.outputTokens,
+              this.state.usage.inputTokens +
+              (this.state.usage.cacheReadTokens ?? 0) +
+              this.state.usage.outputTokens,
+            ...(this.state.usage.cacheReadTokens
+              ? { cachedContentTokenCount: this.state.usage.cacheReadTokens }
+              : {}),
           }
         : undefined,
       modelVersion: this.state.model,

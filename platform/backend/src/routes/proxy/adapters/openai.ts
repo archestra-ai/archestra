@@ -53,7 +53,7 @@ import {
 import { stripBrowserToolsResults } from "../utils/summarize-tool-results";
 import { unwrapToolContent } from "../utils/unwrap-tool-content";
 import { createOpenAiCodexClient } from "./openai-codex-client";
-import { toOpenAiStreamUsage } from "./openai-sse-chunk";
+import { toOpenAiStreamUsageWithCache } from "./openai-sse-chunk";
 import { PROXY_SDK_MAX_RETRIES } from "./sdk-retry-policy";
 import { subscriptionAuthRequiredCode } from "./subscription-auth-error";
 
@@ -1327,9 +1327,10 @@ export class OpenAIStreamAdapter
     };
     // Carry the usage the provider sent in its trailing chunk into the synthesized final chunk;
     // without it, streaming clients (e.g. the chat route's AI SDK, for OpenRouter and other
-    // OpenAI-compatible models) never see token counts. Shape mirrors the non-streaming
-    // `toProviderResponse()` below — `prompt_tokens` is net of cache, with no `prompt_tokens_details`.
-    const usage = toOpenAiStreamUsage(this.state.usage);
+    // OpenAI-compatible models) never see token counts. `state.usage.inputTokens` is net of
+    // cache reads (see processChunk above), so this must recombine them into a gross
+    // `prompt_tokens` with `prompt_tokens_details` — mirrors `toProviderResponse()` below.
+    const usage = toOpenAiStreamUsageWithCache(this.state.usage);
     if (usage) {
       finalChunk.usage = usage;
     }
@@ -1374,12 +1375,10 @@ export class OpenAIStreamAdapter
             : ((this.state.stopReason as OpenAi.Types.FinishReason) ?? "stop"),
         },
       ],
-      usage: {
-        prompt_tokens: this.state.usage?.inputTokens ?? 0,
-        completion_tokens: this.state.usage?.outputTokens ?? 0,
-        total_tokens:
-          (this.state.usage?.inputTokens ?? 0) +
-          (this.state.usage?.outputTokens ?? 0),
+      usage: toOpenAiStreamUsageWithCache(this.state.usage) ?? {
+        prompt_tokens: 0,
+        completion_tokens: 0,
+        total_tokens: 0,
       },
     };
   }

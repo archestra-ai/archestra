@@ -356,6 +356,7 @@ impl State {
             let gate = hooks::handle(
                 &self.runtime,
                 HookEvent::ToolCall {
+                    call_id: None,
                     actor: actor.clone(),
                     call,
                     spawn: false,
@@ -373,6 +374,7 @@ impl State {
         } else {
             let event = match input.event.as_str() {
                 "tool_call" => HookEvent::ToolCall {
+                    call_id: None,
                     actor: actor.clone(),
                     call: proposed(&input)?,
                     spawn: input.spawn,
@@ -474,6 +476,7 @@ impl State {
             // No child return is guessed from an opaque tool result. The child
             // must have reported ChildEnd through its adapter first.
             HookEvent::SpawnResult {
+                call_id: None,
                 actor: actor.clone(),
                 call,
                 outcome,
@@ -482,6 +485,7 @@ impl State {
             }
         } else {
             HookEvent::ToolResult {
+                call_id: None,
                 actor: actor.clone(),
                 call,
                 outcome,

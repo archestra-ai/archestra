@@ -4,12 +4,14 @@ import {
   OPENROUTER_FREE_MODEL_ID,
   type SupportedProvider,
 } from "@archestra/shared";
-import { vi } from "vitest";
+import { HttpResponse, http } from "msw";
+import { modelsDevClient } from "@/clients/models-dev-client";
 import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
 import ModelModel from "@/models/model";
 import OrganizationModel from "@/models/organization";
 import { modelFetchers } from "@/routes/chat/model-fetchers";
-import { afterEach, describe, expect, test } from "@/test";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { useMswServer } from "@/test/msw";
 import {
   buildModelsToUpsert,
   modelSyncService,
@@ -17,14 +19,14 @@ import {
   withDistinctDisplayNames,
 } from "./model-sync";
 
-// Mock only the network boundary (the client singleton's fetch); keep the real
-// pure helpers (sanitizeOutputLimit, modelsDevCostToPerToken) that the SUT uses.
-vi.mock("@/clients/models-dev-client", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/clients/models-dev-client")>()),
-  modelsDevClient: {
-    fetchModelsFromApi: vi.fn().mockResolvedValue({}),
-  },
-}));
+// Keep the real client and stub HTTP so imports through the runtime launch
+// path cannot capture a different singleton from a partial module mock.
+// biome-ignore lint/correctness/useHookAtTopLevel: Vitest lifecycle helper, not a React hook
+useMswServer(
+  http.get("https://models.dev/api.json", () => HttpResponse.json({})),
+);
+beforeEach(() => modelsDevClient.clearFetchCache());
+afterEach(() => modelsDevClient.clearFetchCache());
 
 describe("ModelSyncService", () => {
   const originalOpenAiFetcher = modelFetchers.openai;

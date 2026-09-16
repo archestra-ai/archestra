@@ -217,17 +217,36 @@ if is_prod:
     serve_env=frontend_env_vars
   )
 else:
+  backend_build_cmd = ''
+  backend_watch_deps = ['../.env', 'run-backend-dev.sh']
+  if os.getenv('ARCHESTRA_OPENAPPA_ENABLED') == 'true':
+    # Build before starting/restarting Node: native modules stay cached in a
+    # running process. resource_deps alone only orders the initial startup.
+    # A failed build leaves the previous backend running and surfaces in Tilt.
+    backend_build_cmd = 'pnpm --filter @archestra/openappa-rs build:dev && pnpm --filter @archestra/openappa-rs smoke:load'
+    backend_watch_deps.extend([
+      '../archestra-rs/openappa-rs/src',
+      '../archestra-rs/openappa-rs/build.rs',
+      '../archestra-rs/openappa-rs/Cargo.toml',
+      '../archestra-rs/openappa-rs/package.json',
+      '../archestra-rs/openappa-rs/index.cjs',
+      '../archestra-rs/Cargo.toml',
+      '../archestra-rs/Cargo.lock',
+    ])
+
   # Backend dev server
   local_resource(
     dev_resource_name + '-backend',
+    cmd=backend_build_cmd,
+    cmd_bat=backend_build_cmd,
     # wrapper injects the local TCP runner host when the code runtime is enabled.
     serve_cmd='sh run-backend-dev.sh',
     # on Windows, pnpm dev runs directly; cmd.exe handles process termination when Tilt stops.
     # windows users enabling the code runtime set ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST in .env manually.
     serve_cmd_bat='set ARCHESTRA_LOGGING_LEVEL=debug && set ARCHESTRA_ANALYTICS=disabled && pnpm dev --filter @backend',
     labels=['dev'],
-    resource_deps=backend_resource_deps,
-    deps=['../.env', 'run-backend-dev.sh'],
+    resource_deps=backend_resource_deps + (['pnpm-install'] if backend_build_cmd else []),
+    deps=backend_watch_deps,
   )
 
   # Standardize Tilt local dev on Turbopack for the Next dev server. Left to

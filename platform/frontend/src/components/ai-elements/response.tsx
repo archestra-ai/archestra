@@ -50,7 +50,6 @@ const remarkCanonicalizeAppLinks = () => (tree: unknown) =>
 
 const MATH_PLUGIN = createMathPlugin({ singleDollarTextMath: true });
 
-
 // streamdown exports its defaults as a name-keyed record; passing remarkPlugins
 // replaces them, so re-include the defaults and append our repair.
 const REMARK_PLUGINS: ResponseProps["remarkPlugins"] = [

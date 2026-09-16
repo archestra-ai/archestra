@@ -473,13 +473,12 @@ publication metadata, registry failures, and unsupported registries fail the che
 Existing target-branch versions are grandfathered; local and git dependencies have
 no registry publication age and are outside this check.
 
-Run the same check before building a dependency update, from `platform/`:
+The checker and its tests live in the shared
+[Cargo Release Age action](https://github.com/archestra-ai/.github/tree/f9b82a1ae0c8d73088513454aa46cf5a4021df82/actions/cargo-release-age).
+The workflow pins that action to a reviewed commit. Its README includes local-check
+instructions; use a freshly fetched target branch as the baseline
+(`origin/release/1.3` for a release backport).
 
-```sh
-python3 ../.github/scripts/check-cargo-release-age.py --base-ref origin/main --lockfile ai-labs/Cargo.lock
-```
-
-Use a freshly fetched target branch as the baseline (`origin/release/1.3` for a
-release backport). Stable Cargo does not enforce this policy during local installs.
-Cargo's native [minimum publish age](https://doc.rust-lang.org/cargo/reference/unstable.html#min-publish-age)
+Stable Cargo does not enforce this policy during local installs. Cargo's native
+[minimum publish age](https://doc.rust-lang.org/cargo/reference/unstable.html#min-publish-age)
 requires nightly and `-Zmin-publish-age`; this workspace keeps its stable toolchain.

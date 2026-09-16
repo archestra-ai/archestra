@@ -63,6 +63,69 @@ describe("APPA feature boundary", () => {
     expect(native.dispatchHook).toHaveBeenCalledTimes(1);
   });
 
+  test.each([
+    "agent__research",
+    "skill__research",
+  ])("checks %s as an ordinary tool, including run_tool dispatch", async (toolName) => {
+    native.dispatchHook.mockResolvedValue(
+      JSON.stringify({ decision: "allow_call" }),
+    );
+    for (const wrapped of [false, true]) {
+      const call = {
+        id: `delegation-${wrapped}`,
+        name: wrapped ? "archestra__run_tool" : toolName,
+        arguments: wrapped
+          ? { tool_name: toolName, tool_args: { message: "Research" } }
+          : { message: "Research" },
+      };
+      expect(await checkToolCalls(session, [call], (name) => name)).toBeNull();
+      expect(
+        JSON.parse(
+          native.dispatchHook.mock.calls[
+            native.dispatchHook.mock.calls.length - 1
+          ][0],
+        ),
+      ).toMatchObject({
+        event: "tool_call",
+        tool: toolName,
+        arguments: { message: "Research" },
+        spawn: false,
+      });
+    }
+    native.dispatchHook.mockResolvedValue(
+      JSON.stringify({
+        decision: "deny_call",
+        feedback: "Parent policy denied",
+      }),
+    );
+    const denied = await checkToolCalls(
+      session,
+      [{ id: "denied", name: toolName, arguments: { message: "Research" } }],
+      (name) => name,
+    );
+    expect(denied?.reason).toBe("Parent policy denied");
+  });
+
+  test("does not let an unprotected child execute a remedy on the parent session", async () => {
+    const parent = "a637fb55-989b-4f01-a251-e7e277c65f05";
+    const child = "3c0f2458-f26a-4b05-9571-a64dca1d65a7";
+    await expect(
+      executeArchestraTool(
+        "archestra__execute_remedy_plan",
+        { offer_id: "parent-offer" },
+        {
+          agent: { id: child, name: "Child" },
+          agentId: child,
+          delegationChain: `${parent}:${child}`,
+          organizationId: "org",
+          sessionId: "conversation",
+          currentToolCallId: "child-remedy",
+        },
+      ),
+    ).rejects.toMatchObject({ code: -32601 });
+    expect(native.dispatchHook).not.toHaveBeenCalled();
+  });
+
   test("does not initialize or dispatch while disabled, even with an explicit plugin entry", async () => {
     config.openappa.enabled = false;
     // An explicit plugin entry must not override the feature flag.

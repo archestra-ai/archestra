@@ -85,6 +85,7 @@ import {
 } from "@/openappa/chat-block";
 import {
   isAppaChatSource,
+  isAppaDelegatedRun,
   type OpenAppaSession,
   sessionFromHeaders,
 } from "@/openappa/service";
@@ -1127,19 +1128,27 @@ export async function handleLLMProxy<
       }
       const appaUserId =
         authenticatedUserId ?? (isInternalRequest ? userId : undefined);
-      openappaSession = appaActive
-        ? sessionFromHeaders({
-            headers: headersForExtraction,
-            organizationId: resolvedAgent.organizationId,
-            callerId: appaUserId
-              ? `user:${appaUserId}`
-              : authenticatedApp
-                ? `app:${authenticatedApp.id}`
-                : virtualKeyId
-                  ? `virtual-key:${virtualKeyId}`
-                  : undefined,
-          })
-        : undefined;
+      // Delegated A2A runs share the parent's logging session, but have no
+      // APPA child-return lifecycle. Keep their events out of that trajectory;
+      // the existing guardrails still evaluate the child independently.
+      // Only the trusted internal executor's agent chain selects this path.
+      if (
+        appaActive &&
+        (!isInternalRequest ||
+          !isAppaDelegatedRun(resolvedAgent.id, externalAgentId))
+      ) {
+        openappaSession = sessionFromHeaders({
+          headers: headersForExtraction,
+          organizationId: resolvedAgent.organizationId,
+          callerId: appaUserId
+            ? `user:${appaUserId}`
+            : authenticatedApp
+              ? `app:${authenticatedApp.id}`
+              : virtualKeyId
+                ? `virtual-key:${virtualKeyId}`
+                : undefined,
+        });
+      }
       pluginContext = {
         requestId: request.id,
         organizationId: resolvedAgent.organizationId,

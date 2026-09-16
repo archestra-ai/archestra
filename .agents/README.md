@@ -4,9 +4,9 @@ Keep shared skills in the repository-root `.agents/skills/`. They cover the
 platform, docs, catalog, benchmarks, and releases. Codex discovers this directory
 when started in `platform/` or a deeper directory; no platform symlink is needed.
 
-`AGENTS.md` files hold shared instructions. The adjacent `CLAUDE.md` files import
-those instructions with `@AGENTS.md`, without duplicating their contents or using
-instruction-file symlinks. Keep individual platform preferences in the ignored
+`AGENTS.md` files hold shared instructions. The adjacent `CLAUDE.md` files are
+relative symlinks to `AGENTS.md`, so both clients read the same content without
+duplicating instructions. Keep individual platform preferences in the ignored
 `platform/CLAUDE_LOCAL.md` file.
 
 Claude Code still discovers project skills through `.claude/skills/`. The single
@@ -16,12 +16,12 @@ location directly. Both clients discover root skills when launched in
 `platform/`; do not add another skills link there. Check out Git symlinks as
 symlinks on systems that require explicit symlink support.
 
-When Claude Code starts in `platform/`, the root `CLAUDE.md` imports a file
-outside the working directory. Claude can ask to allow this external import;
-accept it for this trusted repository and confirm the root `AGENTS.md` appears
-in `/context`. In a fresh non-interactive `claude -p` session before approval,
-the root import can be skipped even though `platform/AGENTS.md` and all shared
-skills load. Do not treat finding `CLAUDE.md` alone as proof its imports loaded.
+Use instruction-file symlinks rather than `@AGENTS.md` import wrappers. When
+Claude Code starts in `platform/` or a deeper directory, an ancestor's import
+points outside the working directory and can require external-import approval.
+Fresh non-interactive sessions can silently skip that import. A `CLAUDE.md`
+symlink loads the instructions directly without this extra approval step. Git
+must check out these links as real symlinks, just like the shared skills link.
 
 The root `.claude/settings.json` disables Claude attribution in commits and PRs.
 `platform/.claude/settings.json` symlinks to it so the same setting applies when
@@ -55,7 +55,7 @@ supported locations. This layout does not claim universal automatic discovery.
 After changing this layout, start fresh sessions from the repository root and
 from `platform/`. In Codex, check the skills selector and instruction sources.
 In Claude Code, check `/skills` and `/context`. Confirm that shared skills appear
-and that the relevant `AGENTS.md` instructions are imported.
+and that the relevant `AGENTS.md` content appears under the `CLAUDE.md` paths.
 
 References:
 

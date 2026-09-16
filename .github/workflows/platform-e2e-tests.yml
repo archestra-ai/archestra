@@ -5,14 +5,14 @@ name: Platform E2E Tests
 # later merge-group run can retag them instead of compiling on the queue
 # critical path. Untrusted PRs and private mirrors keep the placeholder checks
 # because their event contexts cannot authenticate to the public image
-# registry. Add the "run-e2e" label to trigger the full E2E suite on demand.
-# Remove and re-add the label to re-trigger after new commits.
+# registry. Add the "run-e2e" label to trigger the full E2E suite on demand,
+# hibernation included. Remove and re-add the label to re-trigger after new
+# commits.
 #
 # MCP idle-hibernation coverage stays OFF the merge queue: the leg is ~10
 # minutes of mostly serial waiting, which every queued merge was paying.
-# The nightly schedule and workflow_dispatch run the hibernation project in
-# four isolated file shards; the separate "run-e2e-hibernation" label
-# runs the same shards on a PR on demand.
+# The nightly schedule, workflow_dispatch and the "run-e2e" label run the
+# hibernation project in four isolated file shards.
 #
 # Three test environments:
 #   - Lite: the platform as one quickstart-mode container plus WireMock and
@@ -84,7 +84,7 @@ jobs:
     # trusted public-repo PR event runs the real builder instead; this
     # placeholder remains only for ordinary events that cannot access the
     # registry, including private-mirror PRs.
-    if: ${{ github.event_name == 'pull_request' && (github.event.repository.private || github.event.pull_request.head.repo.fork == true || github.event.pull_request.user.login == 'dependabot[bot]') && (github.event.action != 'labeled' || (github.event.label.name != 'run-e2e' && github.event.label.name != 'run-e2e-hibernation')) }}
+    if: ${{ github.event_name == 'pull_request' && (github.event.repository.private || github.event.pull_request.head.repo.fork == true || github.event.pull_request.user.login == 'dependabot[bot]') && (github.event.action != 'labeled' || github.event.label.name != 'run-e2e') }}
     strategy:
       fail-fast: false
       matrix:
@@ -100,7 +100,7 @@ jobs:
   platform-e2e-build:
     name: Build ${{ matrix.name }} Image
     runs-on: ${{ matrix.runner }}
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' || github.event.label.name == 'run-e2e-hibernation' || (github.event_name == 'pull_request' && github.event.repository.private == false && github.event.pull_request.head.repo.fork == false && github.event.pull_request.user.login != 'dependabot[bot]') }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' || (github.event_name == 'pull_request' && github.event.repository.private == false && github.event.pull_request.head.repo.fork == false && github.event.pull_request.user.login != 'dependabot[bot]') }}
     permissions:
       contents: read # Required to checkout the repository and build images for E2E jobs.
       id-token: write # Required for Workload Identity Federation when pushing trusted images.
@@ -470,7 +470,7 @@ jobs:
   platform-e2e-cancel-on-build-failure:
     name: Cancel E2E on build failure
     needs: [platform-e2e-build]
-    if: ${{ failure() && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' || github.event.label.name == 'run-e2e-hibernation') }}
+    if: ${{ failure() && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e') }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -682,7 +682,7 @@ jobs:
   # remains intact while all independent groups overlap.
   platform-e2e-hibernation-tests:
     name: Platform E2E Tests (Hibernation ${{ matrix.name }})
-    if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event.label.name == 'run-e2e-hibernation' }}
+    if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event.label.name == 'run-e2e' }}
     runs-on: blacksmith-16vcpu-ubuntu-2404
     timeout-minutes: 60
     strategy:
@@ -1435,7 +1435,7 @@ jobs:
     # `!cancelled()` (not `always()`) so a cancelled upstream still cancels the
     # gate; the event guard keeps it running on merge_group / on-demand runs but
     # reporting skipped (and thus satisfying the ruleset) on ordinary PR pushes.
-    if: ${{ !cancelled() && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' || github.event.label.name == 'run-e2e-hibernation') }}
+    if: ${{ !cancelled() && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e') }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     # No permissions needed: this job only inspects `needs.*.result`.
@@ -1452,7 +1452,7 @@ jobs:
           LITE_RESULT: ${{ needs.platform-e2e-lite-tests.result }}
           QUICKSTART_RESULT: ${{ needs.platform-quickstart-e2e-tests.result }}
           EVENT_NAME: ${{ github.event_name }}
-          RUN_HIBERNATION: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event.label.name == 'run-e2e-hibernation' }}
+          RUN_HIBERNATION: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event.label.name == 'run-e2e' }}
         run: |
           failed=0
           for pair in "k8s:$K8S_RESULT" "lite:$LITE_RESULT" "quickstart:$QUICKSTART_RESULT"; do

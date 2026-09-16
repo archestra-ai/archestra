@@ -23,7 +23,7 @@ const session = {
 
 beforeEach(async () => {
   config.llmProxy.plugins = ["appa"];
-  config.openappa = { enabled: true };
+  config.openappa = { enabled: true, yellEnabled: false };
   await GuardrailsDeploymentModel.setEnabled(true);
   vi.spyOn(database, "getDatabaseConnectionString").mockReturnValue(
     "postgresql://test:test@localhost/test",
@@ -46,6 +46,103 @@ afterEach(() => {
 });
 
 describe("APPA feature boundary", () => {
+  test("reporting is hidden and direct execution is refused until explicitly enabled", async () => {
+    expect(
+      getArchestraMcpTools().some((tool) => tool.name === "archestra__yell"),
+    ).toBe(false);
+    await expect(
+      executeArchestraTool(
+        "archestra__yell",
+        { message: "Confusing feedback", with_trajectory: true },
+        {
+          agent: { id: "agent", name: "Assistant" },
+          organizationId: "org",
+          userId: "alice",
+          sessionId: "conversation",
+          currentToolCallId: "report",
+        },
+      ),
+    ).rejects.toMatchObject({ code: -32601 });
+    expect(native.dispatchHook).not.toHaveBeenCalled();
+    config.openappa.yellEnabled = true;
+    expect(
+      getArchestraMcpTools().some((tool) => tool.name === "archestra__yell"),
+    ).toBe(true);
+  });
+
+  test("reports through the authenticated native session after policy checking", async () => {
+    config.openappa.yellEnabled = true;
+    const args = { message: "Confusing feedback", with_trajectory: true };
+    native.dispatchHook
+      .mockResolvedValueOnce(JSON.stringify({ decision: "allow_call" }))
+      .mockResolvedValueOnce(
+        JSON.stringify({
+          decision: "mcp_result",
+          result: { content: [{ type: "text", text: "Receipt report-1" }] },
+        }),
+      );
+    expect(
+      await checkToolCalls(
+        session,
+        [{ id: "report", name: "archestra__yell", arguments: args }],
+        (name) => name,
+      ),
+    ).toBeNull();
+    const result = await executeArchestraTool("archestra__yell", args, {
+      agent: { id: "agent", name: "Assistant" },
+      agentId: "agent",
+      organizationId: "org",
+      userId: "alice",
+      sessionId: "conversation",
+      currentToolCallId: "report",
+    });
+    expect(result.content).toEqual([
+      { type: "text", text: "Receipt report-1" },
+    ]);
+    expect(
+      native.dispatchHook.mock.calls.map(([raw]) => JSON.parse(raw)),
+    ).toEqual([
+      {
+        ...session,
+        event: "tool_call",
+        operation_id: "call:report",
+        tool: "yell",
+        arguments: args,
+        spawn: false,
+      },
+      {
+        ...session,
+        event: "yell",
+        operation_id: "yell:report",
+        arguments: args,
+      },
+    ]);
+  });
+
+  test("reporting refuses missing identity and unprotected child calls", async () => {
+    config.openappa.yellEnabled = true;
+    const args = { message: "Confusing feedback", with_trajectory: false };
+    await expect(
+      executeArchestraTool("archestra__yell", args, {
+        agent: { id: "agent", name: "Assistant" },
+        organizationId: "org",
+        userId: "alice",
+      }),
+    ).rejects.toThrow("requires an authenticated session");
+    const parent = "a637fb55-989b-4f01-a251-e7e277c65f05";
+    const child = "3c0f2458-f26a-4b05-9571-a64dca1d65a7";
+    await expect(
+      executeArchestraTool("archestra__yell", args, {
+        agent: { id: child, name: "Child" },
+        delegationChain: `${parent}:${child}`,
+        organizationId: "org",
+        sessionId: "conversation",
+        currentToolCallId: "report",
+      }),
+    ).rejects.toMatchObject({ code: -32601 });
+    expect(native.dispatchHook).not.toHaveBeenCalled();
+  });
+
   test("admits multiple calls before any result arrives", async () => {
     native.dispatchHook.mockResolvedValue(
       JSON.stringify({ decision: "allow_call" }),

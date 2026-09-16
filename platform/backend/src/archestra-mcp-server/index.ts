@@ -16,7 +16,11 @@ import {
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { ZodError, type ZodType, z } from "zod";
 import config from "@/config";
-import { isAppaDelegatedRun, openappaEnabled } from "@/openappa/service";
+import {
+  isAppaDelegatedRun,
+  openappaEnabled,
+  openappaYellEnabled,
+} from "@/openappa/service";
 import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
 import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
 // Import all groups
@@ -283,6 +287,12 @@ export async function executeArchestraTool(
   args: Record<string, unknown> | undefined,
   context: ArchestraContext,
 ): Promise<CallToolResult> {
+  if (
+    archestraMcpBranding.getToolShortName(toolName) === "yell" &&
+    (!openappaYellEnabled() || !(await isGuardrailsV2Active()))
+  ) {
+    throw { code: -32601, message: "OpenAPPA reporting is disabled" };
+  }
   // A child runs outside APPA and must not execute remedies on the parent's
   // shared logging session. Direct calls also respect the feature flag.
   if (
@@ -422,6 +432,8 @@ export async function executeArchestraTool(
  * mirror is a 404 while the flag is off.
  */
 function isToolRuntimeEnabled(canonicalName: string): boolean {
+  if (archestraMcpBranding.getToolShortName(canonicalName) === "yell")
+    return openappaYellEnabled();
   if (isOpenappaTool(archestraMcpBranding.getToolShortName(canonicalName)))
     return openappaEnabled();
   if (getSandboxToolNames().has(canonicalName))
@@ -488,7 +500,8 @@ async function resolveToolAssignment(
   // also rejected at write time).
   if (ASSIGNMENT_EXEMPT_SHORT_NAMES.has(shortName)) return null;
   if (
-    shortName === TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME &&
+    (shortName === TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME ||
+      (shortName === "yell" && openappaYellEnabled())) &&
     (await isGuardrailsV2Active())
   )
     return null;

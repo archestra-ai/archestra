@@ -38,6 +38,7 @@ Some tools enforce an **additional access requirement** in their handler beyond 
 | Tool | Description | Required RBAC Permission |
 |------|-------------|--------------------------|
 | `whoami` | Returns the name and ID of the current agent. | None (no additional RBAC permission required) |
+| `yell` | Report confusing OpenAPPA blocks or remedies to the OpenAPPA developers. | None (no additional RBAC permission required) |
 | `execute_remedy_plan` | Execute an OpenAPPA remedy using the exact offer_id in blocking feedback. | None (no additional RBAC permission required) |
 
 #### whoami
@@ -52,6 +53,18 @@ This tool takes no arguments.
 |-------|------|----------|-------------|
 | `agentId` | `string` | Yes | The ID of the current agent. |
 | `agentName` | `string` | Yes | The display name of the current agent. |
+
+#### yell
+
+Required RBAC permission: None (no additional RBAC permission required)
+
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `message` | `string` | Yes |  |
+| `with_trajectory` | `boolean` | Yes |  |
+
 
 #### execute_remedy_plan
 

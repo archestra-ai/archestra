@@ -264,7 +264,7 @@ const rawArchestraTokenCache =
 /**
  * Creates an MCP server for the given agent.
  */
-import { openappaEnabled } from "@/openappa/service";
+import { openappaEnabled, openappaYellEnabled } from "@/openappa/service";
 
 export async function createAgentServer(params: {
   openappaSession?: import("@/openappa/service").OpenAppaSession;
@@ -426,7 +426,9 @@ export async function createAgentServer(params: {
       ? getArchestraMcpTools().filter(
           (tool) =>
             archestraMcpBranding.getToolShortName(tool.name) ===
-            "execute_remedy_plan",
+              "execute_remedy_plan" ||
+            (openappaYellEnabled() &&
+              archestraMcpBranding.getToolShortName(tool.name) === "yell"),
         )
       : [];
     const candidateTools = dedupeToolsByName(
@@ -2288,6 +2290,8 @@ function filterExposedTools(params: {
           (openappaEnabled() &&
             archestraMcpBranding.getToolShortName(tool.name) ===
               "execute_remedy_plan") ||
+          (openappaYellEnabled() &&
+            archestraMcpBranding.getToolShortName(tool.name) === "yell") ||
           isTaskControlTool(tool.name) ||
           isAlwaysExposedTool(tool.name) ||
           (advertiseUiResourceTools &&

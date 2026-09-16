@@ -24,7 +24,7 @@ flowchart LR
 ## Build and run
 
 Cargo fetches OpenAPPA from its public Git repository at commit
-`8ed22934068f030faea9310eee2eb0ddef756a4d`, pinned in this package's manifest and
+`e2065813a7635759fef5ccfe8fbe73dfc44039c9`, pinned in this package's manifest and
 the workspace lockfile. A sibling checkout is not required. Update the revision
 and lockfile together when adopting a newer runtime. The lockfile also selects
 `rmcp` 3.4.0, matching the runtime's MCP API. Rebuild the native addon and
@@ -248,3 +248,21 @@ Organization policy text is stored in PostgreSQL and edited in OpenAPPA. Copy an
 
 The session-key migration clears old OpenAPPA sessions, events, and processing receipts.
 Saved organization policies and policy files are preserved.
+
+## Agent feedback reporting
+
+Agent feedback reporting defaults to enabled when OpenAPPA and Guardrails v2
+are enabled. Set `ARCHESTRA_OPENAPPA_YELL_ENABLED=false` to disable reports
+to the shared OpenAPPA receiver.
+The `archestra__yell` tool is available to protected sessions; its hook is
+checked as `yell` against the active policy. The receiver destination is set
+by the host, never by tool arguments. The report identifies Archestra and the configured frontend hostname. The host passes the authenticated actor
+to OpenAPPA, which verifies the previously released call belongs to that actor.
+
+Reports use upstream classification, size limits, gzip, signing, and HTTPS
+transport. The receiver has create-only access to a private GCS bucket and
+notifies Slack. The public signature is not authentication; incoming reports
+remain untrusted. Raw prompts, tool arguments, outputs, and session identifiers
+are omitted from diagnostics. Policy names and the free-text message are sent;
+messages must not contain secrets or task content. The deployment reporting flag is
+separate from policy editing and cannot be changed through policy TOML.

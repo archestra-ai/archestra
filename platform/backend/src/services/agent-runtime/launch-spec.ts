@@ -8,8 +8,11 @@ import {
   SUBSCRIPTION_CREDENTIALS,
   type SubscriptionCredentialKind,
   type SupportedProvider,
+  TOOL_LIST_SKILLS_SHORT_NAME,
+  TOOL_LOAD_SKILL_SHORT_NAME,
 } from "@archestra/shared";
 import type { A2AActor } from "@/agents/a2a/a2a-base";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { getBedrockRegion } from "@/clients/bedrock-credentials";
 import { selectMCPGatewayToken } from "@/clients/chat-mcp-client";
 import config from "@/config";
@@ -23,6 +26,7 @@ import {
 } from "@/models";
 import { claudeCodeAccountManager } from "@/services/agent-runtime/claude-code-account";
 import { archestraMarkWithText } from "@/services/archestra-mark";
+import { buildSkillDiscoveryPreview } from "@/services/skill-discovery-preview";
 import type {
   AgentRunInput,
   EffectiveNetworkPolicy,
@@ -119,6 +123,11 @@ export async function buildAgentRunLaunchSpec(params: {
       "The Agent for this Agent Runtime run no longer exists",
     );
   }
+  const skillPreview = await buildSkillDiscoveryPreview({
+    agentId: params.agentId,
+    organizationId: params.organizationId,
+    userId: actorUserId ?? undefined,
+  });
   const { llm, selectedModel, usesClaudeCodeSubscription } =
     await preflightAgentRuntimeModelCompatibility({
       runtime: params.runtime,
@@ -291,11 +300,23 @@ export async function buildAgentRunLaunchSpec(params: {
           OPENAI_API_KEY: virtualKeyValue,
         }
       : {}),
-    ...(agent.systemPrompt
-      ? {
-          ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT: agent.systemPrompt,
-        }
-      : {}),
+    ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT: [
+      agent.systemPrompt,
+      skillPreview,
+      "Skills configured for this Agent are available through its MCP gateway, " +
+        "not necessarily in this client's native skill directories. " +
+        `Use ${archestraMcpBranding.getToolName(TOOL_LIST_SKILLS_SHORT_NAME)} ` +
+        "to discover available skills and " +
+        `${archestraMcpBranding.getToolName(TOOL_LOAD_SKILL_SHORT_NAME)} ` +
+        "to load matching instructions and bundled resources. " +
+        "If these tools are not directly listed, discover them through the gateway's tool search. " +
+        "Save bundled resources with their relative paths before running them locally; " +
+        "decode resources marked base64 with a shell decoder, not a text-file tool. " +
+        "Paths advertised as code-sandbox mounts belong to that separate sandbox, " +
+        "not this runtime's filesystem.",
+    ]
+      .filter(Boolean)
+      .join("\n\n"),
     ...(task ? { ARCHESTRA_AGENT_RUNTIME_TASK: task } : {}),
     ...withNativeClientCredentialAliases(credentials.env),
     ...(isClaudeCodeBedrock
@@ -386,6 +407,7 @@ const RESERVED_RUNTIME_ENV_KEYS = new Set([
   "ARCHESTRA_AGENT_RUNTIME_RUN_ID",
   "ARCHESTRA_AGENT_RUNTIME_STEER_FIFO",
   "ARCHESTRA_AGENT_RUNTIME_TASK_ID",
+  "ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT",
   "ARCHESTRA_LLM_PROXY_PROTOCOL",
   "ARCHESTRA_LLM_PROXY_URL",
   "ARCHESTRA_MCP_GATEWAY_TOKEN",

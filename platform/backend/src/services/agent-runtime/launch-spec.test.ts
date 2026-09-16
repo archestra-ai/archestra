@@ -1,11 +1,18 @@
-import type { SupportedProvider } from "@archestra/shared";
+import {
+  ARCHESTRA_MCP_CATALOG_ID,
+  type SupportedProvider,
+  TOOL_LOAD_SKILL_FULL_NAME,
+} from "@archestra/shared";
 import { assert, vi } from "vitest";
 import config from "@/config";
 import {
+  AgentModel,
   LlmProviderApiKeyModel,
   LlmProviderApiKeyModelLinkModel,
   ModelModel,
+  SkillModel,
   TeamTokenModel,
+  ToolModel,
   UserCredentialModel,
   VirtualApiKeyModel,
 } from "@/models";
@@ -50,6 +57,7 @@ describe("buildAgentRunLaunchSpec", () => {
     makeSecret,
     makeLlmProviderApiKey,
     makeAgent,
+    makeAgentTool,
   }) => {
     const setup = await makeConfiguredAgent({
       provider: "gemini",
@@ -60,6 +68,24 @@ describe("buildAgentRunLaunchSpec", () => {
       makeLlmProviderApiKey,
       makeAgent,
     });
+    await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+    const loadTool = await ToolModel.findByName(TOOL_LOAD_SKILL_FULL_NAME);
+    assert(loadTool);
+    await makeAgentTool(setup.agent.id, loadTool.id);
+    await SkillModel.createWithFiles({
+      skill: {
+        organizationId: setup.agent.organizationId,
+        name: "release-review",
+        description: "Evaluate changes against the release checklist.",
+        content: "PRIVATE_INSTRUCTIONS_LOADED_ON_DEMAND",
+        metadata: {},
+        sourceType: "manual",
+        scope: "org",
+      },
+      files: [],
+    });
+    const systemPrompt = "Review the repository's release instructions.";
+    await AgentModel.update(setup.agent.id, { systemPrompt });
     const runId = crypto.randomUUID();
 
     const { spec, virtualApiKeyId } = await buildAgentRunLaunchSpec({
@@ -67,6 +93,10 @@ describe("buildAgentRunLaunchSpec", () => {
         ...runtime(setup.agent, "openai_responses"),
         environment: [
           { key: "CUSTOM_SETTING", value: "preserved" },
+          {
+            key: "ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT",
+            value: "stale instructions",
+          },
           { key: "OPENAI_BASE_URL", value: "https://bypass.invalid" },
           { key: "ARCHESTRA_MCP_GATEWAY_TOKEN", value: "bypass-token" },
           { key: "ARCHESTRA_AGENT_RUNTIME_RUN_ID", value: "bypass-run" },
@@ -107,6 +137,25 @@ describe("buildAgentRunLaunchSpec", () => {
     expect(spec.secretEnv.OPENAI_API_KEY).not.toBe("upstream-secret");
     expect(spec.env.OPENAI_BASE_URL).not.toBe("https://bypass.invalid");
     expect(spec.env).not.toHaveProperty("ARCHESTRA_MCP_GATEWAY_TOKEN");
+    expect(spec.env).not.toHaveProperty(
+      "ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT",
+    );
+    expect(spec.secretEnv.ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT).toContain(
+      systemPrompt,
+    );
+    expect(spec.secretEnv.ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT).not.toContain(
+      "stale instructions",
+    );
+
+    expect(spec.secretEnv.ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT).toContain(
+      'name="release-review"',
+    );
+    expect(spec.secretEnv.ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT).toContain(
+      "Evaluate changes against the release checklist.",
+    );
+    expect(spec.secretEnv.ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT).not.toContain(
+      "PRIVATE_INSTRUCTIONS_LOADED_ON_DEMAND",
+    );
 
     assert(virtualApiKeyId);
     const virtualKey = await VirtualApiKeyModel.findById(virtualApiKeyId);

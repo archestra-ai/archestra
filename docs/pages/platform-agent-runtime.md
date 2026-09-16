@@ -69,9 +69,19 @@ With read-only Vault, generate a token using `claude setup-token`, store it in V
 
 The **Inference API** must match the client in your image. Maintained templates select it for you. Custom clients can use OpenAI Responses, OpenAI Chat Completions, or Anthropic Messages.
 
+### Skills
+
+The Agent's [Skills policy](/docs/platform-agents#skills) applies to every maintained runtime template. Skills use the configured MCP gateway; they need no separate installation in the client. The caller's access and the Agent's environment still apply.
+
+Clients load instructions and bundled resources on demand. Scripts return as text; binary assets return as base64. Clients can save these files and run them using their own tools. The image must contain any dependencies the skill requires.
+
+The [Code Sandbox](/docs/platform-code-sandbox) is separate from the Agent Runtime workspace. Its `/skills` paths are available through sandbox tools, not the runtime's local shell.
+
 ## Bring Your Own Image
 
 Use a custom image to add development tools or run your own Agent client. Set its image, command, and arguments on the Agent. Archestra supplies the task, credentials, workspace, and live terminal.
+
+Custom clients must connect to the injected MCP gateway and support listing and calling tools. Use `list_skills` and `load_skill` for skill instructions and resources. No additional Archestra SDK is required. Native skill directories and slash commands are client-specific.
 
 The [maintained images](https://github.com/archestra-ai/archestra/blob/main/platform/agent_images/README.md) provide build examples. The [image contract](https://github.com/archestra-ai/archestra/blob/main/platform/agent_images/runtime-contract.md) contains the complete environment and transcript specifications.
 

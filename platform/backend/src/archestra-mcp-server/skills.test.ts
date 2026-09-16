@@ -1057,6 +1057,46 @@ describe("skill tool execution", () => {
     expect(textOf(result)).toContain("# Forms");
   });
 
+  test("load_skill returns binary bytes that a runtime can save without a code sandbox", async () => {
+    config.skillsSandbox.enabled = false;
+    const bytes = Buffer.from([0, 255, 137, 80, 78, 71, 13, 10]);
+    await seedSkill({
+      files: [
+        {
+          path: "assets/sample.bin",
+          content: bytes.toString("base64"),
+          encoding: "base64",
+          kind: "asset",
+        },
+      ],
+    });
+    const result = await executeArchestraTool(
+      TOOL_LOAD_SKILL_FULL_NAME,
+      { name: "pdf-processing", path: "assets/sample.bin" },
+      context,
+    );
+
+    expect(result.isError).toBe(false);
+    const encoded = textOf(result).match(
+      /encoding="base64">\n([^<]+)\n<\/skill_file>/,
+    )?.[1];
+    expect(encoded).toBeDefined();
+    expect(Buffer.from(encoded ?? "", "base64")).toEqual(bytes);
+
+    await AgentModel.setActivationSkillPolicyState({
+      id: agent.id,
+      mode: "manual",
+      revision: 1,
+    });
+    const denied = await executeArchestraTool(
+      TOOL_LOAD_SKILL_FULL_NAME,
+      { name: "pdf-processing", path: "assets/sample.bin" },
+      context,
+    );
+    expect(denied.isError).toBe(true);
+    expect(textOf(denied)).not.toContain(bytes.toString("base64"));
+  });
+
   test("load_skill file read escapes file content so it cannot break out of the frame", async () => {
     await seedSkill({
       files: [

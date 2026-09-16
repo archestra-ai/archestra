@@ -833,12 +833,13 @@ async function readSkillFile(params: {
   }
 
   if (file.encoding === "base64") {
-    const approxKb = Math.round((file.content.length * 3) / 4 / 1024);
     return successResult(
       `<skill_file skill="${escapeXmlAttr(skill.name)}" path="${escapeXmlAttr(file.path)}" version="${version.version}" encoding="base64">\n` +
-        `This is a binary asset (~${approxKb} KB) and cannot be read as ` +
-        "text. It is bundled with the skill for redistribution, not for " +
-        "inline use by the model.\n</skill_file>",
+        `${file.content}\n</skill_file>\n` +
+        "Decode these bytes with a shell base64 decoder (base64 -d) or " +
+        "Python base64.b64decode before using this binary asset. " +
+        "Do not write the encoded string with a text-file tool: it does not decode base64. " +
+        "Preserve the resource's relative path when saving it.",
     );
   }
 

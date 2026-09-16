@@ -3,6 +3,8 @@ set -euo pipefail
 
 if [[ "${ARCHESTRA_LLM_PROXY_PROTOCOL:-}" != "openai_responses" ]]; then
   echo "archestra: OpenCode requires an Agent configured for OpenAI Responses" >&2
+  "$(dirname "${BASH_SOURCE[0]}")/archestra-agent-failure" \
+    "opencode_protocol" "OpenCode requires an Agent configured for OpenAI Responses."
   exit 78
 fi
 
@@ -85,7 +87,7 @@ PLUGIN
 chmod 0600 "${attention_plugin}"
 
 cat > "${transcript_plugin}" <<'PLUGIN'
-import { writeFileSync } from "node:fs";
+import { renameSync, writeFileSync } from "node:fs";
 import { rename, writeFile } from "node:fs/promises";
 
 function timestamp(info) {
@@ -150,7 +152,7 @@ function entriesForMessage(message) {
 
 export const ArchestraTranscript = async ({ client, directory }) => ({
   event: async ({ event }) => {
-    if (event.type !== "session.idle") return;
+    if (event.type !== "session.idle" && event.type !== "session.error") return;
 
     const sessionID = event.properties?.sessionID;
     if (!sessionID) return;
@@ -158,7 +160,29 @@ export const ArchestraTranscript = async ({ client, directory }) => ({
       path: { id: sessionID },
       query: { directory },
     });
-    if (sessionResponse.data?.parentID) return;
+    if (!sessionResponse.data || sessionResponse.data.parentID) return;
+
+    if (event.type === "session.error") {
+      // OpenCode also emits this while automatically compacting context.
+      if (event.properties.error?.name === "ContextOverflowError") return;
+      if (process.env.ARCHESTRA_AGENT_RUNTIME_MODE !== "one_shot") return;
+      const runtimeDir = process.env.ARCHESTRA_AGENT_RUNTIME_DIR ?? "/var/run/archestra";
+      const message = "OpenCode could not complete the model request. Check the configured provider credential and model availability, then retry.";
+      const prefix = process.env.ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX;
+      if (prefix) {
+        try {
+          writeFileSync(`${prefix}.failure.tmp`, JSON.stringify({ version: 1, code: "opencode_session_error", message }));
+          renameSync(`${prefix}.failure.tmp`, `${prefix}.failure`);
+        } catch {
+          // Keep the native failure status even if reporting is unavailable.
+        }
+      }
+      if (process.env.ARCHESTRA_AGENT_RUNTIME_PLAIN === "1") return;
+      writeFileSync(`${runtimeDir}/final-answer.txt`, `${message}\n`, "utf8");
+      writeFileSync(`${runtimeDir}/turn-complete.failed`, "", "utf8");
+      writeFileSync(`${runtimeDir}/turn-complete`, "", "utf8");
+      return;
+    }
 
     const response = await client.session.messages({
       path: { id: sessionID },

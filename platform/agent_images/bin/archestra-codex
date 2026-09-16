@@ -3,6 +3,8 @@ set -euo pipefail
 
 if [[ "${ARCHESTRA_LLM_PROXY_PROTOCOL:-}" != "openai_responses" ]]; then
   echo "archestra: Codex requires an Agent configured for OpenAI Responses" >&2
+  "$(dirname "${BASH_SOURCE[0]}")/archestra-agent-failure" \
+    "codex_protocol" "Codex requires an Agent configured for OpenAI Responses."
   exit 78
 fi
 

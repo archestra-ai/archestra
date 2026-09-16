@@ -3,7 +3,7 @@ title: Supported LLM Providers
 category: LLM Proxy
 order: 2
 description: LLM providers supported by Archestra Platform
-lastUpdated: 2026-09-15
+lastUpdated: 2026-09-16
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -25,6 +25,8 @@ Keys that already exist keep working, so turning a provider off never breaks liv
 ## New Model Visibility
 
 **Show new models automatically** is on by default for each provider. Go to **Settings → LLM → Model providers** to turn it off and save. The setting covers every key for that provider in your organization. Turn the provider on before changing it.
+
+![OpenRouter configured to hide new models until an admin shows them](/docs/automated_screenshots/platform-supported-llm-providers_new-model-visibility.webp)
 
 With the setting off, later catalog syncs hide models not previously linked to that provider's keys. This includes manual refreshes, background refreshes, and refreshes triggered by opening a picker. A newly added key's first sync is exempt. Newly discovered models arrive visible on that initial sync.
 

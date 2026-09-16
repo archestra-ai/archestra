@@ -31,7 +31,7 @@ class RumClient {
   private lastErrorSentAt = new Map<string, number>();
   private longTaskObserver: PerformanceObserver | null = null;
   private lastPagePath: string | null = null;
-  private pendingWebVitals: WebVitalMetric[] = [];
+  private webVitalsRegistered = false;
   private pageLoadTracked = false;
   private installedFetchWrapper: typeof window.fetch | null = null;
   private longTasksOnPage = 0;
@@ -73,9 +73,7 @@ class RumClient {
     this.listenForErrors();
     this.listenForInteractions();
     this.instrumentApiRequests();
-    for (const metric of this.pendingWebVitals.splice(0)) {
-      this.trackWebVital(metric);
-    }
+    void this.observeWebVitals();
   }
 
   stop() {
@@ -147,16 +145,12 @@ class RumClient {
   }
 
   /**
-   * Report a finalized Core Web Vital (from Next's useReportWebVitals).
-   * TTFB and FCP usually finalize before sign-in completes and the client
-   * starts, so pre-start metrics are held and drained on start() instead of
-   * being dropped.
+   * Report a finalized Core Web Vital while the client is running.
+   * Observers live for the document lifetime, so ignore callbacks received
+   * after sign-out or after RUM has been disabled.
    */
   trackWebVital(metric: WebVitalMetric) {
     if (!this.started) {
-      if (this.pendingWebVitals.length < MAX_PENDING_WEB_VITALS) {
-        this.pendingWebVitals.push(metric);
-      }
       return;
     }
     // CLS is a unitless score around 0.1; everything else is milliseconds.
@@ -201,7 +195,6 @@ class RumClient {
     this.stop();
     this.lastPagePath = null;
     this.pageLoadTracked = false;
-    this.pendingWebVitals = [];
     this.longTasksOnPage = 0;
     this.errorsOnPage = 0;
     this.apiRequestsOnPage = 0;
@@ -212,6 +205,30 @@ class RumClient {
       window.localStorage.removeItem(LAST_USER_STORAGE_KEY);
     } catch {
       // Storage unavailable — nothing persisted, nothing to clear.
+    }
+  }
+
+  private async observeWebVitals() {
+    if (this.webVitalsRegistered) return;
+
+    // Load only after RUM starts. Next's bundled web-vitals version leaks
+    // visibility listeners during interactions; use the fixed package directly.
+    try {
+      const { onCLS, onFCP, onINP, onLCP, onTTFB } = await import("web-vitals");
+      // An import may finish after stop(), or multiple start() calls may have
+      // awaited it. The library has no unsubscribe API: register once per
+      // document, including across Strict Mode, remounts and sign-in cycles.
+      if (!this.started || this.webVitalsRegistered) return;
+      this.webVitalsRegistered = true;
+      const report = (metric: WebVitalMetric) => this.trackWebVital(metric);
+      onCLS(report);
+      onFCP(report);
+      onINP(report);
+      onLCP(report);
+      onTTFB(report);
+    } catch {
+      // Telemetry must not break the app if its optional chunk cannot load.
+      // A subsequent start can retry a failed import.
     }
   }
 
@@ -559,7 +576,7 @@ export const rumClient = new RumClient();
 
 type RumAttributes = Record<string, string | number | boolean>;
 
-/** Shape of what Next's useReportWebVitals hands the tracker. */
+/** The metric fields retained from web-vitals reports. */
 interface WebVitalMetric {
   name: string;
   value: number;
@@ -589,7 +606,6 @@ const HEARTBEAT_INTERVAL_MS = 60 * 1000;
 const FLUSH_INTERVAL_MS = 10 * 1000;
 const FLUSH_QUEUE_THRESHOLD = 25;
 const INGEST_URL = "/api/rum/events";
-const MAX_PENDING_WEB_VITALS = 10;
 const MAX_LONG_TASKS_PER_PAGE = 50;
 const MAX_CLIENT_ERRORS_PER_PAGE = 10;
 const MAX_API_REQUESTS_PER_PAGE = 200;

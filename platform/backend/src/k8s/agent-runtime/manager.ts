@@ -31,6 +31,7 @@ import McpDeploymentLeaseModel, {
 } from "@/models/mcp-deployment-lease";
 import { reportAgentRuntimeSteer } from "@/observability/metrics/agent-runtime";
 import type { AgentRunLaunchSpec } from "@/services/agent-runtime/backends";
+import { agentRuntimeFailureReason } from "@/services/agent-runtime/failure-reason";
 import {
   AGENT_RUNTIME_ATTACH_SCRIPT,
   AGENT_RUNTIME_ATTACHMENTS_MANIFEST,
@@ -1047,18 +1048,18 @@ class AgentRuntimeManager {
             command: [
               "/bin/sh",
               "-c",
-              'file="/var/run/archestra/turns/$1.exit"; if [ -f "$file" ]; then cat "$file"; fi',
+              'file="/var/run/archestra/turns/$1"; if [ -f "$file.exit" ]; then status="$(cat "$file.exit")"; printf "%s\\n" "$status"; if [ -f "$file.failure" ]; then head -c 4097 "$file.failure" 2>/dev/null || true; fi; fi',
               "read-turn-result",
               params.session.taskId,
             ],
           });
           if (params.abortSignal?.aborted) break;
           if (result.trim()) {
-            return result.trim() === "0"
+            return result.trim().split("\n")[0] === "0"
               ? { outcome: "succeeded" }
               : {
                   outcome: "failed",
-                  reason: `The Agent Runtime turn exited with status ${result.trim()}`,
+                  reason: agentRuntimeFailureReason(result),
                 };
           }
         }

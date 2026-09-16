@@ -17,6 +17,36 @@ This reference is for custom image authors. For maintained image targets and bui
 
 The initial task is supplied in `ARCHESTRA_AGENT_RUNTIME_TASK`. The Agent system prompt is supplied in `ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT`. A custom client decides how to combine them. It should read `ARCHESTRA_AGENT_RUNTIME_MODE`: `interactive` means expose its input loop and remain available for follow-ups, while `one_shot` means finish the supplied task and exit. Images that support only unattended work can ignore interactive mode, but they will not provide a useful Chat terminal.
 
+## Failure Reasons
+
+Custom images can publish a user-facing failure before exiting non-zero. Write a versioned JSON envelope to `${ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX}.failure`. The supervisor supplies this turn-specific prefix before initialization and client startup.
+
+```sh
+failure="${ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX}.failure"
+jq -n \
+  --arg code "my_agent.input_missing" \
+  --arg message "Select an input file and retry." \
+  '{version:1,code:$code,message:$message}' > "$failure.tmp"
+mv "$failure.tmp" "$failure"
+exit 1
+```
+
+Use an atomic rename to publish the complete file. The image owns the code and message. Codes need no platform registration. The backend validates the envelope, appends the runtime exit status, and propagates the message through task results, notifications, and run details.
+
+Version `1` accepts exactly these fields:
+
+| Field | Contract |
+| --- | --- |
+| `version` | The number `1`. |
+| `code` | An image-defined identifier of 1–128 ASCII letters, digits, dots, underscores, or hyphens. |
+| `message` | Non-empty plain text, at most 2,000 characters after trimming. Newlines and tabs are allowed; other ASCII control characters are rejected. |
+
+The entire UTF-8 file must not exceed 4,096 bytes. Missing files, malformed JSON, unsupported versions, and invalid fields retain the exit-status-only fallback. A failure envelope never overrides a successful exit. Older platforms ignore this optional file.
+
+Treat `message` as public task output. Image authors must remove credentials and private details before publishing it. Prefer safe messages constructed from structured client errors; never copy raw stderr or provider response bodies. Schema validation cannot detect secrets in otherwise valid text.
+
+The maintained Claude Code wrapper publishes its own messages from `StopFailure` events. Delegated API failures end the run. Interactive sessions remain open and request attention. Other images implement the same envelope using their own error handling.
+
 ## Readable Transcript
 
 The maintained Archestra Agent, Claude Code, Codex, OpenCode, Hermes, and OpenClaw images export their native message and tool history as a readable transcript. A custom image can provide the same completed-run experience by writing `$ARCHESTRA_AGENT_RUNTIME_DIR/readable-transcript.json` (normally `/var/run/archestra/readable-transcript.json`) before its process exits.

@@ -239,6 +239,38 @@ test.for([
   );
 });
 
+test("propagates a custom image failure without a platform code registry", async ({
+  run,
+}) => {
+  completeExec(
+    `42\n${JSON.stringify({ version: 1, code: "custom_indexer.dataset_missing", message: "The selected dataset is unavailable. Choose an existing dataset." })}`,
+  );
+  await expect(manager.waitForCompletion({ session: run })).resolves.toEqual({
+    outcome: "failed",
+    reason:
+      "The selected dataset is unavailable. Choose an existing dataset. (Runtime exit status 42.)",
+  });
+});
+
+test("does not expose malformed failure payloads", async ({ run }) => {
+  completeExec("78\nsynthetic-secret-and-private-diagnostics");
+  await expect(manager.waitForCompletion({ session: run })).resolves.toEqual({
+    outcome: "failed",
+    reason: "The Agent Runtime turn exited with status 78",
+  });
+});
+
+test("a successful exit ignores an optional failure envelope", async ({
+  run,
+}) => {
+  completeExec(
+    `0\n${JSON.stringify({ version: 1, code: "custom_error", message: "Earlier error" })}`,
+  );
+  await expect(manager.waitForCompletion({ session: run })).resolves.toEqual({
+    outcome: "succeeded",
+  });
+});
+
 test("still fails when the sandbox was deleted", async ({ run }) => {
   server.use(
     http.get(sandboxUrl, () => new HttpResponse(null, { status: 404 })),

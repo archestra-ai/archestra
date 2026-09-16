@@ -87,6 +87,7 @@ import {
   appLaunchToolTitle,
   sanitizeAppNameForToolMetadata,
 } from "@/services/apps/app-run-link";
+import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
 import { MCP_RESOURCE_REFERENCE_PREFIX } from "@/services/identity-providers/enterprise-managed/authorization";
 import {
   discoverOidcJwksUrl,
@@ -419,7 +420,7 @@ export async function createAgentServer(params: {
       config.agentRuntime.enabled || hasTaskStarter
         ? getImplicitTaskControlTools()
         : [];
-    const implicitOpenAppaTools = openappaEnabled()
+    const implicitOpenAppaTools = (await isGuardrailsV2Active())
       ? getArchestraMcpTools().filter(
           (tool) =>
             archestraMcpBranding.getToolShortName(tool.name) ===

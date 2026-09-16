@@ -10,6 +10,7 @@ import config from "@/config";
 import { getDatabaseConnectionString } from "@/database";
 import type { PolicyBlockResult } from "@/guardrails/tool-invocation";
 import { normalizeToolCallsForPolicy } from "@/routes/proxy/llm-proxy-helpers";
+import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
 import { ApiError, type CommonToolResult } from "@/types";
 
@@ -88,6 +89,8 @@ async function dispatch(
   event: Record<string, unknown>,
 ) {
   try {
+    if (!(await isGuardrailsV2Active()))
+      throw new Error("Guardrails v2 is disabled");
     const policy = await guardrailsPolicyService.get(session.organization_id);
     const module = await binding(policy.content);
     return Decision.parse(

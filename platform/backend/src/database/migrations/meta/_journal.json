@@ -3340,6 +3340,13 @@
       "when": 1789551493037,
       "tag": "0476_lonely_carnage",
       "breakpoints": true
+    },
+    {
+      "idx": 477,
+      "version": "7",
+      "when": 1789553750133,
+      "tag": "0477_appa_github_sync",
+      "breakpoints": true
     }
   ]
 }

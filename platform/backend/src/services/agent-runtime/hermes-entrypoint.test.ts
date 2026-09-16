@@ -133,6 +133,14 @@ printf '%s\n' "$*" >> "$ARCHESTRA_AGENT_RUNTIME_DIR/attention-calls"
         OPENAI_BASE_URL: "http://localhost:9000/v1/model-router/test",
       };
 
+      if (mode === "continuation") {
+        await mkdir(runtime, { recursive: true });
+        await writeFile(
+          path.join(runtime, "hermes-main-session"),
+          "main-session",
+        );
+      }
+
       const result = await execFileAsync("bash", [ENTRYPOINT], {
         cwd: workspace,
         env,
@@ -252,6 +260,8 @@ printf '%s\n' "$*" >> "$ARCHESTRA_AGENT_RUNTIME_DIR/attention-calls"
       expect(args).toContain("--accept-hooks");
       expect(args.at(-1)).toBe("Run the task.");
       if (mode === "continuation") {
+        expect(args[args.indexOf("--resume") + 1]).toBe("main-session");
+        expect(args).not.toContain("--continue");
         await execFileAsync("python3", [
           "-c",
           `

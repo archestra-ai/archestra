@@ -23,9 +23,10 @@ import {
   TOOL_WHOAMI_FULL_NAME,
 } from "@archestra/shared";
 import type { ListToolsResult } from "@modelcontextprotocol/sdk/types.js";
-import { vi } from "vitest";
+import { onTestFinished, vi } from "vitest";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
 import mcpClient from "@/clients/mcp-client";
+import config from "@/config";
 import {
   AgentTeamModel,
   McpCatalogLabelModel,
@@ -1411,6 +1412,71 @@ describe("createAgentServer tools/list", () => {
     ).toBe(false);
   });
 
+  test.for([
+    null,
+    "Example Workspace",
+  ])("a client discovers branded handoff and existing-session controls (%s)", async (appName, {
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const previousEnabled = config.agentRuntime.enabled;
+    config.agentRuntime.enabled = true;
+    onTestFinished(() => {
+      config.agentRuntime.enabled = previousEnabled;
+      archestraMcpBranding.syncFromOrganization(null);
+    });
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
+    const agent = await makeAgent({
+      organizationId: org.id,
+      agentType: "mcp_gateway",
+      toolExposureMode: "search_and_run_only",
+    });
+    const { server } = await createAgentServer({
+      agentId: agent.id,
+      tokenAuth: {
+        tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
+        teamId: null,
+        isOrganizationToken: false,
+        organizationId: org.id,
+        isUserToken: true,
+        userId: user.id,
+      },
+    });
+    const handlers = (
+      server.server as unknown as {
+        _requestHandlers: Map<string, TestListToolsHandler>;
+      }
+    )._requestHandlers;
+    archestraMcpBranding.syncFromOrganization({ appName, iconLogo: null });
+    const list = handlers.get("tools/list");
+    if (!list) throw new Error("Missing tool list handler");
+    const response = await list({ method: "tools/list", params: {} });
+    const names = response.tools.map((tool) => tool.name);
+    expect(names).toEqual(
+      expect.arrayContaining([
+        archestraMcpBranding.getToolName("get_run"),
+        archestraMcpBranding.getToolName("list_runs"),
+        archestraMcpBranding.getToolName("steer_run"),
+        archestraMcpBranding.getToolName("cancel_run"),
+      ]),
+    );
+    expect(names).not.toContain(archestraMcpBranding.getToolName("start_run"));
+    const discovery = response.tools.find(
+      (tool) => tool.name === archestraMcpBranding.getToolName("search_tools"),
+    );
+    expect(discovery?.description).toContain(
+      `hand this work over to ${appName ?? archestraMcpBranding.appName}`,
+    );
+    expect(discovery?.description).toContain(
+      `spin this up in ${appName ?? archestraMcpBranding.appName}`,
+    );
+    expect(discovery?.description).toContain("resume locally");
+  });
+
   test("advertises task controls when the gateway can start delegated tasks", async ({
     makeAgent,
     makeAgentTool,
@@ -1846,6 +1912,11 @@ describe("createAgentServer tools/list", () => {
     makeUser,
     makeMember,
   }) => {
+    const runtimeEnabled = config.agentRuntime.enabled;
+    config.agentRuntime.enabled = false;
+    onTestFinished(() => {
+      config.agentRuntime.enabled = runtimeEnabled;
+    });
     const org = await makeOrganization();
     const user = await makeUser();
     await makeMember(user.id, org.id, { role: "admin" });

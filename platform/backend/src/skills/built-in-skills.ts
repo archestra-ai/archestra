@@ -7,6 +7,7 @@ import config from "@/config";
 import type { SkillFileKind } from "@/types/skill";
 import { APPA_GUIDE_SKILL } from "./appa-guide";
 import { applyBuiltInSkillBranding } from "./built-in-skill-branding";
+import { RUNTIME_HANDOFF_SKILL } from "./runtime-handoff";
 
 /**
  * Default Agent Skills shipped with Archestra.
@@ -401,4 +402,5 @@ const BUILT_IN_SKILLS: BuiltInSkill[] = [
     ],
   },
   APPA_GUIDE_SKILL,
+  RUNTIME_HANDOFF_SKILL,
 ];

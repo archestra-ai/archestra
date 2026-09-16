@@ -3,7 +3,7 @@ title: Agent Runtime (Beta)
 category: Agents
 order: 7
 description: Configure isolated workspaces for coding agents and delegated tasks
-lastUpdated: "2026-09-15"
+lastUpdated: "2026-09-16"
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -179,6 +179,20 @@ A local coding client or another system can connect through the MCP Gateway and 
 4. `steer_run` or `cancel_run` to intervene.
 
 Steering completed work starts another turn in the retained workspace. A2A clients can continue with the same `contextId`. See [A2A and SDKs](/docs/platform-agent-triggers-webhook-a2a#sdks) for direct integrations.
+
+### Client Handoff
+
+The built-in **Agent Runtime Handoff** skill guides work between connected clients and the runtime. Install shared skills from [Connect](/docs/platform-connection). The workflow supports repository work and documents in desktop clients.
+
+Send the current goal, decisions, remaining work, and required files when handing off. Input files arrive before the first turn starts. Local file paths alone do not transfer their contents.
+
+Keep the returned session link when switching clients. The connected client can read the original request to recover the task context. Follow-ups reach the same workspace and saved conversation, including while work is running. An unavailable session reports an error instead of silently starting another workspace.
+
+For repository work, include the exact base commit and any local changes. Request a return patch relative to the handed-off working tree so it does not repeat existing local edits. Review it against your current working tree before applying it. For documents, retrieve the finished file from the retained workspace.
+
+You can hand off unfinished repository work before closing your laptop. Check that the workspace retention deadline covers your planned return. The repository workflow saves a local handoff note outside tracked source files. A fresh conversation can use it to recover the task and session link.
+
+Ask your client to “bring it back and continue here” to resume locally. It retrieves changes, checks for conflicts, and runs the relevant checks. Stop remote editing before continuing locally. Expired workspaces retain run history, but their files are unavailable.
 
 ### Messaging Channels
 

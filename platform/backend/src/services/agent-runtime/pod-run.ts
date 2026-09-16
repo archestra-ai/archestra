@@ -23,6 +23,7 @@ import type {
   ResolvedAgentRuntime,
 } from "@/types";
 import { ApiError } from "@/types";
+import { trackBackgroundWork } from "@/utils/background-work";
 import { resolveAgentRuntimeBackendDriver } from "./backends";
 import { buildAgentRunLaunchSpec } from "./launch-spec";
 import { AgentRuntimeOutputCapture } from "./output-capture";
@@ -113,27 +114,29 @@ async function startAgentRunSession(params: {
     completionTarget: params.completionTarget,
   });
 
-  void generateAgentRunTitle({
-    taskId: params.taskId,
-    prompt: params.task ?? "Run",
-    organizationId: params.organizationId,
-    userId: params.titleUserId,
-    modelId: params.modelId,
-    llmApiKeyId: params.llmApiKeyId,
-  })
-    .then((title) =>
-      AgentRunModel.updateTitleIfCurrent({
-        taskId: params.taskId,
-        expectedTitle: placeholderTitle,
-        title,
+  trackBackgroundWork(
+    generateAgentRunTitle({
+      taskId: params.taskId,
+      prompt: params.task ?? "Run",
+      organizationId: params.organizationId,
+      userId: params.titleUserId,
+      modelId: params.modelId,
+      llmApiKeyId: params.llmApiKeyId,
+    })
+      .then((title) =>
+        AgentRunModel.updateTitleIfCurrent({
+          taskId: params.taskId,
+          expectedTitle: placeholderTitle,
+          title,
+        }),
+      )
+      .catch((error) => {
+        logger.warn(
+          { error, taskId: params.taskId },
+          "Could not generate an Agent run title",
+        );
       }),
-    )
-    .catch((error) => {
-      logger.warn(
-        { error, taskId: params.taskId },
-        "Could not generate an Agent run title",
-      );
-    });
+  );
 
   try {
     await backend.launch(spec);

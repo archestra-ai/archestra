@@ -266,12 +266,10 @@ describe("rumClient", () => {
     expect(eventsNamed("archestra.skill_created")).toHaveLength(1);
   });
 
-  test("web vitals use registry attribute names, buffer pre-start, and carry the route", async () => {
-    // TTFB finalizes before sign-in completes — must be buffered, not lost.
-    rumClient.trackWebVital({ name: "TTFB", value: 123.6, rating: "good" });
-
+  test("web vitals use registry attribute names and carry the route", async () => {
     rumClient.start();
     rumClient.trackPageView("/chat");
+    rumClient.trackWebVital({ name: "TTFB", value: 123.6, rating: "good" });
     rumClient.trackWebVital({ name: "CLS", value: 0.04321, rating: "good" });
     await vi.advanceTimersByTimeAsync(11_000);
 
@@ -288,6 +286,21 @@ describe("rumClient", () => {
       "browser.web_vital.rating": "good",
       "url.path": "/chat",
     });
+  });
+
+  test("web vitals received while stopped are not replayed on the next sign-in", async () => {
+    rumClient.trackWebVital({ name: "LCP", value: 1500, rating: "good" });
+    rumClient.start();
+    rumClient.stop();
+    rumClient.trackWebVital({
+      name: "INP",
+      value: 250,
+      rating: "needs-improvement",
+    });
+    rumClient.start();
+    await vi.advanceTimersByTimeAsync(11_000);
+
+    expect(eventsNamed("browser.web_vital")).toHaveLength(0);
   });
 
   test("uncaught errors report type and fingerprint — never the message text", async () => {
@@ -487,7 +500,7 @@ describe("rumClient", () => {
         responseStart: 120.4,
         domContentLoadedEventEnd: 480.9,
         loadEventEnd: 1200.2,
-      } as unknown as PerformanceEntry,
+      } as unknown as PerformanceNavigationTiming,
     ]);
 
     rumClient.start();

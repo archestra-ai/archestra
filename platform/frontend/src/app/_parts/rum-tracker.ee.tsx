@@ -1,15 +1,10 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { useReportWebVitals } from "next/web-vitals";
 import { useEffect } from "react";
 import { useSession } from "@/lib/auth/auth.query";
 import { usePublicConfig } from "@/lib/config/config.query";
 import { rumClient } from "@/lib/rum.ee";
-
-// Next also reports its own Next.js-* timings through the same hook; only the
-// standard Core Web Vitals are part of the RUM taxonomy.
-const WEB_VITAL_NAMES = new Set(["LCP", "CLS", "INP", "FCP", "TTFB"]);
 
 /**
  * Starts the RUM client when the deployment has a RUM export endpoint
@@ -25,18 +20,6 @@ export function RumTracker() {
   const enabled = Boolean(publicConfig?.rum?.enabled);
   const userId = session?.user?.id;
   const isSignedIn = Boolean(userId);
-
-  // Registered unconditionally (hooks can't be conditional); the client
-  // buffers a few pre-start metrics and drops everything while stopped.
-  useReportWebVitals((metric) => {
-    if (WEB_VITAL_NAMES.has(metric.name)) {
-      rumClient.trackWebVital({
-        name: metric.name,
-        value: metric.value,
-        rating: metric.rating,
-      });
-    }
-  });
 
   useEffect(() => {
     if (!enabled || !isSignedIn) {

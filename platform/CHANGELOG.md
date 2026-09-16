@@ -1,5 +1,29 @@
 # Changelog
 
+## [1.4.0-beta.11](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-beta.10...platform-v1.4.0-beta.11) (2026-09-16)
+
+
+### Features
+
+* **knowledge:** filter SharePoint pages by publication status ([#7956](https://github.com/archestra-ai/archestra/issues/7956)) ([7b5f7f1](https://github.com/archestra-ai/archestra/commit/7b5f7f1ccd66ae5ff9256473bf796bab6e393590))
+
+
+### Bug Fixes
+
+* **agent-runtime:** prevent overlapping terminal attachments ([#7953](https://github.com/archestra-ai/archestra/issues/7953)) ([a7df94a](https://github.com/archestra-ai/archestra/commit/a7df94a8c34a8af0f1a63a88ebfc0fc28a8e567e))
+* **agents:** remove Convert to skill end to end ([#7952](https://github.com/archestra-ai/archestra/issues/7952)) ([b04c0e4](https://github.com/archestra-ai/archestra/commit/b04c0e43076697dfc6a87d9ea10b16fb5d4d43cb))
+* **connection:** clear stale Claude credentials when switching authentication modes ([#7949](https://github.com/archestra-ai/archestra/issues/7949)) ([f2089f3](https://github.com/archestra-ai/archestra/commit/f2089f315a1864b2724c7232d9e7a454ef4e5a53))
+* **frontend:** prevent agent model selector provider-switch crash ([#7946](https://github.com/archestra-ai/archestra/issues/7946)) ([ade3187](https://github.com/archestra-ai/archestra/commit/ade3187cb326d0d68b150deaec4aaaee8e5636a4))
+* **frontend:** remove built-in Archestra Agent card from Create Agent view ([#7950](https://github.com/archestra-ai/archestra/issues/7950)) ([d8ea8b1](https://github.com/archestra-ai/archestra/commit/d8ea8b17132888879961c5e24a3b9d7180158de8))
+* **frontend:** stop RUM web-vitals listener accumulation ([#7962](https://github.com/archestra-ai/archestra/issues/7962)) ([76ce4b9](https://github.com/archestra-ai/archestra/commit/76ce4b993308bca809ea4c1321327f7d88de87f1))
+* **llm-proxy:** preserve prompt cache usage in provider responses ([#7954](https://github.com/archestra-ai/archestra/issues/7954)) ([66564a6](https://github.com/archestra-ai/archestra/commit/66564a6a83bb65459562bae9c44abac78a2ee14f))
+* share OpenAPPA state by session ID ([#7947](https://github.com/archestra-ai/archestra/issues/7947)) ([813e213](https://github.com/archestra-ai/archestra/commit/813e213dd8fb0c42b31c659c6069fadebb1f83a4))
+
+
+### Code Refactoring
+
+* remove TOON tool-result compression ([#7965](https://github.com/archestra-ai/archestra/issues/7965)) ([cd566d2](https://github.com/archestra-ai/archestra/commit/cd566d27c0c1621f0169daef8482a4da402909b8))
+
 ## [1.4.0-beta.10](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-beta.9...platform-v1.4.0-beta.10) (2026-09-15)
 
 

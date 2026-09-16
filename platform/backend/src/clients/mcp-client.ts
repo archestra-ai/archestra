@@ -5429,13 +5429,19 @@ async function waitForMcpServerWake(params: {
       if (error.concluded) {
         verdict = { detail: error.detail };
       }
-      // Too little budget left for another attempt to observe anything new.
-      // A verdict already seen outranks this attempt's own reason: a race
-      // lost on the last beat says nothing the caller can act on, while the
-      // verdict says why the server is not up. Either beats a generic
-      // "still pending".
+      // Too little budget left for another attempt to observe anything new:
+      // answer with this attempt's own reason, which is already
+      // retryable-shaped and names more than a generic "still pending" would.
+      //
+      // Deliberately NOT the remembered verdict, even though it often reads
+      // better. This error is what the cluster just said; the verdict is what
+      // it said on an earlier attempt, and the two disagree exactly when the
+      // condition has moved on — capacity freed and the wake then lost a
+      // transition race. Answering "no free capacity" there would describe a
+      // cluster state that has demonstrably cleared. The verdict is for the
+      // case with no fresher answer to give: the budget running out below.
       if (deadlineAt - Date.now() <= WAKE_RETRY_DELAY_MS) {
-        throw verdictForCaller() ?? error;
+        throw error;
       }
       logger.debug(
         { err: error, mcpServerId: params.mcpServerId },

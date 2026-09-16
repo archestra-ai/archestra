@@ -4009,6 +4009,9 @@ describe("McpServerRuntimeManager idle hibernation", () => {
       expect(wakeError).toMatchObject({
         name: "McpServerWakeError",
         message: expect.stringContaining("sleepy-server"),
+        // A ready-wait that ran out its budget is a verdict too, not a lost
+        // race: the demand path answers on it rather than re-deriving it.
+        concluded: true,
       });
 
       // completeWake never ran, so the hibernation annotation stays on the
@@ -4068,6 +4071,9 @@ describe("McpServerRuntimeManager idle hibernation", () => {
       // Marked as a verdict, not a lost race: the demand path answers on this
       // rather than spending the caller's budget re-deriving it.
       expect(wakeError.concluded).toBe(true);
+      // Carried apart from the rendered message so a consumer can re-address
+      // the reason to its own server without the producer's name baked in.
+      expect(wakeError.detail).toContain("no free capacity");
 
       // Nothing is marked broken: completeWake never ran, so the hibernation
       // annotation stays put, and the cache goes back to "hibernated" so the

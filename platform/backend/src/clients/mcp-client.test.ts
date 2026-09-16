@@ -2862,7 +2862,7 @@ describe("McpClient", () => {
         expect(mockEnsureAwake).toHaveBeenCalledTimes(2);
       });
 
-      test("a race on the last beat does not erase a verdict already seen", async () => {
+      test("a verdict raised for a sibling install is re-addressed to this caller", async () => {
         const tool = await ToolModel.createToolIfNotExists({
           name: "local-streamable-http-server__test_tool",
           description: "Test tool",
@@ -2873,30 +2873,26 @@ describe("McpClient", () => {
           mcpServerId: localMcpServerId,
         });
 
-        // The wake reports capacity pressure, then later attempts lose an
-        // ordinary race. Answering with the race would tell the caller only
-        // that something collided; the capacity reason is the one that
-        // explains why the server is not up, so it outranks it.
-        WAKE_BUDGET.ms = 2_500;
+        // Wakes are single-flighted per PHYSICAL deployment, so the error a
+        // multitenant sibling receives was raised for whichever install
+        // loaded it — here "someone-elses-install". The caller must be told
+        // about its OWN server; the other install's name is not its business
+        // and not something it can act on.
+        WAKE_BUDGET.ms = 3_000;
         const { McpServerWakeError } = await import("@/k8s/mcp-server-runtime");
         mockEnsureAwake
           .mockRejectedValueOnce(
-            new McpServerWakeError("local-streamable-http-server", {
+            new McpServerWakeError("someone-elses-install", {
               concluded: true,
               detail:
                 "the cluster has no free capacity to schedule its pod (0/1 nodes are available: 1 Insufficient cpu). The pod stays queued and starts when capacity frees",
             }),
           )
-          .mockRejectedValue(
-            new McpServerWakeError("local-streamable-http-server", {
-              detail:
-                "its wake was superseded by a concurrent transition (the deployment is now waking)",
-            }),
-          );
+          .mockReturnValue(new Promise(() => {}));
 
         const result = await mcpClient.executeToolCallForOwner(
           {
-            id: "call_wake_verdict_outranks_race",
+            id: "call_wake_verdict_readdressed",
             name: "local-streamable-http-server__test_tool",
             arguments: {},
           },
@@ -2904,8 +2900,10 @@ describe("McpClient", () => {
         );
 
         expect(result.isError).toBe(true);
+        expect(result.error).not.toContain("someone-elses-install");
+        expect(result.error).toContain("local-streamable-http-server");
+        // The reason still survives the re-addressing.
         expect(result.error).toContain("no free capacity to schedule its pod");
-        expect(result.error).not.toContain("superseded by a concurrent");
       });
 
       test("with too little budget left for another attempt, the race's own retryable reason is the answer", async () => {

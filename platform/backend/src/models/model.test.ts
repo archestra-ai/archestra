@@ -965,7 +965,7 @@ describe("ModelModel", () => {
   });
 
   describe("deleteOrphanedModels", () => {
-    test("deletes provider-synced models used by chat after their last API key is deleted", async ({
+    test("preserves provider catalog history after the last API key is deleted", async ({
       makeOrganization,
       makeSecret,
       makeLlmProviderApiKey,
@@ -992,13 +992,13 @@ describe("ModelModel", () => {
       await ModelModel.ensureModelExists("claude-opus-4-7", "anthropic");
       await LlmProviderApiKeyModel.delete(apiKey.id);
 
-      expect(await ModelModel.deleteOrphanedModels()).toBe(1);
+      expect(await ModelModel.deleteOrphanedModels()).toBe(0);
       expect(
         await ModelModel.findByProviderAndModelId(
           "anthropic",
           "claude-opus-4-7",
         ),
-      ).toBeNull();
+      ).toMatchObject({ id: model.id, discoveredViaLlmProxy: false });
     });
 
     test("deletes models without API key links that are not from LLM Proxy", async ({

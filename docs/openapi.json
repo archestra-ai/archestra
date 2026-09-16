@@ -330765,6 +330765,9 @@
                           "hidden": {
                             "type": "boolean"
                           },
+                          "showNewModelsAutomatically": {
+                            "type": "boolean"
+                          },
                           "displayName": {
                             "nullable": true,
                             "type": "string",
@@ -331846,6 +331849,9 @@
                         "type": "object",
                         "properties": {
                           "hidden": {
+                            "type": "boolean"
+                          },
+                          "showNewModelsAutomatically": {
                             "type": "boolean"
                           },
                           "displayName": {
@@ -333186,6 +333192,9 @@
                           "hidden": {
                             "type": "boolean"
                           },
+                          "showNewModelsAutomatically": {
+                            "type": "boolean"
+                          },
                           "displayName": {
                             "nullable": true,
                             "type": "string",
@@ -334121,6 +334130,9 @@
                           "hidden": {
                             "type": "boolean"
                           },
+                          "showNewModelsAutomatically": {
+                            "type": "boolean"
+                          },
                           "displayName": {
                             "nullable": true,
                             "type": "string",
@@ -335054,6 +335066,9 @@
                         "type": "object",
                         "properties": {
                           "hidden": {
+                            "type": "boolean"
+                          },
+                          "showNewModelsAutomatically": {
                             "type": "boolean"
                           },
                           "displayName": {
@@ -336001,6 +336016,9 @@
                         "type": "object",
                         "properties": {
                           "hidden": {
+                            "type": "boolean"
+                          },
+                          "showNewModelsAutomatically": {
                             "type": "boolean"
                           },
                           "displayName": {
@@ -337004,6 +337022,9 @@
                           "hidden": {
                             "type": "boolean"
                           },
+                          "showNewModelsAutomatically": {
+                            "type": "boolean"
+                          },
                           "displayName": {
                             "nullable": true,
                             "type": "string",
@@ -337469,6 +337490,9 @@
                       "type": "object",
                       "properties": {
                         "hidden": {
+                          "type": "boolean"
+                        },
+                        "showNewModelsAutomatically": {
                           "type": "boolean"
                         },
                         "displayName": {
@@ -337975,6 +337999,9 @@
                         "type": "object",
                         "properties": {
                           "hidden": {
+                            "type": "boolean"
+                          },
+                          "showNewModelsAutomatically": {
                             "type": "boolean"
                           },
                           "displayName": {
@@ -338982,6 +339009,9 @@
                           "hidden": {
                             "type": "boolean"
                           },
+                          "showNewModelsAutomatically": {
+                            "type": "boolean"
+                          },
                           "displayName": {
                             "nullable": true,
                             "type": "string",
@@ -339929,6 +339959,9 @@
                         "type": "object",
                         "properties": {
                           "hidden": {
+                            "type": "boolean"
+                          },
+                          "showNewModelsAutomatically": {
                             "type": "boolean"
                           },
                           "displayName": {
@@ -340911,6 +340944,9 @@
                           "hidden": {
                             "type": "boolean"
                           },
+                          "showNewModelsAutomatically": {
+                            "type": "boolean"
+                          },
                           "displayName": {
                             "nullable": true,
                             "type": "string",
@@ -341826,6 +341862,9 @@
                         "type": "object",
                         "properties": {
                           "hidden": {
+                            "type": "boolean"
+                          },
+                          "showNewModelsAutomatically": {
                             "type": "boolean"
                           },
                           "displayName": {
@@ -343931,6 +343970,9 @@
                         "type": "object",
                         "properties": {
                           "hidden": {
+                            "type": "boolean"
+                          },
+                          "showNewModelsAutomatically": {
                             "type": "boolean"
                           },
                           "displayName": {

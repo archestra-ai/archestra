@@ -16,18 +16,20 @@ import { ResourceVisibilityScopeSchema } from "./visibility";
 
 export const SelectLlmProviderApiKeySchema = createSelectSchema(
   schema.llmProviderApiKeysTable,
-).extend({
-  provider: SupportedProvidersSchema,
-  scope: ResourceVisibilityScopeSchema,
-  // baseUrl is nullable in the DB schema (text without .notNull()) but
-  // drizzle-zod's createSelectSchema defaults text columns to z.string().
-  // Override to match the actual DB column nullability so Fastify response
-  // serialization doesn't throw when baseUrl is null.
-  baseUrl: z.string().nullable(),
-  inferenceBaseUrl: z.string().nullable(),
-  extraHeaders: z.record(z.string(), z.string()).nullable(),
-  requiresReauthentication: z.boolean().optional(),
-});
+)
+  .omit({ modelsLastSyncedAt: true })
+  .extend({
+    provider: SupportedProvidersSchema,
+    scope: ResourceVisibilityScopeSchema,
+    // baseUrl is nullable in the DB schema (text without .notNull()) but
+    // drizzle-zod's createSelectSchema defaults text columns to z.string().
+    // Override to match the actual DB column nullability so Fastify response
+    // serialization doesn't throw when baseUrl is null.
+    baseUrl: z.string().nullable(),
+    inferenceBaseUrl: z.string().nullable(),
+    extraHeaders: z.record(z.string(), z.string()).nullable(),
+    requiresReauthentication: z.boolean().optional(),
+  });
 
 export const InsertLlmProviderApiKeySchema = createInsertSchema(
   schema.llmProviderApiKeysTable,
@@ -38,6 +40,7 @@ export const InsertLlmProviderApiKeySchema = createInsertSchema(
     updatedAt: true,
     createdByServiceAccountId: true,
     requiresReauthentication: true,
+    modelsLastSyncedAt: true,
   })
   .extend({
     provider: SupportedProvidersSchema,
@@ -54,6 +57,7 @@ export const UpdateLlmProviderApiKeySchema = createUpdateSchema(
     organizationId: true,
     createdByServiceAccountId: true,
     requiresReauthentication: true,
+    modelsLastSyncedAt: true,
     createdAt: true,
     updatedAt: true,
   })

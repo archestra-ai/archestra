@@ -336,6 +336,100 @@ describe("ModelsPage", () => {
     );
   });
 
+  it("shows only hidden arrivals from a deep link and bulk shows that selection", async () => {
+    keyCreated = true;
+    let hiddenModel = {
+      ...model,
+      id: "hidden-model",
+      modelId: "hidden-arrival",
+      ignored: true,
+    };
+    let visibilityRequest: unknown;
+    server.use(
+      http.get(`${API_ORIGIN}/api/llm-provider-models/labels/keys`, () =>
+        HttpResponse.json([]),
+      ),
+      http.get(`${API_ORIGIN}/api/llm-models`, () =>
+        HttpResponse.json([model, hiddenModel]),
+      ),
+      http.patch(`${API_ORIGIN}/api/llm-models/bulk`, async ({ request }) => {
+        visibilityRequest = await request.json();
+        hiddenModel = { ...hiddenModel, ignored: false };
+        return HttpResponse.json({ succeeded: [hiddenModel.id], failed: [] });
+      }),
+    );
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+      isPending: false,
+    } as ReturnType<typeof useHasPermissions>);
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("visibility=hidden") as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    const user = userEvent.setup();
+    renderPage();
+
+    expect(await screen.findByText(hiddenModel.modelId)).toBeVisible();
+    expect(screen.queryByText(model.modelId)).not.toBeInTheDocument();
+    await user.click(
+      screen.getByRole("checkbox", { name: "Select all models on this page" }),
+    );
+    expect(
+      screen.getByRole("checkbox", { name: "Select hidden-arrival" }),
+    ).toBeChecked();
+    await user.click(await screen.findByRole("button", { name: "Show" }));
+
+    await waitFor(() =>
+      expect(visibilityRequest).toEqual({
+        ids: [hiddenModel.id],
+        ignored: false,
+      }),
+    );
+    expect(
+      await screen.findByText("No models match your filters"),
+    ).toBeVisible();
+    expect(screen.queryByText(hiddenModel.modelId)).not.toBeInTheDocument();
+  });
+
+  it("excludes hidden models from a visible-only deep link", async () => {
+    keyCreated = true;
+    server.use(
+      http.get(`${API_ORIGIN}/api/llm-models`, () =>
+        HttpResponse.json([
+          model,
+          {
+            ...model,
+            id: "hidden-model",
+            modelId: "hidden-arrival",
+            ignored: true,
+          },
+        ]),
+      ),
+    );
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("visibility=visible") as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    renderPage();
+    expect(await screen.findByText(model.modelId)).toBeVisible();
+    expect(screen.queryByText("hidden-arrival")).not.toBeInTheDocument();
+  });
+
+  it("writes the visibility filter to the URL", async () => {
+    keyCreated = true;
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(
+      await screen.findByRole("combobox", { name: "Visibility" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Hidden" }));
+    expect(routerPush).toHaveBeenCalledWith("/llm/models?visibility=hidden", {
+      scroll: false,
+    });
+  });
+
   it("keeps a free-only deep link while the provider keys load", async () => {
     keyCreated = true;
     // An OpenRouter key makes the free-only filter valid — but it resolves
@@ -365,9 +459,9 @@ describe("ModelsPage", () => {
   it("clears an active label filter from the model collection", async () => {
     keyCreated = true;
     vi.mocked(useSearchParams).mockReturnValue(
-      new URLSearchParams("labels=stage%3Aproduction") as unknown as ReturnType<
-        typeof useSearchParams
-      >,
+      new URLSearchParams(
+        "labels=stage%3Aproduction&visibility=hidden",
+      ) as unknown as ReturnType<typeof useSearchParams>,
     );
     const user = userEvent.setup();
 

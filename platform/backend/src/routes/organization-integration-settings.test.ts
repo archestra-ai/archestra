@@ -1,4 +1,10 @@
+import { eq } from "drizzle-orm";
 import { vi } from "vitest";
+import { authPlugin } from "@/auth/fastify-plugin";
+import { hasPermission as realHasPermission } from "@/auth/utils";
+import db, { schema } from "@/database";
+import { registerAuditLogHook } from "@/middleware/audit-log-hook";
+import OrganizationModel from "@/models/organization";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -6,7 +12,7 @@ import type { User } from "@/types";
 
 vi.mock("@/auth");
 
-import { hasPermission } from "@/auth";
+import { betterAuth, hasPermission } from "@/auth";
 
 vi.mock("@/agents/chatops/chatops-manager", () => ({
   chatOpsManager: { reinitialize: vi.fn() },
@@ -19,28 +25,31 @@ describe("PATCH /api/organization/integration-settings", () => {
   let adminUser: User;
   let organizationId: string;
 
-  beforeEach(async ({ makeAdmin, makeMember, makeOrganization }) => {
-    vi.clearAllMocks();
-    vi.mocked(hasPermission).mockResolvedValue({ success: true, error: null });
+  beforeEach(
+    async ({ makeAdmin, makeMember, makeOrganization, makeSession }) => {
+      vi.clearAllMocks();
+      vi.mocked(hasPermission).mockImplementation(realHasPermission);
 
-    adminUser = await makeAdmin();
-    const organization = await makeOrganization();
-    organizationId = organization.id;
-    await makeMember(adminUser.id, organizationId, { role: "admin" });
+      adminUser = await makeAdmin();
+      const organization = await makeOrganization();
+      organizationId = organization.id;
+      await makeMember(adminUser.id, organizationId, { role: "admin" });
+      const session = await makeSession(adminUser.id, {
+        activeOrganizationId: organizationId,
+      });
+      vi.mocked(betterAuth.api.getSession).mockResolvedValue({
+        response: { user: adminUser, session },
+        headers: new Headers(),
+      } as unknown as Awaited<ReturnType<typeof betterAuth.api.getSession>>);
 
-    app = createFastifyInstance();
-    app.addHook("onRequest", async (request) => {
-      (
-        request as typeof request & { user: User; organizationId: string }
-      ).user = adminUser;
-      (
-        request as typeof request & { user: User; organizationId: string }
-      ).organizationId = organizationId;
-    });
+      app = createFastifyInstance();
+      await app.register(authPlugin);
 
-    const { default: organizationRoutes } = await import("./organization");
-    await app.register(organizationRoutes);
-  });
+      const { default: organizationRoutes } = await import("./organization");
+      registerAuditLogHook(app);
+      await app.register(organizationRoutes);
+    },
+  );
 
   afterEach(async () => {
     vi.restoreAllMocks();
@@ -53,6 +62,57 @@ describe("PATCH /api/organization/integration-settings", () => {
       url: "/api/organization/integration-settings",
       payload,
     });
+
+  test("persists the provider arrival setting and records its audit diff", async () => {
+    const modelProviderOverrides = {
+      openrouter: { showNewModelsAutomatically: false },
+    };
+    const response = await patch({ modelProviderOverrides });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().modelProviderOverrides).toEqual(
+      modelProviderOverrides,
+    );
+    expect(
+      (await OrganizationModel.getIntegrationOverrides(organizationId))
+        .modelProviderOverrides,
+    ).toEqual(modelProviderOverrides);
+    await vi.waitFor(async () => {
+      const [audit] = await db
+        .select()
+        .from(schema.auditLogsTable)
+        .where(eq(schema.auditLogsTable.action, "organization.updated"));
+      expect(audit?.before).toMatchObject({ modelProviderOverrides: null });
+      expect(audit?.after).toMatchObject({ modelProviderOverrides });
+    });
+  });
+
+  test("rejects provider arrival changes from members without organization settings permission", async ({
+    makeUser,
+    makeMember,
+    makeSession,
+  }) => {
+    const member = await makeUser();
+    await makeMember(member.id, organizationId, { role: "member" });
+    const session = await makeSession(member.id, {
+      activeOrganizationId: organizationId,
+    });
+    vi.mocked(betterAuth.api.getSession).mockResolvedValue({
+      response: { user: member, session },
+      headers: new Headers(),
+    } as unknown as Awaited<ReturnType<typeof betterAuth.api.getSession>>);
+
+    const response = await patch({
+      modelProviderOverrides: {
+        openrouter: { showNewModelsAutomatically: false },
+      },
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(
+      (await OrganizationModel.getIntegrationOverrides(organizationId))
+        .modelProviderOverrides,
+    ).toBeNull();
+  });
 
   test("persists overrides for all three catalogs", async () => {
     const response = await patch({

@@ -70,6 +70,7 @@ export const StoredIntegrationToggleSchema = z.object(integrationToggleShape);
  */
 const modelProviderOverrideShape = {
   ...integrationToggleShape,
+  showNewModelsAutomatically: z.boolean().optional(),
   displayName: z
     .string()
     .trim()
@@ -183,10 +184,12 @@ export function pruneIntegrationOverrides<Id extends string>(
     if (!override) continue;
     const displayName = override.displayName?.trim() || null;
     const hidden = override.hidden === true;
-    if (!hidden && !displayName) continue;
+    const hideNewModels = override.showNewModelsAutomatically === false;
+    if (!hidden && !displayName && !hideNewModels) continue;
     pruned[id] = {
       ...(hidden ? { hidden: true } : {}),
       ...(displayName ? { displayName } : {}),
+      ...(hideNewModels ? { showNewModelsAutomatically: false } : {}),
     };
   }
   return Object.keys(pruned).length > 0 ? pruned : null;
@@ -207,9 +210,8 @@ export function allowedIntegrationIds<Id extends string>(
 /**
  * Rewrites overrides so exactly `allowed` stays on.
  *
- * Names survive the rewrite: model providers keep `displayName` in the same
- * column as the off switch, so switching a provider off and back on must not
- * cost the organization the name it chose for it.
+ * Names and new-model visibility survive the rewrite: switching a provider
+ * off and back on must preserve the organization's other preferences.
  */
 export function withAllowedIntegrationIds<Id extends string>(
   overrides: Partial<Record<Id, ModelProviderOverride>> | null,

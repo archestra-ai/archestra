@@ -9,6 +9,7 @@ import {
   eq,
   ilike,
   inArray,
+  isNull,
   notInArray,
   or,
   sql,
@@ -431,6 +432,7 @@ class ModelModel {
     if (dataArray.length === 0) {
       return [];
     }
+    const sortedData = sortModelsForUpsert(dataArray);
 
     // Batch size of 50 rows to stay safely under PostgreSQL parameter limits
     // Each row has ~11 columns, so 50 rows = ~550 parameters per batch
@@ -448,7 +450,7 @@ class ModelModel {
 
       for (let i = 0; i < dataArray.length; i += BATCH_SIZE) {
         const batchNumber = Math.floor(i / BATCH_SIZE) + 1;
-        const batch = dataArray.slice(i, i + BATCH_SIZE);
+        const batch = sortedData.slice(i, i + BATCH_SIZE);
 
         logger.debug(
           { batchNumber, totalBatches, batchSize: batch.length },
@@ -488,13 +490,16 @@ class ModelModel {
               defaultParameters: sql`COALESCE(excluded.default_parameters, ${schema.modelsTable.defaultParameters})`,
               lastSyncedAt: sql`excluded.last_synced_at`,
               updatedAt: sql`NOW()`,
-              // The proxy marks a row it creates for an id no catalog had
-              // listed, which exempts it from deleteOrphanedModels so a custom
-              // price survives having no API key link. A configured provider's
-              // catalog returning the id makes it an ordinary synced model, and
-              // leaving the mark set would exempt it from that cleanup forever.
+              // A provider catalog returning a proxy-discovered ID makes its
+              // source classification an ordinary synced model. Keep its
+              // visibility when making that transition.
               ...(fromProviderCatalog
-                ? { discoveredViaLlmProxy: sql`false` }
+                ? {
+                    discoveredViaLlmProxy: sql`false`,
+                    // Proxy-first models are exempt from automatic hiding, even
+                    // when they later join a provider's catalog.
+                    firstCatalogSyncedAt: sql`COALESCE(${schema.modelsTable.firstCatalogSyncedAt}, CASE WHEN ${schema.modelsTable.discoveredViaLlmProxy} THEN NOW() END)`,
+                  }
                 : {}),
               // NOTE: custom price overrides (input/output/cache) intentionally NOT updated
               // NOTE: capability fields only backfill when the existing DB value is null
@@ -530,6 +535,7 @@ class ModelModel {
     if (dataArray.length === 0) {
       return [];
     }
+    const sortedData = sortModelsForUpsert(dataArray);
 
     const BATCH_SIZE = 50;
     const totalBatches = Math.ceil(dataArray.length / BATCH_SIZE);
@@ -544,7 +550,7 @@ class ModelModel {
 
       for (let i = 0; i < dataArray.length; i += BATCH_SIZE) {
         const batchNumber = Math.floor(i / BATCH_SIZE) + 1;
-        const batch = dataArray.slice(i, i + BATCH_SIZE);
+        const batch = sortedData.slice(i, i + BATCH_SIZE);
 
         logger.debug(
           { batchNumber, totalBatches, batchSize: batch.length },
@@ -582,6 +588,7 @@ class ModelModel {
               customContextLength: sql`NULL`,
               customOutputLength: sql`NULL`,
               discoveredViaLlmProxy: sql`false`,
+              firstCatalogSyncedAt: sql`COALESCE(${schema.modelsTable.firstCatalogSyncedAt}, CASE WHEN ${schema.modelsTable.discoveredViaLlmProxy} THEN NOW() END)`,
               lastSyncedAt: sql`excluded.last_synced_at`,
               updatedAt: sql`NOW()`,
             },
@@ -638,9 +645,8 @@ class ModelModel {
   }
 
   /**
-   * Delete orphaned models that have no API key links and were NOT
-   * discovered via LLM Proxy. LLM Proxy models are preserved so users
-   * can define custom token pricing for metrics.
+   * Delete unused registry entries. Preserve catalog visibility history and
+   * proxy-discovered rows for cost tracking, even without API key links.
    */
   static async deleteOrphanedModels(): Promise<number> {
     const orphaned = await db
@@ -648,6 +654,9 @@ class ModelModel {
       .where(
         and(
           eq(schema.modelsTable.discoveredViaLlmProxy, false),
+          // Catalog rows retain arrival history and visibility across gaps in
+          // availability; deleting an unrelated key must not erase Show/Hide.
+          isNull(schema.modelsTable.firstCatalogSyncedAt),
           notInArray(
             schema.modelsTable.id,
             db
@@ -1214,3 +1223,13 @@ class ModelModel {
 }
 
 export default ModelModel;
+
+function sortModelsForUpsert(models: CreateModel[]): CreateModel[] {
+  // PostgreSQL's C collation uses UTF-8 byte order. Catalog linking takes
+  // row locks in the same order so overlapping refresh phases cannot invert it.
+  return models.toSorted(
+    (a, b) =>
+      Buffer.compare(Buffer.from(a.provider), Buffer.from(b.provider)) ||
+      Buffer.compare(Buffer.from(a.modelId), Buffer.from(b.modelId)),
+  );
+}

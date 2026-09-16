@@ -12,6 +12,7 @@ import {
   LlmProviderApiKeyModel,
   LlmProviderApiKeyModelLinkModel,
   ModelModel,
+  OrganizationModel,
 } from "@/models";
 import {
   fetchAnthropicModels,
@@ -278,10 +279,19 @@ class SystemKeyManager {
       id: m.id,
       modelId: m.modelId,
     }));
+    const apiKey = await LlmProviderApiKeyModel.findById(apiKeyId);
+    const overrides = apiKey
+      ? await OrganizationModel.getIntegrationOverrides(apiKey.organizationId)
+      : null;
     await LlmProviderApiKeyModelLinkModel.syncModelsForApiKey(
       apiKeyId,
       modelsWithIds,
       provider,
+      {
+        hideNewModels:
+          overrides?.modelProviderOverrides?.[provider]
+            ?.showNewModelsAutomatically === false,
+      },
     );
 
     logger.info(

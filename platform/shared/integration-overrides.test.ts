@@ -76,6 +76,24 @@ describe("pruneIntegrationOverrides", () => {
       }),
     ).toEqual({ openai: { hidden: true, displayName: "OpenAI (retired)" } });
   });
+
+  it("retains automatic hiding while dropping the default arrival visibility", () => {
+    expect(
+      pruneIntegrationOverrides({
+        openai: { showNewModelsAutomatically: true },
+        openrouter: { showNewModelsAutomatically: false },
+        gemini: { displayName: "Gemini Pro", showNewModelsAutomatically: true },
+      }),
+    ).toEqual({
+      openrouter: { showNewModelsAutomatically: false },
+      gemini: { displayName: "Gemini Pro" },
+    });
+    expect(
+      pruneIntegrationOverrides({
+        openai: { showNewModelsAutomatically: true },
+      }),
+    ).toBeNull();
+  });
 });
 
 describe("catalog id schemas", () => {
@@ -154,6 +172,20 @@ describe("withAllowedIntegrationIds", () => {
       openai: { hidden: true },
       anthropic: { hidden: true },
       gemini: { hidden: true },
+    });
+  });
+
+  it("preserves new-model visibility when a provider is switched off and on", () => {
+    const hidden = withAllowedIntegrationIds(
+      { openai: { showNewModelsAutomatically: false } },
+      CATALOG,
+      ["anthropic", "gemini"],
+    );
+    expect(hidden).toEqual({
+      openai: { hidden: true, showNewModelsAutomatically: false },
+    });
+    expect(withAllowedIntegrationIds(hidden, CATALOG, CATALOG)).toEqual({
+      openai: { showNewModelsAutomatically: false },
     });
   });
 });

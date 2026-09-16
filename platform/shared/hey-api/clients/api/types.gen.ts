@@ -85843,6 +85843,7 @@ export type GetOrganizationResponses = {
         modelProviderOverrides: {
             [key: string]: {
                 hidden?: boolean;
+                showNewModelsAutomatically?: boolean;
                 displayName?: string | null;
             };
         } | null;
@@ -86162,6 +86163,7 @@ export type UpdateAppearanceSettingsResponses = {
         modelProviderOverrides: {
             [key: string]: {
                 hidden?: boolean;
+                showNewModelsAutomatically?: boolean;
                 displayName?: string | null;
             };
         } | null;
@@ -86364,6 +86366,7 @@ export type UpdateSecuritySettingsResponses = {
         modelProviderOverrides: {
             [key: string]: {
                 hidden?: boolean;
+                showNewModelsAutomatically?: boolean;
                 displayName?: string | null;
             };
         } | null;
@@ -86561,6 +86564,7 @@ export type UpdateMcpSettingsResponses = {
         modelProviderOverrides: {
             [key: string]: {
                 hidden?: boolean;
+                showNewModelsAutomatically?: boolean;
                 displayName?: string | null;
             };
         } | null;
@@ -86758,6 +86762,7 @@ export type UpdateSkillsSettingsResponses = {
         modelProviderOverrides: {
             [key: string]: {
                 hidden?: boolean;
+                showNewModelsAutomatically?: boolean;
                 displayName?: string | null;
             };
         } | null;
@@ -86956,6 +86961,7 @@ export type UpdateAgentSettingsResponses = {
         modelProviderOverrides: {
             [key: string]: {
                 hidden?: boolean;
+                showNewModelsAutomatically?: boolean;
                 displayName?: string | null;
             };
         } | null;
@@ -87167,6 +87173,7 @@ export type UpdateConnectionSettingsResponses = {
         modelProviderOverrides: {
             [key: string]: {
                 hidden?: boolean;
+                showNewModelsAutomatically?: boolean;
                 displayName?: string | null;
             };
         } | null;
@@ -87207,6 +87214,7 @@ export type UpdateIntegrationSettingsData = {
         modelProviderOverrides?: {
             [key: string]: {
                 hidden?: boolean;
+                showNewModelsAutomatically?: boolean;
                 displayName?: string | null;
             };
         } | null;
@@ -87378,6 +87386,7 @@ export type UpdateIntegrationSettingsResponses = {
         modelProviderOverrides: {
             [key: string]: {
                 hidden?: boolean;
+                showNewModelsAutomatically?: boolean;
                 displayName?: string | null;
             };
         } | null;
@@ -87585,6 +87594,7 @@ export type UpdateDefaultEnvironmentResponses = {
         modelProviderOverrides: {
             [key: string]: {
                 hidden?: boolean;
+                showNewModelsAutomatically?: boolean;
                 displayName?: string | null;
             };
         } | null;
@@ -87787,6 +87797,7 @@ export type UpdateAuthSettingsResponses = {
         modelProviderOverrides: {
             [key: string]: {
                 hidden?: boolean;
+                showNewModelsAutomatically?: boolean;
                 displayName?: string | null;
             };
         } | null;
@@ -87991,6 +88002,7 @@ export type UpdateKnowledgeSettingsResponses = {
         modelProviderOverrides: {
             [key: string]: {
                 hidden?: boolean;
+                showNewModelsAutomatically?: boolean;
                 displayName?: string | null;
             };
         } | null;
@@ -88185,6 +88197,7 @@ export type DropEmbeddingConfigResponses = {
         modelProviderOverrides: {
             [key: string]: {
                 hidden?: boolean;
+                showNewModelsAutomatically?: boolean;
                 displayName?: string | null;
             };
         } | null;
@@ -88729,6 +88742,7 @@ export type CompleteOnboardingResponses = {
         modelProviderOverrides: {
             [key: string]: {
                 hidden?: boolean;
+                showNewModelsAutomatically?: boolean;
                 displayName?: string | null;
             };
         } | null;

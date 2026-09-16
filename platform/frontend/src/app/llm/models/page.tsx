@@ -89,6 +89,7 @@ import {
   canFilterFreeModelsForApiKey,
   filterModelsForPage,
   type ModelsPageModelTypeFilter,
+  type ModelsPageVisibilityFilter,
   OBSERVED_MODEL_SOURCE_DESCRIPTION,
   OBSERVED_MODEL_SOURCE_LABEL,
   resolveDisplayContextLength,
@@ -122,6 +123,11 @@ export default function ModelsPage() {
       ? modelTypeParam
       : "all";
   const freeOnly = searchParams.get("freeOnly") === "true";
+  const visibilityParam = searchParams.get("visibility");
+  const visibilityFilter: ModelsPageVisibilityFilter =
+    visibilityParam === "visible" || visibilityParam === "hidden"
+      ? visibilityParam
+      : "all";
   const labelsFilter = searchParams.get("labels") ?? "";
   const editId = searchParams.get("edit");
   const modelFromUrl = useMemo(
@@ -157,6 +163,7 @@ export default function ModelsPage() {
       search,
       apiKeyFilter,
       modelTypeFilter,
+      visibilityFilter,
       freeOnly,
       canFilterFreeModels,
     });
@@ -175,6 +182,7 @@ export default function ModelsPage() {
     search,
     apiKeyFilter,
     modelTypeFilter,
+    visibilityFilter,
     freeOnly,
     canFilterFreeModels,
     selectedLabels,
@@ -204,6 +212,7 @@ export default function ModelsPage() {
       search,
       apiKeyFilter,
       modelTypeFilter,
+      visibilityFilter,
       freeOnly,
       labelsFilter,
     }),
@@ -214,6 +223,7 @@ export default function ModelsPage() {
     search ||
       apiKeyFilter !== "all" ||
       modelTypeFilter !== "all" ||
+      visibilityFilter !== "all" ||
       (canFilterFreeModels && freeOnly) ||
       labelsFilter,
   );
@@ -222,6 +232,7 @@ export default function ModelsPage() {
       search: null,
       apiKey: null,
       modelType: null,
+      visibility: null,
       freeOnly: null,
       labels: null,
     });
@@ -681,6 +692,25 @@ export default function ModelsPage() {
                   },
                 ]}
               />
+              <FilterSelect
+                value={visibilityFilter}
+                onValueChange={(value) =>
+                  updateQueryParams({
+                    visibility: value === "all" ? null : value,
+                  })
+                }
+                placeholder="Visibility"
+                showSearch={false}
+                items={[
+                  {
+                    value: "all",
+                    label: "All",
+                    selectedContent: <span>Visibility: All</span>,
+                  },
+                  { value: "visible", label: "Visible" },
+                  { value: "hidden", label: "Hidden" },
+                ]}
+              />
               {canFilterFreeModels && (
                 <div className="flex items-center gap-2">
                   <Switch
@@ -708,32 +738,35 @@ export default function ModelsPage() {
             </FilterBar>
           </CollectionFilters>
         )}
-        <BulkActions
-          count={selectedModels.length}
-          noun="model"
-          onClear={clearSelection}
-          selectAllMatching={selectAllMatching}
-          busy={bulkVisibility.isPending}
-        >
-          <PermissionButton
-            permissions={{ llmModel: ["update"] }}
-            variant="outline"
-            size="sm"
-            onClick={() => applyVisibility(false)}
+        {/* Mount with the filter bar so the bulk-actions portal can find its target. */}
+        {models.length > 0 && (
+          <BulkActions
+            count={selectedModels.length}
+            noun="model"
+            onClear={clearSelection}
+            selectAllMatching={selectAllMatching}
+            busy={bulkVisibility.isPending}
           >
-            <Eye className="h-4 w-4" />
-            <span>Show</span>
-          </PermissionButton>
-          <PermissionButton
-            permissions={{ llmModel: ["update"] }}
-            variant="outline"
-            size="sm"
-            onClick={() => applyVisibility(true)}
-          >
-            <EyeOff className="h-4 w-4" />
-            <span>Hide</span>
-          </PermissionButton>
-        </BulkActions>
+            <PermissionButton
+              permissions={{ llmModel: ["update"] }}
+              variant="outline"
+              size="sm"
+              onClick={() => applyVisibility(false)}
+            >
+              <Eye className="h-4 w-4" />
+              <span>Show</span>
+            </PermissionButton>
+            <PermissionButton
+              permissions={{ llmModel: ["update"] }}
+              variant="outline"
+              size="sm"
+              onClick={() => applyVisibility(true)}
+            >
+              <EyeOff className="h-4 w-4" />
+              <span>Hide</span>
+            </PermissionButton>
+          </BulkActions>
+        )}
 
         <DataTable
           columns={columns}

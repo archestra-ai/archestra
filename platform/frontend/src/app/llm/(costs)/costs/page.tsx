@@ -560,16 +560,11 @@ export default function StatisticsPage() {
     return costSavingsData.timeSeries.map((point) => ({
       timestamp: point.timestamp,
       label: formatTimestamp(point.timestamp),
-      compression: point.toonSavings,
       cache: point.cacheSavings,
     }));
   }, [costSavingsData, formatTimestamp]);
 
   const savingsBreakdownChartConfig: ChartConfig = {
-    compression: {
-      label: "Tool Compression Savings",
-      color: "var(--chart-5)",
-    },
     cache: {
       label: "Prompt Cache Savings",
       color: "var(--chart-3)",
@@ -761,18 +756,6 @@ export default function StatisticsPage() {
                 />
                 <ChartTooltip content={CostChartTooltip} />
                 <ChartLegend content={<ChartLegendContent />} />
-                <Line
-                  dataKey="compression"
-                  type="monotone"
-                  stroke="var(--color-compression)"
-                  strokeWidth={2}
-                  dot={{
-                    strokeWidth: 0,
-                    r: 3,
-                    fill: "var(--color-compression)",
-                  }}
-                  activeDot={{ strokeWidth: 0, r: 5 }}
-                />
                 <Line
                   dataKey="cache"
                   type="monotone"

@@ -17,13 +17,10 @@ import type {
   ArchestraInternalErrorCode,
   SupportedProvider,
 } from "@archestra/shared";
-import { encode as toonEncode } from "@toon-format/toon";
 import { get } from "lodash-es";
 import config from "@/config";
 import logger from "@/logging";
-import { ModelModel } from "@/models";
 import { metrics } from "@/observability";
-import { getTokenizer } from "@/tokenizers";
 import type {
   ChunkProcessingResult,
   CommonMcpToolDefinition,
@@ -37,11 +34,9 @@ import type {
   LLMStreamAdapter,
   OllamaNative,
   StreamAccumulatorState,
-  ToolCompressionStats,
   UsageView,
 } from "@/types";
 import { extractCommonToolCallArguments } from "@/types";
-import { unwrapToolContent } from "../utils/unwrap-tool-content";
 
 // =============================================================================
 // TYPE ALIASES
@@ -214,15 +209,6 @@ class OllamaNativeRequestAdapter
     Object.assign(this.toolResultUpdates, updates);
   }
 
-  async applyToonCompression(model: string): Promise<ToolCompressionStats> {
-    const { messages, stats } = await convertNativeToolResultsToToon(
-      this.request.messages,
-      model,
-    );
-    this.request = { ...this.request, messages };
-    return stats;
-  }
-
   convertToolResultContent(messages: NativeMessages): NativeMessages {
     // Ollama tool results are plain strings by the time they reach the proxy
     // (ollama-ai-provider-v2 serializes structured tool output to a string), so
@@ -255,7 +241,7 @@ class OllamaNativeRequestAdapter
    * present only when the caller is ollama-ai-provider-v2. Fall back to the
    * message's position, which is stable for the lifetime of one request:
    * `toCommonFormat`, `getToolResults` and `toProviderRequest` all index the
-   * same array, and TOON compression rewrites content 1:1 without reordering.
+   * same array, and content updates preserve message order.
    */
   private toolResultId(message: NativeMessage, index: number): string {
     return message.tool_call_id ?? `${SYNTHETIC_TOOL_RESULT_ID_PREFIX}${index}`;
@@ -695,68 +681,6 @@ class OllamaNativeStreamAdapter
       eval_count: this.state.usage?.outputTokens ?? 0,
     };
   }
-}
-
-// =============================================================================
-// TOON COMPRESSION (native tool-result messages)
-// =============================================================================
-
-async function convertNativeToolResultsToToon(
-  messages: NativeMessages,
-  model: string,
-): Promise<{ messages: NativeMessages; stats: ToolCompressionStats }> {
-  const tokenizer = getTokenizer(PROVIDER);
-  let toolResultCount = 0;
-  let totalTokensBefore = 0;
-  let totalTokensAfter = 0;
-
-  const result = messages.map((message) => {
-    if (message.role !== "tool" || typeof message.content !== "string") {
-      return message;
-    }
-    try {
-      const unwrapped = unwrapToolContent(message.content);
-      const parsed = JSON.parse(unwrapped);
-      const compressed = toonEncode(parsed);
-      const tokensBefore = tokenizer.countTokens([
-        { role: "user", content: unwrapped },
-      ]);
-      const tokensAfter = tokenizer.countTokens([
-        { role: "user", content: compressed },
-      ]);
-      toolResultCount++;
-      totalTokensBefore += tokensBefore;
-      if (tokensAfter < tokensBefore) {
-        totalTokensAfter += tokensAfter;
-        return { ...message, content: compressed };
-      }
-      totalTokensAfter += tokensBefore;
-      return message;
-    } catch {
-      return message;
-    }
-  });
-
-  let costSavings = 0;
-  const tokensSaved = totalTokensBefore - totalTokensAfter;
-  if (tokensSaved > 0) {
-    costSavings = await ModelModel.calculateCostSavings(
-      model,
-      tokensSaved,
-      PROVIDER,
-    );
-  }
-
-  return {
-    messages: result,
-    stats: {
-      tokensBefore: totalTokensBefore,
-      tokensAfter: totalTokensAfter,
-      costSavings,
-      wasEffective: totalTokensAfter < totalTokensBefore,
-      hadToolResults: toolResultCount > 0,
-    },
-  };
 }
 
 // =============================================================================

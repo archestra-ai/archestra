@@ -56,6 +56,18 @@ try {
 
   let migrationError;
   try {
+    // Retire the old statistics index before dropping its removed feature
+    // columns. Drizzle's transaction cannot use DROP INDEX CONCURRENTLY.
+    // Keep the remaining date/profile indexes; do not rebuild this large index
+    // while proxy traffic is writing interactions.
+    await client.query("SET lock_timeout = '5s'");
+    try {
+      await client.query(
+        'DROP INDEX CONCURRENTLY IF EXISTS "interactions_statistics_covering_idx"',
+      );
+    } finally {
+      await client.query("RESET lock_timeout");
+    }
     child = spawn("./node_modules/.bin/drizzle-kit", ["migrate"], {
       cwd: process.cwd(),
       env: process.env,

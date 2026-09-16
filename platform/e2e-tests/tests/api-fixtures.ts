@@ -68,7 +68,6 @@ export interface TestFixtures {
   syncModels: typeof syncModels;
   updateModelPricing: typeof updateModelPricing;
   getOrganization: typeof getOrganization;
-  updateLlmSettings: typeof updateLlmSettings;
   updateSecuritySettings: typeof updateSecuritySettings;
   updateKnowledgeSettings: typeof updateKnowledgeSettings;
   getInteractions: typeof getInteractions;
@@ -950,25 +949,6 @@ const getOrganization = async (request: APIRequestContext) =>
   });
 
 /**
- * Update LLM settings (compression, cleanup interval)
- * (authnz is handled by the authenticated session)
- */
-const updateLlmSettings = async (
-  request: APIRequestContext,
-  updates: {
-    convertToolResultsToToon?: boolean;
-    compressionScope?: "organization" | "team";
-    limitCleanupInterval?: "1h" | "12h" | "24h" | "1w" | "1m";
-  },
-) =>
-  makeApiRequest({
-    request,
-    method: "patch",
-    urlSuffix: "/api/organization/llm-settings",
-    data: updates,
-  });
-
-/**
  * Update security settings (chat file uploads)
  * (authnz is handled by the authenticated session)
  */
@@ -1314,9 +1294,6 @@ export const test = base.extend<TestFixtures>({
   },
   getOrganization: async ({}, use) => {
     await use(getOrganization);
-  },
-  updateLlmSettings: async ({}, use) => {
-    await use(updateLlmSettings);
   },
   updateSecuritySettings: async ({}, use) => {
     await use(updateSecuritySettings);

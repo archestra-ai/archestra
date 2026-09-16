@@ -18,7 +18,6 @@ export function makeOrganization(
     onboardingSurveyCompletedAt: null,
     theme: "modern-minimal",
     customFont: "inter",
-    convertToolResultsToToon: false,
     onlineMcpCatalogEnabled: true,
     mcpIdleHibernationEnabled: false,
     onlineSkillCatalogEnabled: true,
@@ -27,7 +26,6 @@ export function makeOrganization(
     appsHackathonRecorderEnabled: true,
     newAppsDisabledByDefault: false,
     newAppsLockedByDefault: false,
-    compressionScope: "organization",
     defaultDiscoveredToolInvocationPolicy: "allow_when_context_is_untrusted",
     defaultDiscoveredToolResultPolicy: "mark_as_untrusted",
     allowChatFileUploads: false,
@@ -142,7 +140,6 @@ export function makeTeam(overrides: Partial<Team> = {}): Team {
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
     roles: [],
-    convertToolResultsToToon: false,
     ...overrides,
   };
 }

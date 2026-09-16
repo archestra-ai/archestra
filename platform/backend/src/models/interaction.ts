@@ -718,10 +718,6 @@ class InteractionModel {
           cacheWriteTokens: schema.interactionsTable.cacheWriteTokens,
           cost: schema.interactionsTable.cost,
           baselineCost: schema.interactionsTable.baselineCost,
-          toonTokensBefore: schema.interactionsTable.toonTokensBefore,
-          toonTokensAfter: schema.interactionsTable.toonTokensAfter,
-          toonCostSavings: schema.interactionsTable.toonCostSavings,
-          toonSkipReason: schema.interactionsTable.toonSkipReason,
           createdAt: schema.interactionsTable.createdAt,
         })
         .from(schema.interactionsTable)
@@ -1789,14 +1785,7 @@ class InteractionModel {
           string | null
         >`SUM(${schema.interactionsTable.cost}) FILTER (WHERE ${schema.interactionsTable.billingMode} = 'subscription')`,
         totalBaselineCost: sum(schema.interactionsTable.baselineCost),
-        totalToonCostSavings: sum(schema.interactionsTable.toonCostSavings),
         totalCacheSavings: sum(schema.interactionsTable.cacheSavings),
-        // Count interactions where TOON was applied (has savings)
-        toonAppliedCount: sql<number>`COUNT(*) FILTER (WHERE ${schema.interactionsTable.toonCostSavings} IS NOT NULL AND CAST(${schema.interactionsTable.toonCostSavings} AS NUMERIC) > 0)`,
-        // Count interactions by skip reason
-        toonNotEnabledCount: sql<number>`COUNT(*) FILTER (WHERE ${schema.interactionsTable.toonSkipReason} = 'not_enabled')`,
-        toonNotEffectiveCount: sql<number>`COUNT(*) FILTER (WHERE ${schema.interactionsTable.toonSkipReason} = 'not_effective')`,
-        toonNoToolResultsCount: sql<number>`COUNT(*) FILTER (WHERE ${schema.interactionsTable.toonSkipReason} = 'no_tool_results')`,
         firstRequestTime: min(schema.interactionsTable.createdAt),
         lastRequestTime: max(schema.interactionsTable.createdAt),
         models: sql<string>`STRING_AGG(DISTINCT ${schema.interactionsTable.model}, ',')`,
@@ -1923,14 +1912,7 @@ class InteractionModel {
         totalBilledCost: s.totalBilledCost,
         totalSubscriptionCost: s.totalSubscriptionCost,
         totalBaselineCost: s.totalBaselineCost,
-        totalToonCostSavings: s.totalToonCostSavings,
         totalCacheSavings: s.totalCacheSavings,
-        toonSkipReasonCounts: {
-          applied: Number(s.toonAppliedCount) || 0,
-          notEnabled: Number(s.toonNotEnabledCount) || 0,
-          notEffective: Number(s.toonNotEffectiveCount) || 0,
-          noToolResults: Number(s.toonNoToolResultsCount) || 0,
-        },
         firstRequestTime: s.firstRequestTime ?? new Date(),
         lastRequestTime: s.lastRequestTime ?? new Date(),
         models: s.models ? s.models.split(",").filter(Boolean) : [],

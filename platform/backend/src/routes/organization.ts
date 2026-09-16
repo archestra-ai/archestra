@@ -65,7 +65,6 @@ import {
   UpdateDefaultEnvironmentSchema,
   UpdateIntegrationSettingsSchema,
   UpdateKnowledgeSettingsSchema,
-  UpdateLlmSettingsSchema,
   UpdateMcpSettingsSchema,
   UpdateSecuritySettingsSchema,
   UpdateSkillsSettingsSchema,
@@ -173,29 +172,6 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const patch = config.hackathonRecorder.enabled ? body : withoutHackathon;
 
       const organization = await OrganizationModel.patch(organizationId, patch);
-
-      if (!organization) {
-        throw new ApiError(404, "Organization not found");
-      }
-
-      return reply.send(organization);
-    },
-  );
-
-  fastify.patch(
-    "/api/organization/llm-settings",
-    {
-      schema: {
-        operationId: RouteId.UpdateLlmSettings,
-        description:
-          "Update LLM settings (TOON compression, compression scope)",
-        tags: ["Organization"],
-        body: UpdateLlmSettingsSchema,
-        response: constructResponseSchema(SelectOrganizationSchema),
-      },
-    },
-    async ({ organizationId, body }, reply) => {
-      const organization = await OrganizationModel.patch(organizationId, body);
 
       if (!organization) {
         throw new ApiError(404, "Organization not found");

@@ -1039,25 +1039,6 @@ describe("organization routes", () => {
     });
   });
 
-  describe("PATCH /api/organization/llm-settings", () => {
-    test("updates compression scope and TOON conversion", async () => {
-      const response = await app.inject({
-        method: "PATCH",
-        url: "/api/organization/llm-settings",
-        payload: {
-          compressionScope: "team",
-          convertToolResultsToToon: true,
-        },
-      });
-
-      expect(response.statusCode).toBe(200);
-      expect(response.json()).toMatchObject({
-        compressionScope: "team",
-        convertToolResultsToToon: true,
-      });
-    });
-  });
-
   describe("PATCH /api/organization/knowledge-settings", () => {
     beforeEach(() => {
       // Save-time validation issues a real embedding call; mock the network so

@@ -35,7 +35,6 @@ import type {
   LLMResponseAdapter,
   LLMStreamAdapter,
   StreamAccumulatorState,
-  ToolCompressionStats,
   UsageView,
 } from "@/types";
 import {
@@ -302,12 +301,6 @@ class AzureResponsesRequestAdapter
 
   applyToolResultUpdates(updates: Record<string, string>): void {
     Object.assign(this.toolResultUpdates, updates);
-  }
-
-  async applyToonCompression(_model: string): Promise<ToolCompressionStats> {
-    // Responses tool outputs are already structured as function_call_output items,
-    // so there is no JSON blob to compress with TOON before forwarding upstream.
-    return createEmptyToolCompressionStats();
   }
 
   convertToolResultContent(input: AzureResponseInput): AzureResponseInput {
@@ -823,16 +816,6 @@ class AzureResponsesStreamAdapter
     this.toolCallsByItemId.set(chunk.item_id, toolCall);
     this.state.toolCalls = Array.from(this.toolCallsByItemId.values());
   }
-}
-
-function createEmptyToolCompressionStats(): ToolCompressionStats {
-  return {
-    tokensBefore: 0,
-    tokensAfter: 0,
-    costSavings: 0,
-    wasEffective: false,
-    hadToolResults: false,
-  };
 }
 
 function toCommonMessages(item: ResponseInputItem): CommonMessage[] {

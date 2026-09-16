@@ -122,7 +122,6 @@ export default function SessionDetailPage({
   const totalBilledCost = sessionData?.totalBilledCost;
   const totalSubscriptionCost = sessionData?.totalSubscriptionCost;
   const totalBaselineCost = sessionData?.totalBaselineCost;
-  const totalToonCostSavings = sessionData?.totalToonCostSavings;
 
   // Session metadata from API
   // Badge for known clients (Claude, Codex); null for non-client agent ids.
@@ -249,7 +248,6 @@ export default function SessionDetailPage({
               billedCost={totalBilledCost}
               subscriptionCost={totalSubscriptionCost}
               baselineCost={totalBaselineCost}
-              toonCostSavings={totalToonCostSavings}
               format="percent"
               tooltip="hover"
               variant="session"
@@ -450,10 +448,6 @@ export default function SessionDetailPage({
                                 interaction.cost ||
                                 "0"
                               }
-                              toonCostSavings={interaction.toonCostSavings}
-                              toonTokensBefore={interaction.toonTokensBefore}
-                              toonTokensAfter={interaction.toonTokensAfter}
-                              toonSkipReason={interaction.toonSkipReason}
                               format="percent"
                               tooltip="hover"
                               variant="interaction"

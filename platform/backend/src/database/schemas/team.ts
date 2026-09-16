@@ -42,9 +42,6 @@ export const team = pgTable(
     updatedAt: timestamp("updated_at")
       .$onUpdate(() => /* @__PURE__ */ new Date())
       .notNull(),
-    convertToolResultsToToon: boolean("convert_tool_results_to_toon")
-      .notNull()
-      .default(false),
   },
   (table) => [index("team_parent_team_id_idx").on(table.parentId)],
 );

@@ -5358,9 +5358,11 @@ const WAKE_RETRY_DELAY_MS = 1_000;
  * into a failed tool call for any client that does not retry, so this loop IS
  * that retry: it re-enters the wake until the server is up or the budget is
  * spent, and only then answers. What still surfaces immediately: an abort,
- * failures a retry cannot help (a deployment that cannot start), and a wake
- * that ran to a verdict rather than losing a race — re-entering on those
- * only trades the reason for a generic "still starting up".
+ * and failures a retry cannot help (a deployment that cannot start). A wake
+ * that ran to a verdict — no capacity, a pull that has not succeeded — keeps
+ * its budget too, because those conditions clear; the verdict is remembered
+ * so the budget expires into that reason instead of a generic "still
+ * starting up".
  */
 async function waitForMcpServerWake(params: {
   mcpServerId: string;
@@ -5375,12 +5377,17 @@ async function waitForMcpServerWake(params: {
   }
   const budgetMs = wakeResponseBudgetMs();
   const deadlineAt = Date.now() + budgetMs;
+  // The most recent verdict a wake came back with, kept so the budget can
+  // still expire into a reason rather than the generic "still starting up".
+  let lastVerdict: McpServerWakeError | null = null;
 
   for (;;) {
     const attempt = withDeadline(
       McpServerRuntimeManager.ensureAwake(params.mcpServerId),
       Math.max(1, deadlineAt - Date.now()),
-      () => new McpServerWakePendingError(params.mcpServerName, budgetMs),
+      () =>
+        lastVerdict ??
+        new McpServerWakePendingError(params.mcpServerName, budgetMs),
     );
     try {
       await raceWithAbort(attempt, abortSignal);
@@ -5398,19 +5405,22 @@ async function waitForMcpServerWake(params: {
       }
       // The wake did not lose a race — it ran to the end of its readiness
       // budget and came back with a verdict about the cluster (no capacity to
-      // place the pod, an image that never pulled). Re-entering would spend
-      // what is left of the reply budget re-deriving the same answer and then
-      // report the generic "still starting up" instead, which is how a full
-      // cluster and an unpullable image both reached callers as "retry
-      // shortly" and nothing else. Hand the verdict over as-is: it is already
-      // retryable-shaped, and it is the only form of this answer that says
-      // what is actually wrong.
+      // place the pod, an image that has not pulled). Keep it: whichever way
+      // this call ends, the answer should name that reason rather than the
+      // generic "still starting up", which is how a full cluster reached
+      // callers with nothing they could act on.
+      //
+      // Keeping it is all we do. A verdict describes a condition that can
+      // clear — capacity frees, a pull succeeds — so the caller's remaining
+      // budget is still worth spending on another attempt that might return
+      // a woken server instead of any error at all. Only the budget itself
+      // ends the wait, and by then `lastVerdict` is what it expires into.
       if (error.concluded) {
-        throw error;
+        lastVerdict = error;
       }
       // Too little budget left for another attempt to observe anything new:
-      // answer with the race's own reason, which is already retryable-shaped
-      // and names more than a generic "still pending" would.
+      // answer with this attempt's own reason, which is already
+      // retryable-shaped and names more than a generic "still pending" would.
       if (deadlineAt - Date.now() <= WAKE_RETRY_DELAY_MS) {
         throw error;
       }

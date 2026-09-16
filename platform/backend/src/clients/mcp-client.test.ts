@@ -2767,7 +2767,7 @@ describe("McpClient", () => {
         expect(mockEnsureAwake).toHaveBeenCalledTimes(2);
       });
 
-      test("a wake that reached a verdict answers with its reason instead of being re-entered", async () => {
+      test("a concluded verdict does not cost the caller the rest of its budget", async () => {
         const tool = await ToolModel.createToolIfNotExists({
           name: "local-streamable-http-server__test_tool",
           description: "Test tool",
@@ -2778,24 +2778,74 @@ describe("McpClient", () => {
           mcpServerId: localMcpServerId,
         });
 
-        // Ample budget, so the funnel COULD re-enter the wake — which is
-        // exactly the bug this pins. A verdict is not a race: re-entering
-        // burns the rest of the budget to re-derive the same answer and then
-        // reports the generic "still starting up", which is how a full
-        // cluster reached callers with nothing they could act on.
+        // A verdict names a condition that CAN clear — capacity frees, a pull
+        // succeeds. Answering the caller the moment one arrives would fail a
+        // tool call that the remaining budget could still have served, so the
+        // wake is re-entered and this call goes through.
         WAKE_BUDGET.ms = 30_000;
         const { McpServerWakeError } = await import("@/k8s/mcp-server-runtime");
-        mockEnsureAwake.mockRejectedValue(
-          new McpServerWakeError("local-streamable-http-server", {
-            concluded: true,
-            detail:
-              "the cluster has no free capacity to schedule its pod (0/1 nodes are available: 1 Insufficient cpu). The pod stays queued and starts when capacity frees",
-          }),
-        );
+        mockEnsureAwake
+          .mockRejectedValueOnce(
+            new McpServerWakeError("local-streamable-http-server", {
+              concluded: true,
+              detail:
+                "the cluster has no free capacity to schedule its pod (0/1 nodes are available: 1 Insufficient cpu). The pod stays queued and starts when capacity frees",
+            }),
+          )
+          .mockResolvedValue(undefined);
+        mockUsesStreamableHttp.mockResolvedValue(true);
+        mockGetHttpEndpointUrl.mockReturnValue("http://localhost:30123/mcp");
+        mockCallTool.mockResolvedValue({
+          content: [{ type: "text", text: "served once capacity freed" }],
+          isError: false,
+        });
 
         const result = await mcpClient.executeToolCallForOwner(
           {
-            id: "call_wake_verdict",
+            id: "call_wake_verdict_recovers",
+            name: "local-streamable-http-server__test_tool",
+            arguments: {},
+          },
+          agentOwner(agentId),
+        );
+
+        expect(result.isError).toBe(false);
+        expect(result.content).toEqual([
+          { type: "text", text: "served once capacity freed" },
+        ]);
+        expect(mockEnsureAwake).toHaveBeenCalledTimes(2);
+      });
+
+      test("a budget that expires after a verdict answers with the verdict, not the generic pending reason", async () => {
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "local-streamable-http-server__test_tool",
+          description: "Test tool",
+          parameters: {},
+          catalogId: localCatalogId,
+        });
+        await AgentToolModel.create(agentId, tool.id, {
+          mcpServerId: localMcpServerId,
+        });
+
+        // First attempt comes back with the scheduler's reason; the second
+        // never settles, so the reply budget is what ends the wait. The
+        // answer must still be that reason — expiring into "it is still
+        // starting up" would throw away the only part the caller can act on.
+        WAKE_BUDGET.ms = 3_000;
+        const { McpServerWakeError } = await import("@/k8s/mcp-server-runtime");
+        mockEnsureAwake
+          .mockRejectedValueOnce(
+            new McpServerWakeError("local-streamable-http-server", {
+              concluded: true,
+              detail:
+                "the cluster has no free capacity to schedule its pod (0/1 nodes are available: 1 Insufficient cpu). The pod stays queued and starts when capacity frees",
+            }),
+          )
+          .mockReturnValue(new Promise(() => {}));
+
+        const result = await mcpClient.executeToolCallForOwner(
+          {
+            id: "call_wake_verdict_expires",
             name: "local-streamable-http-server__test_tool",
             arguments: {},
           },
@@ -2803,13 +2853,11 @@ describe("McpClient", () => {
         );
 
         expect(result.isError).toBe(true);
-        // The scheduler's own reason reaches the agent, and it stays
-        // retryable — a full cluster is a condition, not a defect.
         expect(result.error).toContain("no free capacity to schedule its pod");
+        expect(result.error).not.toContain("it is still starting up");
         expect(result.error).toContain("retry shortly");
         expect(result.error).not.toContain("retrying will not help");
-        expect(mockEnsureAwake).toHaveBeenCalledTimes(1);
-        expect(mockConnect).not.toHaveBeenCalled();
+        expect(mockEnsureAwake).toHaveBeenCalledTimes(2);
       });
 
       test("with too little budget left for another attempt, the race's own retryable reason is the answer", async () => {

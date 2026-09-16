@@ -18,6 +18,7 @@ import { ZodError, type ZodType, z } from "zod";
 import config from "@/config";
 import { openappaEnabled } from "@/openappa/service";
 import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
+import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
 // Import all groups
 import { toolEntries as agentToolEntries, tools as agentTools } from "./agents";
 import {
@@ -285,6 +286,13 @@ export async function executeArchestraTool(
   // Discovery alone is insufficient: stale assignments and direct calls must
   // not activate APPA while its feature flag is off.
   if (
+    archestraMcpBranding.getToolShortName(toolName) ===
+      TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME &&
+    !(await isGuardrailsV2Active())
+  ) {
+    throw { code: -32601, message: "Guardrails v2 is disabled" };
+  }
+  if (
     !openappaEnabled() &&
     isOpenappaTool(archestraMcpBranding.getToolShortName(toolName))
   ) {
@@ -293,7 +301,10 @@ export async function executeArchestraTool(
       message: `No tool named "${toolName}" exists. ${toolDiscoverySteer()}`,
     };
   }
-  if (openappaEnabled() && (isAgentTool(toolName) || isSkillTool(toolName))) {
+  if (
+    (isAgentTool(toolName) || isSkillTool(toolName)) &&
+    (await isGuardrailsV2Active())
+  ) {
     return {
       isError: true,
       content: [
@@ -489,7 +500,10 @@ async function resolveToolAssignment(
   // search_tools invocation skips the extra queries (excluding these tools is
   // also rejected at write time).
   if (ASSIGNMENT_EXEMPT_SHORT_NAMES.has(shortName)) return null;
-  if (openappaEnabled() && shortName === TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME)
+  if (
+    shortName === TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME &&
+    (await isGuardrailsV2Active())
+  )
     return null;
 
   // Loaded once per invocation and threaded through both gates. Empty (no-op)

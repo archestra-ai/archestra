@@ -6,14 +6,11 @@ import {
 import type { ConverseStreamOutput } from "@aws-sdk/client-bedrock-runtime";
 import { EventStreamCodec } from "@smithy/eventstream-codec";
 import { fromUtf8, toUtf8 } from "@smithy/util-utf8";
-import { encode as toonEncode } from "@toon-format/toon";
 import type { BedrockClient } from "@/clients/bedrock-client";
 import { buildBedrockClient } from "@/clients/bedrock-credentials";
 import { fetchWithLlmUpstreamDispatcher } from "@/clients/llm-upstream-dispatcher";
 import config from "@/config";
 import logger from "@/logging";
-import { ModelModel } from "@/models";
-import { getTokenizer } from "@/tokenizers";
 import type {
   Bedrock,
   ChunkProcessingResult,
@@ -27,7 +24,6 @@ import type {
   LLMResponseAdapter,
   LLMStreamAdapter,
   StreamAccumulatorState,
-  ToolCompressionStats,
   UsageView,
 } from "@/types";
 import {
@@ -38,8 +34,6 @@ import {
   type SamplingParam,
   withSamplingParamFallback,
 } from "./sampling-param-fallback";
-
-// ToolCompressionStats imported from @/types
 
 // =============================================================================
 // TYPE ALIASES
@@ -714,17 +708,6 @@ class BedrockRequestAdapter
 
   applyToolResultUpdates(updates: Record<string, string>): void {
     Object.assign(this.toolResultUpdates, updates);
-  }
-
-  async applyToonCompression(model: string): Promise<ToolCompressionStats> {
-    const { messages: compressedMessages, stats } =
-      await convertToolResultsToToon(this.request.messages ?? [], model);
-    // Update internal messages state
-    this.request = {
-      ...this.request,
-      messages: compressedMessages,
-    };
-    return stats;
   }
 
   convertToolResultContent(messages: BedrockMessages): BedrockMessages {
@@ -1713,156 +1696,6 @@ class BedrockStreamAdapter
       this.pendingProtocolContentBlockIndex = null;
     }
   }
-}
-
-// =============================================================================
-// TOON COMPRESSION
-// =============================================================================
-
-/**
- * Convert tool results in messages to TOON format
- * Returns both the converted messages and compression stats
- */
-export async function convertToolResultsToToon(
-  messages: BedrockMessages,
-  model: string,
-): Promise<{
-  messages: BedrockMessages;
-  stats: ToolCompressionStats;
-}> {
-  // Use anthropic tokenizer as a reasonable approximation for Bedrock models
-  const tokenizer = getTokenizer("anthropic");
-  let toolResultCount = 0;
-  let totalTokensBefore = 0;
-  let totalTokensAfter = 0;
-
-  const result = messages.map((message) => {
-    // Only process user messages with content arrays that contain tool_result blocks
-    if (message.role === "user" && Array.isArray(message.content)) {
-      const updatedContent = message.content.map((contentBlock) => {
-        if (
-          isToolResultBlock(contentBlock) &&
-          contentBlock.toolResult.status !== "error"
-        ) {
-          toolResultCount++;
-          const toolResult = contentBlock.toolResult;
-
-          // Handle content array
-          if (toolResult.content && toolResult.content.length > 0) {
-            const firstContent = toolResult.content[0];
-
-            if (
-              "text" in firstContent &&
-              typeof firstContent.text === "string"
-            ) {
-              try {
-                const parsed = JSON.parse(firstContent.text);
-                const noncompressed = firstContent.text;
-                const compressed = toonEncode(parsed);
-
-                // Count tokens for before and after
-                const tokensBefore = tokenizer.countTokens([
-                  { role: "user", content: noncompressed },
-                ]);
-                const tokensAfter = tokenizer.countTokens([
-                  { role: "user", content: compressed },
-                ]);
-                totalTokensBefore += tokensBefore;
-                totalTokensAfter += tokensAfter;
-
-                logger.debug(
-                  {
-                    toolUseId: toolResult.toolUseId,
-                    beforeLength: noncompressed.length,
-                    afterLength: compressed.length,
-                    tokensBefore,
-                    tokensAfter,
-                    provider: "bedrock",
-                  },
-                  "convertToolResultsToToon: compressed",
-                );
-
-                return {
-                  toolResult: {
-                    ...toolResult,
-                    content: [{ text: compressed }],
-                  },
-                };
-              } catch {
-                logger.debug(
-                  {
-                    toolUseId: toolResult.toolUseId,
-                  },
-                  "convertToolResultsToToon: skipping - content is not JSON",
-                );
-                return contentBlock;
-              }
-            } else if ("json" in firstContent && firstContent.json) {
-              try {
-                const noncompressed = JSON.stringify(firstContent.json);
-                const compressed = toonEncode(firstContent.json);
-
-                const tokensBefore = tokenizer.countTokens([
-                  { role: "user", content: noncompressed },
-                ]);
-                const tokensAfter = tokenizer.countTokens([
-                  { role: "user", content: compressed },
-                ]);
-                totalTokensBefore += tokensBefore;
-                totalTokensAfter += tokensAfter;
-
-                return {
-                  toolResult: {
-                    ...toolResult,
-                    content: [{ text: compressed }],
-                  },
-                };
-              } catch {
-                return contentBlock;
-              }
-            }
-          }
-        }
-        return contentBlock;
-      });
-
-      return {
-        ...message,
-        content: updatedContent,
-      };
-    }
-
-    return message;
-  }) as BedrockMessages;
-
-  logger.info(
-    { messageCount: messages.length, toolResultCount },
-    "convertToolResultsToToon completed for Bedrock",
-  );
-
-  // Calculate cost savings
-  let toonCostSavings = 0;
-  if (toolResultCount > 0) {
-    const tokensSaved = totalTokensBefore - totalTokensAfter;
-    if (tokensSaved > 0) {
-      toonCostSavings = await ModelModel.calculateCostSavings(
-        model,
-        tokensSaved,
-        "bedrock",
-      );
-    }
-  }
-
-  return {
-    messages: result,
-    stats: {
-      tokensBefore: totalTokensBefore,
-      tokensAfter: totalTokensAfter,
-      costSavings: toonCostSavings,
-      wasEffective: totalTokensAfter < totalTokensBefore,
-      hadToolResults: toolResultCount > 0,
-    },
-  };
 }
 
 // =============================================================================

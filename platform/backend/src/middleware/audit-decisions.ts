@@ -9,6 +9,7 @@ import ChatOpsChannelBindingModel from "@/models/chatops-channel-binding";
 import EnvironmentModel from "@/models/environment";
 import EnvironmentDefaultUserLimitModel from "@/models/environment-default-user-limit";
 import EnvironmentResourceDefaultModel from "@/models/environment-resource-default";
+import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import KbDirectoryModel from "@/models/kb-directory";
@@ -942,6 +943,10 @@ export const AUDIT_DECISIONS = {
   siteNotificationsTable: {
     audited: false,
     reason: "ephemeral in-app notifications; per-user UI state",
+  },
+  guardrailsDeploymentTable: {
+    audited: true,
+    model: GuardrailsDeploymentModel,
   },
   openappaGithubSyncTable: { audited: true, model: OpenAppaGithubSyncModel },
   openappaEventsTable: {

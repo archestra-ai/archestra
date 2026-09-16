@@ -309,6 +309,16 @@ export const SharePointConfigSchema = z.object({
   recursive: z.boolean().optional(),
   maxDepth: z.number().int().min(1).max(100).optional(),
   includePages: z.boolean().optional(),
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  pagePublicationStatus: z
+    .enum(["published", "draft", "both"])
+    .optional()
+    .describe(
+      "Site pages to sync by current publication status. Omitted means both for compatibility.",
+    ),
+  // SPDX-SnippetEnd
   batchSize: z.number().optional(),
 });
 export type SharePointConfig = z.infer<typeof SharePointConfigSchema>;

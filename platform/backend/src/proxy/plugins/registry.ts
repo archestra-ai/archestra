@@ -100,6 +100,8 @@ export type LlmProxyErrorContext = LlmProxyRequestContext & {
 
 export interface LlmProxyPlugin {
   readonly id: string;
+  /** Finalizers reserve approved calls and run after the host's policy check. */
+  readonly finalizesToolCalls?: boolean;
   onSessionInit?(context: LlmProxyRequestContext): Promise<void>;
   onPrompt?(context: LlmProxyPromptContext): Promise<void>;
   onBeforeModel?(context: LlmProxyBeforeModelContext): Promise<void>;
@@ -200,28 +202,42 @@ export class LlmProxyPluginRegistry {
 
   async onToolCalls(
     context: LlmProxyToolCallsContext,
+    validate?: (
+      toolCalls: LlmProxyToolCallsContext["toolCalls"],
+    ) => Promise<LlmProxyToolCallRefusal | null>,
   ): Promise<LlmProxyToolCallsOutcome> {
-    if (!this.hasPlugins()) {
-      return { decision: "allow", toolCalls: context.toolCalls };
-    }
-    let outcome: LlmProxyToolCallsOutcome = {
-      decision: "allow",
-      toolCalls: context.toolCalls,
-    };
-    for (const plugin of this.getSessionPlugins(context)) {
-      const result: LlmProxyToolCallsOutcome | undefined = await this.invoke(
-        plugin,
-        "onToolCalls",
-        {
-          ...context,
-          toolCalls: outcome.toolCalls,
-        },
-      );
+    let toolCalls = context.toolCalls;
+    const plugins = this.hasPlugins() ? this.getSessionPlugins(context) : [];
+    // Rewriters run first. The host checks exactly those calls before a
+    // finalizer such as APPA records any reservation for execution.
+    for (const plugin of plugins.filter(
+      (plugin) => !plugin.finalizesToolCalls,
+    )) {
+      const result = await this.invoke(plugin, "onToolCalls", {
+        ...context,
+        toolCalls,
+      });
       if (!result) continue;
-      outcome = result;
-      if (outcome.decision === "refuse") return outcome;
+      if (result.decision === "refuse") return result;
+      toolCalls = result.toolCalls;
     }
-    return outcome;
+    const refusal = await validate?.(toolCalls);
+    if (refusal) return { decision: "refuse", refusal };
+    for (const plugin of plugins.filter(
+      (plugin) => plugin.finalizesToolCalls,
+    )) {
+      const result = await this.invoke(plugin, "onToolCalls", {
+        ...context,
+        toolCalls,
+      });
+      if (result?.decision === "refuse") return result;
+      if (result && result.toolCalls !== toolCalls) {
+        throw new Error(
+          "A tool-call finalizer cannot rewrite already validated calls",
+        );
+      }
+    }
+    return { decision: "allow", toolCalls };
   }
 
   async onToolResults(

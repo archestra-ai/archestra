@@ -126,7 +126,7 @@ tilt trigger <pnpm-dev-backend|pnpm-dev-frontend|wiremock|etc> # Trigger an upda
 
 **Single-Tenant Organization Model**: Archestra currently provisions exactly one organization per deployment. Better Auth's organization plugin supplies the organization-scoped data model and RBAC primitives, but the product does not support creating or operating multiple organizations in one deployment today. Preserve organization scoping in code for consistency and possible future multi-organization support; do not design current runtime topology or user flows around multiple organizations unless that support is explicitly introduced.
 
-**Key Features**: MCP tool execution, dual LLM security pattern, tool invocation policies, trusted data policies, MCP response modifiers (Handlebars.js), team-based access control (profiles and MCP servers), K8s-based MCP server runtime with stdio and streamable-http transport support, white-labeling (themes, logos, fonts), profile-based chat with MCP tools, comprehensive built-in Archestra MCP tools, profile chat visibility control, TOON format conversion for efficient token usage
+**Key Features**: MCP tool execution, dual LLM security pattern, tool invocation policies, trusted data policies, MCP response modifiers (Handlebars.js), team-based access control (profiles and MCP servers), K8s-based MCP server runtime with stdio and streamable-http transport support, white-labeling (themes, logos, fonts), profile-based chat with MCP tools, comprehensive built-in Archestra MCP tools, profile chat visibility control
 
 **Workspaces**:
 
@@ -374,14 +374,6 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
 - HTTP servers get automatic K8s Service creation with ClusterIP DNS name
 - For streamable-http servers: K8s Service uses NodePort in local dev, ClusterIP in production
 
-
-**TOON Format Conversion**:
-
-- Agents support optional TOON (Token-Oriented Object Notation) conversion for tool results
-- Reduces token usage by 30-60% for uniform arrays of objects
-- Enabled via `convert_tool_results_to_toon` boolean field on agents
-- Automatically converts JSON tool results to TOON format before sending to LLM
-- Particularly useful for agents dealing with structured data from database or API tools
 
 **LLM Cost Billing Mode**:
 

@@ -1,7 +1,4 @@
-import {
-  type archestraApiTypes,
-  calculateCostSavings,
-} from "@archestra/shared";
+import { calculateCostSavings } from "@archestra/shared";
 import {
   Tooltip,
   TooltipContent,
@@ -12,10 +9,6 @@ import { formatCost } from "./cost";
 export function Savings({
   cost,
   baselineCost,
-  toonCostSavings,
-  toonTokensBefore,
-  toonTokensAfter,
-  toonSkipReason,
   format = "percent",
   tooltip = "never",
   className,
@@ -25,12 +18,6 @@ export function Savings({
 }: {
   cost: string;
   baselineCost: string;
-  toonCostSavings?: string | null;
-  toonTokensBefore?: number | null;
-  toonTokensAfter?: number | null;
-  toonSkipReason?:
-    | archestraApiTypes.GetInteractionResponses["200"]["toonSkipReason"]
-    | null;
   format?: "percent" | "number";
   tooltip?: "never" | "always" | "hover";
   className?: string;
@@ -42,20 +29,11 @@ export function Savings({
 }) {
   const {
     modelSwapSavings,
-    toonSavings: toonCostSavingsNum,
-    toonTokensSaved,
     totalSavings,
     estimatedCost,
     actualCost,
     savingsPercent: savingsPercentNum,
-  } = calculateCostSavings({
-    cost,
-    baselineCost,
-    toonCostSavings,
-    toonTokensBefore,
-    toonTokensAfter,
-  });
-
+  } = calculateCostSavings({ cost, baselineCost });
   const savingsPercent =
     savingsPercentNum % 1 === 0
       ? savingsPercentNum.toFixed(0)
@@ -126,23 +104,6 @@ export function Savings({
                       ? ` (${baselineModel} \u2192 ${actualModel})`
                       : ""}
                   </div>
-                )}
-
-                {toonCostSavingsNum > 0 ? (
-                  <div>
-                    Tool result compression: -{formatCost(toonCostSavingsNum)}
-                    {toonTokensSaved
-                      ? ` (${toonTokensSaved.toLocaleString()} tokens saved)`
-                      : ""}
-                  </div>
-                ) : toonSkipReason === "not_enabled" ? (
-                  <div>Tool result compression: Not enabled</div>
-                ) : toonSkipReason === "not_effective" ? (
-                  <div>Tool result compression: Skipped (no token savings)</div>
-                ) : toonSkipReason === "no_tool_results" ? (
-                  <div>Tool result compression: No tool results</div>
-                ) : (
-                  <div>Tool result compression: Not applied</div>
                 )}
               </div>
             )}

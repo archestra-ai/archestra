@@ -226,10 +226,7 @@ async function makeTeam(
   organizationId: string,
   createdBy: string,
   overrides: Partial<
-    Pick<
-      InsertTeam,
-      "name" | "description" | "convertToolResultsToToon" | "parentId"
-    >
+    Pick<InsertTeam, "name" | "description" | "parentId">
   > = {},
 ) {
   const [team] = await db
@@ -916,7 +913,6 @@ async function makeInteraction(
       | "outputTokens"
       | "cost"
       | "baselineCost"
-      | "toonCostSavings"
       | "cacheSavings"
       | "cacheCost"
       | "authMethod"

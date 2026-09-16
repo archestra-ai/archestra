@@ -8,7 +8,7 @@
  * OpenAI shapes.
  *
  * Everything between the route and these translations (auth, cost optimization,
- * trusted-data / tool-invocation policies, TOON compression, OTEL, interaction
+ * trusted-data / tool-invocation policies, OTEL, interaction
  * logging) runs on Converse shapes, reusing the battle-tested Bedrock adapter.
  */
 

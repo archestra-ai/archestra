@@ -2,12 +2,12 @@
 title: Costs & Limits
 category: LLM Proxy
 order: 4
-lastUpdated: 2026-09-07
+lastUpdated: 2026-09-16
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-Archestra tracks personal and organization-wide LLM usage, enforces usage limits, and records savings from tool-result compression and prompt caching. Organization controls remain under **Costs & Limits**. Open **My Usage** from your user menu.
+Archestra tracks personal and organization-wide LLM usage, enforces usage limits, and records savings from prompt caching. Organization controls remain under **Costs & Limits**. Open **My Usage** from your user menu.
 
 ## Statistics
 
@@ -15,7 +15,7 @@ The **Costs** tab at `/llm/costs` is the organization-wide rollup for LLM traffi
 
 - which teams are driving spend
 - which models are responsible for the largest share of cost
-- whether TOON compression and prompt caching are reducing spend over time
+- whether prompt caching is reducing spend over time
 
 The **LLM Proxy** section attributes usage to credentials and access methods. Selecting a credential filters its spend trend.
 
@@ -23,10 +23,7 @@ For a fuller cost view outside the Archestra UI, use Archestra's exported [metri
 
 This page depends on model pricing being configured correctly. If a model has no pricing, usage can still be logged, but cost calculations will be incomplete.
 
-Archestra stores both raw spend and savings. Savings can come from:
-
-- TOON compression that reduces tool-result tokens before the result is sent to the model
-- prompt caching that reuses an unchanged request prefix instead of reprocessing it each turn
+Archestra records prompt cache savings from reusing an unchanged request prefix.
 
 Reading organization-wide costs requires `llmCost:read`. See [LLM API Permissions](platform-access-control#llm-api-permissions) for API access details. You can open **My Usage** from your user menu without this permission.
 
@@ -168,39 +165,10 @@ Model pricing is configured on the provider model settings pages. Pricing is the
 - statistics use it to convert token counts into spend
 - token-cost limits use it to decide when a budget is reached
 - savings reporting uses it to price what a request would otherwise have cost
-- TOON compression savings are reported in dollars using the configured model price
 
 When you add a provider, Archestra syncs known input, output, and cache prices from a public model registry. You can override any of these per model, including cache read and write prices. A model the registry does not recognize falls back to an estimated flat price, shown as "estimated" in the model editor — set a custom price so cost reporting stays accurate. Amazon Bedrock and Azure model ids do not match the registry directly. Archestra maps them back to the underlying vendor model to recover real prices — cache prices included — and the context window.
 
 If you use custom or self-hosted models, add pricing explicitly so cost reporting stays meaningful.
-
-## TOON Compression
-
-TOON compression reduces the token footprint of structured tool results before they are passed to the model. Archestra keeps the original JSON for application logic, then converts the model-facing representation to TOON when compression is enabled and when the converted form is actually smaller.
-
-TOON is a compact, lossless representation of the JSON data model designed for LLM input. Its main advantage is with uniform arrays of objects, where repeated field names are declared once and row values are emitted in a table-like form. In practice, this is useful for tool outputs like:
-
-- database query results
-- lists of API resources
-- analytics rows
-- search results with repeated fields
-
-Compression is skipped when:
-
-- TOON is disabled
-- a response has no tool results
-- the TOON version would not save tokens
-
-Archestra records before/after token counts and savings when compression is applied, so those savings appear in logs and aggregate cost reporting.
-
-You can enable TOON compression at:
-
-- organization level for all traffic
-- team level when only certain teams should use it
-
-A team-level opt-in works on its own. A team with compression enabled uses it even when the organization-wide setting is off. Choosing Disabled in LLM settings clears every team opt-in and turns compression off.
-
-See the upstream TOON format project for the format specification and benchmarks: [toon-format/toon](https://github.com/toon-format/toon).
 
 ## Prompt Caching
 

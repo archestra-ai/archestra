@@ -29,7 +29,7 @@ For embeddings-only providers, follow `voyage`: register the provider and model 
 
 ## Guard rails
 
-- `backend/src/routes/proxy/routes/provider-matrix.test.ts` — `providerConfigsByProvider` is `satisfies Record<ChatProvider, ProviderTestConfig>`, so adding a chat-capable provider without a matrix entry (route plugin + adapter factory + endpoints) fails typecheck. The suite then exercises every chat provider's real route with a mocked client: declared-tool persistence, execution IDs, streaming tool calls, TOON compression, and limit blocking.
+- `backend/src/routes/proxy/routes/provider-matrix.test.ts` — `providerConfigsByProvider` is `satisfies Record<ChatProvider, ProviderTestConfig>`, so adding a chat-capable provider without a matrix entry (route plugin + adapter factory + endpoints) fails typecheck. The suite then exercises every chat provider's real route with a mocked client: declared-tool persistence, execution IDs, streaming tool calls, structured tool result forwarding, and limit blocking.
 - The `modelFetchers` record (above) enforces the same exhaustiveness for model listing.
 
 ## Translation gotchas (real handling, check before "fixing")
@@ -47,7 +47,7 @@ cd backend && npx vitest run src/routes/proxy/adapters/<provider>*.test.ts   # a
 pnpm type-check
 ```
 
-- Manual end-to-end check: `PROVIDER_SMOKE_TEST.md` (repo root of `platform/`) is a browser-automation smoke runbook covering chat, policies, TOON, and proxy flows — run it after provider/proxy changes that unit tests can't cover.
+- Manual end-to-end check: `PROVIDER_SMOKE_TEST.md` (repo root of `platform/`) is a browser-automation smoke runbook covering chat, policies, and proxy flows — run it after provider/proxy changes that unit tests can't cover.
 
 ## Related skills
 

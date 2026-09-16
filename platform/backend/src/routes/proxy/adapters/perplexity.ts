@@ -44,7 +44,6 @@ import type {
   LLMStreamAdapter,
   Perplexity,
   StreamAccumulatorState,
-  ToolCompressionStats,
   UsageView,
 } from "@/types";
 import { extractCommonMessageText } from "@/types";
@@ -131,17 +130,6 @@ class PerplexityRequestAdapter
   // Perplexity doesn't support tool calling - no-op
   applyToolResultUpdates(_updates: Record<string, string>): void {
     // No-op: Perplexity doesn't support tool calling
-  }
-
-  // Perplexity doesn't support tool calling - return stats with no compression
-  async applyToonCompression(_model: string): Promise<ToolCompressionStats> {
-    return {
-      tokensBefore: 0,
-      tokensAfter: 0,
-      costSavings: 0,
-      wasEffective: false,
-      hadToolResults: false,
-    };
   }
 
   // Perplexity doesn't support tool calling - return messages unchanged

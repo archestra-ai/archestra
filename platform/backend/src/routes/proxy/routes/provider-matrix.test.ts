@@ -55,7 +55,6 @@ import { perplexityResponsesAdapterFactory } from "../adapters/perplexity-respon
 import { vllmAdapterFactory } from "../adapters/vllm";
 import { xaiAdapterFactory } from "../adapters/xai";
 import { zhipuaiAdapterFactory } from "../adapters/zhipuai";
-import * as proxyUtils from "../utils";
 import anthropicProxyRoutes from "./anthropic";
 import archestraProxyRoutes from "./archestra";
 import azureProxyRoutes from "./azure";
@@ -112,7 +111,7 @@ type RequestBuilder = {
     tools: ToolDefinition[];
     stream?: boolean;
   }) => Record<string, unknown>;
-  buildCompressionRequest: (params: {
+  buildToolResultRequest: (params: {
     model: string;
   }) => Record<string, unknown>;
 };
@@ -131,7 +130,7 @@ type ProviderTestConfig = {
   model: string;
   supportsDeclaredTools?: boolean;
   supportsStreamingToolCalls?: boolean;
-  supportsCompression?: boolean;
+
   assertStreamingToolCall: (body: string) => void;
 };
 
@@ -215,7 +214,7 @@ function makeOpenAiMessages(content: string) {
   return [{ role: "user", content }];
 }
 
-function makeOpenAiCompressionRequest(model: string) {
+function makeOpenAiToolResultRequest(model: string) {
   return {
     model,
     messages: [
@@ -243,7 +242,7 @@ function makeOpenAiCompressionRequest(model: string) {
   };
 }
 
-function makeAnthropicCompressionRequest(model: string) {
+function makeAnthropicToolResultRequest(model: string) {
   return {
     model,
     max_tokens: 1024,
@@ -274,7 +273,7 @@ function makeAnthropicCompressionRequest(model: string) {
   };
 }
 
-function makeGeminiCompressionRequest() {
+function makeGeminiToolResultRequest() {
   return {
     contents: [
       {
@@ -307,7 +306,7 @@ function makeGeminiCompressionRequest() {
   };
 }
 
-function makeCohereCompressionRequest(model: string) {
+function makeCohereToolResultRequest(model: string) {
   return {
     model,
     messages: [
@@ -340,7 +339,7 @@ function makeCohereCompressionRequest(model: string) {
   };
 }
 
-function makeBedrockCompressionRequest(model: string) {
+function makeBedrockToolResultRequest(model: string) {
   return {
     modelId: model,
     messages: [
@@ -1437,8 +1436,8 @@ function makeOpenAiCompatibleBuilder(defaultModel: string): RequestBuilder {
         },
       })),
     }),
-    buildCompressionRequest: ({ model }) =>
-      makeOpenAiCompressionRequest(model || defaultModel),
+    buildToolResultRequest: ({ model }) =>
+      makeOpenAiToolResultRequest(model || defaultModel),
   };
 }
 
@@ -1460,8 +1459,8 @@ function makeAnthropicBuilder(defaultModel: string): RequestBuilder {
         input_schema: tool.parameters,
       })),
     }),
-    buildCompressionRequest: ({ model }) =>
-      makeAnthropicCompressionRequest(model || defaultModel),
+    buildToolResultRequest: ({ model }) =>
+      makeAnthropicToolResultRequest(model || defaultModel),
   };
 }
 
@@ -1482,7 +1481,7 @@ function makeGeminiBuilder(_defaultModel: string): RequestBuilder {
         },
       ],
     }),
-    buildCompressionRequest: () => makeGeminiCompressionRequest(),
+    buildToolResultRequest: () => makeGeminiToolResultRequest(),
   };
 }
 
@@ -1503,7 +1502,7 @@ function makeAzureResponsesBuilder(defaultModel: string): RequestBuilder {
         parameters: tool.parameters,
       })),
     }),
-    buildCompressionRequest: ({ model }) => ({
+    buildToolResultRequest: ({ model }) => ({
       model: model || defaultModel,
       input: [
         {
@@ -1551,8 +1550,8 @@ function makeCohereBuilder(defaultModel: string): RequestBuilder {
         },
       })),
     }),
-    buildCompressionRequest: ({ model }) =>
-      makeCohereCompressionRequest(model || defaultModel),
+    buildToolResultRequest: ({ model }) =>
+      makeCohereToolResultRequest(model || defaultModel),
   };
 }
 
@@ -1576,8 +1575,8 @@ function makeBedrockBuilder(defaultModel: string): RequestBuilder {
         })),
       },
     }),
-    buildCompressionRequest: ({ model }) =>
-      makeBedrockCompressionRequest(model || defaultModel),
+    buildToolResultRequest: ({ model }) =>
+      makeBedrockToolResultRequest(model || defaultModel),
   };
 }
 
@@ -1614,7 +1613,6 @@ const providerConfigsByProvider = {
     model: "gpt-4o",
     supportsDeclaredTools: true,
     supportsStreamingToolCalls: true,
-    supportsCompression: true,
   }),
   gemini: makeConfig({
     providerName: "Gemini",
@@ -1635,7 +1633,6 @@ const providerConfigsByProvider = {
     model: "gemini-2.5-pro",
     supportsDeclaredTools: true,
     supportsStreamingToolCalls: true,
-    supportsCompression: true,
   }),
   anthropic: makeConfig({
     providerName: "Anthropic",
@@ -1654,7 +1651,6 @@ const providerConfigsByProvider = {
     model: "claude-3-5-sonnet-20241022",
     supportsDeclaredTools: true,
     supportsStreamingToolCalls: true,
-    supportsCompression: true,
   }),
   bedrock: makeConfig({
     providerName: "Bedrock",
@@ -1675,7 +1671,7 @@ const providerConfigsByProvider = {
     model: "anthropic.claude-3-sonnet-20240229-v1:0",
     supportsDeclaredTools: true,
     supportsStreamingToolCalls: true,
-    supportsCompression: true,
+
     assertStreamingToolCall(body) {
       expect(body).toContain("read_file");
       expect(body).toContain("tooluse_123");
@@ -1697,7 +1693,6 @@ const providerConfigsByProvider = {
     model: "command-r-plus-08-2024",
     supportsDeclaredTools: true,
     supportsStreamingToolCalls: false,
-    supportsCompression: true,
   }),
   cerebras: makeConfig({
     providerName: "Cerebras",
@@ -1717,7 +1712,6 @@ const providerConfigsByProvider = {
     model: "llama-4-scout-17b-16e-instruct",
     supportsDeclaredTools: true,
     supportsStreamingToolCalls: true,
-    supportsCompression: true,
   }),
   mistral: makeConfig({
     providerName: "Mistral",
@@ -1735,7 +1729,6 @@ const providerConfigsByProvider = {
     model: "mistral-large-latest",
     supportsDeclaredTools: true,
     supportsStreamingToolCalls: true,
-    supportsCompression: true,
   }),
   perplexity: makeConfig({
     providerName: "Perplexity",
@@ -1753,7 +1746,6 @@ const providerConfigsByProvider = {
     model: "sonar-pro",
     supportsDeclaredTools: false,
     supportsStreamingToolCalls: false,
-    supportsCompression: false,
   }),
   groq: makeConfig({
     providerName: "Groq",
@@ -1771,7 +1763,6 @@ const providerConfigsByProvider = {
     model: "llama-3.3-70b-versatile",
     supportsDeclaredTools: true,
     supportsStreamingToolCalls: true,
-    supportsCompression: true,
   }),
   xai: makeConfig({
     providerName: "xAI",
@@ -1789,7 +1780,6 @@ const providerConfigsByProvider = {
     model: "grok-2-1212",
     supportsDeclaredTools: true,
     supportsStreamingToolCalls: true,
-    supportsCompression: true,
   }),
   openrouter: makeConfig({
     providerName: "OpenRouter",
@@ -1807,7 +1797,6 @@ const providerConfigsByProvider = {
     model: "openai/gpt-4o",
     supportsDeclaredTools: true,
     supportsStreamingToolCalls: true,
-    supportsCompression: true,
   }),
   vllm: makeConfig({
     providerName: "vLLM",
@@ -1827,7 +1816,6 @@ const providerConfigsByProvider = {
     model: "meta-llama/Llama-3.1-8B-Instruct",
     supportsDeclaredTools: true,
     supportsStreamingToolCalls: true,
-    supportsCompression: true,
   }),
   ollama: makeConfig({
     providerName: "Ollama",
@@ -1845,7 +1833,6 @@ const providerConfigsByProvider = {
     model: "llama3.2",
     supportsDeclaredTools: true,
     supportsStreamingToolCalls: true,
-    supportsCompression: true,
   }),
   // Present to satisfy the `Record<SupportedProvider, …>` exhaustiveness guard.
   // The native provider uses an NDJSON `/api/chat` transport over a raw-fetch
@@ -1884,7 +1871,6 @@ const providerConfigsByProvider = {
     model: "glm-4.5-flash",
     supportsDeclaredTools: true,
     supportsStreamingToolCalls: true,
-    supportsCompression: true,
   }),
   deepseek: makeConfig({
     providerName: "DeepSeek",
@@ -1902,7 +1888,6 @@ const providerConfigsByProvider = {
     model: "deepseek-chat",
     supportsDeclaredTools: true,
     supportsStreamingToolCalls: true,
-    supportsCompression: true,
   }),
   archestra: makeConfig({
     providerName: "Archestra",
@@ -1920,7 +1905,6 @@ const providerConfigsByProvider = {
     model: "gpt-4o",
     supportsDeclaredTools: true,
     supportsStreamingToolCalls: true,
-    supportsCompression: true,
   }),
   kimi: makeConfig({
     providerName: "Kimi",
@@ -1938,7 +1922,6 @@ const providerConfigsByProvider = {
     model: "kimi-k2-0711-preview",
     supportsDeclaredTools: true,
     supportsStreamingToolCalls: true,
-    supportsCompression: true,
   }),
   minimax: makeConfig({
     providerName: "Minimax",
@@ -1956,7 +1939,6 @@ const providerConfigsByProvider = {
     model: "MiniMax-M2.1",
     supportsDeclaredTools: true,
     supportsStreamingToolCalls: true,
-    supportsCompression: true,
   }),
   azure: makeConfig({
     providerName: "Azure",
@@ -1974,7 +1956,6 @@ const providerConfigsByProvider = {
     model: "gpt-4o",
     supportsDeclaredTools: true,
     supportsStreamingToolCalls: true,
-    supportsCompression: true,
   }),
   "github-copilot": makeConfig({
     providerName: "GitHub Copilot",
@@ -1992,7 +1973,6 @@ const providerConfigsByProvider = {
     model: "gpt-4o",
     supportsDeclaredTools: true,
     supportsStreamingToolCalls: true,
-    supportsCompression: true,
   }),
   // The matrix mocks createClient, so it exercises the OpenAI-shaped inbound
   // wire format this provider exposes — the Graph translation and its
@@ -2016,7 +1996,6 @@ const providerConfigsByProvider = {
     model: MICROSOFT_365_COPILOT_MODELS[0].id,
     supportsDeclaredTools: false,
     supportsStreamingToolCalls: false,
-    supportsCompression: true,
   }),
 } satisfies Record<ChatProvider, ProviderTestConfig>;
 
@@ -2036,10 +2015,6 @@ const perplexityResponsesConfig = makeConfig({
   model: "anthropic/claude-opus-5",
   supportsDeclaredTools: true,
   supportsStreamingToolCalls: true,
-  // TOON compression rewrites tool-result message content, which the
-  // Responses transport carries as `function_call_output` items rather than
-  // the tool-role messages the compressor understands.
-  supportsCompression: false,
   assertStreamingToolCall(body) {
     expect(body).toContain("response.completed");
     expect(body).toContain("read_file");
@@ -2063,10 +2038,6 @@ const githubCopilotResponsesConfig = makeConfig({
   model: "gpt-5.3-codex",
   supportsDeclaredTools: true,
   supportsStreamingToolCalls: true,
-  // Same reason as the other Responses surfaces: TOON compression rewrites
-  // tool-result message content, which this transport carries as
-  // `function_call_output` items rather than tool-role messages.
-  supportsCompression: false,
   assertStreamingToolCall(body) {
     expect(body).toContain("response.completed");
     expect(body).toContain("read_file");
@@ -2089,7 +2060,7 @@ const azureResponsesConfig = makeConfig({
   model: "gpt-4.1",
   supportsDeclaredTools: true,
   supportsStreamingToolCalls: true,
-  supportsCompression: false,
+
   assertStreamingToolCall(body) {
     expect(body).toContain("response.completed");
     expect(body).toContain("read_file");
@@ -2477,48 +2448,43 @@ describe("LLM proxy provider matrix", () => {
         },
       );
 
-      test.skipIf(config.supportsCompression === false)(
-        "toggles TOON compression before provider execution",
-        async ({ makeAgent }) => {
-          const agent = await makeAgent({
-            name: `${config.providerName} compression`,
-          });
-          vi.spyOn(proxyUtils.toonConversion, "shouldApplyToonCompression")
-            .mockResolvedValueOnce(true)
-            .mockResolvedValueOnce(false);
-
-          const enabledHarness = await setupRoute(agent);
-          const enabledResponse = await app.inject({
-            method: "POST",
-            url: config.endpoint(agent.id),
-            headers: config.headers(),
-            payload: config.requestBuilder.buildCompressionRequest({
-              model: config.model,
-            }),
-          });
-
-          expect(enabledResponse.statusCode).toBe(200);
-          expect(JSON.stringify(enabledHarness.requests.at(-1))).toMatch(
-            /files\[5\]/,
-          );
-
-          await app.close();
-          const disabledHarness = await setupRoute(agent);
-          const disabledResponse = await app.inject({
-            method: "POST",
-            url: config.endpoint(agent.id),
-            headers: config.headers(),
-            payload: config.requestBuilder.buildCompressionRequest({
-              model: config.model,
-            }),
-          });
-
-          expect(disabledResponse.statusCode).toBe(200);
-          expect(JSON.stringify(disabledHarness.requests.at(-1))).toContain(
-            "README.md",
-          );
-        },
-      );
+      test("preserves structured tool results before provider execution", async ({
+        makeAgent,
+      }) => {
+        const agent = await makeAgent({
+          name: `${config.providerName} tool results`,
+        });
+        const harness = await setupRoute(agent);
+        const response = await app.inject({
+          method: "POST",
+          url: config.endpoint(agent.id),
+          headers: config.headers(),
+          payload: config.requestBuilder.buildToolResultRequest({
+            model: config.model,
+          }),
+        });
+        expect(response.statusCode).toBe(200);
+        // Provider formats differ, but the original structured result must reach the client intact.
+        const values: unknown[] = [harness.requests.at(-1)];
+        let foundOriginalResult = false;
+        while (values.length > 0) {
+          const value = values.pop();
+          if (typeof value === "string") {
+            try {
+              values.push(JSON.parse(value));
+            } catch {
+              /* Plain text content. */
+            }
+          } else if (value && typeof value === "object") {
+            if (JSON.stringify(value) === JSON.stringify(TOOL_RESULT_DATA)) {
+              foundOriginalResult = true;
+              break;
+            }
+            values.push(...Object.values(value));
+          }
+        }
+        expect(foundOriginalResult).toBe(true);
+      });
 
       test("blocks requests when token cost limits are exceeded", async ({
         makeAgent,

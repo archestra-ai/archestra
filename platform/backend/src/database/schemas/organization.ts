@@ -26,7 +26,6 @@ import type {
   NetworkPolicy,
   OnboardingWizard,
   OrganizationChatLink,
-  OrganizationCompressionScope,
   ToolInvocation,
   TrustedData,
   TrustedImageRegistries,
@@ -58,13 +57,6 @@ const organizationsTable = pgTable("organization", {
     .$type<OrganizationCustomFont>()
     .notNull()
     .default("lato"),
-  convertToolResultsToToon: boolean("convert_tool_results_to_toon")
-    .notNull()
-    .default(true),
-  compressionScope: varchar("compression_scope")
-    .$type<OrganizationCompressionScope>()
-    .notNull()
-    .default("organization"),
   onlineMcpCatalogEnabled: boolean("online_mcp_catalog_enabled")
     .notNull()
     .default(true),

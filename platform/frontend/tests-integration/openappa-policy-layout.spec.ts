@@ -58,6 +58,11 @@ for (const viewport of [
           credential: ["read"],
         },
       });
+      await mswControl.use({
+        method: "get",
+        url: "/api/guardrails-deployment",
+        body: { enabled: false, featureEnabled: true, active: false },
+      });
       await page.goto("/guardrails-v2");
       await expect(page).toHaveURL(/\/openappa$/);
       const editor = page.getByRole("heading", { name: "Policy editor" });

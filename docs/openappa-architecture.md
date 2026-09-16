@@ -14,9 +14,22 @@ Saved policies remain intact.
 
 `ARCHESTRA_OPENAPPA_ENABLED` defaults to `false`. Explicit `true` enables APPA
 and the OpenAPPA editor. It automatically registers the proxy plugin.
+The **Enable Guardrails v2** switch on `/openappa` controls APPA enforcement
+across every organization and agent in the deployment. It defaults to off and
+requires organization administration permission to change. Both the server flag
+and this shared switch must be on for APPA to enforce policies. Each request
+reads the shared setting, so replicas do not rely on a process-local switch.
+Policy editing and GitHub sync remain available while enforcement is off.
 `ARCHESTRA_BETA` and the plugin list alone do not activate them.
 The OpenAPPA editor stores organization policy revisions in PostgreSQL. Restart
 the backend when changing the flag; saving a policy requires no restart.
+
+Existing trusted-data and invocation guardrails always remain active. When APPA
+is enabled, existing result filters run first and APPA evaluates their filtered
+output. Rewritten tool calls pass existing invocation checks before APPA reserves
+them; either engine can block a call. Disabling APPA does not disable existing
+guardrails or delete policies. A request already inside APPA fails closed if the
+switch is turned off before its next native operation.
 
 The HTTP API and agent read/validate/update tools share validation and revision
 checks. Edits compile without executing external services. The next dispatch
@@ -32,10 +45,10 @@ empty changes and requirements, leaving trust and audience unchanged. Explicit
 tool rules take precedence over the catch-all. The local backend serves this
 fixed answer without calling a model or accessing user data.
 
-| Boundary | Flag off | Flag on |
+| Boundary | APPA inactive | Flag and global switch on |
 | --- | --- | --- |
-| Incoming tool results | Existing result policies | APPA admission and saved output |
-| Outgoing calls | Existing invocation policies | APPA decision |
+| Incoming tool results | Existing result policies | Existing result policies, then APPA admission and saved output |
+| Outgoing calls | Existing invocation policies | Existing invocation policies, then APPA decision |
 | Refusal envelope | Existing adapter | Same adapter, APPA explanation and remedies |
 | Session header | No APPA wiring | Stable conversation identity |
 | Special MCP remedy | Hidden and unavailable | Existing embedded remedy execution |
@@ -68,7 +81,7 @@ While connected, the policy editor is read only and manual API/agent updates are
 rejected. **Stop syncing** keeps the current policy and enables local editing.
 GitHub sync only pulls changes; it does not push editor changes to the repository.
 New conversations use the accepted revision; existing conversations retain theirs.
-Migration `0476_appa_github_sync` adds source storage and task deduplication.
+Migration `0477_appa_github_sync` adds source storage, task deduplication, and the deployment switch.
 
 ## Tool calls and results
 

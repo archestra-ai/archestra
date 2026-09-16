@@ -17,6 +17,7 @@ import * as database from "@/database";
 import * as toolInvocation from "@/guardrails/tool-invocation";
 import * as trustedData from "@/guardrails/trusted-data";
 import { ModelModel } from "@/models";
+import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import { APPA_CHAT_BLOCK_HEADER, decodeChatBlock } from "@/openappa/chat-block";
 import { createAppaLlmProxyPlugin } from "@/proxy/plugins/appa-plugin-archestra";
 import { registerLlmProxyPlugin } from "@/proxy/plugins/registry";
@@ -49,6 +50,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
 
   beforeEach(async ({ makeAgent, makeConversation, makeMember, makeUser }) => {
     config.openappa = parseOpenAppaConfig("true");
+    await GuardrailsDeploymentModel.setEnabled(true);
     config.llmProxy.plugins = parseLlmProxyPlugins(
       undefined,
       config.openappa.enabled,
@@ -591,7 +593,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
   });
 
   for (const stream of [true, false]) {
-    test(`APPA owns invocation policy only while enabled (stream=${stream})`, async ({
+    test(`existing invocation policies remain enforced alongside APPA (stream=${stream})`, async ({
       makeTool,
       makeToolPolicy,
     }) => {
@@ -610,16 +612,15 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         payload: payload(stream),
       };
 
-      const allowed = await app.inject(request);
-      expect(allowed.statusCode, allowed.body).toBe(200);
-      expect(allowed.body).not.toContain(
+      const denied = await app.inject(request);
+      expect(denied.statusCode, denied.body).toBe(200);
+      expect(denied.body).toContain(
         "Platform weather policy refused this call",
       );
-      expect(allowed.body).toContain('"type":"tool_use"');
-      expect(events).toContainEqual(
-        expect.objectContaining({ event: "tool_call", tool: "get_weather" }),
-      );
-      expect(evaluatePolicies).not.toHaveBeenCalled();
+      expect(denied.body).not.toContain('"type":"tool_use"');
+      expect(events.some((event) => event.event === "tool_call")).toBe(false);
+      expect(evaluatePolicies).toHaveBeenCalledOnce();
+      evaluatePolicies.mockClear();
 
       config.openappa.enabled = false;
       config.llmProxy.plugins = parseLlmProxyPlugins("appa", false);
@@ -643,6 +644,74 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         expect(events).toHaveLength(nativeCalls);
       } finally {
         unregisterObserver();
+      }
+    });
+  }
+
+  for (const stream of [true, false]) {
+    test(`deployment toggle off preserves existing enforcement without APPA headers (stream=${stream})`, async ({
+      makeTool,
+      makeToolPolicy,
+    }) => {
+      await GuardrailsDeploymentModel.setEnabled(false);
+      const target = await makeTool({ name: "get_weather", agentId: agent.id });
+      await makeToolPolicy(target.id, {
+        action: "block_always",
+        conditions: [],
+        reason: "Existing guardrails still active",
+      });
+      const response = await app.inject({
+        method: "POST",
+        url: url(),
+        remoteAddress: "127.0.0.1",
+        headers: { "x-api-key": "test-key", "anthropic-version": "2023-06-01" },
+        payload: payload(stream),
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      expect(response.body).toContain("Existing guardrails still active");
+      expect(response.body).not.toContain('"type":"tool_use"');
+      expect(events).toEqual([]);
+    });
+
+    test(`legacy policies check plugin rewrites before APPA reserves a call (stream=${stream})`, async ({
+      makeTool,
+      makeToolPolicy,
+    }) => {
+      const target = await makeTool({
+        name: "get_weather",
+        agentId: agent.id,
+      });
+      await makeToolPolicy(target.id, {
+        action: "block_always",
+        conditions: [{ key: "location", operator: "equal", value: "blocked" }],
+        reason: "Rewritten target blocked",
+      });
+      const unregisterRewriter = registerLlmProxyPlugin({
+        id: "test-rewriter",
+        async onToolCalls({ toolCalls }) {
+          return {
+            decision: "allow",
+            toolCalls: toolCalls.map((call) => ({
+              ...call,
+              arguments: JSON.stringify({ location: "blocked" }),
+            })),
+          };
+        },
+      });
+      try {
+        const response = await app.inject({
+          method: "POST",
+          url: url(),
+          remoteAddress: "127.0.0.1",
+          headers: headers(),
+          payload: payload(stream),
+        });
+        expect(response.statusCode, response.body).toBe(200);
+        expect(response.body).toContain("Rewritten target blocked");
+        expect(response.body).not.toContain('"type":"tool_use"');
+        expect(events.some((event) => event.event === "tool_call")).toBe(false);
+      } finally {
+        unregisterRewriter();
       }
     });
   }
@@ -698,7 +767,68 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         outcome: "success",
       }),
     ]);
-    expect(evaluateTrustedData).not.toHaveBeenCalled();
+    expect(evaluateTrustedData).toHaveBeenCalledTimes(2);
+  });
+
+  test("existing result blocking reaches APPA and stays untrusted for invocation checks", async ({
+    makeTool,
+    makeToolPolicy,
+    makeTrustedDataPolicy,
+  }) => {
+    const target = await makeTool({ name: "get_weather", agentId: agent.id });
+    await makeTrustedDataPolicy(target.id, {
+      action: "block_always",
+      conditions: [{ key: "secret", operator: "equal", value: "RAW SECRET" }],
+      description: "Unsafe result",
+    });
+    await makeToolPolicy(target.id, {
+      action: "block_when_context_is_untrusted",
+      conditions: [],
+      reason: "Existing untrusted-context policy",
+    });
+    const messages = [
+      { role: "user", content: "Weather" },
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "tool_use",
+            id: "previous-call",
+            name: "get_weather",
+            input: {},
+          },
+        ],
+      },
+      {
+        role: "user",
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: "previous-call",
+            content: JSON.stringify({ secret: "RAW SECRET" }),
+          },
+        ],
+      },
+    ];
+    const response = await app.inject({
+      method: "POST",
+      url: url(),
+      remoteAddress: "127.0.0.1",
+      headers: headers(),
+      payload: payload(false, messages),
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        event: "tool_result",
+        output: expect.stringContaining("Unsafe result"),
+      }),
+    );
+    expect(events.some((event) => event.event === "tool_call")).toBe(false);
+    expect(JSON.stringify(providerRequests)).toContain("APPROVED REPLACEMENT");
+    expect(JSON.stringify(providerRequests)).not.toContain("RAW SECRET");
+    expect(response.body).toContain("this session contains sensitive data");
+    expect(response.body).not.toContain('"type":"tool_use"');
   });
 
   test("executes an explicit remedy, then accepts a separate retry on the same APPA root", async () => {

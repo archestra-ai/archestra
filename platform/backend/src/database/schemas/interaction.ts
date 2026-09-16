@@ -22,7 +22,6 @@ import type {
   InteractionRequest,
   InteractionResponse,
   ToolCallBlock,
-  ToonSkipReason,
   UnsafeContextBoundary,
 } from "@/types";
 import agentsTable from "./agent";
@@ -261,10 +260,6 @@ const interactionsTable = pgTable(
     cost: numeric("cost", { precision: 13, scale: 10 }),
     cacheCost: numeric("cache_cost", { precision: 13, scale: 10 }),
     cacheSavings: numeric("cache_savings", { precision: 13, scale: 10 }),
-    toonTokensBefore: integer("toon_tokens_before"),
-    toonTokensAfter: integer("toon_tokens_after"),
-    toonCostSavings: numeric("toon_cost_savings", { precision: 13, scale: 10 }),
-    toonSkipReason: varchar("toon_skip_reason").$type<ToonSkipReason>(),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   },
   (table) => ({
@@ -280,32 +275,6 @@ const interactionsTable = pgTable(
     sessionIdIdx: index("interactions_session_id_idx").on(table.sessionId),
     createdAtIdx: index("interactions_created_at_idx").on(
       table.createdAt.desc(),
-    ),
-    // Covering index for the cost-statistics aggregations (StatisticsModel):
-    // they filter on created_at and only read these numeric/model columns, so
-    // an index-only scan avoids fetching scattered heap pages of a table whose
-    // rows are dominated by large TOASTed JSONB payloads.
-    //
-    // NOTE: `billingMode` is intentionally NOT in this index. The aggregations
-    // split billed vs subscription cost with a conditional (FILTER) SUM on it,
-    // so including it would make the split index-only — but adding a column to
-    // this index means a non-concurrent DROP/CREATE rebuild, which takes a
-    // write-blocking lock on a very large `interactions` table. The rebuild risk
-    // outweighs the index-only win for an analytics query, so the FILTER reads
-    // billing_mode from the heap instead. If that ever becomes a bottleneck, add
-    // the column with a separate `CREATE INDEX CONCURRENTLY` ops step (see the
-    // interactions-table migration skill), never a transactional migration.
-    statisticsCoveringIdx: index("interactions_statistics_covering_idx").on(
-      table.createdAt,
-      table.profileId,
-      table.model,
-      table.inputTokens,
-      table.outputTokens,
-      table.cacheReadTokens,
-      table.cost,
-      table.baselineCost,
-      table.toonCostSavings,
-      table.cacheSavings,
     ),
     profileCreatedAtIdx: index("interactions_profile_created_at_idx").on(
       table.profileId,

@@ -128,6 +128,7 @@ export { default as environmentLabelsTable } from "./environment-label";
 export { default as environmentResourceDefaultsTable } from "./environment-resource-default";
 export { default as externalMcpSkillUsageEventsTable } from "./external-mcp-skill-usage-event";
 export { default as filesTable } from "./file";
+export { default as guardrailsDeploymentTable } from "./guardrails-deployment";
 export { guardrailsPolicyRevisionsTable } from "./guardrails-policy";
 export { default as hookFilesTable } from "./hook-file";
 export { default as identityProvidersTable } from "./identity-provider";

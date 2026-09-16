@@ -2,13 +2,10 @@ import {
   ArchestraInternalErrorCode,
   ZhipuaiErrorTypes,
 } from "@archestra/shared";
-import { encode as toonEncode } from "@toon-format/toon";
 import { get } from "lodash-es";
 import config from "@/config";
 import logger from "@/logging";
-import { ModelModel } from "@/models";
 import { metrics } from "@/observability";
-import { getTokenizer } from "@/tokenizers";
 import type {
   ChunkProcessingResult,
   CommonMcpToolDefinition,
@@ -21,7 +18,6 @@ import type {
   LLMResponseAdapter,
   LLMStreamAdapter,
   StreamAccumulatorState,
-  ToolCompressionStats,
   UsageView,
   Zhipuai,
 } from "@/types";
@@ -29,7 +25,6 @@ import {
   extractCommonMessageText,
   extractCommonToolCallArguments,
 } from "@/types";
-import { unwrapToolContent } from "../utils/unwrap-tool-content";
 import { toOpenAiStreamUsage } from "./openai-sse-chunk";
 import { upstreamHttpError } from "./upstream-http-error";
 
@@ -328,16 +323,6 @@ class ZhipuaiRequestAdapter
     // Zhipuai uses OpenAI-compatible format, so no conversion needed
     // Future: implement MCP image block conversion if needed
     return messages;
-  }
-
-  async applyToonCompression(model: string): Promise<ToolCompressionStats> {
-    const { messages: compressedMessages, stats } =
-      await convertToolResultsToToon(this.request.messages, model);
-    this.request = {
-      ...this.request,
-      messages: compressedMessages,
-    };
-    return stats;
   }
 
   // ---------------------------------------------------------------------------
@@ -926,142 +911,6 @@ class ZhipuaiStreamAdapter
       },
     };
   }
-}
-
-// =============================================================================
-// TOON COMPRESSION
-// =============================================================================
-
-async function convertToolResultsToToon(
-  messages: ZhipuaiMessages,
-  model: string,
-): Promise<{
-  messages: ZhipuaiMessages;
-  stats: ToolCompressionStats;
-}> {
-  const tokenizer = getTokenizer("zhipuai");
-  let toolResultCount = 0;
-  let totalTokensBefore = 0;
-  let totalTokensAfter = 0;
-
-  const result = messages.map((message) => {
-    if (message.role === "tool") {
-      logger.debug(
-        {
-          toolCallId: message.tool_call_id,
-          contentType: typeof message.content,
-          provider: "zhipuai",
-        },
-        "convertToolResultsToToon: tool message found",
-      );
-
-      if (typeof message.content === "string") {
-        try {
-          const unwrapped = unwrapToolContent(message.content);
-          const parsed = JSON.parse(unwrapped);
-          const noncompressed = unwrapped;
-          const compressed = toonEncode(parsed);
-
-          const tokensBefore = tokenizer.countTokens([
-            { role: "user", content: noncompressed },
-          ]);
-          const tokensAfter = tokenizer.countTokens([
-            { role: "user", content: compressed },
-          ]);
-
-          toolResultCount++;
-
-          // Always count tokens before
-          totalTokensBefore += tokensBefore;
-
-          // Only apply compression if it actually saves tokens
-          if (tokensAfter < tokensBefore) {
-            totalTokensAfter += tokensAfter;
-
-            logger.debug(
-              {
-                toolCallId: message.tool_call_id,
-                beforeLength: noncompressed.length,
-                afterLength: compressed.length,
-                tokensBefore,
-                tokensAfter,
-                toonPreview: compressed.substring(0, 150),
-                provider: "zhipuai",
-              },
-              "convertToolResultsToToon: compressed",
-            );
-            logger.trace(
-              {
-                toolCallId: message.tool_call_id,
-                before: noncompressed,
-                after: compressed,
-                provider: "zhipuai",
-                supposedToBeJson: parsed,
-              },
-              "convertToolResultsToToon: before/after",
-            );
-
-            return {
-              ...message,
-              content: compressed,
-            };
-          }
-
-          // Compression not applied - count non-compressed tokens to track total tokens anyway
-          totalTokensAfter += tokensBefore;
-          logger.info(
-            {
-              toolCallId: message.tool_call_id,
-              tokensBefore,
-              tokensAfter,
-              provider: "zhipuai",
-            },
-            "Skipping TOON compression - compressed output has more tokens",
-          );
-        } catch {
-          logger.debug(
-            {
-              toolCallId: message.tool_call_id,
-              contentPreview:
-                typeof message.content === "string"
-                  ? message.content.substring(0, 100)
-                  : "non-string",
-            },
-            "Skipping TOON conversion - content is not JSON",
-          );
-          return message;
-        }
-      }
-    }
-
-    return message;
-  });
-
-  logger.info(
-    { messageCount: messages.length, toolResultCount },
-    "convertToolResultsToToon completed",
-  );
-
-  let toonCostSavings = 0;
-  const tokensSaved = totalTokensBefore - totalTokensAfter;
-  if (tokensSaved > 0) {
-    toonCostSavings = await ModelModel.calculateCostSavings(
-      model,
-      tokensSaved,
-      "zhipuai",
-    );
-  }
-
-  return {
-    messages: result,
-    stats: {
-      tokensBefore: totalTokensBefore,
-      tokensAfter: totalTokensAfter,
-      costSavings: toonCostSavings,
-      wasEffective: totalTokensAfter < totalTokensBefore,
-      hadToolResults: toolResultCount > 0,
-    },
-  };
 }
 
 // =============================================================================

@@ -1043,11 +1043,10 @@ describe("StatisticsModel", () => {
 
       // Real spend 1.00; a historical row where the request ran on a cheaper
       // model than it asked for, so the same usage would have cost 1.50 (0.50
-      // model-swap savings); TOON saved 0.20; cache saved 0.30.
+      // model-swap savings); cache saved 0.30.
       await makeInteraction(agent.id, {
         cost: "1.00",
         baselineCost: "1.50",
-        toonCostSavings: "0.20",
         cacheSavings: "0.30",
       });
 
@@ -1056,15 +1055,13 @@ describe("StatisticsModel", () => {
         organizationId: org.id,
       });
 
-      // Actual cost is the real spend — NOT real spend minus toon savings (the
-      // savings are already baked into `cost`, so subtracting them double-counts).
+      // Actual cost remains the stored billed spend.
       expect(result.totalActualCost).toBeCloseTo(1.0);
-      expect(result.totalToonSavings).toBeCloseTo(0.2);
       expect(result.totalCacheSavings).toBeCloseTo(0.3);
-      // Non-optimized cost sits above actual by the sum of all three savings,
+      // Non-optimized cost sits above actual by the sum of both savings,
       // model-swap savings on historical rows included.
-      expect(result.totalBaselineCost).toBeCloseTo(1.0 + 0.5 + 0.2 + 0.3);
-      expect(result.totalSavings).toBeCloseTo(0.5 + 0.2 + 0.3);
+      expect(result.totalBaselineCost).toBeCloseTo(1.0 + 0.5 + 0.3);
+      expect(result.totalSavings).toBeCloseTo(0.5 + 0.3);
 
       // The per-point gap between the non-optimized and actual lines must equal
       // the stacked savings breakdown, so the two charts reconcile.
@@ -1072,7 +1069,7 @@ describe("StatisticsModel", () => {
       const point = result.timeSeries[0];
       expect(point.actualCost).toBeCloseTo(1.0);
       expect(point.baselineCost - point.actualCost).toBeCloseTo(
-        0.5 + point.toonSavings + point.cacheSavings,
+        0.5 + point.cacheSavings,
       );
     });
   });

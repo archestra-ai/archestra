@@ -44,7 +44,6 @@ export const CreateTeamBodySchema = z.object({
     .max(100)
     .optional(),
   parentId: z.string().nullable().optional(),
-  convertToolResultsToToon: z.boolean().optional(),
   labels: z.array(LabelWithDetailsSchema).optional(),
 });
 
@@ -60,7 +59,6 @@ export const UpdateTeamBodySchema = z.object({
     .max(100)
     .optional(),
   parentId: z.string().nullable().optional(),
-  convertToolResultsToToon: z.boolean().optional(),
   labels: z.array(LabelWithDetailsSchema).optional(),
 });
 

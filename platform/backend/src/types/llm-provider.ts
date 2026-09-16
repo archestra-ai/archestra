@@ -50,7 +50,6 @@ import type {
   CommonToolCall,
   CommonToolResult,
 } from "./common-llm-format";
-import type { ToolCompressionStats } from "./tool-result-compression";
 
 /**
  * Options for creating an LLM provider client
@@ -145,7 +144,7 @@ export interface LLMRequestAdapter<TRequest, TMessages = unknown> {
   setModel(model: string): void;
 
   /**
-   * Update a tool result's content (for trusted data updates, TOON compression)
+   * Update a tool result's content (for trusted data updates)
    * @param toolCallId - The tool call ID to update
    * @param newContent - New content string
    */
@@ -156,18 +155,6 @@ export interface LLMRequestAdapter<TRequest, TMessages = unknown> {
    * @param updates - Map of tool call ID to new content
    */
   applyToolResultUpdates(updates: Record<string, string>): void;
-
-  /**
-   * Apply TOON compression to tool results
-   * @param model - Model name for token counting
-   * @returns Compression statistics
-   *
-   * TODO: Refactor to remove TOON logic from adapter. Instead:
-   * 1. Calculate TOON updates externally: calculateToonUpdates(adapter.getToolResults(), model) → { updates, stats }
-   * 2. Apply via existing applyToolResultUpdates(updates)
-   * This keeps adapters simple (just apply updates) and makes TOON logic provider-agnostic.
-   */
-  applyToonCompression(model: string): Promise<ToolCompressionStats>;
 
   /**
    * Convert tool result content to provider-specific format (e.g., MCP image blocks)

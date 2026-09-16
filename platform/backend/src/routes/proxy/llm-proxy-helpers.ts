@@ -41,8 +41,6 @@ import type {
   InteractionRequest,
   InteractionResponse,
   ToolCallBlock,
-  ToolCompressionStats,
-  ToonSkipReason,
   UnsafeContextBoundary,
   UsageView,
 } from "@/types";
@@ -453,8 +451,6 @@ export function buildInteractionRecord(params: {
     cacheCost: number | undefined;
     cacheSavings: number | undefined;
   };
-  toonStats: ToolCompressionStats;
-  toonSkipReason: ToonSkipReason | null;
   dualLlmAnalyses: DualLlmAnalysis[];
   unsafeContextBoundary?: UnsafeContextBoundary;
   toolCallBlock?: ToolCallBlock;
@@ -500,10 +496,6 @@ export function buildInteractionRecord(params: {
     baselineCost: params.costs.actualCost?.toFixed(10) ?? null,
     cacheCost: params.costs.cacheCost?.toFixed(10) ?? null,
     cacheSavings: params.costs.cacheSavings?.toFixed(10) ?? null,
-    toonTokensBefore: params.toonStats.tokensBefore,
-    toonTokensAfter: params.toonStats.tokensAfter,
-    toonCostSavings: params.toonStats.costSavings?.toFixed(10) ?? null,
-    toonSkipReason: params.toonSkipReason,
   };
 }
 

@@ -1,4 +1,4 @@
-import type { archestraApiTypes, BillingMode } from "@archestra/shared";
+import type { BillingMode } from "@archestra/shared";
 import { Badge } from "@/components/ui/badge";
 import {
   Tooltip,
@@ -28,10 +28,6 @@ export function BilledCost({
   subscriptionCost,
   billingMode,
   baselineCost,
-  toonCostSavings,
-  toonTokensBefore,
-  toonTokensAfter,
-  toonSkipReason,
   baselineModel,
   actualModel,
   format = "percent",
@@ -53,12 +49,6 @@ export function BilledCost({
    */
   billingMode?: BillingMode | null;
   baselineCost: string;
-  toonCostSavings?: string | null;
-  toonTokensBefore?: number | null;
-  toonTokensAfter?: number | null;
-  toonSkipReason?:
-    | archestraApiTypes.GetInteractionResponses["200"]["toonSkipReason"]
-    | null;
   baselineModel?: string | null;
   actualModel?: string | null;
   format?: "percent" | "number";
@@ -83,10 +73,6 @@ export function BilledCost({
       <Savings
         cost={cost}
         baselineCost={baselineCost}
-        toonCostSavings={toonCostSavings}
-        toonTokensBefore={toonTokensBefore}
-        toonTokensAfter={toonTokensAfter}
-        toonSkipReason={toonSkipReason}
         baselineModel={baselineModel}
         actualModel={actualModel}
         format={format}

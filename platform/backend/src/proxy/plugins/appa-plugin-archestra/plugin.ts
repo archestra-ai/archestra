@@ -26,6 +26,7 @@ type AppaPluginBinding = {
 
 export class AppaPluginArchestra implements LlmProxyPlugin {
   readonly id = "archestra.appa";
+  readonly finalizesToolCalls = true;
   private readonly bindings = new WeakMap<object, AppaPluginBinding>();
 
   constructor(private readonly clientAdapters: readonly AppaClientAdapter[]) {}

@@ -3,7 +3,7 @@ title: Knowledge
 category: Knowledge
 order: 1
 description: Built-in RAG knowledge — Knowledge Bases, connectors, and how retrieval works
-lastUpdated: 2026-09-09
+lastUpdated: 2026-09-16
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -736,6 +736,16 @@ Sync documents and site pages from SharePoint Online.
 | Folder Path   | Restrict sync to a specific folder path within each drive (optional)                              |
 | Recursive     | Traverse subfolders within each drive or Folder Path (default: on)                                |
 | Include Pages | Toggle to sync site pages and their web part content (default: on)                                |
+
+<!-- SPDX-SnippetBegin -->
+<!-- SPDX-SnippetCopyrightText: 2026 Archestra Inc. -->
+<!-- SPDX-License-Identifier: LicenseRef-Archestra-Enterprise -->
+**Page publication status** limits site pages to **Published only**, **Draft only**, or **Both**. New connectors created in the UI default to Published only. Existing connectors keep Both until you change the setting. API configurations without `pagePublicationStatus` also use Both.
+
+The filter uses the current version's status from SharePoint. Published only excludes current drafts, even when an earlier published version exists. Restricted modes exclude pages whose status is missing or unrecognized. Document library files are unaffected.
+
+Changing the selection takes effect on the next sync. That sync removes previously indexed pages outside the selection. Later syncs also remove pages whose publication status no longer matches.
+<!-- SPDX-SnippetEnd -->
 
 Where to find each value:
 

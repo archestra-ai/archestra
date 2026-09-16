@@ -457,14 +457,12 @@ export const CostSavingsStatisticsSchema = z.object({
    * so it is never conflated with money actually saved.
    */
   totalSubscriptionCost: z.number(),
-  totalToonSavings: z.number(),
   totalCacheSavings: z.number(),
   timeSeries: z.array(
     z.object({
       timestamp: z.string(),
       baselineCost: z.number(),
       actualCost: z.number(),
-      toonSavings: z.number(),
       cacheSavings: z.number(),
       subscriptionCost: z.number(),
     }),

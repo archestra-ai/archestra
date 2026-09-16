@@ -46228,6 +46228,178 @@ export type GroqChatCompletionsWithAgentResponses = {
 
 export type GroqChatCompletionsWithAgentResponse = GroqChatCompletionsWithAgentResponses[keyof GroqChatCompletionsWithAgentResponses];
 
+export type GetGuardrailsDeploymentData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/guardrails-deployment';
+};
+
+export type GetGuardrailsDeploymentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetGuardrailsDeploymentError = GetGuardrailsDeploymentErrors[keyof GetGuardrailsDeploymentErrors];
+
+export type GetGuardrailsDeploymentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        enabled: boolean;
+        featureEnabled: boolean;
+        active: boolean;
+    };
+};
+
+export type GetGuardrailsDeploymentResponse = GetGuardrailsDeploymentResponses[keyof GetGuardrailsDeploymentResponses];
+
+export type UpdateGuardrailsDeploymentData = {
+    body: {
+        enabled: boolean;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/guardrails-deployment';
+};
+
+export type UpdateGuardrailsDeploymentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UpdateGuardrailsDeploymentError = UpdateGuardrailsDeploymentErrors[keyof UpdateGuardrailsDeploymentErrors];
+
+export type UpdateGuardrailsDeploymentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        enabled: boolean;
+        featureEnabled: boolean;
+        active: boolean;
+    };
+};
+
+export type UpdateGuardrailsDeploymentResponse = UpdateGuardrailsDeploymentResponses[keyof UpdateGuardrailsDeploymentResponses];
+
 export type AnnotateGuardrailsToolData = {
     body: {
         version: 1;
@@ -47681,10 +47853,6 @@ export type GetInteractionsResponses = {
             cost: string | null;
             cacheCost: string | null;
             cacheSavings: string | null;
-            toonTokensBefore: number | null;
-            toonTokensAfter: number | null;
-            toonCostSavings: string | null;
-            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -47889,10 +48057,6 @@ export type GetInteractionsResponses = {
             cost: string | null;
             cacheCost: string | null;
             cacheSavings: string | null;
-            toonTokensBefore: number | null;
-            toonTokensAfter: number | null;
-            toonCostSavings: string | null;
-            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -48013,10 +48177,6 @@ export type GetInteractionsResponses = {
             cost: string | null;
             cacheCost: string | null;
             cacheSavings: string | null;
-            toonTokensBefore: number | null;
-            toonTokensAfter: number | null;
-            toonCostSavings: string | null;
-            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -48135,10 +48295,6 @@ export type GetInteractionsResponses = {
             cost: string | null;
             cacheCost: string | null;
             cacheSavings: string | null;
-            toonTokensBefore: number | null;
-            toonTokensAfter: number | null;
-            toonCostSavings: string | null;
-            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -48257,10 +48413,6 @@ export type GetInteractionsResponses = {
             cost: string | null;
             cacheCost: string | null;
             cacheSavings: string | null;
-            toonTokensBefore: number | null;
-            toonTokensAfter: number | null;
-            toonCostSavings: string | null;
-            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -48379,10 +48531,6 @@ export type GetInteractionsResponses = {
             cost: string | null;
             cacheCost: string | null;
             cacheSavings: string | null;
-            toonTokensBefore: number | null;
-            toonTokensAfter: number | null;
-            toonCostSavings: string | null;
-            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -48478,10 +48626,6 @@ export type GetInteractionsResponses = {
             cost: string | null;
             cacheCost: string | null;
             cacheSavings: string | null;
-            toonTokensBefore: number | null;
-            toonTokensAfter: number | null;
-            toonCostSavings: string | null;
-            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -48579,10 +48723,6 @@ export type GetInteractionsResponses = {
             cost: string | null;
             cacheCost: string | null;
             cacheSavings: string | null;
-            toonTokensBefore: number | null;
-            toonTokensAfter: number | null;
-            toonCostSavings: string | null;
-            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -49121,10 +49261,6 @@ export type GetInteractionsResponses = {
             cost: string | null;
             cacheCost: string | null;
             cacheSavings: string | null;
-            toonTokensBefore: number | null;
-            toonTokensAfter: number | null;
-            toonCostSavings: string | null;
-            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -49696,10 +49832,6 @@ export type GetInteractionsResponses = {
             cost: string | null;
             cacheCost: string | null;
             cacheSavings: string | null;
-            toonTokensBefore: number | null;
-            toonTokensAfter: number | null;
-            toonCostSavings: string | null;
-            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -49797,10 +49929,6 @@ export type GetInteractionsResponses = {
             cost: string | null;
             cacheCost: string | null;
             cacheSavings: string | null;
-            toonTokensBefore: number | null;
-            toonTokensAfter: number | null;
-            toonCostSavings: string | null;
-            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -49898,10 +50026,6 @@ export type GetInteractionsResponses = {
             cost: string | null;
             cacheCost: string | null;
             cacheSavings: string | null;
-            toonTokensBefore: number | null;
-            toonTokensAfter: number | null;
-            toonCostSavings: string | null;
-            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -49999,10 +50123,6 @@ export type GetInteractionsResponses = {
             cost: string | null;
             cacheCost: string | null;
             cacheSavings: string | null;
-            toonTokensBefore: number | null;
-            toonTokensAfter: number | null;
-            toonCostSavings: string | null;
-            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -50100,10 +50220,6 @@ export type GetInteractionsResponses = {
             cost: string | null;
             cacheCost: string | null;
             cacheSavings: string | null;
-            toonTokensBefore: number | null;
-            toonTokensAfter: number | null;
-            toonCostSavings: string | null;
-            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -50201,10 +50317,6 @@ export type GetInteractionsResponses = {
             cost: string | null;
             cacheCost: string | null;
             cacheSavings: string | null;
-            toonTokensBefore: number | null;
-            toonTokensAfter: number | null;
-            toonCostSavings: string | null;
-            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -50302,10 +50414,6 @@ export type GetInteractionsResponses = {
             cost: string | null;
             cacheCost: string | null;
             cacheSavings: string | null;
-            toonTokensBefore: number | null;
-            toonTokensAfter: number | null;
-            toonCostSavings: string | null;
-            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -50403,10 +50511,6 @@ export type GetInteractionsResponses = {
             cost: string | null;
             cacheCost: string | null;
             cacheSavings: string | null;
-            toonTokensBefore: number | null;
-            toonTokensAfter: number | null;
-            toonCostSavings: string | null;
-            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -50502,10 +50606,6 @@ export type GetInteractionsResponses = {
             cost: string | null;
             cacheCost: string | null;
             cacheSavings: string | null;
-            toonTokensBefore: number | null;
-            toonTokensAfter: number | null;
-            toonCostSavings: string | null;
-            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -50601,10 +50701,6 @@ export type GetInteractionsResponses = {
             cost: string | null;
             cacheCost: string | null;
             cacheSavings: string | null;
-            toonTokensBefore: number | null;
-            toonTokensAfter: number | null;
-            toonCostSavings: string | null;
-            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -50700,10 +50796,6 @@ export type GetInteractionsResponses = {
             cost: string | null;
             cacheCost: string | null;
             cacheSavings: string | null;
-            toonTokensBefore: number | null;
-            toonTokensAfter: number | null;
-            toonCostSavings: string | null;
-            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -50801,10 +50893,6 @@ export type GetInteractionsResponses = {
             cost: string | null;
             cacheCost: string | null;
             cacheSavings: string | null;
-            toonTokensBefore: number | null;
-            toonTokensAfter: number | null;
-            toonCostSavings: string | null;
-            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -50902,10 +50990,6 @@ export type GetInteractionsResponses = {
             cost: string | null;
             cacheCost: string | null;
             cacheSavings: string | null;
-            toonTokensBefore: number | null;
-            toonTokensAfter: number | null;
-            toonCostSavings: string | null;
-            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -51717,10 +51801,6 @@ export type GetInteractionsResponses = {
             cost: string | null;
             cacheCost: string | null;
             cacheSavings: string | null;
-            toonTokensBefore: number | null;
-            toonTokensAfter: number | null;
-            toonCostSavings: string | null;
-            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -52532,10 +52612,6 @@ export type GetInteractionsResponses = {
             cost: string | null;
             cacheCost: string | null;
             cacheSavings: string | null;
-            toonTokensBefore: number | null;
-            toonTokensAfter: number | null;
-            toonCostSavings: string | null;
-            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -53347,10 +53423,6 @@ export type GetInteractionsResponses = {
             cost: string | null;
             cacheCost: string | null;
             cacheSavings: string | null;
-            toonTokensBefore: number | null;
-            toonTokensAfter: number | null;
-            toonCostSavings: string | null;
-            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -53448,10 +53520,6 @@ export type GetInteractionsResponses = {
             cost: string | null;
             cacheCost: string | null;
             cacheSavings: string | null;
-            toonTokensBefore: number | null;
-            toonTokensAfter: number | null;
-            toonCostSavings: string | null;
-            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -53617,10 +53685,6 @@ export type GetInteractionsResponses = {
             cost: string | null;
             cacheCost: string | null;
             cacheSavings: string | null;
-            toonTokensBefore: number | null;
-            toonTokensAfter: number | null;
-            toonCostSavings: string | null;
-            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -53825,10 +53889,6 @@ export type GetInteractionsResponses = {
             cost: string | null;
             cacheCost: string | null;
             cacheSavings: string | null;
-            toonTokensBefore: number | null;
-            toonTokensAfter: number | null;
-            toonCostSavings: string | null;
-            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -54033,10 +54093,6 @@ export type GetInteractionsResponses = {
             cost: string | null;
             cacheCost: string | null;
             cacheSavings: string | null;
-            toonTokensBefore: number | null;
-            toonTokensAfter: number | null;
-            toonCostSavings: string | null;
-            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -54241,10 +54297,6 @@ export type GetInteractionsResponses = {
             cost: string | null;
             cacheCost: string | null;
             cacheSavings: string | null;
-            toonTokensBefore: number | null;
-            toonTokensAfter: number | null;
-            toonCostSavings: string | null;
-            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -54393,10 +54445,6 @@ export type GetInteractionSummariesResponses = {
             cacheWriteTokens: number | null;
             cost: string | null;
             baselineCost: string | null;
-            toonTokensBefore: number | null;
-            toonTokensAfter: number | null;
-            toonCostSavings: string | null;
-            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
             createdAt: string;
             type: 'openai:chatCompletions' | 'openai:responses' | 'openai:embeddings' | 'gemini:generateContent' | 'gemini:embeddings' | 'anthropic:messages' | 'bedrock:converse' | 'bedrock:invoke' | 'bedrock:embeddings' | 'cohere:chat' | 'cohere:embeddings' | 'cerebras:chatCompletions' | 'mistral:chatCompletions' | 'perplexity:chatCompletions' | 'perplexity:responses' | 'groq:chatCompletions' | 'xai:chatCompletions' | 'openrouter:chatCompletions' | 'vllm:chatCompletions' | 'ollama:chatCompletions' | 'ollama-native:chat' | 'zhipuai:chatCompletions' | 'deepseek:chatCompletions' | 'minimax:chatCompletions' | 'kimi:chatCompletions' | 'azure:chatCompletions' | 'azure:responses' | 'github-copilot:chatCompletions' | 'github-copilot:responses' | 'microsoft-365-copilot:chatCompletions' | 'archestra:chatCompletions' | 'voyage:embeddings';
             externalAgentIdLabel: string | null;
@@ -54537,14 +54585,7 @@ export type GetInteractionSessionsResponses = {
             totalBilledCost: string | null;
             totalSubscriptionCost: string | null;
             totalBaselineCost: string | null;
-            totalToonCostSavings: string | null;
             totalCacheSavings: string | null;
-            toonSkipReasonCounts: {
-                applied: number;
-                notEnabled: number;
-                notEffective: number;
-                noToolResults: number;
-            };
             firstRequestTime: string;
             lastRequestTime: string;
             models: Array<string>;
@@ -54888,10 +54929,6 @@ export type GetInteractionResponses = {
         cost: string | null;
         cacheCost: string | null;
         cacheSavings: string | null;
-        toonTokensBefore: number | null;
-        toonTokensAfter: number | null;
-        toonCostSavings: string | null;
-        toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -55096,10 +55133,6 @@ export type GetInteractionResponses = {
         cost: string | null;
         cacheCost: string | null;
         cacheSavings: string | null;
-        toonTokensBefore: number | null;
-        toonTokensAfter: number | null;
-        toonCostSavings: string | null;
-        toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -55220,10 +55253,6 @@ export type GetInteractionResponses = {
         cost: string | null;
         cacheCost: string | null;
         cacheSavings: string | null;
-        toonTokensBefore: number | null;
-        toonTokensAfter: number | null;
-        toonCostSavings: string | null;
-        toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -55342,10 +55371,6 @@ export type GetInteractionResponses = {
         cost: string | null;
         cacheCost: string | null;
         cacheSavings: string | null;
-        toonTokensBefore: number | null;
-        toonTokensAfter: number | null;
-        toonCostSavings: string | null;
-        toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -55464,10 +55489,6 @@ export type GetInteractionResponses = {
         cost: string | null;
         cacheCost: string | null;
         cacheSavings: string | null;
-        toonTokensBefore: number | null;
-        toonTokensAfter: number | null;
-        toonCostSavings: string | null;
-        toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -55586,10 +55607,6 @@ export type GetInteractionResponses = {
         cost: string | null;
         cacheCost: string | null;
         cacheSavings: string | null;
-        toonTokensBefore: number | null;
-        toonTokensAfter: number | null;
-        toonCostSavings: string | null;
-        toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -55685,10 +55702,6 @@ export type GetInteractionResponses = {
         cost: string | null;
         cacheCost: string | null;
         cacheSavings: string | null;
-        toonTokensBefore: number | null;
-        toonTokensAfter: number | null;
-        toonCostSavings: string | null;
-        toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -55786,10 +55799,6 @@ export type GetInteractionResponses = {
         cost: string | null;
         cacheCost: string | null;
         cacheSavings: string | null;
-        toonTokensBefore: number | null;
-        toonTokensAfter: number | null;
-        toonCostSavings: string | null;
-        toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -56328,10 +56337,6 @@ export type GetInteractionResponses = {
         cost: string | null;
         cacheCost: string | null;
         cacheSavings: string | null;
-        toonTokensBefore: number | null;
-        toonTokensAfter: number | null;
-        toonCostSavings: string | null;
-        toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -56903,10 +56908,6 @@ export type GetInteractionResponses = {
         cost: string | null;
         cacheCost: string | null;
         cacheSavings: string | null;
-        toonTokensBefore: number | null;
-        toonTokensAfter: number | null;
-        toonCostSavings: string | null;
-        toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -57004,10 +57005,6 @@ export type GetInteractionResponses = {
         cost: string | null;
         cacheCost: string | null;
         cacheSavings: string | null;
-        toonTokensBefore: number | null;
-        toonTokensAfter: number | null;
-        toonCostSavings: string | null;
-        toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -57105,10 +57102,6 @@ export type GetInteractionResponses = {
         cost: string | null;
         cacheCost: string | null;
         cacheSavings: string | null;
-        toonTokensBefore: number | null;
-        toonTokensAfter: number | null;
-        toonCostSavings: string | null;
-        toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -57206,10 +57199,6 @@ export type GetInteractionResponses = {
         cost: string | null;
         cacheCost: string | null;
         cacheSavings: string | null;
-        toonTokensBefore: number | null;
-        toonTokensAfter: number | null;
-        toonCostSavings: string | null;
-        toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -57307,10 +57296,6 @@ export type GetInteractionResponses = {
         cost: string | null;
         cacheCost: string | null;
         cacheSavings: string | null;
-        toonTokensBefore: number | null;
-        toonTokensAfter: number | null;
-        toonCostSavings: string | null;
-        toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -57408,10 +57393,6 @@ export type GetInteractionResponses = {
         cost: string | null;
         cacheCost: string | null;
         cacheSavings: string | null;
-        toonTokensBefore: number | null;
-        toonTokensAfter: number | null;
-        toonCostSavings: string | null;
-        toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -57509,10 +57490,6 @@ export type GetInteractionResponses = {
         cost: string | null;
         cacheCost: string | null;
         cacheSavings: string | null;
-        toonTokensBefore: number | null;
-        toonTokensAfter: number | null;
-        toonCostSavings: string | null;
-        toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -57610,10 +57587,6 @@ export type GetInteractionResponses = {
         cost: string | null;
         cacheCost: string | null;
         cacheSavings: string | null;
-        toonTokensBefore: number | null;
-        toonTokensAfter: number | null;
-        toonCostSavings: string | null;
-        toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -57709,10 +57682,6 @@ export type GetInteractionResponses = {
         cost: string | null;
         cacheCost: string | null;
         cacheSavings: string | null;
-        toonTokensBefore: number | null;
-        toonTokensAfter: number | null;
-        toonCostSavings: string | null;
-        toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -57808,10 +57777,6 @@ export type GetInteractionResponses = {
         cost: string | null;
         cacheCost: string | null;
         cacheSavings: string | null;
-        toonTokensBefore: number | null;
-        toonTokensAfter: number | null;
-        toonCostSavings: string | null;
-        toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -57907,10 +57872,6 @@ export type GetInteractionResponses = {
         cost: string | null;
         cacheCost: string | null;
         cacheSavings: string | null;
-        toonTokensBefore: number | null;
-        toonTokensAfter: number | null;
-        toonCostSavings: string | null;
-        toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -58008,10 +57969,6 @@ export type GetInteractionResponses = {
         cost: string | null;
         cacheCost: string | null;
         cacheSavings: string | null;
-        toonTokensBefore: number | null;
-        toonTokensAfter: number | null;
-        toonCostSavings: string | null;
-        toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -58109,10 +58066,6 @@ export type GetInteractionResponses = {
         cost: string | null;
         cacheCost: string | null;
         cacheSavings: string | null;
-        toonTokensBefore: number | null;
-        toonTokensAfter: number | null;
-        toonCostSavings: string | null;
-        toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -58924,10 +58877,6 @@ export type GetInteractionResponses = {
         cost: string | null;
         cacheCost: string | null;
         cacheSavings: string | null;
-        toonTokensBefore: number | null;
-        toonTokensAfter: number | null;
-        toonCostSavings: string | null;
-        toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -59739,10 +59688,6 @@ export type GetInteractionResponses = {
         cost: string | null;
         cacheCost: string | null;
         cacheSavings: string | null;
-        toonTokensBefore: number | null;
-        toonTokensAfter: number | null;
-        toonCostSavings: string | null;
-        toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -60554,10 +60499,6 @@ export type GetInteractionResponses = {
         cost: string | null;
         cacheCost: string | null;
         cacheSavings: string | null;
-        toonTokensBefore: number | null;
-        toonTokensAfter: number | null;
-        toonCostSavings: string | null;
-        toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -60655,10 +60596,6 @@ export type GetInteractionResponses = {
         cost: string | null;
         cacheCost: string | null;
         cacheSavings: string | null;
-        toonTokensBefore: number | null;
-        toonTokensAfter: number | null;
-        toonCostSavings: string | null;
-        toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -60824,10 +60761,6 @@ export type GetInteractionResponses = {
         cost: string | null;
         cacheCost: string | null;
         cacheSavings: string | null;
-        toonTokensBefore: number | null;
-        toonTokensAfter: number | null;
-        toonCostSavings: string | null;
-        toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -61032,10 +60965,6 @@ export type GetInteractionResponses = {
         cost: string | null;
         cacheCost: string | null;
         cacheSavings: string | null;
-        toonTokensBefore: number | null;
-        toonTokensAfter: number | null;
-        toonCostSavings: string | null;
-        toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -61240,10 +61169,6 @@ export type GetInteractionResponses = {
         cost: string | null;
         cacheCost: string | null;
         cacheSavings: string | null;
-        toonTokensBefore: number | null;
-        toonTokensAfter: number | null;
-        toonCostSavings: string | null;
-        toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -61448,10 +61373,6 @@ export type GetInteractionResponses = {
         cost: string | null;
         cacheCost: string | null;
         cacheSavings: string | null;
-        toonTokensBefore: number | null;
-        toonTokensAfter: number | null;
-        toonCostSavings: string | null;
-        toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -67055,6 +66976,10 @@ export type GetConnectorsResponses = {
                 recursive?: boolean;
                 maxDepth?: number;
                 includePages?: boolean;
+                /**
+                 * Site pages to sync by current publication status. Omitted means both for compatibility.
+                 */
+                pagePublicationStatus?: 'published' | 'draft' | 'both';
                 batchSize?: number;
             } | {
                 type: 'gdrive';
@@ -67281,6 +67206,10 @@ export type CreateConnectorData = {
             recursive?: boolean;
             maxDepth?: number;
             includePages?: boolean;
+            /**
+             * Site pages to sync by current publication status. Omitted means both for compatibility.
+             */
+            pagePublicationStatus?: 'published' | 'draft' | 'both';
             batchSize?: number;
         } | {
             type: 'gdrive';
@@ -67561,6 +67490,10 @@ export type CreateConnectorResponses = {
             recursive?: boolean;
             maxDepth?: number;
             includePages?: boolean;
+            /**
+             * Site pages to sync by current publication status. Omitted means both for compatibility.
+             */
+            pagePublicationStatus?: 'published' | 'draft' | 'both';
             batchSize?: number;
         } | {
             type: 'gdrive';
@@ -67935,6 +67868,10 @@ export type GetConnectorResponses = {
             recursive?: boolean;
             maxDepth?: number;
             includePages?: boolean;
+            /**
+             * Site pages to sync by current publication status. Omitted means both for compatibility.
+             */
+            pagePublicationStatus?: 'published' | 'draft' | 'both';
             batchSize?: number;
         } | {
             type: 'gdrive';
@@ -68147,6 +68084,10 @@ export type UpdateConnectorData = {
             recursive?: boolean;
             maxDepth?: number;
             includePages?: boolean;
+            /**
+             * Site pages to sync by current publication status. Omitted means both for compatibility.
+             */
+            pagePublicationStatus?: 'published' | 'draft' | 'both';
             batchSize?: number;
         } | {
             type: 'gdrive';
@@ -68428,6 +68369,10 @@ export type UpdateConnectorResponses = {
             recursive?: boolean;
             maxDepth?: number;
             includePages?: boolean;
+            /**
+             * Site pages to sync by current publication status. Omitted means both for compatibility.
+             */
+            pagePublicationStatus?: 'published' | 'draft' | 'both';
             batchSize?: number;
         } | {
             type: 'gdrive';
@@ -85828,8 +85773,6 @@ export type GetOrganizationResponses = {
         onboardingSurveyCompletedAt: string | null;
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
-        convertToolResultsToToon: boolean;
-        compressionScope: 'organization' | 'team';
         onlineMcpCatalogEnabled: boolean;
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
@@ -86149,8 +86092,6 @@ export type UpdateAppearanceSettingsResponses = {
         onboardingSurveyCompletedAt: string | null;
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
-        convertToolResultsToToon: boolean;
-        compressionScope: 'organization' | 'team';
         onlineMcpCatalogEnabled: boolean;
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
@@ -86353,8 +86294,6 @@ export type UpdateSecuritySettingsResponses = {
         onboardingSurveyCompletedAt: string | null;
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
-        convertToolResultsToToon: boolean;
-        compressionScope: 'organization' | 'team';
         onlineMcpCatalogEnabled: boolean;
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
@@ -86460,205 +86399,6 @@ export type UpdateSecuritySettingsResponses = {
 
 export type UpdateSecuritySettingsResponse = UpdateSecuritySettingsResponses[keyof UpdateSecuritySettingsResponses];
 
-export type UpdateLlmSettingsData = {
-    body: {
-        convertToolResultsToToon?: boolean;
-        compressionScope?: 'organization' | 'team';
-    };
-    path?: never;
-    query?: never;
-    url: '/api/organization/llm-settings';
-};
-
-export type UpdateLlmSettingsErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type UpdateLlmSettingsError = UpdateLlmSettingsErrors[keyof UpdateLlmSettingsErrors];
-
-export type UpdateLlmSettingsResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        name: string;
-        slug: string;
-        analyticsInstanceId: string;
-        logo: string | null;
-        logoDark: string | null;
-        createdAt: string;
-        metadata: string | null;
-        onboardingComplete: boolean;
-        onboardingSurveyCompletedAt: string | null;
-        theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
-        customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
-        convertToolResultsToToon: boolean;
-        compressionScope: 'organization' | 'team';
-        onlineMcpCatalogEnabled: boolean;
-        onlineSkillCatalogEnabled: boolean;
-        skillMarketplaceAnonymousAccess: boolean;
-        defaultDiscoveredToolInvocationPolicy: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always' | 'require_approval';
-        defaultDiscoveredToolResultPolicy: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
-        allowChatFileUploads: boolean;
-        allowToolAutoAssignment: boolean;
-        embeddingModel: string | null;
-        embeddingDimensions: EmbeddingDimensions | null;
-        embeddingChatApiKeyId: string | null;
-        rerankerChatApiKeyId: string | null;
-        rerankerModel: string | null;
-        ocrChatApiKeyId: string | null;
-        ocrModel: string | null;
-        kbBm25K1: number | null;
-        kbBm25B: number | null;
-        kbContextualRetrievalMode: ContextualRetrievalMode | null;
-        defaultLlmModel: string | null;
-        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
-        defaultModelId: string | null;
-        defaultLlmApiKeyId: string | null;
-        defaultUserLimitValue: number | null;
-        defaultUserLimitModel: Array<string> | null;
-        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
-        defaultMemberRole: string | null;
-        defaultAgentId: string | null;
-        favicon: string | null;
-        appName: string | null;
-        ogDescription: string | null;
-        footerText: string | null;
-        chatLinks: Array<{
-            label: string;
-            url: string;
-        }> | null;
-        onboardingWizard: {
-            label: string;
-            pages: Array<{
-                image?: string | null;
-                content: string;
-            }>;
-        } | null;
-        chatPlaceholders: Array<string> | null;
-        animateChatPlaceholders: boolean;
-        iconLogo: string | null;
-        iconLogoDark: string | null;
-        chatErrorSupportMessage: string | null;
-        slimChatErrorUi: boolean;
-        requireTwoFactor: boolean;
-        sessionMaxAgeSeconds: number | null;
-        oauthAccessTokenLifetimeSeconds: number;
-        connectionDefaultMcpGatewayId: string | null;
-        connectionDefaultLlmProxyId: string | null;
-        connectionDefaultClientId: string | null;
-        connectionShownClientIds: Array<string> | null;
-        connectionShownProviders: Array<string> | null;
-        connectionBaseUrls: Array<{
-            url: string;
-            description: string;
-            isDefault: boolean;
-            visible: boolean;
-        }> | null;
-        connectionDefaultProviderKeys: {
-            [key: string]: string;
-        } | null;
-        connectionSkillsEnabled: boolean;
-        connectionLlmProxyEnabled: boolean;
-        connectionPluginsEnabled: boolean;
-        modelProviderOverrides: {
-            [key: string]: {
-                hidden?: boolean;
-                displayName?: string | null;
-            };
-        } | null;
-        messagingChannelOverrides: {
-            [key: string]: {
-                hidden?: boolean;
-            };
-        } | null;
-        knowledgeConnectorOverrides: {
-            [key: string]: {
-                hidden?: boolean;
-            };
-        } | null;
-        defaultEnvironmentName: string | null;
-        defaultEnvironmentNamespace: string | null;
-        defaultEnvironmentDescription: string | null;
-        defaultNetworkPolicy: {
-            egressMode: 'off' | 'restricted' | 'unrestricted';
-            domainPreset: 'none' | 'common_dependencies' | 'package_managers';
-            allowedDomains: Array<string>;
-            allowedCidrs: Array<string>;
-        } | null;
-        defaultEnvironmentRestricted: boolean;
-        defaultEnvironmentValidationRegex: string | null;
-        defaultEnvironmentTrustedImageRegistries: Array<string> | null;
-        skillToolsEnabled: boolean;
-        mcpIdleHibernationEnabled: boolean;
-        appsHackathonRecorderEnabled: boolean;
-        newAppsDisabledByDefault: boolean;
-        newAppsLockedByDefault: boolean;
-    };
-};
-
-export type UpdateLlmSettingsResponse = UpdateLlmSettingsResponses[keyof UpdateLlmSettingsResponses];
-
 export type UpdateMcpSettingsData = {
     body: {
         onlineMcpCatalogEnabled?: boolean;
@@ -86751,8 +86491,6 @@ export type UpdateMcpSettingsResponses = {
         onboardingSurveyCompletedAt: string | null;
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
-        convertToolResultsToToon: boolean;
-        compressionScope: 'organization' | 'team';
         onlineMcpCatalogEnabled: boolean;
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
@@ -86950,8 +86688,6 @@ export type UpdateSkillsSettingsResponses = {
         onboardingSurveyCompletedAt: string | null;
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
-        convertToolResultsToToon: boolean;
-        compressionScope: 'organization' | 'team';
         onlineMcpCatalogEnabled: boolean;
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
@@ -87150,8 +86886,6 @@ export type UpdateAgentSettingsResponses = {
         onboardingSurveyCompletedAt: string | null;
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
-        convertToolResultsToToon: boolean;
-        compressionScope: 'organization' | 'team';
         onlineMcpCatalogEnabled: boolean;
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
@@ -87363,8 +87097,6 @@ export type UpdateConnectionSettingsResponses = {
         onboardingSurveyCompletedAt: string | null;
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
-        convertToolResultsToToon: boolean;
-        compressionScope: 'organization' | 'team';
         onlineMcpCatalogEnabled: boolean;
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
@@ -87576,8 +87308,6 @@ export type UpdateIntegrationSettingsResponses = {
         onboardingSurveyCompletedAt: string | null;
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
-        convertToolResultsToToon: boolean;
-        compressionScope: 'organization' | 'team';
         onlineMcpCatalogEnabled: boolean;
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
@@ -87785,8 +87515,6 @@ export type UpdateDefaultEnvironmentResponses = {
         onboardingSurveyCompletedAt: string | null;
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
-        convertToolResultsToToon: boolean;
-        compressionScope: 'organization' | 'team';
         onlineMcpCatalogEnabled: boolean;
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
@@ -87989,8 +87717,6 @@ export type UpdateAuthSettingsResponses = {
         onboardingSurveyCompletedAt: string | null;
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
-        convertToolResultsToToon: boolean;
-        compressionScope: 'organization' | 'team';
         onlineMcpCatalogEnabled: boolean;
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
@@ -88195,8 +87921,6 @@ export type UpdateKnowledgeSettingsResponses = {
         onboardingSurveyCompletedAt: string | null;
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
-        convertToolResultsToToon: boolean;
-        compressionScope: 'organization' | 'team';
         onlineMcpCatalogEnabled: boolean;
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
@@ -88391,8 +88115,6 @@ export type DropEmbeddingConfigResponses = {
         onboardingSurveyCompletedAt: string | null;
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
-        convertToolResultsToToon: boolean;
-        compressionScope: 'organization' | 'team';
         onlineMcpCatalogEnabled: boolean;
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
@@ -88937,8 +88659,6 @@ export type CompleteOnboardingResponses = {
         onboardingSurveyCompletedAt: string | null;
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
-        convertToolResultsToToon: boolean;
-        compressionScope: 'organization' | 'team';
         onlineMcpCatalogEnabled: boolean;
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
@@ -103475,13 +103195,11 @@ export type GetCostSavingsStatisticsResponses = {
         totalActualCost: number;
         totalSavings: number;
         totalSubscriptionCost: number;
-        totalToonSavings: number;
         totalCacheSavings: number;
         timeSeries: Array<{
             timestamp: string;
             baselineCost: number;
             actualCost: number;
-            toonSavings: number;
             cacheSavings: number;
             subscriptionCost: number;
         }>;
@@ -103584,7 +103302,6 @@ export type GetTeamsResponses = {
             createdByServiceAccountId: string | null;
             createdAt: string;
             updatedAt: string;
-            convertToolResultsToToon: boolean;
             members?: Array<{
                 id: string;
                 teamId: string;
@@ -103624,7 +103341,6 @@ export type CreateTeamData = {
         description?: string;
         roles?: Array<string>;
         parentId?: string | null;
-        convertToolResultsToToon?: boolean;
         labels?: Array<{
             key: string;
             value: string;
@@ -103717,7 +103433,6 @@ export type CreateTeamResponses = {
         createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
-        convertToolResultsToToon: boolean;
         members?: Array<{
             id: string;
             teamId: string;
@@ -103916,7 +103631,6 @@ export type GetTeamResponses = {
         createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
-        convertToolResultsToToon: boolean;
         members?: Array<{
             id: string;
             teamId: string;
@@ -103947,7 +103661,6 @@ export type UpdateTeamData = {
         description?: string;
         roles?: Array<string>;
         parentId?: string | null;
-        convertToolResultsToToon?: boolean;
         labels?: Array<{
             key: string;
             value: string;
@@ -104042,7 +103755,6 @@ export type UpdateTeamResponses = {
         createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
-        convertToolResultsToToon: boolean;
         members?: Array<{
             id: string;
             teamId: string;

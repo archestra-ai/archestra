@@ -1,5 +1,10 @@
 -- drizzle-migration-linter: allow-breaking
--- drizzle-migration-linter: reason=The new sync table is empty and the unique task index only covers the newly introduced task type.
+-- drizzle-migration-linter: reason=The sync source table is new and empty; its ownership foreign key cannot reject existing rows. The unique index covers only the new task type, so no existing tasks can conflict.
+CREATE TABLE "guardrails_deployment" (
+	"id" text PRIMARY KEY NOT NULL,
+	"enabled" boolean DEFAULT false NOT NULL
+);
+--> statement-breakpoint
 CREATE TABLE "openappa_github_sync" (
 	"organization_id" text PRIMARY KEY NOT NULL,
 	"repo" text NOT NULL,

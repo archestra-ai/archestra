@@ -4,6 +4,7 @@ import { ServerErrorFallback } from "@/components/error-fallback";
 import { PageLayout } from "@/components/page-layout";
 import { getServerApiHeaders } from "@/lib/utils/server";
 import { AppaGithubSyncPanel } from "./_parts/appa-github-sync-panel";
+import { GuardrailsDeploymentToggle } from "./_parts/guardrails-deployment-toggle";
 import { GuardrailsPolicyEditor } from "./guardrails-policy-editor";
 
 export const dynamic = "force-dynamic";
@@ -26,6 +27,7 @@ export default async function OpenAppaPage() {
       description="Edit the policy that governs tool calls and their results."
     >
       <div className="space-y-6">
+        <GuardrailsDeploymentToggle />
         <GuardrailsPolicyEditor />
         <AppaGithubSyncPanel />
       </div>

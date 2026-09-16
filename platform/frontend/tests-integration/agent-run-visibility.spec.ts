@@ -67,6 +67,17 @@ test("keeps a long run owner and sharing scope inside the phone viewport", async
   });
   await mswControl.use({
     method: "get",
+    url: `/api/agents/${agent.id}/runtime/preflight`,
+    body: {
+      ready: true,
+      configured: [],
+      missing: [],
+      misconfigured: [],
+      incompatible: null,
+    } satisfies archestraApiTypes.GetAgentRuntimePreflightResponses["200"],
+  });
+  await mswControl.use({
+    method: "get",
     url: `/api/agents/${agent.id}/runs`,
     body: [run],
   });

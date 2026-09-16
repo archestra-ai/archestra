@@ -27,6 +27,20 @@ commits and PRs. This is an instruction, not a client-enforced setting. There is
 no Codex attribution key in the documented configuration reference, so no
 `.codex/config.toml` is needed for this preference.
 
+The root `.codex/config.toml` raises `project_doc_max_bytes` to 64 KiB. The
+platform guide alone exceeds Codex's default 32 KiB combined instruction budget;
+without the override, its tail can be truncated and nested instructions omitted.
+Keep the combined root-to-working-directory instruction chain below this limit.
+Codex loads project configuration only in trusted projects. In an untrusted
+checkout, use `codex -c project_doc_max_bytes=65536` if you need the full guide
+without enabling project configuration. Restart existing sessions after changing
+the budget.
+
+Discovery makes skills available; it does not guarantee automatic invocation or
+instruction compliance. Explicitly invoke a skill for workflows that require it.
+`CLAUDE_LOCAL.md` is our custom filename, read through the instruction in
+`platform/AGENTS.md`; it is not Claude Code's auto-loaded `CLAUDE.local.md`.
+
 Other clients can read the skills as files using the routing instructions in
 `AGENTS.md`; automatic discovery and slash commands depend on the client's
 supported locations. This layout does not claim universal automatic discovery.

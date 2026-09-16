@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.4.0-beta.12](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-beta.11...platform-v1.4.0-beta.12) (2026-09-16)
+
+
+### Features
+
+* **openappa:** GitHub sync, global toggle, and combined guardrails ([#7966](https://github.com/archestra-ai/archestra/issues/7966)) ([80aa920](https://github.com/archestra-ai/archestra/commit/80aa9206feb96743384a6b4cf79228721c323c79))
+* preserve Agent Runtime sessions across client handoffs ([#7951](https://github.com/archestra-ai/archestra/issues/7951)) ([fa27449](https://github.com/archestra-ai/archestra/commit/fa274498bcbd202344e850ac628758203f5991cd))
+
+
+### Bug Fixes
+
+* **agent-runtime:** discover and load assigned skills across runtime clients ([#7979](https://github.com/archestra-ai/archestra/issues/7979)) ([98b45ce](https://github.com/archestra-ai/archestra/commit/98b45ce6654672b5d6aa9e67c231c405f8a13b7e))
+* **agent-runtime:** report actionable startup and API failures ([#7970](https://github.com/archestra-ai/archestra/issues/7970)) ([d196f0f](https://github.com/archestra-ai/archestra/commit/d196f0fc42232aedceb7fc245d73bb6515222e3a))
+* **agent-runtime:** report failures from maintained agent images ([#7972](https://github.com/archestra-ai/archestra/issues/7972)) ([ce61dc7](https://github.com/archestra-ai/archestra/commit/ce61dc7968fe8ca29e49c31692e47e41bb0b6b0b))
+* load complete shared instructions in Codex and Claude ([#7974](https://github.com/archestra-ai/archestra/issues/7974)) ([a75d6ac](https://github.com/archestra-ai/archestra/commit/a75d6acd5c31dbeec0f9d2b77890e85f86dbc056))
+
 ## [1.4.0-beta.11](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-beta.10...platform-v1.4.0-beta.11) (2026-09-16)
 
 

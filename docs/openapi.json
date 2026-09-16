@@ -262250,6 +262250,15 @@
                                       "includePages": {
                                         "type": "boolean"
                                       },
+                                      "pagePublicationStatus": {
+                                        "description": "Site pages to sync by current publication status. Omitted means both for compatibility.",
+                                        "type": "string",
+                                        "enum": [
+                                          "published",
+                                          "draft",
+                                          "both"
+                                        ]
+                                      },
                                       "batchSize": {
                                         "type": "number"
                                       }
@@ -263784,6 +263793,15 @@
                           "includePages": {
                             "type": "boolean"
                           },
+                          "pagePublicationStatus": {
+                            "description": "Site pages to sync by current publication status. Omitted means both for compatibility.",
+                            "type": "string",
+                            "enum": [
+                              "published",
+                              "draft",
+                              "both"
+                            ]
+                          },
                           "batchSize": {
                             "type": "number"
                           }
@@ -264906,6 +264924,15 @@
                             },
                             "includePages": {
                               "type": "boolean"
+                            },
+                            "pagePublicationStatus": {
+                              "description": "Site pages to sync by current publication status. Omitted means both for compatibility.",
+                              "type": "string",
+                              "enum": [
+                                "published",
+                                "draft",
+                                "both"
+                              ]
                             },
                             "batchSize": {
                               "type": "number"
@@ -266387,6 +266414,15 @@
                                 "includePages": {
                                   "type": "boolean"
                                 },
+                                "pagePublicationStatus": {
+                                  "description": "Site pages to sync by current publication status. Omitted means both for compatibility.",
+                                  "type": "string",
+                                  "enum": [
+                                    "published",
+                                    "draft",
+                                    "both"
+                                  ]
+                                },
                                 "batchSize": {
                                   "type": "number"
                                 }
@@ -267747,6 +267783,15 @@
                           "includePages": {
                             "type": "boolean"
                           },
+                          "pagePublicationStatus": {
+                            "description": "Site pages to sync by current publication status. Omitted means both for compatibility.",
+                            "type": "string",
+                            "enum": [
+                              "published",
+                              "draft",
+                              "both"
+                            ]
+                          },
                           "batchSize": {
                             "type": "number"
                           }
@@ -268867,6 +268912,15 @@
                             },
                             "includePages": {
                               "type": "boolean"
+                            },
+                            "pagePublicationStatus": {
+                              "description": "Site pages to sync by current publication status. Omitted means both for compatibility.",
+                              "type": "string",
+                              "enum": [
+                                "published",
+                                "draft",
+                                "both"
+                              ]
                             },
                             "batchSize": {
                               "type": "number"

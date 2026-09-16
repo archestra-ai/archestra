@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import type { ModelInputModality } from "@archestra/shared";
 import { ClientSecretCredential } from "@azure/identity";
 import { Client, ResponseType } from "@microsoft/microsoft-graph-client";
@@ -212,6 +213,7 @@ export class SharePointConnector extends BaseConnector {
 
       if (parsed.includePages !== false) {
         total += await this.countSitePages({
+          pagePublicationStatus: parsed.pagePublicationStatus,
           client,
           siteId: siteResolution.siteId,
           syncFrom: safetyBufferedSyncFrom,
@@ -310,6 +312,7 @@ export class SharePointConnector extends BaseConnector {
     // Sync site pages if enabled
     if (parsed.includePages !== false) {
       yield* this.syncSitePages({
+        pagePublicationStatus: parsed.pagePublicationStatus,
         client,
         siteId,
         progress,
@@ -1154,6 +1157,7 @@ export class SharePointConnector extends BaseConnector {
   }
 
   private async *syncSitePages(params: {
+    pagePublicationStatus: SharePointConfig["pagePublicationStatus"];
     client: Client;
     siteId: string;
     progress: {
@@ -1163,7 +1167,14 @@ export class SharePointConnector extends BaseConnector {
     syncFrom: string | undefined;
     batchSize: number;
   }): AsyncGenerator<ConnectorSyncBatch> {
-    const { client, siteId, progress, syncFrom, batchSize } = params;
+    const {
+      client,
+      siteId,
+      progress,
+      syncFrom,
+      batchSize,
+      pagePublicationStatus,
+    } = params;
 
     let url = buildSitePagesUrl(siteId, batchSize);
     let hasMore = true;
@@ -1183,22 +1194,47 @@ export class SharePointConnector extends BaseConnector {
 
       const documents: ConnectorDocument[] = [];
 
-      // Client-side incremental filter for pages (same reason as drive items:
-      // $filter on lastModifiedDateTime is not reliably supported by the pages API).
-      const pages = syncFrom
-        ? result.value.filter((p) =>
-            isModifiedSince(p.lastModifiedDateTime, syncFrom),
-          )
-        : result.value;
+      const reconcileScopes: NonNullable<
+        ConnectorSyncBatch["reconcileScopes"]
+      > = [];
+      const excludePage = (page: SitePage) => {
+        // A page may already be indexed, including before the filter changed.
+        // Scope retirement to this page so library documents remain untouched.
+        reconcileScopes.push({
+          metadataFilter: { siteId, pageId: page.id },
+          seenSourceIds: [],
+        });
+      };
 
-      for (const page of pages) {
+      for (const page of result.value) {
+        if (!matchesPagePublicationStatus(page, pagePublicationStatus)) {
+          excludePage(page);
+          continue;
+        }
+        if (!isModifiedSince(page.lastModifiedDateTime, syncFrom)) continue;
         const doc = await this.safeItemFetch({
           fetch: async () => {
-            const content = await this.fetchPageContent(
-              client,
-              siteId,
-              page.id,
-            );
+            // Read status and content together for restricted modes. A separate
+            // webParts request could pick up a draft created after listing.
+            const currentPage =
+              pagePublicationStatus && pagePublicationStatus !== "both"
+                ? ((await client
+                    .api(
+                      `${GRAPH_API_BASE}/sites/${siteId}/pages/${page.id}/microsoft.graph.sitePage?$expand=canvasLayout`,
+                    )
+                    .get()) as SitePage)
+                : page;
+            if (
+              !matchesPagePublicationStatus(currentPage, pagePublicationStatus)
+            ) {
+              excludePage(page);
+              return null;
+            }
+            const content =
+              currentPage === page
+                ? await this.fetchPageContent(client, siteId, page.id)
+                : extractCanvasText(currentPage);
+
             // Skip pages with no extractable content to avoid indexing
             // title-only documents that provide no search value.
             if (!content.trim()) {
@@ -1211,7 +1247,7 @@ export class SharePointConnector extends BaseConnector {
               });
               return null;
             }
-            return sitePageToDocument({ page, siteId, content });
+            return sitePageToDocument({ page: currentPage, siteId, content });
           },
           fallback: null,
           itemId: page.id,
@@ -1253,6 +1289,7 @@ export class SharePointConnector extends BaseConnector {
 
       yield {
         documents,
+        reconcileScopes,
         failures: this.flushFailures(),
         skipped: this.flushSkipped(),
         checkpoint: buildCheckpoint({
@@ -1387,6 +1424,7 @@ export class SharePointConnector extends BaseConnector {
   }
 
   private async countSitePages(params: {
+    pagePublicationStatus: SharePointConfig["pagePublicationStatus"];
     client: Client;
     siteId: string;
     syncFrom: string | undefined;
@@ -1398,8 +1436,10 @@ export class SharePointConnector extends BaseConnector {
       const result = (await params.client
         .api(url)
         .get()) as GraphListResponse<SitePage>;
-      count += result.value.filter((page) =>
-        isModifiedSince(page.lastModifiedDateTime, params.syncFrom),
+      count += result.value.filter(
+        (page) =>
+          isModifiedSince(page.lastModifiedDateTime, params.syncFrom) &&
+          matchesPagePublicationStatus(page, params.pagePublicationStatus),
       ).length;
       url = result["@odata.nextLink"] ?? "";
     }
@@ -2332,7 +2372,8 @@ type SitePage = RequiredNonNull<
   | "lastModifiedDateTime"
   | "createdDateTime"
   | "description"
->;
+> &
+  Pick<GraphSitePage, "publishingState" | "canvasLayout">;
 
 function subtractSafetyBuffer(isoDate: string): string {
   return new Date(
@@ -2534,7 +2575,7 @@ function buildItemSubfoldersUrl(
 function buildSitePagesUrl(siteId: string, batchSize: number): string {
   const params = new URLSearchParams({
     $select:
-      "id,name,title,webUrl,lastModifiedDateTime,createdDateTime,description",
+      "id,name,title,webUrl,lastModifiedDateTime,createdDateTime,description,publishingState",
     $orderby: "lastModifiedDateTime asc",
     $top: String(batchSize),
   });
@@ -2687,4 +2728,28 @@ function sitePageToDocument(params: {
     updatedAt: new Date(page.lastModifiedDateTime),
     contentTruncation: limited.truncation,
   };
+}
+
+function matchesPagePublicationStatus(
+  page: SitePage,
+  status: SharePointConfig["pagePublicationStatus"],
+): boolean {
+  // Missing or future Graph states must not enter a restricted index.
+  return !status || status === "both" || page.publishingState?.level === status;
+}
+
+function extractCanvasText(page: SitePage): string {
+  const layout = page.canvasLayout;
+  const webParts = [
+    ...(layout?.horizontalSections ?? []).flatMap((section) =>
+      (section.columns ?? []).flatMap((column) => column.webparts ?? []),
+    ),
+    ...(layout?.verticalSection?.webparts ?? []),
+  ];
+  return webParts
+    .flatMap((part) => {
+      const text = (part as { innerHtml?: string }).innerHtml;
+      return text ? [stripHtmlTags(text)] : [];
+    })
+    .join("\n\n");
 }

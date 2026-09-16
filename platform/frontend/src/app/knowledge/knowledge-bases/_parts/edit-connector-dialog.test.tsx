@@ -586,3 +586,85 @@ describe("EditConnectorDialog - Notion auto-sync limitation note", () => {
     ).not.toBeInTheDocument();
   });
 });
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+describe("EditConnectorDialog - SharePoint publication status", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(useTeams).mockReturnValue({ data: [] } as unknown as ReturnType<
+      typeof useTeams
+    >);
+    mockMutateAsync.mockResolvedValue({ id: "conn-sharepoint-1" });
+  });
+
+  it.each([
+    undefined,
+    "draft",
+    "published",
+    "both",
+  ] as const)("preserves %s on an unrelated edit", async (status) => {
+    const user = userEvent.setup();
+    renderDialog({
+      ...makeAsanaConnector(),
+      id: "conn-sharepoint-1",
+      connectorType: "sharepoint",
+      config: {
+        type: "sharepoint",
+        tenantId: "test-tenant",
+        siteUrl: "https://tenant.sharepoint.com",
+        pagePublicationStatus: status,
+      },
+    });
+    await user.click(screen.getByRole("button", { name: /Advanced/ }));
+    expect(
+      screen.getByRole("combobox", { name: "Page publication status" }),
+    ).toHaveTextContent(
+      status === "draft"
+        ? "Draft only"
+        : status === "published"
+          ? "Published only"
+          : "Both",
+    );
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+    await waitFor(() => expect(mockMutateAsync).toHaveBeenCalledTimes(1));
+    expect(
+      mockMutateAsync.mock.calls[0][0].body.config.pagePublicationStatus,
+    ).toBe(status);
+  });
+
+  it("saves a changed selection and preserves it while pages are disabled", async () => {
+    const user = userEvent.setup();
+    renderDialog({
+      ...makeAsanaConnector(),
+      id: "conn-sharepoint-1",
+      connectorType: "sharepoint",
+      config: {
+        type: "sharepoint",
+        tenantId: "test-tenant",
+        siteUrl: "https://tenant.sharepoint.com",
+      },
+    });
+    await user.click(screen.getByRole("button", { name: /Advanced/ }));
+    await user.click(
+      screen.getByRole("combobox", { name: "Page publication status" }),
+    );
+    await user.click(screen.getByRole("option", { name: "Draft only" }));
+    await user.click(screen.getByRole("switch", { name: "Include Pages" }));
+    expect(
+      screen.queryByRole("combobox", { name: "Page publication status" }),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("switch", { name: "Include Pages" }));
+    expect(
+      screen.getByRole("combobox", { name: "Page publication status" }),
+    ).toHaveTextContent("Draft only");
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+    await waitFor(() => expect(mockMutateAsync).toHaveBeenCalledTimes(1));
+    expect(mockMutateAsync.mock.calls[0][0].body.config).toMatchObject({
+      pagePublicationStatus: "draft",
+      includePages: true,
+    });
+  });
+});
+// SPDX-SnippetEnd

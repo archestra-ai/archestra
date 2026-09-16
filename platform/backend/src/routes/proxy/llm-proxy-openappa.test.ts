@@ -29,6 +29,7 @@ import {
 import { type Agent, ApiError } from "@/types";
 import { anthropicAdapterFactory } from "./adapters";
 import anthropicProxyRoutes from "./routes/anthropic";
+import openAiProxyRoutes from "./routes/openai";
 
 const native = vi.hoisted(() => ({
   initializeOpenappa: vi.fn(),
@@ -74,6 +75,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       }),
     );
     await app.register(anthropicProxyRoutes);
+    await app.register(openAiProxyRoutes);
     agent = await makeAgent({ name: "Native proxy test" });
     userId = (await makeUser()).id;
     await makeMember(userId, agent.organizationId);
@@ -170,6 +172,86 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     "x-appa-session-id": sessionId,
   });
   const url = () => `/v1/anthropic/${agent.id}/v1/messages`;
+
+  test.each([
+    { stream: false, enabled: true },
+    { stream: true, enabled: true },
+    { stream: false, enabled: false },
+    { stream: true, enabled: false },
+  ])("Responses requests honor policy tool sequencing ($stream, $enabled)", async ({
+    stream,
+    enabled,
+  }) => {
+    config.openappa.enabled = enabled;
+    const upstream: unknown[] = [];
+    vi.stubGlobal(
+      "fetch",
+      async (url: string | URL | Request, init?: RequestInit) => {
+        expect(String(url)).toBe("https://api.openai.com/v1/responses");
+        upstream.push(JSON.parse(String(init?.body)));
+        const response = {
+          id: "resp_fixture",
+          object: "response",
+          created_at: 1,
+          model: "gpt-4o",
+          status: "completed",
+          output: [
+            {
+              id: "msg_fixture",
+              type: "message",
+              role: "assistant",
+              status: "completed",
+              content: [{ type: "output_text", text: "Done", annotations: [] }],
+            },
+          ],
+          usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 },
+        };
+        if (!stream) return Response.json(response);
+        return new Response(
+          `${[
+            {
+              type: "response.created",
+              response: { ...response, status: "in_progress", output: [] },
+            },
+            { type: "response.output_text.delta", delta: "Done" },
+            { type: "response.completed", response },
+          ]
+            .map(
+              (event) =>
+                `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
+            )
+            .join("")}data: [DONE]\n\n`,
+          { headers: { "Content-Type": "text/event-stream" } },
+        );
+      },
+    );
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/responses`,
+      remoteAddress: "127.0.0.1",
+      headers: { ...headers(), authorization: "Bearer test-key" },
+      payload: {
+        model: "gpt-4o",
+        stream,
+        input: "Read the file",
+        parallel_tool_calls: true,
+        tools: [
+          {
+            type: "function",
+            name: "read_file",
+            parameters: { type: "object", properties: {} },
+          },
+        ],
+      },
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    expect(upstream).toHaveLength(1);
+    expect(upstream[0]).toMatchObject({
+      parallel_tool_calls: !enabled,
+      tools: [{ name: "read_file" }],
+    });
+    expect(response.body).toContain("Done");
+  });
 
   test.each([
     true,

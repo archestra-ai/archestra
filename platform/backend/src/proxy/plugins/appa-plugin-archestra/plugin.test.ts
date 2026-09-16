@@ -71,6 +71,42 @@ describe("APPA client adapters", () => {
 });
 
 describe("AppaPluginArchestra", () => {
+  test.each([
+    "openai:responses",
+    "openai:chatCompletions",
+  ])("serializes model tool requests only for bound policy sessions (%s)", async (interactionType) => {
+    const plugin = new AppaPluginArchestra([]);
+    const context = {
+      ...requestContext({
+        sessionId: "tools",
+        canonicalizeToolName: (name) => name,
+      }),
+      interactionType,
+    };
+    for (const parallel of [undefined, true, false]) {
+      const request = {
+        model: "model",
+        tools: [{ type: "function", name: "read_file" }],
+        parallel_tool_calls: parallel,
+      };
+      await plugin.onBeforeModel({ ...context, request });
+      expect(request.parallel_tool_calls).toBe(parallel);
+      await plugin.onSessionInit(context);
+      await plugin.onBeforeModel({ ...context, request });
+      expect(request.parallel_tool_calls).toBe(false);
+      expect(request.tools).toEqual([{ type: "function", name: "read_file" }]);
+      await plugin.onCleanup(context);
+    }
+    await plugin.onSessionInit(context);
+    const unsupported = { parallel_tool_calls: true };
+    await plugin.onBeforeModel({
+      ...context,
+      interactionType: "gemini:generateContent",
+      request: unsupported,
+    });
+    expect(unsupported.parallel_tool_calls).toBe(true);
+  });
+
   test("keeps bindings private to each request and deletes them at cleanup", async () => {
     const canonicalizedNames: string[] = [];
     const checkToolCalls = vi

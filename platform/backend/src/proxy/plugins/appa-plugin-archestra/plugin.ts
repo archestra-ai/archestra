@@ -4,6 +4,7 @@ import {
   processProxyResults,
 } from "@/openappa/service";
 import type {
+  LlmProxyBeforeModelContext,
   LlmProxyContextTrust,
   LlmProxyPlugin,
   LlmProxyRequestContext,
@@ -52,6 +53,24 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     binding.adapter = adapter;
     // Unknown clients still get APPA enforcement using the proxy's canonical names.
     this.bindings.set(context.resources, binding);
+  }
+
+  async onBeforeModel(context: LlmProxyBeforeModelContext): Promise<void> {
+    if (!this.bindings.has(context.resources)) return;
+    if (
+      context.interactionType !== "openai:responses" &&
+      context.interactionType !== "openai:chatCompletions"
+    )
+      return;
+    if (
+      typeof context.request !== "object" ||
+      context.request === null ||
+      Array.isArray(context.request)
+    )
+      return;
+    // The policy engine reserves one tool until its result arrives. Ask the
+    // provider for sequential calls; retain batch rejection if it ignores this.
+    (context.request as Record<string, unknown>).parallel_tool_calls = false;
   }
 
   async onToolResults(

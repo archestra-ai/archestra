@@ -6,6 +6,7 @@ import {
   TOOL_LIST_AGENTS_SHORT_NAME,
 } from "@archestra/shared";
 import { and, eq } from "drizzle-orm";
+import config from "@/config";
 import db, { schema } from "@/database";
 import {
   AgentKnowledgeBaseModel,
@@ -530,6 +531,57 @@ describe("agent tool execution", () => {
     const parsed = JSON.parse((result.content[0] as any).text);
     expect(parsed).toHaveProperty("total");
     expect(parsed).toHaveProperty("agents");
+  });
+
+  test("list_agents identifies agents that can retain and steer runtime work", async ({
+    makeAgent,
+  }) => {
+    const foregroundAgent = await makeAgent({
+      organizationId: testAgent.organizationId,
+      agentType: "agent",
+      scope: "org",
+    });
+    const runtimeAgent = await makeAgent({
+      organizationId: testAgent.organizationId,
+      agentType: "agent",
+      scope: "org",
+      runtime: {
+        image: "example.test/agent:current",
+        command: null,
+        inferenceProtocol: "anthropic",
+        backend: "kubernetes",
+        steerMode: "pipe",
+        privileged: false,
+        resources: null,
+        environment: null,
+        credentials: null,
+        ttlHours: null,
+        maxCostUsd: null,
+        idleTimeoutMinutes: null,
+      },
+    });
+    for (const enabled of [true, false]) {
+      config.agentRuntime.enabled = enabled;
+      const result = await executeArchestraTool(
+        archestraMcpBranding.getToolName(TOOL_LIST_AGENTS_SHORT_NAME),
+        {},
+        mockContext,
+      );
+      expect(result.isError).toBe(false);
+      const parsed = JSON.parse((result.content[0] as { text: string }).text);
+      expect(parsed.agents).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: runtimeAgent.id,
+            executionMode: enabled ? "runtime" : "foreground",
+          }),
+          expect.objectContaining({
+            id: foregroundAgent.id,
+            executionMode: "foreground",
+          }),
+        ]),
+      );
+    }
   });
 
   test("list_agents filters by provider key and returns its display name", async () => {

@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import config from "@/config";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
+import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import { GUARDRAILS_NOOP_ANNOTATOR_PATH } from "@/routes/route-paths";
 import { ApiError } from "@/types";
 import type { GuardrailsPolicy } from "@/types/guardrails-policy";
@@ -48,6 +49,11 @@ export const guardrailsPolicyService = {
     expectedRevision: number;
   }) {
     requireEnabled();
+    if ((await OpenAppaGithubSyncModel.find(params.organizationId))?.interval)
+      throw new ApiError(
+        409,
+        "Stop GitHub syncing before editing this policy.",
+      );
     const validation = await this.validate(params.content);
     if (!validation.valid)
       throw new ApiError(400, validation.errors.join("\n"));

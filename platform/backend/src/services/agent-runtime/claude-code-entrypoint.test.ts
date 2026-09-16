@@ -254,6 +254,34 @@ fi
         path.join(runtime, "transcript-hook.sh"),
       );
 
+      // Capture identity at startup, before a first response can be cancelled.
+      for (const sessionId of ["original-session", "unrelated-session"]) {
+        await execFileAsync(
+          "bash",
+          [
+            "-c",
+            'printf "%s" "$TEST_HOOK_PAYLOAD" | "$1"',
+            "hook-test",
+            settings.hooks.SessionStart[0].hooks[0].command,
+          ],
+          {
+            env: {
+              ...process.env,
+              ARCHESTRA_AGENT_RUNTIME_DIR: runtime,
+              TEST_HOOK_PAYLOAD: JSON.stringify({
+                hook_event_name: "SessionStart",
+                session_id: sessionId,
+              }),
+            },
+          },
+        );
+        expect(
+          (
+            await readFile(path.join(runtime, "claude-session-id"), "utf8")
+          ).trim(),
+        ).toBe("original-session");
+      }
+
       if (mode === "one_shot") {
         expect(args).toContain("--settings");
         expect(result.stdout).toContain("===ARCHESTRA-FINAL-ANSWER===");

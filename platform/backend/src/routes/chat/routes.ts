@@ -113,7 +113,6 @@ import { toConversationApiMessages } from "@/models/conversation";
 import { reportChatMessageFeedback } from "@/observability/metrics/chat";
 import { reportQuoteVerification } from "@/observability/metrics/rag";
 import { startActiveChatSpan } from "@/observability/tracing";
-import { openappaEnabled } from "@/openappa/service";
 import { mcpGatewayTaskRunner } from "@/routes/mcp-gateway/tasks";
 import {
   ACTIVE_CHAT_RUN_TERMINAL_REPLAY_GRACE_MS,
@@ -125,6 +124,7 @@ import {
   resolveOpenedApp,
 } from "@/services/apps/opened-app-context";
 import { conversationFilesService } from "@/services/conversation-files";
+import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
 import { projectService } from "@/services/project";
 import { generateConversationTitle } from "@/services/title-generation";
 import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
@@ -411,7 +411,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Conversation not found");
       }
 
-      if (openappaEnabled() && conversation.lockedChat) {
+      if ((await isGuardrailsV2Active()) && conversation.lockedChat) {
         throw new ApiError(
           409,
           "OpenAPPA does not yet support encrypted policy storage for locked chats",

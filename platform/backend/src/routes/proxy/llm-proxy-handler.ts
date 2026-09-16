@@ -1,3 +1,4 @@
+import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
 /**
  * Generic LLM Proxy Handler
  *
@@ -85,7 +86,6 @@ import {
 import {
   isAppaChatSource,
   type OpenAppaSession,
-  openappaEnabled,
   sessionFromHeaders,
 } from "@/openappa/service";
 import { APPA_PLUGIN_TRUSTED_CONTEXT } from "@/proxy/plugins/appa-plugin-archestra/types";
@@ -94,6 +94,7 @@ import {
   type LlmProxyPluginRegistry,
   type LlmProxyRequestContext,
   type LlmProxyToolCallRefusal,
+  type LlmProxyToolCallsContext,
 } from "@/proxy/plugins/registry";
 import { enrichDiscoveredModel } from "@/services/discovered-model-enrichment";
 import { assertSubscriptionCredentialForProvider } from "@/services/subscription-credential-guard";
@@ -166,7 +167,6 @@ export interface LLMProxyContext<TRequest> {
   pluginRegistry?: LlmProxyPluginRegistry;
   pluginContext?: LlmProxyRequestContext;
   /** Captured by the host after binding an authenticated APPA session. */
-  usesAppaPolicies: boolean;
   agent: GatewayAgent;
   originalRequest: TRequest;
   actualModel: string;
@@ -309,7 +309,6 @@ export async function handleLLMProxy<
   const hasProxyPlugins = pluginRegistry.hasPlugins();
   let pluginContext: LlmProxyRequestContext | undefined;
   let pluginSessionInitialized = false;
-  let usesAppaPolicies = false;
 
   // Extract header-based context
   const headersForExtraction = headers as Record<
@@ -776,7 +775,8 @@ export async function handleLLMProxy<
   // Content never reaches spans or logs for a locked-chat session, whether it
   // ends up encrypted or redacted.
   const suppressContent = lockedChat.kind !== "none";
-  if (openappaEnabled() && suppressContent) {
+  const appaActive = await isGuardrailsV2Active();
+  if (appaActive && suppressContent) {
     throw new ApiError(
       409,
       "OpenAPPA does not yet support encrypted policy storage for locked chats",
@@ -1060,6 +1060,46 @@ export async function handleLLMProxy<
           }
         : undefined;
 
+    const evaluateLegacyTrust = async () =>
+      await utils.trustedData.evaluateIfContextIsTrusted({
+        messages: commonMessages,
+        agentId: resolvedAgentId,
+        organizationId: resolvedAgent.organizationId,
+        userId,
+        considerContextUntrusted: effectiveConsiderContextUntrusted,
+        policyContext: { teamIds, externalAgentId },
+        onDualLlmStart: (info) => {
+          writeDualLlmKeepAlive?.();
+          publishDualLlmEvent?.({ kind: "start", ...info });
+        },
+        onDualLlmProgress: (progress) => {
+          writeDualLlmKeepAlive?.();
+          publishDualLlmEvent?.({ kind: "qa", ...progress });
+        },
+        // A failed analysis fails the request closed. Chat renders the failure
+        // from the structured event; for other clients the message is written
+        // as a text delta — safe here because the request errors out and no
+        // model output follows that could fuse with it.
+        onDualLlmError: (info) => {
+          publishDualLlmEvent?.({ kind: "error", ...info });
+          if (!publishDualLlmEvent && requestAdapter.isStreaming()) {
+            ensureStreamHeaders();
+            reply.raw.write(streamAdapter.formatTextDeltaSSE(info.message));
+          }
+        },
+        onDualLlmComplete: (analysis, info) =>
+          publishDualLlmEvent?.({
+            kind: "complete",
+            toolCallId: analysis.toolCallId,
+            toolName: info.toolName,
+            analysis,
+            cached: info.cached,
+          }),
+        initialUntrustedReason,
+      });
+    let legacyTrustOutcome:
+      | Awaited<ReturnType<typeof evaluateLegacyTrust>>
+      | undefined;
     let pluginToolResultsOutcome:
       | Awaited<ReturnType<LlmProxyPluginRegistry["onToolResults"]>>
       | undefined;
@@ -1074,7 +1114,7 @@ export async function handleLLMProxy<
       // user attribution header alone is not a credential.
       const isInternalRequest = isLoopbackRequest(request);
       if (
-        openappaEnabled() &&
+        appaActive &&
         !isInternalRequest &&
         !authenticatedUserId &&
         !authenticatedApp &&
@@ -1087,17 +1127,19 @@ export async function handleLLMProxy<
       }
       const appaUserId =
         authenticatedUserId ?? (isInternalRequest ? userId : undefined);
-      openappaSession = sessionFromHeaders({
-        headers: headersForExtraction,
-        organizationId: resolvedAgent.organizationId,
-        callerId: appaUserId
-          ? `user:${appaUserId}`
-          : authenticatedApp
-            ? `app:${authenticatedApp.id}`
-            : virtualKeyId
-              ? `virtual-key:${virtualKeyId}`
-              : undefined,
-      });
+      openappaSession = appaActive
+        ? sessionFromHeaders({
+            headers: headersForExtraction,
+            organizationId: resolvedAgent.organizationId,
+            callerId: appaUserId
+              ? `user:${appaUserId}`
+              : authenticatedApp
+                ? `app:${authenticatedApp.id}`
+                : virtualKeyId
+                  ? `virtual-key:${virtualKeyId}`
+                  : undefined,
+          })
+        : undefined;
       pluginContext = {
         requestId: request.id,
         organizationId: resolvedAgent.organizationId,
@@ -1140,57 +1182,31 @@ export async function handleLLMProxy<
       }
       await pluginRegistry.onSessionInit(pluginContext);
       pluginSessionInitialized = true;
+      if (openappaSession) {
+        legacyTrustOutcome = await evaluateLegacyTrust();
+      }
       pluginToolResultsOutcome = await pluginRegistry.onToolResults({
         ...pluginContext,
-        toolResults: requestAdapter.getToolResults(),
+        // Adapters can defer wire updates until serialization; pass the filtered
+        // content explicitly so APPA cannot inspect a blocked/raw version.
+        toolResults: requestAdapter.getToolResults().map((result) => ({
+          ...result,
+          content:
+            legacyTrustOutcome?.toolResultUpdates[result.id] ?? result.content,
+        })),
       });
-      usesAppaPolicies = openappaSession !== undefined;
     }
     const trustedDataOutcome =
+      legacyTrustOutcome ??
       pluginToolResultsOutcome?.contextTrust ??
-      (await utils.trustedData.evaluateIfContextIsTrusted({
-        messages: commonMessages,
-        agentId: resolvedAgentId,
-        organizationId: resolvedAgent.organizationId,
-        userId,
-        considerContextUntrusted: effectiveConsiderContextUntrusted,
-        policyContext: { teamIds, externalAgentId },
-        onDualLlmStart: (info) => {
-          writeDualLlmKeepAlive?.();
-          publishDualLlmEvent?.({ kind: "start", ...info });
-        },
-        onDualLlmProgress: (progress) => {
-          writeDualLlmKeepAlive?.();
-          publishDualLlmEvent?.({ kind: "qa", ...progress });
-        },
-        // A failed analysis fails the request closed. Chat renders the failure
-        // from the structured event; for other clients the message is written
-        // as a text delta — safe here because the request errors out and no
-        // model output follows that could fuse with it.
-        onDualLlmError: (info) => {
-          publishDualLlmEvent?.({ kind: "error", ...info });
-          if (!publishDualLlmEvent && requestAdapter.isStreaming()) {
-            ensureStreamHeaders();
-            reply.raw.write(streamAdapter.formatTextDeltaSSE(info.message));
-          }
-        },
-        onDualLlmComplete: (analysis, info) =>
-          publishDualLlmEvent?.({
-            kind: "complete",
-            toolCallId: analysis.toolCallId,
-            toolName: info.toolName,
-            analysis,
-            cached: info.cached,
-          }),
-        initialUntrustedReason,
-      }));
+      (await evaluateLegacyTrust());
     const { contextIsTrusted, dualLlmAnalyses, unsafeContextBoundary } =
       trustedDataOutcome;
     const toolResultUpdates = {
-      ...pluginToolResultsOutcome?.toolResultUpdates,
       ...("toolResultUpdates" in trustedDataOutcome
         ? trustedDataOutcome.toolResultUpdates
         : {}),
+      ...pluginToolResultsOutcome?.toolResultUpdates,
     };
 
     // Apply tool result updates
@@ -1415,7 +1431,6 @@ export async function handleLLMProxy<
           ? chatBlockCapability.slice(3)
           : undefined,
       ...(pluginContext ? { pluginRegistry, pluginContext } : {}),
-      usesAppaPolicies,
       agent: resolvedAgent,
       originalRequest: requestAdapter.getOriginalRequest(),
       actualModel,
@@ -1892,47 +1907,30 @@ async function handleStreaming<
         "Evaluating tool invocation policies",
       );
 
-      let policyToolCalls = rewrittenToolCalls ?? toolCalls;
-      let pluginRefusal: LlmProxyToolCallRefusal | null = null;
-      if (ctx.pluginRegistry && ctx.pluginContext) {
-        const pluginOutcome = await evaluateProxyPluginToolCalls(
-          ctx.pluginRegistry,
-          ctx.pluginContext,
-          policyToolCalls,
-        );
-        if (pluginOutcome.wasRewritten) {
-          rewrittenToolCalls = pluginOutcome.toolCalls;
-          policyToolCalls = pluginOutcome.toolCalls;
-        }
-        pluginRefusal = pluginOutcome.refusal;
-      }
-
-      // Policies are evaluated against the rewritten calls, which
-      // `normalizeToolCallsForPolicy` unwraps straight back to the same
-      // targets — so a repaired call faces exactly the gate a `run_tool`
-      // dispatch the model wrote itself would have faced.
-      toolInvocationRefusal =
-        pluginRefusal ??
-        (ctx.usesAppaPolicies
-          ? null
-          : await utils.toolInvocation.evaluatePolicies(
-              normalizeToolCallsForPolicy(
-                policyToolCalls,
-                canonicalizeToolName,
-              ),
-              agent.id,
-              {
-                teamIds: teamIds ?? [],
-                externalAgentId,
-                sensitiveContextOrigin:
-                  utils.trustedData.sensitiveContextOriginFromBoundary(
-                    unsafeContextBoundary,
-                  ),
-              },
-              contextIsTrusted,
-              enabledToolNames,
-              { surface: "llm-proxy", sessionId: sessionId ?? undefined },
-            ));
+      const policyOutcome = await evaluateProxyPluginToolCalls(
+        ctx.pluginRegistry,
+        ctx.pluginContext,
+        rewrittenToolCalls ?? toolCalls,
+        async (calls) =>
+          await utils.toolInvocation.evaluatePolicies(
+            normalizeToolCallsForPolicy([...calls], canonicalizeToolName),
+            agent.id,
+            {
+              teamIds: teamIds ?? [],
+              externalAgentId,
+              sensitiveContextOrigin:
+                utils.trustedData.sensitiveContextOriginFromBoundary(
+                  unsafeContextBoundary,
+                ),
+            },
+            contextIsTrusted,
+            enabledToolNames,
+            { surface: "llm-proxy", sessionId: sessionId ?? undefined },
+          ),
+      );
+      if (policyOutcome.wasRewritten)
+        rewrittenToolCalls = policyOutcome.toolCalls;
+      toolInvocationRefusal = policyOutcome.refusal;
 
       logger.info(
         { refused: !!toolInvocationRefusal },
@@ -2430,40 +2428,30 @@ async function handleNonStreaming<
       providerName,
     });
 
-    let policyToolCalls = rewrittenToolCalls ?? emittedToolCalls;
-    let pluginRefusal: LlmProxyToolCallRefusal | null = null;
-    if (ctx.pluginRegistry && ctx.pluginContext) {
-      const pluginOutcome = await evaluateProxyPluginToolCalls(
-        ctx.pluginRegistry,
-        ctx.pluginContext,
-        policyToolCalls,
-      );
-      if (pluginOutcome.wasRewritten) {
-        rewrittenToolCalls = pluginOutcome.toolCalls;
-        policyToolCalls = pluginOutcome.toolCalls;
-      }
-      pluginRefusal = pluginOutcome.refusal;
-    }
-
-    const toolInvocationRefusal: LlmProxyToolCallRefusal | null =
-      pluginRefusal ??
-      (ctx.usesAppaPolicies
-        ? null
-        : await utils.toolInvocation.evaluatePolicies(
-            normalizeToolCallsForPolicy(policyToolCalls, canonicalizeToolName),
-            agent.id,
-            {
-              teamIds: teamIds ?? [],
-              externalAgentId,
-              sensitiveContextOrigin:
-                utils.trustedData.sensitiveContextOriginFromBoundary(
-                  unsafeContextBoundary,
-                ),
-            },
-            contextIsTrusted,
-            enabledToolNames,
-            { surface: "llm-proxy", sessionId: sessionId ?? undefined },
-          ));
+    const policyOutcome = await evaluateProxyPluginToolCalls(
+      ctx.pluginRegistry,
+      ctx.pluginContext,
+      rewrittenToolCalls ?? emittedToolCalls,
+      async (calls) =>
+        await utils.toolInvocation.evaluatePolicies(
+          normalizeToolCallsForPolicy([...calls], canonicalizeToolName),
+          agent.id,
+          {
+            teamIds: teamIds ?? [],
+            externalAgentId,
+            sensitiveContextOrigin:
+              utils.trustedData.sensitiveContextOriginFromBoundary(
+                unsafeContextBoundary,
+              ),
+          },
+          contextIsTrusted,
+          enabledToolNames,
+          { surface: "llm-proxy", sessionId: sessionId ?? undefined },
+        ),
+    );
+    if (policyOutcome.wasRewritten)
+      rewrittenToolCalls = policyOutcome.toolCalls;
+    const toolInvocationRefusal = policyOutcome.refusal;
 
     if (toolInvocationRefusal) {
       const { refusalMessage, contentMessage, reason, allToolCallNames } =
@@ -2689,18 +2677,27 @@ async function handleNonStreaming<
 }
 
 async function evaluateProxyPluginToolCalls(
-  registry: LlmProxyPluginRegistry,
-  context: LlmProxyRequestContext,
+  registry: LlmProxyPluginRegistry | undefined,
+  context: LlmProxyRequestContext | undefined,
   toolCalls: readonly AccumulatedToolCall[],
+  validate: (
+    calls: LlmProxyToolCallsContext["toolCalls"],
+  ) => Promise<LlmProxyToolCallRefusal | null>,
 ): Promise<{
   refusal: LlmProxyToolCallRefusal | null;
   toolCalls: AccumulatedToolCall[];
   wasRewritten: boolean;
 }> {
-  const outcome = await registry.onToolCalls({
-    ...context,
-    toolCalls,
-  });
+  if (!registry || !context)
+    return {
+      refusal: await validate(toolCalls),
+      toolCalls: [...toolCalls],
+      wasRewritten: false,
+    };
+  const outcome = await registry.onToolCalls(
+    { ...context, toolCalls },
+    validate,
+  );
   if (outcome.decision === "allow") {
     return {
       refusal: null,

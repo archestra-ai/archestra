@@ -5,6 +5,7 @@ import {
 } from "@/archestra-mcp-server";
 import config from "@/config";
 import * as database from "@/database";
+import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { checkToolCalls, processProxyResults } from "./service";
@@ -20,9 +21,10 @@ const session = {
   session_id: "conversation",
 };
 
-beforeEach(() => {
+beforeEach(async () => {
   config.llmProxy.plugins = ["appa"];
   config.openappa = { enabled: true };
+  await GuardrailsDeploymentModel.setEnabled(true);
   vi.spyOn(database, "getDatabaseConnectionString").mockReturnValue(
     "postgresql://test:test@localhost/test",
   );

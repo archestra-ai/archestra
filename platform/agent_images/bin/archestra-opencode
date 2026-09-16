@@ -87,7 +87,7 @@ PLUGIN
 chmod 0600 "${attention_plugin}"
 
 cat > "${transcript_plugin}" <<'PLUGIN'
-import { existsSync, renameSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { rename, writeFile } from "node:fs/promises";
 
 function timestamp(info) {
@@ -152,6 +152,15 @@ function entriesForMessage(message) {
 
 export const ArchestraTranscript = async ({ client, directory }) => ({
   event: async ({ event }) => {
+    const runtimeDir = process.env.ARCHESTRA_AGENT_RUNTIME_DIR ?? "/var/run/archestra";
+    const sessionFile = `${runtimeDir}/opencode-main-session`;
+    if (event.type === "session.created") {
+      const info = event.properties?.info;
+      if (info?.id && !info.parentID && !existsSync(sessionFile)) {
+        writeFileSync(sessionFile, `${info.id}\n`, "utf8");
+      }
+      return;
+    }
     if (event.type !== "session.idle" && event.type !== "session.error") return;
 
     const sessionID = event.properties?.sessionID;
@@ -161,12 +170,16 @@ export const ArchestraTranscript = async ({ client, directory }) => ({
       query: { directory },
     });
     if (!sessionResponse.data || sessionResponse.data.parentID) return;
+    if (existsSync(sessionFile)) {
+      if (readFileSync(sessionFile, "utf8").trim() !== sessionID) return;
+    } else {
+      writeFileSync(sessionFile, `${sessionID}\n`, "utf8");
+    }
 
     if (event.type === "session.error") {
       // OpenCode also emits this while automatically compacting context.
       if (event.properties.error?.name === "ContextOverflowError") return;
       if (process.env.ARCHESTRA_AGENT_RUNTIME_MODE !== "one_shot") return;
-      const runtimeDir = process.env.ARCHESTRA_AGENT_RUNTIME_DIR ?? "/var/run/archestra";
       const message = "OpenCode could not complete the model request. Check the configured provider credential and model availability, then retry.";
       const prefix = process.env.ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX;
       if (prefix) {
@@ -189,7 +202,6 @@ export const ArchestraTranscript = async ({ client, directory }) => ({
       query: { directory },
     });
     const messages = response.data ?? [];
-    const runtimeDir = process.env.ARCHESTRA_AGENT_RUNTIME_DIR ?? "/var/run/archestra";
     const transcript = {
       version: 1,
       provider: "opencode",

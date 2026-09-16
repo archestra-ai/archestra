@@ -41,7 +41,7 @@ if [ "$ARCHESTRA_AGENT_RUNTIME_MODE" = "one_shot" ]; then
   plugin_path="$(jq -r '.plugin[] | select(contains("opencode-transcript")) | sub("^file://"; "")' "$OPENCODE_CONFIG")"
   PLUGIN_PATH="$plugin_path" node --input-type=module <<'JS'
 const plugin = await import("file://" + process.env.PLUGIN_PATH);
-const { access } = await import("node:fs/promises");
+const { access, readFile } = await import("node:fs/promises");
 const hooks = await plugin.ArchestraTranscript({
   client: {
     session: {
@@ -65,6 +65,13 @@ const hooks = await plugin.ArchestraTranscript({
   },
   directory: process.cwd(),
 });
+await hooks.event({ event: { type: "session.created", properties: { info: { id: "subagent-session", parentID: "session-1" } } } });
+await hooks.event({ event: { type: "session.created", properties: { info: { id: "session-1" } } } });
+await hooks.event({ event: { type: "session.created", properties: { info: { id: "unrelated-session" } } } });
+if ((await readFile(process.env.ARCHESTRA_AGENT_RUNTIME_DIR + "/opencode-main-session", "utf8")).trim() !== "session-1") {
+  throw new Error("the root session was not preserved before first completion");
+}
+await hooks.event({ event: { type: "session.idle", properties: { sessionID: "unrelated-session" } } });
 await hooks.event({ event: { type: "session.idle", properties: { sessionID: "subagent-session" } } });
 try {
   await access(process.env.ARCHESTRA_AGENT_RUNTIME_DIR + "/turn-complete");

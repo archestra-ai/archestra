@@ -69,8 +69,9 @@ args=(
 if [[ "${ARCHESTRA_AGENT_RUNTIME_CONTINUE:-0}" == "1" ]]; then
   if [[ -s "${runtime_dir}/claude-session-id" ]]; then
     args+=(--resume "$(cat "${runtime_dir}/claude-session-id")")
-  elif [[ "${ARCHESTRA_AGENT_RUNTIME_CLAUDE_AUTH:-}" != "subscription" ]]; then
-    args+=(--continue)
+  else
+    echo "archestra: Cannot resume the saved Claude Code session: its session ID is missing. The workspace is preserved; no new session was started." >&2
+    exit 78
   fi
 fi
 if [[ -n "${ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT:-}" ]]; then
@@ -116,8 +117,43 @@ set -euo pipefail
 runtime_dir="${ARCHESTRA_AGENT_RUNTIME_DIR:-/var/run/archestra}"
 payload="$(cat)"
 native_session_id="$(jq -r '.session_id // empty' <<<"${payload}")"
+session_file="${runtime_dir}/claude-session-id"
 if [[ -n "${native_session_id}" ]]; then
-  printf '%s\n' "${native_session_id}" > "${runtime_dir}/claude-session-id"
+  if [[ -s "${session_file}" && "${native_session_id}" != "$(cat "${session_file}")" ]]; then
+    printf '{}\n'
+    exit 0
+  fi
+  printf '%s\n' "${native_session_id}" > "${session_file}"
+fi
+if [[ "$(jq -r '.hook_event_name // empty' <<<"${payload}")" == "SessionStart" ]]; then
+  printf '{}\n'
+  exit 0
+fi
+# API failures fire StopFailure instead of Stop. Without this hook a delegated
+# TUI stays open forever, even though the provider has already rejected the turn.
+if [[ "$(jq -r '.hook_event_name // empty' <<<"${payload}")" == "StopFailure" ]]; then
+  if [[ "${ARCHESTRA_AGENT_RUNTIME_MODE:-one_shot}" != "one_shot" ]]; then
+    "${ARCHESTRA_AGENT_ATTENTION_COMMAND:-archestra-agent-attention}" set "API error: check terminal" || true
+    exit 0
+  fi
+  case "$(jq -r '.error // empty' <<<"${payload}")" in
+    authentication_failed|cloud_credential_error) code=claude_authentication; message="Claude Code authentication failed. Reconnect your Claude Code account for subscription runs, or check the configured provider credential." ;;
+    oauth_org_not_allowed|account_on_hold|billing_error) code=claude_billing; message="Claude Code could not use the account. Check its billing status and organization access." ;;
+    rate_limit) code=claude_rate_limit; message="Claude Code reached a rate limit. Retry when account capacity is available." ;;
+    overloaded|server_error) code=claude_unavailable; message="Claude Code could not complete the API request. The provider may be temporarily unavailable; retry later." ;;
+    invalid_request|model_not_found|max_output_tokens) code=claude_request; message="Claude Code rejected the request. Check the configured model and account access." ;;
+    *) code=claude_api_error; message="Claude Code ended the turn after an API error. Inspect the run terminal for details." ;;
+  esac
+  # The image owns this safe summary. Never forward raw provider error details
+  # or credentials into the generic Runtime failure envelope.
+  if [[ -n "${ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX:-}" ]]; then
+    jq -n --arg code "$code" --arg message "$message" '{version:1,code:$code,message:$message}' > "${ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX}.failure.tmp"
+    mv "${ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX}.failure.tmp" "${ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX}.failure"
+  fi
+  printf '%s\n' "$message" > "${runtime_dir}/final-answer.txt"
+  touch "${runtime_dir}/turn-complete.failed"
+  touch "${runtime_dir}/turn-complete"
+  exit 0
 fi
 # API failures fire StopFailure instead of Stop. Without this hook a delegated
 # TUI stays open forever, even though the provider has already rejected the turn.
@@ -234,6 +270,7 @@ jq -n --arg attention_cmd "${attention_hook}" --arg transcript_cmd "${transcript
     matcher:"permission_prompt|idle_prompt|elicitation_dialog|elicitation_complete|elicitation_response|auth_success",
     hooks:[{type:"command",command:$attention_cmd}]
   }],
+  SessionStart:[{matcher:"",hooks:[{type:"command",command:$transcript_cmd}]}],
   UserPromptSubmit:[{matcher:"",hooks:[{type:"command",command:$attention_cmd}]}],
   PostToolUse:[{matcher:"",hooks:[{type:"command",command:$attention_cmd}]}],
   Stop:[{matcher:"",hooks:[{type:"command",command:$transcript_cmd}]}],

@@ -87,6 +87,7 @@ import {
   appLaunchToolTitle,
   sanitizeAppNameForToolMetadata,
 } from "@/services/apps/app-run-link";
+import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
 import { MCP_RESOURCE_REFERENCE_PREFIX } from "@/services/identity-providers/enterprise-managed/authorization";
 import {
   discoverOidcJwksUrl,
@@ -412,15 +413,14 @@ export async function createAgentServer(params: {
           archestraMcpBranding.getToolShortName(tool.name) ===
           TOOL_START_RUN_SHORT_NAME,
       );
-    // A run handle is not useful without its lifecycle controls. Dynamic
-    // per-Agent delegation tools do not have assignment rows, so expose the
-    // controls as protocol support whenever this gateway can start a run.
-    // The handlers still scope every run to the authenticated actor and the
-    // call path keeps its normal RBAC check.
-    const implicitTaskControlTools = hasTaskStarter
-      ? getImplicitTaskControlTools()
-      : [];
-    const implicitOpenAppaTools = openappaEnabled()
+    // A session can arrive from another client even if this gateway cannot
+    // start work. Advertise lifecycle controls for runtime handoffs and dynamic
+    // delegation; handlers still enforce actor ownership and RBAC.
+    const implicitTaskControlTools =
+      config.agentRuntime.enabled || hasTaskStarter
+        ? getImplicitTaskControlTools()
+        : [];
+    const implicitOpenAppaTools = (await isGuardrailsV2Active())
       ? getArchestraMcpTools().filter(
           (tool) =>
             archestraMcpBranding.getToolShortName(tool.name) ===
@@ -2374,7 +2374,17 @@ async function buildSearchToolsDescription(params: {
     organizationId,
     toolNames: params.advertisedToolNames,
   });
-  const baseDescription = [searchTool.description, knowledgeInstruction]
+  const runtimeInstruction = params.advertisedToolNames.some(
+    (name) =>
+      archestraMcpBranding.getToolShortName(name) === TOOL_STEER_RUN_SHORT_NAME,
+  )
+    ? `For requests such as "hand this work over to ${sanitizeAppNameForToolMetadata(archestraMcpBranding.appName)}" or "spin this up in ${sanitizeAppNameForToolMetadata(archestraMcpBranding.appName)}", discover Agent Runtime tools here and load the Agent Runtime Handoff skill before transferring work. Discover an agent with list_agents; use start_run only when this work has no runtime session. Otherwise steer_run reuses its saved session. "Bring it back" or "resume locally" means retrieve changes and context, stop remote editing, and continue in the local client.`
+    : null;
+  const baseDescription = [
+    searchTool.description,
+    knowledgeInstruction,
+    runtimeInstruction,
+  ]
     .filter(Boolean)
     .join(" ");
 

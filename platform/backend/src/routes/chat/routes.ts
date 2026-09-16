@@ -336,7 +336,15 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["Chat"],
         body: z.object({
           id: UuidIdSchema, // Chat ID from useChat
-          messages: z.array(z.unknown()), // UIMessage[]
+          // Validate the UI message envelope before acquiring a run or persisting
+          // history. Keep provider/tool/custom part fields intact.
+          messages: z.array(
+            z.looseObject({
+              id: z.string().optional(),
+              role: z.enum(["system", "user", "assistant"]),
+              parts: z.array(z.looseObject({ type: z.string() })),
+            }),
+          ),
           trigger: z.enum(["submit-message", "regenerate-message"]).optional(),
           // Optional sampling override; when omitted the provider/model default applies (unchanged
           // behavior). The benchmark harness sets this to pin runs against temperature variance.

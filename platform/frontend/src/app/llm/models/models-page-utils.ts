@@ -6,6 +6,7 @@ import {
 } from "@archestra/shared";
 
 export type ModelsPageModelTypeFilter = "all" | "chat" | "embedding";
+export type ModelsPageVisibilityFilter = "all" | "visible" | "hidden";
 
 /** The generated update-route payload shape — never re-declared by hand. */
 type ConfiguredParametersBody =
@@ -312,6 +313,7 @@ export type ModelsPageFilterableModel = {
   apiKeys: readonly { id: string }[];
   embeddingDimensions: number | null;
   isFree: boolean;
+  ignored: boolean;
   isBest?: boolean | null;
 };
 
@@ -364,6 +366,7 @@ export function filterModelsForPage<
   search: string;
   apiKeyFilter: string;
   modelTypeFilter: ModelsPageModelTypeFilter;
+  visibilityFilter: ModelsPageVisibilityFilter;
   freeOnly: boolean;
   canFilterFreeModels: boolean;
 }): T[] {
@@ -372,6 +375,7 @@ export function filterModelsForPage<
     search,
     apiKeyFilter,
     modelTypeFilter,
+    visibilityFilter,
     freeOnly,
     canFilterFreeModels,
   } = params;
@@ -392,6 +396,11 @@ export function filterModelsForPage<
     result = result.filter((model) => model.embeddingDimensions !== null);
   } else if (modelTypeFilter === "chat") {
     result = result.filter((model) => model.embeddingDimensions === null);
+  }
+  if (visibilityFilter !== "all") {
+    result = result.filter(
+      (model) => model.ignored === (visibilityFilter === "hidden"),
+    );
   }
   if (freeOnly && canFilterFreeModels) {
     result = result.filter((model) => model.isFree);

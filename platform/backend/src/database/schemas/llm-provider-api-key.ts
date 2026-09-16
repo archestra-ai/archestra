@@ -65,6 +65,8 @@ const llmProviderApiKeysTable = pgTable(
     requiresReauthentication: boolean("requires_reauthentication")
       .notNull()
       .default(false),
+    /** Catalog sync watermark; null preserves the initial-sync exemption. */
+    modelsLastSyncedAt: timestamp("models_last_synced_at", { mode: "date" }),
     /** Service account creator; separate from human ownership. */
     createdByServiceAccountId: uuid("created_by_service_account_id").references(
       () => serviceAccountsTable.id,

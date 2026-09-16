@@ -31,6 +31,7 @@ const models = [
     apiKeys: [{ id: "openrouter-key" }],
     embeddingDimensions: null,
     isFree: true,
+    ignored: false,
   },
   {
     modelId: "openrouter/paid",
@@ -38,6 +39,7 @@ const models = [
     apiKeys: [{ id: "openrouter-key" }],
     embeddingDimensions: null,
     isFree: false,
+    ignored: true,
   },
   {
     modelId: "gpt-4o",
@@ -45,6 +47,7 @@ const models = [
     apiKeys: [{ id: "openai-key" }],
     embeddingDimensions: null,
     isFree: false,
+    ignored: false,
   },
 ] as const satisfies readonly ModelsPageFilterableModel[];
 
@@ -89,6 +92,7 @@ describe("filterModelsForPage", () => {
       search: "",
       apiKeyFilter: "openai-key",
       modelTypeFilter: "all",
+      visibilityFilter: "all",
       freeOnly: true,
       canFilterFreeModels,
     });
@@ -107,6 +111,7 @@ describe("filterModelsForPage", () => {
       search: "",
       apiKeyFilter: "openrouter-key",
       modelTypeFilter: "all",
+      visibilityFilter: "all",
       freeOnly: true,
       canFilterFreeModels,
     });

@@ -181,6 +181,11 @@ class ModelSyncService {
         modelId: m.modelId,
         recommendedForAgents: verdictByProviderModelId.get(m.modelId) ?? null,
       }));
+      const overrides = credentialRow
+        ? await OrganizationModel.getIntegrationOverrides(
+            credentialRow.organizationId,
+          )
+        : null;
       await LlmProviderApiKeyModelLinkModel.syncModelsForApiKey(
         apiKeyId,
         modelsWithIds,
@@ -188,7 +193,12 @@ class ModelSyncService {
         // A tag is mutable (`ollama create` can repoint it), so the full
         // refresh overwrites the verdict verbatim to self-correct; a normal
         // sync COALESCEs so a time-boxed /api/show miss can't wipe it.
-        { overwriteRecommendedForAgents: forceRefresh === true },
+        {
+          overwriteRecommendedForAgents: forceRefresh === true,
+          hideNewModels:
+            overrides?.modelProviderOverrides?.[provider]
+              ?.showNewModelsAutomatically === false,
+        },
       );
 
       logger.info(

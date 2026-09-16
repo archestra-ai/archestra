@@ -3,7 +3,17 @@ import {
   MODEL_MARKER_PATTERNS,
   type SupportedProvider,
 } from "@archestra/shared";
-import { and, asc, desc, eq, inArray, notInArray, or, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  inArray,
+  isNull,
+  notInArray,
+  or,
+  sql,
+} from "drizzle-orm";
 import db, { schema, withDbTransaction } from "@/database";
 import type { LlmProviderApiKey, Model } from "@/types";
 import ModelModel from "./model";
@@ -148,13 +158,52 @@ class LlmProviderApiKeyModelLinkModel {
       recommendedForAgents?: boolean | null;
     }>,
     provider: SupportedProvider,
-    options: { overwriteRecommendedForAgents?: boolean } = {},
+    options: {
+      overwriteRecommendedForAgents?: boolean;
+      hideNewModels?: boolean;
+    } = {},
   ): Promise<void> {
     const uniqueModels = Array.from(
       new Map(models.map((model) => [model.id, model])).values(),
+    ).sort((a, b) =>
+      Buffer.compare(Buffer.from(a.modelId), Buffer.from(b.modelId)),
     );
 
     await withDbTransaction(async (tx) => {
+      const [apiKey] = await tx
+        .select({
+          modelsLastSyncedAt: schema.llmProviderApiKeysTable.modelsLastSyncedAt,
+        })
+        .from(schema.llmProviderApiKeysTable)
+        .where(eq(schema.llmProviderApiKeysTable.id, apiKeyId))
+        .for("update");
+      const hideArrivals =
+        options.hideNewModels === true && apiKey?.modelsLastSyncedAt != null;
+
+      // Match the byte order used by metadata upserts, including the registry sync.
+      // Arrival and visibility become visible together with the first key link.
+      for (let i = 0; i < uniqueModels.length; i += 500) {
+        const ids = uniqueModels.slice(i, i + 500).map((model) => model.id);
+        await tx
+          .select({ id: schema.modelsTable.id })
+          .from(schema.modelsTable)
+          .where(inArray(schema.modelsTable.id, ids))
+          .orderBy(sql`${schema.modelsTable.modelId} COLLATE "C"`)
+          .for("update");
+        await tx
+          .update(schema.modelsTable)
+          .set({
+            firstCatalogSyncedAt: new Date(),
+            ...(hideArrivals ? { ignored: true } : {}),
+          })
+          .where(
+            and(
+              inArray(schema.modelsTable.id, ids),
+              isNull(schema.modelsTable.firstCatalogSyncedAt),
+            ),
+          );
+      }
+
       // Delete links to models the provider no longer serves. Kept links are
       // updated in place below so their last known verdict can survive a
       // sync that learned nothing.
@@ -211,6 +260,10 @@ class LlmProviderApiKeyModelLinkModel {
             });
         }
       }
+      await tx
+        .update(schema.llmProviderApiKeysTable)
+        .set({ modelsLastSyncedAt: new Date() })
+        .where(eq(schema.llmProviderApiKeysTable.id, apiKeyId));
     });
   }
 

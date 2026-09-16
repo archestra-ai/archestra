@@ -121,11 +121,11 @@ const fieldsToExtend = {
 export const SelectModelSchema = createSelectSchema(
   schema.modelsTable,
   fieldsToExtend,
-);
+).omit({ firstCatalogSyncedAt: true });
 export const InsertModelSchema = createInsertSchema(
   schema.modelsTable,
   fieldsToExtend,
-);
+).omit({ firstCatalogSyncedAt: true });
 
 /**
  * Schema for creating new model (without auto-generated fields)

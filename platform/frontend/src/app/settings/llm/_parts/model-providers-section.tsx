@@ -93,6 +93,7 @@ export function ModelProvidersSection() {
       next[provider] = {
         hidden: entry.hidden,
         displayName: entry.displayName.trim() || null,
+        showNewModelsAutomatically: entry.showNewModelsAutomatically,
       };
     }
     await updateMutation.mutateAsync({
@@ -183,6 +184,35 @@ export function ModelProvidersSection() {
                             disabled={locked}
                             className="mt-2 text-sm"
                           />
+                          <div className="mt-3 space-y-1.5">
+                            <Label
+                              htmlFor={`model-provider-new-models-${provider}`}
+                              className="flex items-center justify-between gap-3 text-xs"
+                            >
+                              <span>Show new models automatically</span>
+                              <Switch
+                                id={`model-provider-new-models-${provider}`}
+                                checked={entry.showNewModelsAutomatically}
+                                onCheckedChange={(checked) =>
+                                  patch(provider, {
+                                    showNewModelsAutomatically: checked,
+                                  })
+                                }
+                                disabled={locked || entry.hidden}
+                                aria-describedby={`model-provider-new-models-hint-${provider}`}
+                              />
+                            </Label>
+                            <p
+                              id={`model-provider-new-models-hint-${provider}`}
+                              className="text-xs text-muted-foreground"
+                            >
+                              {entry.hidden
+                                ? "Turn the provider on to change this."
+                                : entry.showNewModelsAutomatically
+                                  ? "Models this provider adds later appear in pickers as soon as they are synced."
+                                  : "Models this provider adds later stay hidden until you show them on the Models page."}
+                            </p>
+                          </div>
                         </div>
                       );
                     })}
@@ -205,9 +235,17 @@ export function ModelProvidersSection() {
 }
 
 /** The name input is controlled, so the draft holds "" rather than null. */
-type DraftEntry = { hidden: boolean; displayName: string };
+type DraftEntry = {
+  hidden: boolean;
+  displayName: string;
+  showNewModelsAutomatically: boolean;
+};
 
-const EMPTY_DRAFT_ENTRY: DraftEntry = { hidden: false, displayName: "" };
+const EMPTY_DRAFT_ENTRY: DraftEntry = {
+  hidden: false,
+  displayName: "",
+  showNewModelsAutomatically: true,
+};
 
 function toDraft(
   overrides: ModelProviderOverrides | null,
@@ -218,6 +256,8 @@ function toDraft(
     draft[provider] = {
       hidden: override?.hidden === true,
       displayName: override?.displayName ?? "",
+      showNewModelsAutomatically:
+        override?.showNewModelsAutomatically !== false,
     };
   }
   return draft;

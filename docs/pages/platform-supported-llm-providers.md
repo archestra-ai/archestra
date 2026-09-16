@@ -3,7 +3,7 @@ title: Supported LLM Providers
 category: LLM Proxy
 order: 2
 description: LLM providers supported by Archestra Platform
-lastUpdated: 2026-09-11
+lastUpdated: 2026-09-16
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -21,6 +21,24 @@ Most organizations only allow a few providers. Go to **Settings → LLM → Mode
 A provider added by a later release arrives switched on.
 
 Keys that already exist keep working, so turning a provider off never breaks live traffic. They are marked as turned off, and you can delete them when you are ready. A retired provider's key can no longer be edited or rotated.
+
+## New Model Visibility
+
+**Show new models automatically** is on by default for each provider. Go to **Settings → LLM → Model providers** to turn it off and save. The setting covers every key for that provider in your organization. Turn the provider on before changing it.
+
+![OpenRouter configured to hide new models until an admin shows them](/docs/automated_screenshots/platform-supported-llm-providers_new-model-visibility.webp)
+
+With the setting off, later catalog syncs hide models not previously linked to that provider's keys. This includes manual refreshes, background refreshes, and refreshes triggered by opening a picker. A newly added key's first sync is exempt. Newly discovered models arrive visible on that initial sync.
+
+Later refreshes preserve visibility choices made with **Hide** and **Show**. Turning automatic visibility back on does not reveal models hidden earlier.
+
+Hidden models stay out of pickers and the model router. Direct provider proxy calls can still use their IDs. Visibility applies across organizations sharing a deployment, just like manual **Hide**. Models recorded only from proxy traffic for cost tracking are unaffected.
+
+### Use Case: Reviewing OpenRouter Releases
+
+Northwind reviews new OpenRouter releases before making them available. Its admin turns **Show new models automatically** off for OpenRouter.
+
+On **LLM → Models**, set **Visibility** to **Hidden**, select the models, and click **Show**. Those models become available in pickers and stay visible after later refreshes.
 
 ## Personal Subscriptions
 

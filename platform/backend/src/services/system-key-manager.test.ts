@@ -1,4 +1,5 @@
-import { beforeEach, vi } from "vitest";
+import { HttpResponse, http } from "msw";
+import { afterEach, beforeEach, vi } from "vitest";
 
 vi.mock("@/clients/anthropic-keyless-auth", () => ({
   isAnthropicKeylessAuthEnabled: vi.fn(),
@@ -40,7 +41,12 @@ import { anthropicWorkloadIdentity } from "@/clients/anthropic-workload-identity
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import { isBedrockIamAuthEnabled } from "@/clients/bedrock-credentials";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
-import { LlmProviderApiKeyModel } from "@/models";
+import { modelsDevClient } from "@/clients/models-dev-client";
+import {
+  LlmProviderApiKeyModel,
+  ModelModel,
+  OrganizationModel,
+} from "@/models";
 import {
   fetchAnthropicModels,
   fetchAnthropicModelsViaVertexAi,
@@ -50,9 +56,15 @@ import { fetchBedrockModelsViaIam } from "@/routes/chat/model-fetchers/bedrock";
 import { fetchGeminiModelsViaVertexAi } from "@/routes/chat/model-fetchers/gemini";
 import { systemKeyManager } from "@/services/system-key-manager";
 import { describe, expect, test } from "@/test";
+import { useMswServer } from "@/test/msw";
 
 describe("systemKeyManager", () => {
+  useMswServer(
+    http.get("https://models.dev/api.json", () => HttpResponse.json({})),
+  );
+
   beforeEach(() => {
+    modelsDevClient.clearFetchCache();
     vi.mocked(isVertexAiEnabled).mockReturnValue(true);
     vi.mocked(isAnthropicKeylessAuthEnabled).mockReturnValue(true);
     vi.mocked(anthropicVertexClient.isEnabled).mockReturnValue(true);
@@ -64,6 +76,51 @@ describe("systemKeyManager", () => {
     vi.mocked(fetchAnthropicModels).mockResolvedValue([]);
     vi.mocked(fetchAzureModels).mockResolvedValue([]);
     vi.mocked(fetchBedrockModelsViaIam).mockResolvedValue([]);
+  });
+
+  afterEach(() => {
+    modelsDevClient.clearFetchCache();
+  });
+
+  test("shows the first successful system-key catalog and hides later arrivals when configured", async ({
+    makeOrganization,
+  }) => {
+    const organization = await makeOrganization();
+    await OrganizationModel.patch(organization.id, {
+      modelProviderOverrides: {
+        gemini: { showNewModelsAutomatically: false },
+      },
+    });
+    const firstModel = {
+      id: "gemini-initial-model",
+      displayName: "Initial model",
+      provider: "gemini" as const,
+    };
+    const laterModel = {
+      id: "gemini-later-model",
+      displayName: "Later model",
+      provider: "gemini" as const,
+    };
+    vi.mocked(fetchGeminiModelsViaVertexAi)
+      .mockRejectedValueOnce(new Error("Provider unavailable"))
+      .mockResolvedValueOnce([firstModel])
+      .mockResolvedValueOnce([firstModel, laterModel]);
+
+    expect(await systemKeyManager.syncSystemKeys(organization.id)).toEqual([
+      "gemini",
+    ]);
+    expect(await systemKeyManager.syncSystemKeys(organization.id)).toEqual([]);
+    await expect(
+      ModelModel.findByProviderAndModelId("gemini", firstModel.id),
+    ).resolves.toMatchObject({ ignored: false });
+
+    expect(await systemKeyManager.syncSystemKeys(organization.id)).toEqual([]);
+    await expect(
+      ModelModel.findByProviderAndModelId("gemini", firstModel.id),
+    ).resolves.toMatchObject({ ignored: false });
+    await expect(
+      ModelModel.findByProviderAndModelId("gemini", laterModel.id),
+    ).resolves.toMatchObject({ ignored: true });
   });
 
   test("reports failed providers while continuing to sync healthy system keys", async ({

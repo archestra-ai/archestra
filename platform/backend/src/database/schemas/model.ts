@@ -208,6 +208,11 @@ const modelsTable = pgTable(
       .notNull()
       .default(false),
 
+    /** Catalog arrival survives removal of key links and preserves visibility choices. */
+    firstCatalogSyncedAt: timestamp("first_catalog_synced_at", {
+      mode: "date",
+    }),
+
     /** When this metadata was last synced from external source */
     lastSyncedAt: timestamp("last_synced_at", { mode: "date" })
       .notNull()

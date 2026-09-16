@@ -31043,7 +31043,15 @@ export type CerebrasChatCompletionsWithAgentResponse = CerebrasChatCompletionsWi
 export type StreamChatData = {
     body: {
         id: string;
-        messages: Array<unknown>;
+        messages: Array<{
+            id?: string;
+            role: 'system' | 'user' | 'assistant';
+            parts: Array<{
+                type: string;
+                [key: string]: unknown;
+            }>;
+            [key: string]: unknown;
+        }>;
         trigger?: 'submit-message' | 'regenerate-message';
         temperature?: number;
         thinkingEffort?: 'low' | 'medium' | 'high';

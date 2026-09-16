@@ -1,8 +1,4 @@
-import {
-  extractMcpToolError,
-  isAgentTool,
-  isSkillTool,
-} from "@archestra/shared";
+import { extractMcpToolError } from "@archestra/shared";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
@@ -58,6 +54,19 @@ const Decision = z.object({
 let native: Promise<typeof import("@archestra/openappa-rs")> | undefined;
 export function openappaEnabled(): boolean {
   return config.openappa.enabled;
+}
+
+/** The A2A executor identifies nested runs with a chain of agent UUIDs. */
+export function isAppaDelegatedRun(
+  agentId: string,
+  delegationChain: string | undefined,
+): boolean {
+  const chain = delegationChain?.split(":") ?? [];
+  return (
+    chain.length > 1 &&
+    chain.at(-1) === agentId &&
+    chain.every((id) => z.uuid().safeParse(id).success)
+  );
 }
 
 export function isAppaChatSource(
@@ -264,23 +273,14 @@ export async function checkToolCalls(
       ) === "execute_remedy_plan"
         ? "appa/execute_remedy_plan"
         : target.toolCallName;
-    if (isAgentTool(tool) || isSkillTool(tool)) {
-      const feedback = `OpenAPPA delegation requires a child-return adapter, which is not yet available in ${archestraMcpBranding.appName} Chat.`;
-      return {
-        refusalMessage: feedback,
-        contentMessage: feedback,
-        reason: feedback,
-        blockedToolName: call.name,
-        toolInput: JSON.parse(target.toolCallArgs),
-        allToolCallNames: calls.map((call) => call.name),
-      };
-    }
     const event = {
       event: "tool_call",
       operation_id: `call:${call.id}`,
       tool,
       arguments: JSON.parse(target.toolCallArgs),
-      spawn: isAgentTool(tool),
+      // Delegation is an ordinary tool until the child-return adapter exists.
+      // Its request and output still pass through the parent's policy.
+      spawn: false,
     };
     const decision = await dispatch(session, event);
     if (

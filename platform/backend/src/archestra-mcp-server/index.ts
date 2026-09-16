@@ -16,7 +16,7 @@ import {
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { ZodError, type ZodType, z } from "zod";
 import config from "@/config";
-import { openappaEnabled } from "@/openappa/service";
+import { isAppaDelegatedRun, openappaEnabled } from "@/openappa/service";
 import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
 import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
 // Import all groups
@@ -283,8 +283,8 @@ export async function executeArchestraTool(
   args: Record<string, unknown> | undefined,
   context: ArchestraContext,
 ): Promise<CallToolResult> {
-  // Discovery alone is insufficient: stale assignments and direct calls must
-  // not activate APPA while its feature flag is off.
+  // A child runs outside APPA and must not execute remedies on the parent's
+  // shared logging session. Direct calls also respect the feature flag.
   if (
     archestraMcpBranding.getToolShortName(toolName) ===
       TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME &&
@@ -293,26 +293,13 @@ export async function executeArchestraTool(
     throw { code: -32601, message: "Guardrails v2 is disabled" };
   }
   if (
-    !openappaEnabled() &&
+    (!openappaEnabled() ||
+      isAppaDelegatedRun(context.agent.id, context.delegationChain)) &&
     isOpenappaTool(archestraMcpBranding.getToolShortName(toolName))
   ) {
     throw {
       code: -32601,
       message: `No tool named "${toolName}" exists. ${toolDiscoverySteer()}`,
-    };
-  }
-  if (
-    (isAgentTool(toolName) || isSkillTool(toolName)) &&
-    (await isGuardrailsV2Active())
-  ) {
-    return {
-      isError: true,
-      content: [
-        {
-          type: "text",
-          text: `OpenAPPA delegation requires a child-return adapter, which is not yet available in ${archestraMcpBranding.appName} Chat.`,
-        },
-      ],
     };
   }
   // Agent delegation tools are dynamic (one per agent) and not in TOOL_PERMISSIONS,

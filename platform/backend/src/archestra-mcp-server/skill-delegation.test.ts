@@ -1,7 +1,9 @@
 // biome-ignore-all lint/suspicious/noExplicitAny: test
 import { SKILL_TOOL_PREFIX } from "@archestra/shared";
 import { vi } from "vitest";
+import config from "@/config";
 import { AgentModel, EnvironmentModel, SkillModel } from "@/models";
+import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { InsertSkill } from "@/types";
 import { type ArchestraContext, executeArchestraTool } from ".";
@@ -264,40 +266,46 @@ describe("skill delegation (agent-designated skills)", () => {
     expect(mockExecuteA2AMessage).not.toHaveBeenCalled();
   });
 
-  test("dispatches the skill instructions plus the task to the designated agent", async ({
-    makeOrganization,
-    makeUser,
-    makeMember,
-    makeAgent,
-  }) => {
-    const { target, context } = await setup({
+  for (const enabled of [true, false]) {
+    test(`dispatches skill instructions and task with APPA enabled=${enabled}`, async ({
       makeOrganization,
       makeUser,
       makeMember,
       makeAgent,
+    }) => {
+      const { target, context } = await setup({
+        makeOrganization,
+        makeUser,
+        makeMember,
+        makeAgent,
+      });
+      config.openappa.enabled = enabled;
+      await GuardrailsDeploymentModel.setEnabled(true);
+      mockExecuteA2AMessage.mockResolvedValue({ text: "research complete" });
+
+      const result = await executeArchestraTool(
+        `${SKILL_TOOL_PREFIX}deep_research`,
+        { message: "find prior art for widgets" },
+        context,
+      );
+
+      expect(result.isError).toBeFalsy();
+      expect(result.content).toEqual([
+        { type: "text", text: "research complete" },
+      ]);
+      expect(mockExecuteA2AMessage).toHaveBeenCalledTimes(1);
+      const params = mockExecuteA2AMessage.mock.calls[0][0];
+      expect(params.agentId).toBe(target.id);
+      expect(params.userId).toBe(context.userId);
+      // the subagent receives the rendered activation block plus the caller's task
+      expect(params.message).toContain(
+        '<skill_content name="deep-research" version="1">',
+      );
+      expect(params.message).toContain("Research thoroughly. Cite sources.");
+      expect(params.message).toContain("find prior art for widgets");
+      expect(params.parentDelegationChain).toBe(context.agentId);
     });
-    mockExecuteA2AMessage.mockResolvedValue({ text: "research complete" });
-
-    const result = await executeArchestraTool(
-      `${SKILL_TOOL_PREFIX}deep_research`,
-      { message: "find prior art for widgets" },
-      context,
-    );
-
-    expect(result.isError).toBeFalsy();
-    expect(textOf(result)).toBe("research complete");
-    expect(mockExecuteA2AMessage).toHaveBeenCalledTimes(1);
-    const params = mockExecuteA2AMessage.mock.calls[0][0];
-    expect(params.agentId).toBe(target.id);
-    expect(params.userId).toBe(context.userId);
-    // the subagent receives the rendered activation block plus the caller's task
-    expect(params.message).toContain(
-      '<skill_content name="deep-research" version="1">',
-    );
-    expect(params.message).toContain("Research thoroughly. Cite sources.");
-    expect(params.message).toContain("find prior art for widgets");
-    expect(params.parentDelegationChain).toBe(context.agentId);
-  });
+  }
 
   test("refuses dispatch for an unknown skill slug and for automated runs", async ({
     makeOrganization,

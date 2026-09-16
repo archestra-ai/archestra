@@ -178,9 +178,12 @@ they are not replaced by legacy Tool Guardrails explanations. There is no
 Chat-specific denied-call execution wrapper or automatic model retry.
 
 Locked chats are refused while enabled because the native tables do not yet
-use their browser-held encryption keys. Delegation remains refused until a
-complete child-return adapter exists. Provider-hosted tools remain outside this
-initial adapter. Existing Chat/gateway permission and policy checks still apply
+use their browser-held encryption keys. Agent and skill delegation are checked
+as ordinary tools in the parent's policy, including their returned output.
+Internal delegated runs use the existing guardrails independently, outside the
+parent's APPA trajectory. APPA child restrictions and return contracts are not
+propagated until a child-return adapter exists. Provider-hosted tools remain
+outside this initial adapter. Existing Chat/gateway permission and policy checks still apply
 independently; only the LLM proxy's legacy policy evaluation is replaced.
 
 Start new conversations when enabling this feature. Historical tool results

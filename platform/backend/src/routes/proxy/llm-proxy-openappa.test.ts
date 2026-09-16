@@ -1162,6 +1162,159 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     );
   });
 
+  test.each([
+    true,
+    false,
+  ])("keeps delegated execution outside the parent's APPA trajectory (stream=%s)", async (stream) => {
+    const delegationName = "agent__research";
+    options.nonStreamingToolUse = {
+      name: delegationName,
+      input: { message: "Research" },
+    };
+    const parentRequest = {
+      ...payload(false),
+      tools: [
+        {
+          name: delegationName,
+          description: "Research",
+          input_schema: {
+            type: "object",
+            properties: { message: { type: "string" } },
+          },
+        },
+      ],
+    };
+    const delegation = await app.inject({
+      method: "POST",
+      url: url(),
+      remoteAddress: "127.0.0.1",
+      headers: headers(),
+      payload: parentRequest,
+    });
+    expect(delegation.statusCode, delegation.body).toBe(200);
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        event: "tool_call",
+        tool: delegationName,
+        spawn: false,
+      }),
+    );
+    const checkedEvents = [...events];
+    options.nonStreamingToolUse = {
+      name: "get_weather",
+      input: { location: "SF" },
+    };
+
+    // A nested run reuses the logging session while the parent awaits its result.
+    const legacyCalls = vi.spyOn(toolInvocation, "evaluatePolicies");
+    const legacyResults = vi.spyOn(trustedData, "evaluateIfContextIsTrusted");
+    const response = await app.inject({
+      method: "POST",
+      url: url(),
+      remoteAddress: "127.0.0.1",
+      headers: {
+        ...headers(),
+        "x-archestra-source": "a2a",
+        "x-archestra-agent-id": `a637fb55-989b-4f01-a251-e7e277c65f05:${agent.id}`,
+      },
+      payload: payload(stream),
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    expect(events).toEqual(checkedEvents);
+    expect(providerRequests).toHaveLength(2);
+    expect(legacyCalls).toHaveBeenCalled();
+    expect(legacyResults).toHaveBeenCalled();
+
+    // The returned child output goes through the parent's ordinary result hook.
+    const delegatedCall = delegation
+      .json()
+      .content.find((part: { type: string }) => part.type === "tool_use");
+    expect(delegatedCall).toMatchObject({
+      id: expect.any(String),
+      name: delegationName,
+    });
+    options.nonStreamingToolUse = undefined;
+    const parentResponse = await app.inject({
+      method: "POST",
+      url: url(),
+      remoteAddress: "127.0.0.1",
+      headers: headers(),
+      payload: payload(false, [
+        { role: "user", content: "Research" },
+        { role: "assistant", content: [delegatedCall] },
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: delegatedCall.id,
+              content: "Child research output",
+            },
+          ],
+        },
+      ]),
+    });
+    expect(parentResponse.statusCode, parentResponse.body).toBe(200);
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        event: "tool_result",
+        session_id: sessionId,
+        tool_call_id: delegatedCall.id,
+        output: "Child research output",
+      }),
+    );
+    expect(JSON.stringify(providerRequests.at(-1))).toContain(
+      "APPROVED REPLACEMENT",
+    );
+    expect(JSON.stringify(providerRequests.at(-1))).not.toContain(
+      "Child research output",
+    );
+  });
+
+  test("does not trust a remote caller's delegation chain", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: url(),
+      remoteAddress: "203.0.113.20",
+      headers: {
+        ...headers(),
+        "x-archestra-source": "a2a",
+        "x-archestra-agent-id": `a637fb55-989b-4f01-a251-e7e277c65f05:${agent.id}`,
+      },
+      payload: payload(false),
+    });
+    expect(response.statusCode, response.body).toBe(401);
+    expect(providerRequests).toHaveLength(0);
+  });
+
+  test.each([
+    "root",
+    "wrong-target",
+    "malformed",
+  ])("keeps APPA active for a %s agent identity", async (kind) => {
+    const externalAgentId =
+      kind === "root"
+        ? agent.id
+        : kind === "wrong-target"
+          ? `${agent.id}:a637fb55-989b-4f01-a251-e7e277c65f05`
+          : `not-an-agent:${agent.id}`;
+    const response = await app.inject({
+      method: "POST",
+      url: url(),
+      remoteAddress: "127.0.0.1",
+      headers: {
+        ...headers(),
+        "x-archestra-source": "a2a",
+        "x-archestra-agent-id": externalAgentId,
+      },
+      payload: payload(false),
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    expect(events).toContainEqual(
+      expect.objectContaining({ event: "tool_call" }),
+    );
+  });
+
   test("requires the explicit session header", async () => {
     const { "x-appa-session-id": _session, ...missing } = headers();
     const response = await app.inject({

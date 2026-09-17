@@ -1,8 +1,11 @@
 import {
+  ARCHESTRA_MCP_CATALOG_ID,
   ARCHESTRA_TOOL_SHORT_NAMES,
   type ArchestraToolShortName,
   getArchestraToolFullName,
   isAgentTool,
+  TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
+  TOOL_GET_REMEDY_PLANS_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
 } from "@archestra/shared";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
@@ -10,7 +13,7 @@ import { z } from "zod";
 import { evaluateSingleMcpToolInvocationPolicy } from "@/guardrails/tool-invocation";
 import { buildPolicyBlockedToolResult } from "@/guardrails/tool-policy-link";
 import logger from "@/logging";
-import { ConversationEnabledToolModel } from "@/models";
+import { ConversationEnabledToolModel, ToolModel } from "@/models";
 import { TASK_TTL_MS } from "@/routes/mcp-gateway/tasks";
 import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
 import { agentOwner, type Tool } from "@/types";
@@ -93,6 +96,23 @@ async function runToolHandler({
   context: ArchestraContext;
 }): Promise<CallToolResult> {
   const requestedName = args.tool_name;
+  // The remedy tools are the platform's own control surface, and the runtime
+  // refuses them behind run_tool as undeclared tools. That refusal reads as a
+  // dead end, so the model is told to call the tool directly instead.
+  const controlShortName = await controlToolShortName(requestedName);
+  if (controlShortName) {
+    const fullName = archestraMcpBranding.getToolName(controlShortName);
+    return dispatchRefusalResult({
+      code: "control_tool_via_run_tool",
+      // The notice tool is never the model's to call: the platform places
+      // that call itself in place of a blocked one.
+      message:
+        controlShortName === TOOL_GET_REMEDY_PLANS_SHORT_NAME
+          ? "[appa] The platform places the remedy-plans call itself when it blocks a call, and its result is already in the conversation. Do not call it."
+          : `[appa] Call ${fullName} directly, not through run_tool. Pass the same arguments to it.`,
+      toolName: requestedName,
+    });
+  }
   const recovery = await resolveShortName({ requestedName, context });
   if (recovery.kind === "ambiguous") {
     return dispatchRefusalResult({
@@ -911,4 +931,44 @@ function appendEnvelopeRepairNote(
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+const CONTROL_TOOL_SHORT_NAMES = [
+  TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
+  TOOL_GET_REMEDY_PLANS_SHORT_NAME,
+] as const;
+
+/**
+ * Resolve an OpenAPPA control tool only from a platform name or a persisted
+ * platform-catalog tool identity. A suffix alone is client-controlled prose:
+ * accepting it would let an unrelated MCP server suppress its own call.
+ */
+async function controlToolShortName(
+  requestedName: string,
+): Promise<(typeof CONTROL_TOOL_SHORT_NAMES)[number] | undefined> {
+  const direct = CONTROL_TOOL_SHORT_NAMES.find(
+    (short) =>
+      requestedName === short ||
+      archestraMcpBranding.getToolShortName(requestedName) === short,
+  );
+  if (direct) return direct;
+
+  const decorated = CONTROL_TOOL_SHORT_NAMES.find((short) =>
+    decoratesBrandedName(requestedName, short),
+  );
+  if (!decorated) return undefined;
+
+  const target = await ToolModel.findByName(requestedName);
+  return target?.catalogId === ARCHESTRA_MCP_CATALOG_ID ? decorated : undefined;
+}
+
+/** Whether `name` carries a branded tool name behind a client label. */
+function decoratesBrandedName(
+  name: string,
+  short: ArchestraToolShortName,
+): boolean {
+  const branded = archestraMcpBranding.getToolName(short);
+  if (name === branded || !name.endsWith(branded)) return false;
+  const separator = name.charAt(name.length - branded.length - 1);
+  return separator === "_" || separator === "-" || separator === ".";
 }

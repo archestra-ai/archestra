@@ -138,6 +138,8 @@ export interface AccumulatedToolCall {
   id: string;
   name: string;
   arguments: string;
+  /** The namespace the model called the tool in, on a wire that has them. */
+  namespace?: string;
 }
 
 /**

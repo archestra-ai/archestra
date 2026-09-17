@@ -2,7 +2,7 @@
 
 This opt-in integration calls the existing OpenAPPA runtime through napi-rs.
 It uses Archestra's native loader, LLM proxy, buffered streaming gate, MCP
-gateway remedy tool, and PostgreSQL migrations. It starts no OpenAPPA
+gateway remedy tools, and PostgreSQL migrations. It starts no OpenAPPA
 HTTP server. The paired OpenAPPA change adds an optional PostgreSQL event store
 and an entry point to the existing MCP remedy implementation.
 
@@ -56,8 +56,8 @@ The feature flag defaults to false and does not inherit `ARCHESTRA_BETA`.
 Enabling it automatically adds `appa` to the effective proxy plugin list.
 An explicit `appa` entry in `ARCHESTRA_LLM_PROXY_PLUGINS` cannot enable APPA
 while the flag is off. With the flag off, the existing Tool
-Guardrails run unchanged: APPA is not loaded, session headers are not required
-or injected, and the remedy tool is neither advertised nor callable. Additive
+Guardrails run unchanged: APPA is not loaded, the session header is not read,
+and the remedy tools are neither advertised nor callable. Additive
 schema migrations still run normally.
 
 Enabling without a policy path is a configuration error. The native runtime
@@ -71,14 +71,13 @@ discovery step. To reproduce the browser check, assign those two
 read-only tools through Archestra's existing tool settings, use Custom tool
 access (or remove their Auto-mode exclusions), configure an OpenAI provider,
 and select **GPT-5.6 Terra** in Chat. No provider key belongs in source files.
-The remedy tool is implicitly available while the integration is enabled.
+The remedy tools are implicitly available while the integration is enabled.
 
 In a new conversation, ask Chat to discover and run `whoami`. The fixture first
-returns an acceptance remedy; ask Chat to execute the offered plan and retry.
-After the successful identity read, restart the backend and ask Chat to run
-`list_agents` without accepting any further remedy. The native policy should
-refuse because the session's trust is now suspicious. The paired `summary.md`
-records this complete live sequence with GPT-5.6 Terra.
+returns an acceptance remedy; Chat executes the offered plan on its own and
+retries. After the successful identity read, restart the backend and ask Chat
+to run `list_agents`. The native policy should refuse because the session's
+trust is now suspicious.
 
 The existing platform Dockerfile builds and deploys the fourth native addon
 using the same pinned Cargo dependency. Build it through the normal image path:
@@ -103,17 +102,15 @@ Chat sends `X-Appa-Session-ID` using the conversation ID. The model constructor
 also supports `X-Appa-Parent-ID`; the initial top-level Chat flow omits it.
 The proxy derives the organization from the resolved agent. Internal agent runs,
 including Chat, Slack and A2A, use the existing local-request trust boundary.
-Caller identity is optional audit attribution. External callers authenticate through the
-proxy's existing authentication; a raw provider key and user headers alone are
-not sufficient. There is no APPA-specific signed identity header.
+Caller identity provides audit attribution. For external clients, it scopes
+the session and binds remedy offers to the authenticated principal. External callers
+authenticate through existing proxy mechanisms.
 
-The native actor ID hashes only the session ID. Everyone in a shared thread
-uses the same guardrail state, regardless of caller or organization attribution.
-Session IDs must identify a conversation uniquely within this deployment. A changed
-parent is refused. `SessionStart` restores the existing trajectory. This version
-does not submit `Prompt` or `TurnEnd` from Chat or infer them in the proxy.
-Abandoned-call cleanup and unused remedy-permit lifetime are unchanged.
-Detached MCP task execution remains disabled only while the flag is enabled.
+The native actor ID hashes only the session ID. Authorized participants share guardrail state within one organization. A caller change does not create a new root. An organization change is refused.
+
+For external clients, the proxy scopes the session ID to the authenticated credential before the runtime sees it. Another credential cannot join a personal session by repeating its ID. The remedy gateway resolves the recorded owner and never uses a caller-supplied session header as a fallback. The host checks access before it selects a shared thread. A changed parent is refused.
+
+`SessionStart` restores the existing trajectory. The proxy sends `Prompt` at the start of each user turn. It sends `TurnEnd` only after a terminal model answer. Abandoned-call cleanup and unused remedy-permit lifetime remain unchanged. Detached MCP task execution remains disabled while the flag is enabled.
 
 Both streaming and non-streaming proxy paths call `ToolCall`; existing streaming
 buffers retain tool deltas until the decision completes. Existing name
@@ -136,7 +133,7 @@ the proxy filters model input, not data already stored or displayed by Chat.
 
 ## Storage and interrupted processing
 
-Migration `0471_openappa_native.sql` creates five tables:
+Migration `0471_openappa_native.sql` creates the event and receipt tables. Migration `0479_chunky_bedlam.sql` adds the durable offer-owner index:
 
 | Table | Owner / purpose |
 | --- | --- |
@@ -145,6 +142,7 @@ Migration `0471_openappa_native.sql` creates five tables:
 | `openappa_sessions` | Scoped actor/root/parent mapping and start decision |
 | `openappa_operations` | Call, lifecycle, and remedy receipts |
 | `openappa_processed_results` | Result status, decision, and approved output |
+| `openappa_offer_owners` | Authenticated offer-to-session routing and client presentation metadata; not offer authorization |
 
 Rust owns event encoding, decoding, policy validation, replay, ordering, and
 compare-and-swap behavior. TypeScript does not interpret policy events. A
@@ -160,9 +158,13 @@ the completed receipt/approved output. Success commits both; errors roll back
 both and discard tentative in-memory runtime state. A durable pending receipt
 blocks further work in that family after an interruption.
 
-Completed result keys are session ID + tool-call ID. Operation keys are
-session ID + operation ID. Resending different bytes under the same key still receives the
-saved approved output, without another hook, sanitizer, or annotator call.
+Completed result keys are session ID + tool-call ID. Ordinary operation keys
+are session ID + operation ID. Those receipts belong to the authorized session;
+caller identity remains attribution. Remedy-execution receipts additionally
+bind the authenticated spender. Resending different result bytes under a
+completed result key returns the saved approved output, without another hook,
+sanitizer, or annotator call. This is distinct from remedy request arguments:
+changing those under an existing logical call ID is refused.
 Calls with reused operation IDs and changed arguments are refused. Result
 correlation uses the original checked call even after compaction removes it.
 
@@ -175,35 +177,27 @@ behavior, not exactly-once execution of arbitrary external services.
 
 ## Remedies and current limits
 
-`archestra__execute_remedy_plan` uses the existing built-in registry, gateway
-dispatch, schemas, and branding. It is implicit protocol support, like existing
-run controls. The native gate checks the control call and the existing Rust MCP
-implementation validates the offer against the session actor. Registered
-remote authorities and sanitizers work. Narrowing offers remain model decisions.
-This integration does not support human approval. Calls requiring it stay blocked,
-and remedies requiring an unavailable human authority return APPA explanations.
-The binding accepts no host approval ruling and has no review/resume events.
+`archestra__execute_remedy_plan` executes remedies through the native gate. Offer routing and execution receipts are durable in PostgreSQL. Any replica can resolve an offer after a restart or routing change. The recorded owner routes to the minted session but does not authorize execution. The runtime validates the offer and the control-call vouch.
 
-A denied call follows the existing proxy refusal envelope. If one proposed
-call is denied, none of that response's tool calls reach the client. The proxy
-settles earlier admissions from that batch with `cancel_call`, reporting known
-non-execution as failure. Closing facts, a refusal replacing the original call
-receipt, and the result receipt commit together. Replaying a canceled call ID
-therefore cannot release it again. Other in-flight calls remain open. Cleanup
-failure refuses the response; an interrupted native transaction retains the
-existing pending-receipt recovery requirement. Refusal text
-and remedy information come from APPA, with existing tool-name translation;
-they are not replaced by legacy Tool Guardrails explanations. There is no
-Chat-specific denied-call execution wrapper or automatic model retry.
+Ordinary session receipts belong to authorized participants in one organization. A personal offer requires its originating user; an organization-scoped offer allows an organization caller. Remedy-execution receipts additionally bind the actual authenticated spender. Unknown, unauthorized, and spent offers return terminal feedback without applying a remedy.
 
-Locked chats are refused while enabled because the native tables do not yet
-use their browser-held encryption keys. Agent and skill delegation are checked
-as ordinary tools in the parent's policy, including their returned output.
-Internal delegated runs use the existing guardrails independently, outside the
-parent's APPA trajectory. APPA child restrictions and return contracts are not
-propagated until a child-return adapter exists. Provider-hosted tools remain
-outside this initial adapter. Existing Chat/gateway permission and policy checks still apply
-independently; only the LLM proxy's legacy policy evaluation is replaced.
+The embedded API carries typed remedy outcomes, refusal reasons, and offer descriptions. Registration and terminal handling use those fields rather than rendered text. Interactive human approval is not implemented. Calls requiring it remain blocked.
+
+The same logical call ID and arguments return the durable result without another execution. Changed arguments under that ID are refused. A new ID for a spent offer receives terminal feedback. The proxy writes a typed execution frame with the provider's real tool call ID. Ordinary MCP clients return it without changes. History restoration removes the frame and restores the original argument bytes before provider forwarding, even when the current request declares no tools. JSON-RPC request IDs are not logical retry IDs. Direct calls need a stable host-supplied ID. An interrupted execution without a committed result fails closed.
+
+The proxy replaces a denied call with `archestra__get_remedy_plans`. The notice keeps the original call position and provider call ID. It carries the blocked tool, its arguments, and the policy ruling in plain text. Allowed calls in the same batch remain available. On later requests, the proxy restores each notice to the original call and injects the ruling as its result.
+
+The runtime withholds results submitted under unreleased call IDs.
+Recorded remedy outputs are returned by logical call ID, regardless of client serialization wrappers.
+For the remedy control tool, unrecognized or expired calls return a terminal
+message advising the model that nothing was applied and to ask the user.
+
+Locked chats are refused while enabled because native tables do not use browser-held keys.
+Agent and skill delegation are governed as ordinary tool calls.
+Sessions declaring provider-hosted tools or `tool_search` are refused with HTTP 400.
+Full notice restoration runs on Anthropic Messages (including Bedrock InvokeModel),
+OpenAI Responses, and OpenAI Chat Completions.
+On other protocols, OpenAPPA rules on calls and results, but notices remain recorded in history as notice calls.
 
 Start new conversations when enabling this feature. Historical tool results
 from before activation have no native admission receipts and are refused;
@@ -220,7 +214,7 @@ From this package, after Archestra migrations have been applied:
 
 ```sh
 pnpm smoke:load
-OPENAPPA_TEST_DATABASE_URL=postgresql://... pnpm test
+ARCHESTRA_OPENAPPA_TEST_DATABASE_URL=postgresql://... pnpm test
 ```
 
 The native tests use real hooks, a real PostgreSQL database, two Node processes,
@@ -234,9 +228,10 @@ commit failure with event rollback. The storage test in the OpenAPPA tree is:
 OPENAPPA_TEST_DATABASE_URL=postgresql://... cargo test -p appa-eventlog --features postgres -- --ignored
 ```
 
-Backend coverage includes flag-off Tool Guardrails, APPA proxy calls/results,
-whole-response refusal, explicit protocol errors, replay, session headers, MCP
-remedy availability and refusal of human-approval offers. Chat tests verify that ordinary tools
+Backend coverage includes flag-off Tool Guardrails, APPA proxy calls and
+results, denial notices and their restoration, explicit protocol errors, replay,
+session identity from headers and from the client's own request, and MCP remedy
+availability. Chat tests verify that ordinary tools
 execute and return their original output without APPA callbacks in either mode.
 
 The pinned OpenAPPA revision includes the companion PostgreSQL and embedded-remedy

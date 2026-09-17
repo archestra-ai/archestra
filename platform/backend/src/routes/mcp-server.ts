@@ -2944,7 +2944,12 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async ({ params: { id }, user, headers }) => {
+    async (request) => {
+      const {
+        params: { id },
+        user,
+        headers,
+      } = request;
       const mcpServer = await McpServerModel.findById(id);
 
       if (!mcpServer) {
@@ -2971,7 +2976,12 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         action: "reload tools for",
       });
 
-      return reloadToolsForServer(mcpServer);
+      const result = await reloadToolsForServer(mcpServer);
+      request.auditAfter = {
+        ...request.auditBefore,
+        toolChanges: result,
+      };
+      return result;
     },
   );
 };
@@ -3348,14 +3358,20 @@ async function assertScopedLifecycleAuthorization(params: {
       );
     }
     case "team": {
-      if (!mcpServer.teamId) {
-        throw new ApiError(500, "Team-scoped MCP server is missing its teamId");
-      }
       const { success: canManageAllTeams } = await hasPermission(
         { team: ["create"] },
         headers,
       );
       if (canManageAllTeams) return;
+
+      // Team deletion clears the FK but retains the connection. Global team
+      // managers can still manage it; former team membership grants no access.
+      if (!mcpServer.teamId) {
+        throw new ApiError(
+          403,
+          `Only organization-level team managers can ${action} connections whose team was deleted`,
+        );
+      }
 
       const isLiteralTeamAdmin = await TeamModel.isUserTeamAdmin(
         mcpServer.teamId,

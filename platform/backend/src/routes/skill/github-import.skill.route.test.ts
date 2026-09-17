@@ -1,3 +1,4 @@
+import { generateKeyPairSync } from "node:crypto";
 import { ADMIN_ROLE_NAME, EDITOR_ROLE_NAME } from "@archestra/shared";
 import { vi } from "vitest";
 import {
@@ -625,5 +626,3 @@ describe("online skill catalog disabled for the organization", () => {
     expect(response.json().created).toHaveLength(1);
   });
 });
-
-import { generateKeyPairSync } from "node:crypto";

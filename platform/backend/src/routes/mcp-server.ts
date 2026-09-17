@@ -1340,6 +1340,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       await assertScopedLifecycleAuthorization({
         mcpServer,
         userId: user.id,
+        organizationId,
         headers,
         action: "re-authenticate",
       });
@@ -1659,6 +1660,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           await assertScopedLifecycleAuthorization({
             mcpServer: server,
             userId: user.id,
+            organizationId,
             headers,
             action: "revoke",
           });
@@ -1737,6 +1739,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       await assertScopedLifecycleAuthorization({
         mcpServer,
         userId: user.id,
+        organizationId,
         headers,
         action: "revoke",
       });
@@ -2260,6 +2263,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       await assertScopedLifecycleAuthorization({
         mcpServer,
         userId: user.id,
+        organizationId,
         headers,
         action: "reinstall",
       });
@@ -2972,6 +2976,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       await assertScopedLifecycleAuthorization({
         mcpServer,
         userId: user.id,
+        organizationId: request.organizationId,
         headers,
         action: "reload tools for",
       });
@@ -3328,15 +3333,17 @@ async function assertLifecycleRoutePermission(params: {
  */
 async function assertScopedLifecycleAuthorization(params: {
   mcpServer: {
+    id: string;
     scope: "personal" | "team" | "org";
     ownerId: string | null;
     teamId: string | null;
   };
   userId: string;
+  organizationId: string;
   headers: IncomingHttpHeaders;
   action: "revoke" | "re-authenticate" | "reinstall" | "reload tools for";
 }): Promise<void> {
-  const { mcpServer, userId, headers, action } = params;
+  const { mcpServer, userId, organizationId, headers, action } = params;
 
   switch (mcpServer.scope) {
     case "personal": {
@@ -3358,6 +3365,14 @@ async function assertScopedLifecycleAuthorization(params: {
       );
     }
     case "team": {
+      // A deleted team no longer supplies an organization link. Resolve the
+      // retained connection through its owner and catalog before granting access.
+      if (
+        !mcpServer.teamId &&
+        !(await findMcpServerInOrganization(mcpServer.id, organizationId))
+      ) {
+        throw new ApiError(404, "MCP server not found");
+      }
       const { success: canManageAllTeams } = await hasPermission(
         { team: ["create"] },
         headers,

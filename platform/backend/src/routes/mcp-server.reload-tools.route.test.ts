@@ -44,6 +44,51 @@ describe("POST /api/mcp_server/:id/reload-tools", () => {
     await app.close();
   });
 
+  for (const action of ["reload-tools", "reinstall", "reauthenticate"]) {
+    test(`denies ${action} for a deleted team's connection in another organization`, async ({
+      makeOrganization,
+      makeMember,
+      makeTeam,
+      makeInternalMcpCatalog,
+      makeMcpServer,
+    }) => {
+      const foreignOrganization = await makeOrganization();
+      // Even a shared owner must not bypass the catalog's organization fence.
+      await makeMember(user.id, foreignOrganization.id);
+      const team = await makeTeam(foreignOrganization.id, user.id);
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: foreignOrganization.id,
+        serverType: "remote",
+      });
+      const server = await makeMcpServer({
+        catalogId: catalog.id,
+        ownerId: user.id,
+        scope: "team",
+        teamId: team.id,
+      });
+      await TeamModel.delete(team.id);
+      const getTools = vi
+        .spyOn(McpServerModel, "getToolsFromServer")
+        .mockResolvedValue([]);
+
+      const response = await app.inject({
+        method: action === "reauthenticate" ? "PATCH" : "POST",
+        url: `/api/mcp_server/${server.id}/${action}`,
+        payload:
+          action === "reauthenticate" ? { accessToken: "synthetic" } : {},
+      });
+
+      expect(response.statusCode).toBe(404);
+      expect(response.json().error.message).toBe("MCP server not found");
+      expect(getTools).not.toHaveBeenCalled();
+      expect(await McpServerModel.findById(server.id)).toMatchObject({
+        scope: "team",
+        teamId: null,
+        secretId: null,
+      });
+    });
+  }
+
   for (const canManageAllTeams of [true, false]) {
     test(`after team deletion, reload ${canManageAllTeams ? "allows global team managers" : "denies former team admins"}`, async ({
       makeTeam,

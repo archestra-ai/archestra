@@ -1,4 +1,4 @@
-import { and, count, desc, eq, isNull } from "drizzle-orm";
+import { and, count, desc, eq, isNotNull, isNull } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type {
   ScheduleTrigger,
@@ -123,6 +123,55 @@ class ScheduleTriggerRunModel {
       );
 
     return run ?? null;
+  }
+
+  /** Link before execution starts, so queue retries cannot launch a second runtime. */
+  static async setRuntimeTaskId(params: {
+    runId: string;
+    taskId: string;
+  }): Promise<boolean> {
+    const [updated] = await db
+      .update(schema.scheduleTriggerRunsTable)
+      .set({ runtimeTaskId: params.taskId })
+      .where(
+        and(
+          eq(schema.scheduleTriggerRunsTable.id, params.runId),
+          eq(schema.scheduleTriggerRunsTable.status, "running"),
+          isNull(schema.scheduleTriggerRunsTable.runtimeTaskId),
+        ),
+      )
+      .returning({ id: schema.scheduleTriggerRunsTable.id });
+    return !!updated;
+  }
+
+  /** Batch-read durable outcomes, including tasks settled after a backend restart. */
+  static async findRunningRuntimeTasks() {
+    return await db
+      .select({
+        runId: schema.scheduleTriggerRunsTable.id,
+        triggerId: schema.scheduleTriggerRunsTable.triggerId,
+        state: schema.a2aTasksTable.state,
+        statusReason: schema.a2aTasksTable.statusReason,
+        agentName: schema.agentsTable.name,
+      })
+      .from(schema.scheduleTriggerRunsTable)
+      .leftJoin(
+        schema.a2aTasksTable,
+        eq(
+          schema.a2aTasksTable.id,
+          schema.scheduleTriggerRunsTable.runtimeTaskId,
+        ),
+      )
+      .leftJoin(
+        schema.agentsTable,
+        eq(schema.agentsTable.id, schema.a2aTasksTable.agentId),
+      )
+      .where(
+        and(
+          eq(schema.scheduleTriggerRunsTable.status, "running"),
+          isNotNull(schema.scheduleTriggerRunsTable.runtimeTaskId),
+        ),
+      );
   }
 
   static async markCompleted(params: {

@@ -27,7 +27,7 @@ import {
   formatScheduledRecentRow,
 } from "@/app/projects/[id]/project-chats.utils";
 import { ProjectSchedulesSection } from "@/app/projects/[id]/project-schedules-section";
-import { runChatHref } from "@/app/projects/[id]/schedules/[triggerId]/run-row.utils";
+import { runHref } from "@/app/projects/[id]/schedules/[triggerId]/run-row.utils";
 import { AgentIcon } from "@/components/agent-icon";
 import { FileDetailHeader } from "@/components/chat/file-detail-header";
 import type { FileListItem } from "@/components/chat/file-list-section";
@@ -472,7 +472,7 @@ function ScheduledRecentRow({
       router.push(`/chat/${conv.id}`);
       return;
     }
-    const href = latestRun ? runChatHref({ triggerId, run: latestRun }) : null;
+    const href = latestRun ? runHref({ triggerId, run: latestRun }) : null;
     if (href) {
       router.push(href);
     } else if (latestRun) {

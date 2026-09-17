@@ -10,14 +10,11 @@ import {
   type HarmProbability,
   type Part,
 } from "@google/genai";
-import { encode as toonEncode } from "@toon-format/toon";
 import { get } from "lodash-es";
 import { createGoogleGenAIClient } from "@/clients/gemini-client";
 import config from "@/config";
 import logger from "@/logging";
-import { ModelModel } from "@/models";
 import { metrics } from "@/observability";
-import { getTokenizer } from "@/tokenizers";
 import type {
   ChunkProcessingResult,
   CommonMcpToolDefinition,
@@ -31,7 +28,6 @@ import type {
   LLMResponseAdapter,
   LLMStreamAdapter,
   StreamAccumulatorState,
-  ToolCompressionStats,
   UsageView,
 } from "@/types";
 import {
@@ -43,7 +39,6 @@ import {
   isImageTooLarge,
   isMcpImageBlock,
 } from "../utils/mcp-image";
-import { unwrapToolContent } from "../utils/unwrap-tool-content";
 import { sanitizeGeminiToolSchema } from "./gemini-schema";
 import { GeminiToolNameCodec } from "./gemini-tool-names";
 
@@ -294,16 +289,6 @@ class GeminiRequestAdapter
 
   applyToolResultUpdates(updates: Record<string, string>): void {
     Object.assign(this.toolResultUpdates, updates);
-  }
-
-  async applyToonCompression(model: string): Promise<ToolCompressionStats> {
-    const { contents: compressedContents, stats } =
-      await convertToolResultsToToon(this.request.contents || [], model);
-    this.request = {
-      ...this.request,
-      contents: compressedContents,
-    };
-    return stats;
   }
 
   convertToolResultContent(contents: GeminiContents): GeminiContents {
@@ -960,192 +945,30 @@ class GeminiStreamAdapter
           index: 0,
         },
       ],
+      // `state.usage.inputTokens` is net of the cache read (see processChunk
+      // above, which subtracts `cachedContentTokenCount`), so this recombines
+      // it into a gross `promptTokenCount` and republishes the cache read via
+      // `cachedContentTokenCount` — otherwise a heavily cached turn reports
+      // only the uncached remainder as its entire prompt.
       usageMetadata: this.state.usage
         ? {
-            promptTokenCount: this.state.usage.inputTokens,
+            promptTokenCount:
+              this.state.usage.inputTokens +
+              (this.state.usage.cacheReadTokens ?? 0),
             candidatesTokenCount: this.state.usage.outputTokens,
             totalTokenCount:
-              this.state.usage.inputTokens + this.state.usage.outputTokens,
+              this.state.usage.inputTokens +
+              (this.state.usage.cacheReadTokens ?? 0) +
+              this.state.usage.outputTokens,
+            ...(this.state.usage.cacheReadTokens
+              ? { cachedContentTokenCount: this.state.usage.cacheReadTokens }
+              : {}),
           }
         : undefined,
       modelVersion: this.state.model,
       responseId: this.state.responseId || `gemini-${Date.now()}`,
     };
   }
-}
-
-// =============================================================================
-// TOON COMPRESSION
-// =============================================================================
-
-async function convertToolResultsToToon(
-  contents: GeminiContents,
-  model: string,
-): Promise<{
-  contents: GeminiContents;
-  stats: ToolCompressionStats;
-}> {
-  const tokenizer = getTokenizer("gemini");
-  let toolResultCount = 0;
-  let totalTokensBefore = 0;
-  let totalTokensAfter = 0;
-
-  const result = contents.map((content) => {
-    // Only process user messages with parts containing functionResponse
-    if (content.role === "user" && content.parts) {
-      const updatedParts = content.parts.map((part) => {
-        // Check if this part has a functionResponse
-        if (
-          "functionResponse" in part &&
-          part.functionResponse &&
-          typeof part.functionResponse === "object" &&
-          "response" in part.functionResponse
-        ) {
-          const { functionResponse } = part;
-          toolResultCount++;
-
-          logger.info(
-            {
-              functionName:
-                "name" in functionResponse ? functionResponse.name : "unknown",
-              responseType: typeof functionResponse.response,
-            },
-            "Processing functionResponse for TOON conversion",
-          );
-
-          // Handle response object - try to compress it
-          const response = functionResponse.response;
-          if (response && typeof response === "object") {
-            try {
-              const noncompressed = JSON.stringify(response);
-              const unwrapped = unwrapToolContent(noncompressed);
-              const parsed = JSON.parse(unwrapped);
-              const compressed = toonEncode(parsed);
-
-              // Count tokens for before and after
-              const tokensBefore = tokenizer.countTokens([
-                { role: "user", content: noncompressed },
-              ]);
-              const tokensAfter = tokenizer.countTokens([
-                { role: "user", content: compressed },
-              ]);
-
-              // Always count tokens
-              totalTokensBefore += tokensBefore;
-
-              // Only apply compression if it actually saves tokens
-              if (tokensAfter < tokensBefore) {
-                totalTokensAfter += tokensAfter;
-
-                logger.debug(
-                  {
-                    functionName:
-                      "name" in functionResponse
-                        ? functionResponse.name
-                        : "unknown",
-                    beforeLength: noncompressed.length,
-                    afterLength: compressed.length,
-                    tokensBefore,
-                    tokensAfter,
-                    toonPreview: compressed.substring(0, 150),
-                    provider: "gemini",
-                  },
-                  "convertToolResultsToToon: compressed",
-                );
-                logger.trace(
-                  {
-                    functionName:
-                      "name" in functionResponse
-                        ? functionResponse.name
-                        : "unknown",
-                    before: noncompressed,
-                    after: compressed,
-                    provider: "gemini",
-                  },
-                  "convertToolResultsToToon: before/after",
-                );
-
-                // Return updated part with compressed response
-                return {
-                  functionResponse: {
-                    ...functionResponse,
-                    // Gemini expects response as Record<string, unknown>, but we now have a TOON string
-                    // We wrap it in a {"tool_result": "<TOON string>"} object to match the expected format
-                    response: { tool_result: compressed } as Record<
-                      string,
-                      unknown
-                    >,
-                  },
-                };
-              }
-
-              // Compression not applied - count non-compressed tokens to track total tokens anyway
-              totalTokensAfter += tokensBefore;
-              logger.info(
-                {
-                  functionName:
-                    "name" in functionResponse
-                      ? functionResponse.name
-                      : "unknown",
-                  tokensBefore,
-                  tokensAfter,
-                  provider: "gemini",
-                },
-                "Skipping TOON compression - compressed output has more tokens",
-              );
-              return part;
-            } catch {
-              logger.debug(
-                {
-                  functionName:
-                    "name" in functionResponse
-                      ? functionResponse.name
-                      : "unknown",
-                },
-                "convertToolResultsToToon: skipping - response cannot be compressed",
-              );
-              return part;
-            }
-          }
-        }
-        return part;
-      });
-
-      return {
-        ...content,
-        parts: updatedParts,
-      };
-    }
-
-    return content;
-  });
-
-  logger.info(
-    { contentsCount: contents.length, toolResultCount },
-    "convertToolResultsToToon completed",
-  );
-
-  // Calculate cost savings (always a number, 0 if no savings)
-  let toonCostSavings = 0;
-  const tokensSaved = totalTokensBefore - totalTokensAfter;
-  if (tokensSaved > 0) {
-    toonCostSavings = await ModelModel.calculateCostSavings(
-      model,
-      tokensSaved,
-      "gemini",
-    );
-  }
-
-  return {
-    contents: result,
-    stats: {
-      tokensBefore: totalTokensBefore,
-      tokensAfter: totalTokensAfter,
-      costSavings: toonCostSavings,
-      wasEffective: totalTokensAfter < totalTokensBefore,
-      hadToolResults: toolResultCount > 0,
-    },
-  };
 }
 
 // =============================================================================

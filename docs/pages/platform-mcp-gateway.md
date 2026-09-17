@@ -3,7 +3,7 @@ title: MCP Gateway
 category: MCP
 order: 1
 description: Unified access point for all MCP servers
-lastUpdated: 2026-09-03
+lastUpdated: 2026-09-16
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -27,6 +27,10 @@ Every gateway has its own page, and that page is where you change it. The three 
 Tool assignments can point to a specific installed MCP server connection or use **Resolve at call time**. Resolve-at-call-time is useful when the same gateway should use the caller's own GitHub, Jira, or other upstream credential instead of a shared connection.
 
 After the gateway is configured, use its **Connect** tab to copy connection details for supported clients.
+
+## Ownership Transfers
+
+MCP gateways support [ownership transfers](/docs/platform-agents#ownership-transfers) between organization members. Their endpoint, assigned tools, and sharing settings stay unchanged. Your automatically created personal gateway stays with your account.
 
 ## Tool Assignment
 
@@ -98,6 +102,14 @@ MCP Gateways support four client authentication paths:
 Use OAuth 2.1 for standard MCP clients, ID-JAG or JWKS for enterprise-managed identity, and bearer tokens for direct service integrations or simple local setup.
 
 See [MCP Authentication](/docs/mcp-authentication) for more details.
+
+## Transport
+
+Use Streamable HTTP with `/v1/mcp/{id-or-slug}`. Send MCP requests, including capability discovery, through POST.
+
+The same URL supports legacy HTTP+SSE clients, including Claude Code entries configured with transport `sse`. An authenticated GET with `Accept: text/event-stream` opens the stream. Its `endpoint` event supplies the URL for POSTing messages. Each POST receives `202 Accepted`; its MCP response arrives on the stream. Prefer Streamable HTTP when your client supports it.
+
+Other authenticated GET requests return `405 Method Not Allowed` with `Allow: POST`. GET requests declaring protocol `2026-07-28` also return `405`. Missing or invalid credentials receive `401` with the OAuth discovery challenge.
 
 ## Protocol Versions
 

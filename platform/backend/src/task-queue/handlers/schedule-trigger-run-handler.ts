@@ -1,4 +1,5 @@
 import { ChatErrorCode, type ChatErrorResponse } from "@archestra/shared";
+import { A2AProtocolTaskState } from "@/agents/a2a/a2a-protocol";
 import {
   type A2AExecuteResult,
   executeA2AMessage,
@@ -6,6 +7,7 @@ import {
 import { hasAnyAgentTypeAdminPermission } from "@/auth";
 import logger from "@/logging";
 import {
+  A2ATaskModel,
   AgentModel,
   AgentTeamModel,
   ScheduleTriggerModel,
@@ -14,6 +16,8 @@ import {
 } from "@/models";
 import { metrics } from "@/observability";
 import { ProviderError } from "@/routes/chat/errors";
+import { resolveAgentRuntime } from "@/services/agent-runtime/pod-run";
+import { startDetachedAgentTask } from "@/services/agent-runtime/start-task";
 import {
   createAndLinkRunConversation,
   persistRunConversationMessages,
@@ -36,7 +40,7 @@ export async function handleScheduleTriggerRunExecution(
   logger.info({ runId, triggerId }, "Schedule trigger run picked up");
 
   const run = await ScheduleTriggerRunModel.findById(runId);
-  if (!run || run.status !== "running") {
+  if (!run || run.status !== "running" || run.runtimeTaskId) {
     logger.warn(
       { runId, found: !!run, status: run?.status ?? null },
       "Schedule trigger run skipped, not in running state",
@@ -101,6 +105,60 @@ export async function handleScheduleTriggerRunExecution(
       throw new Error("Scheduled trigger target must be an internal agent");
     }
 
+    if (triggerAgent.runtime) {
+      if (!resolveAgentRuntime(triggerAgent)) {
+        throw new Error(
+          "Agent Runtime is disabled. Enable it before running this scheduled agent.",
+        );
+      }
+      await startDetachedAgentTask({
+        actor: {
+          kind: "user",
+          id: actor.id,
+          organizationId: trigger.organizationId,
+        },
+        agentId: trigger.agentId,
+        message: trigger.messageTemplate,
+        systemParams: {
+          sessionId: `scheduled-${run.id}`,
+          projectId: trigger.projectId ?? undefined,
+          source: "schedule-trigger",
+          runtimeMode: "one_shot",
+        },
+        onTaskCreated: async (taskId) => {
+          if (
+            await ScheduleTriggerRunModel.setRuntimeTaskId({
+              runId: run.id,
+              taskId,
+            })
+          )
+            return;
+          // Another queue delivery already owns this run. Cancel our unstarted
+          // task without affecting the winning runtime or scheduled run.
+          const task = await A2ATaskModel.findById(taskId);
+          if (task)
+            await A2ATaskModel.transitionStateWithEvent({
+              id: taskId,
+              to: A2AProtocolTaskState.Canceled,
+              allowedFrom: [A2AProtocolTaskState.Submitted],
+              statusReason: "Scheduled run already has a runtime task",
+              eventPayload: {
+                statusUpdate: {
+                  taskId,
+                  contextId: task.contextId,
+                  status: { state: A2AProtocolTaskState.Canceled },
+                  final: true,
+                },
+              },
+            });
+          throw new ScheduledRuntimeAlreadyStartedError();
+        },
+      });
+      // The periodic scheduler settles the run from the durable task outcome.
+      // Returning from launch is not successful execution.
+      return;
+    }
+
     // For a project-scoped trigger, materialize the run's chat conversation up
     // front and execute against it, so the file tools resolve the project scope
     // (results land in the project). Unscoped triggers keep the headless path.
@@ -127,6 +185,7 @@ export async function handleScheduleTriggerRunExecution(
       scheduleTriggerRunId: run.id,
     });
   } catch (error) {
+    if (error instanceof ScheduledRuntimeAlreadyStartedError) return;
     status = "failed";
     errorMessage = formatScheduleTriggerExecutionError(
       error instanceof Error ? error.message : String(error),
@@ -222,3 +281,5 @@ function formatScheduleTriggerExecutionError(errorMessage: string): string {
 
   return `${errorMessage} Scheduled triggers need a different chat-capable model for this agent. Pick a model that supports standard text and tool execution for scheduled runs, then try again.`;
 }
+
+class ScheduledRuntimeAlreadyStartedError extends Error {}

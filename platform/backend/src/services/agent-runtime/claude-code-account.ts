@@ -1,24 +1,19 @@
 import { randomUUID } from "node:crypto";
-import { getAgentCatalogImages, isVaultReference } from "@archestra/shared";
+import { isVaultReference } from "@archestra/shared";
 import { z } from "zod";
-import config from "@/config";
-import { claudeCodeAccountRuntime } from "@/k8s/agent-runtime/claude-code-account";
 import logger from "@/logging";
 import { EnvironmentModel, OrganizationModel } from "@/models";
 import ClaudeCodeAccountModel from "@/models/claude-code-account";
 import { isByosEnabled, secretManager } from "@/secrets-manager";
-import { resolveEffectiveNetworkPolicy } from "@/services/environments/network-policy";
 import {
   AgentRuntimeCredentialsRequiredError,
   ApiError,
   type ResolvedAgentRuntime,
 } from "@/types";
-import {
-  ClaudeCodeAccountSchema,
-  type ClaudeCodeAccountStatus,
-  ClaudeCodeModelsSchema,
-} from "@/types/claude-code-account";
+import type { ClaudeCodeAccountStatus } from "@/types/claude-code-account";
+import { decryptSecretValue, encryptSecretValue } from "@/utils/crypto";
 import { resolveAgentRuntimeBackendDriver } from "./backends";
+import { claudeCodeOAuth } from "./claude-code-oauth";
 
 /** Personal account credentials use the same secret backend as other runtime
  * credentials. The flow ID fences asynchronous completion across replicas. */
@@ -31,24 +26,21 @@ class ClaudeCodeAccountManager {
     const flow = await ClaudeCodeAccountModel.flow(owner);
     const base = { requiresVaultReference: isByosEnabled() };
     if (flow && !isExpired(flow.expiresAt)) {
-      if (flow.vaultReference)
+      if (flow.failed || (!flow.vaultReference && !flow.oauth))
+        return { ...base, state: "failed", flowId: flow.flowId };
+      if (flow.vaultReference || flow.completionStarted)
         return { ...base, state: "connecting", flowId: flow.flowId };
-      if (params.inspectFlow === false)
-        return { ...base, state: "starting", flowId: flow.flowId };
-      const result = ClaudeCodeAccountSchema.safeParse(
-        await claudeCodeAccountRuntime.status(flow),
-      );
-      if (!result.success)
-        throw new ApiError(
-          502,
-          "Claude Code returned an invalid sign-in status",
-        );
       return {
         ...base,
-        ...result.data,
-        state:
-          result.data.state === "connected" ? "connecting" : result.data.state,
+        state: "awaiting_code",
         flowId: flow.flowId,
+        ...(params.inspectFlow === false
+          ? {}
+          : {
+              authorizationUrl: claudeCodeOAuth.authorizationUrl(
+                readOAuth(flow.oauth),
+              ),
+            }),
       };
     }
     if (account)
@@ -81,34 +73,27 @@ class ClaudeCodeAccountManager {
         "A valid Vault path#key reference is required on a read-only Vault deployment",
       );
     // SPDX-SnippetEnd
-    const previous = await ClaudeCodeAccountModel.flow(owner);
+    const oauth = params.vaultReference ? undefined : claudeCodeOAuth.create();
     const flowId = randomUUID();
-    const flow = {
-      flowId,
-      namespace: owner.namespace,
-      image: getAgentCatalogImages(config.agentRuntime.defaultImage)[
-        "claude-code"
-      ],
-      vaultReference: params.vaultReference,
-    };
-    await ClaudeCodeAccountModel.startFlow({ owner, flow });
-    if (previous) await this.deleteFlow(previous);
-    try {
-      await claudeCodeAccountRuntime.create({
-        ...owner,
-        image: flow.image,
+    await ClaudeCodeAccountModel.startFlow({
+      owner,
+      flow: {
         flowId,
-        vaultReference: Boolean(params.vaultReference),
-      });
-    } catch {
-      throw new ApiError(
-        503,
-        "Could not prepare Claude Code sign-in. Please try again.",
-      );
-    }
+        vaultReference: params.vaultReference,
+        oauth: oauth
+          ? {
+              state: oauth.state,
+              verifier: encryptSecretValue({ verifier: oauth.verifier }),
+            }
+          : undefined,
+      },
+    });
     return {
-      state: params.vaultReference ? "connecting" : "starting",
+      state: params.vaultReference ? "connecting" : "awaiting_code",
       flowId,
+      ...(oauth
+        ? { authorizationUrl: claudeCodeOAuth.authorizationUrl(oauth) }
+        : {}),
       requiresVaultReference: isByosEnabled(),
     };
   }
@@ -118,7 +103,13 @@ class ClaudeCodeAccountManager {
   ): Promise<ClaudeCodeAccountStatus> {
     const owner = await this.placement(params);
     const flow = await ClaudeCodeAccountModel.flow(owner);
-    if (!flow || flow.flowId !== params.flowId || isExpired(flow.expiresAt))
+    if (
+      !flow ||
+      flow.flowId !== params.flowId ||
+      isExpired(flow.expiresAt) ||
+      flow.failed ||
+      (!flow.vaultReference && !flow.oauth)
+    )
       throw new ApiError(
         409,
         "This sign-in has expired. Start Claude Code sign-in again.",
@@ -128,10 +119,30 @@ class ClaudeCodeAccountManager {
         409,
         "Secret storage changed. Start Claude Code sign-in again.",
       );
+    if (flow.completionStarted)
+      return { state: "connecting", flowId: params.flowId };
+    const oauth = flow.oauth ? readOAuth(flow.oauth) : undefined;
+    const code = oauth
+      ? claudeCodeOAuth.parseCode({
+          code: params.code ?? "",
+          state: oauth.state,
+        })
+      : undefined;
+    if (
+      !(await ClaudeCodeAccountModel.claimFlow({
+        owner,
+        flowId: params.flowId,
+      }))
+    )
+      throw new ApiError(
+        409,
+        "This sign-in was already submitted or replaced. Check its status or start again.",
+      );
     let secretId: string | null = null;
     let stored = false;
     try {
       let token: string | undefined;
+      let expiresAt: string | null = null;
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
       // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -145,43 +156,26 @@ class ClaudeCodeAccountManager {
         token = await this.readToken(secretId);
       }
       // SPDX-SnippetEnd
-      const result = CompletionSchema.safeParse(
-        await claudeCodeAccountRuntime.complete({
-          namespace: flow.namespace,
-          flowId: params.flowId,
-          code: params.code,
-          token,
-        }),
-      );
-      if (!result.success)
-        throw new ApiError(
-          502,
-          "Claude Code returned an invalid sign-in result",
-        );
-      if (result.data.state !== "connected")
-        return { state: result.data.state, flowId: params.flowId };
-      if (!token && !result.data.token)
-        throw new ApiError(
-          502,
-          "Claude Code did not return a subscription token",
-        );
+      if (oauth && code) {
+        const result = await claudeCodeOAuth.exchange({ ...oauth, code });
+        token = result.token;
+        expiresAt = result.expiresAt;
+      }
+      if (!token)
+        throw new ApiError(502, "Claude did not return a subscription token");
       secretId ??= (
         await secretManager().createSecret(
-          { value: result.data.token },
+          { value: token },
           "claude-code-account",
         )
       ).id;
-      const expiresAt = flow.vaultReference
-        ? null
-        : new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
       const saved = await ClaudeCodeAccountModel.complete({
         owner,
         flowId: params.flowId,
         secretId,
         metadata: {
-          image: flow.image,
           expiresAt,
-          models: result.data.models,
+          models: [],
         },
       });
       if (!saved)
@@ -191,12 +185,14 @@ class ClaudeCodeAccountManager {
         );
       stored = true;
       await this.deleteSecret(saved.previousSecretId);
-      await this.deleteFlow(flow);
       return {
         state: "connected",
         expiresAt,
         requiresVaultReference: isByosEnabled(),
       };
+    } catch (error) {
+      await ClaudeCodeAccountModel.failFlow({ owner, flowId: params.flowId });
+      throw error;
     } finally {
       if (!stored) await this.deleteSecret(secretId);
     }
@@ -208,7 +204,7 @@ class ClaudeCodeAccountManager {
     return {
       models:
         account?.secretId && !isExpired(account.expiresAt)
-          ? account.models
+          ? await claudeCodeOAuth.models(await this.readToken(account.secretId))
           : [],
     };
   }
@@ -217,9 +213,8 @@ class ClaudeCodeAccountManager {
     const owner = await this.placement(params);
     // Delete the connection first: neither a cached secret nor a late flow may
     // authorize a new run. Existing runs keep their already-issued credential.
-    const { account, flow } = await ClaudeCodeAccountModel.delete(owner);
+    const { account } = await ClaudeCodeAccountModel.delete(owner);
     await this.deleteSecret(account?.secretId ?? null);
-    if (flow) await this.deleteFlow(flow);
     return { state: "disconnected", requiresVaultReference: isByosEnabled() };
   }
 
@@ -266,18 +261,11 @@ class ClaudeCodeAccountManager {
       environmentScope: environment?.namespace,
       organizationScope: organization?.defaultEnvironmentNamespace,
     });
-    const effectiveNetworkPolicy = await resolveEffectiveNetworkPolicy({
-      organizationId: params.runtime.organizationId,
-      environmentId: params.runtime.environmentId,
-      environmentNetworkPolicy: environment?.networkPolicy,
-      defaultNetworkPolicy: organization?.defaultNetworkPolicy,
-    });
     return {
       organizationId: params.runtime.organizationId,
       userId: params.userId,
       agentId: params.runtime.agentId,
       namespace,
-      effectiveNetworkPolicy,
     };
   }
 
@@ -302,14 +290,6 @@ class ClaudeCodeAccountManager {
       logger.warn("Could not remove a disconnected Claude Code secret");
     }
   }
-
-  private async deleteFlow(params: { namespace: string; flowId: string }) {
-    try {
-      await claudeCodeAccountRuntime.delete(params);
-    } catch {
-      logger.warn("Claude Code sign-in cleanup deferred to the Job deadline");
-    }
-  }
 }
 
 export const claudeCodeAccountManager = new ClaudeCodeAccountManager();
@@ -320,14 +300,15 @@ const TokenSchema = z
   .min(32)
   .max(8192)
   .regex(/^sk-ant-oat[0-9]+-[A-Za-z0-9_-]+$/);
-const CompletionSchema = z.discriminatedUnion("state", [
-  z.object({
-    state: z.literal("connected"),
-    token: TokenSchema.optional(),
-    models: ClaudeCodeModelsSchema.shape.models,
-  }),
-  z.object({ state: z.enum(["connecting", "failed"]) }),
-]);
+function readOAuth(
+  oauth: { state: string; verifier: { __encrypted: string } } | undefined,
+) {
+  if (!oauth) throw new ApiError(409, "Start Claude Code sign-in again.");
+  const { verifier } = decryptSecretValue(oauth.verifier);
+  if (typeof verifier !== "string")
+    throw new ApiError(409, "Start Claude Code sign-in again.");
+  return { state: oauth.state, verifier };
+}
 function isExpired(date: Date | string | null) {
   return date !== null && new Date(date).getTime() <= Date.now();
 }

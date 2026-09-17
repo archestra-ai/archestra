@@ -1092,6 +1092,39 @@ describe("GeminiStreamAdapter", () => {
       expect(response.usageMetadata?.candidatesTokenCount).toBe(5);
     });
 
+    test("reports gross promptTokenCount and republishes cachedContentTokenCount", () => {
+      const adapter = geminiAdapterFactory.createStreamAdapter();
+
+      adapter.processChunk({
+        candidates: [
+          {
+            content: { role: "model", parts: [{ text: "Hello" }] },
+            finishReason: FinishReason.STOP,
+            index: 0,
+          },
+        ],
+        // Gemini reports cachedContentTokenCount as a SUBSET of promptTokenCount:
+        // 4000 total prompt tokens, 3900 of them served from cache.
+        usageMetadata: {
+          promptTokenCount: 4000,
+          candidatesTokenCount: 100,
+          totalTokenCount: 4100,
+          cachedContentTokenCount: 3900,
+        },
+        modelVersion: "gemini-2.5-pro",
+        responseId: "test-response",
+      } as GeminiStreamChunk);
+
+      const response = adapter.toProviderResponse();
+
+      expect(response.usageMetadata).toEqual({
+        promptTokenCount: 4000,
+        candidatesTokenCount: 100,
+        totalTokenCount: 4100,
+        cachedContentTokenCount: 3900,
+      });
+    });
+
     test("preserves thoughtSignature on text and function call parts", () => {
       const adapter = geminiAdapterFactory.createStreamAdapter();
 

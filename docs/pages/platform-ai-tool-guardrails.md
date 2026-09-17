@@ -2,7 +2,7 @@
 title: Tool Guardrails
 category: LLM Proxy
 order: 5
-lastUpdated: 2026-07-27
+lastUpdated: 2026-09-16
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -15,6 +15,18 @@ This gives you a middle ground between two extremes:
 - A permanently read-only agent that can never take external action
 
 With AI tool guardrails, the same agent can operate normally in safe contexts and become more restricted only when context or tool output requires it.
+
+## Guardrails V2 Preview
+
+Set `ARCHESTRA_OPENAPPA_ENABLED=true` to enable the OpenAPPA sidebar entry in Studio. Open OpenAPPA to edit the organization policy as TOML. The Guardrails page keeps its existing controls. Policies are stored in PostgreSQL. Saved revisions apply to new conversations without restarting the backend. Existing conversations retain their original policy.
+
+The built-in APPA Guide skill helps agents inspect, explain, and edit this policy. It uses the same read, validate, and update tools as the editor. The skill is available only while APPA is enabled.
+
+APPA checks every call in a batch before releasing it. Allowed calls can run in parallel, and their results can arrive in any order. If any call is denied, none of the calls in that response run.
+
+The default policy has no rules for specific tools. A catch-all annotator adds no restrictions or label changes. Explicit tool rules take precedence over this fallback.
+
+The assistant can read, validate, and update the same policy through its policy tools. Both editing paths enforce permissions and reject conflicting revisions. Invalid policies leave the saved revision unchanged.
 
 ## The Lethal Trifecta
 

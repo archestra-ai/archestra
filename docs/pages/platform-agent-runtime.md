@@ -3,20 +3,20 @@ title: Agent Runtime (Beta)
 category: Agents
 order: 7
 description: Configure isolated workspaces for coding agents and delegated tasks
-lastUpdated: "2026-09-12"
+lastUpdated: "2026-09-17"
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
 Agent Runtime gives an Agent an isolated workspace for coding, running commands, and long-running tasks. You can follow its terminal output, send instructions, and continue work in the same workspace.
 
-![Available Agent Runtime templates](/docs/automated_screenshots/platform-agent-runtime_catalog.webp)
-
-A dedicated runtime belongs to an existing Agent. It uses that Agent's instructions, tools, Environment, and access rules. Choose Archestra Agent, Claude Code, Codex, OpenCode, Hermes, OpenClaw, or your own image.
+A dedicated runtime belongs to an existing Agent. It uses that Agent's instructions, tools, Environment, and access rules. Choose the built-in agent, Claude Code, Codex, OpenCode, Hermes, OpenClaw, or your own image.
 
 Chat and Projects open an interactive terminal for Agents with a dedicated runtime. Delegation, A2A, email, and schedules start unattended tasks that return a result when finished. Ordinary messaging-channel conversations stay in the foreground unless the channel Agent delegates work.
 
 ## Runtime Backend
+
+Deployments can [prepare warm workspaces](/docs/platform-deployment#warm-workspaces) to reduce startup time. Compatible Agents share spare capacity; every new workspace remains isolated.
 
 Kubernetes is currently the supported runtime backend. Archestra manages task state, credentials, cancellation, and run history. The cluster supplies the workspace where the Agent executes commands.
 
@@ -26,9 +26,19 @@ Your administrator must enable Agent Runtime on a Kubernetes cluster with persis
 
 ## Configure Agent Runtime
 
-Choose a maintained template from **Create Agent**, then configure its instructions, model, tools, and connections. For an existing Agent, enable **Dedicated runtime** under **Edit → Advanced**.
+Choose a maintained template from **Create Agent**. The **Runtime** picker sits below Visibility in Configuration. Switching runtimes keeps your name, description, and instructions. It replaces the image, command, inference settings, environment variables, and credential declarations.
+
+Maintained runtimes arrive preconfigured. Model or Authentication settings open by default; other settings are collapsed for review. **Archestra** uses the platform’s native agent loop with the selected model and tools, without a dedicated runtime. **Custom image** opens the model, image, and inference settings.
+
+An attention icon marks missing or incompatible settings that need to be fixed before creation, even when the section is collapsed. Hover over the icon to see what needs to change. Claude personal accounts connect after saving. Codex requires your ChatGPT subscription before creation. Claude provider billing requires an explicit compatible connection.
+
+The created page and Agent header show remaining setup requirements. Connection changes refresh the banner automatically. Each person connects their own subscription before running a shared Agent.
+
+For an existing Agent, configure **Dedicated Agent runtime** in its **Agent Runtime** tab.
 
 Select the Agent in Chat or a Project and send your first task. Its live terminal opens so you can follow progress and provide input. See [Work With Runs In Chat](#work-with-runs-in-chat) for continuing work.
+
+The **Agents** list marks an Agent with a dedicated runtime with a **Runtime** badge. An Agent created from a popular agent template shows the template name instead — **Claude Code**, for example. Its **Chat** action reads **Start run**.
 
 **Settings → Agents → Runtime Backend** shows backend health and deployment defaults. Each Agent can override its image, command, environment variables, resources, and run controls. Deployment defaults remain managed by the operator.
 
@@ -44,7 +54,7 @@ See [Network Egress Policies](/docs/platform-environments#network-egress-policie
 
 ### Built-In Archestra Agent
 
-The Archestra Agent template includes a shell tool, the Agent's assigned MCP tools, and its system prompt. It supports OpenAI Responses, OpenAI Chat Completions, and Anthropic Messages. Follow-up instructions are consumed between model turns.
+The built-in agent loop is available through **Custom image** using the default runtime image. It includes a shell tool, the Agent's assigned MCP tools, and its system prompt. It supports OpenAI Responses, OpenAI Chat Completions, and Anthropic Messages. Follow-up instructions are consumed between model turns.
 
 Use it when you need a general coding loop without a specific third-party client's behavior. The [runtime-agent source](https://github.com/archestra-ai/archestra/tree/main/platform/runtime-agent) provides a working integration example.
 
@@ -59,19 +69,29 @@ Assigned MCP tools are available through the Agent's gateway with the initiating
 - **Personal Claude subscription:** each person connects their own Pro or Max account. Subscription inference goes directly to Anthropic and bypasses Archestra's inference logs, cost limits, and inference guardrails. MCP tool policies still apply.
 - **API key or cloud provider:** use Anthropic, AWS Bedrock, or Anthropic on Vertex AI through Archestra's proxy. Platform inference controls apply. See [Supported LLM Providers](/docs/platform-supported-llm-providers) for setup.
 
-Personal Claude connections belong to your user account. Connect once to reuse your subscription across your Claude Code Agents and Environments. They work only in the Claude Code runtime. Tokens use your configured secrets backend. Reconnect when the connection expires or to refresh available models.
+Personal Claude connections belong to your user account. Connect once to reuse your subscription across your Claude Code Agents and Environments. They work only in the Claude Code runtime. Tokens use your configured secrets backend. Reconnect when the connection expires.
 
-Sign-in uses the maintained Claude Code image. Archestra [prefetches popular runtime images](/docs/platform-deployment#runtime-image-cache) in the background. A new node still needs its first download. Disconnecting your account prevents new subscription runs across all your Claude Code Agents.
+Sign-in connects directly to Claude through your browser and the Archestra backend. It does not start a container or download a runtime image. Starting an Agent still requires its runtime image. Disconnecting your account prevents new subscription runs across all your Claude Code Agents.
 
 With read-only Vault, generate a token using `claude setup-token`, store it in Vault, and connect its `path#key` reference. Disconnect prevents new runs from using a connection; running sessions retain their issued token. Revoke it in Claude to end provider access.
 
 **Codex** requires the initiating user's connected ChatGPT subscription. Connect it under **Model Providers**; an ordinary OpenAI API key does not replace it. Each teammate uses their own connection.
 
-The **Inference API** must match the client in your image. Maintained templates select it for you. Custom clients can use OpenAI Responses, OpenAI Chat Completions, or Anthropic Messages.
+The **Inference API** must match the client in your image. Maintained templates select it for you. Claude Code uses Anthropic Messages. Codex offers the two OpenAI protocols. Other runtimes can use OpenAI Responses, OpenAI Chat Completions, or Anthropic Messages.
+
+### Skills
+
+The Agent's [Skills policy](/docs/platform-agents#skills) applies to every maintained runtime template. Skills use the configured MCP gateway; they need no separate installation in the client. The caller's access and the Agent's environment still apply.
+
+Runtime startup instructions include a compact preview of available skill names and descriptions. The MCP discovery tool also advertises this preview to connected clients. Clients load full instructions and bundled resources on demand. Scripts return as text; binary assets return as base64. Clients can save these files and run them using their own tools. The image must contain any dependencies the skill requires.
+
+The [Code Sandbox](/docs/platform-code-sandbox) is separate from the Agent Runtime workspace. Its `/skills` paths are available through sandbox tools, not the runtime's local shell.
 
 ## Bring Your Own Image
 
 Use a custom image to add development tools or run your own Agent client. Set its image, command, and arguments on the Agent. Archestra supplies the task, credentials, workspace, and live terminal.
+
+Custom clients must connect to the injected MCP gateway and support listing and calling tools. Use `list_skills` and `load_skill` for skill instructions and resources. No additional Archestra SDK is required. Native skill directories and slash commands are client-specific.
 
 The [maintained images](https://github.com/archestra-ai/archestra/blob/main/platform/agent_images/README.md) provide build examples. The [image contract](https://github.com/archestra-ai/archestra/blob/main/platform/agent_images/runtime-contract.md) contains the complete environment and transcript specifications.
 
@@ -87,6 +107,14 @@ The [maintained images](https://github.com/archestra-ai/archestra/blob/main/plat
 | Storage | Keep working files and saved client sessions under `/home/node`. Other container paths may be ephemeral. |
 
 Read `ARCHESTRA_AGENT_RUNTIME_MODE` to support interactive and unattended work. Interactive clients remain available for follow-ups; unattended clients finish the task and exit.
+
+### Reporting Failures
+
+Your image can supply an actionable error message before exiting non-zero. Runtime carries that message into task results, notifications, and run details.
+
+Publish a JSON envelope containing `version`, `code`, and `message` to `${ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX}.failure`. Your image defines the code and wording; no platform registration is required. Remove credentials and private details before publishing. Without a valid envelope, Runtime reports the exit status.
+
+See the [failure contract](https://github.com/archestra-ai/archestra/blob/main/platform/agent_images/runtime-contract.md#failure-reasons) for the format, limits, and a shell example.
 
 ### SDK Integration
 
@@ -179,6 +207,20 @@ A local coding client or another system can connect through the MCP Gateway and 
 4. `steer_run` or `cancel_run` to intervene.
 
 Steering completed work starts another turn in the retained workspace. A2A clients can continue with the same `contextId`. See [A2A and SDKs](/docs/platform-agent-triggers-webhook-a2a#sdks) for direct integrations.
+
+### Client Handoff
+
+The built-in **Agent Runtime Handoff** skill guides work between connected clients and the runtime. Install shared skills from [Connect](/docs/platform-connection). The workflow supports repository work and documents in desktop clients.
+
+Send the current goal, decisions, remaining work, and required files when handing off. Input files arrive before the first turn starts. Local file paths alone do not transfer their contents.
+
+Keep the returned session link when switching clients. The connected client can read the original request to recover the task context. Follow-ups reach the same workspace and saved conversation, including while work is running. An unavailable session reports an error instead of silently starting another workspace.
+
+For repository work, include the exact base commit and any local changes. Request a return patch relative to the handed-off working tree so it does not repeat existing local edits. Review it against your current working tree before applying it. For documents, retrieve the finished file from the retained workspace.
+
+You can hand off unfinished repository work before closing your laptop. Check that the workspace retention deadline covers your planned return. The repository workflow saves a local handoff note outside tracked source files. A fresh conversation can use it to recover the task and session link.
+
+Ask your client to “bring it back and continue here” to resume locally. It retrieves changes, checks for conflicts, and runs the relevant checks. Stop remote editing before continuing locally. Expired workspaces retain run history, but their files are unavailable.
 
 ### Messaging Channels
 

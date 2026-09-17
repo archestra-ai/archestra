@@ -682,7 +682,16 @@ export function getDefaultConnectorConfig(
     },
     servicenow: { type, syncDataForLastMonths: 6 },
     notion: { type },
-    sharepoint: { type, includePages: true, recursive: true },
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    sharepoint: {
+      type,
+      includePages: true,
+      recursive: true,
+      pagePublicationStatus: "published",
+    },
+    // SPDX-SnippetEnd
     gdrive: { type, recursive: true, authMode: DEFAULT_GDRIVE_AUTH_MODE },
     dropbox: { type, rootPath: "" },
     asana: { type },

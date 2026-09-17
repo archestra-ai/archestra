@@ -25,5 +25,31 @@ export function getAgentCatalogImages(
   ) as Record<AgentCatalogId, string>;
 }
 
+/**
+ * Which maintained CLI template a saved runtime runs, or null for a custom
+ * one. A runtime stores no template id, so this reads the `archestra-<id>`
+ * wrapper command each template launches with, the same fingerprint the
+ * launch path keys on.
+ */
+export function resolveAgentCatalogId(
+  runtime: unknown,
+): Exclude<AgentCatalogId, "archestra"> | null {
+  if (!runtime || typeof runtime !== "object") return null;
+  const { command } = runtime as { command?: unknown };
+  const executable = Array.isArray(command) ? command[0] : undefined;
+  return typeof executable === "string"
+    ? (CATALOG_ID_BY_COMMAND[executable] ?? null)
+    : null;
+}
+
 const CATALOG_REGISTRY =
   "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public";
+
+const CATALOG_ID_BY_COMMAND: Record<
+  string,
+  Exclude<AgentCatalogId, "archestra">
+> = Object.fromEntries(
+  (Object.keys(AGENT_CATALOG_IMAGE_NAMES) as AgentCatalogId[])
+    .filter((id) => id !== "archestra")
+    .map((id) => [`archestra-${id}`, id]),
+);

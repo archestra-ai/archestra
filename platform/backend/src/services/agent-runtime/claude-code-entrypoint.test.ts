@@ -20,6 +20,95 @@ const ENTRYPOINT = path.resolve(
 
 describe("Claude Code image entrypoint", () => {
   test.each([
+    ["authentication_failed", "claude_authentication", "one_shot"],
+    ["authentication_failed", "claude_authentication", "interactive"],
+    ["rate_limit", "claude_rate_limit", "one_shot"],
+    ["billing_error", "claude_billing", "one_shot"],
+    ["unrecognized-secret", "claude_api_error", "one_shot"],
+  ])("handles API failure %s (%s) in %s mode", async (error, code, mode) => {
+    const root = await mkdtemp(path.join(tmpdir(), "claude-stop-failure-"));
+    try {
+      const bin = path.join(root, "bin");
+      const runtime = path.join(root, "runtime");
+      await mkdir(bin);
+      await mkdir(runtime);
+      await writeExecutable(
+        path.join(bin, "archestra-agent-attention"),
+        `#!/bin/sh
+printf '%s\\n' "$*" > "$ARCHESTRA_AGENT_RUNTIME_DIR/attention"
+`,
+      );
+      await writeExecutable(
+        path.join(bin, "claude"),
+        `#!/bin/sh
+previous=""
+for argument in "$@"; do
+  if [ "$previous" = "--settings" ]; then settings="$argument"; fi
+  previous="$argument"
+done
+hook="$(jq -r '.hooks.StopFailure[0].hooks[0].command' "$settings")"
+printf '%s' "$TEST_FAILURE_PAYLOAD" | "$hook"
+if [ "$ARCHESTRA_AGENT_RUNTIME_MODE" = "interactive" ]; then exit 0; fi
+trap 'exit 0' TERM
+while :; do sleep 0.1; done
+`,
+      );
+      const result = await execFileAsync("bash", [ENTRYPOINT], {
+        cwd: root,
+        timeout: 15000,
+        env: {
+          PATH: `${bin}:${process.env.PATH}`,
+          HOME: root,
+          ARCHESTRA_AGENT_RUNTIME_DIR: runtime,
+          ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX: path.join(runtime, "test-turn"),
+          ARCHESTRA_AGENT_RUNTIME_MODE: mode,
+          ARCHESTRA_LLM_PROXY_PROTOCOL: "anthropic",
+          ARCHESTRA_AGENT_RUNTIME_TASK: "Example task",
+          ARCHESTRA_AGENT_RUNTIME_TASK_ID: "test-task",
+          ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL: "test-model",
+          ARCHESTRA_MCP_GATEWAY_URL: "http://localhost:9000/v1/mcp/example",
+          ARCHESTRA_MCP_GATEWAY_TOKEN: "example-gateway-token",
+          TEST_FAILURE_PAYLOAD: JSON.stringify({
+            hook_event_name: "StopFailure",
+            error,
+            error_details: "synthetic-secret-do-not-forward",
+            last_assistant_message: "synthetic-secret-do-not-forward",
+          }),
+        },
+      })
+        .then((output) => ({ ...output, code: 0, killed: false }))
+        .catch((failure) => failure);
+      if (mode === "interactive") {
+        expect(result.code).toBe(0);
+        expect(
+          await readFile(path.join(runtime, "attention"), "utf8"),
+        ).toContain("API error: check terminal");
+        await expect(
+          readFile(path.join(runtime, "turn-complete")),
+        ).rejects.toMatchObject({ code: "ENOENT" });
+        await expect(
+          readFile(path.join(runtime, "test-turn.failure")),
+        ).rejects.toMatchObject({ code: "ENOENT" });
+        return;
+      }
+      expect(result.code).toBe(1);
+      expect(result.killed).not.toBe(true);
+      const failure = JSON.parse(
+        await readFile(path.join(runtime, "test-turn.failure"), "utf8"),
+      );
+      expect(failure).toMatchObject({ version: 1, code });
+      expect(failure.message).toContain("Claude Code");
+      expect(JSON.stringify(failure)).not.toContain("synthetic-secret");
+      expect(JSON.stringify(failure)).not.toContain("unrecognized-secret");
+      expect(result.stdout).not.toContain("synthetic-secret");
+      expect(result.stderr).not.toContain("synthetic-secret");
+      expect(result.stdout).toContain(failure.message);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test.each([
     "subscription",
     "provider",
   ])("isolates %s authentication at CLI startup", async (authentication) => {
@@ -164,6 +253,34 @@ fi
       expect(settings.hooks.Stop[0].hooks[0].command).toBe(
         path.join(runtime, "transcript-hook.sh"),
       );
+
+      // Capture identity at startup, before a first response can be cancelled.
+      for (const sessionId of ["original-session", "unrelated-session"]) {
+        await execFileAsync(
+          "bash",
+          [
+            "-c",
+            'printf "%s" "$TEST_HOOK_PAYLOAD" | "$1"',
+            "hook-test",
+            settings.hooks.SessionStart[0].hooks[0].command,
+          ],
+          {
+            env: {
+              ...process.env,
+              ARCHESTRA_AGENT_RUNTIME_DIR: runtime,
+              TEST_HOOK_PAYLOAD: JSON.stringify({
+                hook_event_name: "SessionStart",
+                session_id: sessionId,
+              }),
+            },
+          },
+        );
+        expect(
+          (
+            await readFile(path.join(runtime, "claude-session-id"), "utf8")
+          ).trim(),
+        ).toBe("original-session");
+      }
 
       if (mode === "one_shot") {
         expect(args).toContain("--settings");

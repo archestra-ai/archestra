@@ -1,7 +1,7 @@
 "use client";
 
 import { Eye, Pencil, Trash2 } from "lucide-react";
-import { TableRowActions } from "@/components/table-row-actions";
+import { ResourceTableRowActions } from "@/components/resource-table-row-actions";
 import type { A2aRemoteAgent } from "@/lib/a2a-remote-agents.query";
 
 export function A2aRemoteAgentActions({
@@ -16,7 +16,9 @@ export function A2aRemoteAgentActions({
   onDelete: () => void;
 }) {
   return (
-    <TableRowActions
+    <ResourceTableRowActions
+      kind="remoteAgent"
+      resource={canManage ? agent : null}
       itemName={agent.name}
       actions={[
         canManage

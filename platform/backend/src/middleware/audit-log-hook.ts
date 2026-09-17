@@ -365,7 +365,6 @@ const AUDIT_DENYLIST: readonly AuditDenylistEntry[] = [
   },
   { kind: "route", value: "/api/mcp_server/:id/inspect" },
   { kind: "route", value: "/api/connectors/:id/test" },
-  { kind: "route", value: "/api/agents/:id/suggest-skill-description" },
   // Children of the now-audited /api/projects/:id that change nothing on the
   // project row: a pin is per-user state (projectPinsTable is audited:false),
   // and instructions are file content (filesTable is audited:false). These two

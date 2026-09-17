@@ -385,9 +385,6 @@ importers:
       '@smithy/util-utf8':
         specifier: ^4.2.2
         version: 4.2.2
-      '@toon-format/toon':
-        specifier: ^2.3.1
-        version: 2.3.1
       '@types/pdf-parse':
         specifier: ^1.1.5
         version: 1.1.5
@@ -884,6 +881,9 @@ importers:
       use-stick-to-bottom:
         specifier: ^1.1.3
         version: 1.1.3(react@19.2.4)
+      web-vitals:
+        specifier: 5.3.0
+        version: 5.3.0
       zod:
         specifier: 'catalog:'
         version: 4.3.6
@@ -965,19 +965,19 @@ importers:
     dependencies:
       '@ai-sdk/anthropic':
         specifier: ^3.0.58
-        version: 3.0.111(zod@4.3.6)
+        version: 3.0.111(zod@4.5.4)
       '@ai-sdk/openai':
         specifier: ^3.0.41
-        version: 3.0.99(zod@4.3.6)
+        version: 3.0.99(zod@4.5.4)
       '@modelcontextprotocol/sdk':
         specifier: ^1.27.1
-        version: 1.27.1(zod@4.3.6)
+        version: 1.27.1(zod@4.5.4)
       ai:
         specifier: 'catalog:'
-        version: 6.0.193(zod@4.3.6)
+        version: 6.0.193(zod@4.5.4)
       zod:
-        specifier: ^4.1.13
-        version: 4.3.6
+        specifier: ^4.5.4
+        version: 4.5.4
     devDependencies:
       '@types/node':
         specifier: ^25.5.0
@@ -5898,9 +5898,6 @@ packages:
 
   '@tokenizer/token@0.3.0':
     resolution: {integrity: sha512-OvjF+z51L3ov0OyAU0duzsYuvO01PH7x4t6DJx+guahgTnBHkhJdG7soQeTSFLWN3efnHyibZ4Z8l2EuWwJN3A==}
-
-  '@toon-format/toon@2.3.1':
-    resolution: {integrity: sha512-sWqEMeAJGMda9qRrfPKrX3C4c33CO9SJuvJzzrcBEn5sbDB+k6pSLkDsfN0rVnLQwR97MV3sDgVbcxQNsq8xVw==}
 
   '@turbo/darwin-64@2.9.14':
     resolution: {integrity: sha512-t7QiPflaEyBE4oayeZtSmu4mEfjgIrcNlNNl1z1dmIVPqEdtA7+CfTf8d7KXsOGPh6aNgWjKxyvQg9uGfDQF+A==}
@@ -10934,6 +10931,9 @@ packages:
   zod@4.3.6:
     resolution: {integrity: sha512-rftlrkhHZOcjDwkGlnUtZZkvaPHCsDATp4pGpuOOMDaTdDDXF91wuVDJoWoPsKX/3YPQ5fHuF3STjcYyKr+Qhg==}
 
+  zod@4.5.4:
+    resolution: {integrity: sha512-sC95tT5iHHH9gtpj6A81kh+NEaRAUFN+qlUPDUbRfOMvNf5QCBqsb3WgvnpVtK5Y+4UfA6KqufotuTvMGiTlsA==}
+
   zwitch@2.0.4:
     resolution: {integrity: sha512-bXE4cR/kVZhKZX/RjPEflHaKVhUVl85noU3v6b8apfQEc1x4A+zBxjZ4lN8LqGd6WZ3dl98pY4o717VFmoPp+A==}
 
@@ -10965,6 +10965,12 @@ snapshots:
       '@ai-sdk/provider-utils': 4.0.46(zod@4.3.6)
       zod: 4.3.6
 
+  '@ai-sdk/anthropic@3.0.111(zod@4.5.4)':
+    dependencies:
+      '@ai-sdk/provider': 3.0.15
+      '@ai-sdk/provider-utils': 4.0.46(zod@4.5.4)
+      zod: 4.5.4
+
   '@ai-sdk/anthropic@3.0.58(zod@4.3.6)':
     dependencies:
       '@ai-sdk/provider': 3.0.8
@@ -10990,6 +10996,13 @@ snapshots:
       '@ai-sdk/provider-utils': 4.0.27(zod@4.3.6)
       '@vercel/oidc': 3.2.0
       zod: 4.3.6
+
+  '@ai-sdk/gateway@3.0.121(zod@4.5.4)':
+    dependencies:
+      '@ai-sdk/provider': 3.0.10
+      '@ai-sdk/provider-utils': 4.0.27(zod@4.5.4)
+      '@vercel/oidc': 3.2.0
+      zod: 4.5.4
 
   '@ai-sdk/google-vertex@4.0.80(zod@4.3.6)':
     dependencies:
@@ -11038,6 +11051,12 @@ snapshots:
       '@ai-sdk/provider-utils': 4.0.46(zod@4.3.6)
       zod: 4.3.6
 
+  '@ai-sdk/openai@3.0.99(zod@4.5.4)':
+    dependencies:
+      '@ai-sdk/provider': 3.0.15
+      '@ai-sdk/provider-utils': 4.0.46(zod@4.5.4)
+      zod: 4.5.4
+
   '@ai-sdk/provider-utils@4.0.19(zod@4.3.6)':
     dependencies:
       '@ai-sdk/provider': 3.0.8
@@ -11052,6 +11071,13 @@ snapshots:
       eventsource-parser: 3.1.0
       zod: 4.3.6
 
+  '@ai-sdk/provider-utils@4.0.27(zod@4.5.4)':
+    dependencies:
+      '@ai-sdk/provider': 3.0.10
+      '@standard-schema/spec': 1.1.0
+      eventsource-parser: 3.1.0
+      zod: 4.5.4
+
   '@ai-sdk/provider-utils@4.0.46(zod@4.3.6)':
     dependencies:
       '@ai-sdk/provider': 3.0.15
@@ -11059,6 +11085,14 @@ snapshots:
       eventsource-parser: 3.1.0
       undici: 7.29.0
       zod: 4.3.6
+
+  '@ai-sdk/provider-utils@4.0.46(zod@4.5.4)':
+    dependencies:
+      '@ai-sdk/provider': 3.0.15
+      '@standard-schema/spec': 1.1.0
+      eventsource-parser: 3.1.0
+      undici: 7.29.0
+      zod: 4.5.4
 
   '@ai-sdk/provider@3.0.10':
     dependencies:
@@ -13246,6 +13280,28 @@ snapshots:
       raw-body: 3.0.2
       zod: 4.3.6
       zod-to-json-schema: 3.25.1(zod@4.3.6)
+    transitivePeerDependencies:
+      - supports-color
+
+  '@modelcontextprotocol/sdk@1.27.1(zod@4.5.4)':
+    dependencies:
+      '@hono/node-server': 1.19.14(hono@4.12.25)
+      ajv: 8.18.0
+      ajv-formats: 3.0.1(ajv@8.18.0)
+      content-type: 1.0.5
+      cors: 2.8.6
+      cross-spawn: 7.0.6
+      eventsource: 3.0.7
+      eventsource-parser: 3.1.0
+      express: 5.2.0
+      express-rate-limit: 8.3.1(express@5.2.0)
+      hono: 4.12.25
+      jose: 6.2.1
+      json-schema-typed: 8.0.2
+      pkce-challenge: 5.0.1
+      raw-body: 3.0.2
+      zod: 4.5.4
+      zod-to-json-schema: 3.25.1(zod@4.5.4)
     transitivePeerDependencies:
       - supports-color
 
@@ -16589,8 +16645,6 @@ snapshots:
 
   '@tokenizer/token@0.3.0': {}
 
-  '@toon-format/toon@2.3.1': {}
-
   '@turbo/darwin-64@2.9.14':
     optional: true
 
@@ -17233,6 +17287,14 @@ snapshots:
       '@ai-sdk/provider-utils': 4.0.27(zod@4.3.6)
       '@opentelemetry/api': 1.9.1
       zod: 4.3.6
+
+  ai@6.0.193(zod@4.5.4):
+    dependencies:
+      '@ai-sdk/gateway': 3.0.121(zod@4.5.4)
+      '@ai-sdk/provider': 3.0.10
+      '@ai-sdk/provider-utils': 4.0.27(zod@4.5.4)
+      '@opentelemetry/api': 1.9.1
+      zod: 4.5.4
 
   ajv-formats@2.1.1(ajv@8.18.0):
     optionalDependencies:
@@ -22288,8 +22350,14 @@ snapshots:
     dependencies:
       zod: 4.3.6
 
+  zod-to-json-schema@3.25.1(zod@4.5.4):
+    dependencies:
+      zod: 4.5.4
+
   zod@3.25.76: {}
 
   zod@4.3.6: {}
+
+  zod@4.5.4: {}
 
   zwitch@2.0.4: {}

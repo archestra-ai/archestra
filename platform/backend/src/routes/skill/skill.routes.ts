@@ -15,7 +15,6 @@ import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import {
   getAgentTypePermissionChecker,
   getResourceForAgentType,
-  requireAgentModifyPermission,
 } from "@/auth/agent-type-permissions";
 import {
   getSkillPermissionChecker,
@@ -23,7 +22,6 @@ import {
   type SkillPermissionChecker,
 } from "@/auth/skill-permissions";
 import { isGlobalAdmin, userHasPermission } from "@/auth/utils";
-import { withDbTransaction } from "@/database";
 import logger from "@/logging";
 import {
   AgentActivationSkillRuleModel,
@@ -32,7 +30,6 @@ import {
   AgentSkillModel,
   CreatedByModel,
   lookupCreator,
-  MemberModel,
   OrganizationModel,
   SkillEnvironmentModel,
   SkillFileModel,
@@ -49,7 +46,7 @@ import {
 } from "@/models";
 import { publishesSkills } from "@/services/agent-skill-resolution";
 import { assertCanAssignEnvironment } from "@/services/environments/environment";
-import { agentToSkill, SCOPE_FIELD } from "@/skills/agent-migration";
+import { transferResourceOwnership } from "@/services/resource-ownership";
 import {
   builtInSkillShippedWrite,
   findBuiltInSkillBySourceRef,
@@ -62,7 +59,6 @@ import {
   discoverSkills,
   importSkills,
   MAX_FILES_PER_SKILL,
-  MAX_SKILL_FILE_BYTES,
   SkillImportError,
 } from "@/skills/github-import";
 import {
@@ -71,7 +67,6 @@ import {
   SkillParseError,
 } from "@/skills/parser";
 import { skillCatalog } from "@/skills/skill-catalog";
-import { suggestSkillDescription } from "@/skills/skill-description";
 import {
   isSkillNameConflict,
   refineUniqueFilePaths,
@@ -202,44 +197,6 @@ const SkillCatalogResultSchema = z.object({
   fileCount: z.number(),
 });
 
-/** One source-agent field and how the conversion preserved it. */
-const MigrationFieldSchema = z.object({
-  field: z.string(),
-  detail: z.string(),
-});
-
-/**
- * Record of how an agent→skill conversion mapped each field: `carried` to a
- * native skill field, or `annotated` into the SKILL.md body / metadata. Nothing
- * is silently dropped, so the UI can show the user exactly what changed.
- */
-const MigrationReportSchema = z.object({
-  carried: z.array(MigrationFieldSchema),
-  annotated: z.array(MigrationFieldSchema),
-});
-
-/** An LLM-suggested skill description for the convert-to-skill dialog. */
-const SuggestSkillDescriptionResponseSchema = z.object({
-  description: z.string(),
-});
-
-const ConvertAgentToSkillResponseSchema = z.object({
-  skill: SkillDetailSchema,
-  report: MigrationReportSchema,
-  /** Whether the source agent was deleted as part of the conversion. */
-  deletedAgent: z.boolean(),
-});
-
-/**
- * Conversion options gathered in the confirm dialog: an explicit skill
- * description (required there when the agent has none) and whether to delete the
- * source agent once the skill exists.
- */
-const ConvertAgentToSkillInputSchema = z.object({
-  description: z.string().trim().min(1).max(1024).optional(),
-  deleteAgent: z.boolean().optional(),
-});
-
 /**
  * Manual create/update payload: raw SKILL.md, resource files, and the skill's
  * visibility scope.
@@ -351,6 +308,30 @@ const DiscoveredSkillSchema = z.object({
 });
 
 const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  fastify.post(
+    "/api/skills/:id/transfer-ownership",
+    {
+      schema: {
+        operationId: RouteId.TransferSkillOwnership,
+        description: "Transfer ownership to another organization member",
+        tags: ["Ownership"],
+        params: z.object({ id: z.string().uuid() }),
+        body: z.object({ ownerId: z.string().min(1) }),
+        response: constructResponseSchema(z.object({ success: z.boolean() })),
+      },
+    },
+    async ({ params, body, user, organizationId }) => {
+      await transferResourceOwnership({
+        kind: "skill",
+        id: params.id,
+        ownerId: body.ownerId,
+        userId: user.id,
+        organizationId,
+      });
+      return { success: true };
+    },
+  );
+
   registerEntityLabelRoutes(fastify, {
     basePath: "/api/skills",
     tag: "Skills",
@@ -762,175 +743,6 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       return reply.send(await loadSkillDetail(skill));
-    },
-  );
-
-  // Lives in the skill plugin (not the agent plugin) so it can reuse the
-  // skill-create authorization helpers; the button that calls it sits on the
-  // agent page. Non-destructive: the source agent is left untouched.
-  fastify.post(
-    "/api/agents/:id/convert-to-skill",
-    {
-      schema: {
-        operationId: RouteId.ConvertAgentToSkill,
-        description:
-          "Convert an internal agent into a new Agent Skill. The skill inherits the agent's scope. The source agent is left intact unless deleteAgent is set.",
-        tags: ["Skills"],
-        params: z.object({ id: UuidIdSchema }),
-        body: ConvertAgentToSkillInputSchema,
-        response: constructResponseSchema(ConvertAgentToSkillResponseSchema),
-      },
-    },
-    async ({ params: { id }, body, user, organizationId }, reply) => {
-      const { agent, agentChecker } =
-        await authorizeInternalAgentForSkillConversion({
-          id,
-          userId: user.id,
-          organizationId,
-        });
-
-      let deletedAgent = false;
-
-      // If the caller wants the source agent gone, prove they may delete it
-      // BEFORE creating the skill, so a permission failure doesn't leave an
-      // orphan skill behind. Mirrors the agent DELETE route's authorization.
-      if (body.deleteAgent) {
-        try {
-          agentChecker.require(agent.agentType, "delete");
-        } catch {
-          throw new ApiError(
-            403,
-            "You do not have permission to delete this agent",
-          );
-        }
-        const agentUserTeamIds = agentChecker.isAdmin(agent.agentType)
-          ? []
-          : await TeamModel.getUserTeamIds(user.id);
-        requireAgentModifyPermission({
-          checker: agentChecker,
-          agentType: agent.agentType,
-          agentScope: agent.scope,
-          agentAuthorId: agent.authorId,
-          agentTeamIds: agent.teams.map((team) => team.id),
-          userTeamIds: agentUserTeamIds,
-          userId: user.id,
-        });
-      }
-
-      const { draft, teamIds, report } = agentToSkill(agent, {
-        description: body.description,
-      });
-
-      // Agent system prompts are unbounded, so enforce the same content-size cap
-      // the manual/import paths apply to SKILL.md (SkillManifestInputSchema). An
-      // oversized skill would otherwise slip in here and later bloat chat
-      // activation payloads and the model's context.
-      if (draft.content.length > MAX_SKILL_FILE_BYTES) {
-        throw new ApiError(
-          400,
-          `Converted skill content exceeds the ${MAX_SKILL_FILE_BYTES}-character limit. Trim the agent's system prompt before converting.`,
-        );
-      }
-
-      // ...and be allowed to create a skill in the scope inherited from the agent.
-      await authorizeSkillCreate({
-        userId: user.id,
-        organizationId,
-        scope: draft.scope,
-        teamIds,
-      });
-
-      // Create the skill and (optionally) delete the source agent in one
-      // transaction so convert+delete is all-or-nothing: a failed delete rolls
-      // back the skill insert, so a retry never collides with a half-created
-      // skill and the user is never left with duplicated state.
-      const skill = await withTeamFkErrorMapped(() =>
-        withDbTransaction(async (tx) => {
-          const created = await SkillModel.createWithFiles(
-            {
-              skill: {
-                ...toSkillInsertFields(draft),
-                organizationId,
-                authorId: user.id,
-                sourceType: "manual",
-                scope: draft.scope,
-              },
-              files: [],
-              teamIds,
-              // inherit the source agent's environment (if any) so the
-              // converted skill stays visible where the agent lived; a
-              // Default-environment agent yields an unrestricted skill.
-              environmentIds: agent.environmentId ? [agent.environmentId] : [],
-            },
-            tx,
-          );
-          if (!created) {
-            // name already taken in this visibility scope — nothing was
-            // inserted, so rolling back here leaves no orphan.
-            throw skillNameConflict(draft.name);
-          }
-          // Eligibility was checked above; delete inside the same transaction.
-          if (body.deleteAgent) {
-            deletedAgent = await AgentModel.delete(agent.id, tx);
-            // Same as the agent DELETE route: members who chose this agent as
-            // their personal default fall back to the organization default.
-            if (deletedAgent) {
-              await MemberModel.clearDefaultAgent(agent.id, tx);
-            }
-          }
-          return created;
-        }),
-      );
-
-      // this surface persists the agent's scope (and teams) verbatim, so report
-      // it carried. The MCP draft path can't and reports it annotated instead.
-      report.carried.push({ field: SCOPE_FIELD, detail: draft.scope });
-
-      logger.info(
-        { agentId: agent.id, skillId: skill.id, organizationId, deletedAgent },
-        "[Skills] Converted agent to skill",
-      );
-      return reply.send({
-        skill: await loadSkillDetail(skill),
-        report,
-        deletedAgent,
-      });
-    },
-  );
-
-  fastify.post(
-    "/api/agents/:id/suggest-skill-description",
-    {
-      schema: {
-        operationId: RouteId.SuggestSkillDescription,
-        description:
-          "Suggest a skill description for an agent using an LLM, for the convert-to-skill flow. Does not modify the agent or create a skill.",
-        tags: ["Skills"],
-        params: z.object({ id: UuidIdSchema }),
-        response: constructResponseSchema(
-          SuggestSkillDescriptionResponseSchema,
-        ),
-      },
-    },
-    async ({ params: { id }, user, organizationId }, reply) => {
-      const { agent } = await authorizeInternalAgentForSkillConversion({
-        id,
-        userId: user.id,
-        organizationId,
-      });
-
-      const description = await suggestSkillDescription({
-        agent,
-        organizationId,
-        userId: user.id,
-      });
-      if (!description) {
-        throw new ApiError(
-          502,
-          "Could not generate a description. Please write one manually.",
-        );
-      }
-      return reply.send({ description });
     },
   );
 
@@ -2567,55 +2379,6 @@ async function authorizeSkillCreate(params: {
     teamIds: params.teamIds,
     organizationId: params.organizationId,
   });
-}
-
-/**
- * Read-authorize an internal agent for the convert-to-skill flow, shared by the
- * convert and suggest-description routes.
- *
- * admin-view load bypasses access filtering; the read + scope checks below
- * re-impose it BEFORE we reveal anything about the resource — otherwise a user
- * with only agent:read could distinguish an inaccessible
- * profile/MCP-gateway/LLM-proxy from a nonexistent id via the "not an internal
- * agent" 400. Only once the caller is allowed to read it do we disclose that it
- * is the wrong kind of resource for conversion.
- *
- * Returns the loaded agent and its permission checker so callers can run
- * follow-up checks (e.g. delete) without reloading.
- */
-async function authorizeInternalAgentForSkillConversion(params: {
-  id: string;
-  userId: string;
-  organizationId: string;
-}) {
-  const { id, userId, organizationId } = params;
-
-  const agent = await AgentModel.findById(id, userId, true);
-  if (!agent || agent.organizationId !== organizationId) {
-    throw new ApiError(404, "Agent not found");
-  }
-
-  const agentChecker = await getAgentTypePermissionChecker({
-    userId,
-    organizationId,
-  });
-  try {
-    agentChecker.require(agent.agentType, "read");
-  } catch {
-    throw new ApiError(404, "Agent not found");
-  }
-  if (!agentChecker.isAdmin(agent.agentType)) {
-    const accessible = await AgentModel.findById(id, userId, false);
-    if (!accessible) {
-      throw new ApiError(404, "Agent not found");
-    }
-  }
-
-  if (agent.agentType !== "agent" || agent.builtInAgentConfig) {
-    throw new ApiError(400, "Only internal agents can be converted to skills.");
-  }
-
-  return { agent, agentChecker };
 }
 
 /**

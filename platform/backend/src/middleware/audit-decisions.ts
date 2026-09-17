@@ -9,6 +9,8 @@ import ChatOpsChannelBindingModel from "@/models/chatops-channel-binding";
 import EnvironmentModel from "@/models/environment";
 import EnvironmentDefaultUserLimitModel from "@/models/environment-default-user-limit";
 import EnvironmentResourceDefaultModel from "@/models/environment-resource-default";
+import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
+import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import KbDirectoryModel from "@/models/kb-directory";
 import KbFileModel from "@/models/kb-file";
@@ -20,6 +22,7 @@ import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
 import McpServerModel from "@/models/mcp-server";
 import MemberModel from "@/models/member";
 import ModelModel from "@/models/model";
+import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import OrganizationModel from "@/models/organization";
 import OrganizationRoleModel from "@/models/organization-role";
 import PluginModel from "@/models/plugin";
@@ -81,6 +84,10 @@ type AuditDecision =
  * @public — consumed by audit-log-snapshot.test.ts invariant tests
  */
 export const AUDIT_DECISIONS = {
+  guardrailsPolicyRevisionsTable: {
+    audited: true,
+    model: GuardrailsPolicyModel,
+  },
   // =========================================================================
   // Audited resources — mutations captured via AUDITABLE_ROUTES
   // =========================================================================
@@ -937,6 +944,11 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "ephemeral in-app notifications; per-user UI state",
   },
+  guardrailsDeploymentTable: {
+    audited: true,
+    model: GuardrailsDeploymentModel,
+  },
+  openappaGithubSyncTable: { audited: true, model: OpenAppaGithubSyncModel },
   openappaEventsTable: {
     audited: false,
     reason: "OpenAPPA owns its immutable policy event history",

@@ -1,27 +1,87 @@
 # Archestra × OpenAPPA
 
 APPA evaluates tool calls and results at the existing LLM-proxy Tool Guardrails
-checkpoints. Chat supplies the user and conversation identity.
+checkpoints. Clients supply a stable session ID; caller identity is optional attribution.
 The special MCP remedy tool also calls the embedded runtime.
 
-## Feature flag
+Session state is keyed only by session ID. Participants in the same Slack thread
+share trust state and pending calls. Internal agent requests use the local-request
+trust boundary; external requests still require platform authentication.
+The unreleased session-key migration clears old sessions, events, and receipts.
+Saved policies remain intact.
 
-`ARCHESTRA_OPENAPPA_ENABLED` defaults to `false`. Only explicit `true` enables
-APPA; a configured policy path and `ARCHESTRA_BETA` do not activate it.
-`ARCHESTRA_OPENAPPA_POLICY_PATH` is required when enabled. Restart the backend
-when changing either setting.
+## Startup configuration
 
-| Boundary | Flag off | Flag on |
+`ARCHESTRA_OPENAPPA_ENABLED` defaults to `false`. Explicit `true` enables APPA
+and the OpenAPPA editor. It automatically registers the proxy plugin.
+The **Enable Guardrails v2** switch on `/openappa` controls APPA enforcement
+across every organization and agent in the deployment. It defaults to off and
+requires organization administration permission to change. Both the server flag
+and this shared switch must be on for APPA to enforce policies. Each request
+reads the shared setting, so replicas do not rely on a process-local switch.
+Policy editing and GitHub sync remain available while enforcement is off.
+`ARCHESTRA_BETA` and the plugin list alone do not activate them.
+The OpenAPPA editor stores organization policy revisions in PostgreSQL. Restart
+the backend when changing the flag; saving a policy requires no restart.
+
+Existing trusted-data and invocation guardrails always remain active. When APPA
+is enabled, existing result filters run first and APPA evaluates their filtered
+output. Rewritten tool calls pass existing invocation checks before APPA reserves
+them; either engine can block a call. Disabling APPA does not disable existing
+guardrails or delete policies. A request already inside APPA fails closed if the
+switch is turned off before its next native operation.
+
+The HTTP API and agent read/validate/update tools share validation and revision
+checks. Edits compile without executing external services. The next dispatch
+loads the latest saved revision under the native runtime lock. New conversations
+use it; existing conversations retain their recorded policy.
+
+The editor accepts `[policy]` and URL/builtin bindings in `[externals]`. File
+includes, local commands, and runtime-owned settings are rejected. Tokens are
+referenced through `token_env`; policy documents must not contain credentials.
+Existing file-based deployments must copy their policy into the editor. An
+unconfigured organization starts with only a catch-all annotator. It returns
+empty changes and requirements, leaving trust and audience unchanged. Explicit
+tool rules take precedence over the catch-all. The local backend serves this
+fixed answer without calling a model or accessing user data.
+
+| Boundary | APPA inactive | Flag and global switch on |
 | --- | --- | --- |
-| Incoming tool results | Existing result policies | APPA admission and saved output |
-| Outgoing calls | Existing invocation policies | APPA decision |
+| Incoming tool results | Existing result policies | Existing result policies, then APPA admission and saved output |
+| Outgoing calls | Existing invocation policies | Existing invocation policies, then APPA decision |
 | Refusal envelope | Existing adapter | Same adapter, APPA explanation and remedies |
-| Session header | No APPA wiring | User and conversation identity |
+| Session header | No APPA wiring | Stable conversation identity |
 | Special MCP remedy | Hidden and unavailable | Existing embedded remedy execution |
 | Runtime | Not loaded or initialized | Lazy native initialization; errors fail closed |
 
 Migrations remain additive and deployment-wide; runtime APPA records are accessed
-only when enabled. The existing guardrails remain the flag-off behavior.
+only when enabled. The existing guardrails remain active with the APPA flag off.
+
+## GitHub policy sync
+
+Open **OpenAPPA** (`/openappa`) and select **Connect GitHub** below the policy
+editor. `/guardrails-v2` redirects to this page. With APPA enabled, organization
+administrators can choose an `owner/repository`, branch or tag (blank uses the
+default branch), and a repository-relative TOML file. Public repositories need no
+credential; private repositories use an existing organization token or GitHub App
+credential, with credential-read permission required to select one.
+
+Saving the source queues the first pull. Choose every 15 minutes, every hour, or
+once a day; **Sync now** requests an immediate pull. The panel shows the last
+check, accepted commit, and any error. The scheduler checks for due sources every
+minute and deduplicates queued/running pulls per organization.
+
+Each pull resolves a commit before downloading the file, limits the policy to
+1 MiB of UTF-8, and runs the native policy validator. Accepted changes atomically
+create an organization policy revision and record source metadata. Unchanged
+bytes create no additional revision. Failed pulls preserve the active policy;
+a source edit or disconnect prevents an in-flight stale pull from publishing.
+
+While connected, the policy editor is read only and manual API/agent updates are
+rejected. **Stop syncing** keeps the current policy and enables local editing.
+GitHub sync only pulls changes; it does not push editor changes to the repository.
+New conversations use the accepted revision; existing conversations retain theirs.
+Migration `0477_appa_github_sync` adds source storage, task deduplication, and the deployment switch.
 
 ## Tool calls and results
 
@@ -74,9 +134,9 @@ retains the existing blocking behavior.
 This integration does not send `Prompt` or `TurnEnd`. Abandoned-call recovery,
 unresolved-dispatch cleanup and unused remedy-permit lifetime are unchanged.
 The enabled prototype still refuses locked chats and delegation and disables
-detached tool tasks. These restrictions do not apply with the flag off.
+detached tool tasks. These restrictions do not apply with the APPA flag off.
 
-Policy reload, general attachment/final-answer enforcement, child return
+General attachment/final-answer enforcement, child return
 integration, provider-hosted tools and operator recovery remain follow-up work.
 Start new conversations when enabling APPA: old tool results have no receipts.
 

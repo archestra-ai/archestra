@@ -42,6 +42,7 @@ export function McpCatalogItemEditPage({ id }: { id: string }) {
   return (
     <PageLayout
       maxWidth="wizard"
+      contentOverflowX="clip"
       title={
         item ? (
           <span className="flex min-w-0 items-center gap-3">

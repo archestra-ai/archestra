@@ -1976,22 +1976,50 @@ export function betaFeatureEnabled(envValue: string | undefined): boolean {
   return envValue === "true";
 }
 
+const LLM_PROXY_PLUGIN_NAMES = ["appa"] as const;
+type LlmProxyPluginName = (typeof LLM_PROXY_PLUGIN_NAMES)[number];
+
 /**
- * APPA must be explicitly enabled; a policy path or ARCHESTRA_BETA does not activate it.
+ * Parses the startup-only allowlist and registers APPA only through its feature flag.
+ * @public — exported for testability
+ */
+export function parseLlmProxyPlugins(
+  value: string | undefined,
+  appaEnabled = false,
+): LlmProxyPluginName[] {
+  const plugins = parseCommaSeparatedList(value ?? "");
+  const invalid = plugins.filter(
+    (plugin) => !(LLM_PROXY_PLUGIN_NAMES as readonly string[]).includes(plugin),
+  );
+  if (invalid.length > 0) {
+    throw new Error(
+      `ARCHESTRA_LLM_PROXY_PLUGINS contains unsupported plugin names: ${invalid.join(", ")}. Supported values: ${LLM_PROXY_PLUGIN_NAMES.join(", ")}`,
+    );
+  }
+  if (new Set(plugins).size !== plugins.length) {
+    throw new Error("ARCHESTRA_LLM_PROXY_PLUGINS must not contain duplicates");
+  }
+  if (!appaEnabled) {
+    return plugins.filter(
+      (plugin) => plugin !== "appa",
+    ) as LlmProxyPluginName[];
+  }
+  if (!plugins.includes("appa")) plugins.push("appa");
+  return plugins as LlmProxyPluginName[];
+}
+
+/**
+ * Validates APPA settings only when its feature flag is explicitly enabled.
  * @public — exported for testability
  */
 export function parseOpenAppaConfig(
   enabled: string | undefined,
-  policyPath: string | undefined,
+  yellEnabled?: string,
 ) {
-  const isEnabled = enabled === "true";
-  const path = policyPath?.trim() || undefined;
-  if (isEnabled && !path) {
-    throw new Error(
-      "ARCHESTRA_OPENAPPA_POLICY_PATH is required when ARCHESTRA_OPENAPPA_ENABLED=true",
-    );
-  }
-  return { enabled: isEnabled, policyPath: path };
+  return {
+    enabled: enabled === "true",
+    yellEnabled: enabled === "true" && (yellEnabled ?? "true") === "true",
+  };
 }
 
 /**
@@ -2181,11 +2209,17 @@ const fileStorageS3Config = parseFileStorageS3Config({
   },
 });
 
+const openappa = parseOpenAppaConfig(
+  process.env.ARCHESTRA_OPENAPPA_ENABLED,
+  process.env.ARCHESTRA_OPENAPPA_YELL_ENABLED,
+);
+const llmProxyPlugins = parseLlmProxyPlugins(
+  process.env.ARCHESTRA_LLM_PROXY_PLUGINS,
+  openappa.enabled,
+);
+
 const config = {
-  openappa: parseOpenAppaConfig(
-    process.env.ARCHESTRA_OPENAPPA_ENABLED,
-    process.env.ARCHESTRA_OPENAPPA_POLICY_PATH,
-  ),
+  openappa,
   frontendBaseUrl,
   api: {
     host: isDevelopment ? "127.0.0.1" : "0.0.0.0",
@@ -2313,6 +2347,15 @@ const config = {
      * regardless of this value.
      */
     enabled: process.env.ARCHESTRA_AGENT_RUNTIME_ENABLED === "true",
+    /** Ready spare workspaces per compatible runtime configuration. */
+    warmPoolSize: parseNonNegativeInt(
+      process.env.ARCHESTRA_AGENT_RUNTIME_WARM_POOL_SIZE,
+      0,
+    ),
+    warmPoolMaxPools: parsePositiveInt(
+      process.env.ARCHESTRA_AGENT_RUNTIME_WARM_POOL_MAX_POOLS,
+      4,
+    ),
     /**
      * Privileged pods have node-level impact. Agent administrators cannot
      * enable them unless the deployment operator explicitly opts in too.
@@ -2613,8 +2656,11 @@ const config = {
         identityToken: process.env.ARCHESTRA_ANTHROPIC_IDENTITY_TOKEN,
       }),
       vertexAi: {
-        enabled: process.env.ARCHESTRA_ANTHROPIC_VERTEX_AI_ENABLED === "true",
-        project: process.env.ARCHESTRA_ANTHROPIC_VERTEX_AI_PROJECT || "",
+        enabled: Boolean(
+          process.env.ARCHESTRA_ANTHROPIC_VERTEX_AI_PROJECT?.trim(),
+        ),
+        project:
+          process.env.ARCHESTRA_ANTHROPIC_VERTEX_AI_PROJECT?.trim() || "",
         location:
           process.env.ARCHESTRA_ANTHROPIC_VERTEX_AI_LOCATION || "global",
         credentialsFile:
@@ -3414,6 +3460,7 @@ const config = {
   production: isProduction,
   environment,
   llmProxy: {
+    plugins: llmProxyPlugins,
     maxVirtualKeysPerApiKey: parsePositiveInt(
       process.env.ARCHESTRA_LLM_PROXY_MAX_VIRTUAL_KEYS,
       10,

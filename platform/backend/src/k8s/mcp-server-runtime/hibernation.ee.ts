@@ -29,6 +29,7 @@ import { deriveDeploymentState } from "./hibernation-state-machine.ee";
 import type K8sDeployment from "./k8s-deployment";
 import {
   McpServerDeploymentFailedError,
+  McpServerReadinessTimeoutError,
   McpServerUnschedulableError,
 } from "./k8s-deployment";
 
@@ -50,19 +51,56 @@ import {
  * safe to retry shortly. `detail` replaces the generic reason when the wake
  * knows more — a cluster with no free capacity, an attempt cut by its
  * deadline — while keeping the same retryable shape for callers.
+ *
+ * `concluded` separates the two very different things this one retryable
+ * shape carries. A wake can fail because it LOST A RACE it is allowed to lose
+ * (a superseded transition, a lease another replica still holds) — those
+ * settle in seconds, and the demand path is right to re-enter the wake rather
+ * than answer. Or it can fail because it RAN TO THE END of its readiness
+ * budget and reached a verdict about the cluster: no capacity to place the
+ * pod, an image the kubelet never managed to pull. Re-entering on a verdict
+ * only spends the caller's remaining budget to arrive at the same answer, and
+ * costs the caller the one thing worth having — the reason. Verdicts set this
+ * flag so {@link McpServerWakeError} consumers can tell them apart.
  */
 export class McpServerWakeError extends Error {
+  /** The wake reached a verdict rather than losing a retryable race. */
+  readonly concluded: boolean;
+  /**
+   * The reason, kept apart from the rendered message. A wake is single-flighted
+   * per PHYSICAL deployment, so its error is addressed to whichever install
+   * loaded that deployment — not necessarily the caller who receives it. A
+   * consumer that re-reports a wake's reason re-addresses it to its own server
+   * and needs the reason without the other install's name baked in.
+   */
+  readonly detail?: string;
+  /**
+   * Extra sentence appended AFTER the message's own, never spliced into it.
+   * `detail` replaces the reason clause, so anything routed through it changes
+   * a sentence that callers — and the hibernation e2e specs — match on to tell
+   * one wake failure from another. A suffix adds what the wake learned without
+   * moving what was already there.
+   */
+  readonly suffix?: string;
+
   constructor(
     serverName: string,
-    options?: ErrorOptions & { detail?: string },
+    options?: ErrorOptions & {
+      detail?: string;
+      concluded?: boolean;
+      suffix?: string;
+    },
   ) {
     super(
       `MCP server ${serverName} is waking from idle hibernation but ${
         options?.detail ?? "did not become ready in time"
-      }; retry shortly.`,
+      }; retry shortly.${options?.suffix ? ` ${options.suffix}` : ""}`,
       options,
     );
     this.name = "McpServerWakeError";
+    this.concluded = options?.concluded ?? false;
+    this.detail = options?.detail;
+    this.suffix = options?.suffix;
   }
 }
 
@@ -440,6 +478,7 @@ export async function wakeDeployment(params: {
       );
       throw new McpServerWakeError(deployment.statusSummary.serverName, {
         cause: error,
+        concluded: true,
         detail: `the cluster has no free capacity to schedule its pod (${error.schedulerMessage}). The pod stays queued and starts when capacity frees`,
       });
     }
@@ -447,8 +486,20 @@ export async function wakeDeployment(params: {
       { err: error, mcpServerId },
       "MCP server wake did not reach ready within the wait budget",
     );
+    // A pull the kubelet kept retrying and never completed is the one thing
+    // this exhausted wait can still explain. It is deliberately a SUFFIX: the
+    // sentence before it is what separates "ran out of time" from "no free
+    // capacity", and callers match on it.
+    const imagePullError =
+      error instanceof McpServerReadinessTimeoutError
+        ? error.imagePullError
+        : null;
     throw new McpServerWakeError(deployment.statusSummary.serverName, {
       cause: error,
+      concluded: true,
+      suffix: imagePullError
+        ? `The pod has not managed to pull its image (${imagePullError}); if that does not clear on its own, the image or its credentials need fixing.`
+        : undefined,
     });
   }
 

@@ -62,6 +62,7 @@ import config, {
   // SPDX-SnippetEnd
   parseK8sResourceQuantity,
   parseKeepAliveTimeoutMs,
+  parseLlmProxyPlugins,
   parseLogFormat,
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -1428,6 +1429,56 @@ describe("parseActiveChatRunPollIntervalMs", () => {
     expect(logger.warn).toHaveBeenCalledWith(
       'Invalid ARCHESTRA_CHAT_ACTIVE_RUN_REPLAY_POLL_INTERVAL_MS value "abc", using default 500',
     );
+  });
+});
+
+describe("Anthropic Vertex AI config", () => {
+  beforeEach(() => {
+    vi.resetModules();
+  });
+
+  test.each([
+    { project: "", legacyEnabled: "", enabled: false, expectedProject: "" },
+    {
+      project: "   ",
+      legacyEnabled: "true",
+      enabled: false,
+      expectedProject: "",
+    },
+    { project: "", legacyEnabled: "true", enabled: false, expectedProject: "" },
+    {
+      project: "test-project",
+      legacyEnabled: "",
+      enabled: true,
+      expectedProject: "test-project",
+    },
+    {
+      project: "test-project",
+      legacyEnabled: "false",
+      enabled: true,
+      expectedProject: "test-project",
+    },
+    {
+      project: "  test-project  ",
+      legacyEnabled: "true",
+      enabled: true,
+      expectedProject: "test-project",
+    },
+  ])("project '$project' enables Vertex AI: $enabled (legacy flag '$legacyEnabled')", async ({
+    project,
+    legacyEnabled,
+    enabled,
+    expectedProject,
+  }) => {
+    vi.stubEnv("ARCHESTRA_ANTHROPIC_VERTEX_AI_PROJECT", project);
+    vi.stubEnv("ARCHESTRA_ANTHROPIC_VERTEX_AI_ENABLED", legacyEnabled);
+
+    const { default: cfg } = await import("./config");
+
+    expect(cfg.llm.anthropic.vertexAi).toMatchObject({
+      enabled,
+      project: expectedProject,
+    });
   });
 });
 
@@ -3469,30 +3520,55 @@ describe("parseOtelCaptureContent", () => {
 });
 
 describe("OpenAPPA feature configuration", () => {
+  test("reporting defaults on for OpenAPPA and supports an explicit opt-out", () => {
+    expect(parseOpenAppaConfig("true").yellEnabled).toBe(true);
+    expect(parseOpenAppaConfig("true", "true").yellEnabled).toBe(true);
+    for (const [enabled, reporting] of [
+      [undefined, "true"],
+      ["false", "true"],
+      ["true", "false"],
+      ["true", ""],
+      ["true", "TRUE"],
+    ]) {
+      expect(parseOpenAppaConfig(enabled, reporting).yellEnabled).toBe(false);
+    }
+  });
+  test("gates APPA registration on its feature flag, regardless of the explicit plugin list", () => {
+    expect(parseLlmProxyPlugins(undefined)).toEqual([]);
+    expect(parseLlmProxyPlugins(" appa ")).toEqual([]);
+    expect(parseLlmProxyPlugins(undefined, true)).toEqual(["appa"]);
+    expect(parseLlmProxyPlugins("", true)).toEqual(["appa"]);
+    expect(parseLlmProxyPlugins(" appa ", true)).toEqual(["appa"]);
+  });
+
+  test.each([
+    false,
+    true,
+  ])("rejects invalid plugin configuration (APPA enabled=%s)", (enabled) => {
+    expect(() => parseLlmProxyPlugins("unknown", enabled)).toThrow(
+      "ARCHESTRA_LLM_PROXY_PLUGINS contains unsupported plugin names",
+    );
+    expect(() => parseLlmProxyPlugins("appa,appa", enabled)).toThrow(
+      "ARCHESTRA_LLM_PROXY_PLUGINS must not contain duplicates",
+    );
+  });
+
   test.each([
     undefined,
-    "",
     "false",
     "TRUE",
     "1",
-  ])("does not activate from a policy path or beta flag when enabled=%s", (enabled) => {
+  ])("requires explicit true to enable APPA (flag=%s)", (enabled) => {
     vi.stubEnv("ARCHESTRA_BETA", "true");
-    expect(parseOpenAppaConfig(enabled, "/policy.toml")).toEqual({
+    expect(parseOpenAppaConfig(enabled)).toEqual({
       enabled: false,
-      policyPath: "/policy.toml",
+      yellEnabled: false,
     });
-    vi.unstubAllEnvs();
   });
-  test("requires a policy path only for explicit activation", () => {
-    expect(parseOpenAppaConfig(undefined, undefined).enabled).toBe(false);
-    expect(parseOpenAppaConfig("true", "/policy.toml")).toEqual({
+  test("enables database policies without a container path", () => {
+    expect(parseOpenAppaConfig("true")).toEqual({
       enabled: true,
-      policyPath: "/policy.toml",
+      yellEnabled: true,
     });
-    for (const path of [undefined, "", "   "]) {
-      expect(() => parseOpenAppaConfig("true", path)).toThrow(
-        "ARCHESTRA_OPENAPPA_POLICY_PATH is required",
-      );
-    }
   });
 });

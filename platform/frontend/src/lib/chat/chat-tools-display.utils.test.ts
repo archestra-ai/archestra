@@ -335,3 +335,36 @@ describe("tool display helpers", () => {
     ).toBe("denied");
   });
 });
+
+it("keeps structured OpenAPPA denials out of generic compact error details", () => {
+  const part = {
+    type: "tool-archestra__whoami" as const,
+    toolCallId: "blocked-attempt",
+    state: "output-available" as const,
+    input: {},
+    output: {
+      isError: true,
+      content: [
+        { type: "text", text: "Accept the session restriction using offer-1" },
+      ],
+      _meta: {
+        appaBlockedReceipt: "opaque-receipt",
+        archestraError: {
+          type: "policy_denied",
+          toolName: "archestra__whoami",
+          input: {},
+          reason: "Session trust would fall",
+          message: "Accept the session restriction using offer-1",
+        },
+      },
+    },
+  };
+  expect(
+    isCompactEligible({
+      part,
+      toolResultPart: null,
+      toolName: "archestra__whoami",
+    }),
+  ).toBe(false);
+  expect(getToolErrorText({ part, toolResultPart: null })).toContain("offer-1");
+});

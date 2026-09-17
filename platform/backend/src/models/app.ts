@@ -7,6 +7,7 @@ import {
   eq,
   getTableColumns,
   inArray,
+  isNull,
   or,
   type SQL,
   sql,
@@ -157,6 +158,79 @@ async function withLabelsOne<T extends { id: string }>(
  * (accessibility + batch team loaders) lives in `AppAccessModel`.
  */
 class AppModel {
+  /** Keep the app and its backing identities under one owner atomically. */
+  static async transferOwnership(params: {
+    id: string;
+    organizationId: string;
+    previousOwnerId: string | null;
+    updatedAt: Date;
+    ownerId: string;
+  }): Promise<boolean> {
+    return withDbTransaction(async (tx) => {
+      const [app] = await tx
+        .update(schema.appsTable)
+        .set({
+          authorId: params.ownerId,
+          createdByServiceAccountId: null,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(schema.appsTable.id, params.id),
+            eq(schema.appsTable.organizationId, params.organizationId),
+            params.previousOwnerId === null
+              ? isNull(schema.appsTable.authorId)
+              : eq(schema.appsTable.authorId, params.previousOwnerId),
+            sql`date_trunc('milliseconds', ${schema.appsTable.updatedAt}) = ${params.updatedAt.toISOString()}::timestamp`,
+            notDeleted(schema.appsTable),
+          ),
+        )
+        .returning();
+      if (!app) return false;
+      if (!app.mcpServerId)
+        throw new ApiError(409, "The app has no backing connection");
+      const [server] = await tx
+        .update(schema.mcpServersTable)
+        .set({
+          ownerId: params.ownerId,
+          createdByServiceAccountId: null,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(schema.mcpServersTable.id, app.mcpServerId),
+            eq(schema.mcpServersTable.serverType, "app"),
+            notDeleted(schema.mcpServersTable),
+          ),
+        )
+        .returning();
+      if (!server?.catalogId)
+        throw new ApiError(409, "The app backing connection changed");
+      const rows = await tx
+        .update(schema.internalMcpCatalogTable)
+        .set({
+          authorId: params.ownerId,
+          createdByServiceAccountId: null,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(schema.internalMcpCatalogTable.id, server.catalogId),
+            eq(
+              schema.internalMcpCatalogTable.organizationId,
+              params.organizationId,
+            ),
+            eq(schema.internalMcpCatalogTable.serverType, "app"),
+            notDeleted(schema.internalMcpCatalogTable),
+          ),
+        )
+        .returning({ id: schema.internalMcpCatalogTable.id });
+      if (!rows.length)
+        throw new ApiError(409, "The app backing catalog changed");
+      return true;
+    });
+  }
+
   /**
    * Active apps in an org, newest first; `accessibleAppIds` applies scope
    * filtering. `enabled` filters on the lifecycle state — the chat `list_apps`

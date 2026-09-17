@@ -3,6 +3,7 @@ import {
   anthropicEffortForThinkingEffort,
   anthropicSupportsThinkingEffort,
   anthropicThinksByDefault,
+  getAgentRuntimeAllowedProtocols,
   getAgentRuntimeModelCompatibility,
   getAgentRuntimeProviderCompatibility,
   getProvidersWithOptionalApiKey,
@@ -456,5 +457,47 @@ describe("providerSearchTerms", () => {
 
   test("labels the vLLM entry for the path it serves, not the one engine", () => {
     expect(providerDisplayNames.vllm).toBe("OpenAI-compatible");
+  });
+});
+
+describe("getAgentRuntimeAllowedProtocols", () => {
+  test("uses the maintained entrypoint even with arguments, and leaves custom commands unrestricted", () => {
+    expect(
+      getAgentRuntimeAllowedProtocols(["archestra-claude-code", "--verbose"]),
+    ).toEqual(["anthropic"]);
+    expect(getAgentRuntimeAllowedProtocols(["archestra-codex"])).toEqual([
+      "openai_responses",
+      "openai_chat",
+    ]);
+    for (const command of [
+      null,
+      [],
+      ["custom", "archestra-claude-code"],
+      ["archestra-opencode"],
+    ]) {
+      expect(getAgentRuntimeAllowedProtocols(command)).toEqual([
+        "openai_responses",
+        "openai_chat",
+        "anthropic",
+      ]);
+    }
+  });
+
+  test("rejects every disallowed Claude Code protocol at the shared compatibility boundary", () => {
+    for (const inferenceProtocol of [
+      "openai_responses",
+      "openai_chat",
+    ] as const) {
+      expect(
+        getAgentRuntimeProviderCompatibility({
+          runtimeCommand: ["archestra-claude-code"],
+          inferenceProtocol,
+          provider: "anthropic",
+        }),
+      ).toMatchObject({
+        compatible: false,
+        message: expect.stringContaining("requires the Anthropic API"),
+      });
+    }
   });
 });

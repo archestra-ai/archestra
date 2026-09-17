@@ -114,14 +114,7 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (
       {
-        body: {
-          name,
-          description,
-          parentId,
-          convertToolResultsToToon,
-          labels,
-          roles,
-        },
+        body: { name, description, parentId, labels, roles },
         user,
         organizationId,
         headers,
@@ -160,7 +153,6 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
           organizationId,
           createdBy: user.id,
           parentId,
-          convertToolResultsToToon,
           labels,
           roles,
         }),

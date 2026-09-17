@@ -771,7 +771,7 @@ describe("AgentChatAppsEditor", () => {
     // Claimed but not yet saved, and the row says whose it still is.
     expect(
       within(channelRow("Operations")).getByText(
-        "Takes over from Incident Agent",
+        "Takes over from Incident Agent agent",
       ),
     ).toBeVisible();
     await user.click(

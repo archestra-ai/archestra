@@ -807,8 +807,6 @@ class OrganizationModel {
         org.defaultUserLimitCleanupInterval ?? null,
       defaultMemberRole: org.defaultMemberRole ?? null,
       onboardingComplete: org.onboardingComplete,
-      compressionScope: org.compressionScope,
-      convertToolResultsToToon: org.convertToolResultsToToon,
       onlineMcpCatalogEnabled: org.onlineMcpCatalogEnabled,
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.

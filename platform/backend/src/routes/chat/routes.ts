@@ -51,6 +51,7 @@ import {
   createChatMcpElicitationBridge,
   resolveChatMcpElicitation,
 } from "@/clients/chat-mcp-elicitation";
+import { withOpenAppaChat } from "@/clients/chat-openappa";
 import {
   applyMcpTasksToMessages,
   chatTaskPrincipal,
@@ -112,7 +113,6 @@ import { toConversationApiMessages } from "@/models/conversation";
 import { reportChatMessageFeedback } from "@/observability/metrics/chat";
 import { reportQuoteVerification } from "@/observability/metrics/rag";
 import { startActiveChatSpan } from "@/observability/tracing";
-import { openappaEnabled } from "@/openappa/service";
 import { mcpGatewayTaskRunner } from "@/routes/mcp-gateway/tasks";
 import {
   ACTIVE_CHAT_RUN_TERMINAL_REPLAY_GRACE_MS,
@@ -124,6 +124,7 @@ import {
   resolveOpenedApp,
 } from "@/services/apps/opened-app-context";
 import { conversationFilesService } from "@/services/conversation-files";
+import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
 import { projectService } from "@/services/project";
 import { generateConversationTitle } from "@/services/title-generation";
 import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
@@ -335,7 +336,15 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["Chat"],
         body: z.object({
           id: UuidIdSchema, // Chat ID from useChat
-          messages: z.array(z.unknown()), // UIMessage[]
+          // Validate the UI message envelope before acquiring a run or persisting
+          // history. Keep provider/tool/custom part fields intact.
+          messages: z.array(
+            z.looseObject({
+              id: z.string().optional(),
+              role: z.enum(["system", "user", "assistant"]),
+              parts: z.array(z.looseObject({ type: z.string() })),
+            }),
+          ),
           trigger: z.enum(["submit-message", "regenerate-message"]).optional(),
           // Optional sampling override; when omitted the provider/model default applies (unchanged
           // behavior). The benchmark harness sets this to pin runs against temperature variance.
@@ -410,7 +419,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Conversation not found");
       }
 
-      if (openappaEnabled() && conversation.lockedChat) {
+      if ((await isGuardrailsV2Active()) && conversation.lockedChat) {
         throw new ApiError(
           409,
           "OpenAPPA does not yet support encrypted policy storage for locked chats",
@@ -1328,10 +1337,19 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 // "retrying may help".
                 let lastFinishReason: string | null = null;
 
-                const streamTextConfig: ChatStreamTextConfig = {
+                const chatAppa = withOpenAppaChat({
                   model,
+                  tools: mcpTools,
+                  session: {
+                    organization_id: organizationId,
+                    caller_id: `user:${user.id}`,
+                    session_id: conversationId,
+                  },
+                });
+                const streamTextConfig: ChatStreamTextConfig = {
+                  model: chatAppa.model,
                   messages: modelMessages,
-                  ...(supportsToolCalling && { tools: mcpTools }),
+                  ...(supportsToolCalling && { tools: chatAppa.tools }),
                   stopWhen: buildChatStopConditions(repeatTracker),
                   abortSignal: chatAbortController.signal,
                   experimental_repairToolCall: createToolCallRepair({

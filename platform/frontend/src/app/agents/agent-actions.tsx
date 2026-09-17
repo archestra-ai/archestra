@@ -10,8 +10,8 @@ import {
   PinOff,
   Plug,
   RotateCcw,
-  Sparkles,
   Star,
+  TerminalSquare,
   Trash2,
 } from "lucide-react";
 import {
@@ -19,11 +19,13 @@ import {
   getAgentActionModel,
 } from "@/components/agent-pages/agent-actions-model";
 import { permanentDeleteRowAction } from "@/components/permanent-delete";
+import { ResourceTableRowActions } from "@/components/resource-table-row-actions";
 import {
   type TableRowAction,
   TableRowActions,
 } from "@/components/table-row-actions";
 import type { useProfilesPaginated } from "@/lib/agent.query";
+import { useFeature } from "@/lib/config/config.query";
 import { ACTION_LABEL, notYoursToChange } from "@/lib/design/resource-lexicon";
 import { useIsGlobalAdmin } from "@/lib/organization.query";
 
@@ -41,7 +43,6 @@ type AgentActionsProps = {
   onPermanentlyDelete: (agent: Agent) => void;
   onClone: (agent: Agent) => void;
   onExport: (agent: Agent) => void;
-  onConvertToSkill: (agent: Agent) => void;
   onTogglePin: (agent: Agent) => void;
   /**
    * The caller's personal default agent, when this row is one of the caller's
@@ -71,7 +72,6 @@ export function AgentActions({
   onPermanentlyDelete,
   onClone,
   onExport,
-  onConvertToSkill,
   onTogglePin,
   personalDefault,
   onHistory,
@@ -79,14 +79,18 @@ export function AgentActions({
   const admin = useIsGlobalAdmin();
   const isBuiltIn = Boolean(agent.builtIn);
   const isDeleted = Boolean(agent.deletedAt);
-  const actionModel = getAgentActionModel({ kind: "agent", agent });
+  const agentRuntimeEnabled = useFeature("agentRuntime") === true;
+  const actionModel = getAgentActionModel({
+    kind: "agent",
+    agent,
+    agentRuntimeEnabled,
+  });
   const connectAction = agentAction(actionModel, "connect");
   const chatAction = agentAction(actionModel, "chat");
   const editAction = agentAction(actionModel, "edit");
   const cloneAction = agentAction(actionModel, "clone");
   const exportAction = agentAction(actionModel, "export");
   const historyAction = agentAction(actionModel, "history");
-  const convertAction = agentAction(actionModel, "convert");
   const deleteAction = agentAction(actionModel, "delete");
 
   if (isDeleted) {
@@ -159,7 +163,11 @@ export function AgentActions({
     ...(chatAction.visible
       ? [
           {
-            icon: <MessageSquare className="h-4 w-4" />,
+            icon: chatAction.startsRun ? (
+              <TerminalSquare className="h-4 w-4" />
+            ) : (
+              <MessageSquare className="h-4 w-4" />
+            ),
             label: chatAction.label,
             href: chatAction.href,
           },
@@ -228,18 +236,6 @@ export function AgentActions({
       onClick: () => onHistory(agent.id, canModify),
     },
     {
-      icon: <Sparkles className="h-4 w-4" />,
-      label: convertAction.label,
-      permissions: convertAction.permissions,
-      disabled: isBuiltIn || agent.agentType !== "agent",
-      disabledTooltip: isBuiltIn
-        ? "Built-in agents cannot be converted"
-        : agent.agentType !== "agent"
-          ? "Only internal agents can be converted to skills"
-          : undefined,
-      onClick: () => onConvertToSkill(agent),
-    },
-    {
       icon: <Trash2 className="h-4 w-4" />,
       label: deleteAction.label,
       permissions: deleteAction.permissions,
@@ -254,7 +250,9 @@ export function AgentActions({
   ];
 
   return (
-    <TableRowActions
+    <ResourceTableRowActions
+      kind="agent"
+      resource={agent}
       itemName={agent.name}
       actions={primaryActions}
       dropdownActions={dropdownActions}

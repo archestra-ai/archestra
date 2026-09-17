@@ -3319,6 +3319,41 @@
       "when": 1789408411759,
       "tag": "0473_sloppy_gertrude_yorkes",
       "breakpoints": true
+    },
+    {
+      "idx": 474,
+      "version": "7",
+      "when": 1789419085483,
+      "tag": "0474_white_demogoblin",
+      "breakpoints": true
+    },
+    {
+      "idx": 475,
+      "version": "7",
+      "when": 1789494122731,
+      "tag": "0475_powerful_cannonball",
+      "breakpoints": true
+    },
+    {
+      "idx": 476,
+      "version": "7",
+      "when": 1789551493037,
+      "tag": "0476_lonely_carnage",
+      "breakpoints": true
+    },
+    {
+      "idx": 477,
+      "version": "7",
+      "when": 1789553750133,
+      "tag": "0477_appa_github_sync",
+      "breakpoints": true
+    },
+    {
+      "idx": 478,
+      "version": "7",
+      "when": 1789635251511,
+      "tag": "0478_first_avengers",
+      "breakpoints": true
     }
   ]
 }

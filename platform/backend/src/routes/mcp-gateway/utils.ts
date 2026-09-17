@@ -17,6 +17,7 @@ import {
   TOOL_COPY_FILE_SHORT_NAME,
   TOOL_GET_RUN_SHORT_NAME,
   TOOL_LIST_RUNS_SHORT_NAME,
+  TOOL_LIST_SKILLS_SHORT_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
   TOOL_RENDER_APP_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
@@ -58,16 +59,11 @@ import { isToolRejectedForMcpHeaders } from "@/clients/mcp-param-headers";
 import config from "@/config";
 import { evaluateSingleMcpToolInvocationPolicy } from "@/guardrails/tool-invocation";
 import { buildPolicyBlockedToolResult } from "@/guardrails/tool-policy-link";
-import { knowledgeSourceAccessControlService } from "@/knowledge-base/source-access-control";
 import logger from "@/logging";
 import {
-  AgentConnectorAssignmentModel,
-  AgentKnowledgeBaseModel,
   AgentModel,
   AgentTeamModel,
   InternalMcpCatalogModel,
-  KnowledgeBaseConnectorModel,
-  KnowledgeBaseModel,
   McpOauthClientModel,
   McpToolCallModel,
   MemberModel,
@@ -92,12 +88,16 @@ import {
   appLaunchToolTitle,
   sanitizeAppNameForToolMetadata,
 } from "@/services/apps/app-run-link";
+import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
 import { MCP_RESOURCE_REFERENCE_PREFIX } from "@/services/identity-providers/enterprise-managed/authorization";
 import {
   discoverOidcJwksUrl,
   findExternalIdentityProviderById,
 } from "@/services/identity-providers/oidc";
 import { jwksValidator } from "@/services/jwks-validator";
+import { buildKnowledgeSearchInstruction } from "@/services/knowledge-search-instruction";
+import { buildKnowledgeSourcesDescription } from "@/services/knowledge-sources-description";
+import { buildSkillDiscoveryPreview } from "@/services/skill-discovery-preview";
 import { isPlatformSkillUri } from "@/skills/skill-uri";
 import {
   type AgentAccessContext,
@@ -264,7 +264,7 @@ const rawArchestraTokenCache =
 /**
  * Creates an MCP server for the given agent.
  */
-import { openappaEnabled } from "@/openappa/service";
+import { openappaEnabled, openappaYellEnabled } from "@/openappa/service";
 
 export async function createAgentServer(params: {
   openappaSession?: import("@/openappa/service").OpenAppaSession;
@@ -415,19 +415,20 @@ export async function createAgentServer(params: {
           archestraMcpBranding.getToolShortName(tool.name) ===
           TOOL_START_RUN_SHORT_NAME,
       );
-    // A run handle is not useful without its lifecycle controls. Dynamic
-    // per-Agent delegation tools do not have assignment rows, so expose the
-    // controls as protocol support whenever this gateway can start a run.
-    // The handlers still scope every run to the authenticated actor and the
-    // call path keeps its normal RBAC check.
-    const implicitTaskControlTools = hasTaskStarter
-      ? getImplicitTaskControlTools()
-      : [];
-    const implicitOpenAppaTools = openappaEnabled()
+    // A session can arrive from another client even if this gateway cannot
+    // start work. Advertise lifecycle controls for runtime handoffs and dynamic
+    // delegation; handlers still enforce actor ownership and RBAC.
+    const implicitTaskControlTools =
+      config.agentRuntime.enabled || hasTaskStarter
+        ? getImplicitTaskControlTools()
+        : [];
+    const implicitOpenAppaTools = (await isGuardrailsV2Active())
       ? getArchestraMcpTools().filter(
           (tool) =>
             archestraMcpBranding.getToolShortName(tool.name) ===
-            "execute_remedy_plan",
+              "execute_remedy_plan" ||
+            (openappaYellEnabled() &&
+              archestraMcpBranding.getToolShortName(tool.name) === "yell"),
         )
       : [];
     const candidateTools = dedupeToolsByName(
@@ -533,53 +534,73 @@ export async function createAgentServer(params: {
         archestraMcpBranding.getToolShortName(tool.name) ===
         TOOL_SEARCH_TOOLS_SHORT_NAME,
     );
-    const [kbToolDescription, searchToolsDescription] = await Promise.all([
-      buildKnowledgeSourcesDescription(
-        agentId,
+    const listSkillsName = archestraMcpBranding.getToolName(
+      TOOL_LIST_SKILLS_SHORT_NAME,
+    );
+    const [kbToolDescription, searchToolsDescription, skillPreview] =
+      await Promise.all([
+        buildKnowledgeSourcesDescription(
+          agentId,
+          tokenAuth?.organizationId
+            ? {
+                userId: tokenAuth.userId,
+                organizationId: tokenAuth.organizationId,
+              }
+            : undefined,
+        ),
+        advertisesSearchTools
+          ? buildSearchToolsDescription({
+              mcpTools,
+              advertisedToolNames: permittedTools.map((tool) => tool.name),
+              agentId,
+              userId: tokenAuth?.userId,
+              organizationId: tokenAuth?.organizationId,
+              prefetchedCatalogs: catalogsById,
+            })
+          : null,
+        permittedTools.some((tool) => tool.name === listSkillsName) &&
         tokenAuth?.organizationId
-          ? {
-              userId: tokenAuth.userId,
+          ? buildSkillDiscoveryPreview({
+              agentId,
               organizationId: tokenAuth.organizationId,
-            }
-          : undefined,
-      ),
-      advertisesSearchTools
-        ? buildSearchToolsDescription({
-            mcpTools,
-            agentId,
-            userId: tokenAuth?.userId,
-            organizationId: tokenAuth?.organizationId,
-            prefetchedCatalogs: catalogsById,
-          })
-        : null,
-    ]);
+              userId: tokenAuth.userId,
+            })
+          : null,
+      ]);
 
-    const toolsList: McpListTool[] = permittedTools.map(
-      ({ name, description, parameters, meta, catalogId }) => ({
+    const toolsList: McpListTool[] = permittedTools
+      .filter(
+        (tool) =>
+          archestraMcpBranding.getToolShortName(tool.name) !==
+            TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME ||
+          kbToolDescription !== null,
+      )
+      .map(({ name, description, parameters, meta, catalogId }) => ({
         name,
         title:
           archestraToolTitles.get(name) ||
           appLaunchTitle(catalogId, name) ||
           name,
         description:
-          name ===
-            archestraMcpBranding.getToolName(
-              TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
-            ) && kbToolDescription
-            ? kbToolDescription
+          name === listSkillsName && skillPreview
+            ? `${description ?? ""}\n\n${skillPreview}`
             : name ===
                   archestraMcpBranding.getToolName(
-                    TOOL_SEARCH_TOOLS_SHORT_NAME,
-                  ) && searchToolsDescription
-              ? searchToolsDescription
-              : (appLaunchDescription(catalogId, name) ??
-                description ??
-                undefined),
+                    TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+                  ) && kbToolDescription
+              ? kbToolDescription
+              : name ===
+                    archestraMcpBranding.getToolName(
+                      TOOL_SEARCH_TOOLS_SHORT_NAME,
+                    ) && searchToolsDescription
+                ? searchToolsDescription
+                : (appLaunchDescription(catalogId, name) ??
+                  description ??
+                  undefined),
         inputSchema: parameters,
         annotations: meta?.annotations || {},
         _meta: meta?._meta || {},
-      }),
-    );
+      }));
 
     // Log tools/list request
     try {
@@ -2236,90 +2257,6 @@ async function resolveArchestraToken(
 }
 
 /**
- * Build a dynamic description for the query_knowledge_sources tool that includes
- * the agent's actual knowledge base names and connector sources.
- * Audience is resolved on each request so membership changes apply immediately.
- */
-export async function buildKnowledgeSourcesDescription(
-  agentId: string,
-  viewer?: { userId?: string; organizationId: string },
-): Promise<string | null> {
-  const [kbAssignments, directConnectorIds] = await Promise.all([
-    AgentKnowledgeBaseModel.findByAgent(agentId),
-    AgentConnectorAssignmentModel.getConnectorIds(agentId),
-  ]);
-
-  if (kbAssignments.length === 0 && directConnectorIds.length === 0) {
-    return null;
-  }
-
-  const kbIds = kbAssignments.map((a) => a.knowledgeBaseId);
-
-  const assignedKnowledgeBases = kbIds.length
-    ? await KnowledgeBaseModel.findByIds(kbIds)
-    : [];
-  const access = viewer?.userId
-    ? await knowledgeSourceAccessControlService.buildAccessControlContext({
-        userId: viewer.userId,
-        organizationId: viewer.organizationId,
-      })
-    : null;
-  const knowledgeBases = assignedKnowledgeBases.filter(
-    (kb) =>
-      (!viewer || kb.organizationId === viewer.organizationId) &&
-      (access
-        ? knowledgeSourceAccessControlService.canAccessKnowledgeBase(access, kb)
-        : kb.visibility === "org-wide"),
-  );
-  const visibleKbIds = knowledgeBases.map((kb) => kb.id);
-  const [kbConnectors, directConnectors] = await Promise.all([
-    visibleKbIds.length
-      ? KnowledgeBaseConnectorModel.findByKnowledgeBaseIds(visibleKbIds, {
-          visibilityScope: "query",
-        })
-      : [],
-    KnowledgeBaseConnectorModel.findByIds(directConnectorIds),
-  ]);
-
-  const kbNames = knowledgeBases.map((kb) => kb.name);
-  const allConnectors = [...kbConnectors, ...directConnectors];
-  const connectorTypes = [
-    ...new Set(allConnectors.map((c) => c.connectorType)),
-  ];
-
-  // Written as a PROACTIVE trigger, and deliberately naming files/images/photos
-  // and the verbs a user actually uses ("show me", "find"). The previous
-  // reactive wording ("a question you cannot answer from your training data")
-  // excluded imperatives: asked to "show me a man with lobsters" the model went
-  // looking for an image-GENERATION tool and answered that it cannot show
-  // pictures, with the indexed photo one call away. This string is also the
-  // text search_tools ranks on, so the vocabulary matters twice.
-  let description =
-    "Search the organization's indexed knowledge — documents, files, images, photos, " +
-    "and records synced from its connected sources. " +
-    "Use it whenever the user refers to something that may live in this workspace rather " +
-    "than in your training data: a question about internal material, or a request to find, " +
-    "look up, show, open, or describe a document, file, or picture. " +
-    "Prefer searching over answering from memory or replying that you cannot see files or " +
-    "images — this workspace's own content is reachable only through this tool. " +
-    "Pass the user's original query as-is — do not rephrase, summarize, or expand it. " +
-    "The system performs its own query optimization internally.";
-
-  if (kbNames.length > 0) {
-    const kbList = kbNames.join(", ");
-    description +=
-      kbList.length > 500
-        ? ` Available knowledge bases: ${kbList.slice(0, 500)}...`
-        : ` Available knowledge bases: ${kbList}.`;
-  }
-  if (connectorTypes.length > 0) {
-    description += ` Connected sources: ${connectorTypes.join(", ")}.`;
-  }
-
-  return description;
-}
-
-/**
  * The single point where the advertised tool list is finalized. Every
  * contributor (assigned catalog tools, Archestra Apps, built-ins, delegation
  * tools) funnels through here, so a new tool source cannot reintroduce a leak
@@ -2353,6 +2290,8 @@ function filterExposedTools(params: {
           (openappaEnabled() &&
             archestraMcpBranding.getToolShortName(tool.name) ===
               "execute_remedy_plan") ||
+          (openappaYellEnabled() &&
+            archestraMcpBranding.getToolShortName(tool.name) === "yell") ||
           isTaskControlTool(tool.name) ||
           isAlwaysExposedTool(tool.name) ||
           (advertiseUiResourceTools &&
@@ -2431,6 +2370,7 @@ const SEARCH_TOOLS_DESCRIPTION_MAX_SERVER_DESCRIPTION_LENGTH = 200;
 
 async function buildSearchToolsDescription(params: {
   mcpTools: McpToolForSearchDescription[];
+  advertisedToolNames: string[];
   agentId: string;
   userId?: string;
   organizationId?: string;
@@ -2445,10 +2385,28 @@ async function buildSearchToolsDescription(params: {
       archestraMcpBranding.getToolShortName(tool.name) ===
       TOOL_SEARCH_TOOLS_SHORT_NAME,
   );
-  const baseDescription = searchTool?.description;
-  if (!baseDescription) {
+  if (!searchTool?.description) {
     return null;
   }
+  const knowledgeInstruction = await buildKnowledgeSearchInstruction({
+    agentId,
+    userId,
+    organizationId,
+    toolNames: params.advertisedToolNames,
+  });
+  const runtimeInstruction = params.advertisedToolNames.some(
+    (name) =>
+      archestraMcpBranding.getToolShortName(name) === TOOL_STEER_RUN_SHORT_NAME,
+  )
+    ? `For requests such as "hand this work over to ${sanitizeAppNameForToolMetadata(archestraMcpBranding.appName)}" or "spin this up in ${sanitizeAppNameForToolMetadata(archestraMcpBranding.appName)}", discover Agent Runtime tools here and load the Agent Runtime Handoff skill before transferring work. Discover an agent with list_agents; use start_run only when this work has no runtime session. Otherwise steer_run reuses its saved session. "Bring it back" or "resume locally" means retrieve changes and context, stop remote editing, and continue in the local client.`
+    : null;
+  const baseDescription = [
+    searchTool.description,
+    knowledgeInstruction,
+    runtimeInstruction,
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   // Mirror search_tools' actual search space: the catalogs backing the
   // assigned tools, widened by the dynamically discoverable ones when the

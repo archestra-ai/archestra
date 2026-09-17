@@ -1,15 +1,24 @@
-import type { SupportedProvider } from "@archestra/shared";
+import {
+  ARCHESTRA_MCP_CATALOG_ID,
+  type SupportedProvider,
+  TOOL_LOAD_SKILL_FULL_NAME,
+} from "@archestra/shared";
 import { assert, vi } from "vitest";
 import config from "@/config";
 import {
+  AgentModel,
   LlmProviderApiKeyModel,
   LlmProviderApiKeyModelLinkModel,
   ModelModel,
+  SkillModel,
   TeamTokenModel,
+  ToolModel,
   UserCredentialModel,
   VirtualApiKeyModel,
 } from "@/models";
+import { resolveModelRoute } from "@/routes/proxy/model-router-resolver";
 import { claudeCodeAccountManager } from "@/services/agent-runtime/claude-code-account";
+import { encodeOpenAiCodexCredential } from "@/services/openai-codex-credentials";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import {
   type Agent,
@@ -50,6 +59,7 @@ describe("buildAgentRunLaunchSpec", () => {
     makeSecret,
     makeLlmProviderApiKey,
     makeAgent,
+    makeAgentTool,
   }) => {
     const setup = await makeConfiguredAgent({
       provider: "gemini",
@@ -60,6 +70,24 @@ describe("buildAgentRunLaunchSpec", () => {
       makeLlmProviderApiKey,
       makeAgent,
     });
+    await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+    const loadTool = await ToolModel.findByName(TOOL_LOAD_SKILL_FULL_NAME);
+    assert(loadTool);
+    await makeAgentTool(setup.agent.id, loadTool.id);
+    await SkillModel.createWithFiles({
+      skill: {
+        organizationId: setup.agent.organizationId,
+        name: "release-review",
+        description: "Evaluate changes against the release checklist.",
+        content: "PRIVATE_INSTRUCTIONS_LOADED_ON_DEMAND",
+        metadata: {},
+        sourceType: "manual",
+        scope: "org",
+      },
+      files: [],
+    });
+    const systemPrompt = "Review the repository's release instructions.";
+    await AgentModel.update(setup.agent.id, { systemPrompt });
     const runId = crypto.randomUUID();
 
     const { spec, virtualApiKeyId } = await buildAgentRunLaunchSpec({
@@ -67,6 +95,10 @@ describe("buildAgentRunLaunchSpec", () => {
         ...runtime(setup.agent, "openai_responses"),
         environment: [
           { key: "CUSTOM_SETTING", value: "preserved" },
+          {
+            key: "ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT",
+            value: "stale instructions",
+          },
           { key: "OPENAI_BASE_URL", value: "https://bypass.invalid" },
           { key: "ARCHESTRA_MCP_GATEWAY_TOKEN", value: "bypass-token" },
           { key: "ARCHESTRA_AGENT_RUNTIME_RUN_ID", value: "bypass-run" },
@@ -107,6 +139,25 @@ describe("buildAgentRunLaunchSpec", () => {
     expect(spec.secretEnv.OPENAI_API_KEY).not.toBe("upstream-secret");
     expect(spec.env.OPENAI_BASE_URL).not.toBe("https://bypass.invalid");
     expect(spec.env).not.toHaveProperty("ARCHESTRA_MCP_GATEWAY_TOKEN");
+    expect(spec.env).not.toHaveProperty(
+      "ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT",
+    );
+    expect(spec.secretEnv.ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT).toContain(
+      systemPrompt,
+    );
+    expect(spec.secretEnv.ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT).not.toContain(
+      "stale instructions",
+    );
+
+    expect(spec.secretEnv.ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT).toContain(
+      'name="release-review"',
+    );
+    expect(spec.secretEnv.ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT).toContain(
+      "Evaluate changes against the release checklist.",
+    );
+    expect(spec.secretEnv.ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT).not.toContain(
+      "PRIVATE_INSTRUCTIONS_LOADED_ON_DEMAND",
+    );
 
     assert(virtualApiKeyId);
     const virtualKey = await VirtualApiKeyModel.findById(virtualApiKeyId);
@@ -758,61 +809,153 @@ describe("buildAgentRunLaunchSpec", () => {
     });
   });
 
-  test("uses the acting user's ChatGPT subscription for maintained Codex runtimes", async ({
-    makeOrganization,
-    makeAdmin,
-    makeMember,
-    makeSecret,
-    makeLlmProviderApiKey,
-    makeAgent,
-  }) => {
-    const setup = await makeConfiguredAgent({
-      provider: "openai",
+  for (const { scenario, modelId, linked, authRejected, expectedStatus } of [
+    {
+      scenario: "stale catalog",
+      modelId: "gpt-6-astra",
+      linked: false,
+      authRejected: false,
+      expectedStatus: null,
+    },
+    {
+      scenario: "current catalog",
+      modelId: "gpt-6-astra",
+      linked: true,
+      authRejected: false,
+      expectedStatus: null,
+    },
+    {
+      scenario: "unsupported model",
+      modelId: "unsupported-codex-model",
+      linked: false,
+      authRejected: false,
+      expectedStatus: 409,
+    },
+    {
+      scenario: "expired connection",
+      modelId: "gpt-6-astra",
+      linked: false,
+      authRejected: true,
+      expectedStatus: 401,
+    },
+  ]) {
+    test(`checks the acting user's Codex model before launch: ${scenario}`, async ({
       makeOrganization,
       makeAdmin,
       makeMember,
       makeSecret,
       makeLlmProviderApiKey,
       makeAgent,
-    });
-    const subscriptionSecret = await makeSecret({
-      secret: { apiKey: "chatgpt-oauth:test-refresh-token" },
-    });
-    const subscriptionKey = await makeLlmProviderApiKey(
-      setup.agent.organizationId,
-      subscriptionSecret.id,
-      {
+    }) => {
+      const setup = await makeConfiguredAgent({
         provider: "openai",
-        scope: "personal",
-        userId: setup.user.id,
-      },
-    );
-    const configuredRuntime = runtime(setup.agent, "openai_responses");
-    configuredRuntime.command = ["archestra-codex"];
+        modelId,
+        makeOrganization,
+        makeAdmin,
+        makeMember,
+        makeSecret,
+        makeLlmProviderApiKey,
+        makeAgent,
+      });
+      const subscriptionSecret = await makeSecret({
+        secret: {
+          apiKey: encodeOpenAiCodexCredential({
+            refreshToken: "test-refresh-token",
+            accountId: "test-account",
+          }),
+        },
+      });
+      const subscriptionKey = await makeLlmProviderApiKey(
+        setup.agent.organizationId,
+        subscriptionSecret.id,
+        {
+          provider: "openai",
+          scope: "personal",
+          userId: setup.user.id,
+        },
+      );
+      // The agent's key knows Astra, but this user's older subscription does not.
+      const olderModel = await ModelModel.create({
+        externalId: "openai/gpt-5.6-sol",
+        provider: "openai",
+        modelId: "gpt-5.6-sol",
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        lastSyncedAt: new Date(),
+      });
+      await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(
+        subscriptionKey.id,
+        [olderModel.id],
+      );
+      if (linked) {
+        assert(setup.agent.modelId);
+        await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(
+          subscriptionKey.id,
+          [setup.agent.modelId],
+        );
+      }
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (input: string | URL | Request) => {
+          const url = String(input);
+          if (url.endsWith("/oauth/token")) {
+            if (authRejected)
+              return Response.json({ error: "invalid_grant" }, { status: 400 });
+            return Response.json({
+              access_token: "test-access-token",
+              expires_in: 3600,
+            });
+          }
+          if (url === "https://models.dev/api.json") return Response.json({});
+          throw new Error(`Unexpected request: ${url}`);
+        }),
+      );
+      const configuredRuntime = runtime(setup.agent, "openai_responses");
+      configuredRuntime.command = ["archestra-codex"];
 
-    const { virtualApiKeyId } = await buildAgentRunLaunchSpec({
-      runtime: configuredRuntime,
-      taskId: crypto.randomUUID(),
-      runId: crypto.randomUUID(),
-      agentId: setup.agent.id,
-      actor: {
-        id: setup.user.id,
-        kind: "user",
+      const launch = buildAgentRunLaunchSpec({
+        runtime: configuredRuntime,
+        taskId: crypto.randomUUID(),
+        runId: crypto.randomUUID(),
+        agentId: setup.agent.id,
+        actor: {
+          id: setup.user.id,
+          kind: "user",
+          organizationId: setup.agent.organizationId,
+        },
         organizationId: setup.agent.organizationId,
-      },
-      organizationId: setup.agent.organizationId,
-      runtimeScope: "agent-tests",
-      effectiveNetworkPolicy: { source: "built_in", policy: null },
-      appName: "Archestra",
-      runMode: "interactive",
-    });
+        runtimeScope: "agent-tests",
+        effectiveNetworkPolicy: { source: "built_in", policy: null },
+        appName: "Archestra",
+        runMode: "interactive",
+      });
 
-    const subscriptionVirtualKeys =
-      await VirtualApiKeyModel.findByProviderApiKeyId(subscriptionKey.id);
-    expect(subscriptionVirtualKeys.map(({ id }) => id)).toContain(
-      virtualApiKeyId,
-    );
-  });
+      if (expectedStatus) {
+        await expect(launch).rejects.toMatchObject({
+          statusCode: expectedStatus,
+        });
+        expect(
+          await VirtualApiKeyModel.findByProviderApiKeyId(subscriptionKey.id),
+        ).toEqual([]);
+        return;
+      }
+      const { spec, virtualApiKeyId } = await launch;
+      if (linked) expect(fetch).not.toHaveBeenCalled();
+      await expect(
+        resolveModelRoute({
+          requestedModel: spec.env.ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL,
+          allowedProviders: new Set(["openai"]),
+          allowedApiKeyIds: [subscriptionKey.id],
+        }),
+      ).resolves.toMatchObject({ provider: "openai", modelId: "gpt-6-astra" });
+
+      const subscriptionVirtualKeys =
+        await VirtualApiKeyModel.findByProviderApiKeyId(subscriptionKey.id);
+      expect(subscriptionVirtualKeys.map(({ id }) => id)).toContain(
+        virtualApiKeyId,
+      );
+    });
+  }
 
   test("never falls back to an OpenAI API key for Codex", async ({
     makeOrganization,

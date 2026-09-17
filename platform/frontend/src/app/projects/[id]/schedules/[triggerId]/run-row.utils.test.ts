@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { runChatHref, runRowKind } from "./run-row.utils";
+import { runHref, runRowKind } from "./run-row.utils";
 
 describe("run-row.utils", () => {
   describe("runRowKind", () => {
@@ -31,10 +31,10 @@ describe("run-row.utils", () => {
     });
   });
 
-  describe("runChatHref", () => {
+  describe("runHref", () => {
     it("returns the chat URL for a run with a conversation", () => {
       expect(
-        runChatHref({
+        runHref({
           triggerId: "t1",
           run: { id: "r1", status: "success", chatConversationId: "c1" },
         }),
@@ -43,7 +43,7 @@ describe("run-row.utils", () => {
 
     it("returns the chat URL for a failed run WITH a conversation", () => {
       expect(
-        runChatHref({
+        runHref({
           triggerId: "t1",
           run: { id: "r1", status: "failed", chatConversationId: "c1" },
         }),
@@ -52,7 +52,7 @@ describe("run-row.utils", () => {
 
     it("returns null for a completed run without a conversation", () => {
       expect(
-        runChatHref({
+        runHref({
           triggerId: "t1",
           run: { id: "r1", status: "failed", chatConversationId: null },
         }),
@@ -61,11 +61,28 @@ describe("run-row.utils", () => {
 
     it("returns null for a running run", () => {
       expect(
-        runChatHref({
+        runHref({
           triggerId: "t1",
           run: { id: "r1", status: "running", chatConversationId: null },
         }),
       ).toBe(null);
     });
+  });
+});
+
+describe("scheduled runtime navigation", () => {
+  it.each([
+    "running",
+    "success",
+    "failed",
+  ])("opens the live runtime for a %s run", (status) => {
+    const run = {
+      id: "run-1",
+      status,
+      chatConversationId: null,
+      runtimeTaskId: "task-1",
+    };
+    expect(runRowKind(run)).toBe("open-runtime");
+    expect(runHref({ triggerId: "trigger-1", run })).toBe("/chat/runs/task-1");
   });
 });

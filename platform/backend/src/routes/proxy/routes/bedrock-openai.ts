@@ -33,7 +33,7 @@ type FastifyRequestLike = Pick<FastifyRequest, "ip" | "raw">;
  *
  * Accepts an OpenAI ChatCompletions request at /v1/bedrock/openai/chat/completions,
  * translates it to a Converse body, runs it through the existing LLM proxy
- * pipeline using the Bedrock adapter (auth, policies, TOON, cost, logging),
+ * pipeline using the Bedrock adapter (auth, policies, cost, logging),
  * and translates the Converse response / event stream back to OpenAI on the
  * way out.
  */

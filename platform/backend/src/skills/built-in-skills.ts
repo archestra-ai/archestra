@@ -3,8 +3,11 @@ import {
   APP_AUTHORING_CONTRACT,
   APP_BUILD_LOOP_GUIDANCE,
 } from "@/archestra-mcp-server/app-authoring-guidance";
+import config from "@/config";
 import type { SkillFileKind } from "@/types/skill";
+import { APPA_GUIDE_SKILL } from "./appa-guide";
 import { applyBuiltInSkillBranding } from "./built-in-skill-branding";
+import { RUNTIME_HANDOFF_SKILL } from "./runtime-handoff";
 
 /**
  * Default Agent Skills shipped with Archestra.
@@ -33,7 +36,8 @@ interface BuiltInSkillFile {
   content: string;
 }
 
-interface BuiltInSkill {
+export interface BuiltInSkill {
+  feature?: "appa";
   /** Stable identifier; never changes once shipped. */
   builtInSkillId: string;
   name: string;
@@ -63,7 +67,26 @@ export function findBuiltInSkillBySourceRef(
 ): BuiltInSkill | null {
   if (!sourceRef.startsWith(BUILT_IN_SKILL_SOURCE_REF_PREFIX)) return null;
   const id = sourceRef.slice(BUILT_IN_SKILL_SOURCE_REF_PREFIX.length);
-  return BUILT_IN_SKILLS.find((skill) => skill.builtInSkillId === id) ?? null;
+  return (
+    getEnabledBuiltInSkills().find((skill) => skill.builtInSkillId === id) ??
+    null
+  );
+}
+
+/** Definitions that this deployment can seed and reset. */
+export function getEnabledBuiltInSkills(): BuiltInSkill[] {
+  return BUILT_IN_SKILLS.filter(isEnabled);
+}
+
+/** Hide persisted copies too when their feature is disabled. */
+export function getDisabledBuiltInSkillSourceRefs(): string[] {
+  return BUILT_IN_SKILLS.filter((skill) => !isEnabled(skill)).map((skill) =>
+    builtInSkillSourceRef(skill.builtInSkillId),
+  );
+}
+
+function isEnabled(skill: BuiltInSkill): boolean {
+  return !skill.feature || config.openappa.enabled;
 }
 
 /**
@@ -177,6 +200,11 @@ Parameter details and the local-vs-remote server fields are in
   create a role or add a member, point them there rather than inventing a tool.
 
 ### Control autonomy and data handling
+If \`archestra__get_guardrails_policy\` is available and the request concerns
+Guardrails v2 or OpenAPPA, load the \`appa-guide\` skill for its policy workflow.
+APPA can also check administrative tool calls; the legacy bypass below does not
+bypass APPA.
+
 - \`create_tool_invocation_policy\` (\`toolId\`, \`conditions\`, \`action\`:
   \`allow\`/\`deny\`/\`require_approval\`) gates *when* a tool may run. Use
   \`get_autonomy_policy_operators\` for the valid condition operators.
@@ -339,7 +367,7 @@ ${APP_BUILD_LOOP_GUIDANCE}
 // Catalog (declared last so it can reference the content constants above)
 // ============================================================================
 
-export const BUILT_IN_SKILLS: BuiltInSkill[] = [
+const BUILT_IN_SKILLS: BuiltInSkill[] = [
   {
     builtInSkillId: "archestra-platform-operations",
     name: "Archestra Platform Operations",
@@ -373,4 +401,6 @@ export const BUILT_IN_SKILLS: BuiltInSkill[] = [
       },
     ],
   },
+  APPA_GUIDE_SKILL,
+  RUNTIME_HANDOFF_SKILL,
 ];

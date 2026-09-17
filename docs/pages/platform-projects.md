@@ -3,7 +3,7 @@ title: Projects
 category: Projects
 order: 1
 description: A shared workspace to organize your work
-lastUpdated: 2026-09-03
+lastUpdated: 2026-09-17
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -11,6 +11,10 @@ lastUpdated: 2026-09-03
 A project is a shared workspace for your chats, Agent Runtime sessions, files, instructions, and scheduled tasks. Projects are private until you share them with teams or the whole organization.
 
 ![A project with its chats, files, and monthly schedule](/docs/automated_screenshots/platform-projects_project-overview.webp)
+
+## Ownership
+
+You can transfer a project to another organization member. Files, instructions, schedules, and sharing stay intact. Existing chats and scheduled tasks keep their original authors and execution identities.
 
 ## Creating a Project
 
@@ -40,7 +44,7 @@ Every project has an `instructions.md` file, pinned at the top of the Files pane
 
 ## Scheduled Tasks
 
-A schedule runs an agent for you on a recurring basis. Every run is saved as a chat in the project, so you can always see what the agent did.
+A schedule runs an agent for you on a recurring basis. Agents with a dedicated runtime start an Agent Runtime session in the project. Other agents start a chat. Open a scheduled run to follow its work and review the result. Runtime runs stay in progress until their task finishes.
 
 ![New schedule dialog](/docs/automated_screenshots/platform-projects_schedule-dialog.webp)
 

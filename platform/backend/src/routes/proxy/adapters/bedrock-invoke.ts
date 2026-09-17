@@ -7,7 +7,7 @@
  * `/model/:modelId/invoke` and `/model/:modelId/invoke-with-response-stream`.
  *
  * This adapter delegates all request/response/stream semantics (policy
- * evaluation, TOON compression, accumulation, refusals) to the existing
+ * evaluation, accumulation, refusals) to the existing
  * Anthropic adapters and only changes the transport:
  * - upstream requests go through `BedrockClient` (Bearer/SigV4/IAM auth) with
  *   the model in the URL, `anthropic_version` in the body, and no `model`,
@@ -35,7 +35,6 @@ import type {
   LLMResponseAdapter,
   LLMStreamAdapter,
   StreamAccumulatorState,
-  ToolCompressionStats,
   UsageView,
 } from "@/types";
 import { anthropicAdapterFactory } from "./anthropic";
@@ -244,10 +243,6 @@ class BedrockInvokeRequestAdapter
 
   applyToolResultUpdates(updates: Record<string, string>): void {
     this.inner.applyToolResultUpdates(updates);
-  }
-
-  applyToonCompression(model: string): Promise<ToolCompressionStats> {
-    return this.inner.applyToonCompression(model);
   }
 
   convertToolResultContent(messages: AnthropicMessages): AnthropicMessages {

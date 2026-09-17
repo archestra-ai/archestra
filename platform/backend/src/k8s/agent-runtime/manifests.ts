@@ -68,8 +68,9 @@ export interface AgentSandbox {
 /** Render a turn request without interpolating credentials into exec arguments. */
 export function buildAgentRuntimeTurnScript(
   spec: AgentRunLaunchSpec,
-  inheritedVariableNames: string[] = [],
+  options: { inheritedVariableNames?: string[]; initial?: boolean } = {},
 ): string {
+  const { inheritedVariableNames = [], initial = false } = options;
   const variables = {
     LANG: "C.UTF-8",
     LC_ALL: "C.UTF-8",
@@ -83,7 +84,7 @@ export function buildAgentRuntimeTurnScript(
       AGENT_RUNTIME_ATTACHMENTS_MANIFEST,
     ...spec.env,
     ...spec.secretEnv,
-    ARCHESTRA_AGENT_RUNTIME_CONTINUE: "1",
+    ARCHESTRA_AGENT_RUNTIME_CONTINUE: initial ? "0" : "1",
     ARCHESTRA_AGENT_RUNTIME_CREDENTIALS_FILE: AGENT_RUNTIME_CREDENTIALS_FILE,
   };
   return [
@@ -175,6 +176,8 @@ function buildAgentRuntimeBootstrapScript(): string {
     '  echo "agent-runtime: this image has no tmux, which Agent Runtime runs require for attach and steering" >&2',
     `  exit ${AGENT_RUNTIME_UNUSABLE_IMAGE_EXIT_CODE}`,
     "fi",
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: POSIX shell parameter expansion.
+    'if [ "${ARCHESTRA_AGENT_RUNTIME_WARM:-0}" != 1 ]; then',
     'case "$ARCHESTRA_AGENT_RUNTIME_TASK_ID" in ""|*[!a-zA-Z0-9-]*) echo "Invalid runtime task ID" >&2; exit 78;; esac',
     `mkdir -p ${AGENT_RUNTIME_DIR}/turns`,
     `request=${AGENT_RUNTIME_DIR}/turns/$ARCHESTRA_AGENT_RUNTIME_TASK_ID.request`,
@@ -182,6 +185,7 @@ function buildAgentRuntimeBootstrapScript(): string {
     "  umask 077",
     `  printf '%s\\n' "$ARCHESTRA_AGENT_RUNTIME_ENTRYPOINT" > "$request.tmp"`,
     '  mv "$request.tmp" "$request"',
+    "fi",
     "fi",
     buildSandboxSupervisorScript(),
   ].join("\n");

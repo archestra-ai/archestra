@@ -59,22 +59,7 @@ Before starting, verify the development environment is running:
 
 ---
 
-## Test 3: Disable Tool Result Compression (Clean Baseline)
-
-**Objective**: Ensure tool result compression does not interfere with testing.
-
-### Steps
-
-1. Navigate to Organization Settings
-2. Ensure "Tool Result Compression (TOON)" is DISABLED at the organization level
-
-### Expected Result
-
-- TOON compression shows as "Disabled" in the UI
-
----
-
-## Test 4: GitHub Issues Overview (Initial Request)
+## Test 3: GitHub Issues Overview (Initial Request)
 
 **Objective**: Verify MCP tools execute correctly and return meaningful data.
 
@@ -99,17 +84,17 @@ Before starting, verify the development environment is running:
 
 ---
 
-## Test 5: Tool Invocation Policy (Untrusted Data Blocking)
+## Test 4: Tool Invocation Policy (Untrusted Data Blocking)
 
 **Objective**: Verify that tool invocation is blocked when context contains untrusted data.
 
 ### Precondition
 
-The previous conversation from Test 4 contains tool results (untrusted data by default).
+The previous conversation from Test 3 contains tool results (untrusted data by default).
 
 ### Steps
 
-1. **In the same conversation from Test 4**, send another message:
+1. **In the same conversation from Test 3**, send another message:
    "github whoami"
 
 This prompt forces a tool invocation (`get_me`) rather than allowing the LLM to answer from context.
@@ -134,49 +119,7 @@ Create a tool invocation policy:
 
 ---
 
-## Test 6: Tool Result Compression (TOON Format)
-
-**Objective**: Verify TOON compression is applied to tool results when enabled.
-
-### Steps
-
-1. Navigate to Organization Settings
-2. Enable "Tool Result Compression (TOON)" at organization level
-3. Navigate to Chat and start a NEW conversation
-4. Select the profile with GitHub tools
-5. Send message: "Give a short overview of the open issues in https://github.com/archestra-ai/archestra"
-
-### Expected Result
-
-- Tool executes successfully
-- In LLM Proxy Logs, the **processed request** shows tool results in TOON format
-
-### TOON Format Verification
-
-Look for compressed format in logs:
-```
-issues[N]{title,number,state,...}  // TOON format
-```
-
-Instead of standard JSON:
-```json
-[{"title": "...", "number": 1, "state": "open", ...}]
-```
-
-### Additional Step (if needed)
-
-If `list_issues` is blocked in untrusted context due to Test 5:
-1. Navigate to profile Policies
-2. Add a Trusted Data Policy that allows `list_issues` execution in untrusted context
-3. Retry the test
-
-### Cleanup
-
-- Keep TOON enabled for next test, or note to disable after testing
-
----
-
-## Test 7: LLM Proxy Tool Discovery (External MCP Server)
+## Test 5: LLM Proxy Tool Discovery (External MCP Server)
 
 **Objective**: Verify tools can be discovered via LLM Proxy when MCP server runs externally (not in Archestra's K8s).
 

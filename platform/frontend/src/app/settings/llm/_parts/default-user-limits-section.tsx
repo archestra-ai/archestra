@@ -5,10 +5,10 @@ import Link from "next/link";
 import { useState } from "react";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import {
-  EnvironmentScopeSelect,
+  EnvironmentSelector,
   GLOBAL_ENVIRONMENT_SCOPE,
   GLOBAL_ENVIRONMENT_SCOPE_LABEL,
-} from "@/components/environment-scope-select";
+} from "@/components/environment-selector";
 import { FormDialog } from "@/components/form-dialog";
 import {
   CLEANUP_INTERVAL_LABELS,
@@ -368,12 +368,12 @@ export function DefaultUserLimitsSection() {
               {editing ? (
                 <Input value={scopeLabel(editing.environmentId)} disabled />
               ) : (
-                <EnvironmentScopeSelect
+                <EnvironmentSelector
+                  mode="scope"
                   value={formState.scope}
-                  onValueChange={(value) =>
+                  onChange={(value) =>
                     setFormState((current) => ({ ...current, scope: value }))
                   }
-                  environments={environments}
                   includeGlobalOption
                   takenValues={takenScopes}
                 />

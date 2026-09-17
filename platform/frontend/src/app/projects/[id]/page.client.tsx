@@ -27,7 +27,7 @@ import {
   formatScheduledRecentRow,
 } from "@/app/projects/[id]/project-chats.utils";
 import { ProjectSchedulesSection } from "@/app/projects/[id]/project-schedules-section";
-import { runChatHref } from "@/app/projects/[id]/schedules/[triggerId]/run-row.utils";
+import { runHref } from "@/app/projects/[id]/schedules/[triggerId]/run-row.utils";
 import { AgentIcon } from "@/components/agent-icon";
 import { FileDetailHeader } from "@/components/chat/file-detail-header";
 import type { FileListItem } from "@/components/chat/file-list-section";
@@ -57,6 +57,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useResourceOwnershipTransfer } from "@/components/use-resource-ownership-transfer";
 import { useStartAgentRun } from "@/lib/agent-runtime.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useCreateConversation } from "@/lib/chat/chat.query";
@@ -97,6 +98,17 @@ function ProjectDetail() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const { data: project, isPending, isLoadingError, refetch } = useProject(id);
+  const ownership = useResourceOwnershipTransfer({
+    kind: "project",
+    resource: project
+      ? {
+          ...project,
+          authorId: project.createdBy?.id ?? null,
+          scope: projectVisibilityToScope(project.visibility),
+        }
+      : null,
+    onTransferred: () => router.push("/projects"),
+  });
   // Chats are hidden from admin oversight, so don't even fetch them there.
   const { data: conversations } = useProjectConversations(id, {
     enabled: !!project && project.viewerRole !== "admin",
@@ -235,6 +247,7 @@ function ProjectDetail() {
                       Edit details
                     </DropdownMenuItem>
                   )}
+                  {ownership.menuItem}
                   {canManage && canDelete && (
                     <DropdownMenuItem
                       variant="destructive"
@@ -246,6 +259,7 @@ function ProjectDetail() {
                   )}
                 </DropdownMenuContent>
               </DropdownMenu>
+              {ownership.dialog}
             </div>
           }
         >
@@ -458,7 +472,7 @@ function ScheduledRecentRow({
       router.push(`/chat/${conv.id}`);
       return;
     }
-    const href = latestRun ? runChatHref({ triggerId, run: latestRun }) : null;
+    const href = latestRun ? runHref({ triggerId, run: latestRun }) : null;
     if (href) {
       router.push(href);
     } else if (latestRun) {

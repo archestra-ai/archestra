@@ -6,6 +6,8 @@ case "${ARCHESTRA_LLM_PROXY_PROTOCOL:-}" in
   openai_responses) openclaw_api="openai-responses" ;;
   *)
     echo "archestra: OpenClaw requires an Agent configured for OpenAI Chat Completions or OpenAI Responses" >&2
+    "$(dirname "${BASH_SOURCE[0]}")/archestra-agent-failure" \
+      "openclaw_protocol" "OpenClaw requires an Agent configured for OpenAI Chat Completions or OpenAI Responses."
     exit 78
     ;;
 esac
@@ -264,10 +266,19 @@ export default {
 
       if (answer) {
         await writeFile(`${runtimeDir}/final-answer.txt`, `${answer}\n`, "utf8");
-      } else if (event.error) {
-        await writeFile(`${runtimeDir}/final-answer.txt`, `${event.error}\n`, "utf8");
       }
       if (!event.success) {
+        const message = "OpenClaw could not complete the turn. Check the configured provider credential, model availability, and network access, then retry.";
+        const prefix = process.env.ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX;
+        if (prefix) {
+          try {
+            await writeFile(`${prefix}.failure.tmp`, JSON.stringify({ version: 1, code: "openclaw_turn_failed", message }), "utf8");
+            await rename(`${prefix}.failure.tmp`, `${prefix}.failure`);
+          } catch {
+            // Keep the native failure status even if reporting is unavailable.
+          }
+        }
+        await writeFile(`${runtimeDir}/final-answer.txt`, `${message}\n`, "utf8");
         await writeFile(`${runtimeDir}/turn-complete.failed`, "", "utf8");
       }
       await writeFile(`${runtimeDir}/turn-complete`, "", "utf8");

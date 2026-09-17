@@ -15,6 +15,7 @@ import {
   EnvironmentModel,
   ToolModel,
 } from "@/models";
+import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import { ProviderError, SubagentProviderError } from "@/routes/chat/errors";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { Agent } from "@/types";
@@ -260,43 +261,50 @@ describe("delegation tool execution", () => {
     }
   });
 
-  test("propagates the current trust state to delegated subagents", async ({
-    makeAgent,
-    makeAgentTool,
-  }) => {
-    const targetAgent = await makeAgent({ name: "Security Review Agent" });
-    const delegationTool = await ToolModel.findOrCreateDelegationTool(
-      targetAgent.id,
-    );
-    await makeAgentTool(testAgent.id, delegationTool.id);
+  for (const enabled of [true, false]) {
+    test(`executes delegation and propagates trust with APPA enabled=${enabled}`, async ({
+      makeAgent,
+      makeAgentTool,
+    }) => {
+      config.openappa.enabled = enabled;
+      await GuardrailsDeploymentModel.setEnabled(true);
+      const targetAgent = await makeAgent({ name: "Security Review Agent" });
+      const delegationTool = await ToolModel.findOrCreateDelegationTool(
+        targetAgent.id,
+      );
+      await makeAgentTool(testAgent.id, delegationTool.id);
 
-    mockExecuteA2AMessage.mockResolvedValue({
-      messageId: "subagent-message-1",
-      text: "Handled by subagent",
-      finishReason: "stop",
+      mockExecuteA2AMessage.mockResolvedValue({
+        messageId: "subagent-message-1",
+        text: "Handled by subagent",
+        finishReason: "stop",
+      });
+
+      const result = await executeArchestraTool(
+        `${AGENT_TOOL_PREFIX}${slugify(targetAgent.name)}`,
+        { message: "Review the latest findings." },
+        {
+          ...mockContext,
+          contextIsTrusted: false,
+        },
+      );
+
+      expect(result.isError).toBe(false);
+      expect(result.content).toEqual([
+        { type: "text", text: "Handled by subagent" },
+      ]);
+      expect(mockExecuteA2AMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          agentId: targetAgent.id,
+          message: "Review the latest findings.",
+          organizationId: mockContext.organizationId,
+          userId: "system",
+          parentDelegationChain: testAgent.id,
+          parentContextIsTrusted: false,
+        }),
+      );
     });
-
-    const result = await executeArchestraTool(
-      `${AGENT_TOOL_PREFIX}${slugify(targetAgent.name)}`,
-      { message: "Review the latest findings." },
-      {
-        ...mockContext,
-        contextIsTrusted: false,
-      },
-    );
-
-    expect(result.isError).toBe(false);
-    expect(mockExecuteA2AMessage).toHaveBeenCalledWith(
-      expect.objectContaining({
-        agentId: targetAgent.id,
-        message: "Review the latest findings.",
-        organizationId: mockContext.organizationId,
-        userId: "system",
-        parentDelegationChain: testAgent.id,
-        parentContextIsTrusted: false,
-      }),
-    );
-  });
+  }
 
   test("uses the caller user when the gateway token is not user-scoped", async ({
     makeAgent,

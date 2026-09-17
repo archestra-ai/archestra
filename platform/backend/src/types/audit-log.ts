@@ -201,6 +201,7 @@ export const AuditEventNameSchema = z.enum([
   "team.bulk_deleted",
   "teamToken.rotated",
   "tool.deleted",
+  "guardrailsPolicy.updated",
   "toolInvocationPolicy.created",
   "toolInvocationPolicy.updated",
   "toolInvocationPolicy.deleted",

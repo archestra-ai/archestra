@@ -41,6 +41,7 @@ import {
   secretManager,
 } from "@/secrets-manager";
 import { ApiError } from "@/types";
+import { recordSubscriptionAuthenticationFailure } from "./subscription-authentication-status";
 
 /**
  * Delegated scopes the Microsoft 365 Copilot Chat API requires — ALL of the
@@ -172,6 +173,23 @@ class Microsoft365CopilotTokenManager {
     // re-inserting an already-expired entry preserves them for the next
     // redemption while failing the freshness check above.
     this.tokenCache.set(providerApiKeyId, { ...cached, expiresAtMs: 0 });
+  }
+
+  async recordAuthenticationFailure(params: {
+    providerApiKeyId: string;
+    refreshToken: string;
+  }): Promise<void> {
+    const { providerApiKeyId, refreshToken } = params;
+    const callerDigest = hashToken(refreshToken);
+    const cached = this.tokenCache.get(providerApiKeyId);
+    const lineage = cached?.knownRefreshTokenDigests.includes(callerDigest)
+      ? cached.knownRefreshTokenDigests
+      : [callerDigest];
+    await recordSubscriptionAuthenticationFailure({
+      providerApiKeyId,
+      provider: "microsoft-365-copilot",
+      matchesCredential: (stored) => lineage.includes(hashToken(stored)),
+    });
   }
 
   private async redeemAndCache(params: {
@@ -319,6 +337,16 @@ export function createMicrosoft365CopilotFetch(params: {
         providerApiKeyId,
       });
     } catch (error) {
+      if (
+        providerApiKeyId &&
+        error instanceof ApiError &&
+        error.statusCode === 401
+      ) {
+        await microsoft365CopilotTokenManager.recordAuthenticationFailure({
+          providerApiKeyId,
+          refreshToken,
+        });
+      }
       return redemptionErrorResponse(error);
     }
     const response = await doFetch(accessToken);
@@ -346,9 +374,26 @@ export function createMicrosoft365CopilotFetch(params: {
           },
         );
       } catch (error) {
+        if (
+          providerApiKeyId &&
+          error instanceof ApiError &&
+          error.statusCode === 401
+        ) {
+          await microsoft365CopilotTokenManager.recordAuthenticationFailure({
+            providerApiKeyId,
+            refreshToken,
+          });
+        }
         return redemptionErrorResponse(error);
       }
-      return doFetch(freshAccessToken);
+      const retried = await doFetch(freshAccessToken);
+      if (providerApiKeyId && retried.status === 401) {
+        await microsoft365CopilotTokenManager.recordAuthenticationFailure({
+          providerApiKeyId,
+          refreshToken,
+        });
+      }
+      return retried;
     }
 
     return response;

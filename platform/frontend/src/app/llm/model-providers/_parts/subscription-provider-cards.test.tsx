@@ -1,10 +1,17 @@
+import {
+  SUBSCRIPTION_CREDENTIAL_KINDS,
+  SUBSCRIPTION_CREDENTIALS,
+} from "@archestra/shared";
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LlmProviderApiKeyResponse } from "@/components/llm-provider-api-key-form";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { hasPermissions } from "@/lib/auth/auth.utils";
-import type { SubscriptionOffer } from "./subscription-offers";
+import {
+  buildSubscriptionOffers,
+  type SubscriptionOffer,
+} from "./subscription-offers";
 import { SubscriptionProviderCards } from "./subscription-provider-cards";
 
 vi.mock("@/lib/auth/auth.query");
@@ -24,6 +31,47 @@ afterEach(() => {
 });
 
 describe("SubscriptionProviderCards", () => {
+  it.each(
+    SUBSCRIPTION_CREDENTIAL_KINDS,
+  )("shows and recovers from rejected authentication for %s", async (kind) => {
+    const user = userEvent.setup();
+    const own = credential({
+      provider: SUBSCRIPTION_CREDENTIALS[kind].provider,
+      subscriptionKind: kind,
+      requiresReauthentication: false,
+    });
+    const onConnect = vi.fn();
+    const cards = (requiresReauthentication: boolean) => (
+      <SubscriptionProviderCards
+        offers={buildSubscriptionOffers([
+          { ...own, requiresReauthentication },
+        ]).filter((offer) => offer.kind === kind)}
+        isLoading={false}
+        currentUserId="user-1"
+        onConnect={onConnect}
+        onManage={vi.fn()}
+        onDisconnect={vi.fn()}
+        disconnectBlockedReason={() => null}
+      />
+    );
+    const { rerender } = render(cards(false));
+    expect(screen.getByText("Connected")).toBeVisible();
+    rerender(cards(true));
+    expect(screen.queryByText("Connected")).toBeNull();
+    expect(screen.getByText("Reconnect required")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Manage" })).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Reconnect" }));
+    expect(onConnect).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind,
+        credential: expect.objectContaining({ id: own.id }),
+      }),
+    );
+    rerender(cards(false));
+    expect(screen.getByText("Connected")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Reconnect" })).toBeNull();
+  });
+
   it("offers Connect when nothing is linked", () => {
     const { onDisconnect } = renderCards({ credential: null });
     expect(screen.getByRole("button", { name: "Connect" })).toBeTruthy();

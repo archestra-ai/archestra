@@ -2,7 +2,7 @@
 title: Deployment
 category: Archestra Platform
 order: 3
-lastUpdated: 2026-09-12
+lastUpdated: 2026-09-17
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -124,7 +124,7 @@ Helm deployment is our recommended approach for deploying Archestra Platform to 
 Install Archestra Platform using the Helm chart from our OCI registry:
 
 ```bash
-export ARCHESTRA_VERSION="1.4.0-beta.8" # x-release-please-version
+export ARCHESTRA_VERSION="1.4.0-beta.13" # x-release-please-version
 helm upgrade archestra-platform \
   oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts/archestra-platform \
   --version "$ARCHESTRA_VERSION" \
@@ -802,13 +802,14 @@ The following environment variables can be used to configure Archestra Platform.
 - **`ARCHESTRA_DATABASE_POOL_MAX`** - Maximum number of PostgreSQL connections per backend pod.
   - Default: `50`
   - Range: `1`–`500`
-  - Helm divides `archestra.database.connectionBudget` (default `200`) across peak backend pods, then subtracts 12 per pod. Those 12 connections cover the cache pool and two notification listeners. The query pool is capped at `500`.
+  - `archestra.database.connectionBudget` defaults to `null`. Omitting it preserves existing pool configuration, or the backend default of 50 query connections per pod. Upgrades do not require a budget, including deployments with HPA or multiple replicas.
+  - Set a connection budget to enable automatic sizing. Helm divides it across peak backend pods, then subtracts 12 per pod. Those 12 connections cover the cache pool and two notification listeners. The query pool is capped at `500`.
   - Peak pods include web/HPA maximum replicas, worker replicas, rollout surge, and one terminating old revision. Recreate deployments count only their target replicas. Each peak pod needs at least 13 budgeted connections; Helm rejects smaller budgets.
   - For example, four web and three worker replicas with default surge budget for 16 peak pods. A `400`-connection budget gives each pod 13 query connections: `16 × (13 + 12) = 400`.
-  - Keep the budget below PostgreSQL `max_connections`, after subtracting reserved slots and other clients. The bundled database allows `250` connections, leaving `50` outside the default budget. External databases and multiple releases need explicitly allocated budgets.
+  - Keep the budget below PostgreSQL `max_connections`, after subtracting reserved slots and other clients. The bundled database allows `250` connections. An explicit budget of `200` leaves `50` for other clients. External databases and multiple releases need explicitly allocated budgets.
   - Finish one rollout before starting another. Before increasing replicas, roll out a smaller `archestra.database.poolMax` at the existing replica count. Then scale and clear the override. Old pods keep their previous limits until replaced; Helm cannot resize existing pools.
   - Fixed overrides (`archestra.database.poolMax` or this environment variable) bypass automatic budgeting. Operators must budget their aggregate use separately.
-  - Unprefixed `archestra.envFrom` imports preserve their existing pool configuration by default. Helm omits its explicit pool variable so it cannot override a value from the Secret or ConfigMap; if neither supplies a pool limit, the backend default applies. Set `archestra.database.poolMaxFromEnvFrom: false` to opt into chart-managed sizing, or `true` to explicitly require an unprefixed bulk source. Exclusively prefixed sources cannot supply `ARCHESTRA_DATABASE_POOL_MAX`, so they use chart sizing by default.
+  - Unprefixed `archestra.envFrom` imports preserve their existing pool configuration by default. Helm omits its explicit pool variable so it cannot override a value from the Secret or ConfigMap; if neither supplies a pool limit, the backend default applies. Set `archestra.database.poolMaxFromEnvFrom: false` alongside a budget to enable chart-managed sizing. Set it to `true` to require an unprefixed bulk source. Exclusively prefixed sources use chart sizing when a budget is configured.
 
 - **`ARCHESTRA_DATABASE_STATEMENT_TIMEOUT_MILLIS`** - Per-connection PostgreSQL `statement_timeout` (in milliseconds) applied to every pooled connection.
   - Default: `30000` (30s)
@@ -938,12 +939,26 @@ Agent Runtime requires Kubernetes configuration through `ARCHESTRA_ORCHESTRATOR_
 Install the tested controller version before enabling the feature:
 
 ```sh
-kubectl apply --server-side -f https://github.com/kubernetes-sigs/agent-sandbox/releases/download/v1.0.1/sandbox.yaml
-kubectl wait --for=condition=Established crd/sandboxes.agents.x-k8s.io --timeout=60s
+kubectl apply --server-side -f https://github.com/kubernetes-sigs/agent-sandbox/releases/download/v1.0.1/sandbox-with-extensions.yaml
+kubectl wait --for=condition=Established \
+  crd/sandboxes.agents.x-k8s.io \
+  crd/sandboxtemplates.extensions.agents.x-k8s.io \
+  crd/sandboxwarmpools.extensions.agents.x-k8s.io \
+  crd/sandboxclaims.extensions.agents.x-k8s.io --timeout=60s
+kubectl create configmap agent-sandbox-config -n agent-sandbox-system \
+  --from-literal=allowed-label-domains=sandbox.users.io,archestra.io \
+  --dry-run=client -o yaml | kubectl apply -f -
+kubectl rollout restart deployment/agent-sandbox-controller -n agent-sandbox-system
 kubectl rollout status deployment/agent-sandbox-controller -n agent-sandbox-system --timeout=120s
 ```
 
 The controller does not install a container isolation runtime. Check your cluster's admission policies and image architecture before enabling workloads.
+
+#### Claude Subscription Sign-In
+
+Claude subscription sign-in uses backend HTTPS requests instead of a Kubernetes workload. The backend needs outbound HTTPS access to `platform.claude.com` for token exchange. Model discovery needs access to `api.anthropic.com`. Browsers need access to `claude.ai` and its sign-in redirects.
+
+Environment egress policies govern runtime workloads, not these backend account requests. Runtime inference still follows the Agent's Environment policy. Tokens remain in the configured secrets backend.
 
 #### Provider Setup
 
@@ -975,6 +990,14 @@ The prefetch uses the runtime namespace's default ServiceAccount image pull secr
 Fresh nodes still need their first download. An unavailable image does not block other images or Agent launches.
 <!-- SPDX-SnippetEnd -->
 
+#### Warm Workspaces
+
+Warm pools prepare empty workspaces before tasks arrive. Compatible Agents share a pool within the same Environment. Each new workspace claims one Sandbox exclusively. Used workspaces never return to the pool.
+
+Set `ARCHESTRA_AGENT_RUNTIME_WARM_POOL_SIZE=1` to keep one spare workspace per configuration. `ARCHESTRA_AGENT_RUNTIME_WARM_POOL_MAX_POOLS` defaults to `4` and limits prepared configurations. Spare workspaces consume CPU, memory, and persistent storage.
+
+The controller extensions above provide allocation and replenishment. Pools contain no task credentials and start without network access. Claimed workspaces use the Agent's existing network policy. Missing pools or extensions fall back to normal startup. Empty pools allocate a new workspace. Setting the size to `0` removes spare capacity without deleting claimed workspaces.
+
 #### Privileged Containers
 
 Ordinary coding clients do not require privilege. Docker-in-Docker and nested Kubernetes development environments may require it. Privileged containers have broad access to the node, so use a dedicated namespace and node pool.
@@ -998,7 +1021,7 @@ On GKE, custom Sandbox controllers can produce a “not backed by a controller�
   - Values: `true`, `false`
 
 - **`ARCHESTRA_AGENT_RUNTIME_BASE_IMAGE`** - Container image prefilled when Agent Runtime is enabled on an Agent. The built-in image supplies the default Agent loop. Custom images can replace it and set their own command.
-  - Default: `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/agent-archestra:1.4.0-beta.8` <!-- x-release-please-version -->
+  - Default: `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/agent-archestra:1.4.0-beta.13` <!-- x-release-please-version -->
 
 - **`ARCHESTRA_AGENT_RUNTIME_ALLOW_PRIVILEGED`** - Allows Agent administrators to configure privileged Agent Runtime pods. Privileged containers have node-level access.
   - Default: `false`
@@ -1016,6 +1039,10 @@ On GKE, custom Sandbox controllers can produce a “not backed by a controller�
 - **`ARCHESTRA_AGENT_RUNTIME_CPU_REQUEST`**, **`ARCHESTRA_AGENT_RUNTIME_MEMORY_REQUEST`**, **`ARCHESTRA_AGENT_RUNTIME_MEMORY_LIMIT`** - Pod resources for a run whose Agent sets none. There is no CPU limit by default: throttling an agent mid-turn reads as a hang rather than back-pressure.
   - Defaults: `500m`, `1Gi`, `4Gi`
 
+- **`ARCHESTRA_AGENT_RUNTIME_WARM_POOL_SIZE`** - Spare workspaces per compatible runtime configuration. `0` disables warming.
+  - Default: `0`
+- **`ARCHESTRA_AGENT_RUNTIME_WARM_POOL_MAX_POOLS`** - Maximum prepared configurations per deployment. Additional configurations start normally without reserved capacity.
+  - Default: `4`
 - **`ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_SIZE`** - Persistent volume capacity for each Agent Sandbox workspace. Stores runtime state, client sessions, and working files under `/home/node`. Privileged workspaces also store `/var/lib/docker` on this volume.
   - Default: `20Gi`
 
@@ -1267,13 +1294,11 @@ These environment variables set the default base URL for each LLM provider. Per-
   - Uses Azure Identity `DefaultAzureCredential` with token scope `https://ai.azure.com/.default`
   - Claude deployments must already exist in the Azure resource. Microsoft lists additional Claude prerequisites: paid eligible subscription, supported region, Azure Marketplace access for partner models, permission to subscribe to model offerings, and Contributor or Owner role on the resource group. Azure also requires Anthropic deployment metadata: `industry`, `organizationName`, and `countryCode`.
 
-- **`ARCHESTRA_ANTHROPIC_VERTEX_AI_ENABLED`** - Enable Claude through Vertex AI.
-  - Default: `false`
+- **`ARCHESTRA_ANTHROPIC_VERTEX_AI_PROJECT`** - Google Cloud project ID for Claude on Vertex AI.
+  - A non-empty project enables Claude on Vertex AI. Unset or blank disables it.
   - Uses Application Default Credentials when no credentials file is set
   - Do not enable another keyless Anthropic authentication mode at the same time
-
-- **`ARCHESTRA_ANTHROPIC_VERTEX_AI_PROJECT`** - Google Cloud project ID for Claude on Vertex AI.
-  - Required when: `ARCHESTRA_ANTHROPIC_VERTEX_AI_ENABLED=true`
+  - `ARCHESTRA_ANTHROPIC_VERTEX_AI_ENABLED` is no longer used, including when set to `false`. Remove the project setting to disable this mode.
 
 - **`ARCHESTRA_ANTHROPIC_VERTEX_AI_LOCATION`** - Vertex AI location for Claude requests.
   - Default: `global`
@@ -2076,13 +2101,14 @@ To learn more about enterprise licensing, see the [pricing model](/docs/platform
 
 ### OpenAPPA Tool Guardrails (experimental)
 
-- `ARCHESTRA_OPENAPPA_ENABLED`: explicit opt-in, default `false`. `ARCHESTRA_BETA` and a policy path do not enable it.
-- `ARCHESTRA_OPENAPPA_POLICY_PATH`: absolute deployment TOML path, required when enabled.
+- `ARCHESTRA_OPENAPPA_ENABLED`: defaults to `false`. Explicit `true` enables OpenAPPA and its policy editor.
+- `ARCHESTRA_OPENAPPA_YELL_ENABLED`: defaults to `true`. Set `false` to disable reporting. With OpenAPPA and Guardrails v2 enabled, exposes agent feedback reporting. Reports go to Archestra’s shared HTTPS receiver, private GCS storage, and internal Slack channel. No GCP credentials are required in your deployment.
+- `ARCHESTRA_LLM_PROXY_PLUGINS`: comma-separated plugin list, empty by default. Enabling OpenAPPA automatically registers its plugin. The list alone does not enable APPA.
 
-Restart the backend after changing these settings. While disabled, existing Tool
-Guardrails run unchanged and the native APPA runtime and MCP remedy tool are
-inactive. While enabled, APPA evaluates calls/results at the same LLM-proxy
-checkpoints; errors fail closed. The existing refusal envelope carries APPA's
-explanation and remedy text. Human approvals and the special MCP remedy tool
-remain available. See [the integration setup](https://github.com/archestra-ai/archestra/blob/main/platform/archestra-rs/openappa-rs/README.md)
-for paired source builds and current limitations.
+Policies are stored in PostgreSQL and edited in OpenAPPA. Container policy paths are no longer used. Save your existing policy in the editor when upgrading. Saved revisions apply to new conversations. Existing conversations keep their original policy.
+
+`ARCHESTRA_BETA` does not enable OpenAPPA. Restart the backend after changing the feature flag.
+
+Reporting sends the agent’s message verbatim, plus filtered policy diagnostics. Reports identify Archestra and the hostname from `ARCHESTRA_FRONTEND_URL`. Agents can include their session’s policy decisions. Diagnostics exclude raw prompts, tool arguments, tool outputs, and session identifiers. Policy names remain visible. Messages must not contain secrets, personal data, or task content. Reporting does not change policies or grant tool permissions. The active policy must permit the `yell` tool, directly or through a matching wildcard. Restart the backend after changing the reporting flag.
+
+With the APPA flag off, existing Tool Guardrails run unchanged. The native APPA runtime and MCP remedy tool remain inactive. When enabled, APPA replaces the proxy's existing tool-call and tool-result policy checks. Errors fail closed. Chat shows blocked attempts as denied tool calls and returns APPA's feedback to the model. The model can choose a remedy and continue without another user message. Existing approval requirements still apply. External clients receive the existing text refusal; automatic continuation requires client support. See [the integration setup](https://github.com/archestra-ai/archestra/blob/main/platform/archestra-rs/openappa-rs/README.md) for current limitations.

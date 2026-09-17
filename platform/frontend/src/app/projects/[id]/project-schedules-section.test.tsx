@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/auth/auth.query");
+vi.mock("@/lib/config/config.query");
 
 vi.mock("next/navigation");
 
@@ -37,6 +38,7 @@ vi.mock("@/components/scheduled-tasks/use-resolve-run-chat", () => ({
 import { useRouter, useSearchParams } from "next/navigation";
 import { useProfiles } from "@/lib/agent.query";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { useFeature } from "@/lib/config/config.query";
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import {
   type ScheduleTrigger,
@@ -97,6 +99,9 @@ beforeEach(() => {
   vi.mocked(useSession).mockReturnValue({
     data: { user: { id: "user-1" } },
   } as ReturnType<typeof useSession>);
+  vi.mocked(useFeature).mockImplementation((flag) =>
+    flag === "agentRuntime" ? true : undefined,
+  );
   vi.mocked(useRouter).mockReturnValue({
     push: vi.fn(),
   } as unknown as ReturnType<typeof useRouter>);

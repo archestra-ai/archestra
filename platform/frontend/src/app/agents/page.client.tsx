@@ -47,6 +47,7 @@ import { computeCanModifyAgent } from "@/components/agent-pages/use-agent-access
 import { AgentProviderIndicator } from "@/components/agent-provider-indicator";
 import { AgentVersionHistoryDialog } from "@/components/agent-version-history-dialog";
 import { BulkVisibilityDialog } from "@/components/bulk-visibility-dialog";
+import { RuntimeCapableIndicator } from "@/components/chat/runtime-capable-indicator";
 import { CloneAgentDialog } from "@/components/clone-agent-dialog";
 import {
   DefaultAgentTag,
@@ -132,7 +133,6 @@ import {
 import { useMyTeams } from "@/lib/teams/team.query";
 import { resolveCatalogEnvironmentLabel } from "../mcp/registry/_parts/catalog-environment-label";
 import { AgentActions } from "./agent-actions";
-import { ConvertToSkillDialog } from "./convert-to-skill-dialog";
 
 type AgentsInitialData = {
   agents: archestraApiTypes.GetAgentCatalogResponses["200"] | null;
@@ -366,9 +366,6 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     id: string;
     canModify: boolean;
   } | null>(null);
-  const [convertingAgent, setConvertingAgent] = useState<AgentData | null>(
-    null,
-  );
 
   // Create/edit/view used to be dialogs on this page, opened from
   // `?create=true`, `?edit=<id>` and `?view=<id>`; those links still arrive
@@ -667,7 +664,6 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
         }}
         onPermanentlyDelete={setPermanentlyDeletingAgent}
         onClone={setCloningAgent}
-        onConvertToSkill={setConvertingAgent}
         onTogglePin={(target) =>
           pinAgent.mutate({ id: target.id, pinned: !target.pinnedAt })
         }
@@ -812,6 +808,11 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
             currentUserId={currentUserId}
             showSelfAsMe
           />
+          {/* Badge row, not the title line: the title shares its line with
+              the action cluster and clips at phone width. */}
+          {agent.runtime != null && (
+            <RuntimeCapableIndicator variant="pill" runtime={agent.runtime} />
+          )}
           {effectiveDefault?.agentId === agent.id ? (
             <DefaultAgentTag source={effectiveDefault.source} />
           ) : null}
@@ -886,9 +887,17 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
             description={agent.description}
             labels={agent.labels}
             extraBadges={
-              effectiveDefault?.agentId === agent.id ? (
-                <DefaultAgentTag source={effectiveDefault.source} />
-              ) : undefined
+              <>
+                {agent.runtime != null && (
+                  <RuntimeCapableIndicator
+                    variant="pill"
+                    runtime={agent.runtime}
+                  />
+                )}
+                {effectiveDefault?.agentId === agent.id ? (
+                  <DefaultAgentTag source={effectiveDefault.source} />
+                ) : null}
+              </>
             }
           />
         );
@@ -1401,13 +1410,6 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                 open={isImportDialogOpen}
                 onOpenChange={setIsImportDialogOpen}
                 onSuccess={() => {}}
-              />
-
-              <ConvertToSkillDialog
-                agent={convertingAgent}
-                onOpenChange={(open) => {
-                  if (!open) setConvertingAgent(null);
-                }}
               />
 
               <CloneAgentDialog

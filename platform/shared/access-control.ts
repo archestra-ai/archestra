@@ -558,7 +558,7 @@ export const permissionDescriptions: Record<string, string> = {
   "llmLimit:create": "Create new usage limits",
   "llmLimit:update": "Modify existing usage limits",
   "llmLimit:delete": "Remove usage limits",
-  "llmSettings:read": "View LLM settings (compression, cleanup interval)",
+  "llmSettings:read": "View LLM settings",
   "llmSettings:update": "Modify LLM settings",
   "mcpSettings:read": "View MCP settings (online catalog availability)",
   "mcpSettings:update": "Modify MCP settings",
@@ -674,6 +674,11 @@ export const permissionDescriptions: Record<string, string> = {
 export const requiredEndpointPermissionsMap: Partial<
   Record<RouteId, Permissions>
 > = {
+  // Public, stateless APPA endpoint. Returns only an empty annotation.
+  [RouteId.AnnotateGuardrailsTool]: {},
+  [RouteId.GetGuardrailsPolicy]: { toolPolicy: ["read"] },
+  [RouteId.ValidateGuardrailsPolicy]: { toolPolicy: ["update"] },
+  [RouteId.UpdateGuardrailsPolicy]: { toolPolicy: ["update"] },
   // Inspecting or mutating arbitrary outbound destinations can configure
   // credential-bearing egress, so those operations remain settings-manager
   // only. Credential-redacted registry summaries require Agent read and are
@@ -783,6 +788,13 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UnpinAgent]: {},
   [RouteId.CreateAgent]: {},
   [RouteId.CloneAgent]: {},
+  [RouteId.TransferSkillOwnership]: { skill: ["update"] },
+  [RouteId.TransferPluginOwnership]: { plugin: ["update", "admin"] },
+  [RouteId.TransferProjectOwnership]: { project: ["update"] },
+  [RouteId.TransferAppOwnership]: { app: ["update"] },
+  [RouteId.TransferMcpCatalogOwnership]: { mcpRegistry: ["update"] },
+  [RouteId.TransferRemoteAgentOwnership]: { agentSettings: ["update"] },
+  [RouteId.TransferAgentOwnership]: {},
   [RouteId.UpdateAgent]: {},
   [RouteId.BulkUpdateAgents]: {},
   [RouteId.BulkDeleteAgents]: {},
@@ -1483,9 +1495,6 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateSecuritySettings]: {
     agentSettings: ["update"],
   },
-  [RouteId.UpdateLlmSettings]: {
-    llmSettings: ["update"],
-  },
   [RouteId.UpdateMcpSettings]: {
     mcpSettings: ["update"],
   },
@@ -1909,14 +1918,6 @@ export const requiredEndpointPermissionsMap: Partial<
     mcpServerInstallation: ["read"],
   },
   [RouteId.CreateSkill]: { skill: ["create"] },
-  [RouteId.ConvertAgentToSkill]: { skill: ["create"], agent: ["read"] },
-  // chat:read gates spending the agent's configured LLM key — the same gate
-  // every other resolveAgentLlmOrDefault path (chat, compaction) sits behind.
-  [RouteId.SuggestSkillDescription]: {
-    skill: ["create"],
-    agent: ["read"],
-    chat: ["read"],
-  },
   [RouteId.GetSkill]: { skill: ["read"] },
   [RouteId.UpdateSkill]: { skill: ["update"] },
   [RouteId.BulkUpdateSkillsVisibility]: { skill: ["update"] },
@@ -1928,6 +1929,11 @@ export const requiredEndpointPermissionsMap: Partial<
   // you past the trash.
   [RouteId.PermanentlyDeleteSkill]: { skill: ["delete"] },
   [RouteId.ResetSkill]: { skill: ["update"] },
+  [RouteId.GetGuardrailsDeployment]: { toolPolicy: ["read"] },
+  [RouteId.UpdateGuardrailsDeployment]: { organization: ["update"] },
+  [RouteId.GetAppaGithubSync]: { toolPolicy: ["read"] },
+  [RouteId.ConfigureAppaGithubSync]: { organization: ["update"] },
+  [RouteId.UpdateAppaGithubSync]: { organization: ["update"] },
   [RouteId.UpdateSkillGithubSync]: { skill: ["update"] },
   [RouteId.GetPlugins]: { plugin: ["read"] },
   [RouteId.GetPluginLabelKeys]: { plugin: ["read"] },
@@ -2122,8 +2128,9 @@ export const requiredEndpointPermissionsMap: Partial<
   },
 
   // MCP Gateway Routes - available to all authenticated users
-  [RouteId.McpGatewayGet]: {}, // Server discovery endpoint
+  [RouteId.McpGatewayGet]: {}, // MCP transport probe; authenticates gateway credentials
   [RouteId.McpGatewayPost]: {}, // JSON-RPC endpoint for resources/read and tools/call
+  [RouteId.McpGatewaySseMessage]: {}, // Legacy HTTP+SSE message endpoint; authenticates gateway credentials
   [RouteId.McpProxyPost]: {}, // Frontend proxy to MCP Gateway with session auth
   [RouteId.McpServerProxyPost]: {}, // Server-scoped Apps proxy; access enforced in-handler
   // App-bound MCP proxy: app access + visibility/allowlist gate enforced in the handler
@@ -2235,6 +2242,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
 
   "/mcp/tool-policies": { toolPolicy: ["read"] },
   "/mcp/tool-guardrails": { toolPolicy: ["read"] },
+  "/openappa": { toolPolicy: ["read"] },
 
   // Logs
   "/llm/logs": { log: ["read"] },

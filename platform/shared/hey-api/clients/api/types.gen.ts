@@ -12586,6 +12586,93 @@ export type InteractionVirtualKey = {
     createdByUserName: string | null;
 };
 
+export type TransferRemoteAgentOwnershipData = {
+    body: {
+        ownerId: string;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/a2a/remote-agents/{id}/transfer-ownership';
+};
+
+export type TransferRemoteAgentOwnershipErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type TransferRemoteAgentOwnershipError = TransferRemoteAgentOwnershipErrors[keyof TransferRemoteAgentOwnershipErrors];
+
+export type TransferRemoteAgentOwnershipResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type TransferRemoteAgentOwnershipResponse = TransferRemoteAgentOwnershipResponses[keyof TransferRemoteAgentOwnershipResponses];
+
 export type GetAgentA2aDelegationsData = {
     body?: never;
     path: {
@@ -19191,6 +19278,93 @@ export type UpdateAgentSkillExclusionsResponses = {
 
 export type UpdateAgentSkillExclusionsResponse = UpdateAgentSkillExclusionsResponses[keyof UpdateAgentSkillExclusionsResponses];
 
+export type TransferAgentOwnershipData = {
+    body: {
+        ownerId: string;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/agents/{id}/transfer-ownership';
+};
+
+export type TransferAgentOwnershipErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type TransferAgentOwnershipError = TransferAgentOwnershipErrors[keyof TransferAgentOwnershipErrors];
+
+export type TransferAgentOwnershipResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type TransferAgentOwnershipResponse = TransferAgentOwnershipResponses[keyof TransferAgentOwnershipResponses];
+
 export type BulkDeleteAgentsData = {
     body: {
         /**
@@ -20654,8 +20828,6 @@ export type DisconnectClaudeCodeAccountResponses = {
      */
     200: {
         state: 'disconnected' | 'starting' | 'awaiting_code' | 'connecting' | 'connected' | 'failed' | 'expired';
-        startupPhase?: 'scheduling' | 'pulling' | 'starting';
-        startupIssue?: 'image_pull' | 'capacity' | 'container';
         requiresVaultReference?: boolean;
         expiresAt?: string | null;
         flowId?: string;
@@ -20745,8 +20917,6 @@ export type GetClaudeCodeAccountResponses = {
      */
     200: {
         state: 'disconnected' | 'starting' | 'awaiting_code' | 'connecting' | 'connected' | 'failed' | 'expired';
-        startupPhase?: 'scheduling' | 'pulling' | 'starting';
-        startupIssue?: 'image_pull' | 'capacity' | 'container';
         requiresVaultReference?: boolean;
         expiresAt?: string | null;
         flowId?: string;
@@ -20838,8 +21008,6 @@ export type StartClaudeCodeSignInResponses = {
      */
     200: {
         state: 'disconnected' | 'starting' | 'awaiting_code' | 'connecting' | 'connected' | 'failed' | 'expired';
-        startupPhase?: 'scheduling' | 'pulling' | 'starting';
-        startupIssue?: 'image_pull' | 'capacity' | 'container';
         requiresVaultReference?: boolean;
         expiresAt?: string | null;
         flowId?: string;
@@ -20932,8 +21100,6 @@ export type CompleteClaudeCodeSignInResponses = {
      */
     200: {
         state: 'disconnected' | 'starting' | 'awaiting_code' | 'connecting' | 'connected' | 'failed' | 'expired';
-        startupPhase?: 'scheduling' | 'pulling' | 'starting';
-        startupIssue?: 'image_pull' | 'capacity' | 'container';
         requiresVaultReference?: boolean;
         expiresAt?: string | null;
         flowId?: string;
@@ -25037,6 +25203,93 @@ export type ReviewAppRecordingResponses = {
     200: unknown;
 };
 
+export type TransferAppOwnershipData = {
+    body: {
+        ownerId: string;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/apps/{id}/transfer-ownership';
+};
+
+export type TransferAppOwnershipErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type TransferAppOwnershipError = TransferAppOwnershipErrors[keyof TransferAppOwnershipErrors];
+
+export type TransferAppOwnershipResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type TransferAppOwnershipResponse = TransferAppOwnershipResponses[keyof TransferAppOwnershipResponses];
+
 export type GetAppsData = {
     body?: never;
     path?: never;
@@ -28602,7 +28855,7 @@ export type GetAuditLogsData = {
         /**
          * Filter by action type (dotted name, e.g. agent.created)
          */
-        action?: 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_updated' | 'agent.bulk_deleted' | 'agentRun.created' | 'agentRun.canceled' | 'agentRun.updated' | 'agentRun.deleted' | 'agentRun.shared' | 'agentRun.unshared' | 'credential.created' | 'credential.updated' | 'credential.deleted' | 'runtimeCredential.created' | 'runtimeCredential.updated' | 'runtimeCredential.deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_updated' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'clientConnection.updated' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_updated' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.content_upserted' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_updated' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'limit.bulk_deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmOauthClient.bulk_deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.updated' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'llmProviderApiKey.bulk_deleted' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'member.bulk_deleted' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_updated' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'serviceAccount.bulk_updated' | 'skill.created' | 'skill.updated' | 'skill.bulk_updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'teamToken.rotated' | 'tool.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'user.password_reset' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'auth.sessions_revoked' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted';
+        action?: 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_updated' | 'agent.bulk_deleted' | 'agentRun.created' | 'agentRun.canceled' | 'agentRun.updated' | 'agentRun.deleted' | 'agentRun.shared' | 'agentRun.unshared' | 'credential.created' | 'credential.updated' | 'credential.deleted' | 'runtimeCredential.created' | 'runtimeCredential.updated' | 'runtimeCredential.deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_updated' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'clientConnection.updated' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_updated' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.content_upserted' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_updated' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'limit.bulk_deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmOauthClient.bulk_deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.updated' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'llmProviderApiKey.bulk_deleted' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'member.bulk_deleted' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_updated' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'serviceAccount.bulk_updated' | 'skill.created' | 'skill.updated' | 'skill.bulk_updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'teamToken.rotated' | 'tool.deleted' | 'guardrailsPolicy.updated' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'user.password_reset' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'auth.sessions_revoked' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted';
         /**
          * Filter by outcome (success, failure, or denied)
          */
@@ -28706,7 +28959,7 @@ export type GetAuditLogsResponses = {
             actorName: string | null;
             actorEmail: string | null;
             impersonatedBy: string | null;
-            action: 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_updated' | 'agent.bulk_deleted' | 'agentRun.created' | 'agentRun.canceled' | 'agentRun.updated' | 'agentRun.deleted' | 'agentRun.shared' | 'agentRun.unshared' | 'credential.created' | 'credential.updated' | 'credential.deleted' | 'runtimeCredential.created' | 'runtimeCredential.updated' | 'runtimeCredential.deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_updated' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'clientConnection.updated' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_updated' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.content_upserted' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_updated' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'limit.bulk_deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmOauthClient.bulk_deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.updated' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'llmProviderApiKey.bulk_deleted' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'member.bulk_deleted' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_updated' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'serviceAccount.bulk_updated' | 'skill.created' | 'skill.updated' | 'skill.bulk_updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'teamToken.rotated' | 'tool.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'user.password_reset' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'auth.sessions_revoked' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted' | string;
+            action: 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_updated' | 'agent.bulk_deleted' | 'agentRun.created' | 'agentRun.canceled' | 'agentRun.updated' | 'agentRun.deleted' | 'agentRun.shared' | 'agentRun.unshared' | 'credential.created' | 'credential.updated' | 'credential.deleted' | 'runtimeCredential.created' | 'runtimeCredential.updated' | 'runtimeCredential.deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_updated' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'clientConnection.updated' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_updated' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.content_upserted' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_updated' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'limit.bulk_deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmOauthClient.bulk_deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.updated' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'llmProviderApiKey.bulk_deleted' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'member.bulk_deleted' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_updated' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'serviceAccount.bulk_updated' | 'skill.created' | 'skill.updated' | 'skill.bulk_updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'teamToken.rotated' | 'tool.deleted' | 'guardrailsPolicy.updated' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'user.password_reset' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'auth.sessions_revoked' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted' | string;
             outcome: 'success' | 'failure' | 'denied';
             resourceType: string | null;
             resourceId: string | null;
@@ -28825,7 +29078,7 @@ export type GetAuditLogResponses = {
         actorName: string | null;
         actorEmail: string | null;
         impersonatedBy: string | null;
-        action: 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_updated' | 'agent.bulk_deleted' | 'agentRun.created' | 'agentRun.canceled' | 'agentRun.updated' | 'agentRun.deleted' | 'agentRun.shared' | 'agentRun.unshared' | 'credential.created' | 'credential.updated' | 'credential.deleted' | 'runtimeCredential.created' | 'runtimeCredential.updated' | 'runtimeCredential.deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_updated' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'clientConnection.updated' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_updated' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.content_upserted' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_updated' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'limit.bulk_deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmOauthClient.bulk_deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.updated' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'llmProviderApiKey.bulk_deleted' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'member.bulk_deleted' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_updated' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'serviceAccount.bulk_updated' | 'skill.created' | 'skill.updated' | 'skill.bulk_updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'teamToken.rotated' | 'tool.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'user.password_reset' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'auth.sessions_revoked' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted' | string;
+        action: 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_updated' | 'agent.bulk_deleted' | 'agentRun.created' | 'agentRun.canceled' | 'agentRun.updated' | 'agentRun.deleted' | 'agentRun.shared' | 'agentRun.unshared' | 'credential.created' | 'credential.updated' | 'credential.deleted' | 'runtimeCredential.created' | 'runtimeCredential.updated' | 'runtimeCredential.deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_updated' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'clientConnection.updated' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_updated' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.content_upserted' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_updated' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'limit.bulk_deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmOauthClient.bulk_deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.updated' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'llmProviderApiKey.bulk_deleted' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'member.bulk_deleted' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_updated' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'serviceAccount.bulk_updated' | 'skill.created' | 'skill.updated' | 'skill.bulk_updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'teamToken.rotated' | 'tool.deleted' | 'guardrailsPolicy.updated' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'user.password_reset' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'auth.sessions_revoked' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted' | string;
         outcome: 'success' | 'failure' | 'denied';
         resourceType: string | null;
         resourceId: string | null;
@@ -34528,7 +34781,15 @@ export type CerebrasChatCompletionsWithAgentResponse = CerebrasChatCompletionsWi
 export type StreamChatData = {
     body: {
         id: string;
-        messages: Array<unknown>;
+        messages: Array<{
+            id?: string;
+            role: 'system' | 'user' | 'assistant';
+            parts: Array<{
+                type: string;
+                [key: string]: unknown;
+            }>;
+            [key: string]: unknown;
+        }>;
         trigger?: 'submit-message' | 'regenerate-message';
         temperature?: number;
         thinkingEffort?: 'low' | 'medium' | 'high';
@@ -40624,6 +40885,7 @@ export type GetConfigResponses = {
             maintenanceMode: string | null;
             chatSecretScanEnabled: boolean;
             lockedChatEnabled: boolean;
+            openappaEnabled: boolean;
             agentHooksEnabled: boolean;
             chatopsTelegramEnabled: boolean;
             kbAutoSyncPermissionsEnabled: boolean;
@@ -45966,6 +46228,540 @@ export type GroqChatCompletionsWithAgentResponses = {
 
 export type GroqChatCompletionsWithAgentResponse = GroqChatCompletionsWithAgentResponses[keyof GroqChatCompletionsWithAgentResponses];
 
+export type GetGuardrailsDeploymentData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/guardrails-deployment';
+};
+
+export type GetGuardrailsDeploymentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetGuardrailsDeploymentError = GetGuardrailsDeploymentErrors[keyof GetGuardrailsDeploymentErrors];
+
+export type GetGuardrailsDeploymentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        enabled: boolean;
+        featureEnabled: boolean;
+        active: boolean;
+    };
+};
+
+export type GetGuardrailsDeploymentResponse = GetGuardrailsDeploymentResponses[keyof GetGuardrailsDeploymentResponses];
+
+export type UpdateGuardrailsDeploymentData = {
+    body: {
+        enabled: boolean;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/guardrails-deployment';
+};
+
+export type UpdateGuardrailsDeploymentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UpdateGuardrailsDeploymentError = UpdateGuardrailsDeploymentErrors[keyof UpdateGuardrailsDeploymentErrors];
+
+export type UpdateGuardrailsDeploymentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        enabled: boolean;
+        featureEnabled: boolean;
+        active: boolean;
+    };
+};
+
+export type UpdateGuardrailsDeploymentResponse = UpdateGuardrailsDeploymentResponses[keyof UpdateGuardrailsDeploymentResponses];
+
+export type AnnotateGuardrailsToolData = {
+    body: {
+        version: 1;
+        kind: 'annotation';
+        [key: string]: unknown;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/guardrails-policy/annotators/noop';
+};
+
+export type AnnotateGuardrailsToolErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type AnnotateGuardrailsToolError = AnnotateGuardrailsToolErrors[keyof AnnotateGuardrailsToolErrors];
+
+export type AnnotateGuardrailsToolResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        version: 1;
+        answer: {
+            delta: {
+                [key: string]: never;
+            };
+            requires: {
+                history: Array<unknown>;
+                attention: Array<unknown>;
+            };
+            emits: Array<unknown>;
+        };
+    };
+};
+
+export type AnnotateGuardrailsToolResponse = AnnotateGuardrailsToolResponses[keyof AnnotateGuardrailsToolResponses];
+
+export type GetGuardrailsPolicyData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/guardrails-policy';
+};
+
+export type GetGuardrailsPolicyErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetGuardrailsPolicyError = GetGuardrailsPolicyErrors[keyof GetGuardrailsPolicyErrors];
+
+export type GetGuardrailsPolicyResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        organizationId: string;
+        revision: number;
+        content: string;
+        contentHash: string;
+        updatedBy: string | null;
+        updatedAt: string | null;
+    };
+};
+
+export type GetGuardrailsPolicyResponse = GetGuardrailsPolicyResponses[keyof GetGuardrailsPolicyResponses];
+
+export type UpdateGuardrailsPolicyData = {
+    body: {
+        content: string;
+        expectedRevision: number;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/guardrails-policy';
+};
+
+export type UpdateGuardrailsPolicyErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UpdateGuardrailsPolicyError = UpdateGuardrailsPolicyErrors[keyof UpdateGuardrailsPolicyErrors];
+
+export type UpdateGuardrailsPolicyResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        organizationId: string;
+        revision: number;
+        content: string;
+        contentHash: string;
+        updatedBy: string | null;
+        updatedAt: string | null;
+    };
+};
+
+export type UpdateGuardrailsPolicyResponse = UpdateGuardrailsPolicyResponses[keyof UpdateGuardrailsPolicyResponses];
+
+export type ValidateGuardrailsPolicyData = {
+    body: {
+        content: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/guardrails-policy/validate';
+};
+
+export type ValidateGuardrailsPolicyErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ValidateGuardrailsPolicyError = ValidateGuardrailsPolicyErrors[keyof ValidateGuardrailsPolicyErrors];
+
+export type ValidateGuardrailsPolicyResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        valid: boolean;
+        errors: Array<string>;
+    };
+};
+
+export type ValidateGuardrailsPolicyResponse = ValidateGuardrailsPolicyResponses[keyof ValidateGuardrailsPolicyResponses];
+
 export type GetHealthData = {
     body?: never;
     path?: never;
@@ -47057,10 +47853,6 @@ export type GetInteractionsResponses = {
             cost: string | null;
             cacheCost: string | null;
             cacheSavings: string | null;
-            toonTokensBefore: number | null;
-            toonTokensAfter: number | null;
-            toonCostSavings: string | null;
-            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -47265,10 +48057,6 @@ export type GetInteractionsResponses = {
             cost: string | null;
             cacheCost: string | null;
             cacheSavings: string | null;
-            toonTokensBefore: number | null;
-            toonTokensAfter: number | null;
-            toonCostSavings: string | null;
-            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -47389,10 +48177,6 @@ export type GetInteractionsResponses = {
             cost: string | null;
             cacheCost: string | null;
             cacheSavings: string | null;
-            toonTokensBefore: number | null;
-            toonTokensAfter: number | null;
-            toonCostSavings: string | null;
-            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -47511,10 +48295,6 @@ export type GetInteractionsResponses = {
             cost: string | null;
             cacheCost: string | null;
             cacheSavings: string | null;
-            toonTokensBefore: number | null;
-            toonTokensAfter: number | null;
-            toonCostSavings: string | null;
-            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -47633,10 +48413,6 @@ export type GetInteractionsResponses = {
             cost: string | null;
             cacheCost: string | null;
             cacheSavings: string | null;
-            toonTokensBefore: number | null;
-            toonTokensAfter: number | null;
-            toonCostSavings: string | null;
-            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -47755,10 +48531,6 @@ export type GetInteractionsResponses = {
             cost: string | null;
             cacheCost: string | null;
             cacheSavings: string | null;
-            toonTokensBefore: number | null;
-            toonTokensAfter: number | null;
-            toonCostSavings: string | null;
-            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -47854,10 +48626,6 @@ export type GetInteractionsResponses = {
             cost: string | null;
             cacheCost: string | null;
             cacheSavings: string | null;
-            toonTokensBefore: number | null;
-            toonTokensAfter: number | null;
-            toonCostSavings: string | null;
-            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -47955,10 +48723,6 @@ export type GetInteractionsResponses = {
             cost: string | null;
             cacheCost: string | null;
             cacheSavings: string | null;
-            toonTokensBefore: number | null;
-            toonTokensAfter: number | null;
-            toonCostSavings: string | null;
-            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -48497,10 +49261,6 @@ export type GetInteractionsResponses = {
             cost: string | null;
             cacheCost: string | null;
             cacheSavings: string | null;
-            toonTokensBefore: number | null;
-            toonTokensAfter: number | null;
-            toonCostSavings: string | null;
-            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -49072,10 +49832,6 @@ export type GetInteractionsResponses = {
             cost: string | null;
             cacheCost: string | null;
             cacheSavings: string | null;
-            toonTokensBefore: number | null;
-            toonTokensAfter: number | null;
-            toonCostSavings: string | null;
-            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -49173,10 +49929,6 @@ export type GetInteractionsResponses = {
             cost: string | null;
             cacheCost: string | null;
             cacheSavings: string | null;
-            toonTokensBefore: number | null;
-            toonTokensAfter: number | null;
-            toonCostSavings: string | null;
-            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -49274,10 +50026,6 @@ export type GetInteractionsResponses = {
             cost: string | null;
             cacheCost: string | null;
             cacheSavings: string | null;
-            toonTokensBefore: number | null;
-            toonTokensAfter: number | null;
-            toonCostSavings: string | null;
-            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -49375,10 +50123,6 @@ export type GetInteractionsResponses = {
             cost: string | null;
             cacheCost: string | null;
             cacheSavings: string | null;
-            toonTokensBefore: number | null;
-            toonTokensAfter: number | null;
-            toonCostSavings: string | null;
-            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -49476,10 +50220,6 @@ export type GetInteractionsResponses = {
             cost: string | null;
             cacheCost: string | null;
             cacheSavings: string | null;
-            toonTokensBefore: number | null;
-            toonTokensAfter: number | null;
-            toonCostSavings: string | null;
-            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -49577,10 +50317,6 @@ export type GetInteractionsResponses = {
             cost: string | null;
             cacheCost: string | null;
             cacheSavings: string | null;
-            toonTokensBefore: number | null;
-            toonTokensAfter: number | null;
-            toonCostSavings: string | null;
-            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -49678,10 +50414,6 @@ export type GetInteractionsResponses = {
             cost: string | null;
             cacheCost: string | null;
             cacheSavings: string | null;
-            toonTokensBefore: number | null;
-            toonTokensAfter: number | null;
-            toonCostSavings: string | null;
-            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -49779,10 +50511,6 @@ export type GetInteractionsResponses = {
             cost: string | null;
             cacheCost: string | null;
             cacheSavings: string | null;
-            toonTokensBefore: number | null;
-            toonTokensAfter: number | null;
-            toonCostSavings: string | null;
-            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -49878,10 +50606,6 @@ export type GetInteractionsResponses = {
             cost: string | null;
             cacheCost: string | null;
             cacheSavings: string | null;
-            toonTokensBefore: number | null;
-            toonTokensAfter: number | null;
-            toonCostSavings: string | null;
-            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -49977,10 +50701,6 @@ export type GetInteractionsResponses = {
             cost: string | null;
             cacheCost: string | null;
             cacheSavings: string | null;
-            toonTokensBefore: number | null;
-            toonTokensAfter: number | null;
-            toonCostSavings: string | null;
-            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -50076,10 +50796,6 @@ export type GetInteractionsResponses = {
             cost: string | null;
             cacheCost: string | null;
             cacheSavings: string | null;
-            toonTokensBefore: number | null;
-            toonTokensAfter: number | null;
-            toonCostSavings: string | null;
-            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -50177,10 +50893,6 @@ export type GetInteractionsResponses = {
             cost: string | null;
             cacheCost: string | null;
             cacheSavings: string | null;
-            toonTokensBefore: number | null;
-            toonTokensAfter: number | null;
-            toonCostSavings: string | null;
-            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -50278,10 +50990,6 @@ export type GetInteractionsResponses = {
             cost: string | null;
             cacheCost: string | null;
             cacheSavings: string | null;
-            toonTokensBefore: number | null;
-            toonTokensAfter: number | null;
-            toonCostSavings: string | null;
-            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -51093,10 +51801,6 @@ export type GetInteractionsResponses = {
             cost: string | null;
             cacheCost: string | null;
             cacheSavings: string | null;
-            toonTokensBefore: number | null;
-            toonTokensAfter: number | null;
-            toonCostSavings: string | null;
-            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -51908,10 +52612,6 @@ export type GetInteractionsResponses = {
             cost: string | null;
             cacheCost: string | null;
             cacheSavings: string | null;
-            toonTokensBefore: number | null;
-            toonTokensAfter: number | null;
-            toonCostSavings: string | null;
-            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -52723,10 +53423,6 @@ export type GetInteractionsResponses = {
             cost: string | null;
             cacheCost: string | null;
             cacheSavings: string | null;
-            toonTokensBefore: number | null;
-            toonTokensAfter: number | null;
-            toonCostSavings: string | null;
-            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -52824,10 +53520,6 @@ export type GetInteractionsResponses = {
             cost: string | null;
             cacheCost: string | null;
             cacheSavings: string | null;
-            toonTokensBefore: number | null;
-            toonTokensAfter: number | null;
-            toonCostSavings: string | null;
-            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -52993,10 +53685,6 @@ export type GetInteractionsResponses = {
             cost: string | null;
             cacheCost: string | null;
             cacheSavings: string | null;
-            toonTokensBefore: number | null;
-            toonTokensAfter: number | null;
-            toonCostSavings: string | null;
-            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -53201,10 +53889,6 @@ export type GetInteractionsResponses = {
             cost: string | null;
             cacheCost: string | null;
             cacheSavings: string | null;
-            toonTokensBefore: number | null;
-            toonTokensAfter: number | null;
-            toonCostSavings: string | null;
-            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -53409,10 +54093,6 @@ export type GetInteractionsResponses = {
             cost: string | null;
             cacheCost: string | null;
             cacheSavings: string | null;
-            toonTokensBefore: number | null;
-            toonTokensAfter: number | null;
-            toonCostSavings: string | null;
-            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -53617,10 +54297,6 @@ export type GetInteractionsResponses = {
             cost: string | null;
             cacheCost: string | null;
             cacheSavings: string | null;
-            toonTokensBefore: number | null;
-            toonTokensAfter: number | null;
-            toonCostSavings: string | null;
-            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -53769,10 +54445,6 @@ export type GetInteractionSummariesResponses = {
             cacheWriteTokens: number | null;
             cost: string | null;
             baselineCost: string | null;
-            toonTokensBefore: number | null;
-            toonTokensAfter: number | null;
-            toonCostSavings: string | null;
-            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
             createdAt: string;
             type: 'openai:chatCompletions' | 'openai:responses' | 'openai:embeddings' | 'gemini:generateContent' | 'gemini:embeddings' | 'anthropic:messages' | 'bedrock:converse' | 'bedrock:invoke' | 'bedrock:embeddings' | 'cohere:chat' | 'cohere:embeddings' | 'cerebras:chatCompletions' | 'mistral:chatCompletions' | 'perplexity:chatCompletions' | 'perplexity:responses' | 'groq:chatCompletions' | 'xai:chatCompletions' | 'openrouter:chatCompletions' | 'vllm:chatCompletions' | 'ollama:chatCompletions' | 'ollama-native:chat' | 'zhipuai:chatCompletions' | 'deepseek:chatCompletions' | 'minimax:chatCompletions' | 'kimi:chatCompletions' | 'azure:chatCompletions' | 'azure:responses' | 'github-copilot:chatCompletions' | 'github-copilot:responses' | 'microsoft-365-copilot:chatCompletions' | 'archestra:chatCompletions' | 'voyage:embeddings';
             externalAgentIdLabel: string | null;
@@ -53913,14 +54585,7 @@ export type GetInteractionSessionsResponses = {
             totalBilledCost: string | null;
             totalSubscriptionCost: string | null;
             totalBaselineCost: string | null;
-            totalToonCostSavings: string | null;
             totalCacheSavings: string | null;
-            toonSkipReasonCounts: {
-                applied: number;
-                notEnabled: number;
-                notEffective: number;
-                noToolResults: number;
-            };
             firstRequestTime: string;
             lastRequestTime: string;
             models: Array<string>;
@@ -54264,10 +54929,6 @@ export type GetInteractionResponses = {
         cost: string | null;
         cacheCost: string | null;
         cacheSavings: string | null;
-        toonTokensBefore: number | null;
-        toonTokensAfter: number | null;
-        toonCostSavings: string | null;
-        toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -54472,10 +55133,6 @@ export type GetInteractionResponses = {
         cost: string | null;
         cacheCost: string | null;
         cacheSavings: string | null;
-        toonTokensBefore: number | null;
-        toonTokensAfter: number | null;
-        toonCostSavings: string | null;
-        toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -54596,10 +55253,6 @@ export type GetInteractionResponses = {
         cost: string | null;
         cacheCost: string | null;
         cacheSavings: string | null;
-        toonTokensBefore: number | null;
-        toonTokensAfter: number | null;
-        toonCostSavings: string | null;
-        toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -54718,10 +55371,6 @@ export type GetInteractionResponses = {
         cost: string | null;
         cacheCost: string | null;
         cacheSavings: string | null;
-        toonTokensBefore: number | null;
-        toonTokensAfter: number | null;
-        toonCostSavings: string | null;
-        toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -54840,10 +55489,6 @@ export type GetInteractionResponses = {
         cost: string | null;
         cacheCost: string | null;
         cacheSavings: string | null;
-        toonTokensBefore: number | null;
-        toonTokensAfter: number | null;
-        toonCostSavings: string | null;
-        toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -54962,10 +55607,6 @@ export type GetInteractionResponses = {
         cost: string | null;
         cacheCost: string | null;
         cacheSavings: string | null;
-        toonTokensBefore: number | null;
-        toonTokensAfter: number | null;
-        toonCostSavings: string | null;
-        toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -55061,10 +55702,6 @@ export type GetInteractionResponses = {
         cost: string | null;
         cacheCost: string | null;
         cacheSavings: string | null;
-        toonTokensBefore: number | null;
-        toonTokensAfter: number | null;
-        toonCostSavings: string | null;
-        toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -55162,10 +55799,6 @@ export type GetInteractionResponses = {
         cost: string | null;
         cacheCost: string | null;
         cacheSavings: string | null;
-        toonTokensBefore: number | null;
-        toonTokensAfter: number | null;
-        toonCostSavings: string | null;
-        toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -55704,10 +56337,6 @@ export type GetInteractionResponses = {
         cost: string | null;
         cacheCost: string | null;
         cacheSavings: string | null;
-        toonTokensBefore: number | null;
-        toonTokensAfter: number | null;
-        toonCostSavings: string | null;
-        toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -56279,10 +56908,6 @@ export type GetInteractionResponses = {
         cost: string | null;
         cacheCost: string | null;
         cacheSavings: string | null;
-        toonTokensBefore: number | null;
-        toonTokensAfter: number | null;
-        toonCostSavings: string | null;
-        toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -56380,10 +57005,6 @@ export type GetInteractionResponses = {
         cost: string | null;
         cacheCost: string | null;
         cacheSavings: string | null;
-        toonTokensBefore: number | null;
-        toonTokensAfter: number | null;
-        toonCostSavings: string | null;
-        toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -56481,10 +57102,6 @@ export type GetInteractionResponses = {
         cost: string | null;
         cacheCost: string | null;
         cacheSavings: string | null;
-        toonTokensBefore: number | null;
-        toonTokensAfter: number | null;
-        toonCostSavings: string | null;
-        toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -56582,10 +57199,6 @@ export type GetInteractionResponses = {
         cost: string | null;
         cacheCost: string | null;
         cacheSavings: string | null;
-        toonTokensBefore: number | null;
-        toonTokensAfter: number | null;
-        toonCostSavings: string | null;
-        toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -56683,10 +57296,6 @@ export type GetInteractionResponses = {
         cost: string | null;
         cacheCost: string | null;
         cacheSavings: string | null;
-        toonTokensBefore: number | null;
-        toonTokensAfter: number | null;
-        toonCostSavings: string | null;
-        toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -56784,10 +57393,6 @@ export type GetInteractionResponses = {
         cost: string | null;
         cacheCost: string | null;
         cacheSavings: string | null;
-        toonTokensBefore: number | null;
-        toonTokensAfter: number | null;
-        toonCostSavings: string | null;
-        toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -56885,10 +57490,6 @@ export type GetInteractionResponses = {
         cost: string | null;
         cacheCost: string | null;
         cacheSavings: string | null;
-        toonTokensBefore: number | null;
-        toonTokensAfter: number | null;
-        toonCostSavings: string | null;
-        toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -56986,10 +57587,6 @@ export type GetInteractionResponses = {
         cost: string | null;
         cacheCost: string | null;
         cacheSavings: string | null;
-        toonTokensBefore: number | null;
-        toonTokensAfter: number | null;
-        toonCostSavings: string | null;
-        toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -57085,10 +57682,6 @@ export type GetInteractionResponses = {
         cost: string | null;
         cacheCost: string | null;
         cacheSavings: string | null;
-        toonTokensBefore: number | null;
-        toonTokensAfter: number | null;
-        toonCostSavings: string | null;
-        toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -57184,10 +57777,6 @@ export type GetInteractionResponses = {
         cost: string | null;
         cacheCost: string | null;
         cacheSavings: string | null;
-        toonTokensBefore: number | null;
-        toonTokensAfter: number | null;
-        toonCostSavings: string | null;
-        toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -57283,10 +57872,6 @@ export type GetInteractionResponses = {
         cost: string | null;
         cacheCost: string | null;
         cacheSavings: string | null;
-        toonTokensBefore: number | null;
-        toonTokensAfter: number | null;
-        toonCostSavings: string | null;
-        toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -57384,10 +57969,6 @@ export type GetInteractionResponses = {
         cost: string | null;
         cacheCost: string | null;
         cacheSavings: string | null;
-        toonTokensBefore: number | null;
-        toonTokensAfter: number | null;
-        toonCostSavings: string | null;
-        toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -57485,10 +58066,6 @@ export type GetInteractionResponses = {
         cost: string | null;
         cacheCost: string | null;
         cacheSavings: string | null;
-        toonTokensBefore: number | null;
-        toonTokensAfter: number | null;
-        toonCostSavings: string | null;
-        toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -58300,10 +58877,6 @@ export type GetInteractionResponses = {
         cost: string | null;
         cacheCost: string | null;
         cacheSavings: string | null;
-        toonTokensBefore: number | null;
-        toonTokensAfter: number | null;
-        toonCostSavings: string | null;
-        toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -59115,10 +59688,6 @@ export type GetInteractionResponses = {
         cost: string | null;
         cacheCost: string | null;
         cacheSavings: string | null;
-        toonTokensBefore: number | null;
-        toonTokensAfter: number | null;
-        toonCostSavings: string | null;
-        toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -59930,10 +60499,6 @@ export type GetInteractionResponses = {
         cost: string | null;
         cacheCost: string | null;
         cacheSavings: string | null;
-        toonTokensBefore: number | null;
-        toonTokensAfter: number | null;
-        toonCostSavings: string | null;
-        toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -60031,10 +60596,6 @@ export type GetInteractionResponses = {
         cost: string | null;
         cacheCost: string | null;
         cacheSavings: string | null;
-        toonTokensBefore: number | null;
-        toonTokensAfter: number | null;
-        toonCostSavings: string | null;
-        toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -60200,10 +60761,6 @@ export type GetInteractionResponses = {
         cost: string | null;
         cacheCost: string | null;
         cacheSavings: string | null;
-        toonTokensBefore: number | null;
-        toonTokensAfter: number | null;
-        toonCostSavings: string | null;
-        toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -60408,10 +60965,6 @@ export type GetInteractionResponses = {
         cost: string | null;
         cacheCost: string | null;
         cacheSavings: string | null;
-        toonTokensBefore: number | null;
-        toonTokensAfter: number | null;
-        toonCostSavings: string | null;
-        toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -60616,10 +61169,6 @@ export type GetInteractionResponses = {
         cost: string | null;
         cacheCost: string | null;
         cacheSavings: string | null;
-        toonTokensBefore: number | null;
-        toonTokensAfter: number | null;
-        toonCostSavings: string | null;
-        toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -60824,10 +61373,6 @@ export type GetInteractionResponses = {
         cost: string | null;
         cacheCost: string | null;
         cacheSavings: string | null;
-        toonTokensBefore: number | null;
-        toonTokensAfter: number | null;
-        toonCostSavings: string | null;
-        toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -60864,6 +61409,93 @@ export type GetInteractionResponses = {
 };
 
 export type GetInteractionResponse = GetInteractionResponses[keyof GetInteractionResponses];
+
+export type TransferMcpCatalogOwnershipData = {
+    body: {
+        ownerId: string;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/internal_mcp_catalog/{id}/transfer-ownership';
+};
+
+export type TransferMcpCatalogOwnershipErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type TransferMcpCatalogOwnershipError = TransferMcpCatalogOwnershipErrors[keyof TransferMcpCatalogOwnershipErrors];
+
+export type TransferMcpCatalogOwnershipResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type TransferMcpCatalogOwnershipResponse = TransferMcpCatalogOwnershipResponses[keyof TransferMcpCatalogOwnershipResponses];
 
 export type GetInternalMcpCatalogData = {
     body?: never;
@@ -66344,6 +66976,10 @@ export type GetConnectorsResponses = {
                 recursive?: boolean;
                 maxDepth?: number;
                 includePages?: boolean;
+                /**
+                 * Site pages to sync by current publication status. Omitted means both for compatibility.
+                 */
+                pagePublicationStatus?: 'published' | 'draft' | 'both';
                 batchSize?: number;
             } | {
                 type: 'gdrive';
@@ -66570,6 +67206,10 @@ export type CreateConnectorData = {
             recursive?: boolean;
             maxDepth?: number;
             includePages?: boolean;
+            /**
+             * Site pages to sync by current publication status. Omitted means both for compatibility.
+             */
+            pagePublicationStatus?: 'published' | 'draft' | 'both';
             batchSize?: number;
         } | {
             type: 'gdrive';
@@ -66850,6 +67490,10 @@ export type CreateConnectorResponses = {
             recursive?: boolean;
             maxDepth?: number;
             includePages?: boolean;
+            /**
+             * Site pages to sync by current publication status. Omitted means both for compatibility.
+             */
+            pagePublicationStatus?: 'published' | 'draft' | 'both';
             batchSize?: number;
         } | {
             type: 'gdrive';
@@ -67224,6 +67868,10 @@ export type GetConnectorResponses = {
             recursive?: boolean;
             maxDepth?: number;
             includePages?: boolean;
+            /**
+             * Site pages to sync by current publication status. Omitted means both for compatibility.
+             */
+            pagePublicationStatus?: 'published' | 'draft' | 'both';
             batchSize?: number;
         } | {
             type: 'gdrive';
@@ -67436,6 +68084,10 @@ export type UpdateConnectorData = {
             recursive?: boolean;
             maxDepth?: number;
             includePages?: boolean;
+            /**
+             * Site pages to sync by current publication status. Omitted means both for compatibility.
+             */
+            pagePublicationStatus?: 'published' | 'draft' | 'both';
             batchSize?: number;
         } | {
             type: 'gdrive';
@@ -67717,6 +68369,10 @@ export type UpdateConnectorResponses = {
             recursive?: boolean;
             maxDepth?: number;
             includePages?: boolean;
+            /**
+             * Site pages to sync by current publication status. Omitted means both for compatibility.
+             */
+            pagePublicationStatus?: 'published' | 'draft' | 'both';
             batchSize?: number;
         } | {
             type: 'gdrive';
@@ -75619,34 +76275,20 @@ export type McpGatewayGetErrors = {
         error: string;
         message: string;
     };
-};
-
-export type McpGatewayGetError = McpGatewayGetErrors[keyof McpGatewayGetErrors];
-
-export type McpGatewayGetResponses = {
     /**
      * Default Response
      */
-    200: {
-        name: string;
-        version: string;
-        agentId: string;
-        transport: string;
-        protocolVersions: Array<string>;
-        capabilities: {
-            tools: boolean;
+    405: {
+        jsonrpc: '2.0';
+        error: {
+            code: number;
+            message: string;
         };
-        tokenAuth?: {
-            tokenId: string;
-            teamId: string | null;
-            isOrganizationToken: boolean;
-            isUserToken?: boolean;
-            userId?: string;
-        };
+        id: null;
     };
 };
 
-export type McpGatewayGetResponse = McpGatewayGetResponses[keyof McpGatewayGetResponses];
+export type McpGatewayGetError = McpGatewayGetErrors[keyof McpGatewayGetErrors];
 
 export type McpGatewayPostData = {
     body: {
@@ -75665,6 +76307,49 @@ export type McpGatewayPostResponses = {
      */
     200: unknown;
 };
+
+export type McpGatewaySseMessageData = {
+    body: {
+        [key: string]: unknown;
+    };
+    path: {
+        profileId: string;
+    };
+    query: {
+        sessionId: string;
+    };
+    url: '/v1/mcp/{profileId}/messages';
+};
+
+export type McpGatewaySseMessageErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string;
+        message: string;
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string;
+        message: string;
+    };
+};
+
+export type McpGatewaySseMessageError = McpGatewaySseMessageErrors[keyof McpGatewaySseMessageErrors];
+
+export type McpGatewaySseMessageResponses = {
+    /**
+     * Default Response
+     */
+    202: {
+        accepted: true;
+    };
+};
+
+export type McpGatewaySseMessageResponse = McpGatewaySseMessageResponses[keyof McpGatewaySseMessageResponses];
 
 export type ReportAgentRuntimeStatusData = {
     body: {
@@ -84057,6 +84742,311 @@ export type OpenaiCodexDeviceAuthPollResponses = {
 
 export type OpenaiCodexDeviceAuthPollResponse = OpenaiCodexDeviceAuthPollResponses[keyof OpenaiCodexDeviceAuthPollResponses];
 
+export type GetAppaGithubSyncData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/openappa/github-sync';
+};
+
+export type GetAppaGithubSyncErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAppaGithubSyncError = GetAppaGithubSyncErrors[keyof GetAppaGithubSyncErrors];
+
+export type GetAppaGithubSyncResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        enabled: boolean;
+        source: {
+            organizationId: string;
+            repo: string;
+            ref: string | null;
+            path: string;
+            interval: '15m' | '1h' | '1d' | null;
+            githubPatId: string | null;
+            githubAppConfigId: string | null;
+            revision: string;
+            sourceCommit: string | null;
+            lastSyncedAt: string | null;
+            lastSyncError: string | null;
+        } | null;
+        hasPolicy: boolean;
+    };
+};
+
+export type GetAppaGithubSyncResponse = GetAppaGithubSyncResponses[keyof GetAppaGithubSyncResponses];
+
+export type UpdateAppaGithubSyncData = {
+    body: {
+        action: 'sync';
+    } | {
+        action: 'disconnect';
+    } | {
+        action: 'schedule';
+        interval: '15m' | '1h' | '1d';
+    };
+    path?: never;
+    query?: never;
+    url: '/api/openappa/github-sync';
+};
+
+export type UpdateAppaGithubSyncErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UpdateAppaGithubSyncError = UpdateAppaGithubSyncErrors[keyof UpdateAppaGithubSyncErrors];
+
+export type UpdateAppaGithubSyncResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        enabled: boolean;
+        source: {
+            organizationId: string;
+            repo: string;
+            ref: string | null;
+            path: string;
+            interval: '15m' | '1h' | '1d' | null;
+            githubPatId: string | null;
+            githubAppConfigId: string | null;
+            revision: string;
+            sourceCommit: string | null;
+            lastSyncedAt: string | null;
+            lastSyncError: string | null;
+        } | null;
+        hasPolicy: boolean;
+    };
+};
+
+export type UpdateAppaGithubSyncResponse = UpdateAppaGithubSyncResponses[keyof UpdateAppaGithubSyncResponses];
+
+export type ConfigureAppaGithubSyncData = {
+    body: {
+        repo: string;
+        ref?: string | null;
+        path: string;
+        interval: '15m' | '1h' | '1d';
+        githubPatId?: string | null;
+        githubAppConfigId?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/openappa/github-sync';
+};
+
+export type ConfigureAppaGithubSyncErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ConfigureAppaGithubSyncError = ConfigureAppaGithubSyncErrors[keyof ConfigureAppaGithubSyncErrors];
+
+export type ConfigureAppaGithubSyncResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        enabled: boolean;
+        source: {
+            organizationId: string;
+            repo: string;
+            ref: string | null;
+            path: string;
+            interval: '15m' | '1h' | '1d' | null;
+            githubPatId: string | null;
+            githubAppConfigId: string | null;
+            revision: string;
+            sourceCommit: string | null;
+            lastSyncedAt: string | null;
+            lastSyncError: string | null;
+        } | null;
+        hasPolicy: boolean;
+    };
+};
+
+export type ConfigureAppaGithubSyncResponse = ConfigureAppaGithubSyncResponses[keyof ConfigureAppaGithubSyncResponses];
+
 export type OpenrouterChatCompletionsWithDefaultAgentData = {
     body: OpenrouterChatCompletionRequestInput;
     headers: {
@@ -84826,8 +85816,6 @@ export type GetOrganizationResponses = {
         onboardingSurveyCompletedAt: string | null;
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
-        convertToolResultsToToon: boolean;
-        compressionScope: 'organization' | 'team';
         onlineMcpCatalogEnabled: boolean;
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
@@ -85147,8 +86135,6 @@ export type UpdateAppearanceSettingsResponses = {
         onboardingSurveyCompletedAt: string | null;
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
-        convertToolResultsToToon: boolean;
-        compressionScope: 'organization' | 'team';
         onlineMcpCatalogEnabled: boolean;
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
@@ -85351,8 +86337,6 @@ export type UpdateSecuritySettingsResponses = {
         onboardingSurveyCompletedAt: string | null;
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
-        convertToolResultsToToon: boolean;
-        compressionScope: 'organization' | 'team';
         onlineMcpCatalogEnabled: boolean;
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
@@ -85458,205 +86442,6 @@ export type UpdateSecuritySettingsResponses = {
 
 export type UpdateSecuritySettingsResponse = UpdateSecuritySettingsResponses[keyof UpdateSecuritySettingsResponses];
 
-export type UpdateLlmSettingsData = {
-    body: {
-        convertToolResultsToToon?: boolean;
-        compressionScope?: 'organization' | 'team';
-    };
-    path?: never;
-    query?: never;
-    url: '/api/organization/llm-settings';
-};
-
-export type UpdateLlmSettingsErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type UpdateLlmSettingsError = UpdateLlmSettingsErrors[keyof UpdateLlmSettingsErrors];
-
-export type UpdateLlmSettingsResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        name: string;
-        slug: string;
-        analyticsInstanceId: string;
-        logo: string | null;
-        logoDark: string | null;
-        createdAt: string;
-        metadata: string | null;
-        onboardingComplete: boolean;
-        onboardingSurveyCompletedAt: string | null;
-        theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
-        customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
-        convertToolResultsToToon: boolean;
-        compressionScope: 'organization' | 'team';
-        onlineMcpCatalogEnabled: boolean;
-        onlineSkillCatalogEnabled: boolean;
-        skillMarketplaceAnonymousAccess: boolean;
-        defaultDiscoveredToolInvocationPolicy: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always' | 'require_approval';
-        defaultDiscoveredToolResultPolicy: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
-        allowChatFileUploads: boolean;
-        allowToolAutoAssignment: boolean;
-        embeddingModel: string | null;
-        embeddingDimensions: EmbeddingDimensions | null;
-        embeddingChatApiKeyId: string | null;
-        rerankerChatApiKeyId: string | null;
-        rerankerModel: string | null;
-        ocrChatApiKeyId: string | null;
-        ocrModel: string | null;
-        kbBm25K1: number | null;
-        kbBm25B: number | null;
-        kbContextualRetrievalMode: ContextualRetrievalMode | null;
-        defaultLlmModel: string | null;
-        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
-        defaultModelId: string | null;
-        defaultLlmApiKeyId: string | null;
-        defaultUserLimitValue: number | null;
-        defaultUserLimitModel: Array<string> | null;
-        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
-        defaultMemberRole: string | null;
-        defaultAgentId: string | null;
-        favicon: string | null;
-        appName: string | null;
-        ogDescription: string | null;
-        footerText: string | null;
-        chatLinks: Array<{
-            label: string;
-            url: string;
-        }> | null;
-        onboardingWizard: {
-            label: string;
-            pages: Array<{
-                image?: string | null;
-                content: string;
-            }>;
-        } | null;
-        chatPlaceholders: Array<string> | null;
-        animateChatPlaceholders: boolean;
-        iconLogo: string | null;
-        iconLogoDark: string | null;
-        chatErrorSupportMessage: string | null;
-        slimChatErrorUi: boolean;
-        requireTwoFactor: boolean;
-        sessionMaxAgeSeconds: number | null;
-        oauthAccessTokenLifetimeSeconds: number;
-        connectionDefaultMcpGatewayId: string | null;
-        connectionDefaultLlmProxyId: string | null;
-        connectionDefaultClientId: string | null;
-        connectionShownClientIds: Array<string> | null;
-        connectionShownProviders: Array<string> | null;
-        connectionBaseUrls: Array<{
-            url: string;
-            description: string;
-            isDefault: boolean;
-            visible: boolean;
-        }> | null;
-        connectionDefaultProviderKeys: {
-            [key: string]: string;
-        } | null;
-        connectionSkillsEnabled: boolean;
-        connectionLlmProxyEnabled: boolean;
-        connectionPluginsEnabled: boolean;
-        modelProviderOverrides: {
-            [key: string]: {
-                hidden?: boolean;
-                displayName?: string | null;
-            };
-        } | null;
-        messagingChannelOverrides: {
-            [key: string]: {
-                hidden?: boolean;
-            };
-        } | null;
-        knowledgeConnectorOverrides: {
-            [key: string]: {
-                hidden?: boolean;
-            };
-        } | null;
-        defaultEnvironmentName: string | null;
-        defaultEnvironmentNamespace: string | null;
-        defaultEnvironmentDescription: string | null;
-        defaultNetworkPolicy: {
-            egressMode: 'off' | 'restricted' | 'unrestricted';
-            domainPreset: 'none' | 'common_dependencies' | 'package_managers';
-            allowedDomains: Array<string>;
-            allowedCidrs: Array<string>;
-        } | null;
-        defaultEnvironmentRestricted: boolean;
-        defaultEnvironmentValidationRegex: string | null;
-        defaultEnvironmentTrustedImageRegistries: Array<string> | null;
-        skillToolsEnabled: boolean;
-        mcpIdleHibernationEnabled: boolean;
-        appsHackathonRecorderEnabled: boolean;
-        newAppsDisabledByDefault: boolean;
-        newAppsLockedByDefault: boolean;
-    };
-};
-
-export type UpdateLlmSettingsResponse = UpdateLlmSettingsResponses[keyof UpdateLlmSettingsResponses];
-
 export type UpdateMcpSettingsData = {
     body: {
         onlineMcpCatalogEnabled?: boolean;
@@ -85749,8 +86534,6 @@ export type UpdateMcpSettingsResponses = {
         onboardingSurveyCompletedAt: string | null;
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
-        convertToolResultsToToon: boolean;
-        compressionScope: 'organization' | 'team';
         onlineMcpCatalogEnabled: boolean;
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
@@ -85948,8 +86731,6 @@ export type UpdateSkillsSettingsResponses = {
         onboardingSurveyCompletedAt: string | null;
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
-        convertToolResultsToToon: boolean;
-        compressionScope: 'organization' | 'team';
         onlineMcpCatalogEnabled: boolean;
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
@@ -86148,8 +86929,6 @@ export type UpdateAgentSettingsResponses = {
         onboardingSurveyCompletedAt: string | null;
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
-        convertToolResultsToToon: boolean;
-        compressionScope: 'organization' | 'team';
         onlineMcpCatalogEnabled: boolean;
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
@@ -86361,8 +87140,6 @@ export type UpdateConnectionSettingsResponses = {
         onboardingSurveyCompletedAt: string | null;
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
-        convertToolResultsToToon: boolean;
-        compressionScope: 'organization' | 'team';
         onlineMcpCatalogEnabled: boolean;
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
@@ -86574,8 +87351,6 @@ export type UpdateIntegrationSettingsResponses = {
         onboardingSurveyCompletedAt: string | null;
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
-        convertToolResultsToToon: boolean;
-        compressionScope: 'organization' | 'team';
         onlineMcpCatalogEnabled: boolean;
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
@@ -86783,8 +87558,6 @@ export type UpdateDefaultEnvironmentResponses = {
         onboardingSurveyCompletedAt: string | null;
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
-        convertToolResultsToToon: boolean;
-        compressionScope: 'organization' | 'team';
         onlineMcpCatalogEnabled: boolean;
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
@@ -86987,8 +87760,6 @@ export type UpdateAuthSettingsResponses = {
         onboardingSurveyCompletedAt: string | null;
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
-        convertToolResultsToToon: boolean;
-        compressionScope: 'organization' | 'team';
         onlineMcpCatalogEnabled: boolean;
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
@@ -87193,8 +87964,6 @@ export type UpdateKnowledgeSettingsResponses = {
         onboardingSurveyCompletedAt: string | null;
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
-        convertToolResultsToToon: boolean;
-        compressionScope: 'organization' | 'team';
         onlineMcpCatalogEnabled: boolean;
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
@@ -87389,8 +88158,6 @@ export type DropEmbeddingConfigResponses = {
         onboardingSurveyCompletedAt: string | null;
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
-        convertToolResultsToToon: boolean;
-        compressionScope: 'organization' | 'team';
         onlineMcpCatalogEnabled: boolean;
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
@@ -87935,8 +88702,6 @@ export type CompleteOnboardingResponses = {
         onboardingSurveyCompletedAt: string | null;
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
-        convertToolResultsToToon: boolean;
-        compressionScope: 'organization' | 'team';
         onlineMcpCatalogEnabled: boolean;
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
@@ -89001,6 +89766,93 @@ export type PerplexityResponsesWithAgentResponses = {
 };
 
 export type PerplexityResponsesWithAgentResponse = PerplexityResponsesWithAgentResponses[keyof PerplexityResponsesWithAgentResponses];
+
+export type TransferPluginOwnershipData = {
+    body: {
+        ownerId: string;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/plugins/{id}/transfer-ownership';
+};
+
+export type TransferPluginOwnershipErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type TransferPluginOwnershipError = TransferPluginOwnershipErrors[keyof TransferPluginOwnershipErrors];
+
+export type TransferPluginOwnershipResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type TransferPluginOwnershipResponse = TransferPluginOwnershipResponses[keyof TransferPluginOwnershipResponses];
 
 export type PluginLabelKeysData = {
     body?: never;
@@ -91262,6 +92114,93 @@ export type GetPluginSkillResponses = {
 };
 
 export type GetPluginSkillResponse = GetPluginSkillResponses[keyof GetPluginSkillResponses];
+
+export type TransferProjectOwnershipData = {
+    body: {
+        ownerId: string;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/projects/{id}/transfer-ownership';
+};
+
+export type TransferProjectOwnershipErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type TransferProjectOwnershipError = TransferProjectOwnershipErrors[keyof TransferProjectOwnershipErrors];
+
+export type TransferProjectOwnershipResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type TransferProjectOwnershipResponse = TransferProjectOwnershipResponses[keyof TransferProjectOwnershipResponses];
 
 export type ProjectLabelKeysData = {
     body?: never;
@@ -95194,6 +96133,7 @@ export type RunScheduleTriggerNowResponses = {
         status: 'running' | 'success' | 'failed';
         initiatedByUserId: string | null;
         chatConversationId: string | null;
+        runtimeTaskId: string | null;
         startedAt: string | null;
         completedAt: string | null;
         error: string | null;
@@ -95295,6 +96235,7 @@ export type GetScheduleTriggerRunsResponses = {
             status: 'running' | 'success' | 'failed';
             initiatedByUserId: string | null;
             chatConversationId: string | null;
+            runtimeTaskId: string | null;
             startedAt: string | null;
             completedAt: string | null;
             error: string | null;
@@ -95401,6 +96342,7 @@ export type GetScheduleTriggerRunResponses = {
         status: 'running' | 'success' | 'failed';
         initiatedByUserId: string | null;
         chatConversationId: string | null;
+        runtimeTaskId: string | null;
         startedAt: string | null;
         completedAt: string | null;
         error: string | null;
@@ -97661,6 +98603,93 @@ export type GetSkillMarketplaceResponses = {
 
 export type GetSkillMarketplaceResponse = GetSkillMarketplaceResponses[keyof GetSkillMarketplaceResponses];
 
+export type TransferSkillOwnershipData = {
+    body: {
+        ownerId: string;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/skills/{id}/transfer-ownership';
+};
+
+export type TransferSkillOwnershipErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type TransferSkillOwnershipError = TransferSkillOwnershipErrors[keyof TransferSkillOwnershipErrors];
+
+export type TransferSkillOwnershipResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type TransferSkillOwnershipResponse = TransferSkillOwnershipResponses[keyof TransferSkillOwnershipResponses];
+
 export type SkillLabelKeysData = {
     body?: never;
     path?: never;
@@ -98211,258 +99240,6 @@ export type CreateSkillResponses = {
 };
 
 export type CreateSkillResponse = CreateSkillResponses[keyof CreateSkillResponses];
-
-export type ConvertAgentToSkillData = {
-    body: {
-        description?: string;
-        deleteAgent?: boolean;
-    };
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/agents/{id}/convert-to-skill';
-};
-
-export type ConvertAgentToSkillErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type ConvertAgentToSkillError = ConvertAgentToSkillErrors[keyof ConvertAgentToSkillErrors];
-
-export type ConvertAgentToSkillResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        skill: {
-            id: string;
-            organizationId: string;
-            authorId: string | null;
-            scope: 'personal' | 'team' | 'org';
-            name: string;
-            description: string;
-            content: string;
-            digest: string | null;
-            latestVersion: number;
-            license: string | null;
-            compatibility: string | null;
-            allowedTools: string | null;
-            agentName: string | null;
-            templated: boolean;
-            metadata: {
-                [key: string]: string;
-            };
-            sourceType: 'manual' | 'github' | 'built_in';
-            sourceRef: string | null;
-            sourceCommit: string | null;
-            githubSyncInterval: '15m' | '1h' | '1d' | null;
-            githubSyncRef: string | null;
-            githubAppConfigId: string | null;
-            githubPatId: string | null;
-            lastSyncedAt: string | null;
-            lastSyncError: string | null;
-            usageCount: number;
-            lastUsedAt: string | null;
-            createdByServiceAccountId: string | null;
-            createdAt: string;
-            updatedAt: string;
-            deletedAt: string | null;
-            files: Array<{
-                id: string;
-                skillId: string;
-                path: string;
-                content: string;
-                encoding: 'utf8' | 'base64';
-                digest: string | null;
-                kind: 'reference' | 'script' | 'asset';
-                createdAt: string;
-            }>;
-            createdBy: {
-                id: string;
-                type?: 'user' | 'service_account';
-                name: string | null;
-                email: string | null;
-            } | null;
-            teams: Array<{
-                id: string;
-                name: string;
-            }>;
-            users: Array<{
-                id: string;
-                name: string;
-                email: string;
-            }>;
-            environments: Array<{
-                id: string;
-                name: string;
-            }>;
-            labels: Array<{
-                key: string;
-                value: string;
-                keyId?: string;
-                valueId?: string;
-            }>;
-        };
-        report: {
-            carried: Array<{
-                field: string;
-                detail: string;
-            }>;
-            annotated: Array<{
-                field: string;
-                detail: string;
-            }>;
-        };
-        deletedAgent: boolean;
-    };
-};
-
-export type ConvertAgentToSkillResponse = ConvertAgentToSkillResponses[keyof ConvertAgentToSkillResponses];
-
-export type SuggestSkillDescriptionData = {
-    body?: never;
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/agents/{id}/suggest-skill-description';
-};
-
-export type SuggestSkillDescriptionErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type SuggestSkillDescriptionError = SuggestSkillDescriptionErrors[keyof SuggestSkillDescriptionErrors];
-
-export type SuggestSkillDescriptionResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        description: string;
-    };
-};
-
-export type SuggestSkillDescriptionResponse = SuggestSkillDescriptionResponses[keyof SuggestSkillDescriptionResponses];
 
 export type DeleteSkillData = {
     body?: never;
@@ -102464,13 +103241,11 @@ export type GetCostSavingsStatisticsResponses = {
         totalActualCost: number;
         totalSavings: number;
         totalSubscriptionCost: number;
-        totalToonSavings: number;
         totalCacheSavings: number;
         timeSeries: Array<{
             timestamp: string;
             baselineCost: number;
             actualCost: number;
-            toonSavings: number;
             cacheSavings: number;
             subscriptionCost: number;
         }>;
@@ -102573,7 +103348,6 @@ export type GetTeamsResponses = {
             createdByServiceAccountId: string | null;
             createdAt: string;
             updatedAt: string;
-            convertToolResultsToToon: boolean;
             members?: Array<{
                 id: string;
                 teamId: string;
@@ -102613,7 +103387,6 @@ export type CreateTeamData = {
         description?: string;
         roles?: Array<string>;
         parentId?: string | null;
-        convertToolResultsToToon?: boolean;
         labels?: Array<{
             key: string;
             value: string;
@@ -102706,7 +103479,6 @@ export type CreateTeamResponses = {
         createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
-        convertToolResultsToToon: boolean;
         members?: Array<{
             id: string;
             teamId: string;
@@ -102905,7 +103677,6 @@ export type GetTeamResponses = {
         createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
-        convertToolResultsToToon: boolean;
         members?: Array<{
             id: string;
             teamId: string;
@@ -102936,7 +103707,6 @@ export type UpdateTeamData = {
         description?: string;
         roles?: Array<string>;
         parentId?: string | null;
-        convertToolResultsToToon?: boolean;
         labels?: Array<{
             key: string;
             value: string;
@@ -103031,7 +103801,6 @@ export type UpdateTeamResponses = {
         createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
-        convertToolResultsToToon: boolean;
         members?: Array<{
             id: string;
             teamId: string;

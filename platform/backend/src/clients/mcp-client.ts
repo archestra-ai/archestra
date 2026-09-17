@@ -5358,7 +5358,11 @@ const WAKE_RETRY_DELAY_MS = 1_000;
  * into a failed tool call for any client that does not retry, so this loop IS
  * that retry: it re-enters the wake until the server is up or the budget is
  * spent, and only then answers. What still surfaces immediately: an abort,
- * and failures a retry cannot help (a deployment that cannot start).
+ * and failures a retry cannot help (a deployment that cannot start). A wake
+ * that ran to a verdict — no capacity, a pull that has not succeeded — keeps
+ * its budget too, because those conditions clear; the verdict is remembered
+ * so the budget expires into that reason instead of a generic "still
+ * starting up".
  */
 async function waitForMcpServerWake(params: {
   mcpServerId: string;
@@ -5373,12 +5377,32 @@ async function waitForMcpServerWake(params: {
   }
   const budgetMs = wakeResponseBudgetMs();
   const deadlineAt = Date.now() + budgetMs;
+  // The most recent reason a wake came back with, kept so the wait can end in
+  // that reason rather than the generic "still starting up". Held as the
+  // REASON, not the wake's own error: a wake is single-flighted per physical
+  // deployment, so its error names whichever install loaded that deployment,
+  // which for a multitenant sibling is someone else. Re-addressing it here
+  // keeps one install's name out of another install's answer.
+  let verdict: {
+    detail: string | undefined;
+    suffix: string | undefined;
+  } | null = null;
+  const verdictForCaller = () =>
+    verdict === null
+      ? null
+      : new McpServerWakeError(params.mcpServerName, {
+          concluded: true,
+          detail: verdict.detail,
+          suffix: verdict.suffix,
+        });
 
   for (;;) {
     const attempt = withDeadline(
       McpServerRuntimeManager.ensureAwake(params.mcpServerId),
       Math.max(1, deadlineAt - Date.now()),
-      () => new McpServerWakePendingError(params.mcpServerName, budgetMs),
+      () =>
+        verdictForCaller() ??
+        new McpServerWakePendingError(params.mcpServerName, budgetMs),
     );
     try {
       await raceWithAbort(attempt, abortSignal);
@@ -5394,9 +5418,32 @@ async function waitForMcpServerWake(params: {
       ) {
         throw error;
       }
+      // The wake did not lose a race — it ran to the end of its readiness
+      // budget and came back with a verdict about the cluster (no capacity to
+      // place the pod, an image that has not pulled). Keep it: whichever way
+      // this call ends, the answer should name that reason rather than the
+      // generic "still starting up", which is how a full cluster reached
+      // callers with nothing they could act on.
+      //
+      // Keeping it is all we do. A verdict describes a condition that can
+      // clear — capacity frees, a pull succeeds — so the caller's remaining
+      // budget is still worth spending on another attempt that might return
+      // a woken server instead of any error at all. Only the budget itself
+      // ends the wait, and by then `lastVerdict` is what it expires into.
+      if (error.concluded) {
+        verdict = { detail: error.detail, suffix: error.suffix };
+      }
       // Too little budget left for another attempt to observe anything new:
-      // answer with the race's own reason, which is already retryable-shaped
-      // and names more than a generic "still pending" would.
+      // answer with this attempt's own reason, which is already
+      // retryable-shaped and names more than a generic "still pending" would.
+      //
+      // Deliberately NOT the remembered verdict, even though it often reads
+      // better. This error is what the cluster just said; the verdict is what
+      // it said on an earlier attempt, and the two disagree exactly when the
+      // condition has moved on — capacity freed and the wake then lost a
+      // transition race. Answering "no free capacity" there would describe a
+      // cluster state that has demonstrably cleared. The verdict is for the
+      // case with no fresher answer to give: the budget running out below.
       if (deadlineAt - Date.now() <= WAKE_RETRY_DELAY_MS) {
         throw error;
       }

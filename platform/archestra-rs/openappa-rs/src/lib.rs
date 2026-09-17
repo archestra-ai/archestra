@@ -1,6 +1,8 @@
 //! Archestra's host boundary. Policy evaluation and event serialization live in
 //! OpenAPPA; identity, call correlation and durable processing receipts live here.
 
+mod policy;
+
 use appa_eventlog::{
     Backend, LogStore,
     postgres::{PostgresError, PostgresStore},
@@ -17,24 +19,33 @@ use serde_json::{Value, json, value::RawValue};
 use sha2::{Digest, Sha256};
 use std::{
     panic::AssertUnwindSafe,
-    path::Path,
     sync::{Arc, OnceLock},
 };
 use tokio::sync::Mutex;
 
+#[napi(object)]
+#[derive(Clone)]
+pub struct ReportingOptions {
+    pub endpoint: String,
+    pub hostname: Option<String>,
+}
+
 static STATE: OnceLock<Mutex<Option<State>>> = OnceLock::new();
 
 struct State {
-    runtime: Runtime,
+    runtime: Arc<Runtime>,
     config: Config,
     store: Arc<LogStore>,
+    policy_content: String,
+    reporting: Option<ReportingOptions>,
 }
 
 #[derive(Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Input {
     organization_id: String,
-    caller_id: String,
+    #[serde(default)]
+    caller_id: Option<String>,
     session_id: String,
     #[serde(default)]
     parent_id: Option<String>,
@@ -68,28 +79,36 @@ fn wire(decision: &HookDecision) -> Value {
     serde_json::to_value(WireDecision::of(decision)).expect("wire decision serializes")
 }
 fn identity(input: &Input) -> String {
-    let bytes = serde_json::to_vec(&(&input.organization_id, &input.caller_id, &input.session_id))
-        .expect("identity serializes");
-    format!("archestra:{:x}", Sha256::digest(bytes))
+    format!(
+        "archestra:{:x}",
+        Sha256::digest(input.session_id.as_bytes())
+    )
 }
 
 #[napi(js_name = "initializeOpenappa")]
-pub async fn initialize_openappa(database_url: String, policy_path: String) -> napi::Result<()> {
+pub async fn initialize_openappa(
+    database_url: String,
+    policy_content: String,
+    reporting: Option<ReportingOptions>,
+) -> napi::Result<()> {
     let mut slot = STATE.get_or_init(|| Mutex::new(None)).lock().await;
     if slot.is_some() {
         return Ok(());
     }
     let state = tokio::task::spawn_blocking(move || -> napi::Result<State> {
         appa_runtime::tls::install_crypto_provider();
-        let config = Config::load(Path::new(&policy_path)).map_err(error)?;
+        let mut config = policy::compile(&policy_content).map_err(error)?;
+        config.reporting.agent_yell = reporting.is_some();
         let store =
             Arc::new(LogStore::open(Backend::Postgres { url: database_url }).map_err(error)?);
         let runtime =
             Runtime::open_with_store(config.clone(), store.clone(), None).map_err(error)?;
         Ok(State {
-            runtime,
+            runtime: Arc::new(runtime),
             config,
             store,
+            policy_content,
+            reporting,
         })
     })
     .await
@@ -98,12 +117,22 @@ pub async fn initialize_openappa(database_url: String, policy_path: String) -> n
     Ok(())
 }
 
+#[napi(js_name = "validateOpenappaPolicy")]
+pub async fn validate_openappa_policy(content: String) -> napi::Result<Vec<String>> {
+    tokio::task::spawn_blocking(move || {
+        std::panic::catch_unwind(|| policy::validate(&content))
+            .map(|result| result.err().into_iter().collect())
+            .map_err(|_| error("OpenAPPA policy validation failed"))
+    })
+    .await
+    .map_err(error)?
+}
+
 #[napi(js_name = "dispatchHook")]
-pub async fn dispatch_hook(input: String) -> napi::Result<String> {
+pub async fn dispatch_hook(input: String, policy_content: Option<String>) -> napi::Result<String> {
     let input: Input = serde_json::from_str(&input).map_err(error)?;
     for (name, value) in [
         ("organization", &input.organization_id),
-        ("caller", &input.caller_id),
         ("session", &input.session_id),
     ] {
         if value.is_empty() || value.len() > 512 || value.chars().any(char::is_control) {
@@ -111,6 +140,7 @@ pub async fn dispatch_hook(input: String) -> napi::Result<String> {
         }
     }
     for (name, value) in [
+        ("caller", &input.caller_id),
         ("parent", &input.parent_id),
         ("operation", &input.operation_id),
         ("tool call", &input.tool_call_id),
@@ -137,9 +167,20 @@ pub async fn dispatch_hook(input: String) -> napi::Result<String> {
                 return Err(error("invalid tool outcome"));
             }
         }
+        "cancel_call" => {
+            required(&input.tool_call_id, "tool_call_id")?;
+        }
         "tool_call" => {
-            required(&input.operation_id, "operation_id")?;
+            let operation = required(&input.operation_id, "operation_id")?;
+            if !operation.starts_with("call:") || operation == "call:" {
+                return Err(error("tool call operation_id must be call:<tool-call-id>"));
+            }
             proposed(&input)?;
+        }
+        "yell" => {
+            required(&input.operation_id, "operation_id")?;
+            let _: YellArguments =
+                serde_json::from_str(required_arguments(&input)?).map_err(error)?;
         }
         "remedy" => {
             required(&input.operation_id, "operation_id")?;
@@ -155,7 +196,20 @@ pub async fn dispatch_hook(input: String) -> napi::Result<String> {
     let state = slot
         .as_mut()
         .ok_or_else(|| error("OpenAPPA is not initialized"))?;
-    let result = AssertUnwindSafe(state.dispatch(input)).catch_unwind().await;
+    let result = AssertUnwindSafe(async {
+        if let Some(content) = policy_content
+            && content != state.policy_content
+        {
+            let mut config = policy::compile(&content).map_err(error)?;
+            config.reporting.agent_yell = state.reporting.is_some();
+            state.runtime.reload(config.clone()).map_err(error)?;
+            state.config = config;
+            state.policy_content = content;
+        }
+        state.dispatch(input).await
+    })
+    .catch_unwind()
+    .await;
     match result {
         Ok(Ok(value)) => Ok(value.to_string()),
         failure => {
@@ -163,7 +217,7 @@ pub async fn dispatch_hook(input: String) -> napi::Result<String> {
             // turn markers. Durable pending receipts remain fail-closed.
             let rebuilt = Runtime::open_with_store(state.config.clone(), state.store.clone(), None)
                 .map_err(error)?;
-            state.runtime = rebuilt;
+            state.runtime = Arc::new(rebuilt);
             match failure {
                 Ok(Err(error)) => Err(error),
                 _ => Err(error("OpenAPPA panicked; operation was not released")),
@@ -299,7 +353,7 @@ impl State {
                 })
                 .map_err(error);
         }
-        if input.event == "tool_result" {
+        if matches!(input.event.as_str(), "tool_result" | "cancel_call") {
             return self.result(pg, &input, &actor).await;
         }
 
@@ -307,9 +361,22 @@ impl State {
             .operation_id
             .clone()
             .ok_or_else(|| error("an operation id is required"))?;
-        let request = json!({ "event": input.event, "tool": input.tool, "arguments": input.arguments, "spawn": input.spawn, "output": input.output });
+        let mut request = json!({ "event": input.event, "tool": input.tool, "arguments": input.arguments, "spawn": input.spawn, "output": input.output });
+        if input.event == "tool_call" {
+            // The receipt key is also the host call identity. Results reconstruct
+            // the same namespace from the provider's tool-call ID.
+            request["call_id"] = json!(operation);
+        }
         let cached = lookup_operation(pg, &input, &operation)?;
         if let Some((saved, decision)) = cached {
+            // Receipts created before call bindings have no call_id. They keep
+            // their original decision; their result uses the unbound protocol.
+            if saved.get("call_id").is_none() {
+                request
+                    .as_object_mut()
+                    .ok_or_else(|| error("invalid call receipt"))?
+                    .remove("call_id");
+            }
             if saved != request {
                 return Err(error("operation id was reused with different input"));
             }
@@ -317,7 +384,30 @@ impl State {
         }
         claim_operation(pg, &input, &root, &operation, &request)?;
         let tx = pg.begin().map_err(error)?;
-        let decision = if input.event == "remedy" {
+        let decision = if input.event == "yell" {
+            let reporting = self
+                .reporting
+                .as_ref()
+                .ok_or_else(|| error("OpenAPPA reporting is disabled"))?;
+            let args: YellArguments =
+                serde_json::from_str(required_arguments(&input)?).map_err(error)?;
+            let result = appa_runtime::yell::embedded::send(
+                &self.runtime,
+                appa_runtime::yell::embedded::Request {
+                    actor: actor.clone(),
+                    endpoint: reporting.endpoint.clone(),
+                    hostname: reporting.hostname.clone(),
+                    message: args.message,
+                    with_trajectory: args.with_trajectory,
+                },
+            )
+            .await;
+            let (is_error, message) = match result {
+                Ok(receipt) => (false, format!("[appa] Reported. Receipt {receipt}.")),
+                Err(reason) => (true, format!("[appa] Not reported: {reason}")),
+            };
+            json!({ "decision": "mcp_result", "result": { "isError": is_error, "content": [{ "type": "text", "text": message }] } })
+        } else if input.event == "remedy" {
             let call = ProposedCall {
                 tool: appa_runtime_api::CONTROL_TOOL.into(),
                 arguments: input
@@ -330,6 +420,7 @@ impl State {
                 HookEvent::ToolCall {
                     actor: actor.clone(),
                     call,
+                    call_id: None,
                     spawn: false,
                     ruling: None,
                 },
@@ -347,6 +438,7 @@ impl State {
                 "tool_call" => HookEvent::ToolCall {
                     actor: actor.clone(),
                     call: proposed(&input)?,
+                    call_id: Some(operation.clone()),
                     spawn: input.spawn,
                     ruling: None,
                 },
@@ -381,14 +473,9 @@ impl State {
         actor: &Actor,
     ) -> napi::Result<Value> {
         let call_id = required(&input.tool_call_id, "tool_call_id")?.to_owned();
-        let key = (
-            input.organization_id.clone(),
-            input.caller_id.clone(),
-            input.session_id.clone(),
-            call_id.clone(),
-        );
+        let key = (input.session_id.clone(), call_id.clone());
         let lookup = key.clone();
-        let cached = pg.with_client(move |client| Ok(client.query_opt("SELECT approved_output, decision FROM openappa_processed_results WHERE organization_id=$1 AND caller_id=$2 AND session_id=$3 AND tool_call_id=$4 AND status='complete'", &[&lookup.0,&lookup.1,&lookup.2,&lookup.3])?
+        let cached = pg.with_client(move |client| Ok(client.query_opt("SELECT approved_output, decision FROM openappa_processed_results WHERE session_id=$1 AND tool_call_id=$2 AND status='complete'", &[&lookup.0,&lookup.1])?
             .map(|row| (row.get::<_, String>(0), row.get::<_, Value>(1))))).map_err(error)?;
         if let Some((output, mut decision)) = cached {
             decision["approved_output"] = json!(output);
@@ -424,33 +511,45 @@ impl State {
                 .into(),
             arguments: serde_json::value::to_raw_value(&saved["arguments"]).map_err(error)?,
         };
-        let output = input
-            .output
-            .clone()
-            .ok_or_else(|| error("missing tool output"))?;
-        let outcome = match input.outcome.as_deref() {
-            Some("success") => ToolOutcome::Success {
-                body: OutcomeBody::Available(output.clone()),
-            },
-            Some("failure") => ToolOutcome::Failure {
+        let cancelled = input.event == "cancel_call";
+        let output = if cancelled {
+            "OpenAPPA withheld the tool-call batch. This tool was not executed. Retry with a new tool-call ID.".to_owned()
+        } else {
+            input
+                .output
+                .clone()
+                .ok_or_else(|| error("missing tool output"))?
+        };
+        let outcome = match (cancelled, input.outcome.as_deref()) {
+            (true, _) => ToolOutcome::Failure {
                 message: output.clone(),
             },
-            Some("unknown") | None => ToolOutcome::Indeterminate,
+            (false, Some("success")) => ToolOutcome::Success {
+                body: OutcomeBody::Available(output.clone()),
+            },
+            (false, Some("failure")) => ToolOutcome::Failure {
+                message: output.clone(),
+            },
+            (false, Some("unknown") | None) => ToolOutcome::Indeterminate,
             _ => return Err(error("invalid tool outcome")),
         };
         let claim = key.clone();
+        let caller_id = input.caller_id.clone();
+        let organization_id = input.organization_id.clone();
         let root = actor.root.0.clone();
         pg.with_client(move |client| {
-            client.execute("INSERT INTO openappa_processed_results (organization_id,caller_id,session_id,tool_call_id,root,status) VALUES ($1,$2,$3,$4,$5,'pending')", &[&claim.0,&claim.1,&claim.2,&claim.3,&root])?;
+            client.execute("INSERT INTO openappa_processed_results (organization_id,caller_id,session_id,tool_call_id,root,status) VALUES ($1,$2,$3,$4,$5,'pending')", &[&organization_id,&caller_id,&claim.0,&claim.1,&root])?;
             Ok(())
         }).map_err(error)?;
         let tx = pg.begin().map_err(error)?;
+        let host_call_id = saved["call_id"].as_str().map(str::to_owned);
         let event = if saved["spawn"] == true {
             // No child return is guessed from an opaque tool result. The child
             // must have reported ChildEnd through its adapter first.
             HookEvent::SpawnResult {
                 actor: actor.clone(),
                 call,
+                call_id: host_call_id,
                 outcome,
                 child: None,
                 value: None,
@@ -459,13 +558,18 @@ impl State {
             HookEvent::ToolResult {
                 actor: actor.clone(),
                 call,
+                call_id: host_call_id,
                 outcome,
             }
         };
         let decision = hooks::handle(&self.runtime, event).await;
+        if cancelled && !matches!(decision, HookDecision::Ack) {
+            return Err(error("OpenAPPA could not settle a withheld tool call"));
+        }
         let approved = match &decision {
             HookDecision::Ack
-                if input.outcome.as_deref() == Some("unknown") || input.outcome.is_none() =>
+                if !cancelled
+                    && (input.outcome.as_deref() == Some("unknown") || input.outcome.is_none()) =>
             {
                 "[appa] Tool output withheld: execution outcome is unknown.".into()
             }
@@ -482,11 +586,19 @@ impl State {
             }
             _ => return Err(error("unexpected tool result decision")),
         };
-        let mut response = wire(&decision);
+        let mut response = if cancelled {
+            // Never replay an admission for a dispatch we have closed without
+            // execution. Persist the refusal with the closing facts and result.
+            let refusal = json!({ "decision": "deny_call", "feedback": approved });
+            finish_operation(pg, input, &format!("call:{call_id}"), &refusal)?;
+            refusal
+        } else {
+            wire(&decision)
+        };
         response["approved_output"] = json!(approved);
         let saved_response = response.clone();
         pg.with_client(move |client| {
-            client.execute("UPDATE openappa_processed_results SET status='complete', approved_output=$5, decision=$6 WHERE organization_id=$1 AND caller_id=$2 AND session_id=$3 AND tool_call_id=$4", &[&key.0,&key.1,&key.2,&key.3,&approved,&saved_response])?;
+            client.execute("UPDATE openappa_processed_results SET status='complete', approved_output=$3, decision=$4 WHERE session_id=$1 AND tool_call_id=$2", &[&key.0,&key.1,&approved,&saved_response])?;
             Ok(())
         }).map_err(error)?;
         tx.commit().map_err(error)?;
@@ -526,7 +638,7 @@ fn lookup_operation(
     operation: &str,
 ) -> napi::Result<Option<(Value, Value)>> {
     let (input, operation) = (input.clone(), operation.to_owned());
-    pg.with_client(move |client| Ok(client.query_opt("SELECT input, decision FROM openappa_operations WHERE organization_id=$1 AND caller_id=$2 AND session_id=$3 AND operation_id=$4 AND status='complete'", &[&input.organization_id,&input.caller_id,&input.session_id,&operation])?.map(|row| (row.get(0), row.get(1))))).map_err(error)
+    pg.with_client(move |client| Ok(client.query_opt("SELECT input, decision FROM openappa_operations WHERE session_id=$1 AND operation_id=$2 AND status='complete'", &[&input.session_id,&operation])?.map(|row| (row.get(0), row.get(1))))).map_err(error)
 }
 fn claim_operation(
     pg: &PostgresStore,
@@ -554,7 +666,14 @@ fn finish_operation(
 ) -> napi::Result<()> {
     let (input, operation, decision) = (input.clone(), operation.to_owned(), decision.clone());
     pg.with_client(move |client| {
-        client.execute("UPDATE openappa_operations SET status='complete', decision=$5 WHERE organization_id=$1 AND caller_id=$2 AND session_id=$3 AND operation_id=$4", &[&input.organization_id,&input.caller_id,&input.session_id,&operation,&decision])?;
+        client.execute("UPDATE openappa_operations SET status='complete', decision=$3 WHERE session_id=$1 AND operation_id=$2", &[&input.session_id,&operation,&decision])?;
         Ok(())
     }).map_err(error)
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct YellArguments {
+    message: String,
+    with_trajectory: bool,
 }

@@ -45,6 +45,30 @@ class FakeCacheManager {
     return value;
   }
 
+  async appendToList<T>(params: {
+    key: string;
+    value: T;
+    ttl: number;
+  }): Promise<void> {
+    const values = (this.store.get(params.key) as T[] | undefined) ?? [];
+    this.store.set(params.key, [...values, params.value]);
+  }
+
+  async getAndDeleteMany<T>(
+    keys: string[],
+  ): Promise<Array<{ key: string; value: T }>> {
+    const entries: Array<{ key: string; value: T }> = [];
+    for (const key of keys) {
+      if (this.store.has(key)) {
+        entries.push({ key, value: this.store.get(key) as T });
+        this.store.delete(key);
+      }
+    }
+    return entries;
+  }
+
+  async deleteExpiredByPrefix(_prefix: string): Promise<void> {}
+
   async deleteByPrefix(prefix: string): Promise<number> {
     let deleted = 0;
     for (const key of [...this.store.keys()]) {

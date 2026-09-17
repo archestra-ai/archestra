@@ -123,6 +123,7 @@ export default function NewMcpCatalogItemPage() {
       backLink={<PageBackLink href="/mcp/registry">MCP Registry</PageBackLink>}
       actionButton={<SetupStepper compact activeStep="configuration" />}
       maxWidth="wizard"
+      contentOverflowX="clip"
     >
       <div className="space-y-6">
         {/* Resolve the catalog setting before rendering so a disabled org never

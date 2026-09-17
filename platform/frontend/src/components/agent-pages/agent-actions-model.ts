@@ -17,7 +17,6 @@ export type AgentActionId =
   | "clone"
   | "export"
   | "history"
-  | "convert"
   | "delete";
 
 export interface AgentActionDefinition {
@@ -26,6 +25,8 @@ export interface AgentActionDefinition {
   visible: boolean;
   permissions?: Permissions;
   href?: string;
+  /** Chat only: sending in the composer starts a run in the agent's dedicated runtime, so renderers swap the glyph. */
+  startsRun?: boolean;
 }
 
 /**
@@ -36,16 +37,22 @@ export interface AgentActionDefinition {
 export function getAgentActionModel({
   kind,
   agent,
+  agentRuntimeEnabled = false,
 }: {
   kind: AgentPageKind;
   agent: {
     id: string;
     agentType: AgentType;
     builtIn?: boolean | null;
+    runtime?: unknown | null;
   };
+  /** The deployment's `agentRuntime` feature; a stored runtime only changes Chat while it is on, matching the composer's gate. */
+  agentRuntimeEnabled?: boolean;
 }): AgentActionDefinition[] {
   const builtIn = !!agent.builtIn;
   const resource = getResourceForAgentType(agent.agentType);
+  const startsRun =
+    agentRuntimeEnabled && kind === "agent" && agent.runtime != null;
 
   return [
     {
@@ -57,9 +64,10 @@ export function getAgentActionModel({
     },
     {
       id: "chat",
-      label: ACTION_LABEL.chat,
+      label: startsRun ? ACTION_LABEL.startRun : ACTION_LABEL.chat,
       visible: kind === "agent" && !builtIn,
       href: `/chat/new?agent_id=${agent.id}`,
+      startsRun,
     },
     {
       id: "edit",
@@ -88,12 +96,6 @@ export function getAgentActionModel({
       label: ACTION_LABEL.versionHistory,
       visible: true,
       permissions: permission(resource, "read"),
-    },
-    {
-      id: "convert",
-      label: "Convert to skill",
-      visible: kind === "agent",
-      permissions: { skill: ["create"] },
     },
     {
       id: "delete",

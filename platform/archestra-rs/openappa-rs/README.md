@@ -24,9 +24,11 @@ flowchart LR
 ## Build and run
 
 Cargo fetches OpenAPPA from its public Git repository at commit
-`581124c212860713010522971afbd7ab4677cb8d`, pinned in this package's manifest and
+`e2065813a7635759fef5ccfe8fbe73dfc44039c9`, pinned in this package's manifest and
 the workspace lockfile. A sibling checkout is not required. Update the revision
-and lockfile together when adopting a newer runtime.
+and lockfile together when adopting a newer runtime. The lockfile also selects
+`rmcp` 3.4.0, matching the runtime's MCP API. Rebuild the native addon and
+restart the backend after updating; production uses the normal Archestra image build.
 
 From `archestra/platform`:
 
@@ -40,11 +42,20 @@ Configure the usual Archestra database and auth secret, then explicitly set:
 
 ```sh
 ARCHESTRA_OPENAPPA_ENABLED=true
-ARCHESTRA_OPENAPPA_POLICY_PATH=/absolute/path/to/policy.toml
 ```
 
+With this flag enabled in `platform/.env`, `tilt up` builds and load-checks the
+native addon before starting the development backend. Changes to its Rust
+sources, build configuration, or the workspace Cargo manifest/lockfile rebuild
+the addon and restart the backend after a successful build. Failed builds leave
+the previous backend running and appear as errors in Tilt. With the flag off,
+Tilt skips this build. The build uses the same pinned OpenAPPA dependency as
+Docker; it does not use a sibling OpenAPPA checkout.
+
 The feature flag defaults to false and does not inherit `ARCHESTRA_BETA`.
-A policy path alone does not enable APPA. With the flag off, the existing Tool
+Enabling it automatically adds `appa` to the effective proxy plugin list.
+An explicit `appa` entry in `ARCHESTRA_LLM_PROXY_PLUGINS` cannot enable APPA
+while the flag is off. With the flag off, the existing Tool
 Guardrails run unchanged: APPA is not loaded, session headers are not required
 or injected, and the remedy tool is neither advertised nor callable. Additive
 schema migrations still run normally.
@@ -83,20 +94,22 @@ The production `pnpm deploy` includes `index.cjs`, declarations, the native
 binary, and the shared napi loader. Native builds are excluded from Turbo's
 cross-platform cache. The normal Archestra image and release workflows are
 unchanged; no separate addon release or binary download is introduced. The
-feature flag gates execution, so builds still compile/package the addon when
-the runtime feature is off.
+plugin list gates execution, so builds still compile/package the addon when
+APPA is not enabled.
 
 ## Identity and lifecycle
 
 Chat sends `X-Appa-Session-ID` using the conversation ID. The model constructor
 also supports `X-Appa-Parent-ID`; the initial top-level Chat flow omits it.
-The proxy derives the organization from the resolved agent. Internal Chat uses
-the existing local-request trust boundary and forwards the user from its
-authenticated Chat route. External callers must identify themselves through the
+The proxy derives the organization from the resolved agent. Internal agent runs,
+including Chat, Slack and A2A, use the existing local-request trust boundary.
+Caller identity is optional audit attribution. External callers authenticate through the
 proxy's existing authentication; a raw provider key and user headers alone are
 not sufficient. There is no APPA-specific signed identity header.
 
-The native actor ID hashes the organization/caller/session tuple. A changed
+The native actor ID hashes only the session ID. Everyone in a shared thread
+uses the same guardrail state, regardless of caller or organization attribution.
+Session IDs must identify a conversation uniquely within this deployment. A changed
 parent is refused. `SessionStart` restores the existing trajectory. This version
 does not submit `Prompt` or `TurnEnd` from Chat or infer them in the proxy.
 Abandoned-call cleanup and unused remedy-permit lifetime are unchanged.
@@ -105,7 +118,10 @@ Detached MCP task execution remains disabled only while the flag is enabled.
 Both streaming and non-streaming proxy paths call `ToolCall`; existing streaming
 buffers retain tool deltas until the decision completes. Existing name
 normalization unwraps `run_tool` and client decorations. Chat does not check
-APPA again before execution.
+APPA again before execution. Each call uses `call:<provider-tool-call-id>` as its
+host identity, persisted with the dispatch. Several calls can remain open and
+return in any order, including after a backend restart. Hook processing remains
+serialized; tool execution can overlap.
 
 On the next model request, the proxy reads the provider adapter's tool results,
 including explicit protocol error flags. Ordinary results are client-reported
@@ -144,8 +160,8 @@ the completed receipt/approved output. Success commits both; errors roll back
 both and discard tentative in-memory runtime state. A durable pending receipt
 blocks further work in that family after an interruption.
 
-Completed result keys are organization + authenticated caller + session +
-tool-call ID. Resending different bytes under the same key still receives the
+Completed result keys are session ID + tool-call ID. Operation keys are
+session ID + operation ID. Resending different bytes under the same key still receives the
 saved approved output, without another hook, sanitizer, or annotator call.
 Calls with reused operation IDs and changed arguments are refused. Result
 correlation uses the original checked call even after compaction removes it.
@@ -162,22 +178,31 @@ behavior, not exactly-once execution of arbitrary external services.
 `archestra__execute_remedy_plan` uses the existing built-in registry, gateway
 dispatch, schemas, and branding. It is implicit protocol support, like existing
 run controls. The native gate checks the control call and the existing Rust MCP
-implementation validates the offer against the authenticated actor. Registered
+implementation validates the offer against the session actor. Registered
 remote authorities and sanitizers work. Narrowing offers remain model decisions.
 This integration does not support human approval. Calls requiring it stay blocked,
 and remedies requiring an unavailable human authority return APPA explanations.
 The binding accepts no host approval ruling and has no review/resume events.
 
 A denied call follows the existing proxy refusal envelope. If one proposed
-call is denied, none of that response's tool calls reach the client. Refusal text
+call is denied, none of that response's tool calls reach the client. The proxy
+settles earlier admissions from that batch with `cancel_call`, reporting known
+non-execution as failure. Closing facts, a refusal replacing the original call
+receipt, and the result receipt commit together. Replaying a canceled call ID
+therefore cannot release it again. Other in-flight calls remain open. Cleanup
+failure refuses the response; an interrupted native transaction retains the
+existing pending-receipt recovery requirement. Refusal text
 and remedy information come from APPA, with existing tool-name translation;
 they are not replaced by legacy Tool Guardrails explanations. There is no
 Chat-specific denied-call execution wrapper or automatic model retry.
 
 Locked chats are refused while enabled because the native tables do not yet
-use their browser-held encryption keys. Delegation remains refused until a
-complete child-return adapter exists. Provider-hosted tools remain outside this
-initial adapter. Existing Chat/gateway permission and policy checks still apply
+use their browser-held encryption keys. Agent and skill delegation are checked
+as ordinary tools in the parent's policy, including their returned output.
+Internal delegated runs use the existing guardrails independently, outside the
+parent's APPA trajectory. APPA child restrictions and return contracts are not
+propagated until a child-return adapter exists. Provider-hosted tools remain
+outside this initial adapter. Existing Chat/gateway permission and policy checks still apply
 independently; only the LLM proxy's legacy policy evaluation is replaced.
 
 Start new conversations when enabling this feature. Historical tool results
@@ -200,7 +225,8 @@ OPENAPPA_TEST_DATABASE_URL=postgresql://... pnpm test
 
 The native tests use real hooks, a real PostgreSQL database, two Node processes,
 and a local HTTP sanitizer. They cover changed resends, concurrent duplicates,
-tenant isolation, remedy acceptance, restriction persistence without model
+session isolation, parallel identical calls, reverse-order results after restart,
+canceled-batch replay, remedy acceptance, restriction persistence without model
 history, one-time sanitizer execution, unknown outcomes, and injected receipt
 commit failure with event rollback. The storage test in the OpenAPPA tree is:
 
@@ -217,3 +243,26 @@ The pinned OpenAPPA revision includes the companion PostgreSQL and embedded-reme
 changes. Archestra uses embedded remedies without a human approval context.
 Previous demo/browser results do not qualify this proxy-only refactor; validation
 for this change is reported separately in the PR.
+
+Organization policy text is stored in PostgreSQL and edited in OpenAPPA. Copy an existing file policy into the editor when upgrading.
+
+The session-key migration clears old OpenAPPA sessions, events, and processing receipts.
+Saved organization policies and policy files are preserved.
+
+## Agent feedback reporting
+
+Agent feedback reporting defaults to enabled when OpenAPPA and Guardrails v2
+are enabled. Set `ARCHESTRA_OPENAPPA_YELL_ENABLED=false` to disable reports
+to the shared OpenAPPA receiver.
+The `archestra__yell` tool is available to protected sessions; its hook is
+checked as `yell` against the active policy. The receiver destination is set
+by the host, never by tool arguments. The report identifies Archestra and the configured frontend hostname. The host passes the authenticated actor
+to OpenAPPA, which verifies the previously released call belongs to that actor.
+
+Reports use upstream classification, size limits, gzip, signing, and HTTPS
+transport. The receiver has create-only access to a private GCS bucket and
+notifies Slack. The public signature is not authentication; incoming reports
+remain untrusted. Raw prompts, tool arguments, outputs, and session identifiers
+are omitted from diagnostics. Policy names and the free-text message are sent;
+messages must not contain secrets or task content. The deployment reporting flag is
+separate from policy editing and cannot be changed through policy TOML.

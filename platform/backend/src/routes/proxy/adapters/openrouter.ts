@@ -89,9 +89,6 @@ class OpenrouterRequestAdapter
   applyToolResultUpdates(updates: Record<string, string>) {
     return this.delegate.applyToolResultUpdates(updates);
   }
-  applyToonCompression(model: string) {
-    return this.delegate.applyToonCompression(model);
-  }
   convertToolResultContent(messages: OpenrouterMessages) {
     return this.delegate.convertToolResultContent(messages);
   }

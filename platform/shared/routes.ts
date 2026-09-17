@@ -1,4 +1,8 @@
 export const RouteId = {
+  AnnotateGuardrailsTool: "annotateGuardrailsTool",
+  GetGuardrailsPolicy: "getGuardrailsPolicy",
+  ValidateGuardrailsPolicy: "validateGuardrailsPolicy",
+  UpdateGuardrailsPolicy: "updateGuardrailsPolicy",
   // Outbound A2A Agent Routes
   InspectA2aRemoteAgent: "inspectA2aRemoteAgent",
   ListA2aRemoteAgents: "listA2aRemoteAgents",
@@ -21,6 +25,13 @@ export const RouteId = {
   GetDefaultMcpGateway: "getDefaultMcpGateway",
   GetLlmProxy: "getLlmProxy",
   UpdateLlmProxy: "updateLlmProxy",
+  TransferSkillOwnership: "transferSkillOwnership",
+  TransferPluginOwnership: "transferPluginOwnership",
+  TransferProjectOwnership: "transferProjectOwnership",
+  TransferAppOwnership: "transferAppOwnership",
+  TransferMcpCatalogOwnership: "transferMcpCatalogOwnership",
+  TransferRemoteAgentOwnership: "transferRemoteAgentOwnership",
+  TransferAgentOwnership: "transferAgentOwnership",
   UpdateAgent: "updateAgent",
   DeleteAgent: "deleteAgent",
   BulkUpdateAgents: "bulkUpdateAgents",
@@ -135,6 +146,7 @@ export const RouteId = {
   // MCP Gateway Routes
   McpGatewayGet: "mcpGatewayGet",
   McpGatewayPost: "mcpGatewayPost",
+  McpGatewaySseMessage: "mcpGatewaySseMessage", // Legacy HTTP+SSE message endpoint
   McpProxyPost: "mcpProxyPost", // Frontend session-based proxy to MCP Gateway
   McpServerProxyPost: "mcpServerProxyPost", // Session-based proxy to one installed server's MCP App runtime
 
@@ -590,9 +602,6 @@ export const RouteId = {
   // Security Settings Routes
   UpdateSecuritySettings: "updateSecuritySettings",
 
-  // LLM Settings Routes (organization-level)
-  UpdateLlmSettings: "updateLlmSettings",
-
   // MCP Settings Routes (organization-level)
   UpdateMcpSettings: "updateMcpSettings",
 
@@ -809,8 +818,6 @@ export const RouteId = {
   GetExternalMcpSkill: "getExternalMcpSkill",
   GetExternalMcpSkillUsageStatistics: "getExternalMcpSkillUsageStatistics",
   CreateSkill: "createSkill",
-  ConvertAgentToSkill: "convertAgentToSkill",
-  SuggestSkillDescription: "suggestSkillDescription",
   GetSkill: "getSkill",
   UpdateSkill: "updateSkill",
   BulkUpdateSkillsVisibility: "bulkUpdateSkillsVisibility",
@@ -819,6 +826,11 @@ export const RouteId = {
   RestoreSkill: "restoreSkill",
   PermanentlyDeleteSkill: "permanentlyDeleteSkill",
   ResetSkill: "resetSkill",
+  GetGuardrailsDeployment: "getGuardrailsDeployment",
+  UpdateGuardrailsDeployment: "updateGuardrailsDeployment",
+  GetAppaGithubSync: "getAppaGithubSync",
+  ConfigureAppaGithubSync: "configureAppaGithubSync",
+  UpdateAppaGithubSync: "updateAppaGithubSync",
   UpdateSkillGithubSync: "updateSkillGithubSync",
   DiscoverGithubSkills: "discoverGithubSkills",
   SearchSkillCatalog: "searchSkillCatalog",

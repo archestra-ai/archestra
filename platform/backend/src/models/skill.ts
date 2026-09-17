@@ -26,7 +26,10 @@ import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import { hardDelete, restore, softDelete } from "@/database/soft-delete";
 import logger from "@/logging";
 import { skillInEnvironmentPredicate } from "@/services/environments/environment-isolation";
-import { isBuiltInSkillSourceRef } from "@/skills/built-in-skills";
+import {
+  getDisabledBuiltInSkillSourceRefs,
+  isBuiltInSkillSourceRef,
+} from "@/skills/built-in-skills";
 import { SKILL_MANIFEST_FILENAME } from "@/skills/parser";
 import {
   buildSkillPublicationArtifacts,
@@ -234,7 +237,48 @@ export function afterIdPredicate(afterId: string | undefined): SQL | undefined {
   return afterId ? gt(schema.skillsTable.id, afterId) : undefined;
 }
 
+/** Filter both catalog discovery and direct reads when a built-in feature is off. */
+export function enabledSkillPredicate(): SQL | undefined {
+  const disabled = getDisabledBuiltInSkillSourceRefs();
+  return disabled.length
+    ? or(
+        ne(schema.skillsTable.sourceType, "built_in"),
+        isNull(schema.skillsTable.sourceRef),
+        notInArray(schema.skillsTable.sourceRef, disabled),
+      )
+    : undefined;
+}
+
 class SkillModel {
+  static async transferOwnership(params: {
+    id: string;
+    organizationId: string;
+    previousOwnerId: string | null;
+    updatedAt: Date;
+    ownerId: string;
+  }): Promise<boolean> {
+    const rows = await db
+      .update(schema.skillsTable)
+      .set({
+        authorId: params.ownerId,
+        createdByServiceAccountId: null,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(schema.skillsTable.id, params.id),
+          eq(schema.skillsTable.organizationId, params.organizationId),
+          params.previousOwnerId === null
+            ? isNull(schema.skillsTable.authorId)
+            : eq(schema.skillsTable.authorId, params.previousOwnerId),
+          sql`date_trunc('milliseconds', ${schema.skillsTable.updatedAt}) = ${params.updatedAt.toISOString()}::timestamp`,
+          notDeleted(schema.skillsTable),
+        ),
+      )
+      .returning({ id: schema.skillsTable.id });
+    return rows.length === 1;
+  }
+
   static async findByOrganization(params: {
     organizationId: string;
     limit?: number;
@@ -359,7 +403,11 @@ class SkillModel {
       .select()
       .from(schema.skillsTable)
       .where(
-        and(eq(schema.skillsTable.id, id), notDeleted(schema.skillsTable)),
+        and(
+          eq(schema.skillsTable.id, id),
+          notDeleted(schema.skillsTable),
+          enabledSkillPredicate(),
+        ),
       );
 
     return result ?? null;
@@ -374,6 +422,7 @@ class SkillModel {
         and(
           inArray(schema.skillsTable.id, ids),
           notDeleted(schema.skillsTable),
+          enabledSkillPredicate(),
         ),
       );
   }
@@ -439,6 +488,7 @@ class SkillModel {
           eq(schema.skillsTable.scope, "org"),
           skillInEnvironmentPredicate(params.environmentId),
           notDeleted(schema.skillsTable),
+          enabledSkillPredicate(),
           notExcludedByAgentPredicate(params.excludedForAgentId),
           publishableSkillPredicate(),
           afterIdPredicate(params.afterId),
@@ -472,6 +522,7 @@ class SkillModel {
           skillUriKeyPredicate(params),
           skillInEnvironmentPredicate(params.environmentId),
           notDeleted(schema.skillsTable),
+          enabledSkillPredicate(),
           publishableSkillPredicate(),
         ),
       )
@@ -513,7 +564,13 @@ class SkillModel {
         digest: schema.skillsTable.digest,
       })
       .from(schema.skillsTable)
-      .where(and(eq(schema.skillsTable.id, id), notDeleted(schema.skillsTable)))
+      .where(
+        and(
+          eq(schema.skillsTable.id, id),
+          notDeleted(schema.skillsTable),
+          enabledSkillPredicate(),
+        ),
+      )
       .limit(1);
 
     return row ?? null;
@@ -671,6 +728,7 @@ class SkillModel {
           eq(schema.skillsTable.organizationId, organizationId),
           eq(schema.skillsTable.name, name),
           notDeleted(schema.skillsTable),
+          enabledSkillPredicate(),
         ),
       )
       .orderBy(desc(schema.skillsTable.createdAt), desc(schema.skillsTable.id));
@@ -726,22 +784,19 @@ class SkillModel {
    * inserted in the same transaction, so a failed assignment cannot leave a
    * scoped skill orphaned.
    */
-  static async createWithFiles(
-    params: {
-      skill: InsertSkill;
-      files: Omit<InsertSkillFile, "skillId">[];
-      teamIds?: string[];
-      /** Environments the skill is restricted to; empty/omitted = every environment. */
-      environmentIds?: string[];
-      /**
-       * Git commit the initial bytes came from, stamped on version 1. Passed
-       * only by the GitHub import; see `skill_versions.source_commit`.
-       */
-      versionSourceCommit?: string;
-    },
-    tx?: Transaction,
-  ): Promise<Skill | null> {
-    const run = async (tx: Transaction) => {
+  static async createWithFiles(params: {
+    skill: InsertSkill;
+    files: Omit<InsertSkillFile, "skillId">[];
+    teamIds?: string[];
+    /** Environments the skill is restricted to; empty/omitted = every environment. */
+    environmentIds?: string[];
+    /**
+     * Git commit the initial bytes came from, stamped on version 1. Passed
+     * only by the GitHub import; see `skill_versions.source_commit`.
+     */
+    versionSourceCommit?: string;
+  }): Promise<Skill | null> {
+    return await withDbTransaction(async (tx) => {
       const [skill] = await tx
         .insert(schema.skillsTable)
         .values(
@@ -810,11 +865,7 @@ class SkillModel {
       });
 
       return skill;
-    };
-
-    // join a caller-supplied transaction so the create can be made atomic with
-    // other writes (e.g. agent→skill conversion deleting the source agent).
-    return tx ? await run(tx) : await withDbTransaction(run);
+    });
   }
 
   /**
@@ -1672,6 +1723,7 @@ function buildOrgFilters(params: {
     // Only the org list/count methods pass `status`; every other caller
     // (source-repo scan, name lookups, etc.) omits it and stays active-only.
     getSkillStatusCondition(params.status ?? "active"),
+    enabledSkillPredicate(),
     ...(params.accessibleSkillIds !== undefined
       ? [inArray(schema.skillsTable.id, params.accessibleSkillIds)]
       : []),

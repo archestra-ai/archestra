@@ -1,0 +1,13 @@
+#!/bin/sh
+set -eu
+
+# Callers supply image-owned, safe text, never raw provider responses or logs.
+# Reporting is best-effort so an unwritable sidecar cannot mask the exit status.
+if [ -n "${ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX:-}" ]; then
+  temporary="${ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX}.failure.tmp.$$"
+  if jq -n --arg code "$1" --arg message "$2" \
+    '{version:1,code:$code,message:$message}' > "$temporary"; then
+    mv "$temporary" "${ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX}.failure" || true
+  fi
+  rm -f "$temporary" || true
+fi

@@ -3,7 +3,9 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
+import { ConnectionSignInDialog } from "@/components/connection-sign-in-dialog";
 import { ExternalSecretReferenceDialog } from "@/components/external-secret-reference-dialog";
+import { GitHubConnectButton } from "@/components/github-connect-button";
 import { RuntimeCredentialIcon } from "@/components/runtime-credential-icon";
 import { RuntimeCredentialDescription } from "@/components/runtime-credential-row-content";
 import { StandardFormDialog } from "@/components/standard-dialog";
@@ -62,31 +64,25 @@ export function RuntimeCredentialConnectionDialog({
 
   if (definition.kind === "github_app_user")
     return (
-      <StandardFormDialog
+      <ConnectionSignInDialog
         open
         onOpenChange={(open) => {
           if (!open) onClose();
         }}
-        size="small"
         title="Connect GitHub"
-        description="Authorize your GitHub account once. All agents using this connection act as you, within the App’s repository access and your own permissions."
-        onSubmit={(event) => {
-          event.preventDefault();
-          startGitHub.mutate(definition.key);
-        }}
-        footer={
-          <>
-            <Button type="button" variant="outline" onClick={onClose}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={startGitHub.isPending}>
-              {startGitHub.isPending ? "Connecting…" : "Connect GitHub"}
-            </Button>
-          </>
+        description={
+          <span className="whitespace-pre-wrap break-words">
+            {definition.description?.trim() ||
+              "Connect your GitHub account to use it with your agents."}
+          </span>
         }
-      >
-        <RuntimeCredentialDescription definition={definition} />
-      </StandardFormDialog>
+        action={
+          <GitHubConnectButton
+            pending={startGitHub.isPending}
+            onClick={() => startGitHub.mutate(definition.key)}
+          />
+        }
+      />
     );
 
   if (useExternalSecretsManager) {

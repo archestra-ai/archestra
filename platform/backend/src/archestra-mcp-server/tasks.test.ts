@@ -209,6 +209,22 @@ describe("run tools", () => {
     );
 
     expect(result.isError).not.toBe(true);
+    const started = result.structuredContent as { run: { task_id: string } };
+    expect(started).toMatchObject({
+      runtime: "foreground",
+      session_id: null,
+      run_url: null,
+    });
+    const read = await executeArchestraTool(
+      TOOL_GET_RUN_FULL_NAME,
+      { task_id: started.run.task_id },
+      chatContext,
+    );
+    expect(read.isError).not.toBe(true);
+    expect(read.structuredContent).toMatchObject({
+      session_id: null,
+      run_url: null,
+    });
     expect(sendMessage).toHaveBeenCalledWith(
       expect.objectContaining({
         agentId: target.id,
@@ -466,6 +482,9 @@ describe("run tools", () => {
         context,
       );
       expect(written.isError).toBeFalsy();
+      expect(JSON.parse((written.content[0] as { text: string }).text)).toEqual(
+        written.structuredContent,
+      );
       const read = await executeArchestraTool(
         "archestra__read_workspace_file",
         { task_id: task.id, path: "notes.txt" },
@@ -475,6 +494,9 @@ describe("run tools", () => {
         content: "hello",
         encoding: "utf8",
       });
+      expect(JSON.parse((read.content[0] as { text: string }).text)).toEqual(
+        read.structuredContent,
+      );
       expect(access).toHaveBeenCalledTimes(2);
       const other = await makeUser();
       await makeMember(other.id, organizationId, { role: "member" });

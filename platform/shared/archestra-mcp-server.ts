@@ -211,6 +211,10 @@ export const TOOL_APP_LLM_COMPLETE_SHORT_NAME = "llm_complete";
 export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_WHOAMI_SHORT_NAME,
   TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
+  "yell",
+  "get_guardrails_policy",
+  "validate_guardrails_policy",
+  "update_guardrails_policy",
   TOOL_CREATE_AGENT_SHORT_NAME,
   TOOL_GET_AGENT_SHORT_NAME,
   TOOL_LIST_AGENTS_SHORT_NAME,
@@ -397,6 +401,10 @@ export const ARCHESTRA_TOOL_GROUP_BY_SHORT_NAME: Record<
 > = {
   whoami: "identity",
   execute_remedy_plan: "identity",
+  yell: "identity",
+  get_guardrails_policy: "policies",
+  validate_guardrails_policy: "policies",
+  update_guardrails_policy: "policies",
 
   create_agent: "agents",
   get_agent: "agents",

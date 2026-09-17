@@ -3,7 +3,6 @@ import {
   ArchestraInternalErrorCode,
   type SupportedProvider,
 } from "@archestra/shared";
-import { encode as toonEncode } from "@toon-format/toon";
 import { get } from "lodash-es";
 import OpenAIProvider from "openai";
 import type {
@@ -12,13 +11,11 @@ import type {
 } from "openai/resources/chat/completions/completions";
 import config from "@/config";
 import logger from "@/logging";
-import { ModelModel } from "@/models";
 import { metrics } from "@/observability";
 import {
   decodeOpenAiCodexCredential,
   isOpenAiCodexCredential,
 } from "@/services/openai-codex-credentials";
-import { getTokenizer } from "@/tokenizers";
 import type {
   ChunkProcessingResult,
   CommonMcpToolDefinition,
@@ -32,7 +29,6 @@ import type {
   LLMStreamAdapter,
   OpenAi,
   StreamAccumulatorState,
-  ToolCompressionStats,
   UsageView,
 } from "@/types";
 import {
@@ -51,9 +47,8 @@ import {
   isMcpImageBlock,
 } from "../utils/mcp-image";
 import { stripBrowserToolsResults } from "../utils/summarize-tool-results";
-import { unwrapToolContent } from "../utils/unwrap-tool-content";
 import { createOpenAiCodexClient } from "./openai-codex-client";
-import { toOpenAiStreamUsage } from "./openai-sse-chunk";
+import { toOpenAiStreamUsageWithCache } from "./openai-sse-chunk";
 import { PROXY_SDK_MAX_RETRIES } from "./sdk-retry-policy";
 import { subscriptionAuthRequiredCode } from "./subscription-auth-error";
 
@@ -152,16 +147,6 @@ export class OpenAIEmbeddingRequestAdapter
   updateToolResult(): void {}
 
   applyToolResultUpdates(): void {}
-
-  async applyToonCompression(): Promise<ToolCompressionStats> {
-    return {
-      tokensBefore: 0,
-      tokensAfter: 0,
-      costSavings: 0,
-      wasEffective: false,
-      hadToolResults: false,
-    };
-  }
 
   convertToolResultContent(messages: OpenAiMessages): OpenAiMessages {
     return messages;
@@ -405,20 +390,6 @@ export class OpenAIRequestAdapter
 
   applyToolResultUpdates(updates: Record<string, string>): void {
     Object.assign(this.toolResultUpdates, updates);
-  }
-
-  async applyToonCompression(model: string): Promise<ToolCompressionStats> {
-    const { messages: compressedMessages, stats } =
-      await convertToolResultsToToon(
-        this.request.messages,
-        model,
-        this.provider,
-      );
-    this.request = {
-      ...this.request,
-      messages: compressedMessages,
-    };
-    return stats;
   }
 
   convertToolResultContent(messages: OpenAiMessages): OpenAiMessages {
@@ -1327,9 +1298,10 @@ export class OpenAIStreamAdapter
     };
     // Carry the usage the provider sent in its trailing chunk into the synthesized final chunk;
     // without it, streaming clients (e.g. the chat route's AI SDK, for OpenRouter and other
-    // OpenAI-compatible models) never see token counts. Shape mirrors the non-streaming
-    // `toProviderResponse()` below — `prompt_tokens` is net of cache, with no `prompt_tokens_details`.
-    const usage = toOpenAiStreamUsage(this.state.usage);
+    // OpenAI-compatible models) never see token counts. `state.usage.inputTokens` is net of
+    // cache reads (see processChunk above), so this must recombine them into a gross
+    // `prompt_tokens` with `prompt_tokens_details` — mirrors `toProviderResponse()` below.
+    const usage = toOpenAiStreamUsageWithCache(this.state.usage);
     if (usage) {
       finalChunk.usage = usage;
     }
@@ -1374,155 +1346,13 @@ export class OpenAIStreamAdapter
             : ((this.state.stopReason as OpenAi.Types.FinishReason) ?? "stop"),
         },
       ],
-      usage: {
-        prompt_tokens: this.state.usage?.inputTokens ?? 0,
-        completion_tokens: this.state.usage?.outputTokens ?? 0,
-        total_tokens:
-          (this.state.usage?.inputTokens ?? 0) +
-          (this.state.usage?.outputTokens ?? 0),
+      usage: toOpenAiStreamUsageWithCache(this.state.usage) ?? {
+        prompt_tokens: 0,
+        completion_tokens: 0,
+        total_tokens: 0,
       },
     };
   }
-}
-
-// =============================================================================
-// TOON COMPRESSION (copied from utils/adapters/openai.ts)
-// =============================================================================
-
-// Exported for reuse by OpenAI-compatible providers (Mistral, etc.)
-export async function convertToolResultsToToon(
-  messages: OpenAiMessages,
-  model: string,
-  provider: SupportedProvider,
-): Promise<{
-  messages: OpenAiMessages;
-  stats: ToolCompressionStats;
-}> {
-  const tokenizer = getTokenizer(provider);
-  let toolResultCount = 0;
-  let totalTokensBefore = 0;
-  let totalTokensAfter = 0;
-
-  const result = messages.map((message) => {
-    if (message.role === "tool") {
-      logger.debug(
-        {
-          toolCallId: message.tool_call_id,
-          contentType: typeof message.content,
-          provider,
-        },
-        "convertToolResultsToToon: tool message found",
-      );
-
-      if (typeof message.content === "string") {
-        try {
-          const unwrapped = unwrapToolContent(message.content);
-          const parsed = JSON.parse(unwrapped);
-          const noncompressed = unwrapped;
-          const compressed = toonEncode(parsed);
-
-          const tokensBefore = tokenizer.countTokens([
-            { role: "user", content: noncompressed },
-          ]);
-          const tokensAfter = tokenizer.countTokens([
-            { role: "user", content: compressed },
-          ]);
-
-          toolResultCount++;
-
-          // Always count tokens
-          totalTokensBefore += tokensBefore;
-
-          // Only apply compression if it actually saves tokens
-          if (tokensAfter < tokensBefore) {
-            totalTokensAfter += tokensAfter;
-
-            logger.debug(
-              {
-                toolCallId: message.tool_call_id,
-                beforeLength: noncompressed.length,
-                afterLength: compressed.length,
-                tokensBefore,
-                tokensAfter,
-                toonPreview: compressed.substring(0, 150),
-                provider,
-              },
-              "convertToolResultsToToon: compressed",
-            );
-            logger.trace(
-              {
-                toolCallId: message.tool_call_id,
-                before: noncompressed,
-                after: compressed,
-                provider,
-                supposedToBeJson: parsed,
-              },
-              "convertToolResultsToToon: before/after",
-            );
-
-            return {
-              ...message,
-              content: compressed,
-            };
-          }
-
-          // Compression not applied - count non-compressed tokens to track total tokens anyway
-          totalTokensAfter += tokensBefore;
-          logger.info(
-            {
-              toolCallId: message.tool_call_id,
-              tokensBefore,
-              tokensAfter,
-              provider,
-            },
-            "Skipping TOON compression - compressed output has more tokens",
-          );
-          return message;
-        } catch {
-          logger.debug(
-            {
-              toolCallId: message.tool_call_id,
-              contentPreview:
-                typeof message.content === "string"
-                  ? message.content.substring(0, 100)
-                  : "non-string",
-            },
-            "Skipping TOON conversion - content is not JSON",
-          );
-          return message;
-        }
-      }
-    }
-
-    return message;
-  });
-
-  logger.info(
-    { messageCount: messages.length, toolResultCount },
-    "convertToolResultsToToon completed",
-  );
-
-  // Calculate cost savings (always a number, 0 if no savings)
-  let toonCostSavings = 0;
-  const tokensSaved = totalTokensBefore - totalTokensAfter;
-  if (tokensSaved > 0) {
-    toonCostSavings = await ModelModel.calculateCostSavings(
-      model,
-      tokensSaved,
-      provider,
-    );
-  }
-
-  return {
-    messages: result,
-    stats: {
-      tokensBefore: totalTokensBefore,
-      tokensAfter: totalTokensAfter,
-      costSavings: toonCostSavings,
-      wasEffective: totalTokensAfter < totalTokensBefore,
-      hadToolResults: toolResultCount > 0,
-    },
-  };
 }
 
 // =============================================================================

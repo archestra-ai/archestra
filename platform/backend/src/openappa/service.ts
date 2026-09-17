@@ -1,7 +1,6 @@
 import {
   extractMcpToolError,
-  isAgentTool,
-  isSkillTool,
+  isSeededAppRenderToolResult,
 } from "@archestra/shared";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
@@ -10,15 +9,24 @@ import config from "@/config";
 import { getDatabaseConnectionString } from "@/database";
 import type { PolicyBlockResult } from "@/guardrails/tool-invocation";
 import { normalizeToolCallsForPolicy } from "@/routes/proxy/llm-proxy-helpers";
+import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
+import { guardrailsPolicyService } from "@/services/guardrails-policy";
 import { ApiError, type CommonToolResult } from "@/types";
+
+import { isChatBlockResult } from "./chat-block";
 
 export const APPA_SESSION_HEADER = "X-Appa-Session-ID";
 export const APPA_PARENT_HEADER = "X-Appa-Parent-ID";
-export const OPENAPPA_REMEDY_TOOL = "archestra__execute_remedy_plan";
+export const APPA_CHAT_SOURCES = [
+  "chat",
+  "chat:tool_call_repair",
+  "chat:compaction",
+] as const;
+export type AppaChatSource = (typeof APPA_CHAT_SOURCES)[number];
 type ExecutionOutcome = "success" | "failure" | "unknown";
 export type OpenAppaSession = {
   organization_id: string;
-  caller_id: string;
+  caller_id?: string;
   session_id: string;
   parent_id?: string;
 };
@@ -47,21 +55,68 @@ const Decision = z.object({
 });
 
 let native: Promise<typeof import("@archestra/openappa-rs")> | undefined;
+export function openappaYellEnabled(): boolean {
+  return config.openappa.enabled && config.openappa.yellEnabled;
+}
+
 export function openappaEnabled(): boolean {
   return config.openappa.enabled;
 }
 
-async function binding() {
-  if (!openappaEnabled() || !config.openappa.policyPath) {
-    throw new Error("OpenAPPA is disabled or its policy path is missing");
+export async function executeYell(params: {
+  session: OpenAppaSession;
+  toolCallId: string;
+  args: { message: string; with_trajectory: boolean };
+}): Promise<CallToolResult> {
+  if (!openappaYellEnabled())
+    throw new ApiError(404, "OpenAPPA reporting is disabled");
+  return runtimeToolResult(
+    await dispatch(params.session, {
+      event: "yell",
+      operation_id: `yell:${params.toolCallId}`,
+      arguments: params.args,
+    }),
+  );
+}
+
+/** The A2A executor identifies nested runs with a chain of agent UUIDs. */
+export function isAppaDelegatedRun(
+  agentId: string,
+  delegationChain: string | undefined,
+): boolean {
+  const chain = delegationChain?.split(":") ?? [];
+  return (
+    chain.length > 1 &&
+    chain.at(-1) === agentId &&
+    chain.every((id) => z.uuid().safeParse(id).success)
+  );
+}
+
+export function isAppaChatSource(
+  source: string | undefined,
+): source is AppaChatSource {
+  return (APPA_CHAT_SOURCES as readonly string[]).includes(source ?? "");
+}
+
+async function binding(content: string) {
+  if (!openappaEnabled()) {
+    throw new Error("OpenAPPA is disabled");
   }
-  const policyPath = config.openappa.policyPath;
   native ??= (async () => {
     const module = await import("@archestra/openappa-rs");
     const url = new URL(getDatabaseConnectionString());
     // pg ignores Prisma's legacy schema parameter; rust-postgres rejects it.
     url.searchParams.delete("schema");
-    await module.initializeOpenappa(url.toString(), policyPath);
+    await module.initializeOpenappa(
+      url.toString(),
+      content,
+      openappaYellEnabled()
+        ? {
+            endpoint: "https://appa-yell-wkjbuewj5a-ew.a.run.app",
+            hostname: new URL(config.frontendBaseUrl).hostname,
+          }
+        : undefined,
+    );
     return module;
   })().catch((error) => {
     native = undefined;
@@ -75,10 +130,16 @@ async function dispatch(
   event: Record<string, unknown>,
 ) {
   try {
-    const module = await binding();
+    if (!(await isGuardrailsV2Active()))
+      throw new Error("Guardrails v2 is disabled");
+    const policy = await guardrailsPolicyService.get(session.organization_id);
+    const module = await binding(policy.content);
     return Decision.parse(
       JSON.parse(
-        await module.dispatchHook(JSON.stringify({ ...session, ...event })),
+        await module.dispatchHook(
+          JSON.stringify({ ...session, ...event }),
+          policy.content,
+        ),
       ),
     );
   } catch (error) {
@@ -123,14 +184,9 @@ export function sessionFromHeaders(params: {
       400,
       "OpenAPPA requires valid X-Appa-Session-ID and optional X-Appa-Parent-ID headers",
     );
-  if (!params.callerId)
-    throw new ApiError(
-      401,
-      `OpenAPPA requires an authenticated ${archestraMcpBranding.appName} caller`,
-    );
   return {
     organization_id: params.organizationId,
-    caller_id: params.callerId,
+    ...(params.callerId ? { caller_id: params.callerId } : {}),
     session_id: sessionId,
     ...(parentId ? { parent_id: parentId as string } : {}),
   };
@@ -174,6 +230,19 @@ export async function processProxyResults(
   await startSession(session);
   const updates: Record<string, string> = {};
   for (const result of results) {
+    // Opening an app seeds a platform-authored render, not an executed call.
+    // It has no APPA admission to settle. Live MCP results have this reserved
+    // marker stripped, matching the trusted-data guardrail's exemption.
+    if (isSeededAppRenderToolResult(result.content)) continue;
+    // A signed proxy refusal is feedback, not an executed tool result.
+    if (
+      isChatBlockResult({
+        content: result.content,
+        toolCallId: result.id,
+        session,
+      })
+    )
+      continue;
     // Like existing proxy guardrails, consume the client's reported result.
     // This is protocol-level completion, not independent proof of execution.
     // Explicit tool errors remain failures; a reported cancellation is unknown.
@@ -207,8 +276,13 @@ export async function checkToolCalls(
   calls: Array<{ id: string; name: string; arguments: string | object }>,
   canonicalize: (name: string) => string,
 ): Promise<PolicyBlockResult | null> {
-  const normalized = normalizeToolCallsForPolicy(calls, canonicalize);
-  for (const [index, call] of calls.entries()) {
+  const ids = new Set<string>();
+  // Validate the whole response before any call acquires a native dispatch.
+  for (const call of calls) {
+    if (!call.id || ids.has(call.id)) {
+      throw new ApiError(400, "OpenAPPA requires distinct tool-call IDs");
+    }
+    ids.add(call.id);
     if (typeof call.arguments === "string") {
       try {
         JSON.parse(call.arguments);
@@ -219,15 +293,53 @@ export async function checkToolCalls(
         );
       }
     }
-    const target = normalized[index];
-    const tool =
-      archestraMcpBranding.getToolShortName(
+  }
+  const normalized = normalizeToolCallsForPolicy(calls, canonicalize);
+  const admitted: string[] = [];
+  let released = false;
+  try {
+    for (const [index, call] of calls.entries()) {
+      const target = normalized[index];
+      const shortName = archestraMcpBranding.getToolShortName(
         canonicalize(target.toolCallName),
-      ) === "execute_remedy_plan"
-        ? "appa/execute_remedy_plan"
-        : target.toolCallName;
-    if (isAgentTool(tool) || isSkillTool(tool)) {
-      const feedback = `OpenAPPA delegation requires a child-return adapter, which is not yet available in ${archestraMcpBranding.appName} Chat.`;
+      );
+      const tool =
+        shortName === "execute_remedy_plan"
+          ? "appa/execute_remedy_plan"
+          : shortName === "yell"
+            ? "yell"
+            : target.toolCallName;
+      const event = {
+        event: "tool_call",
+        operation_id: `call:${call.id}`,
+        tool,
+        arguments: JSON.parse(target.toolCallArgs),
+        // Delegation is an ordinary tool until the child-return adapter exists.
+        // Its request and output still pass through the parent's policy.
+        spawn: false,
+      };
+      const decision = await dispatch(session, event);
+      if (
+        decision.decision === "allow_call" ||
+        decision.decision === "pass_control"
+      ) {
+        admitted.push(call.id);
+        continue;
+      }
+      const feedback = (
+        decision.feedback ??
+        decision.reason ??
+        decision.detail ??
+        "OpenAPPA blocked this tool call"
+      )
+        .replaceAll(
+          "appa/execute_remedy_plan",
+          archestraMcpBranding.getToolName("execute_remedy_plan"),
+        )
+        .replace(
+          /(?<![\w/])execute_remedy_plan\b/g,
+          archestraMcpBranding.getToolName("execute_remedy_plan"),
+        );
       return {
         refusalMessage: feedback,
         contentMessage: feedback,
@@ -237,46 +349,20 @@ export async function checkToolCalls(
         allToolCallNames: calls.map((call) => call.name),
       };
     }
-    const event = {
-      event: "tool_call",
-      operation_id: `call:${call.id}`,
-      tool,
-      arguments: JSON.parse(target.toolCallArgs),
-      spawn: isAgentTool(tool),
-    };
-    const decision = await dispatch(session, event);
-    if (
-      decision.decision === "allow_call" ||
-      decision.decision === "pass_control"
-    )
-      continue;
-    const feedback = (
-      decision.feedback ??
-      decision.reason ??
-      decision.detail ??
-      "OpenAPPA blocked this tool call"
-    )
-      .replaceAll(
-        "appa/execute_remedy_plan",
-        archestraMcpBranding.getToolName("execute_remedy_plan"),
-      )
-      .replace(
-        /(?<![\w/])execute_remedy_plan\b/g,
-        archestraMcpBranding.getToolName("execute_remedy_plan"),
-      );
-    return {
-      refusalMessage: feedback,
-      contentMessage: feedback,
-      reason: feedback,
-      blockedToolName: call.name,
-      toolInput: JSON.parse(target.toolCallArgs),
-      allToolCallNames: calls.map((call) => call.name),
-    };
+    released = true;
+    return null;
+  } finally {
+    if (!released) {
+      // The proxy withholds the entire response on refusal or error. Settle
+      // only this batch's admissions; other in-flight calls must remain open.
+      for (const id of admitted) {
+        await dispatch(session, { event: "cancel_call", tool_call_id: id });
+      }
+    }
   }
-  return null;
 }
 
-function remedyResult(decision: z.infer<typeof Decision>): CallToolResult {
+function runtimeToolResult(decision: z.infer<typeof Decision>): CallToolResult {
   if (decision.decision !== "mcp_result")
     return {
       isError: true,
@@ -284,7 +370,9 @@ function remedyResult(decision: z.infer<typeof Decision>): CallToolResult {
         {
           type: "text",
           text:
-            decision.feedback ?? decision.detail ?? "OpenAPPA remedy refused",
+            decision.feedback ??
+            decision.detail ??
+            "OpenAPPA refused this operation",
         },
       ],
     };
@@ -303,5 +391,5 @@ export async function executeRemedy(
     operation_id: `remedy:${toolCallId}`,
     arguments: args,
   });
-  return remedyResult(decision);
+  return runtimeToolResult(decision);
 }

@@ -621,7 +621,9 @@ function AgentSelectorRow({
       <span className="min-w-0 flex-1">
         <span className="flex min-w-0 items-center gap-1.5">
           <span className="truncate">{agent.name}</span>
-          {isOption && agent.runtime ? <RuntimeCapableIndicator /> : null}
+          {isOption && agent.runtime ? (
+            <RuntimeCapableIndicator runtime={agent.runtime} />
+          ) : null}
         </span>
         {description && (
           <span className="block truncate text-xs text-muted-foreground">
@@ -635,7 +637,10 @@ function AgentSelectorRow({
         )}
       </span>
       {!isOption && agent.runtime ? (
-        <RuntimeCapableIndicator className="self-center" />
+        <RuntimeCapableIndicator
+          runtime={agent.runtime}
+          className="self-center"
+        />
       ) : null}
       {!isOption && agent.scope ? (
         <span className="shrink-0 self-center">

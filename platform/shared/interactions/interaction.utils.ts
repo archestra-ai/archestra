@@ -79,9 +79,6 @@ const interactionFactories: Record<Interaction["type"], InteractionFactory> = {
 export interface CostSavingsInput {
   cost: string | null | undefined;
   baselineCost: string | null | undefined;
-  toonCostSavings: string | null | undefined;
-  toonTokensBefore: number | null | undefined;
-  toonTokensAfter: number | null | undefined;
 }
 
 export interface CostSavingsResult {
@@ -92,15 +89,11 @@ export interface CostSavingsResult {
    * record the baseline as the model actually used, so this is 0 for them.
    */
   modelSwapSavings: number;
-  /** Savings from TOON compression */
-  toonSavings: number;
-  /** Number of tokens saved by TOON compression */
-  toonTokensSaved: number | null;
-  /** Total savings (model swap + toon) */
+  /** Total savings from historical model swaps */
   totalSavings: number;
   /**
    * Estimated cost: what the request would have cost without the savings we
-   * attribute (requested model + uncompressed tool results). Equals
+   * attribute (requested model). Equals
    * `actualCost + totalSavings`.
    */
   estimatedCost: number;
@@ -123,31 +116,15 @@ export function calculateCostSavings(
   const baselineCostNum = input.baselineCost
     ? Number.parseFloat(input.baselineCost)
     : 0;
-  const toonCostSavingsNum = input.toonCostSavings
-    ? Number.parseFloat(input.toonCostSavings)
-    : 0;
 
-  // Calculate tokens saved from TOON compression
-  const toonTokensSaved =
-    input.toonTokensBefore &&
-    input.toonTokensAfter &&
-    input.toonTokensBefore > input.toonTokensAfter
-      ? input.toonTokensBefore - input.toonTokensAfter
-      : null;
-
-  // `cost` is the real spend. It already reflects every applied optimization
-  // (the cheaper model and TOON's reduced billed token count), so it is the
-  // true actual cost. It must never be re-derived by subtracting savings again
-  // — doing so double-counts the TOON savings already baked into `cost` and can
-  // produce a negative cost and a >100% savings percentage.
   const actualCost = costNum;
 
   // Savings from model selection: identical token usage priced at the
   // requested model vs. the model actually used.
   const modelSwapSavings = baselineCostNum - costNum;
 
-  // Total savings (model swap + TOON compression).
-  const totalSavings = modelSwapSavings + toonCostSavingsNum;
+  // Total savings from historical model swaps.
+  const totalSavings = modelSwapSavings;
 
   // The estimated (non-optimized) cost sits exactly `totalSavings` above the
   // real spend, so the breakdown always reconciles and the percentage stays
@@ -159,8 +136,6 @@ export function calculateCostSavings(
 
   return {
     modelSwapSavings,
-    toonSavings: toonCostSavingsNum,
-    toonTokensSaved,
     totalSavings,
     estimatedCost,
     actualCost,
@@ -334,44 +309,5 @@ export class DynamicInteraction implements InteractionUtils {
         parts: [{ type: "text", text: errorText }],
       },
     ];
-  }
-
-  /**
-   * Get TOON compression savings from database-stored token counts
-   * Returns null if no TOON compression data available
-   */
-  getToonSavings(): {
-    originalSize: number;
-    compressedSize: number;
-    savedCharacters: number;
-    percentageSaved: number;
-  } | null {
-    const toonTokensBefore = this.interaction.toonTokensBefore;
-    const toonTokensAfter = this.interaction.toonTokensAfter;
-
-    // Return null if no TOON compression data
-    if (
-      toonTokensBefore === null ||
-      toonTokensAfter === null ||
-      toonTokensBefore === undefined ||
-      toonTokensAfter === undefined
-    ) {
-      return null;
-    }
-
-    // Only show savings if there was actual compression
-    if (toonTokensAfter >= toonTokensBefore || toonTokensBefore === 0) {
-      return null;
-    }
-
-    const savedCharacters = toonTokensBefore - toonTokensAfter;
-    const percentageSaved = (savedCharacters / toonTokensBefore) * 100;
-
-    return {
-      originalSize: toonTokensBefore,
-      compressedSize: toonTokensAfter,
-      savedCharacters,
-      percentageSaved,
-    };
   }
 }

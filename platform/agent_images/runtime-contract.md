@@ -17,6 +17,46 @@ This reference is for custom image authors. For maintained image targets and bui
 
 The initial task is supplied in `ARCHESTRA_AGENT_RUNTIME_TASK`. The Agent system prompt is supplied in `ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT`. A custom client decides how to combine them. It should read `ARCHESTRA_AGENT_RUNTIME_MODE`: `interactive` means expose its input loop and remain available for follow-ups, while `one_shot` means finish the supplied task and exit. Images that support only unattended work can ignore interactive mode, but they will not provide a useful Chat terminal.
 
+## Failure Reasons
+
+Custom images can publish a user-facing failure before exiting non-zero. Write a versioned JSON envelope to `${ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX}.failure`. The supervisor supplies this turn-specific prefix before initialization and client startup.
+
+```sh
+failure="${ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX}.failure"
+jq -n \
+  --arg code "my_agent.input_missing" \
+  --arg message "Select an input file and retry." \
+  '{version:1,code:$code,message:$message}' > "$failure.tmp"
+mv "$failure.tmp" "$failure"
+exit 1
+```
+
+Use an atomic rename to publish the complete file. The image owns the code and message. Codes need no platform registration. The backend validates the envelope, appends the runtime exit status, and propagates the message through task results, notifications, and run details.
+
+Version `1` accepts exactly these fields:
+
+| Field | Contract |
+| --- | --- |
+| `version` | The number `1`. |
+| `code` | An image-defined identifier of 1–128 ASCII letters, digits, dots, underscores, or hyphens. |
+| `message` | Non-empty plain text, at most 2,000 characters after trimming. Newlines and tabs are allowed; other ASCII control characters are rejected. |
+
+The entire UTF-8 file must not exceed 4,096 bytes. Missing files, malformed JSON, unsupported versions, and invalid fields retain the exit-status-only fallback. A failure envelope never overrides a successful exit. Older platforms ignore this optional file.
+
+Treat `message` as public task output. Image authors must remove credentials and private details before publishing it. Prefer safe messages constructed from structured client errors; never copy raw stderr or provider response bodies. Schema validation cannot detect secrets in otherwise valid text.
+
+The built-in Archestra image reports configuration, startup, and session failures. The maintained Claude Code wrapper publishes its own messages from `StopFailure` events. Delegated API failures end the run. Interactive sessions remain open and request attention. The OpenCode and OpenClaw wrappers also publish safe messages for terminal one-shot errors. OpenCode context compaction remains recoverable. Shared initialization reports proxy connectivity and GitHub setup failures. Codex, Hermes, OpenCode, and OpenClaw publish protocol configuration errors through the same envelope. Native errors without an adapter retain exit-status-only reporting.
+
+## Skills
+
+Agent skills are exposed as MCP tools through `ARCHESTRA_MCP_GATEWAY_URL`, authenticated with `ARCHESTRA_MCP_GATEWAY_TOKEN`. A custom client must support MCP `tools/list` and `tools/call`, expose the returned tools to its model, and return tool results to the model. No separate Archestra SDK or skill installation is required.
+
+Pass `ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT` to the model. It includes a bounded preview of accessible skill names and descriptions. The gateway also adds this preview to the `list_skills` tool description. Treat previews as discovery hints; call `list_skills` for the complete current catalog.
+
+Use the gateway's advertised tool names: `list_skills` discovers the Agent's effective catalog; `load_skill` loads instructions or a bundled file by `name` and optional `path`. Names carry the deployment's tool prefix. When the gateway uses tool search, discover these tools there first. The Agent's skill policy, environment, and caller permissions apply to every request.
+
+Bundled text files are returned as text. A `<skill_file encoding="base64">` contains bytes to decode before saving. Preserve resource paths relative to the skill root and provide the runtimes and dependencies its scripts require. Files are not automatically installed in native client skill directories. `/skills` mounts mentioned by sandbox-enabled tools belong to the separate Code Sandbox, not this container.
+
 ## Readable Transcript
 
 The maintained Archestra Agent, Claude Code, Codex, OpenCode, Hermes, and OpenClaw images export their native message and tool history as a readable transcript. A custom image can provide the same completed-run experience by writing `$ARCHESTRA_AGENT_RUNTIME_DIR/readable-transcript.json` (normally `/var/run/archestra/readable-transcript.json`) before its process exits.

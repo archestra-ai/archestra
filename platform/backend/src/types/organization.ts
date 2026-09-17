@@ -305,11 +305,6 @@ export const AppearanceSettingsSchema = z.object({
   animateChatPlaceholders: z.boolean(),
 });
 
-export const OrganizationCompressionScopeSchema = z.enum([
-  "organization",
-  "team",
-]);
-
 export const OAuthAccessTokenLifetimeSecondsSchema = z
   .number()
   .int()
@@ -319,7 +314,6 @@ export const OAuthAccessTokenLifetimeSecondsSchema = z
 const extendedFields = {
   theme: OrganizationThemeSchema,
   customFont: OrganizationCustomFontSchema,
-  compressionScope: OrganizationCompressionScopeSchema,
   defaultDiscoveredToolInvocationPolicy:
     ToolInvocation.ToolInvocationPolicyActionSchema,
   defaultDiscoveredToolResultPolicy: TrustedData.TrustedDataPolicyActionSchema,
@@ -453,11 +447,6 @@ export const UpdateSecuritySettingsSchema = z.object({
   newAppsLockedByDefault: z.boolean().optional(),
   /** @deprecated No longer gates anything; accepted for backwards-compat and ignored. */
   allowToolAutoAssignment: z.boolean().optional(),
-});
-
-export const UpdateLlmSettingsSchema = z.object({
-  convertToolResultsToToon: z.boolean().optional(),
-  compressionScope: OrganizationCompressionScopeSchema.optional(),
 });
 
 export const UpdateMcpSettingsSchema = z.object({
@@ -654,10 +643,6 @@ export type UpdateDefaultEnvironment = z.infer<
 export const CompleteOnboardingSchema = z.object({
   onboardingComplete: z.literal(true),
 });
-
-export type OrganizationCompressionScope = z.infer<
-  typeof OrganizationCompressionScopeSchema
->;
 export type Organization = z.infer<typeof SelectOrganizationSchema>;
 export type OrganizationAnalyticsState = Pick<
   z.infer<typeof InternalSelectOrganizationSchema>,

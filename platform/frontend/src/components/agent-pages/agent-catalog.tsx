@@ -2,21 +2,14 @@ import {
   type AgentCatalogId,
   getAgentCatalogImages,
   getDefaultAgentRuntimeImage,
-  type SubscriptionCredentialKind,
 } from "@archestra/shared";
 import { Bot, Network } from "lucide-react";
 import Image from "next/image";
 import type { AgentFormInitialValues } from "@/components/agent-form";
 import { CatalogSourceCard } from "@/components/catalog-source-card";
 import { ProviderIcon } from "@/components/provider-icon";
-import { Badge } from "@/components/ui/badge";
-import appConfig from "@/lib/config/config";
 import { useFeature } from "@/lib/config/config.query";
-import {
-  DEFAULT_APP_LOGO,
-  useAppIconLogo,
-  useAppName,
-} from "@/lib/hooks/use-app-name";
+import { useAppName } from "@/lib/hooks/use-app-name";
 
 export interface AgentCatalogTemplate {
   id: AgentCatalogId;
@@ -26,28 +19,31 @@ export interface AgentCatalogTemplate {
   initialValues: AgentFormInitialValues;
 }
 
+/**
+ * Shared by the catalog card and the runtime pill. `archestra` is absent: its
+ * name is composed from the app name.
+ */
+export const AGENT_CATALOG_TEMPLATE_NAMES: Record<
+  Exclude<AgentCatalogId, "archestra">,
+  string
+> = {
+  "claude-code": "Claude Code",
+  codex: "Codex",
+  opencode: "OpenCode",
+  hermes: "Hermes",
+  openclaw: "OpenClaw",
+};
+
 export function getAgentCatalogTemplates(
   archestraImage: string,
   // white-label-ok: test/helper fallback only; shipped UI always passes useAppName().
   appName = "Archestra",
-  appIconLogo: string | null = "/logo-icon.svg",
 ): readonly AgentCatalogTemplate[] {
   const images = getAgentCatalogImages(archestraImage);
   return [
     template({
-      id: "archestra",
-      name: `${appName} Agent`,
-      icon: appIconLogo,
-      description: `${appName}'s lightweight agent loop with model inference and MCP tools managed by the platform.`,
-      platformName: appName,
-      image: images.archestra,
-      command: null,
-      inferenceProtocol: "openai_responses",
-      steerMode: "pipe",
-    }),
-    template({
       id: "claude-code",
-      name: "Claude Code",
+      name: AGENT_CATALOG_TEMPLATE_NAMES["claude-code"],
       icon: "/model-logos/anthropic.svg",
       description: `Anthropic's coding agent with personal Claude sign-in or provider billing, connected to the ${appName} MCP gateway.`,
       platformName: appName,
@@ -58,7 +54,7 @@ export function getAgentCatalogTemplates(
     }),
     template({
       id: "codex",
-      name: "Codex",
+      name: AGENT_CATALOG_TEMPLATE_NAMES.codex,
       icon: "/model-logos/openai.svg",
       description: `OpenAI's coding agent, preconfigured to use the ${appName} LLM proxy and MCP gateway.`,
       platformName: appName,
@@ -66,11 +62,10 @@ export function getAgentCatalogTemplates(
       command: ["archestra-codex"],
       inferenceProtocol: "openai_responses",
       steerMode: "tmux_keys",
-      requiredSubscriptionKind: "chatgpt",
     }),
     template({
       id: "opencode",
-      name: "OpenCode",
+      name: AGENT_CATALOG_TEMPLATE_NAMES.opencode,
       icon: "/agent-logos/opencode.svg",
       description: `The open source coding agent, preconfigured to use the ${appName} LLM proxy and MCP gateway.`,
       platformName: appName,
@@ -81,7 +76,7 @@ export function getAgentCatalogTemplates(
     }),
     template({
       id: "hermes",
-      name: "Hermes",
+      name: AGENT_CATALOG_TEMPLATE_NAMES.hermes,
       icon: "/agent-logos/hermes.png",
       description: `The Hermes coding agent with its model and remote MCP tools supplied by ${appName}.`,
       platformName: appName,
@@ -92,7 +87,7 @@ export function getAgentCatalogTemplates(
     }),
     template({
       id: "openclaw",
-      name: "OpenClaw",
+      name: AGENT_CATALOG_TEMPLATE_NAMES.openclaw,
       icon: "/agent-logos/openclaw.svg",
       description: `OpenClaw in an isolated task pod, with inference and MCP access kept behind ${appName}.`,
       platformName: appName,
@@ -121,22 +116,11 @@ export function AgentCatalog({
 }) {
   const configuredImage = useFeature("agentRuntimeBaseImage");
   const appName = useAppName();
-  const resolvedAppIconLogo = useAppIconLogo();
-  // SPDX-SnippetBegin
-  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-  const appIconLogo =
-    appConfig.enterpriseFeatures.fullWhiteLabeling &&
-    resolvedAppIconLogo === DEFAULT_APP_LOGO
-      ? null
-      : resolvedAppIconLogo;
-  // SPDX-SnippetEnd
   const templates = getAgentCatalogTemplates(
     typeof configuredImage === "string"
       ? configuredImage
       : getDefaultAgentRuntimeImage("latest"),
     appName,
-    appIconLogo,
   );
   return (
     <div className="space-y-8">
@@ -161,16 +145,9 @@ export function AgentCatalog({
             {templates.map((item) => (
               <CatalogSourceCard
                 key={item.id}
-                icon={
-                  <CatalogAgentIcon id={item.id} appIconLogo={appIconLogo} />
-                }
+                icon={<CatalogAgentIcon id={item.id} />}
                 title={item.name}
                 description={item.description}
-                badge={
-                  item.id === "archestra" ? (
-                    <Badge variant="outline">Built in</Badge>
-                  ) : undefined
-                }
                 onClick={() => onSelect(item)}
                 disabled={!canCreateAgent}
                 disabledReason="Requires permission to create agents."
@@ -197,58 +174,68 @@ export function AgentCatalog({
   );
 }
 
-function CatalogAgentIcon({
+export function CatalogAgentIcon({
   id,
-  appIconLogo,
+  appIconLogo = null,
+  size = 22,
 }: {
-  id: AgentCatalogTemplate["id"];
-  appIconLogo: string | null;
+  id: AgentCatalogId;
+  appIconLogo?: string | null;
+  size?: number;
 }) {
+  const box = { width: size, height: size };
   switch (id) {
     case "archestra":
       return appIconLogo ? (
         <Image
           src={appIconLogo}
           alt=""
-          width={22}
-          height={22}
-          className="size-[22px] rounded-sm object-contain"
+          width={size}
+          height={size}
+          style={box}
+          className="rounded-sm object-contain"
         />
       ) : (
         <Bot className="size-5" />
       );
     case "claude-code":
-      return <ProviderIcon provider="anthropic" size={22} />;
+      return <ProviderIcon provider="anthropic" size={size} />;
     case "codex":
-      return <ProviderIcon provider="openai" size={22} />;
+      return <ProviderIcon provider="openai" size={size} />;
     case "opencode":
       return (
         <Image
           src="/agent-logos/opencode.svg"
           alt=""
-          width={22}
-          height={22}
-          className="h-[22px] w-auto object-contain dark:invert"
+          width={size}
+          height={size}
+          style={{ height: size }}
+          className="w-auto object-contain dark:invert"
         />
       );
-    case "hermes":
+    case "hermes": {
+      // The artwork carries its own padding, so it draws larger than its peers.
+      const hermesSize = Math.round((size * 30) / 22);
       return (
         <Image
           src="/agent-logos/hermes.png"
           alt=""
-          width={30}
-          height={30}
-          className="size-[30px] rounded-md object-contain"
+          width={hermesSize}
+          height={hermesSize}
+          style={{ width: hermesSize, height: hermesSize }}
+          className="rounded-md object-contain"
         />
       );
+    }
     case "openclaw":
       return (
         <Image
           src="/agent-logos/openclaw.svg"
           alt=""
-          width={22}
-          height={22}
-          className="size-[22px] object-contain"
+          width={size}
+          height={size}
+          style={box}
+          className="object-contain"
         />
       );
     default:
@@ -266,7 +253,6 @@ function template(params: {
   command: string[] | null;
   inferenceProtocol: "openai_responses" | "openai_chat" | "anthropic";
   steerMode: "pipe" | "tmux_keys";
-  requiredSubscriptionKind?: SubscriptionCredentialKind;
 }): AgentCatalogTemplate {
   return {
     id: params.id,
@@ -279,7 +265,6 @@ function template(params: {
       description: params.description,
       systemPrompt: `You are ${params.name}, an autonomous coding agent. Complete delegated tasks carefully, use the tools available through ${params.platformName}, verify your work, and report the concrete result.`,
       accessAllTools: true,
-      requiredSubscriptionKind: params.requiredSubscriptionKind,
       runtime: {
         image: params.image,
         command: params.command,

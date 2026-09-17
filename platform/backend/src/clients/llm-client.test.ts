@@ -1213,7 +1213,8 @@ describe("createLLMModel", () => {
     false,
     true,
   ])("gates every APPA identity header (enabled=%s)", (enabled) => {
-    config.openappa = { enabled, policyPath: "/test/policy.toml" };
+    config.llmProxy.plugins = enabled ? ["appa"] : [];
+    config.openappa = { enabled, yellEnabled: false };
     createLLMModel({
       provider: "openai",
       apiKey: "test",

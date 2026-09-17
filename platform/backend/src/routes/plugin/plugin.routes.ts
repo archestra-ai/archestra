@@ -28,6 +28,7 @@ import {
   prepareGithubMarketplaceImports,
 } from "@/plugins/github-marketplace-import";
 import { validatePluginVisibility } from "@/services/plugin-visibility";
+import { transferResourceOwnership } from "@/services/resource-ownership";
 import {
   resolveGithubAppInstallationToken,
   resolveGithubPatToken,
@@ -171,6 +172,30 @@ const GithubMarketplaceImportSchema = GithubMarketplaceSourceSchema.and(
 );
 
 const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  fastify.post(
+    "/api/plugins/:id/transfer-ownership",
+    {
+      schema: {
+        operationId: RouteId.TransferPluginOwnership,
+        description: "Transfer ownership to another organization member",
+        tags: ["Ownership"],
+        params: z.object({ id: z.string().uuid() }),
+        body: z.object({ ownerId: z.string().min(1) }),
+        response: constructResponseSchema(z.object({ success: z.boolean() })),
+      },
+    },
+    async ({ params, body, user, organizationId }) => {
+      await transferResourceOwnership({
+        kind: "plugin",
+        id: params.id,
+        ownerId: body.ownerId,
+        userId: user.id,
+        organizationId,
+      });
+      return { success: true };
+    },
+  );
+
   registerEntityLabelRoutes(fastify, {
     basePath: "/api/plugins",
     tag: "Plugins",

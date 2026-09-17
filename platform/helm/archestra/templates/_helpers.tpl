@@ -239,7 +239,10 @@ Additionally, any env var matching ARCHESTRA_CHAT_*_API_KEY is treated as sensit
     {{- if not .prefix }}{{- $databasePoolProvided = true }}{{- end }}
   {{- end }}
 {{- end }}
-{{- if not $databasePoolProvided }}
+{{/* An omitted budget preserves the backend default on upgrade. Check for nil
+     explicitly so zero budgets still reach validation instead of opting out. */}}
+{{- $databasePoolConfigured := or (ne (toString .Values.archestra.database.poolMax) "<nil>") (ne (toString .Values.archestra.database.connectionBudget) "<nil>") }}
+{{- if and (not $databasePoolProvided) $databasePoolConfigured }}
 - name: ARCHESTRA_DATABASE_POOL_MAX
   value: {{ include "archestra-platform.databasePoolMax" . | quote }}
 {{- end }}
@@ -608,6 +611,9 @@ rbac.environmentNamespaces, so both grant exactly the same access (no drift).
 - apiGroups: ["agents.x-k8s.io"]
   resources: ["sandboxes/status"]
   verbs: ["get"]
+- apiGroups: ["extensions.agents.x-k8s.io"]
+  resources: ["sandboxclaims", "sandboxtemplates", "sandboxwarmpools"]
+  verbs: ["get", "list", "create", "patch", "delete"]
 # DaemonSet for the MCP image pre-puller, which keeps every node's image cache
 # warm so a hibernated MCP server wakes without reaching the registry. Narrower
 # than the rule above on purpose: the reconciler only reads and rewrites its own

@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
-import { runChatHref } from "@/app/projects/[id]/schedules/[triggerId]/run-row.utils";
+import { runHref } from "@/app/projects/[id]/schedules/[triggerId]/run-row.utils";
 import { AgentSelector } from "@/components/agent-selector";
 import {
   DEFAULT_FORM_STATE,
@@ -194,7 +194,7 @@ function ScheduleRow({
   const runNow = useRunScheduleTriggerNow();
 
   const { resolve, isResolving } = useResolveRunChat();
-  // "Open recent run" (overflow menu) opens this schedule's LAST run's chat.
+  // "Open recent run" (overflow menu) opens this schedule's latest session.
   // Fetch just that run; poll while it's running so a manual/scheduled run shows
   // its live "running" state (spinner) here and settles on its own.
   const { data: runsResponse } = useScheduleTriggerRuns(schedule.id, {
@@ -204,13 +204,13 @@ function ScheduleRow({
   });
   const lastRun = runsResponse?.data?.[0];
   const isLastRunActive = lastRun?.status === "running";
-  const lastRunChatHref = lastRun
-    ? runChatHref({ triggerId: schedule.id, run: lastRun })
+  const lastRunHref = lastRun
+    ? runHref({ triggerId: schedule.id, run: lastRun })
     : null;
-  // Last run has a chat → go straight to it. Last run without one (legacy) →
+  // A linked runtime or chat opens directly. An unlinked legacy run →
   // create it, then open. No runs yet → the menu item is disabled.
   const openRecentRun = () => {
-    if (lastRunChatHref) router.push(lastRunChatHref);
+    if (lastRunHref) router.push(lastRunHref);
     else if (lastRun) resolve(schedule.id, lastRun.id);
   };
 
@@ -405,7 +405,7 @@ function ScheduleDialog({
       open={open}
       onOpenChange={onOpenChange}
       title={isEditing ? "Edit schedule" : "New schedule"}
-      description="Run an agent on a recurring schedule. Each run starts a chat in this project."
+      description="Run an agent on a recurring schedule. Each run uses the agent’s chat or dedicated runtime in this project."
       size="medium"
       onSubmit={onSubmit}
       bodyClassName="space-y-3"

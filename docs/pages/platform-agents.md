@@ -3,7 +3,7 @@ title: Overview
 category: Agents
 order: 1
 description: Agent overview, invocation paths, knowledge sources, and prompt templating
-lastUpdated: 2026-09-14
+lastUpdated: 2026-09-15
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -29,11 +29,19 @@ Hover or focus an agent's provider logo to see its configured key name and model
 
 ## Creating and Editing an Agent
 
-**Add Agent** opens a catalog. Start from scratch to open the setup wizard. When dedicated runtimes are enabled, popular agents can prefill that wizard. **Configuration** includes the name, visibility, instructions, model, and optional dedicated runtime settings. Nothing is saved until you press **Create** on the last step. The agent then opens on its **A2A** tab, unless it needs a personal Claude sign-in.
+**Add Agent** opens a catalog. Start from scratch to open the setup wizard. When dedicated runtimes are enabled, popular agents can prefill that wizard. **Configuration** includes the name, visibility, instructions, model, and optional dedicated runtime settings. Nothing is saved until you press **Create** on the last step. A confirmation page summarizes its email address and assigned messaging channels. Select **Chat** to start a conversation with the new agent.
 
-Each agent has its own page for editing. When dedicated runtimes are enabled, **Agent Runtime** follows **Tools, Skills & Knowledge**. It controls the runtime configuration and credentials. **Save changes** saves the current tab and keeps it open. **A2A** holds the endpoint, authentication options, and connection examples.
+Each agent has its own page for editing. When dedicated runtimes are enabled, **Agent Runtime** follows **Tools, Skills & Knowledge**. It controls the runtime configuration and credentials. **Save changes** saves the current tab and keeps it open. **A2A** holds the endpoint, authentication options, and connection examples. An Agent with a dedicated runtime is marked **Runtime** in the list and on its page. Its **Chat** action reads **Start run**.
 
 Switching tabs with unsaved edits asks before it discards them. If you cannot change an agent, its configuration still opens — read-only, with the reason.
+
+## Ownership Transfers
+
+You can hand an agent over to another organization member without recreating it. For example, a departing maintainer can transfer a reporting assistant to their replacement.
+
+The current owner or a resource admin can transfer ownership. The recipient needs permission to manage the agent at its current visibility. Configuration and sharing stay unchanged. Transferring a personal agent can remove the previous owner's access.
+
+Transfers require the recipient to retain access to configured model credentials and pinned tool connections. Platform-managed resources cannot be transferred. Audit logs record the previous and new owners.
 
 ## Tool Access Modes
 
@@ -125,6 +133,10 @@ Knowledge follows the same **Auto** / **Custom** setting as tools (**Tools & Kno
 
 Whenever an agent has at least one reachable knowledge source, Archestra adds the built-in [`query_knowledge_sources`](/docs/platform-archestra-mcp-server#query_knowledge_sources) tool so the model can search across them during a run. The tool disappears when every source the caller can reach is disabled for that agent.
 
+Agents receive a short overview of accessible knowledge sources, including their names and descriptions. The system prompt and tool discovery both include this overview. Knowledge bases without connectors and inaccessible sources are not advertised.
+
+Knowledge search finds and summarizes indexed content, such as decisions recorded across Jira issues. Source MCP tools handle live status, exact record lookups, exhaustive listings, and changes. Indexed knowledge reflects the last sync; it may lag behind the source.
+
 The output of `query_knowledge_sources` is treated as sensitive by default, which can impact the ability to use subsequent tools. See [Archestra MCP Server](/docs/platform-archestra-mcp-server#auth), and [AI Tool Guardrails](/docs/platform-ai-tool-guardrails), for more details.
 
 See [Knowledge Bases](/docs/platform-knowledge) for how retrieval works and how sources are assigned. See [Archestra MCP Server](/docs/platform-archestra-mcp-server) for the built-in tool behavior and RBAC requirements.
@@ -163,19 +175,6 @@ When an agent delegates work to another agent, Archestra tracks the full call ch
 An agent can also delegate to an [external A2A agent](/docs/platform-outbound-a2a-agents). External targets use the same subagent picker but are always assigned explicitly.
 
 For durable work, an Agent can optionally use [Agent Runtime](/docs/platform-agent-runtime). Direct conversations always stay in the foreground Agent loop. A delegated task uses the target Agent's isolated deployment only when that target has Agent Runtime configured.
-
-## Convert to Skill
-
-An agent can be converted into an [Agent Skill](/docs/platform-agent-skills) — a reusable `SKILL.md` instruction set that any agent can activate from chat. Use this when the agent's value is mostly in its instructions and you want them available as a `/slash-command` rather than as a separate agent to switch to.
-
-The **Convert to skill** action on the agents page opens a confirmation dialog where you set the skill's description and choose whether to remove the source agent once the skill is created. The skill inherits the agent's scope. Conversion is lossy by nature: a skill carries instructions only, with no tools, model, or knowledge of its own. Each field is either carried over or annotated:
-
-- the system prompt becomes the skill body, and the scope carries over directly; the name is normalized into a slug (for example `Support Helper` → `support-helper`) so it works as a `/slash-command`
-- the description is required — the agent's own is prefilled, and you must supply one when the agent has none (an activating agent uses it to decide when to run the skill); **Generate** drafts one from the agent's prompt, tools, and example prompts via a single LLM call when you need a starting point
-- if the system prompt uses [Handlebars templating](#system-prompt-templating), the skill is flagged `templated` so its body is re-rendered with the activating user's context at runtime — otherwise the slug would bake one author's `{{user.name}}` into instructions every agent shares
-- assigned tools are carried into the skill's [`allowed-tools`](https://agentskills.io/specification#allowed-tools-field) frontmatter (the skill-runtime tools are dropped as noise), so the activating agent knows which tools to enable; the default model and knowledge sources have no skill equivalent and are reported as not carried, without cluttering the skill body
-- suggested prompts, icon, and labels are folded into the body or metadata, and the origin agent is recorded in metadata so the skill stays linked back to it
-- removing the source agent is optional and off by default; it is a soft delete, so the agent can be restored later from the deleted-agents filter
 
 ## Organizing Agents
 
@@ -238,7 +237,7 @@ Over the API, `POST /api/agents/:id/versions/:version/restore` does the same. Se
 
 ## System Prompt Templating
 
-Agent system prompts support [Handlebars](https://handlebarsjs.com/) templating. Templates are rendered at runtime before the prompt is sent to the LLM, with the current user's context injected as variables. Agent Skills can opt into the same rendering with a `templated: true` frontmatter field (set automatically when converting a templated agent); their `SKILL.md` body is then rendered with the same variables and helpers each time the skill is loaded.
+Agent system prompts support [Handlebars](https://handlebarsjs.com/) templating. Templates are rendered at runtime before the prompt is sent to the LLM, with the current user's context injected as variables. Agent Skills can opt into the same rendering with a `templated: true` frontmatter field; their `SKILL.md` body is then rendered with the same variables and helpers each time the skill is loaded.
 
 ### Variables
 

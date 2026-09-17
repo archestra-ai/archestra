@@ -16,6 +16,7 @@ import { LRUCacheManager } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
 import { ApiError } from "@/types";
+import { recordSubscriptionAuthenticationFailure } from "./subscription-authentication-status";
 
 /**
  * Editor-identity headers the Copilot endpoints require on every request.
@@ -165,9 +166,10 @@ export const githubCopilotTokenManager = new GithubCopilotTokenManager();
  */
 export function createGithubCopilotFetch(params: {
   githubToken: string | undefined;
+  providerApiKeyId?: string;
   innerFetch?: FetchLike;
 }): FetchLike {
-  const { githubToken, innerFetch } = params;
+  const { githubToken, providerApiKeyId, innerFetch } = params;
   const baseFetch: FetchLike = innerFetch ?? fetch;
 
   return async (input, init) => {
@@ -191,10 +193,20 @@ export function createGithubCopilotFetch(params: {
       );
     };
 
+    const recordFailure = async () => {
+      if (!providerApiKeyId) return;
+      await recordSubscriptionAuthenticationFailure({
+        providerApiKeyId,
+        provider: "github-copilot",
+        matchesCredential: (stored) => stored === githubToken,
+      });
+    };
     let credentials: CachedBearer;
     try {
       credentials = await githubCopilotTokenManager.getCredentials(githubToken);
     } catch (error) {
+      if (error instanceof ApiError && error.statusCode === 401)
+        await recordFailure();
       return exchangeErrorResponse(error);
     }
     const response = await doFetch(credentials);
@@ -212,9 +224,13 @@ export function createGithubCopilotFetch(params: {
         freshCredentials =
           await githubCopilotTokenManager.getCredentials(githubToken);
       } catch (error) {
+        if (error instanceof ApiError && error.statusCode === 401)
+          await recordFailure();
         return exchangeErrorResponse(error);
       }
-      return doFetch(freshCredentials);
+      const retried = await doFetch(freshCredentials);
+      if (retried.status === 401) await recordFailure();
+      return retried;
     }
 
     return response;

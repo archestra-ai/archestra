@@ -18,12 +18,12 @@ await writeFile(
   { mode: 0o600 },
 );
 const response = await fetch(
-  "https://github.com/kubernetes-sigs/agent-sandbox/releases/download/v1.0.1/sandbox.yaml",
+  "https://github.com/kubernetes-sigs/agent-sandbox/releases/download/v1.0.1/sandbox-with-extensions.yaml",
   { signal: AbortSignal.timeout(60_000) },
 );
 if (!response.ok) throw new Error(`Agent Sandbox manifest download failed: ${response.status}`);
 const manifest = Buffer.from(await response.arrayBuffer());
-if (createHash("sha256").update(manifest).digest("hex") !== "e30fa5017c6c39d85780ba94554e372da35b068e63a1c3d1a7d70137b349a9b0") {
+if (createHash("sha256").update(manifest).digest("hex") !== "460c1e0272c793c98de82482aed57db1bddb0afcb979c19325dc6cc52289c44c") {
   throw new Error("Agent Sandbox manifest checksum mismatch; refusing to install");
 }
 const storageClasses = JSON.parse(kubectl(["get", "storageclass", "-o", "json"]));
@@ -34,7 +34,13 @@ if (!storageClasses.items.some((item) =>
   throw new Error("Agent Runtime requires a default Kubernetes StorageClass. Configure dynamic volume provisioning on your local cluster first.");
 }
 console.log(kubectl(["apply", "--server-side", "--field-manager=archestra-dev-agent-sandbox", "-f", "-"], manifest));
-console.log(kubectl(["wait", "--for=condition=Established", "crd/sandboxes.agents.x-k8s.io", "--timeout=120s"]));
+console.log(kubectl(["wait", "--for=condition=Established", "crd/sandboxes.agents.x-k8s.io", "crd/sandboxclaims.extensions.agents.x-k8s.io", "crd/sandboxwarmpools.extensions.agents.x-k8s.io", "crd/sandboxtemplates.extensions.agents.x-k8s.io", "--timeout=120s"]));
+const labelDomains = "sandbox.users.io,archestra.io";
+console.log(kubectl(["apply", "--server-side", "--field-manager=archestra-dev-agent-sandbox", "-f", "-"], JSON.stringify({
+  apiVersion: "v1", kind: "ConfigMap", metadata: { name: "agent-sandbox-config", namespace: "agent-sandbox-system" },
+  data: { "allowed-label-domains": labelDomains },
+})));
+console.log(kubectl(["patch", "deployment", "agent-sandbox-controller", "-n", "agent-sandbox-system", "--type=merge", "-p", JSON.stringify({ spec: { template: { metadata: { annotations: { "archestra.io/allowed-label-domains": labelDomains } } } } })]));
 console.log(kubectl(["rollout", "status", "deployment/agent-sandbox-controller", "-n", "agent-sandbox-system", "--timeout=180s"]));
 
 function kubectl(args, input) {

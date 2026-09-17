@@ -1,12 +1,15 @@
 "use client";
 
+import { DocsPage, getDocsUrl, SecretsManagerType } from "@archestra/shared";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { createContext, useContext, useMemo, useState } from "react";
+import { ExternalDocsLink } from "@/components/external-docs-link";
 import { PageLayout } from "@/components/page-layout";
 import { SectionNav } from "@/components/section-nav";
 import { useDisableInvitations } from "@/lib/config/config.query";
+import { useSecretsType } from "@/lib/secrets.query";
 import { resolveSettingsSection, useSettingsTabs } from "./settings-tabs";
 
 const PAGE_CONFIG: Record<string, { title: string; description: ReactNode }> = {
@@ -41,8 +44,7 @@ const PAGE_CONFIG: Record<string, { title: string; description: ReactNode }> = {
   },
   "/settings/credentials": {
     title: "Credentials",
-    description:
-      "Reusable credentials for agents, MCP servers, skills, and knowledge. Connect a personal account or share a credential with your organization.",
+    description: <CredentialsDescription />,
   },
   "/settings/environments": {
     title: "Environments",
@@ -66,8 +68,7 @@ const PAGE_CONFIG: Record<string, { title: string; description: ReactNode }> = {
   },
   "/settings/llm": {
     title: "LLM",
-    description:
-      "Configure platform-wide LLM behavior, like tool-result compression and default cost limits.",
+    description: "Configure model providers and default cost limits.",
   },
   "/settings/mcp": {
     title: "MCP",
@@ -218,5 +219,28 @@ export default function SettingsLayout({
         </div>
       </PageLayout>
     </SettingsLayoutContext.Provider>
+  );
+}
+
+function CredentialsDescription() {
+  const { data: secretsType } = useSecretsType();
+  return (
+    <>
+      Save credentials once and reuse them across agents, MCP servers, skills,
+      and knowledge. Each user connects their own personal value; organization
+      credentials share one value.{" "}
+      {secretsType && (
+        <span>
+          {secretsType.type === SecretsManagerType.BYOS_VAULT
+            ? "Values reference your external Vault. "
+            : secretsType.type === SecretsManagerType.Vault
+              ? "Values are stored in Vault. "
+              : "Values are encrypted in the database. "}
+        </span>
+      )}
+      <ExternalDocsLink href={getDocsUrl(DocsPage.PlatformCredentials)}>
+        Learn more
+      </ExternalDocsLink>
+    </>
   );
 }

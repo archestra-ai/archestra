@@ -3,7 +3,6 @@ import { HttpResponse, http } from "msw";
 import { vi } from "vitest";
 import config from "@/config";
 import { agentRuntimeManager } from "@/k8s/agent-runtime";
-import { claudeCodeAccountRuntime } from "@/k8s/agent-runtime/claude-code-account";
 import ClaudeCodeAccountModel from "@/models/claude-code-account";
 import SecretModel from "@/models/secret";
 import { secretManagerCoordinator } from "@/secrets-manager";
@@ -21,12 +20,6 @@ beforeEach(() => {
   vi.stubEnv("ARCHESTRA_HASHICORP_VAULT_TOKEN", "example-vault-token");
   vi.stubEnv("ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD", "TOKEN");
   vi.stubEnv("ARCHESTRA_HASHICORP_VAULT_KV_VERSION", "2");
-  vi.spyOn(claudeCodeAccountRuntime, "create").mockResolvedValue(undefined);
-  vi.spyOn(claudeCodeAccountRuntime, "delete").mockResolvedValue(undefined);
-  vi.spyOn(claudeCodeAccountRuntime, "complete").mockResolvedValue({
-    state: "connected",
-    models: [],
-  });
 });
 afterEach(async () => {
   await secretManagerCoordinator.initialize(SecretsManagerType.DB);
@@ -72,12 +65,19 @@ test("read-only Vault keeps only a reference, reads rotated tokens, and never wr
     requiresVaultReference: true,
   });
   await expect(manager.start(owner)).rejects.toThrow("read-only Vault");
-  expect(claudeCodeAccountRuntime.create).not.toHaveBeenCalled();
   const pending = await manager.start({
     ...owner,
     vaultReference: "secret/data/personal#token",
   });
-  await manager.complete({ ...owner, flowId: pending.flowId as string });
+  await manager.complete({
+    ...owner,
+    flowId: pending.flowId as string,
+    ...(pending.authorizationUrl
+      ? {
+          code: `example-code#${new URL(pending.authorizationUrl).searchParams.get("state")}`,
+        }
+      : {}),
+  });
   const credential = await ClaudeCodeAccountModel.find({
     organizationId: organization.id,
     userId: user.id,
@@ -160,13 +160,26 @@ test("managed Vault stores the token remotely and deletes it on disconnect", asy
       },
     ),
   );
-  vi.mocked(claudeCodeAccountRuntime.complete).mockResolvedValue({
-    state: "connected",
-    token,
-    models: [],
-  });
+  server.use(
+    http.post("https://platform.claude.com/v1/oauth/token", () =>
+      HttpResponse.json({
+        access_token: token,
+        token_type: "Bearer",
+        expires_in: 3600,
+        scope: "user:inference",
+      }),
+    ),
+  );
   const pending = await manager.start(owner);
-  await manager.complete({ ...owner, flowId: pending.flowId as string });
+  await manager.complete({
+    ...owner,
+    flowId: pending.flowId as string,
+    ...(pending.authorizationUrl
+      ? {
+          code: `example-code#${new URL(pending.authorizationUrl).searchParams.get("state")}`,
+        }
+      : {}),
+  });
   expect(stored).toEqual({ data: { value: JSON.stringify({ value: token }) } });
   const credential = await ClaudeCodeAccountModel.find({
     organizationId: organization.id,

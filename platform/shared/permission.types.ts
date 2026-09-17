@@ -168,7 +168,7 @@ export const resourceDescriptions: Record<Resource, string> = {
   llmOauthClient: "OAuth clients authorized to call the LLM Proxy",
   llmModel: "LLM model catalog entries and chat capabilities",
   llmLimit: "LLM usage limits",
-  llmSettings: "LLM settings (compression, cleanup interval)",
+  llmSettings: "LLM settings",
   agentSettings:
     "Agent settings (default model, default agent, default tool guardrails, chat file uploads)",
   llmCost: "Organization-wide LLM usage and cost analytics",

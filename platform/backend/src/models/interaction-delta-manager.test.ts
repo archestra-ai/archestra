@@ -433,7 +433,7 @@ describe("InteractionDeltaManager", () => {
     const m0 = userMsg("p0");
     const reqMsgs1 = [m0];
     const reqMsgs2 = [m0, assistantMsg("pa0"), userMsg("p1")];
-    // processed messages mirror the request messages (TOON/trusted-data rewrite content).
+    // processed messages mirror the request messages (trusted-data rewrite content).
     const procMsgs1 = [userMsg("p0-processed")];
     const procMsgs2 = [
       userMsg("p0-processed"),

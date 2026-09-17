@@ -3,7 +3,7 @@ title: "Access Control"
 category: Administration
 description: "Role-based access control (RBAC) system for managing user permissions in Archestra"
 order: 1
-lastUpdated: 2026-09-13
+lastUpdated: 2026-09-16
 ---
 <!--
 GENERATED FILE — edit codegen-access-control-docs.ts, not this page.
@@ -242,7 +242,7 @@ The following table lists all available permissions that can be assigned to cust
 | `llmProviderApiKey:admin` | Manage all LLM provider API keys, including org-wide keys |
 | `llmProxy:read` | View the LLM Proxy and its connection details |
 | `llmProxy:update` | Modify LLM Proxy configuration |
-| `llmSettings:read` | View LLM settings (compression, cleanup interval) |
+| `llmSettings:read` | View LLM settings |
 | `llmSettings:update` | Modify LLM settings |
 | `llmVirtualKey:read` | View LLM virtual keys |
 | `llmVirtualKey:create` | Create LLM virtual keys |

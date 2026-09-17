@@ -1,9 +1,7 @@
 import { ArchestraInternalErrorCode } from "@archestra/shared";
-import { encode as toonEncode } from "@toon-format/toon";
 import { get } from "lodash-es";
 import config from "@/config";
 import logger from "@/logging";
-import { ModelModel } from "@/models";
 import { metrics } from "@/observability";
 import { getTokenizer } from "@/tokenizers";
 import type {
@@ -25,8 +23,6 @@ import {
   extractCommonToolCallArguments,
 } from "@/types";
 import type { Minimax } from "@/types/llm-providers";
-import type { ToolCompressionStats } from "../utils/toon-conversion";
-import { unwrapToolContent } from "../utils/unwrap-tool-content";
 import { upstreamHttpError } from "./upstream-http-error";
 
 // =============================================================================
@@ -327,16 +323,6 @@ class MinimaxRequestAdapter
     Object.assign(this.toolResultUpdates, updates);
   }
 
-  async applyToonCompression(model: string): Promise<ToolCompressionStats> {
-    const { messages: compressedMessages, stats } =
-      await convertToolResultsToToon(this.request.messages, model);
-    this.request = {
-      ...this.request,
-      messages: compressedMessages,
-    };
-    return stats;
-  }
-
   /**
    * Convert tool result content to MiniMax format
    * MiniMax doesn't support images in OpenAI API mode, so strip them
@@ -379,10 +365,6 @@ class MinimaxRequestAdapter
       model: this.getModel(),
       messages: convertReasoningContentToDetails(processedMessages),
     };
-  }
-
-  estimateRequestCost(model: string): Promise<number> {
-    return estimateRequestCost(model, this.request.messages);
   }
 
   // ---------------------------------------------------------------------------
@@ -1076,135 +1058,6 @@ function convertReasoningContentToDetails(
     }
     return { ...rest, reasoning_details: [{ text: reasoning_content }] };
   });
-}
-
-/**
- * Convert tool results to TOON format for compression
- * Same logic as OpenAI/Zhipuai
- */
-async function convertToolResultsToToon(
-  messages: MinimaxMessages,
-  model: string,
-): Promise<{ messages: MinimaxMessages; stats: ToolCompressionStats }> {
-  const tokenizer = getTokenizer("minimax");
-  let toolResultCount = 0;
-  let totalTokensBefore = 0;
-  let totalTokensAfter = 0;
-
-  const result = messages.map((message) => {
-    if (message.role === "tool") {
-      logger.debug(
-        {
-          toolCallId: message.tool_call_id,
-          contentType: typeof message.content,
-          provider: "minimax",
-        },
-        "convertToolResultsToToon: tool message found",
-      );
-
-      if (typeof message.content === "string") {
-        try {
-          const unwrapped = unwrapToolContent(message.content);
-          const parsed = JSON.parse(unwrapped);
-          const noncompressed = unwrapped;
-          const compressed = toonEncode(parsed);
-
-          const tokensBefore = tokenizer.countTokens([
-            { role: "user", content: noncompressed },
-          ]);
-          const tokensAfter = tokenizer.countTokens([
-            { role: "user", content: compressed },
-          ]);
-
-          totalTokensBefore += tokensBefore;
-          totalTokensAfter += tokensAfter;
-          toolResultCount++;
-
-          logger.info(
-            {
-              toolCallId: message.tool_call_id,
-              tokensBefore,
-              tokensAfter,
-              tokensSaved: tokensBefore - tokensAfter,
-              provider: "minimax",
-            },
-            "convertToolResultsToToon: tool result compressed",
-          );
-
-          return {
-            ...message,
-            content: compressed,
-          };
-        } catch (err) {
-          logger.warn(
-            { err, toolCallId: message.tool_call_id },
-            "Failed to compress tool result",
-          );
-          return message;
-        }
-      }
-    }
-    return message;
-  });
-
-  logger.info(
-    { messageCount: messages.length, toolResultCount },
-    "convertToolResultsToToon completed",
-  );
-
-  let toonCostSavings = 0;
-  if (toolResultCount > 0) {
-    const tokensSaved = totalTokensBefore - totalTokensAfter;
-    if (tokensSaved > 0) {
-      toonCostSavings = await ModelModel.calculateCostSavings(
-        model,
-        tokensSaved,
-        "minimax",
-      );
-    }
-  }
-
-  return {
-    messages: result,
-    stats: {
-      tokensBefore: toolResultCount > 0 ? totalTokensBefore : 0,
-      tokensAfter: toolResultCount > 0 ? totalTokensAfter : 0,
-      costSavings: toonCostSavings,
-      wasEffective: totalTokensAfter < totalTokensBefore,
-      hadToolResults: toolResultCount > 0,
-    },
-  };
-}
-
-/**
- * Estimate the cost of a request based on message token counts
- */
-async function estimateRequestCost(
-  model: string,
-  messages: MinimaxMessages,
-): Promise<number> {
-  const tokenizer = getTokenizer("minimax");
-
-  // Convert messages to proper format for tokenizer
-  const tokenizableMessages = messages.map((m) => {
-    if (m.role === "system") {
-      return { role: "system" as const, content: m.content || "" };
-    }
-    if (m.role === "user") {
-      return { role: "user" as const, content: m.content || "" };
-    }
-    if (m.role === "tool") {
-      const content =
-        typeof m.content === "string" ? m.content : JSON.stringify(m.content);
-      return { role: "user" as const, content };
-    }
-    // assistant
-    return { role: "assistant" as const, content: m.content || "" };
-  });
-
-  const totalTokens = tokenizer.countTokens(tokenizableMessages);
-
-  return ModelModel.calculateCostSavings(model, totalTokens, "minimax");
 }
 
 // =============================================================================

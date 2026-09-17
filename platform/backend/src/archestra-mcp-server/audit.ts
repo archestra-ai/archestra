@@ -11,6 +11,7 @@ import AgentToolModel from "@/models/agent-tool";
 import AgentWorkspaceModel from "@/models/agent-workspace";
 import AppModel from "@/models/app";
 import AuditLogModel from "@/models/audit-log";
+import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import KnowledgeBaseModel from "@/models/knowledge-base";
 import KnowledgeBaseConnectorModel from "@/models/knowledge-base-connector";
@@ -303,6 +304,12 @@ const agentEditSpec: ArchestraToolAuditSpec = {
 };
 
 const TOOL_AUDIT_SPECS: Record<string, ArchestraToolAuditSpec> = {
+  update_guardrails_policy: {
+    resourceType: "guardrailsPolicy",
+    action: "guardrailsPolicy.updated",
+    useOrganizationAsResource: true,
+    fetchById: (id, orgId) => GuardrailsPolicyModel.findByIdForAudit(id, orgId),
+  },
   write_workspace_file: {
     resourceType: "agentRun",
     action: "agentRun.updated",

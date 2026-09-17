@@ -3,6 +3,8 @@ set -euo pipefail
 
 if [[ "${ARCHESTRA_LLM_PROXY_PROTOCOL:-}" != "openai_responses" ]]; then
   echo "archestra: Codex requires an Agent configured for OpenAI Responses" >&2
+  "$(dirname "${BASH_SOURCE[0]}")/archestra-agent-failure" \
+    "codex_protocol" "Codex requires an Agent configured for OpenAI Responses."
   exit 78
 fi
 
@@ -237,7 +239,12 @@ common_args=(
   --config model_provider='"archestra"'
 )
 if [[ "${ARCHESTRA_AGENT_RUNTIME_CONTINUE:-0}" == "1" ]]; then
-  common_args=(resume --last "${common_args[@]}")
+  session_file="${runtime_dir}/codex-main-session"
+  if [[ ! -s "${session_file}" ]]; then
+    echo "archestra: Cannot resume the saved Codex session: its session ID is missing. The workspace is preserved; no new session was started." >&2
+    exit 78
+  fi
+  common_args=(resume "$(cat "${session_file}")" "${common_args[@]}")
 fi
 
 case "${runtime_mode}" in

@@ -53,7 +53,7 @@ interface AgentRunAttachSubscription {
     readyState: number;
     close: () => void;
     send: (data: Buffer) => void;
-  };
+  } | null;
 }
 
 type PausableWebSocket = WebSocket & {
@@ -219,7 +219,8 @@ class WebSocketService {
     agent_run_attach_input: (ws, message) => {
       if (message.type !== "agent_run_attach_input") return;
       const subscription = this.agentRunAttachSubscriptions.get(ws);
-      if (subscription?.runId !== message.payload.runId) return;
+      if (subscription?.runId !== message.payload.runId || !subscription.socket)
+        return;
       const accepted = subscription.stdin.write(message.payload.data);
       if (!accepted && !subscription.inputPaused) {
         subscription.inputPaused = true;
@@ -234,7 +235,8 @@ class WebSocketService {
     agent_run_attach_resize: (ws, message) => {
       if (message.type !== "agent_run_attach_resize") return;
       const subscription = this.agentRunAttachSubscriptions.get(ws);
-      if (subscription?.runId !== message.payload.runId) return;
+      if (subscription?.runId !== message.payload.runId || !subscription.socket)
+        return;
       // SPDY channel 4 carries terminal dimensions; without it tmux keeps the
       // default 80x24 and redraws the pane to a size nobody is looking at.
       const resize = JSON.stringify({
@@ -552,42 +554,45 @@ class WebSocketService {
     clientContext: WebSocketClientContext,
   ): Promise<void> {
     this.unsubscribeAgentRunAttach(ws);
-
-    // The URL may identify the retained workspace's original task while its
-    // live terminal belongs to a newer turn. Resolve that stable session alias
-    // with the same owner-scoped lookup as the HTTP detail route before
-    // falling back to the raw task for the denial response.
-    const ownedSession = await AgentRunModel.findCurrentSessionForActor({
-      taskId: runId,
-      actorUserId: clientContext.userId,
-      organizationId: clientContext.organizationId,
-    });
-    const session = await AgentRunModel.findByTaskId(
-      ownedSession?.taskId ?? runId,
-    );
-    if (!session || session.organizationId !== clientContext.organizationId) {
-      this.sendToClient(ws, {
-        type: "agent_run_attach_error",
-        payload: { runId, error: "Session not found" },
-      });
-      return;
-    }
-    if (session.actorUserId !== clientContext.userId) {
-      this.sendToClient(ws, {
-        type: "agent_run_attach_error",
-        payload: {
-          runId,
-          error: "Only the person who started this run can attach to it",
-        },
-      });
-      return;
-    }
-
-    const stdin = new PassThrough();
-    const stdout = new PassThrough();
-    const stderr = new PassThrough();
+    const subscription: AgentRunAttachSubscription = {
+      runId,
+      stdin: new PassThrough(),
+      stdout: new PassThrough(),
+      stderr: new PassThrough(),
+      inputPaused: false,
+      socket: null,
+    };
+    // Claim ownership before awaiting lookup or attachment so unsubscribe and
+    // a newer subscribe also invalidate work that is still connecting.
+    this.agentRunAttachSubscriptions.set(ws, subscription);
+    const isCurrent = () =>
+      this.agentRunAttachSubscriptions.get(ws) === subscription;
 
     try {
+      // The URL may identify the retained workspace's original task while its
+      // live terminal belongs to a newer turn. Resolve that stable session alias
+      // with the same owner-scoped lookup as the HTTP detail route before
+      // falling back to the raw task for the denial response.
+      const ownedSession = await AgentRunModel.findCurrentSessionForActor({
+        taskId: runId,
+        actorUserId: clientContext.userId,
+        organizationId: clientContext.organizationId,
+      });
+      if (!isCurrent()) return;
+      const session = await AgentRunModel.findByTaskId(
+        ownedSession?.taskId ?? runId,
+      );
+      if (!isCurrent()) return;
+      if (!session || session.organizationId !== clientContext.organizationId) {
+        throw new Error("Session not found");
+      }
+      if (session.actorUserId !== clientContext.userId) {
+        throw new Error(
+          "Only the person who started this run can attach to it",
+        );
+      }
+
+      const { stdin, stdout, stderr } = subscription;
       const { resourceName, command, socket } =
         await resolveAgentRuntimeBackendDriver(session.backend).attach({
           session,
@@ -599,7 +604,7 @@ class WebSocketService {
           // so the terminal can name what it is waiting for instead of showing
           // an unqualified "Connecting…" for the whole of it.
           onProgress: (progress) => {
-            if (ws.readyState !== WS.OPEN) return;
+            if (!isCurrent() || ws.readyState !== WS.OPEN) return;
             this.sendToClient(ws, {
               type: "agent_run_attach_progress",
               payload: {
@@ -612,6 +617,7 @@ class WebSocketService {
             });
           },
           onStatus: (status) => {
+            if (!isCurrent()) return;
             if (status.outcome === "failure") {
               this.sendToClient(ws, {
                 type: "agent_run_attach_closed",
@@ -621,17 +627,16 @@ class WebSocketService {
           },
         });
 
-      this.agentRunAttachSubscriptions.set(ws, {
-        runId,
-        stdin,
-        stdout,
-        stderr,
-        inputPaused: false,
-        socket: socket as unknown as AgentRunAttachSubscription["socket"],
-      });
+      if (!isCurrent()) {
+        if (socket.readyState <= 1) socket.close();
+        return;
+      }
+      subscription.socket =
+        socket as unknown as AgentRunAttachSubscription["socket"];
 
       for (const stream of [stdout, stderr]) {
         stream.on("data", (chunk: Buffer) => {
+          if (!isCurrent()) return;
           this.sendToClient(ws, {
             type: "agent_run_attach_output",
             payload: { runId, data: chunk.toString() },
@@ -640,6 +645,7 @@ class WebSocketService {
       }
 
       socket.on("close", () => {
+        if (!isCurrent()) return;
         this.sendToClient(ws, {
           type: "agent_run_attach_closed",
           payload: { runId },
@@ -652,6 +658,7 @@ class WebSocketService {
         payload: { runId, command, resourceName },
       });
     } catch (error) {
+      if (!isCurrent()) return;
       this.sendToClient(ws, {
         type: "agent_run_attach_error",
         payload: {
@@ -670,9 +677,8 @@ class WebSocketService {
     subscription.stdin.destroy();
     subscription.stdout.destroy();
     subscription.stderr.destroy();
-    // Closing the exec detaches tmux; the session itself keeps running, which
-    // is the whole point of attaching to a multiplexer rather than a raw pty.
-    if (subscription.socket.readyState <= 1) {
+    // Close the exec transport without stopping the underlying tmux session.
+    if (subscription.socket && subscription.socket.readyState <= 1) {
       subscription.socket.close();
     }
   }

@@ -949,28 +949,6 @@ class ModelModel {
   }
 
   /**
-   * Calculate TOON cost savings for a model based on tokens saved.
-   * Looks up the model and its effective pricing, then computes savings.
-   */
-  static async calculateCostSavings(
-    modelId: string,
-    tokensSaved: number,
-    provider: SupportedProvider,
-  ): Promise<number> {
-    const modelEntry = await ModelModel.findByProviderAndModelId(
-      provider,
-      modelId,
-    );
-    const pricing = ModelModel.getEffectivePricing(
-      modelEntry,
-      modelId,
-      provider,
-    );
-    const inputPricePerToken = Number(pricing.pricePerMillionInput) / 1_000_000;
-    return tokensSaved * inputPricePerToken;
-  }
-
-  /**
    * Find model by modelId only, without provider disambiguation.
    * WARNING: Prefer `findByProviderAndModelId` — this method may return an
    * arbitrary match when multiple providers share the same model name.

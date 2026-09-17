@@ -1,6 +1,14 @@
 #!/bin/sh
 set -eu
 
+fail_github_setup() {
+  # Publish an image-owned, safe message; gh output may contain tokens.
+  "$(dirname "$0")/archestra-agent-failure" github_configuration \
+    "GitHub authentication could not be configured. Check the GitHub credential and runtime image."
+  echo "archestra: GitHub authentication setup failed; check the GitHub credential and runtime image" >&2
+  exit 78
+}
+
 # A pod can become runnable a moment before the platform endpoint is reachable
 # (notably while a local Tilt backend restarts). Native clients retry transport
 # errors inconsistently, so establish the shared runtime contract once here.
@@ -19,6 +27,8 @@ if [ -n "${OPENAI_BASE_URL:-}" ] && [ -n "${OPENAI_API_KEY:-}" ]; then
   done
   if [ "${platform_ready}" != true ]; then
     echo "archestra: the Agent runtime could not reach the platform proxy" >&2
+    "$(dirname "$0")/archestra-agent-failure" proxy_unavailable \
+      "The Agent could not connect to the platform proxy. Check proxy availability, network access, and the configured provider credential, then retry."
     exit 69
   fi
 fi
@@ -43,9 +53,9 @@ if [ -n "${GH_TOKEN:-${GITHUB_TOKEN:-}}" ] && command -v gh >/dev/null 2>&1; the
     printf '%s\n' "${github_token}" |
     env -u GH_TOKEN -u GITHUB_TOKEN gh auth login \
       --hostname github.com \
-      --with-token >/dev/null 2>&1
+      --with-token >/dev/null 2>&1 || fail_github_setup
   fi
-  gh auth setup-git >/dev/null 2>&1
+  gh auth setup-git >/dev/null 2>&1 || fail_github_setup
   # gh records its resolved executable, which bypasses our script wrapper.
   # Redirect each configured host back through the renewable credential reader.
   git config --global --get-regexp '^credential\..*\.helper$' |

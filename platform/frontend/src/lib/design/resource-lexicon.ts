@@ -98,11 +98,13 @@ export const FIELD_LABEL = {
  * label and accessible name, a header button, a kebab item.
  *
  * Only verbs that appear on more than one of the five surfaces live here. A
- * verb one page alone offers ("Convert to skill") has nothing to agree with
- * and stays where it is used.
+ * verb one page alone offers has nothing to agree with and stays where it is
+ * used.
  */
 export const ACTION_LABEL = {
   chat: "Chat",
+  /** Chat's label when sending starts a run in the agent's dedicated runtime. */
+  startRun: "Start run",
   connect: "Connect",
   edit: "Edit",
   /** The read-only destination offered in Edit's place when Edit is not the user's to take. */

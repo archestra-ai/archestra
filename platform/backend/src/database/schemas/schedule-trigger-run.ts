@@ -20,6 +20,7 @@ const scheduleTriggerRunsTable = pgTable(
       .default("running"),
     initiatedByUserId: text("initiated_by_user_id"),
     chatConversationId: uuid("chat_conversation_id"),
+    runtimeTaskId: uuid("runtime_task_id"),
     startedAt: timestamp("started_at", { withTimezone: true, mode: "date" }),
     completedAt: timestamp("completed_at", {
       withTimezone: true,

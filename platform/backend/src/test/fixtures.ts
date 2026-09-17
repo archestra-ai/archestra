@@ -226,10 +226,7 @@ async function makeTeam(
   organizationId: string,
   createdBy: string,
   overrides: Partial<
-    Pick<
-      InsertTeam,
-      "name" | "description" | "convertToolResultsToToon" | "parentId"
-    >
+    Pick<InsertTeam, "name" | "description" | "parentId">
   > = {},
 ) {
   const [team] = await db
@@ -916,7 +913,6 @@ async function makeInteraction(
       | "outputTokens"
       | "cost"
       | "baselineCost"
-      | "toonCostSavings"
       | "cacheSavings"
       | "cacheCost"
       | "authMethod"
@@ -1223,7 +1219,7 @@ async function makeKnowledgeBase(
   overrides: Partial<
     Pick<
       InsertKnowledgeBase,
-      "name" | "status" | "visibility" | "teamIds" | "createdBy"
+      "name" | "description" | "status" | "visibility" | "teamIds" | "createdBy"
     >
   > = {},
 ): Promise<KnowledgeBase> {
@@ -1248,6 +1244,7 @@ async function makeKnowledgeBaseConnector(
     Pick<
       InsertKnowledgeBaseConnector,
       | "name"
+      | "description"
       | "visibility"
       | "teamIds"
       | "connectorType"

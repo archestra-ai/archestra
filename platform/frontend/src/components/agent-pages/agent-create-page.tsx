@@ -38,8 +38,8 @@ import { AgentPageShell } from "./agent-page-shell";
  * `/<family>/new` — the setup wizard for a record that does not exist yet.
  * Every step fills one form that lives for the whole wizard; nothing reaches
  * the backend until the last step's Create, which writes the record and
- * everything picked for it together, then lands on the detail page's Connect
- * section — the way the skills wizard collects a draft and creates at the end.
+ * everything picked for it together, then opens the agent's creation summary
+ * or the gateway's connection instructions.
  */
 export function AgentCreatePage({
   kind,
@@ -87,26 +87,12 @@ export function AgentCreatePage({
     !!created && isReadPermissionKnown && !canReadFamily;
   useEffect(() => {
     if (!created || !isReadPermissionKnown || !canReadFamily) return;
-    // A personal Claude subscription still needs to be connected after the
-    // record exists. Its account control lives in General, so surface that
-    // required setup instead of sending the creator to the unrelated A2A tab.
-    // Other records keep their established next step: connecting a client.
-    const needsClaudeCodeSignIn = selectedTemplate?.id === "claude-code";
     router.push(
-      agentDetailHref(
-        kind,
-        created.id,
-        needsClaudeCodeSignIn ? "general" : "connect",
-      ),
+      kind === "agent"
+        ? `/agents/${encodeURIComponent(created.id)}/created`
+        : agentDetailHref(kind, created.id, "connect"),
     );
-  }, [
-    created,
-    isReadPermissionKnown,
-    canReadFamily,
-    router,
-    kind,
-    selectedTemplate,
-  ]);
+  }, [created, isReadPermissionKnown, canReadFamily, router, kind]);
 
   const [isDirty, setIsDirty] = useState(false);
   useBeforeUnloadWhileDirty(isDirty);
@@ -192,7 +178,7 @@ export function AgentCreatePage({
           </EmptyHeader>
         </Empty>
       ) : created ? (
-        // Created, and on its way to the Connect section as soon as the read
+        // Created, and on its way to the next page as soon as the read
         // permission answers. The form stays unmounted so it cannot be
         // submitted a second time.
         <Empty className="border">
@@ -226,6 +212,7 @@ export function AgentCreatePage({
           agentType={kind}
           defaultIconType={config.defaultIconType}
           initialValues={selectedTemplate?.initialValues}
+          initialRuntimeId={selectedTemplate?.id}
           // One mount for the whole wizard: the steps show one group at a
           // time, and what was picked on a step stays on the form until the
           // create at the end.

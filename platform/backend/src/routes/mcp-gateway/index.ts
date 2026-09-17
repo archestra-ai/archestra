@@ -17,7 +17,16 @@ import {
   constructResponseSchema,
   UuidOrSlugSchema,
 } from "@/types";
+import { trackBackgroundWork } from "@/utils/background-work";
 import { getPublicRequestOrigin } from "../request-origin";
+import {
+  dispatchLegacySseMessage,
+  LEGACY_SSE_MESSAGES_SEGMENT,
+  LegacySseSessionRegistry,
+  loadLegacySseSession,
+  openLegacySseStream,
+  wantsLegacySseStream,
+} from "./legacy-sse";
 import {
   deriveStatePrincipal,
   extractMrtrParams,
@@ -36,7 +45,6 @@ import {
   resolveProtocolRevision,
   SERVER_DISCOVER_METHOD,
   STATELESS_MCP_PROTOCOL_REVISION,
-  SUPPORTED_MCP_PROTOCOL_REVISIONS,
   validateRoutingHeaders,
   withCompleteResultEnvelope,
 } from "./protocol";
@@ -304,7 +312,18 @@ async function handleMcpPostRequest(
 const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const { endpoint } = config.mcpGateway;
 
-  // GET endpoint for server discovery with profile ID in URL
+  // Legacy HTTP+SSE streams this process holds. Ended from `preClose`, before
+  // Fastify drains the HTTP server: a held stream IS one of the in-flight
+  // requests being drained, so ending it any later deadlocks the shutdown.
+  // Clients then reconnect to a live replica instead of a dead socket.
+  const legacySseSessions = new LegacySseSessionRegistry();
+  fastify.addHook("preClose", async () => {
+    legacySseSessions.close();
+  });
+
+  // GET opens the legacy HTTP+SSE stream for a client that asks for one. Any
+  // other GET is answered 405: the gateway offers nothing else on GET, and a
+  // Streamable HTTP client reads 405 as "no standalone stream" and stops.
   fastify.get(
     `${endpoint}/:profileId`,
     {
@@ -315,24 +334,13 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
           profileId: UuidOrSlugSchema,
         }),
         response: {
-          200: z.object({
-            name: z.string(),
-            version: z.string(),
-            agentId: z.string(),
-            transport: z.string(),
-            protocolVersions: z.array(z.string()),
-            capabilities: z.object({
-              tools: z.boolean(),
+          405: z.object({
+            jsonrpc: z.literal("2.0"),
+            error: z.object({
+              code: z.number(),
+              message: z.string(),
             }),
-            tokenAuth: z
-              .object({
-                tokenId: z.string(),
-                teamId: z.string().nullable(),
-                isOrganizationToken: z.boolean(),
-                isUserToken: z.boolean().optional(),
-                userId: z.string().optional(),
-              })
-              .optional(),
+            id: z.null(),
           }),
           401: z.object({
             error: z.string(),
@@ -355,28 +363,137 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
         };
       }
 
-      const tokenAuth = await validateMCPGatewayToken(profileId, token);
+      const { result: tokenAuth, reason } = await authenticateMCPGatewayRequest(
+        profileId,
+        token,
+      );
+      if (!tokenAuth) {
+        setWWWAuthenticateHeader(request, reply);
+        reply.status(401);
+        return {
+          error: "Unauthorized",
+          message: describeGatewayAuthFailure(reason),
+        };
+      }
 
-      reply.type("application/json");
+      // A legacy client reads its message endpoint from the stream. A
+      // Streamable HTTP client that opens the optional standalone stream gets
+      // the same stream and ignores the `endpoint` event; nothing is ever
+      // pushed to it unasked.
+      if (wantsLegacySseStream(request)) {
+        await openLegacySseStream({
+          request,
+          reply,
+          profileId,
+          principal: deriveStatePrincipal(tokenAuth),
+          registry: legacySseSessions,
+        });
+        return;
+      }
+
+      reply.header("Allow", "POST");
+      reply.status(405);
       return {
-        name: `archestra-agent-${profileId}`,
-        version: config.api.version,
-        agentId: profileId,
-        transport: "http",
-        protocolVersions: [...SUPPORTED_MCP_PROTOCOL_REVISIONS],
-        capabilities: {
-          tools: true,
+        jsonrpc: "2.0" as const,
+        error: {
+          code: -32000,
+          message:
+            "Method not allowed. Use POST for MCP requests, or GET with Accept: text/event-stream for the legacy HTTP+SSE transport.",
         },
-        ...(tokenAuth && {
-          tokenAuth: {
-            tokenId: tokenAuth.tokenId,
-            teamId: tokenAuth.teamId,
-            isOrganizationToken: tokenAuth.isOrganizationToken,
-            ...(tokenAuth.isUserToken && { isUserToken: true }),
-            ...(tokenAuth.userId && { userId: tokenAuth.userId }),
-          },
-        }),
+        id: null,
       };
+    },
+  );
+
+  // Legacy HTTP+SSE message endpoint. The stream opened by GET announces this
+  // URL, and the client POSTs every JSON-RPC message here. The answer goes
+  // back on the stream, never in this response.
+  fastify.post(
+    `${endpoint}/:profileId/${LEGACY_SSE_MESSAGES_SEGMENT}`,
+    {
+      schema: {
+        operationId: "mcpGatewaySseMessage",
+        tags: ["MCP Gateway"],
+        params: z.object({
+          profileId: UuidOrSlugSchema,
+        }),
+        querystring: z.object({
+          sessionId: z.string().uuid(),
+        }),
+        body: z.record(z.string(), z.unknown()),
+        response: {
+          202: z.object({ accepted: z.literal(true) }),
+          401: z.object({
+            error: z.string(),
+            message: z.string(),
+          }),
+          404: z.object({
+            error: z.string(),
+            message: z.string(),
+          }),
+        },
+      },
+    },
+    async (request, reply) => {
+      const token = extractBearerToken(request);
+      const profileId = await AgentModel.resolveIdFromIdOrSlug(
+        request.params.profileId,
+      );
+
+      if (!profileId || !token) {
+        setWWWAuthenticateHeader(request, reply);
+        reply.status(401);
+        return {
+          error: "Unauthorized",
+          message:
+            "Missing or invalid Authorization header. Expected: Bearer <platform_token> or Bearer <agent-id>",
+        };
+      }
+
+      const { result: tokenAuth, reason } = await authenticateMCPGatewayRequest(
+        profileId,
+        token,
+      );
+      if (!tokenAuth) {
+        setWWWAuthenticateHeader(request, reply);
+        reply.status(401);
+        return {
+          error: "Unauthorized",
+          message: describeGatewayAuthFailure(reason),
+        };
+      }
+
+      // Bind the stream to its gateway and principal. Unknown sessions return
+      // 404, avoiding an unnecessary OAuth retry for valid credentials.
+      const session = await loadLegacySseSession(request.query.sessionId);
+      if (
+        !session ||
+        session.profileId !== profileId ||
+        session.principal !== deriveStatePrincipal(tokenAuth)
+      ) {
+        reply.status(404);
+        return { error: "Not Found", message: "Unknown session" };
+      }
+
+      // Acknowledged now, answered on the stream: the client's POST must not
+      // wait on a tool call, and the SDK's own SSE server answers 202 too.
+      trackBackgroundWork(
+        dispatchLegacySseMessage({
+          request,
+          registry: legacySseSessions,
+          sessionId: request.query.sessionId,
+          profileId,
+          message: request.body,
+        }).catch((error) => {
+          fastify.log.error(
+            { error, profileId },
+            "Legacy SSE message dispatch failed",
+          );
+        }),
+      );
+
+      reply.status(202);
+      return { accepted: true as const };
     },
   );
 

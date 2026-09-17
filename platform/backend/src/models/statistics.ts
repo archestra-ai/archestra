@@ -1590,7 +1590,7 @@ class StatisticsModel {
     const query = db
       .select({
         timeBucket: sql<string>`DATE_TRUNC(${sql.raw(`'${timeBucket}'`)}, ${schema.interactionsTable.createdAt})`,
-        // All cost/savings figures are billed (metered) only: TOON and cache
+        // All cost/savings figures are billed (metered) only: cache
         // savings reflect money actually spent. Subscription traffic is
         // reported separately as its would-be list-price cost, never as a
         // saving.
@@ -1599,10 +1599,6 @@ class StatisticsModel {
           "DECIMAL",
         ),
         actualCost: billedSum(schema.interactionsTable.cost, "DECIMAL"),
-        toonSavings: billedSum(
-          schema.interactionsTable.toonCostSavings,
-          "DECIMAL",
-        ),
         cacheSavings: billedSum(
           schema.interactionsTable.cacheSavings,
           "DECIMAL",
@@ -1630,7 +1626,6 @@ class StatisticsModel {
       timeBucket: string;
       baselineCost: number;
       actualCost: number;
-      toonSavings: number;
       cacheSavings: number;
       subscriptionCost: number;
     }
@@ -1653,7 +1648,6 @@ class StatisticsModel {
           timeBucket: bucketKey,
           baselineCost: 0,
           actualCost: 0,
-          toonSavings: 0,
           cacheSavings: 0,
           subscriptionCost: 0,
         });
@@ -1664,7 +1658,6 @@ class StatisticsModel {
 
       existing.baselineCost += Number(row.baselineCost);
       existing.actualCost += Number(row.actualCost);
-      existing.toonSavings += Number(row.toonSavings);
       existing.cacheSavings += Number(row.cacheSavings);
       existing.subscriptionCost += Number(row.subscriptionCost);
     }
@@ -1677,14 +1670,12 @@ class StatisticsModel {
     // Calculate totals and build time series
     let totalBaselineCost = 0;
     let totalActualCost = 0;
-    let totalToonSavings = 0;
     let totalCacheSavings = 0;
     let totalSubscriptionCost = 0;
 
     const timeSeries = timeSeriesData.map((row) => {
       // `row.actualCost` is SUM(interactions.cost) over METERED rows only: the
-      // real billed spend. It already reflects every applied saving — TOON's
-      // reduced billed token count, the prompt-cache discount, and on
+      // real billed spend. It already reflects the prompt-cache discount and on
       // historical rows the cheaper model a rule swapped in — so it is the true
       // "Actual Cost". Subscription-fulfilled traffic is excluded here and
       // surfaced separately as `subscriptionCost`.
@@ -1696,7 +1687,6 @@ class StatisticsModel {
       // swap the requested model for a cheaper one; that feature is gone, so
       // new rows record the two as equal and this term is zero for them.
       const baselineModelCost = Number(row.baselineCost);
-      const toonSavings = Number(row.toonSavings);
       const cacheSavings = Number(row.cacheSavings);
 
       // Historical savings from a model swap: identical token usage, requested
@@ -1704,17 +1694,15 @@ class StatisticsModel {
       const modelSwapSavings = baselineModelCost - actualCost;
 
       // "Non-optimized" cost: what the request would have cost with none of the
-      // savings applied (uncompressed tokens, no cache, and — on historical
+      // savings applied (no cache and — on historical
       // rows — the requested model). Adding each realized saving back onto the
       // real spend keeps this line exactly that far above the actual-cost line,
       // so the savings-breakdown chart reconciles with the gap shown in the
       // non-optimized-vs-actual chart.
-      const baselineCost =
-        actualCost + modelSwapSavings + toonSavings + cacheSavings;
+      const baselineCost = actualCost + modelSwapSavings + cacheSavings;
 
       totalBaselineCost += baselineCost;
       totalActualCost += actualCost;
-      totalToonSavings += toonSavings;
       totalCacheSavings += cacheSavings;
       totalSubscriptionCost += subscriptionCost;
 
@@ -1722,7 +1710,6 @@ class StatisticsModel {
         timestamp: row.timeBucket,
         baselineCost,
         actualCost,
-        toonSavings,
         cacheSavings,
         subscriptionCost,
       };
@@ -1735,7 +1722,6 @@ class StatisticsModel {
       totalActualCost,
       totalSavings,
       totalSubscriptionCost,
-      totalToonSavings,
       totalCacheSavings,
       timeSeries,
     };

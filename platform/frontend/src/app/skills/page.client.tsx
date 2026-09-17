@@ -46,6 +46,7 @@ import {
   ResourceScopeFilter,
   useScopeFilterParams,
 } from "@/components/resource-scope-filter";
+import { ResourceTableRowActions } from "@/components/resource-table-row-actions";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { SearchInput } from "@/components/search-input";
 import {
@@ -647,7 +648,9 @@ function SkillsList() {
           },
         ];
     return (
-      <TableRowActions
+      <ResourceTableRowActions
+        kind="skill"
+        resource={isDeletedView ? null : skill}
         actions={actions}
         dropdownActions={dropdownActions}
         itemName={skill.name}

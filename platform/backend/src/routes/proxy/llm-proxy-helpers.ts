@@ -29,6 +29,7 @@ import logger from "@/logging";
 import { metrics } from "@/observability";
 import { SESSION_ID_KEY } from "@/observability/request-context";
 import type { SpanTeamInfo, SpanUserInfo } from "@/observability/tracing";
+import type { LlmProxyToolCallRefusal } from "@/proxy/plugins/registry";
 import { getTokenizer } from "@/tokenizers";
 import type {
   CommonMcpToolDefinition,
@@ -40,8 +41,6 @@ import type {
   InteractionRequest,
   InteractionResponse,
   ToolCallBlock,
-  ToolCompressionStats,
-  ToonSkipReason,
   UnsafeContextBoundary,
   UsageView,
 } from "@/types";
@@ -452,8 +451,6 @@ export function buildInteractionRecord(params: {
     cacheCost: number | undefined;
     cacheSavings: number | undefined;
   };
-  toonStats: ToolCompressionStats;
-  toonSkipReason: ToonSkipReason | null;
   dualLlmAnalyses: DualLlmAnalysis[];
   unsafeContextBoundary?: UnsafeContextBoundary;
   toolCallBlock?: ToolCallBlock;
@@ -499,10 +496,6 @@ export function buildInteractionRecord(params: {
     baselineCost: params.costs.actualCost?.toFixed(10) ?? null,
     cacheCost: params.costs.cacheCost?.toFixed(10) ?? null,
     cacheSavings: params.costs.cacheSavings?.toFixed(10) ?? null,
-    toonTokensBefore: params.toonStats.tokensBefore,
-    toonTokensAfter: params.toonStats.tokensAfter,
-    toonCostSavings: params.toonStats.costSavings?.toFixed(10) ?? null,
-    toonSkipReason: params.toonSkipReason,
   };
 }
 
@@ -526,7 +519,7 @@ export function buildInteractionRecord(params: {
  * overwhelming majority of rows.
  */
 export function toToolCallBlock(
-  refusal: utils.toolInvocation.PolicyBlockResult | null,
+  refusal: LlmProxyToolCallRefusal | null,
 ): ToolCallBlock | undefined {
   if (!refusal) {
     return undefined;

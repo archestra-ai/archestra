@@ -1,7 +1,7 @@
 "use client";
 
 import { Plus } from "lucide-react";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import {
   type CredentialBindingOption,
   EnvironmentVariableDialog,
@@ -14,9 +14,10 @@ import {
 import { Button } from "@/components/ui/button";
 
 interface DeploymentEnvironmentVariablesEditorProps {
+  hideHeading?: boolean;
   value: EnvVarDraft[];
   onChange: (value: EnvVarDraft[]) => void;
-  description: string;
+  description: ReactNode;
   targetLabel: string;
   installationLabel: string;
   staticLabel: string;
@@ -33,6 +34,7 @@ interface DeploymentEnvironmentVariablesEditorProps {
 }
 
 export function DeploymentEnvironmentVariablesEditor({
+  hideHeading = false,
   value,
   onChange,
   description,
@@ -63,7 +65,9 @@ export function DeploymentEnvironmentVariablesEditor({
     <div className="space-y-1">
       <div className="flex items-start justify-between gap-4">
         <div className="space-y-1">
-          <h3 className="font-semibold text-base">Environment variables</h3>
+          {!hideHeading && (
+            <h3 className="font-semibold text-base">Environment variables</h3>
+          )}
           <p className="text-xs text-muted-foreground">{description}</p>
         </div>
         <Button
@@ -88,6 +92,12 @@ export function DeploymentEnvironmentVariablesEditor({
             (credentialBindingOptions ?? []).map((option) => [
               option.id,
               option.label,
+            ]),
+          )}
+          credentialSources={Object.fromEntries(
+            (credentialBindingOptions ?? []).map((option) => [
+              option.id,
+              { icon: option.icon, label: option.sourceLabel },
             ]),
           )}
           promptedValueLabel={promptedValueLabel}

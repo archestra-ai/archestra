@@ -1,4 +1,4 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, gt, sql } from "drizzle-orm";
 import { z } from "zod";
 import db, { schema, withDbTransaction } from "@/database";
 import { ClaudeCodeModelsSchema } from "@/types/claude-code-account";
@@ -40,6 +40,52 @@ class ClaudeCodeAccountModel {
         target: schema.verificationsTable.id,
         set: { value, expiresAt },
       });
+  }
+
+  /** Compare-and-swap the pending flow before contacting the provider. */
+  static async claimFlow(params: { owner: Owner; flowId: string }) {
+    return withDbTransaction(async (tx) => {
+      const [row] = await tx
+        .select()
+        .from(schema.verificationsTable)
+        .where(
+          and(
+            eq(schema.verificationsTable.id, flowKey(params.owner)),
+            gt(schema.verificationsTable.expiresAt, new Date()),
+          ),
+        )
+        .for("update");
+      if (!row) return false;
+      const flow = FlowSchema.parse(JSON.parse(row.value));
+      if (
+        flow.flowId !== params.flowId ||
+        flow.completionStarted ||
+        flow.failed
+      )
+        return false;
+      await tx
+        .update(schema.verificationsTable)
+        .set({ value: JSON.stringify({ ...flow, completionStarted: true }) })
+        .where(eq(schema.verificationsTable.id, row.id));
+      return true;
+    });
+  }
+
+  static async failFlow(params: { owner: Owner; flowId: string }) {
+    return withDbTransaction(async (tx) => {
+      const [row] = await tx
+        .select()
+        .from(schema.verificationsTable)
+        .where(eq(schema.verificationsTable.id, flowKey(params.owner)))
+        .for("update");
+      if (!row) return;
+      const flow = FlowSchema.parse(JSON.parse(row.value));
+      if (flow.flowId !== params.flowId) return;
+      await tx
+        .update(schema.verificationsTable)
+        .set({ value: JSON.stringify({ ...flow, failed: true }) })
+        .where(eq(schema.verificationsTable.id, row.id));
+    });
   }
 
   static async complete(params: {
@@ -118,14 +164,22 @@ type Owner = { organizationId: string; userId: string };
 // into arbitrary runtime environment variables.
 const CREDENTIAL_ID = "claude-code:account";
 const MetadataSchema = ClaudeCodeModelsSchema.extend({
-  image: z.string(),
+  image: z.string().optional(),
   expiresAt: z.string().datetime().nullable(),
 });
 const FlowSchema = z.object({
   flowId: z.string().uuid(),
-  namespace: z.string(),
-  image: z.string(),
+  namespace: z.string().optional(),
+  image: z.string().optional(),
   vaultReference: z.string().optional(),
+  oauth: z
+    .object({
+      state: z.string(),
+      verifier: z.object({ __encrypted: z.string() }),
+    })
+    .optional(),
+  completionStarted: z.boolean().optional(),
+  failed: z.boolean().optional(),
 });
 function flowKey(owner: Owner) {
   // This is a database lookup key made from IDs, not a credential or token.

@@ -35,6 +35,20 @@ describe.skipIf(process.env.ARCHESTRA_TEST_SANDBOX_CONTEXT !== "orbstack")(
         inputFileCount: 0,
       });
       try {
+        kubectl(
+          ["apply", "-f", "-"],
+          JSON.stringify({
+            apiVersion: "v1",
+            kind: "Secret",
+            metadata: { name: `${name}-env` },
+            stringData: {
+              ARCHESTRA_AGENT_RUNTIME_RENEWABLE_CREDENTIALS: JSON.stringify({
+                taskId,
+                credentials: {},
+              }),
+            },
+          }),
+        );
         kubectl(["apply", "-f", "-"], JSON.stringify(manifest));
         await until(() => readResult() === "0");
         expect(exec("cat /home/node/result")).toBe("first");
@@ -162,6 +176,7 @@ describe.skipIf(process.env.ARCHESTRA_TEST_SANDBOX_CONTEXT !== "orbstack")(
           `${String(error)}\nSandbox diagnostics:\n${diagnostics}`,
         );
       } finally {
+        kubectl(["delete", "secret", `${name}-env`, "--ignore-not-found"]);
         kubectl([
           "delete",
           "sandbox",

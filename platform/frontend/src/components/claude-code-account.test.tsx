@@ -109,55 +109,18 @@ function renderAccount(variant: "card" | "compact" = "card") {
   );
 }
 
-it("shows download progress then exposes the authorization link through real polling", async () => {
+it("retries a failed sign-in and immediately exposes the authorization link", async () => {
   const user = userEvent.setup();
   let account: archestraApiTypes.GetClaudeCodeAccountResponses["200"] = {
-    state: "disconnected",
+    state: "failed",
   };
-  server.use(http.get(accountUrl, () => HttpResponse.json(account)));
   server.use(
-    http.post(accountUrl, () => {
-      account = { state: "starting", startupPhase: "pulling" };
-      return HttpResponse.json(account);
-    }),
-  );
-  renderAccount();
-  await user.click(await screen.findByRole("button", { name: "Sign in" }));
-  await user.click(screen.getByRole("button", { name: "Sign in with Claude" }));
-  expect(
-    await screen.findByText("Downloading the Claude Code runtime…"),
-  ).toBeVisible();
-  account = {
-    state: "awaiting_code",
-    flowId: "00000000-0000-4000-8000-000000000001",
-    authorizationUrl: "https://claude.ai/oauth/authorize?state=test",
-  };
-  expect(
-    await screen.findByRole(
-      "link",
-      { name: "Open Claude sign-in" },
-      { timeout: 3000 },
-    ),
-  ).toHaveAttribute("href", account.authorizationUrl);
-  expect(screen.getByLabelText("Authorization code")).toBeVisible();
-  expect(
-    screen.queryByText("Downloading the Claude Code runtime…"),
-  ).not.toBeInTheDocument();
-});
-
-it("replaces a failed image pull with an explanation and lets the user retry", async () => {
-  const user = userEvent.setup();
-  let account: archestraApiTypes.GetClaudeCodeAccountResponses["200"] = {
-    state: "disconnected",
-  };
-  server.use(http.get(accountUrl, () => HttpResponse.json(account)));
-  account = { state: "failed", startupIssue: "image_pull" };
-  server.use(
+    http.get(accountUrl, () => HttpResponse.json(account)),
     http.post(accountUrl, () => {
       account = {
-        state: "starting",
-        startupPhase: "scheduling",
-        startupIssue: "capacity",
+        state: "awaiting_code",
+        flowId: "00000000-0000-4000-8000-000000000001",
+        authorizationUrl: "https://claude.ai/oauth/authorize?state=test",
       };
       return HttpResponse.json(account);
     }),
@@ -165,12 +128,13 @@ it("replaces a failed image pull with an explanation and lets the user retry", a
   renderAccount();
   await user.click(await screen.findByRole("button", { name: "Sign in" }));
   expect(screen.getByRole("alert")).toHaveTextContent(
-    "image and registry access",
+    "Sign-in did not complete",
   );
   await user.click(screen.getByRole("button", { name: "Sign in with Claude" }));
   expect(
-    await screen.findByText("Waiting for available capacity…"),
-  ).toBeVisible();
+    await screen.findByRole("link", { name: "Open Claude sign-in" }),
+  ).toHaveAttribute("href", account.authorizationUrl);
+  expect(screen.getByLabelText("Authorization code")).toBeVisible();
   expect(screen.queryByRole("alert")).not.toBeInTheDocument();
 });
 

@@ -20828,8 +20828,6 @@ export type DisconnectClaudeCodeAccountResponses = {
      */
     200: {
         state: 'disconnected' | 'starting' | 'awaiting_code' | 'connecting' | 'connected' | 'failed' | 'expired';
-        startupPhase?: 'scheduling' | 'pulling' | 'starting';
-        startupIssue?: 'image_pull' | 'capacity' | 'container';
         requiresVaultReference?: boolean;
         expiresAt?: string | null;
         flowId?: string;
@@ -20919,8 +20917,6 @@ export type GetClaudeCodeAccountResponses = {
      */
     200: {
         state: 'disconnected' | 'starting' | 'awaiting_code' | 'connecting' | 'connected' | 'failed' | 'expired';
-        startupPhase?: 'scheduling' | 'pulling' | 'starting';
-        startupIssue?: 'image_pull' | 'capacity' | 'container';
         requiresVaultReference?: boolean;
         expiresAt?: string | null;
         flowId?: string;
@@ -21012,8 +21008,6 @@ export type StartClaudeCodeSignInResponses = {
      */
     200: {
         state: 'disconnected' | 'starting' | 'awaiting_code' | 'connecting' | 'connected' | 'failed' | 'expired';
-        startupPhase?: 'scheduling' | 'pulling' | 'starting';
-        startupIssue?: 'image_pull' | 'capacity' | 'container';
         requiresVaultReference?: boolean;
         expiresAt?: string | null;
         flowId?: string;
@@ -21106,8 +21100,6 @@ export type CompleteClaudeCodeSignInResponses = {
      */
     200: {
         state: 'disconnected' | 'starting' | 'awaiting_code' | 'connecting' | 'connected' | 'failed' | 'expired';
-        startupPhase?: 'scheduling' | 'pulling' | 'starting';
-        startupIssue?: 'image_pull' | 'capacity' | 'container';
         requiresVaultReference?: boolean;
         expiresAt?: string | null;
         flowId?: string;

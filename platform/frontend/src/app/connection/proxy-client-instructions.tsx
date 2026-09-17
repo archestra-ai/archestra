@@ -24,6 +24,12 @@ import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-
 import { PROVIDER_CONFIG } from "@/components/llm-provider-api-key-form";
 import { LlmProviderSelectItems } from "@/components/llm-provider-select-items";
 import {
+  TerminalCard,
+  terminalActionClass,
+  terminalCodeClass,
+  terminalLabelClass,
+} from "@/components/terminal-surface";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -40,6 +46,7 @@ import {
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
+import { cn } from "@/lib/utils";
 import type { ConnectClient, ProxyStep } from "./clients";
 import { UnsupportedPanel } from "./mcp-client-instructions";
 import { TerminalBlock } from "./terminal-block";
@@ -972,19 +979,17 @@ function StackedCopyField({
   copyValue: string;
 }) {
   return (
-    <div className="overflow-hidden rounded-xl border border-[#1f2937] bg-[#0d1117] shadow-lg">
+    <TerminalCard>
       <div className="flex items-center gap-3 px-4 py-3">
         <div className="min-w-0 flex-1 space-y-1">
-          <div className="font-mono text-[11px] font-medium uppercase tracking-wider text-[#9ca3af]">
-            {label}
-          </div>
-          <code className="block truncate font-mono text-[13px] text-[#e5e7eb]">
+          <div className={terminalLabelClass}>{label}</div>
+          <code className={cn("block truncate", terminalCodeClass)}>
             {display}
           </code>
         </div>
         <FieldCopyButton value={copyValue} />
       </div>
-    </div>
+    </TerminalCard>
   );
 }
 
@@ -1010,17 +1015,15 @@ function FieldRow({
     );
   }
   return (
-    <div className="overflow-hidden rounded-xl border border-[#1f2937] bg-[#0d1117] shadow-lg">
+    <TerminalCard>
       <div className="grid grid-cols-[140px_1fr_auto] items-center gap-3 px-4 py-3">
-        <div className="font-mono text-[11px] font-medium uppercase tracking-wider text-[#9ca3af]">
-          {label}
-        </div>
-        <code className="min-w-0 truncate font-mono text-[13px] text-[#e5e7eb]">
+        <div className={terminalLabelClass}>{label}</div>
+        <code className={cn("min-w-0 truncate", terminalCodeClass)}>
           {value}
         </code>
         <FieldCopyButton value={value} />
       </div>
-    </div>
+    </TerminalCard>
   );
 }
 
@@ -1036,10 +1039,10 @@ function FieldCopyButton({ value }: { value: string }) {
       type="button"
       onClick={onCopy}
       aria-label="Copy to clipboard"
-      className="flex size-7 items-center justify-center rounded border border-[#1f2937] bg-[#0d1117] text-[#9ca3af] transition-colors hover:text-white"
+      className={cn(terminalActionClass, "size-7")}
     >
       {copied ? (
-        <Check className="size-3.5 text-[#4ade80]" strokeWidth={2.5} />
+        <Check className="size-3.5 text-terminal-success" strokeWidth={2.5} />
       ) : (
         <Copy className="size-3.5" strokeWidth={2} />
       )}

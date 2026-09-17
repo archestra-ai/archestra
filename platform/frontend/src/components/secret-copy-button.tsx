@@ -3,6 +3,7 @@
 import { Check, Copy, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { terminalActionClass } from "@/components/terminal-surface";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -95,7 +96,7 @@ export function SecretCopyButton({
     <Check
       className={cn(
         "size-4",
-        variant === "terminal" ? "text-[#4ade80]" : "text-green-500",
+        variant === "terminal" ? "text-terminal-success" : "text-green-500",
       )}
     />
   ) : (
@@ -108,7 +109,7 @@ export function SecretCopyButton({
         type="button"
         disabled={isCopying || disabled}
         aria-label="Copy"
-        className="flex size-7 items-center justify-center rounded border border-[#1f2937] bg-[#0d1117] text-[#9ca3af] transition-colors hover:text-white disabled:opacity-50"
+        className={cn(terminalActionClass, "size-7")}
       >
         {icon}
       </button>
@@ -131,7 +132,7 @@ export function SecretCopyButton({
         onClick={handleCopyPlaceholder}
         disabled={disabled}
         aria-label="Copy"
-        className="flex size-7 items-center justify-center rounded border border-[#1f2937] bg-[#0d1117] text-[#9ca3af] transition-colors hover:text-white disabled:opacity-50"
+        className={cn(terminalActionClass, "size-7")}
       >
         {icon}
       </button>

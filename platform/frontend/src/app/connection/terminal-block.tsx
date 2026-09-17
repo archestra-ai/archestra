@@ -4,7 +4,13 @@ import { Check, Copy } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { SecretCopyButton } from "@/components/secret-copy-button";
+import {
+  TerminalCard,
+  terminalActionClass,
+  terminalCodeClass,
+} from "@/components/terminal-surface";
 import { copyToClipboard } from "@/lib/clipboard";
+import { cn } from "@/lib/utils";
 
 interface TerminalBlockProps {
   /** Raw code to render and copy. Ignored when `rows` is provided. */
@@ -43,13 +49,13 @@ export function TerminalBlock({ code, rows, header }: TerminalBlockProps) {
   };
 
   return (
-    <div className="overflow-hidden rounded-xl border border-[#1f2937] bg-[#0d1117] shadow-lg">
+    <TerminalCard>
       {header}
       {effectiveRows.map((row, index) => (
         <div
           key={row.code}
           className={
-            index > 0 ? "relative border-t border-[#1f2937]" : "relative"
+            index > 0 ? "relative border-t border-terminal-edge" : "relative"
           }
         >
           {row.getSecretText ? (
@@ -65,18 +71,29 @@ export function TerminalBlock({ code, rows, header }: TerminalBlockProps) {
               type="button"
               onClick={() => onCopy(row.code, index)}
               aria-label="Copy to clipboard"
-              className="absolute right-2 top-2 flex size-7 items-center justify-center rounded border border-[#1f2937] bg-[#0d1117] text-[#9ca3af] transition-colors hover:text-white"
+              className={cn(
+                terminalActionClass,
+                "absolute right-2 top-2 size-7",
+              )}
             >
               {copiedIndex === index ? (
-                <Check className="size-3.5 text-[#4ade80]" strokeWidth={2.5} />
+                <Check
+                  className="size-3.5 text-terminal-success"
+                  strokeWidth={2.5}
+                />
               ) : (
                 <Copy className="size-3.5" strokeWidth={2} />
               )}
             </button>
           )}
-          <pre className="m-0 max-h-[360px] overflow-auto px-5 py-4 pr-12 font-mono text-[13px] leading-[1.65] text-[#e5e7eb]">
+          <pre
+            className={cn(
+              "m-0 max-h-[360px] overflow-auto px-5 py-4 pr-12",
+              terminalCodeClass,
+            )}
+          >
             {row.comment && (
-              <span className="select-none text-[#6d7681]">
+              <span className="select-none text-terminal-comment">
                 # {row.comment}
                 {"\n"}
               </span>
@@ -85,6 +102,6 @@ export function TerminalBlock({ code, rows, header }: TerminalBlockProps) {
           </pre>
         </div>
       ))}
-    </div>
+    </TerminalCard>
   );
 }

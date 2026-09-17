@@ -82,6 +82,15 @@
   --shadow-opacity: var(--shadow-opacity);
   --color-shadow-color: var(--shadow-color);
   --color-destructive-foreground: var(--destructive-foreground);
+  --color-terminal: var(--terminal);
+  --color-terminal-elevated: var(--terminal-elevated);
+  --color-terminal-foreground: var(--terminal-foreground);
+  --color-terminal-muted: var(--terminal-muted);
+  --color-terminal-comment: var(--terminal-comment);
+  --color-terminal-edge: var(--terminal-edge);
+  --color-terminal-emphasis: var(--terminal-emphasis);
+  --color-terminal-success: var(--terminal-success);
+  --color-terminal-destructive: var(--terminal-destructive);
 }
 
 /* Base styles and defaults - theme classes override --radius */
@@ -109,6 +118,32 @@
   --tracking-normal: 0em;
   --scrollbar-thumb: color-mix(in oklab, var(--muted-foreground) 20%, transparent);
   --scrollbar-thumb-hover: color-mix(in oklab, var(--muted-foreground) 45%, transparent);
+
+
+  /* Code/terminal surface, shared by every command block and copyable code
+     field (see components/terminal-surface.tsx). Derived from the active theme
+     so each of the 24 selectable themes gets a block in its own palette, and
+     derived *from the surface* rather than from the theme's text tokens so the
+     contrast holds without per-theme tuning. --terminal-anchor is the far end
+     of the theme's range; it is the only value dark mode overrides.
+     terminal-surface.test.ts checks the resulting ratios for every theme. */
+  --terminal-anchor: black;
+  --terminal: color-mix(in oklab, var(--card) 95%, var(--foreground));
+  --terminal-foreground: color-mix(in oklab, var(--foreground) 74%, var(--terminal-anchor));
+  /* Raised fill so controls on the surface read as buttons. */
+  --terminal-elevated: color-mix(in oklab, var(--terminal) 93%, var(--terminal-foreground));
+  --terminal-edge: color-mix(in oklab, var(--terminal) 72%, var(--terminal-foreground));
+  --terminal-muted: color-mix(in oklab, var(--terminal-foreground) 85%, var(--terminal));
+  --terminal-comment: color-mix(in oklab, var(--terminal-foreground) 78%, var(--terminal));
+  --terminal-emphasis: var(--terminal-anchor);
+  /* State hues pulled toward the foreground far enough to stay legible on any
+     theme's surface while still reading as green/red. */
+  --terminal-success: color-mix(in oklab, #22c55e 42%, var(--terminal-foreground));
+  --terminal-destructive: color-mix(in oklab, #ef4444 40%, var(--terminal-foreground));
+}
+
+html.dark {
+  --terminal-anchor: white;
 }
 
 @layer base {

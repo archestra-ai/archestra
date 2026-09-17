@@ -29,6 +29,15 @@ export const openappaEventsTable = pgTable(
   ],
 );
 
+export const openappaHostKeysTable = pgTable(
+  "openappa_host_keys",
+  {
+    key: text().notNull(),
+    root: text().notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.key, table.root] })],
+);
+
 export const openappaPolicyFilesTable = pgTable("openappa_policy_files", {
   hash: text().primaryKey(),
   bytes: bytea("bytes").notNull(),
@@ -51,6 +60,31 @@ export const openappaSessionsTable = pgTable(
     startDecision: jsonb("start_decision").notNull(),
   },
   (table) => [index("openappa_sessions_root_idx").on(table.root)],
+);
+
+// Routing and client presentation only. OpenAPPA's event log remains the
+// authority for whether an offer can execute.
+export const openappaOfferOwnersTable = pgTable(
+  "openappa_offer_owners",
+  {
+    ...scope(),
+    binding: text("binding").notNull(),
+    offerId: text("offer_id").notNull(),
+    root: text().notNull(),
+    parentId: text("parent_id"),
+    arguments: text(),
+    tool: text(),
+    spelling: text(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    primaryKey({
+      name: "openappa_offer_owners_pk",
+      columns: [table.organizationId, table.offerId],
+    }),
+  ],
 );
 
 export const openappaOperationsTable = pgTable(

@@ -50,7 +50,13 @@ describe("buildAgentRuntimeSandbox", () => {
           'printf "%s|%s|%s|%s|%s" "${OPENAI_API_KEY-unset}" "${REMOVED_SETTING-unset}" "$CLAUDE_CODE_OAUTH_TOKEN" "$CURRENT_SETTING" "$IMAGE_SETTING"',
         ],
       },
-      ["OPENAI_API_KEY", "REMOVED_SETTING", "CURRENT_SETTING"],
+      {
+        inheritedVariableNames: [
+          "OPENAI_API_KEY",
+          "REMOVED_SETTING",
+          "CURRENT_SETTING",
+        ],
+      },
     );
     expect(
       execFileSync("/bin/sh", ["-c", script], {

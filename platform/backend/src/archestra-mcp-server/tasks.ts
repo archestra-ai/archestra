@@ -567,7 +567,7 @@ const registry = defineArchestraTools([
                 continuation_error: continuationError,
                 connection:
                   session && ["active", "idle"].includes(workspace.state)
-                    ? resolveAgentRuntimeBackendDriver(
+                    ? await resolveAgentRuntimeBackendDriver(
                         session.backend,
                       ).getWorkspaceConnection(session)
                     : null,

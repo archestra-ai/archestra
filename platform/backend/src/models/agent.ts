@@ -1146,6 +1146,43 @@ class AgentModel {
     return results;
   }
 
+  /** Distinct runtime configurations are selected by the warm pool reconciler. */
+  static async listWarmPoolCandidates() {
+    return db
+      .select({
+        id: schema.agentsTable.id,
+        organizationId: schema.agentsTable.organizationId,
+        environmentId: schema.agentsTable.environmentId,
+        runtime: schema.agentsTable.runtime,
+        namespace: schema.environmentsTable.namespace,
+        defaultNamespace: schema.organizationsTable.defaultEnvironmentNamespace,
+        environmentPolicy: schema.environmentsTable.networkPolicy,
+        defaultPolicy: schema.organizationsTable.defaultNetworkPolicy,
+      })
+      .from(schema.agentsTable)
+      .innerJoin(
+        schema.organizationsTable,
+        eq(schema.organizationsTable.id, schema.agentsTable.organizationId),
+      )
+      .leftJoin(
+        schema.environmentsTable,
+        and(
+          eq(schema.environmentsTable.id, schema.agentsTable.environmentId),
+          eq(
+            schema.environmentsTable.organizationId,
+            schema.agentsTable.organizationId,
+          ),
+        ),
+      )
+      .where(
+        and(
+          isNotNull(schema.agentsTable.runtime),
+          notDeleted(schema.agentsTable),
+        ),
+      )
+      .orderBy(schema.agentsTable.createdAt, schema.agentsTable.id);
+  }
+
   /**
    * Runtime Agents without an explicit model/key pair inherit the
    * organization's effective default model. This narrow query supports

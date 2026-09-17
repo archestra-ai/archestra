@@ -16,6 +16,8 @@ Chat and Projects open an interactive terminal for Agents with a dedicated runti
 
 ## Runtime Backend
 
+Deployments can [prepare warm workspaces](/docs/platform-deployment#warm-workspaces) to reduce startup time. Compatible Agents share spare capacity; every new workspace remains isolated.
+
 Kubernetes is currently the supported runtime backend. Archestra manages task state, credentials, cancellation, and run history. The cluster supplies the workspace where the Agent executes commands.
 
 ## Cluster Prerequisites

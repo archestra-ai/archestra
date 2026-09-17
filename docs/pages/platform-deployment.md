@@ -939,8 +939,16 @@ Agent Runtime requires Kubernetes configuration through `ARCHESTRA_ORCHESTRATOR_
 Install the tested controller version before enabling the feature:
 
 ```sh
-kubectl apply --server-side -f https://github.com/kubernetes-sigs/agent-sandbox/releases/download/v1.0.1/sandbox.yaml
-kubectl wait --for=condition=Established crd/sandboxes.agents.x-k8s.io --timeout=60s
+kubectl apply --server-side -f https://github.com/kubernetes-sigs/agent-sandbox/releases/download/v1.0.1/sandbox-with-extensions.yaml
+kubectl wait --for=condition=Established \
+  crd/sandboxes.agents.x-k8s.io \
+  crd/sandboxtemplates.extensions.agents.x-k8s.io \
+  crd/sandboxwarmpools.extensions.agents.x-k8s.io \
+  crd/sandboxclaims.extensions.agents.x-k8s.io --timeout=60s
+kubectl create configmap agent-sandbox-config -n agent-sandbox-system \
+  --from-literal=allowed-label-domains=sandbox.users.io,archestra.io \
+  --dry-run=client -o yaml | kubectl apply -f -
+kubectl rollout restart deployment/agent-sandbox-controller -n agent-sandbox-system
 kubectl rollout status deployment/agent-sandbox-controller -n agent-sandbox-system --timeout=120s
 ```
 
@@ -981,6 +989,14 @@ The prefetch uses the runtime namespace's default ServiceAccount image pull secr
 
 Fresh nodes still need their first download. An unavailable image does not block other images or Agent launches.
 <!-- SPDX-SnippetEnd -->
+
+#### Warm Workspaces
+
+Warm pools prepare empty workspaces before tasks arrive. Compatible Agents share a pool within the same Environment. Each new workspace claims one Sandbox exclusively. Used workspaces never return to the pool.
+
+Set `ARCHESTRA_AGENT_RUNTIME_WARM_POOL_SIZE=1` to keep one spare workspace per configuration. Tilt enables this automatically when Agent Runtime is enabled. `ARCHESTRA_AGENT_RUNTIME_WARM_POOL_MAX_POOLS` defaults to `4` and limits prepared configurations. Spare workspaces consume CPU, memory, and persistent storage.
+
+The controller extensions above provide allocation and replenishment. Pools contain no task credentials and start without network access. Claimed workspaces use the Agent's existing network policy. Missing pools or extensions fall back to normal startup. Empty pools allocate a new workspace. Setting the size to `0` removes spare capacity without deleting claimed workspaces.
 
 #### Privileged Containers
 
@@ -1023,6 +1039,10 @@ On GKE, custom Sandbox controllers can produce a â€œnot backed by a controllerâ€
 - **`ARCHESTRA_AGENT_RUNTIME_CPU_REQUEST`**, **`ARCHESTRA_AGENT_RUNTIME_MEMORY_REQUEST`**, **`ARCHESTRA_AGENT_RUNTIME_MEMORY_LIMIT`** - Pod resources for a run whose Agent sets none. There is no CPU limit by default: throttling an agent mid-turn reads as a hang rather than back-pressure.
   - Defaults: `500m`, `1Gi`, `4Gi`
 
+- **`ARCHESTRA_AGENT_RUNTIME_WARM_POOL_SIZE`** - Spare workspaces per compatible runtime configuration. `0` disables warming.
+  - Default: `0`; Tilt uses `1` when Agent Runtime is enabled.
+- **`ARCHESTRA_AGENT_RUNTIME_WARM_POOL_MAX_POOLS`** - Maximum prepared configurations per deployment. Additional configurations start normally without reserved capacity.
+  - Default: `4`
 - **`ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_SIZE`** - Persistent volume capacity for each Agent Sandbox workspace. Stores runtime state, client sessions, and working files under `/home/node`. Privileged workspaces also store `/var/lib/docker` on this volume.
   - Default: `20Gi`
 

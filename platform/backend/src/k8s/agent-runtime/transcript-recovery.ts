@@ -6,11 +6,8 @@ import type {
 } from "@kubernetes/client-node";
 import { isK8sNotFoundError } from "@/k8s/shared";
 import type { AgentRunRecord } from "@/types";
-import {
-  AGENT_RUNTIME_CONTAINER_NAME,
-  AGENT_SANDBOX_API,
-  type AgentSandbox,
-} from "./manifests";
+import { AGENT_RUNTIME_CONTAINER_NAME } from "./manifests";
+import { readWorkspaceSandbox } from "./warm-pool";
 
 /** Read retained output without resuming the workspace or extending its deadline. */
 export async function withTranscriptRecoveryPod(params: {
@@ -26,11 +23,11 @@ export async function withTranscriptRecoveryPod(params: {
   params.abortSignal?.throwIfAborted();
   const { clients, session } = params;
   const namespace = session.runtimeScope;
-  const sandbox = (await clients.customObjectsApi.getNamespacedCustomObject({
-    ...AGENT_SANDBOX_API,
+  const sandbox = await readWorkspaceSandbox({
+    api: clients.customObjectsApi,
     namespace,
     name: session.workloadName,
-  })) as AgentSandbox;
+  });
   const template = sandbox.spec.podTemplate.spec;
   const image = template?.containers.find(
     (container) => container.name === AGENT_RUNTIME_CONTAINER_NAME,
@@ -39,7 +36,7 @@ export async function withTranscriptRecoveryPod(params: {
     throw new Error("Workspace recovery metadata is unavailable");
   const claim = await clients.coreApi.readNamespacedPersistentVolumeClaim({
     namespace,
-    name: `workspace-${session.workloadName}`,
+    name: `workspace-${sandbox.metadata.name}`,
   });
   if (
     !claim.metadata?.name ||
@@ -57,7 +54,7 @@ export async function withTranscriptRecoveryPod(params: {
     {
       apiVersion: sandbox.apiVersion,
       kind: sandbox.kind,
-      name: session.workloadName,
+      name: sandbox.metadata.name ?? session.workloadName,
       uid: sandbox.metadata.uid,
     },
   ];

@@ -25,6 +25,8 @@ import type { RenewableCredential } from "@/types/renewable-credential";
  * VM or managed sandbox later.
  */
 export type AgentRunLaunchSpec = {
+  /** Organization and Environment identity for compatible warm capacity. */
+  poolScope?: string;
   taskId: string;
   agentRuntimeId: string;
   frozenName: string;
@@ -109,10 +111,10 @@ export interface AgentRuntimeBackendDriver {
   /** Stable connection hints; commands require the caller's own cluster access. */
   getWorkspaceConnection(
     session: Pick<AgentRunRecord, "workloadName" | "runtimeScope" | "taskId">,
-  ): {
+  ): Promise<{
     hostname: string;
     shellCommand: string;
-  };
+  } | null>;
   accessWorkspaceFile(params: {
     session: AgentRunRecord;
     request: AgentWorkspaceFileRequest;

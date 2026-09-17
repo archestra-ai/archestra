@@ -2347,6 +2347,15 @@ const config = {
      * regardless of this value.
      */
     enabled: process.env.ARCHESTRA_AGENT_RUNTIME_ENABLED === "true",
+    /** Ready spare workspaces per compatible runtime configuration. */
+    warmPoolSize: parseNonNegativeInt(
+      process.env.ARCHESTRA_AGENT_RUNTIME_WARM_POOL_SIZE,
+      0,
+    ),
+    warmPoolMaxPools: parsePositiveInt(
+      process.env.ARCHESTRA_AGENT_RUNTIME_WARM_POOL_MAX_POOLS,
+      4,
+    ),
     /**
      * Privileged pods have node-level impact. Agent administrators cannot
      * enable them unless the deployment operator explicitly opts in too.

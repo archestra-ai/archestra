@@ -7,6 +7,10 @@ description: Use when writing or editing Archestra documentation pages under doc
 
 This skill is the single source of truth for Archestra docs. Write and edit `docs/pages/*.md` by these rules.
 
+## Audience and Scope
+
+Pages under `docs/pages/` are for end users deploying, configuring, and using Archestra. Omit contributor and local development details, including Tilt setup and development-only defaults. Keep those instructions in contributor documentation. Dedicated developer pages, such as `platform-developer-quickstart.md`, are exceptions.
+
 ## Process
 
 1. Open the docs page you are editing.

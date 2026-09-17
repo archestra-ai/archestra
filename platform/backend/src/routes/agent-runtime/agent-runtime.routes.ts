@@ -694,7 +694,7 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
                       ).hasRetainedTerminal(owned)
                     : false,
                 connection: ["active", "idle"].includes(workspace.state)
-                  ? resolveAgentRuntimeBackendDriver(
+                  ? await resolveAgentRuntimeBackendDriver(
                       owned.backend,
                     ).getWorkspaceConnection(owned)
                   : null,

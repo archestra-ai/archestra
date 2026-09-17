@@ -28,7 +28,7 @@ vi.mock("@/config", async () =>
 );
 
 const origin = "https://kubernetes.example.test";
-const sandboxUrl = `${origin}/apis/agents.x-k8s.io/v1beta1/namespaces/test/sandboxes/:name/status`;
+const sandboxUrl = `${origin}/apis/agents.x-k8s.io/v1beta1/namespaces/test/sandboxes/:name`;
 const podsUrl = `${origin}/api/v1/namespaces/test/pods`;
 // biome-ignore lint/correctness/useHookAtTopLevel: MSW test lifecycle helper, not a React hook.
 const server = useMswServer();
@@ -74,6 +74,10 @@ beforeEach(() => {
     },
   );
   server.use(
+    http.get(
+      `${origin}/apis/extensions.agents.x-k8s.io/v1beta1/namespaces/test/sandboxclaims/:name`,
+      () => new HttpResponse(null, { status: 404 }),
+    ),
     http.get(sandboxUrl, () => HttpResponse.json({ status: {} })),
     http.get(podsUrl, () =>
       HttpResponse.json({
@@ -347,6 +351,7 @@ test.for([
   const lifecycle = new A2AManager({ taskMode: "full" });
   const commands: string[] = [];
   let observations = 0;
+  let recovering = true;
   server.use(
     http.get(
       `${origin}/api/v1/namespaces/test/secrets/:name`,
@@ -356,13 +361,14 @@ test.for([
       `${origin}/api/v1/namespaces/test/secrets/:name`,
       () => new HttpResponse(null, { status: 404 }),
     ),
-    http.get(sandboxUrl.replace("/status", ""), () =>
-      HttpResponse.json({
-        metadata: { labels: { [AGENT_RUNTIME_TASK_LABEL]: run.taskId } },
-        spec: {},
-      }),
-    ),
     http.get(sandboxUrl, async ({ request }) => {
+      if (recovering) {
+        recovering = false;
+        return HttpResponse.json({
+          metadata: { labels: { [AGENT_RUNTIME_TASK_LABEL]: run.taskId } },
+          spec: {},
+        });
+      }
       observations++;
       if (observations === 1) {
         await new Promise<void>((resolve) =>

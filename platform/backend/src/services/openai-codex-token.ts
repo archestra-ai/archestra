@@ -44,6 +44,7 @@ import {
   encodeOpenAiCodexCredential,
   type OpenAiCodexCredential,
 } from "./openai-codex-credentials";
+import { recordSubscriptionAuthenticationFailure } from "./subscription-authentication-status";
 
 const MAX_CACHED_TOKENS = 1000;
 
@@ -221,33 +222,23 @@ class OpenAiCodexTokenManager {
     credential: OpenAiCodexCredential;
   }): Promise<void> {
     const { providerApiKeyId, credential } = params;
-    try {
-      const row = await LlmProviderApiKeyModel.findById(providerApiKeyId);
-      if (!row?.secretId) return;
-      const stored = decodeOpenAiCodexCredential(
-        await getSecretValueForLlmProviderApiKey(row.secretId),
-      );
-      if (!stored || stored.accountId !== credential.accountId) return;
-      const callerDigest = hashToken(credential.refreshToken);
-      const cached = this.tokenCache.get(providerApiKeyId);
-      const lineage = cached?.knownRefreshTokenDigests.includes(callerDigest)
-        ? cached.knownRefreshTokenDigests
-        : [callerDigest];
-      // A reconnect can replace the secret before this failed request finishes.
-      // Only mark the same credential family, and guard the subsequent write.
-      if (!lineage.includes(hashToken(stored.refreshToken))) return;
-      await LlmProviderApiKeyModel.setRequiresReauthentication({
-        id: providerApiKeyId,
-        requiresReauthentication: true,
-        expectedUpdatedAt: row.updatedAt,
-      });
-    } catch (error) {
-      // Status persistence must not replace the original authentication error.
-      logger.warn(
-        { providerApiKeyId, error },
-        "[OpenAiCodex] failed to record reconnect requirement",
-      );
-    }
+    const callerDigest = hashToken(credential.refreshToken);
+    const cached = this.tokenCache.get(providerApiKeyId);
+    const lineage = cached?.knownRefreshTokenDigests.includes(callerDigest)
+      ? cached.knownRefreshTokenDigests
+      : [callerDigest];
+    await recordSubscriptionAuthenticationFailure({
+      providerApiKeyId,
+      provider: "openai",
+      matchesCredential(value) {
+        const stored = decodeOpenAiCodexCredential(value);
+        return Boolean(
+          stored &&
+            stored.accountId === credential.accountId &&
+            lineage.includes(hashToken(stored.refreshToken)),
+        );
+      },
+    });
   }
 
   private recordValidationRotation(

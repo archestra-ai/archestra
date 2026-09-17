@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.3.63](https://github.com/archestra-ai/archestra/compare/platform-v1.3.62...platform-v1.3.63) (2026-09-17)
+
+
+### Bug Fixes
+
+* **anthropic:** enable Vertex AI when a project is configured (backport release/1.3) ([#7998](https://github.com/archestra-ai/archestra/issues/7998)) ([bed9965](https://github.com/archestra-ai/archestra/commit/bed9965a1d0c175caf2b5eba4c0963cc77cab472))
+* **chat:** validate UI messages before starting a stream (release/1.3) ([#7993](https://github.com/archestra-ai/archestra/issues/7993)) ([cc47054](https://github.com/archestra-ai/archestra/commit/cc47054f52bc3aa8b15a23ba6ea12f1eb85c5c41))
+* load complete shared instructions in Codex and Claude (release/1.3) ([#7975](https://github.com/archestra-ai/archestra/issues/7975)) ([e0a9969](https://github.com/archestra-ai/archestra/commit/e0a99690201359e049672423fef665a05e48b11f))
+* prevent agent title work leaking between backend tests (1.3) ([#7995](https://github.com/archestra-ai/archestra/issues/7995)) ([fc0340d](https://github.com/archestra-ai/archestra/commit/fc0340dfd8b91ff2a901a3e3c3b04ef68b2cc0fe))
+
 ## [1.3.62](https://github.com/archestra-ai/archestra/compare/platform-v1.3.61...platform-v1.3.62) (2026-09-16)
 
 

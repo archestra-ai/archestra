@@ -198,6 +198,10 @@ export const TOOL_PERMISSIONS: Record<
   read_workspace_file: { resource: "agent", action: "read" },
   write_workspace_file: { resource: "agent", action: "read" },
   delete_workspace: { resource: "agent", action: "read" },
+  // Writes only the caller's own personal credential, so it needs no elevated
+  // permission; the handler additionally requires access to the target Agent
+  // and refuses keys declared at organization scope.
+  transfer_credential: { resource: "credential", action: "create" },
   // Persistent file store — these operate on `skill_sandbox_files`, not the
   // sandbox itself, so they gate on `file:manage`. Per-file authorization
   // (authorship, project membership) stays in the handlers.

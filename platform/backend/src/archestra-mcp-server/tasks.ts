@@ -1065,7 +1065,8 @@ function missingCredentialsFrom(error: unknown): {
   return null;
 }
 
-function requireActor(context: ArchestraContext): A2AActor {
+/** @public — also used by the credential transfer tool in `./credentials`. */
+export function requireActor(context: ArchestraContext): A2AActor {
   if (!context.userId || !context.organizationId) {
     throw new Error(
       "Run tools act as the calling user, so they need an authenticated user context.",

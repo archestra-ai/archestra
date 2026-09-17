@@ -20,6 +20,7 @@ vi.mock("@/config", async () =>
 const server = useMswServer();
 
 beforeEach(() => {
+  config.agentRuntime.enabled = true;
   vi.spyOn(KubeConfig.prototype, "loadFromDefault").mockImplementation(
     function (this: KubeConfig) {
       this.loadFromOptions({
@@ -35,8 +36,15 @@ beforeEach(() => {
 test.for([
   403, 503,
 ])("omits optional connection hints when Kubernetes returns %i", async (status) => {
-  server.use(http.get(SANDBOX_URL, () => new HttpResponse(null, { status })));
+  let requests = 0;
+  server.use(
+    http.get(SANDBOX_URL, () => {
+      requests++;
+      return new HttpResponse(null, { status });
+    }),
+  );
   await expect(manager.getWorkspaceConnection(SESSION)).resolves.toBeNull();
+  expect(requests).toBe(1);
 });
 
 test("omits connection hints when the runtime is disabled", async () => {

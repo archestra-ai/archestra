@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.4.0-beta.13](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-beta.12...platform-v1.4.0-beta.13) (2026-09-17)
+
+
+### Features
+
+* **agent-runtime:** streamline agent creation and setup ([#7980](https://github.com/archestra-ai/archestra/issues/7980)) ([98e023f](https://github.com/archestra-ai/archestra/commit/98e023f8192b932ea534016ef99684aeb8962d45))
+* **openappa:** add yell reporting enabled by default ([#7991](https://github.com/archestra-ai/archestra/issues/7991)) ([6b8873e](https://github.com/archestra-ai/archestra/commit/6b8873e3750321155a341ef8618f57bc8a6e86d9))
+* **openappa:** support parallel tool calls in the proxy ([#7985](https://github.com/archestra-ai/archestra/issues/7985)) ([4613457](https://github.com/archestra-ai/archestra/commit/46134572775d9b8976727d5f6fdac2673ed6d9ba))
+
+
+### Bug Fixes
+
+* **agent-runtime:** refresh missing Codex subscription models before launch ([#7988](https://github.com/archestra-ai/archestra/issues/7988)) ([bcf0f9f](https://github.com/archestra-ai/archestra/commit/bcf0f9f3cdbaac0a85237d583b7e189ba7ac5e00))
+* **anthropic:** enable Vertex AI when a project is configured ([#7997](https://github.com/archestra-ai/archestra/issues/7997)) ([ce142a1](https://github.com/archestra-ai/archestra/commit/ce142a1d884d14bced6da45a090fae861b8ca528))
+* **chat:** validate UI messages before starting a stream ([#7992](https://github.com/archestra-ai/archestra/issues/7992)) ([12616e7](https://github.com/archestra-ai/archestra/commit/12616e789fac5015e6e6d573806caee33a6d1576))
+* **dev:** rebuild OpenAPPA automatically in Tilt ([#7989](https://github.com/archestra-ai/archestra/issues/7989)) ([67c73ed](https://github.com/archestra-ai/archestra/commit/67c73ed1332ae09b75fbc67e23ac8e8f5e0d96ae))
+* exclude seeded app renders from APPA result approval ([#7996](https://github.com/archestra-ai/archestra/issues/7996)) ([47a33da](https://github.com/archestra-ai/archestra/commit/47a33daa1727fd5c15794e4d93fa0e3a68b7e7ce))
+* **openappa:** accept symbolic audience remedies without sources ([#7990](https://github.com/archestra-ai/archestra/issues/7990)) ([a1614e9](https://github.com/archestra-ai/archestra/commit/a1614e90f578dcdf3f4e8cd5e4a82ee8dd8a3af8))
+* **openappa:** allow agent and skill delegation ([#7983](https://github.com/archestra-ai/archestra/issues/7983)) ([dc844b7](https://github.com/archestra-ai/archestra/commit/dc844b7ca4bccc894876fab16b24e3e81690aa15))
+* prevent agent title work leaking between backend tests ([#7994](https://github.com/archestra-ai/archestra/issues/7994)) ([db5bf27](https://github.com/archestra-ai/archestra/commit/db5bf279fdee28bb81e564d351f9bc48b3275026))
+
 ## [1.4.0-beta.12](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-beta.11...platform-v1.4.0-beta.12) (2026-09-16)
 
 

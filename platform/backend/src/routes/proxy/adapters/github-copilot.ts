@@ -40,6 +40,7 @@ export const githubCopilotAdapterFactory = {
         baseURL: options.baseUrl ?? config.llm["github-copilot"].baseUrl,
         fetch: createGithubCopilotFetch({
           githubToken: apiKey,
+          providerApiKeyId: options.llmProviderApiKeyId,
           innerFetch: observableFetch,
         }),
         defaultHeaders: options.defaultHeaders,

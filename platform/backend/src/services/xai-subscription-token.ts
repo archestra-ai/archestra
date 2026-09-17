@@ -36,6 +36,7 @@ import {
 import { ApiError } from "@/types";
 import { trackBackgroundWork } from "@/utils/background-work";
 import { decodeJwtClaims } from "./openai-codex-credentials";
+import { recordSubscriptionAuthenticationFailure } from "./subscription-authentication-status";
 import {
   decodeXaiSubscriptionCredential,
   encodeXaiSubscriptionCredential,
@@ -174,6 +175,30 @@ class XaiSubscriptionTokenManager {
       { ...cached, expiresAtMs: 0 },
       ROTATED_TOKEN_RETENTION_MS,
     );
+  }
+
+  async recordAuthenticationFailure(params: {
+    providerApiKeyId: string;
+    credential: XaiSubscriptionCredential;
+  }): Promise<void> {
+    const { providerApiKeyId, credential } = params;
+    const callerDigest = hashToken(credential.refreshToken);
+    const cached = this.tokenCache.get(providerApiKeyId);
+    const lineage = cached?.knownRefreshTokenDigests.includes(callerDigest)
+      ? cached.knownRefreshTokenDigests
+      : [callerDigest];
+    await recordSubscriptionAuthenticationFailure({
+      providerApiKeyId,
+      provider: "xai",
+      matchesCredential(value) {
+        const stored = decodeXaiSubscriptionCredential(value);
+        return Boolean(
+          stored &&
+            stored.userId === credential.userId &&
+            lineage.includes(hashToken(stored.refreshToken)),
+        );
+      },
+    });
   }
 
   private recordValidationRotation(
@@ -419,6 +444,16 @@ export function createXaiSubscriptionFetch(params: {
         providerApiKeyId,
       });
     } catch (error) {
+      if (
+        providerApiKeyId &&
+        error instanceof ApiError &&
+        error.statusCode === 401
+      ) {
+        await xaiSubscriptionTokenManager.recordAuthenticationFailure({
+          providerApiKeyId,
+          credential,
+        });
+      }
       return redemptionErrorResponse(error);
     }
     const response = await doFetch(accessToken);
@@ -437,9 +472,26 @@ export function createXaiSubscriptionFetch(params: {
           providerApiKeyId,
         });
       } catch (error) {
+        if (
+          providerApiKeyId &&
+          error instanceof ApiError &&
+          error.statusCode === 401
+        ) {
+          await xaiSubscriptionTokenManager.recordAuthenticationFailure({
+            providerApiKeyId,
+            credential,
+          });
+        }
         return redemptionErrorResponse(error);
       }
-      return doFetch(freshAccessToken);
+      const retried = await doFetch(freshAccessToken);
+      if (providerApiKeyId && retried.status === 401) {
+        await xaiSubscriptionTokenManager.recordAuthenticationFailure({
+          providerApiKeyId,
+          credential,
+        });
+      }
+      return retried;
     }
 
     return response;

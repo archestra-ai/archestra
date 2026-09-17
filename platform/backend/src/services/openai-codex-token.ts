@@ -44,6 +44,7 @@ import {
   encodeOpenAiCodexCredential,
   type OpenAiCodexCredential,
 } from "./openai-codex-credentials";
+import { recordSubscriptionAuthenticationFailure } from "./subscription-authentication-status";
 
 const MAX_CACHED_TOKENS = 1000;
 
@@ -214,6 +215,30 @@ class OpenAiCodexTokenManager {
       { ...cached, expiresAtMs: 0 },
       ROTATED_TOKEN_RETENTION_MS,
     );
+  }
+
+  async recordAuthenticationFailure(params: {
+    providerApiKeyId: string;
+    credential: OpenAiCodexCredential;
+  }): Promise<void> {
+    const { providerApiKeyId, credential } = params;
+    const callerDigest = hashToken(credential.refreshToken);
+    const cached = this.tokenCache.get(providerApiKeyId);
+    const lineage = cached?.knownRefreshTokenDigests.includes(callerDigest)
+      ? cached.knownRefreshTokenDigests
+      : [callerDigest];
+    await recordSubscriptionAuthenticationFailure({
+      providerApiKeyId,
+      provider: "openai",
+      matchesCredential(value) {
+        const stored = decodeOpenAiCodexCredential(value);
+        return Boolean(
+          stored &&
+            stored.accountId === credential.accountId &&
+            lineage.includes(hashToken(stored.refreshToken)),
+        );
+      },
+    });
   }
 
   private recordValidationRotation(
@@ -459,6 +484,16 @@ export function createOpenAiCodexFetch(params: {
         accountId: credential.accountId,
       });
     } catch (error) {
+      if (
+        providerApiKeyId &&
+        error instanceof ApiError &&
+        error.statusCode === 401
+      ) {
+        await openAiCodexTokenManager.recordAuthenticationFailure({
+          providerApiKeyId,
+          credential,
+        });
+      }
       return redemptionErrorResponse(error);
     }
     const response = await doFetch(accessToken);
@@ -480,9 +515,26 @@ export function createOpenAiCodexFetch(params: {
           accountId: credential.accountId,
         });
       } catch (error) {
+        if (
+          providerApiKeyId &&
+          error instanceof ApiError &&
+          error.statusCode === 401
+        ) {
+          await openAiCodexTokenManager.recordAuthenticationFailure({
+            providerApiKeyId,
+            credential,
+          });
+        }
         return redemptionErrorResponse(error);
       }
-      return doFetch(freshAccessToken);
+      const retried = await doFetch(freshAccessToken);
+      if (providerApiKeyId && retried.status === 401) {
+        await openAiCodexTokenManager.recordAuthenticationFailure({
+          providerApiKeyId,
+          credential,
+        });
+      }
+      return retried;
     }
 
     return response;

@@ -3,7 +3,7 @@ title: MCP Gateway
 category: MCP
 order: 1
 description: Unified access point for all MCP servers
-lastUpdated: 2026-09-15
+lastUpdated: 2026-09-16
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -107,9 +107,9 @@ See [MCP Authentication](/docs/mcp-authentication) for more details.
 
 Use Streamable HTTP with `/v1/mcp/{id-or-slug}`. Send MCP requests, including capability discovery, through POST.
 
-Authenticated GET requests return `405 Method Not Allowed` with `Allow: POST`. The gateway does not offer a standalone GET event stream. Missing or invalid credentials receive `401` with the OAuth discovery challenge.
+The same URL supports legacy HTTP+SSE clients, including Claude Code entries configured with transport `sse`. An authenticated GET with `Accept: text/event-stream` opens the stream. Its `endpoint` event supplies the URL for POSTing messages. Each POST receives `202 Accepted`; its MCP response arrives on the stream. Prefer Streamable HTTP when your client supports it.
 
-Legacy HTTP+SSE endpoints such as `/sse` and `/message` are not available.
+Other authenticated GET requests return `405 Method Not Allowed` with `Allow: POST`. GET requests declaring protocol `2026-07-28` also return `405`. Missing or invalid credentials receive `401` with the OAuth discovery challenge.
 
 ## Protocol Versions
 

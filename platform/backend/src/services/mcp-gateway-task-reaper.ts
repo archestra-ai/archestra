@@ -1,3 +1,4 @@
+import { CacheKey, cacheManager } from "@/cache-manager";
 import logger from "@/logging";
 import { McpGatewayTaskModel } from "@/models";
 import { TASK_TTL_MS } from "@/routes/mcp-gateway/tasks";
@@ -56,6 +57,9 @@ class McpGatewayTaskReaper {
       const purged = await McpGatewayTaskModel.purgeExpired({
         graceMs: PURGE_GRACE_MS,
       });
+      // Keyv only expires entries on reads; disconnected streams leave no reader.
+      await cacheManager.deleteExpiredByPrefix(CacheKey.LegacySseMessages);
+      await cacheManager.deleteExpiredByPrefix(CacheKey.LegacySseSession);
       if (failed > 0 || purged > 0) {
         logger.info(
           { failed, purged },

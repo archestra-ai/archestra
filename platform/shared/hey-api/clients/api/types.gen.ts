@@ -71522,6 +71522,49 @@ export type McpGatewayPostResponses = {
     200: unknown;
 };
 
+export type McpGatewaySseMessageData = {
+    body: {
+        [key: string]: unknown;
+    };
+    path: {
+        profileId: string;
+    };
+    query: {
+        sessionId: string;
+    };
+    url: '/v1/mcp/{profileId}/messages';
+};
+
+export type McpGatewaySseMessageErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string;
+        message: string;
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string;
+        message: string;
+    };
+};
+
+export type McpGatewaySseMessageError = McpGatewaySseMessageErrors[keyof McpGatewaySseMessageErrors];
+
+export type McpGatewaySseMessageResponses = {
+    /**
+     * Default Response
+     */
+    202: {
+        accepted: true;
+    };
+};
+
+export type McpGatewaySseMessageResponse = McpGatewaySseMessageResponses[keyof McpGatewaySseMessageResponses];
+
 export type ReportAgentRuntimeStatusData = {
     body: {
         taskId: string;

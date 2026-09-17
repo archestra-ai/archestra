@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.64](https://github.com/archestra-ai/archestra/compare/platform-v1.3.63...platform-v1.3.64) (2026-09-17)
+
+
+### Bug Fixes
+
+* **mcp-gateway:** support legacy SSE clients (backport release/1.3) ([#8020](https://github.com/archestra-ai/archestra/issues/8020)) ([f5c1ad3](https://github.com/archestra-ai/archestra/commit/f5c1ad33c580594c9c13b5ddf375010c4a8f63a7))
+
 ## [1.3.63](https://github.com/archestra-ai/archestra/compare/platform-v1.3.62...platform-v1.3.63) (2026-09-17)
 
 

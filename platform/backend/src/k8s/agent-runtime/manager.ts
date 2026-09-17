@@ -199,6 +199,7 @@ class AgentRuntimeManager {
     ) {
       const deadline =
         Date.now() + config.agentRuntime.podStartTimeoutSeconds * 1000;
+      let pollDelayMs = 250;
       while (true) {
         try {
           await readWorkspaceSandbox({
@@ -210,7 +211,8 @@ class AgentRuntimeManager {
         } catch (error) {
           if (!isK8sNotFoundError(error) || Date.now() >= deadline) throw error;
         }
-        await new Promise((resolve) => setTimeout(resolve, 250));
+        await new Promise((resolve) => setTimeout(resolve, pollDelayMs));
+        pollDelayMs = Math.min(pollDelayMs * 2, 1000);
       }
       const session = await AgentRunModel.findByTaskId(spec.taskId);
       if (!session) throw new Error("Workspace run no longer exists");
@@ -731,15 +733,23 @@ class AgentRuntimeManager {
   async getWorkspaceConnection(
     session: Pick<AgentRunRecord, "workloadName" | "runtimeScope" | "taskId">,
   ) {
-    const sandbox = await readWorkspaceSandbox({
-      api: this.requireClients().customObjectsApi,
-      namespace: session.runtimeScope,
-      name: session.workloadName,
-    }).catch((error) => {
-      if (isK8sNotFoundError(error)) return null;
-      throw error;
-    });
-    if (!sandbox) return null;
+    // Connection hints are optional; retained run history must remain readable
+    // when Kubernetes is disabled, unreachable, or the workspace has disappeared.
+    let sandbox: AgentSandbox;
+    try {
+      sandbox = await readWorkspaceSandbox({
+        api: this.requireClients().customObjectsApi,
+        namespace: session.runtimeScope,
+        name: session.workloadName,
+      });
+    } catch (error) {
+      if (!isK8sNotFoundError(error))
+        logger.debug(
+          { error, workloadName: session.workloadName },
+          "Workspace connection hints are unavailable",
+        );
+      return null;
+    }
     const name = sandbox.metadata.name ?? session.workloadName;
     return {
       hostname: `${name}.${session.runtimeScope}`,

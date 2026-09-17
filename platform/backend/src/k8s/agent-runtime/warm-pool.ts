@@ -368,7 +368,12 @@ class AgentWarmPoolManager {
     try {
       await this.reconcile();
     } catch (error) {
-      if (!isK8sNotFoundError(error))
+      if (isK8sNotFoundError(error)) {
+        logger.debug(
+          { error },
+          "Agent warm pool reconciliation skipped: extensions or a resource are unavailable",
+        );
+      } else
         logger.warn(
           { error },
           "Agent warm pool reconciliation failed; new workspaces can still cold-start",

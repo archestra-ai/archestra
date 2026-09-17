@@ -455,3 +455,132 @@ describe("rotation persistence compare-and-swap", () => {
     expect(row?.secret).toMatchObject({ apiKey: "vault/data/llm#openai" });
   });
 });
+
+describe("inference authentication status", () => {
+  for (const { status, reconnect, expected } of [
+    { status: 400, reconnect: false, expected: true },
+    { status: 401, reconnect: false, expected: true },
+    { status: 503, reconnect: false, expected: false },
+    { status: 400, reconnect: true, expected: false },
+  ]) {
+    test(`records refresh failure ${status}, reconnect=${reconnect}`, async ({
+      makeOrganization,
+      makeUser,
+    }) => {
+      const organization = await makeOrganization();
+      const user = await makeUser();
+      const credential = {
+        refreshToken: `rt-${crypto.randomUUID()}`,
+        accountId: "fixture-account",
+      };
+      const secret = await secretManager().createSecret(
+        { apiKey: encodeOpenAiCodexCredential(credential) },
+        `codex-health-${crypto.randomUUID()}`,
+      );
+      const key = await LlmProviderApiKeyModel.create({
+        organizationId: organization.id,
+        name: "Fixture subscription",
+        provider: "openai",
+        secretId: secret.id,
+        scope: "personal",
+        userId: user.id,
+      });
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () => {
+          if (reconnect) {
+            await secretManager().updateSecret(secret.id, {
+              apiKey: encodeOpenAiCodexCredential({
+                ...credential,
+                refreshToken: "replacement-family",
+              }),
+            });
+            await LlmProviderApiKeyModel.update(key.id, {
+              secretId: secret.id,
+            });
+          }
+          return tokenResponse(
+            {
+              error:
+                status === 503 ? "temporarily_unavailable" : "invalid_grant",
+            },
+            status,
+          );
+        }),
+      );
+      const upstream = vi.fn(async () => tokenResponse({ ok: true }));
+      const request = createOpenAiCodexFetch({
+        credential,
+        providerApiKeyId: key.id,
+        sessionId: "fixture-session",
+        innerFetch: upstream,
+      });
+      const response = await request("https://example.test/responses", {
+        method: "POST",
+        body: "{}",
+      });
+      expect(response.status).toBe(status === 503 ? 502 : 401);
+      expect(upstream).not.toHaveBeenCalled();
+      expect(
+        (await LlmProviderApiKeyModel.findById(key.id))
+          ?.requiresReauthentication,
+      ).toBe(expected);
+    });
+  }
+});
+
+for (const retryStatus of [200, 401, 503]) {
+  test(`inference retry status ${retryStatus} only requires reconnect for persistent unauthorized responses`, async ({
+    makeOrganization,
+    makeUser,
+  }) => {
+    const organization = await makeOrganization();
+    const user = await makeUser();
+    const credential = {
+      refreshToken: `rt-${crypto.randomUUID()}`,
+      accountId: "fixture-account",
+      accessToken: "stale-access",
+      accessTokenExpiresAtMs: Date.now() + 3600000,
+    };
+    const secret = await secretManager().createSecret(
+      { apiKey: encodeOpenAiCodexCredential(credential) },
+      `codex-retry-${crypto.randomUUID()}`,
+    );
+    const key = await LlmProviderApiKeyModel.create({
+      organizationId: organization.id,
+      name: "Fixture subscription",
+      provider: "openai",
+      secretId: secret.id,
+      scope: "personal",
+      userId: user.id,
+    });
+    stubTokenEndpoint({
+      [credential.refreshToken]: {
+        accessToken: "fresh-access",
+        rotatedTo: "rotated-family-token",
+      },
+    });
+    const upstream = vi
+      .fn()
+      .mockResolvedValueOnce(tokenResponse({ error: "unauthorized" }, 401))
+      .mockImplementationOnce(async () => {
+        await openAiCodexTokenManager.waitForPersistFlush(key.id);
+        return tokenResponse({ ok: retryStatus === 200 }, retryStatus);
+      });
+    const request = createOpenAiCodexFetch({
+      credential,
+      providerApiKeyId: key.id,
+      sessionId: "fixture-session",
+      innerFetch: upstream,
+    });
+    const response = await request("https://example.test/responses", {
+      method: "POST",
+      body: "{}",
+    });
+    expect(response.status).toBe(retryStatus);
+    expect(upstream).toHaveBeenCalledTimes(2);
+    expect(
+      (await LlmProviderApiKeyModel.findById(key.id))?.requiresReauthentication,
+    ).toBe(retryStatus === 401);
+  });
+}

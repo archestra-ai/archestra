@@ -216,6 +216,40 @@ class OpenAiCodexTokenManager {
     );
   }
 
+  async recordAuthenticationFailure(params: {
+    providerApiKeyId: string;
+    credential: OpenAiCodexCredential;
+  }): Promise<void> {
+    const { providerApiKeyId, credential } = params;
+    try {
+      const row = await LlmProviderApiKeyModel.findById(providerApiKeyId);
+      if (!row?.secretId) return;
+      const stored = decodeOpenAiCodexCredential(
+        await getSecretValueForLlmProviderApiKey(row.secretId),
+      );
+      if (!stored || stored.accountId !== credential.accountId) return;
+      const callerDigest = hashToken(credential.refreshToken);
+      const cached = this.tokenCache.get(providerApiKeyId);
+      const lineage = cached?.knownRefreshTokenDigests.includes(callerDigest)
+        ? cached.knownRefreshTokenDigests
+        : [callerDigest];
+      // A reconnect can replace the secret before this failed request finishes.
+      // Only mark the same credential family, and guard the subsequent write.
+      if (!lineage.includes(hashToken(stored.refreshToken))) return;
+      await LlmProviderApiKeyModel.setRequiresReauthentication({
+        id: providerApiKeyId,
+        requiresReauthentication: true,
+        expectedUpdatedAt: row.updatedAt,
+      });
+    } catch (error) {
+      // Status persistence must not replace the original authentication error.
+      logger.warn(
+        { providerApiKeyId, error },
+        "[OpenAiCodex] failed to record reconnect requirement",
+      );
+    }
+  }
+
   private recordValidationRotation(
     redeemedToken: string,
     rotatedRefreshToken: string | undefined,
@@ -459,6 +493,16 @@ export function createOpenAiCodexFetch(params: {
         accountId: credential.accountId,
       });
     } catch (error) {
+      if (
+        providerApiKeyId &&
+        error instanceof ApiError &&
+        error.statusCode === 401
+      ) {
+        await openAiCodexTokenManager.recordAuthenticationFailure({
+          providerApiKeyId,
+          credential,
+        });
+      }
       return redemptionErrorResponse(error);
     }
     const response = await doFetch(accessToken);
@@ -480,9 +524,26 @@ export function createOpenAiCodexFetch(params: {
           accountId: credential.accountId,
         });
       } catch (error) {
+        if (
+          providerApiKeyId &&
+          error instanceof ApiError &&
+          error.statusCode === 401
+        ) {
+          await openAiCodexTokenManager.recordAuthenticationFailure({
+            providerApiKeyId,
+            credential,
+          });
+        }
         return redemptionErrorResponse(error);
       }
-      return doFetch(freshAccessToken);
+      const retried = await doFetch(freshAccessToken);
+      if (providerApiKeyId && retried.status === 401) {
+        await openAiCodexTokenManager.recordAuthenticationFailure({
+          providerApiKeyId,
+          credential,
+        });
+      }
+      return retried;
     }
 
     return response;

@@ -19,13 +19,16 @@ import {
 } from "@archestra/shared";
 import type { Tool } from "ai";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
+import config, { parseOpenAppaConfig } from "@/config";
 import { AgentModel, SkillModel } from "@/models";
+import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import type { OpenedApp } from "@/services/apps/opened-app-context";
 import { SKILL_SANDBOX_ATTACHMENTS_DIR } from "@/skills-sandbox/runtime-image";
 import { describe, expect, test } from "@/test";
 import {
   APP_BUILD_CONDUCT_INSTRUCTION,
   buildAgentSystemPrompt,
+  buildAppaRemedyInstruction,
   OPENED_APP_PREFIX,
   PROJECT_FILES_PREFIX,
   PROJECT_INSTRUCTIONS_PREFIX,
@@ -121,6 +124,81 @@ describe("buildAgentSystemPrompt", () => {
     });
 
     expect(prompt).toBe(`You are helpful.\n\n${TOOL_DENIAL_INSTRUCTION}`);
+    // No remedy instruction: OpenAPPA is off, so no ruling can reach the model.
+    expect(prompt).not.toContain(buildAppaRemedyInstruction());
+  });
+
+  test("tells the model to act on remedy plans itself while OpenAPPA enforces", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+  }) => {
+    const agent = await makeAgent({
+      systemPrompt: "You are helpful.",
+      toolExposureMode: "full",
+    });
+    const user = await makeUser();
+    await makeMember(user.id, agent.organizationId);
+
+    // Enforcement needs both switches; the denial instruction above otherwise
+    // wins and the model stops to ask the user about a ruling it could act on.
+    const openappa = config.openappa;
+    config.openappa = parseOpenAppaConfig("true");
+    await GuardrailsDeploymentModel.setEnabled(true);
+
+    try {
+      const prompt = await buildAgentSystemPrompt({
+        agent,
+        mcpTools: {},
+        organizationId: agent.organizationId,
+        userId: user.id,
+        agentId: agent.id,
+      });
+
+      expect(prompt).toBe(
+        `You are helpful.\n\n${TOOL_DENIAL_INSTRUCTION}\n\n${buildAppaRemedyInstruction()}`,
+      );
+      // The model sees its own call answered with a ruling, never a call to
+      // the notice tool, and calls the control tool by its branded name.
+      const instruction = buildAppaRemedyInstruction();
+      expect(instruction).toContain("comes back with a ruling as its result");
+      expect(instruction).not.toContain('starts with "[appa]"');
+      expect(instruction).toContain("call archestra__execute_remedy_plan with");
+      expect(instruction).not.toContain("get_remedy_plans");
+    } finally {
+      config.openappa = openappa;
+    }
+  });
+
+  test("omits the remedy instruction when only the server flag is on", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+  }) => {
+    const agent = await makeAgent({
+      systemPrompt: "You are helpful.",
+      toolExposureMode: "full",
+    });
+    const user = await makeUser();
+    await makeMember(user.id, agent.organizationId);
+
+    const openappa = config.openappa;
+    config.openappa = parseOpenAppaConfig("true");
+    await GuardrailsDeploymentModel.setEnabled(false);
+
+    try {
+      const prompt = await buildAgentSystemPrompt({
+        agent,
+        mcpTools: {},
+        organizationId: agent.organizationId,
+        userId: user.id,
+        agentId: agent.id,
+      });
+
+      expect(prompt).toBe(`You are helpful.\n\n${TOOL_DENIAL_INSTRUCTION}`);
+    } finally {
+      config.openappa = openappa;
+    }
   });
 
   test("renders Handlebars user context from a fetched user and their teams", async ({

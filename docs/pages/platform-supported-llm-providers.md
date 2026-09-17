@@ -3,7 +3,7 @@ title: Supported LLM Providers
 category: LLM Proxy
 order: 2
 description: LLM providers supported by Archestra Platform
-lastUpdated: 2026-09-11
+lastUpdated: 2026-09-17
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -140,7 +140,7 @@ See Microsoft's [Claude on Foundry guide](https://learn.microsoft.com/en-us/azur
 
 Archestra can use Claude models published through Google Vertex AI. This mode uses Application Default Credentials and requires no Anthropic API key.
 
-Set `ARCHESTRA_ANTHROPIC_VERTEX_AI_ENABLED=true`, then configure the project and location. The default location is `global`. Archestra discovers Claude models from Model Garden and adds them to the Anthropic model picker.
+Set `ARCHESTRA_ANTHROPIC_VERTEX_AI_PROJECT` to enable this mode. Unset or blank disables it. The default location is `global`. Archestra discovers Claude models from Model Garden and adds them to the Anthropic model picker.
 
 Enable each Claude model in Model Garden before using it. Google may require accepting provider terms during activation.
 

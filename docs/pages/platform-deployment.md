@@ -2,7 +2,7 @@
 title: Deployment
 category: Archestra Platform
 order: 3
-lastUpdated: 2026-09-15
+lastUpdated: 2026-09-17
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -945,6 +945,12 @@ kubectl rollout status deployment/agent-sandbox-controller -n agent-sandbox-syst
 ```
 
 The controller does not install a container isolation runtime. Check your cluster's admission policies and image architecture before enabling workloads.
+
+#### Claude Subscription Sign-In
+
+Claude subscription sign-in uses backend HTTPS requests instead of a Kubernetes workload. The backend needs outbound HTTPS access to `platform.claude.com` for token exchange. Model discovery needs access to `api.anthropic.com`. Browsers need access to `claude.ai` and its sign-in redirects.
+
+Environment egress policies govern runtime workloads, not these backend account requests. Runtime inference still follows the Agent's Environment policy. Tokens remain in the configured secrets backend.
 
 #### Provider Setup
 

@@ -4,11 +4,11 @@ import {
   TOOL_START_RUN_FULL_NAME,
   TOOL_STEER_RUN_FULL_NAME,
 } from "@archestra/shared";
+import { HttpResponse, http } from "msw";
 import { onTestFinished, vi } from "vitest";
 import { chatOpsManager } from "@/agents/chatops/chatops-manager";
 import config from "@/config";
 import { agentRuntimeManager } from "@/k8s/agent-runtime";
-import { claudeCodeAccountRuntime } from "@/k8s/agent-runtime/claude-code-account";
 import {
   A2AContextModel,
   A2AMessageModel,
@@ -21,8 +21,12 @@ import { kubernetesAgentRuntimeBackendDriver as backend } from "@/services/agent
 import { claudeCodeAccountManager } from "@/services/agent-runtime/claude-code-account";
 import { resolveAgentRuntime } from "@/services/agent-runtime/pod-run";
 import { beforeEach, expect, test } from "@/test";
+import { useMswServer } from "@/test/msw";
 import type { Agent, ResolvedAgentRuntime } from "@/types";
 import { type ArchestraContext, executeArchestraTool } from ".";
+
+// biome-ignore lint/correctness/useHookAtTopLevel: Vitest lifecycle helper.
+const oauthServer = useMswServer();
 
 let agent: Agent;
 let runtime: ResolvedAgentRuntime;
@@ -442,21 +446,22 @@ test("invalid handoff attachment data is rejected before creating a run", async 
 });
 
 async function connect(approvedRuntime: ResolvedAgentRuntime) {
-  vi.spyOn(claudeCodeAccountRuntime, "create").mockResolvedValue();
-  vi.spyOn(claudeCodeAccountRuntime, "delete").mockResolvedValue();
-  vi.spyOn(claudeCodeAccountRuntime, "status").mockResolvedValue({
-    state: "connecting",
-  });
-  vi.spyOn(claudeCodeAccountRuntime, "complete").mockResolvedValue({
-    state: "connected",
-    token: `sk-ant-oat01-${"example".repeat(8)}`,
-    models: [],
-  });
+  oauthServer.use(
+    http.post("https://platform.claude.com/v1/oauth/token", () =>
+      HttpResponse.json({
+        access_token: `sk-ant-oat01-${"example".repeat(8)}`,
+        token_type: "Bearer",
+        expires_in: 3600,
+        scope: "user:inference",
+      }),
+    ),
+  );
   const owner = { runtime: approvedRuntime, userId };
   const flow = await claudeCodeAccountManager.start(owner);
   await claudeCodeAccountManager.complete({
     ...owner,
     flowId: flow.flowId as string,
+    code: `example-code#${new URL(flow.authorizationUrl as string).searchParams.get("state")}`,
   });
 }
 

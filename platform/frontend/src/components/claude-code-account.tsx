@@ -312,30 +312,15 @@ export function ClaudeCodeAccount({
               <span>
                 {account.data?.state === "connecting"
                   ? "Completing sign-in…"
-                  : account.data?.startupIssue === "capacity"
-                    ? "Waiting for available capacity…"
-                    : account.data?.startupPhase === "pulling"
-                      ? "Downloading the Claude Code runtime…"
-                      : account.data?.startupPhase === "scheduling"
-                        ? "Waiting for the Claude Code runtime…"
-                        : "Starting Claude Code…"}
+                  : "Preparing Claude sign-in…"}
               </span>
             </output>
-            {account.data?.startupPhase === "pulling" && (
-              <p className="text-xs text-muted-foreground">
-                The first sign-in can take a few minutes while the runtime
-                downloads. Later sign-ins are faster when it is already
-                available.
-              </p>
-            )}
           </div>
         ) : (
           <div className="space-y-2">
             {account.data?.state === "failed" && (
               <p role="alert" className="text-sm text-destructive">
-                {account.data.startupIssue === "image_pull"
-                  ? "The Claude Code runtime could not be downloaded. Ask your administrator to check the image and registry access, then try again."
-                  : "Sign-in did not complete. Please try again."}
+                Sign-in did not complete. Please try again.
               </p>
             )}
             {account.data?.state === "expired" && (

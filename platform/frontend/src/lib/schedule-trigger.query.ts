@@ -54,6 +54,7 @@ export type ScheduleTriggerRun = {
   status: ScheduleTriggerRunStatus;
   initiatedByUserId: string | null;
   chatConversationId: string | null;
+  runtimeTaskId?: string | null;
   startedAt: string | null;
   completedAt: string | null;
   error: string | null;

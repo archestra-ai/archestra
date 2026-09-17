@@ -96090,6 +96090,7 @@ export type RunScheduleTriggerNowResponses = {
         status: 'running' | 'success' | 'failed';
         initiatedByUserId: string | null;
         chatConversationId: string | null;
+        runtimeTaskId: string | null;
         startedAt: string | null;
         completedAt: string | null;
         error: string | null;
@@ -96191,6 +96192,7 @@ export type GetScheduleTriggerRunsResponses = {
             status: 'running' | 'success' | 'failed';
             initiatedByUserId: string | null;
             chatConversationId: string | null;
+            runtimeTaskId: string | null;
             startedAt: string | null;
             completedAt: string | null;
             error: string | null;
@@ -96297,6 +96299,7 @@ export type GetScheduleTriggerRunResponses = {
         status: 'running' | 'success' | 'failed';
         initiatedByUserId: string | null;
         chatConversationId: string | null;
+        runtimeTaskId: string | null;
         startedAt: string | null;
         completedAt: string | null;
         error: string | null;

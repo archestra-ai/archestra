@@ -4,7 +4,7 @@ import { Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import {
-  runChatHref,
+  runHref,
   runRowKind,
 } from "@/app/projects/[id]/schedules/[triggerId]/run-row.utils";
 import { isScheduleTriggerRunActive } from "@/components/scheduled-tasks/schedule-trigger.utils";
@@ -19,7 +19,7 @@ import { formatRunTimestamp } from "@/lib/utils/format-run-timestamp";
 
 /**
  * A schedule's runs, reused by the project runs page and the chat right-side
- * Runs panel. Every run opens a chat: a run with a conversation links straight to
+ * Runs panel. Runtime runs open their session. A run with a conversation links to
  * it (a failed run's chat shows the prompt + an inline error card with "Try
  * again"); a completed run without one (legacy) lazily creates it on click; a
  * still-running run is inert. Polls while any run is active; `currentRunId`
@@ -106,8 +106,8 @@ function RunRow({
     </div>
   );
 
-  if (kind === "open-chat") {
-    const href = runChatHref({ triggerId, run });
+  if (kind === "open-chat" || kind === "open-runtime") {
+    const href = runHref({ triggerId, run });
     if (!href) {
       return <div className="rounded-lg border bg-card">{rowContent}</div>;
     }

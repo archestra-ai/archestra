@@ -159,13 +159,20 @@ function buildInstallationTokenCacheKey(params: {
 
 function parseSigningKey(privateKey: string): KeyObject {
   try {
-    return createPrivateKey(privateKey.replace(/\\n/g, "\n"));
+    const key = createPrivateKey(privateKey.replace(/\\n/g, "\n"));
+    if (
+      key.asymmetricKeyType === "rsa" &&
+      (key.asymmetricKeyDetails?.modulusLength ?? 0) >= 2048
+    ) {
+      return key;
+    }
   } catch {
-    throw new ApiError(
-      400,
-      "GitHub App private key is invalid. Reconnect with the complete, unencrypted RSA private key PEM from GitHub.",
-    );
+    // Unreadable and unsupported keys use the same recovery instructions.
   }
+  throw new ApiError(
+    400,
+    "GitHub App private key is invalid. Reconnect with the complete, unencrypted RSA private key PEM from GitHub.",
+  );
 }
 
 async function readGithubErrorResponse(response: Response): Promise<string> {

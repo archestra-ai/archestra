@@ -88,6 +88,36 @@ describe("resolveInstallationToken", () => {
     expect(networkCalls).toBe(0);
   });
 
+  test("rejects readable keys that cannot sign RS256 before contacting GitHub", async () => {
+    const unsupportedKeys = [
+      generateKeyPairSync("ec", { namedCurve: "P-256" }).privateKey,
+      generateKeyPairSync("ed25519").privateKey,
+      generateKeyPairSync("rsa-pss", { modulusLength: 2048 }).privateKey,
+      generateKeyPairSync("rsa", { modulusLength: 1024 }).privateKey,
+    ];
+    let networkCalls = 0;
+    for (const key of unsupportedKeys) {
+      await expect(
+        resolveInstallationToken(
+          {
+            ...makeCredentials("unsupported-signing-key"),
+            privateKey: key.export({ type: "pkcs8", format: "pem" }).toString(),
+          },
+          async () => {
+            networkCalls++;
+            throw new Error("Unexpected network request");
+          },
+        ),
+      ).rejects.toMatchObject({
+        statusCode: 400,
+        type: "api_validation_error",
+        message:
+          "GitHub App private key is invalid. Reconnect with the complete, unencrypted RSA private key PEM from GitHub.",
+      });
+    }
+    expect(networkCalls).toBe(0);
+  });
+
   test("uses the signing key from an App connection that also supports user sign-in", async () => {
     const token = await resolveInstallationToken(
       {

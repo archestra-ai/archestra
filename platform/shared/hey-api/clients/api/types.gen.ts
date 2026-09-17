@@ -79109,9 +79109,11 @@ export type GetMcpToolCallsResponses = {
             toolCall: {
                 id: string;
                 name: string;
+                namespace?: string;
                 arguments: {
                     [key: string]: unknown;
                 };
+                kind?: 'function' | 'custom';
             } | {
                 __lockedChatSealed: string;
             } | {
@@ -79223,9 +79225,11 @@ export type GetMcpToolCallResponses = {
         toolCall: {
             id: string;
             name: string;
+            namespace?: string;
             arguments: {
                 [key: string]: unknown;
             };
+            kind?: 'function' | 'custom';
         } | {
             __lockedChatSealed: string;
         } | {

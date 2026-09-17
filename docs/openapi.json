@@ -307880,9 +307880,19 @@
                                   "name": {
                                     "type": "string"
                                   },
+                                  "namespace": {
+                                    "type": "string"
+                                  },
                                   "arguments": {
                                     "type": "object",
                                     "additionalProperties": {}
+                                  },
+                                  "kind": {
+                                    "type": "string",
+                                    "enum": [
+                                      "function",
+                                      "custom"
+                                    ]
                                   }
                                 },
                                 "required": [
@@ -308321,9 +308331,19 @@
                             "name": {
                               "type": "string"
                             },
+                            "namespace": {
+                              "type": "string"
+                            },
                             "arguments": {
                               "type": "object",
                               "additionalProperties": {}
+                            },
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "function",
+                                "custom"
+                              ]
                             }
                           },
                           "required": [

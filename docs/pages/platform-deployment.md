@@ -954,12 +954,6 @@ kubectl rollout status deployment/agent-sandbox-controller -n agent-sandbox-syst
 
 The controller does not install a container isolation runtime. Check your cluster's admission policies and image architecture before enabling workloads.
 
-#### Claude Subscription Sign-In
-
-Claude subscription sign-in uses backend HTTPS requests instead of a Kubernetes workload. The backend needs outbound HTTPS access to `platform.claude.com` for token exchange. Model discovery needs access to `api.anthropic.com`. Browsers need access to `claude.ai` and its sign-in redirects.
-
-Environment egress policies govern runtime workloads, not these backend account requests. Runtime inference still follows the Agent's Environment policy. Tokens remain in the configured secrets backend.
-
 #### Provider Setup
 
 | Cluster | Setup |
@@ -970,7 +964,7 @@ Environment egress policies govern runtime workloads, not these backend account 
 | EKS Auto Mode | Use an Auto Mode storage class with `ebs.csi.eks.amazonaws.com`. Check your NodePool and image compatibility. |
 | Self-Managed Kubernetes | Configure a compatible OCI runtime, CSI driver, and dynamically provisioned storage class. |
 
-For zonal disks, use `WaitForFirstConsumer` binding and compatible node zones. Node-local storage cannot preserve a workspace after node loss. Use the storage and node-selector settings below to select compatible resources.
+For zonal disks, use `WaitForFirstConsumer` binding and compatible node zones. Node-local storage cannot preserve files after node loss. Use the storage and node-selector settings below to select compatible resources.
 
 #### Startup Troubleshooting
 
@@ -990,13 +984,23 @@ The prefetch uses the runtime namespace's default ServiceAccount image pull secr
 Fresh nodes still need their first download. An unavailable image does not block other images or Agent launches.
 <!-- SPDX-SnippetEnd -->
 
-#### Warm Workspaces
+#### Warm Pools
 
-Warm pools prepare empty workspaces before tasks arrive. Compatible Agents share a pool within the same Environment. Each new workspace claims one Sandbox exclusively. Used workspaces never return to the pool.
+A warm pool keeps Kubernetes containers running before anyone starts a task. A new run takes an unused container, reducing startup time. Archestra then prepares a replacement for the next run.
 
-Set `ARCHESTRA_AGENT_RUNTIME_WARM_POOL_SIZE=1` to keep one spare workspace per configuration. `ARCHESTRA_AGENT_RUNTIME_WARM_POOL_MAX_POOLS` defaults to `4` and limits prepared configurations. Spare workspaces consume CPU, memory, and persistent storage.
+Agents in the same Environment share a pool when their container settings match. These include the image, CPU, memory, storage, node placement, and network policy. For example, two Agents using the same Claude Code setup share one pool. They do not each need a spare container.
 
-The controller extensions above provide allocation and replenishment. Pools contain no task credentials and start without network access. Claimed workspaces use the Agent's existing network policy. Missing pools or extensions fall back to normal startup. Empty pools allocate a new workspace. Setting the size to `0` removes spare capacity without deleting claimed workspaces.
+Warm pools are disabled by default. After installing the controller extensions above, add this to your Helm values:
+
+```yaml
+archestra:
+  env:
+    ARCHESTRA_AGENT_RUNTIME_WARM_POOL_SIZE: "1"
+```
+
+This keeps one spare container for each matching group of Agents. Archestra prepares up to four groups by default. Set `ARCHESTRA_AGENT_RUNTIME_WARM_POOL_MAX_POOLS` to change that limit. Spare containers reserve CPU, memory, and persistent storage even while idle.
+
+Each spare has no task credentials or network access. Once assigned, it uses the Agent's network policy and never returns to the pool. When no spare is available, the run starts a new container normally. Setting the size to `0` removes unused spares and preserves containers already assigned to runs.
 
 #### Privileged Containers
 
@@ -1008,13 +1012,13 @@ Privilege requires all three settings:
 2. Elevated permissions enabled on the Agent.
 3. A node runtime and cluster admission policy that allow privileged containers.
 
-The deployment setting does not override cloud-provider restrictions. Images running nested Docker must also prepare the node's cgroup setup. After workspace resumption, restart Docker and any development services.
+The deployment setting does not override cloud-provider restrictions. Images running nested Docker must also prepare the node's cgroup setup. After resuming a run, restart Docker and any development services.
 
 #### Runtime Configuration
 
 Configure deployment defaults below; individual Agents can override supported run settings. For agent setup and everyday use, see [Agent Runtime](/docs/platform-agent-runtime).
 
-On GKE, custom Sandbox controllers can produce a “not backed by a controller” scale-down warning. Active runs must finish before their nodes can be removed safely. Idle workspace suspension releases pods through the runtime lifecycle. Setting `safe-to-evict: "true"` permits interruptions; persisted files do not preserve running processes.
+On GKE, custom Sandbox controllers can produce a “not backed by a controller” scale-down warning. Active runs must finish before their nodes can be removed safely. Archestra releases pods when idle runs are suspended. Setting `safe-to-evict: "true"` permits interruptions; persisted files do not preserve running processes.
 
 - **`ARCHESTRA_AGENT_RUNTIME_ENABLED`** - Enables Agent Runtime. A run can carry the credentials of the person who started it, so this gate is independent of `ARCHESTRA_BETA` and never turns on by implication.
   - Default: `false`
@@ -1039,14 +1043,14 @@ On GKE, custom Sandbox controllers can produce a “not backed by a controller�
 - **`ARCHESTRA_AGENT_RUNTIME_CPU_REQUEST`**, **`ARCHESTRA_AGENT_RUNTIME_MEMORY_REQUEST`**, **`ARCHESTRA_AGENT_RUNTIME_MEMORY_LIMIT`** - Pod resources for a run whose Agent sets none. There is no CPU limit by default: throttling an agent mid-turn reads as a hang rather than back-pressure.
   - Defaults: `500m`, `1Gi`, `4Gi`
 
-- **`ARCHESTRA_AGENT_RUNTIME_WARM_POOL_SIZE`** - Spare workspaces per compatible runtime configuration. `0` disables warming.
+- **`ARCHESTRA_AGENT_RUNTIME_WARM_POOL_SIZE`** - Spare containers per [warm pool](#warm-pools). `0` disables warm pools.
   - Default: `0`
-- **`ARCHESTRA_AGENT_RUNTIME_WARM_POOL_MAX_POOLS`** - Maximum prepared configurations per deployment. Additional configurations start normally without reserved capacity.
+- **`ARCHESTRA_AGENT_RUNTIME_WARM_POOL_MAX_POOLS`** - Maximum warm pools per deployment. Agents outside these pools start containers on demand.
   - Default: `4`
-- **`ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_SIZE`** - Persistent volume capacity for each Agent Sandbox workspace. Stores runtime state, client sessions, and working files under `/home/node`. Privileged workspaces also store `/var/lib/docker` on this volume.
+- **`ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_SIZE`** - Persistent volume capacity for each run. Stores runtime state, client sessions, and working files under `/home/node`. Privileged containers also store `/var/lib/docker` on this volume.
   - Default: `20Gi`
 
-- **`ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_CLASS`** - Storage class for workspace volumes. Use a CSI-backed class with `WaitForFirstConsumer` when nodes span zones. See [Agent Runtime setup](#agent-runtime).
+- **`ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_CLASS`** - Storage class for Agent Runtime volumes. Use a CSI-backed class with `WaitForFirstConsumer` when nodes span zones. See [Agent Runtime setup](#agent-runtime).
   - Default: the cluster's default storage class
 
 - **`ARCHESTRA_AGENT_RUNTIME_POD_START_TIMEOUT_SECONDS`** - How long a launched run may stay pending before it is declared failed. Raise it when runs land on an autoscaled node pool — node creation plus a large image pull can pass the default.

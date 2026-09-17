@@ -2647,8 +2647,11 @@ const config = {
         identityToken: process.env.ARCHESTRA_ANTHROPIC_IDENTITY_TOKEN,
       }),
       vertexAi: {
-        enabled: process.env.ARCHESTRA_ANTHROPIC_VERTEX_AI_ENABLED === "true",
-        project: process.env.ARCHESTRA_ANTHROPIC_VERTEX_AI_PROJECT || "",
+        enabled: Boolean(
+          process.env.ARCHESTRA_ANTHROPIC_VERTEX_AI_PROJECT?.trim(),
+        ),
+        project:
+          process.env.ARCHESTRA_ANTHROPIC_VERTEX_AI_PROJECT?.trim() || "",
         location:
           process.env.ARCHESTRA_ANTHROPIC_VERTEX_AI_LOCATION || "global",
         credentialsFile:

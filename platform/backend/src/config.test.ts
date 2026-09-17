@@ -1432,6 +1432,56 @@ describe("parseActiveChatRunPollIntervalMs", () => {
   });
 });
 
+describe("Anthropic Vertex AI config", () => {
+  beforeEach(() => {
+    vi.resetModules();
+  });
+
+  test.each([
+    { project: "", legacyEnabled: "", enabled: false, expectedProject: "" },
+    {
+      project: "   ",
+      legacyEnabled: "true",
+      enabled: false,
+      expectedProject: "",
+    },
+    { project: "", legacyEnabled: "true", enabled: false, expectedProject: "" },
+    {
+      project: "test-project",
+      legacyEnabled: "",
+      enabled: true,
+      expectedProject: "test-project",
+    },
+    {
+      project: "test-project",
+      legacyEnabled: "false",
+      enabled: true,
+      expectedProject: "test-project",
+    },
+    {
+      project: "  test-project  ",
+      legacyEnabled: "true",
+      enabled: true,
+      expectedProject: "test-project",
+    },
+  ])("project '$project' enables Vertex AI: $enabled (legacy flag '$legacyEnabled')", async ({
+    project,
+    legacyEnabled,
+    enabled,
+    expectedProject,
+  }) => {
+    vi.stubEnv("ARCHESTRA_ANTHROPIC_VERTEX_AI_PROJECT", project);
+    vi.stubEnv("ARCHESTRA_ANTHROPIC_VERTEX_AI_ENABLED", legacyEnabled);
+
+    const { default: cfg } = await import("./config");
+
+    expect(cfg.llm.anthropic.vertexAi).toMatchObject({
+      enabled,
+      project: expectedProject,
+    });
+  });
+});
+
 describe("chat active run config", () => {
   const originalEnv = process.env;
 

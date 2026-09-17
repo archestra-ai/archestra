@@ -12,6 +12,7 @@ import {
   ExecTerminalProgress,
   ExecTerminalStatus,
 } from "./exec-terminal-progress";
+import { attachBrowserSelection } from "./exec-terminal-selection";
 
 type ConnectionStatus =
   | "idle"
@@ -134,6 +135,9 @@ export function ExecTerminal({
   const [closedReason, setClosedReason] = useState<string | null>(null);
   const [command, setCommand] = useState<string | null>(null);
   const initializedRef = useRef(false);
+  const [mouseControl, setMouseControl] = useState(false);
+  const mouseControlRef = useRef(false);
+  mouseControlRef.current = mouseControl;
 
   const cleanup = useCallback(() => {
     if (terminalInstanceRef.current) {
@@ -171,6 +175,7 @@ export function ExecTerminal({
       const fitAddon = new FitAddon();
       const terminal = new Terminal({
         cursorBlink: true,
+        macOptionClickForcesSelection: true,
         fontSize: 12,
         fontFamily:
           "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
@@ -185,6 +190,10 @@ export function ExecTerminal({
 
       terminal.loadAddon(fitAddon);
       terminal.open(terminalRef.current);
+      const detachBrowserSelection = attachBrowserSelection(
+        terminal,
+        () => mouseControlRef.current,
+      );
 
       // FitAddon can resize xterm for reasons other than an element resize
       // (font metrics settling is the common one). Drive the remote PTY from
@@ -295,6 +304,7 @@ export function ExecTerminal({
       });
 
       return () => {
+        detachBrowserSelection();
         resizeObserver.disconnect();
         closeSession?.();
       };
@@ -384,7 +394,22 @@ export function ExecTerminal({
                 </span>
                 Connected
               </div>
-              <div />
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-slate-400">
+                  {mouseControl
+                    ? "Mouse clicks control the terminal"
+                    : "Drag to select text"}
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  aria-pressed={mouseControl}
+                  onClick={() => setMouseControl((enabled) => !enabled)}
+                  className="h-6 text-xs text-slate-400 hover:text-slate-200 hover:bg-slate-800"
+                >
+                  Mouse control
+                </Button>
+              </div>
             </div>
           )}
         </div>

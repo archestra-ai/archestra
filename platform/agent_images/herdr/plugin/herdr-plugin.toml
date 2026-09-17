@@ -1,0 +1,13 @@
+id = "archestra.runtime-events"
+name = "Archestra Runtime Events"
+version = "1.0.0"
+min_herdr_version = "0.9.0"
+description = "Reports Herdr pane agent status to the Archestra runtime event spool."
+platforms = ["linux"]
+
+[[startup]]
+command = ["python3", "plugin.py", "ready"]
+
+[[events]]
+on = "pane.agent_status_changed"
+command = ["python3", "plugin.py", "status"]

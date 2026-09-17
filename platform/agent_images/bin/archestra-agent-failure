@@ -3,11 +3,38 @@ set -eu
 
 # Callers supply image-owned, safe text, never raw provider responses or logs.
 # Reporting is best-effort so an unwritable sidecar cannot mask the exit status.
+code="${1:?failure code is required}"
+message="${2:?failure message is required}"
 if [ -n "${ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX:-}" ]; then
   temporary="${ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX}.failure.tmp.$$"
-  if jq -n --arg code "$1" --arg message "$2" \
-    '{version:1,code:$code,message:$message}' > "$temporary"; then
+  catalog="${ARCHESTRA_AGENT_RUNTIME_ERRORS_CATALOG:-/usr/local/share/archestra/runtime-errors.json}"
+  metadata='{}'
+  if [ -f "$catalog" ]; then
+    metadata="$(jq -c --arg code "$code" '.[$code] // {}' "$catalog" 2>/dev/null || printf '%s' '{}')"
+  fi
+  phase="$(printf '%s' "$metadata" | jq -r '.phase // "terminal"')"
+  resolution="$(printf '%s' "$metadata" | jq -r '.resolution // "Open the run logs to inspect the last output, then retry the run."')"
+  event_message="$(printf '%s' "$metadata" | jq -r '.message // empty')"
+  if [ -z "$event_message" ]; then
+    event_message="$message"
+  fi
+  if jq -n --arg code "$code" --arg message "$message" \
+    --arg phase "$phase" --arg resolution "$resolution" \
+    '{version:1,code:$code,phase:$phase,message:$message,resolution:$resolution}' > "$temporary"; then
     mv "$temporary" "${ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX}.failure" || true
   fi
   rm -f "$temporary" || true
+  context="${ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX}.events/context.json"
+  if command -v archestra-agent-event >/dev/null 2>&1 && [ -f "$context" ]; then
+    if payload=$(jq -cn --arg code "$code" --arg message "$event_message" \
+      --arg phase "$phase" --arg resolution "$resolution" \
+      '{type:"turn.finished",outcome:"failed",error:{code:$code,phase:$phase,message:$message,resolution:$resolution}}'); then
+      # Keep the legacy sidecar above for old supervisors and custom images.
+      # Event persistence must never change the caller's established status.
+      if ! event_error="$(archestra-agent-event emit --context "$context" --source image-failure \
+        --event-key "failure:${code}" "$payload" 2>&1 >/dev/null)"; then
+        printf 'archestra-agent-failure: runtime event unavailable: %s\n' "$event_error" >&2
+      fi
+    fi
+  fi
 fi

@@ -1,6 +1,7 @@
 import path from "node:path";
 import type { Readable, Writable } from "node:stream";
 import { Readable as NodeReadable } from "node:stream";
+import type { AgentRuntimeState } from "@archestra/shared";
 import type * as k8s from "@kubernetes/client-node";
 import { PatchStrategy, setHeaderOptions } from "@kubernetes/client-node";
 import type WebSocket from "ws";
@@ -41,6 +42,7 @@ import {
   AGENT_RUNTIME_TERMINAL_BACKEND_FILE,
   AGENT_RUNTIME_TERMINAL_HELPER,
 } from "@/services/agent-runtime/runtime-contract";
+import { AgentRuntimeEventMonitor } from "@/services/agent-runtime/runtime-events";
 import { resolveCredential } from "@/services/credentials";
 import { resolveEffectiveNetworkPolicy } from "@/services/environments/network-policy";
 import type {
@@ -64,6 +66,7 @@ import {
   AGENT_RUNTIME_TMUX_SESSION,
   AGENT_SANDBOX_API,
   type AgentSandbox,
+  buildAgentRuntimeActivityProbeCommand,
   buildAgentRuntimePlatformEgressPolicy,
   buildAgentRuntimeSandbox,
   buildAgentRuntimeSecret,
@@ -736,9 +739,7 @@ class AgentRuntimeManager {
       command: [
         "/bin/sh",
         "-c",
-        herdrSelected
-          ? "cat /var/run/archestra/development-activity 2>/dev/null"
-          : "{ cat /var/run/archestra/development-activity 2>/dev/null; tmux list-clients -F '#{client_activity}' 2>/dev/null; } | sort -nr | head -1",
+        buildAgentRuntimeActivityProbeCommand(herdrSelected),
       ],
     });
     if (!/^\d+$/.test(output.trim())) return null;
@@ -1092,6 +1093,31 @@ class AgentRuntimeManager {
       params.session.workloadName,
     );
     const interval = params.pollIntervalMs ?? AGENT_RUNTIME_COMPLETION_POLL_MS;
+    const runtimeSession = params.session as AgentRunRecord & {
+      runtimeState?: AgentRuntimeState | null;
+    };
+    let runningPodName: string | null = null;
+    const eventMonitor = new AgentRuntimeEventMonitor({
+      taskId: params.session.taskId,
+      // The AgentRun UUID is the immutable launch generation for this A2A
+      // turn. A delayed native callback must never be relabeled by a later turn.
+      attemptId: params.session.id,
+      runId: params.session.id,
+      read: ({ afterSequence }) => {
+        if (!runningPodName)
+          return Promise.reject(
+            new Error("The Agent Runtime pod is not running"),
+          );
+        return this.readRuntimeEvents({
+          session: params.session,
+          podName: runningPodName,
+          afterSequence,
+        });
+      },
+      persist: (state) => AgentRunModel.updateRuntimeState(state),
+      initialState: runtimeSession.runtimeState ?? null,
+      initialAttentionState: params.session.attentionState,
+    });
 
     let retryDelayMs = interval;
     while (!params.abortSignal?.aborted) {
@@ -1120,6 +1146,8 @@ class AgentRuntimeManager {
         const pod = await this.findPod(params.session);
         if (params.abortSignal?.aborted) break;
         if (pod?.status?.phase === "Running" && pod.metadata?.name) {
+          runningPodName = pod.metadata.name;
+          const events = await eventMonitor.poll();
           const result = await this.execInPod({
             session: params.session,
             podName: pod.metadata.name,
@@ -1133,11 +1161,18 @@ class AgentRuntimeManager {
           });
           if (params.abortSignal?.aborted) break;
           if (result.trim()) {
+            // A producer writes its failure before publishing .exit. Give a
+            // failure arriving between reads one final persistence attempt;
+            // reader outages still fall back to the completion sidecar.
+            if (!events.unavailable) await eventMonitor.poll();
+            if (params.abortSignal?.aborted) break;
             return result.trim().split("\n")[0] === "0"
               ? { outcome: "succeeded" }
               : {
                   outcome: "failed",
-                  reason: agentRuntimeFailureReason(result),
+                  reason:
+                    eventMonitor.failureReasonForExit() ??
+                    agentRuntimeFailureReason(result),
                 };
           }
         }
@@ -1151,10 +1186,14 @@ class AgentRuntimeManager {
           const condition = finished ?? expired;
           return {
             outcome: "failed",
-            reason:
-              condition?.message ??
-              condition?.reason ??
-              "The Agent Runtime run exited without completing",
+            reason: eventMonitor.latestFailure
+              ? (eventMonitor.failureReasonForExit() ??
+                condition?.message ??
+                condition?.reason ??
+                "The Agent Runtime run exited without completing")
+              : (condition?.message ??
+                condition?.reason ??
+                "The Agent Runtime run exited without completing"),
           };
         }
         retryDelayMs = interval;
@@ -1176,6 +1215,27 @@ class AgentRuntimeManager {
     }
 
     return { outcome: "aborted" };
+  }
+
+  private async readRuntimeEvents(params: {
+    session: AgentRunRecord;
+    podName: string;
+    afterSequence: number;
+  }): Promise<string> {
+    return this.execInPod({
+      session: params.session,
+      podName: params.podName,
+      command: [
+        "archestra-agent-event",
+        "read",
+        "--task",
+        params.session.taskId,
+        "--after",
+        String(params.afterSequence),
+        "--limit",
+        "100",
+      ],
+    });
   }
 
   /**

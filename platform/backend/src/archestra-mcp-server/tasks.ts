@@ -1,4 +1,5 @@
 import {
+  AgentRuntimeStateSchema,
   DEFAULT_APP_NAME,
   TOOL_CANCEL_RUN_SHORT_NAME,
   TOOL_DELETE_WORKSPACE_SHORT_NAME,
@@ -218,6 +219,9 @@ const StartRunOutputSchema = z.object({
 
 const GetRunOutputSchema = z.object({
   run: RunSummarySchema,
+  runtime_state: AgentRuntimeStateSchema.nullable().describe(
+    "Latest runtime activity and actionable diagnostic for the returned task_id, when available.",
+  ),
   session_id: z
     .string()
     .nullable()
@@ -551,6 +555,7 @@ const registry = defineArchestraTools([
 
         return structuredSuccessResult({
           run: runSummary(task.row),
+          runtime_state: session?.runtimeState ?? null,
           session_id: workspace?.id ?? (session ? session.taskId : null),
           run_url: session
             ? `${config.frontendBaseUrl}/chat/runs/${workspace?.id ?? task.row.id}`

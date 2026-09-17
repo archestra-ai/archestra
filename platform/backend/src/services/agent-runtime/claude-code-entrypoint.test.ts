@@ -17,25 +17,58 @@ const ENTRYPOINT = path.resolve(
   import.meta.dirname,
   "../../../../agent_images/bin/archestra-claude-code",
 );
+const EVENT_HELPER = path.resolve(
+  import.meta.dirname,
+  "../../../../agent_images/bin/archestra-agent-event",
+);
+const TASK_ID = "12345678-abcd-4000-8000-123456789abc";
+const ATTEMPT_ID = "12345678-abcd-4000-8000-123456789abd";
 
 describe("Claude Code image entrypoint", () => {
   test.each([
-    ["authentication_failed", "claude_authentication", "one_shot"],
-    ["authentication_failed", "claude_authentication", "interactive"],
-    ["rate_limit", "claude_rate_limit", "one_shot"],
-    ["billing_error", "claude_billing", "one_shot"],
-    ["unrecognized-secret", "claude_api_error", "one_shot"],
-  ])("handles API failure %s (%s) in %s mode", async (error, code, mode) => {
+    [
+      "authentication_failed",
+      "provider_credential_rejected",
+      "one_shot",
+      "provider",
+    ],
+    [
+      "authentication_failed",
+      "provider_auth_required",
+      "one_shot",
+      "subscription",
+    ],
+    [
+      "authentication_failed",
+      "provider_credential_rejected",
+      "interactive",
+      "provider",
+    ],
+    ["rate_limit", "provider_rate_limited", "one_shot", "provider"],
+    ["billing_error", "provider_billing_required", "one_shot", "provider"],
+    ["unrecognized-secret", "provider_error", "one_shot", "provider"],
+  ])("handles API failure %s (%s) in %s mode (%s auth)", async (error, code, mode, authMode) => {
     const root = await mkdtemp(path.join(tmpdir(), "claude-stop-failure-"));
     try {
       const bin = path.join(root, "bin");
       const runtime = path.join(root, "runtime");
       await mkdir(bin);
       await mkdir(runtime);
+      const prefix = path.join(runtime, "test-turn");
+      const contextPath = `${prefix}.events/context.json`;
+      await execFileAsync(EVENT_HELPER, [
+        "context",
+        "--path",
+        contextPath,
+        "--task",
+        TASK_ID,
+        "--attempt",
+        ATTEMPT_ID,
+      ]);
       await writeExecutable(
         path.join(bin, "archestra-agent-attention"),
         `#!/bin/sh
-printf '%s\\n' "$*" > "$ARCHESTRA_AGENT_RUNTIME_DIR/attention"
+printf '%s:%s\\n' "$*" "\${ARCHESTRA_AGENT_RUNTIME_ATTENTION_KIND:-}" > "$ARCHESTRA_AGENT_RUNTIME_DIR/attention"
 `,
       );
       await writeExecutable(
@@ -57,17 +90,22 @@ while :; do sleep 0.1; done
         cwd: root,
         timeout: 15000,
         env: {
-          PATH: `${bin}:${process.env.PATH}`,
           HOME: root,
+          PATH: `${bin}:${path.dirname(EVENT_HELPER)}:${process.env.PATH}`,
           ARCHESTRA_AGENT_RUNTIME_DIR: runtime,
-          ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX: path.join(runtime, "test-turn"),
+          ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX: prefix,
+          ARCHESTRA_AGENT_RUNTIME_TASK_ID: TASK_ID,
+          ARCHESTRA_AGENT_RUNTIME_RUN_ID: ATTEMPT_ID,
           ARCHESTRA_AGENT_RUNTIME_MODE: mode,
+          ARCHESTRA_AGENT_RUNTIME_CLAUDE_AUTH: authMode,
           ARCHESTRA_LLM_PROXY_PROTOCOL: "anthropic",
           ARCHESTRA_AGENT_RUNTIME_TASK: "Example task",
-          ARCHESTRA_AGENT_RUNTIME_TASK_ID: "test-task",
           ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL: "test-model",
           ARCHESTRA_MCP_GATEWAY_URL: "http://localhost:9000/v1/mcp/example",
           ARCHESTRA_MCP_GATEWAY_TOKEN: "example-gateway-token",
+          ...(authMode === "subscription"
+            ? { CLAUDE_CODE_OAUTH_TOKEN: "subscription-token" }
+            : {}),
           TEST_FAILURE_PAYLOAD: JSON.stringify({
             hook_event_name: "StopFailure",
             error,
@@ -83,6 +121,31 @@ while :; do sleep 0.1; done
         expect(
           await readFile(path.join(runtime, "attention"), "utf8"),
         ).toContain("API error: check terminal");
+        expect(
+          await readFile(path.join(runtime, "attention"), "utf8"),
+        ).toContain(
+          code === "provider_auth_required" ||
+            code === "provider_credential_rejected"
+            ? "auth_required"
+            : "input_required",
+        );
+        const interactiveEvents = JSON.parse(
+          (
+            await execFileAsync(EVENT_HELPER, [
+              "read",
+              "--task",
+              TASK_ID,
+              "--context",
+              contextPath,
+            ])
+          ).stdout,
+        );
+        expect(
+          interactiveEvents.events.some(
+            (event: { type?: string; error?: { code?: string } }) =>
+              event.type === "diagnostic" && event.error?.code === code,
+          ),
+        ).toBe(true);
         await expect(
           readFile(path.join(runtime, "turn-complete")),
         ).rejects.toMatchObject({ code: "ENOENT" });
@@ -103,6 +166,29 @@ while :; do sleep 0.1; done
       expect(result.stdout).not.toContain("synthetic-secret");
       expect(result.stderr).not.toContain("synthetic-secret");
       expect(result.stdout).toContain(failure.message);
+      const terminalEvents = JSON.parse(
+        (
+          await execFileAsync(EVENT_HELPER, [
+            "read",
+            "--task",
+            TASK_ID,
+            "--context",
+            contextPath,
+          ])
+        ).stdout,
+      );
+      expect(
+        terminalEvents.events.some(
+          (event: {
+            type?: string;
+            outcome?: string;
+            error?: { code?: string };
+          }) =>
+            event.type === "turn.finished" &&
+            event.outcome === "failed" &&
+            event.error?.code === code,
+        ),
+      ).toBe(true);
     } finally {
       await rm(root, { recursive: true, force: true });
     }

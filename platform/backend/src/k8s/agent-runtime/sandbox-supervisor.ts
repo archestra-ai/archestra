@@ -17,6 +17,52 @@ umask 077
 root=/var/run/archestra
 mkdir -p "$root/turns"
 backend=tmux
+
+# Failure sidecars are retained beside the exit ledger. The values below are
+# supervisor-owned, bounded templates; provider output never enters them.
+publish_failure() {
+  turn="$1"
+  code="$2"
+  phase="$3"
+  message="$4"
+  resolution="$5"
+  printf '{"version":1,"code":"%s","phase":"%s","message":"%s","resolution":"%s"}\n' "$code" "$phase" "$message" "$resolution" > "$turn.failure.tmp"
+  mv "$turn.failure.tmp" "$turn.failure"
+  if command -v archestra-agent-event >/dev/null 2>&1; then
+    publish_event_context "$turn" "$turn.request"
+    if [ -f "$turn.events/context.json" ]; then
+      printf '{"type":"turn.finished","outcome":"failed","error":{"code":"%s","phase":"%s","message":"%s","resolution":"%s"}}\n' "$code" "$phase" "$message" "$resolution" |
+        ARCHESTRA_AGENT_RUNTIME_TASK_ID="${"$"}{turn##*/}" archestra-agent-event emit \
+          --context "$turn.events/context.json" --source supervisor --event-key "failure:$code" >/dev/null ||
+        echo 'Agent Runtime failure event could not be saved' >&2
+    fi
+  fi
+}
+
+# Bind the turn before Herdr creates its recorder. The request contains the
+# server-selected run UUID; parsing only this generated assignment avoids
+# making the context identity depend on mutable process state.
+publish_event_context() {
+  turn="$1"
+  request="$2"
+  command -v archestra-agent-event >/dev/null 2>&1 || return 0
+  attempt_id="$(sed -n "s/^export ARCHESTRA_AGENT_RUNTIME_RUN_ID='\\([^']*\\)'$/\\1/p" "$request")"
+  if [ -z "$attempt_id" ] && [ "${"$"}{turn##*/}" = "${"$"}{ARCHESTRA_AGENT_RUNTIME_TASK_ID:-}" ]; then
+    attempt_id="${"$"}{ARCHESTRA_AGENT_RUNTIME_RUN_ID:-}"
+  fi
+  case "$attempt_id" in
+    ''|*[!a-fA-F0-9-]*) return 0 ;;
+  esac
+  export ARCHESTRA_AGENT_RUNTIME_ATTEMPT_ID="$attempt_id"
+  task_id="${"$"}{turn##*/}"
+  if ! ARCHESTRA_AGENT_RUNTIME_TASK_ID="$task_id" archestra-agent-event context \
+    --path "$turn.events/context.json" \
+    --task "$task_id" \
+    --attempt "$attempt_id" >/dev/null 2>&1; then
+    echo 'Agent Runtime event context could not be initialized' >&2
+  fi
+}
+
 if [ -f ${AGENT_RUNTIME_TERMINAL_BACKEND_FILE} ] && [ "$(cat ${AGENT_RUNTIME_TERMINAL_BACKEND_FILE} 2>/dev/null)" = herdr ] && command -v ${AGENT_RUNTIME_TERMINAL_HELPER} >/dev/null 2>&1 && command -v ${AGENT_RUNTIME_HERDR_BINARY} >/dev/null 2>&1; then
   backend=herdr
 else
@@ -61,6 +107,9 @@ while :; do
     fi
     if [ -f "$turn.started" ]; then
       # A replacement Pod cannot know which external effects completed.
+      publish_failure "$turn" runtime_restarted startup \
+        'The runtime restarted before this turn finished.' \
+        'Review the retained output before retrying: some actions may already have completed, so the turn was not replayed automatically.'
       printf '75\n' > "$turn.exit.tmp"
       mv "$turn.exit.tmp" "$turn.exit"
       rm -f "$request" "$turn.session"
@@ -68,6 +117,7 @@ while :; do
     fi
     touch "$turn.started"
     : > "$turn.log"
+    publish_event_context "$turn" "$request"
     if [ "$backend" = tmux ]; then
       tmux set-option -t agent @archestra_retained_task ""
       tmux respawn-pane -k -t agent 'while :; do sleep 1; done'
@@ -80,12 +130,21 @@ while :; do
       start_failed=0
       if ! ${AGENT_RUNTIME_TERMINAL_HELPER} start "$turn" >>/proc/1/fd/1 2>>/proc/1/fd/2; then start_failed=1; fi
       if [ "$start_failed" = 1 ]; then
+        publish_failure "$turn" terminal_start_failed terminal \
+          'The runtime could not start the agent terminal.' \
+          'Check the runtime startup logs and image configuration, then retry the run.'
         printf '75\n' > "$turn.result.tmp"
         mv "$turn.result.tmp" "$turn.result"
       fi
     else
       printf '%s\n' "touch '$turn.running'; export ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX='$turn'; /bin/sh '$turn.request'; status=\$?; sleep 2; printf '%s\\n' \"\$status\" > '$turn.result.tmp'; mv '$turn.result.tmp' '$turn.result'; exit \"\$status\"" > "$turn.session"
-      tmux respawn-pane -k -t agent "/bin/sh '$turn.session'"
+      if ! tmux respawn-pane -k -t agent "/bin/sh '$turn.session'"; then
+        publish_failure "$turn" terminal_start_failed terminal \
+          'The runtime could not start the agent terminal.' \
+          'Check the runtime startup logs and image configuration, then retry the run.'
+        printf '75\n' > "$turn.result.tmp"
+        mv "$turn.result.tmp" "$turn.result"
+      fi
     fi
     startup_polls=0
     dead_polls=0
@@ -113,6 +172,9 @@ while :; do
       if { [ -f "$turn.running" ] || [ "$startup_polls" -ge 30 ]; } && [ "$pane_dead" = 1 ]; then
         dead_polls=$((dead_polls + 1))
         if [ "$dead_polls" -ge 3 ] && [ ! -f "$turn.result" ]; then
+          publish_failure "$turn" agent_process_exited terminal \
+            'The agent process stopped before reporting a result.' \
+            'Open the run logs to inspect the last output. Check the runtime image and memory limits before retrying.'
           printf '75\n' > "$turn.result.tmp"
           mv "$turn.result.tmp" "$turn.result"
           break

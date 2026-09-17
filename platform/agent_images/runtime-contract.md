@@ -8,7 +8,7 @@ This reference is for custom image authors. For maintained image targets and bui
 | --- | --- |
 | Shell | `/bin/sh` must exist. Archestra uses it for the bootstrap and configured command. |
 | Live terminal | Derive from a maintained image to inherit pinned Herdr, Python 3, `archestra-terminal`, and `archestra-pty-record`. Archestra owns one headless server per runtime. Attachments display only the agent terminal. Existing images containing `tmux` remain supported. |
-| Input attention | Run `archestra-agent-attention set "Permission needed"` when the client needs input, and `archestra-agent-attention clear` when work resumes. The helper updates attached terminals and the task callback. |
+| Input attention | Run `archestra-agent-attention set "Permission needed"` when the client needs input, and `archestra-agent-attention clear` when work resumes. The helper updates attached terminals and publishes an event. Older images use the task callback. |
 | Command | Set **Command** and **Arguments** to the executable and arguments for the Agent client. If Command is blank, `archestra-runtime-agent` must be on `PATH`. |
 | Initialization | An optional `archestra-agent-init` executable is called immediately before the Agent command. Use it for runtime-only setup such as Git credential configuration. |
 | Output | Write progress and the final result to stdout or stderr. Archestra streams and retains that output as the run log. Do not print credentials. |
@@ -17,35 +17,84 @@ This reference is for custom image authors. For maintained image targets and bui
 
 The initial task is supplied in `ARCHESTRA_AGENT_RUNTIME_TASK`. The Agent system prompt is supplied in `ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT`. A custom client decides how to combine them. It should read `ARCHESTRA_AGENT_RUNTIME_MODE`: `interactive` means expose its input loop and remain available for follow-ups, while `one_shot` means finish the supplied task and exit. Images that support only unattended work can ignore interactive mode, but they will not provide a useful Chat terminal.
 
+## Runtime Events
+
+Maintained images include a private Herdr plugin and `archestra-agent-event`. The terminal helper links the plugin before starting the headless server. No plugin download or public registry is involved.
+
+Herdr reports pane activity. Native harness adapters report authentication, permissions, and failures. Both publish the same versioned contract. Herdr's idle, done, and exited states never declare task success. Native completion still passes through the recording and completion bridge before task settlement.
+
+```mermaid
+flowchart LR
+  H[Herdr status plugin] --> E[Common event writer]
+  N[Native harness adapters] --> E
+  E --> J[Per-turn event journal]
+  J --> M[Backend event monitor]
+  M --> S[Persisted activity and diagnostic]
+  S --> U[Run UI and get_run]
+  N --> C[Recording and completion bridge]
+  C --> T[Task result and notifications]
+```
+
+The control plane supplies an immutable context for each task and attempt. Producers inherit `ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX`; they must not discover or relabel a delayed event using the current task. The writer supplies identity, event ID, sequence, source, and timestamp.
+
+For example, an adapter can report an expired account without copying the provider response:
+
+```sh
+printf '%s\n' '{"type":"diagnostic","error":{"code":"provider_auth_required"}}' |
+  archestra-agent-event emit --source native.example
+archestra-agent-attention set "Authentication needed"
+```
+
+Use `archestra-agent-attention clear` when native work resumes. An interactive diagnostic leaves the terminal open. An unattended failure must also use the completion contract below.
+
+The event types are:
+
+| Type | Payload | Meaning |
+| --- | --- | --- |
+| `agent.status` | `status`: working, idle, or unknown; `attention`: input_required, auth_required, or null | Advisory activity or an explicit native attention update. Herdr cannot clear native attention. |
+| `diagnostic` | `error` | A problem with a safe message and recovery action. |
+| `turn.finished` | `outcome`: failed; `error` | A native terminal failure, also reported through the existing completion bridge. |
+| `turn.finished` | `outcome`: succeeded; `resultRef` | A reference to a captured result. The event alone cannot settle the task. |
+
+Maintained adapters currently publish failures through this journal. Successful completion continues through the recording and completion bridge; `turn.finished` with a succeeded outcome is available to custom adapters.
+
+An `error` contains `code`, `phase`, `message`, and `resolution`, with optional `httpStatus`. Known codes resolve through `shared/agent-runtime-errors.json`. Custom codes must supply all required fields. Treat both text fields as public output. Never include credentials, raw provider bodies, terminal escapes, or private reasoning.
+
+Records live under `${ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX}.events/`, outside transient terminal state. The writer serializes concurrent producers and publishes complete files with atomic rename and fsync. Supply `--event-id` or `--event-key` for retry-safe delivery. Reusing an ID with different content is rejected. Each event is limited to 4,096 UTF-8 bytes. A journal holds up to 1,000 records. Until a terminal outcome is recorded, the last two slots are reserved for a capacity diagnostic and terminal outcome. After reaching capacity, ordinary status events stop until a new run; existing records remain available. Producer failures must remain observable in runtime logs.
+
+The backend reads bounded batches through authenticated runtime exec:
+
+```sh
+archestra-agent-event read --task "$ARCHESTRA_AGENT_RUNTIME_TASK_ID" --after 0 --limit 100
+```
+
+It persists the latest diagnostic and sequence with the run. Replays, another attempt's events, and updates after task settlement cannot overwrite that state. Accepted-event logs include task, run, attempt, event, source, and sequence identifiers. These fields provide a future tracing integration point without adding a message broker.
+
+### Extending Reporting
+
+1. Add a safe message and resolution to `shared/agent-runtime-errors.json` when the cause is reusable.
+2. Map the harness's structured hook or transcript event in its adapter under `agent_images/bin/`. Keep raw provider text out of the journal.
+3. Add a fixture for the native event, including stale-session and recovery cases.
+4. Use existing event types. Change the shared schema and backend reducer only for a new semantic behavior.
+
+The native adapters are version-sensitive. Codex observes its main session's structured terminal outcome; it does not infer failure from terminal text. Other clients use their supported hooks. Unmapped failures receive a generic diagnostic rather than a guessed cause.
+
 ## Failure Reasons
 
-Custom images can publish a user-facing failure before exiting non-zero. Write a versioned JSON envelope to `${ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX}.failure`. The supervisor supplies this turn-specific prefix before initialization and client startup.
+Custom images can publish a failure before exiting non-zero. Write the complete JSON envelope to `${ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX}.failure` using an atomic rename.
 
 ```sh
 failure="${ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX}.failure"
-jq -n \
-  --arg code "my_agent.input_missing" \
-  --arg message "Select an input file and retry." \
-  '{version:1,code:$code,message:$message}' > "$failure.tmp"
+jq -n '{version:1,code:"my_agent.input_missing",phase:"startup",message:"The input file is missing.",resolution:"Attach the input file and retry."}' > "$failure.tmp"
 mv "$failure.tmp" "$failure"
 exit 1
 ```
 
-Use an atomic rename to publish the complete file. The image owns the code and message. Codes need no platform registration. The backend validates the envelope, appends the runtime exit status, and propagates the message through task results, notifications, and run details.
+Version 1 accepts `code` and `message`, plus optional `phase`, `resolution`, and `httpStatus`. Legacy images supplying only code and message remain supported. Codes contain 1–128 ASCII letters, digits, dots, underscores, or hyphens. Messages allow 2,000 characters; resolutions allow 1,000. The complete UTF-8 file must not exceed 4,096 bytes. Plain text may contain tabs and newlines, but no other ASCII control characters.
 
-Version `1` accepts exactly these fields:
+Maintained images use `archestra-agent-failure <code> <safe-message>` to publish the failure and event together. Known causes include rejected credentials, denied model access, runtime replacement, credential projection timeout, and an agent process ending without a result. A bare legacy exit 75 receives honest runtime-unavailable advice; it is never interpreted as proof of an authentication failure.
 
-| Field | Contract |
-| --- | --- |
-| `version` | The number `1`. |
-| `code` | An image-defined identifier of 1–128 ASCII letters, digits, dots, underscores, or hyphens. |
-| `message` | Non-empty plain text, at most 2,000 characters after trimming. Newlines and tabs are allowed; other ASCII control characters are rejected. |
-
-The entire UTF-8 file must not exceed 4,096 bytes. Missing files, malformed JSON, unsupported versions, and invalid fields retain the exit-status-only fallback. A failure envelope never overrides a successful exit. Older platforms ignore this optional file.
-
-Treat `message` as public task output. Image authors must remove credentials and private details before publishing it. Prefer safe messages constructed from structured client errors; never copy raw stderr or provider response bodies. Schema validation cannot detect secrets in otherwise valid text.
-
-The built-in Archestra image reports configuration, startup, and session failures. The maintained Claude Code wrapper publishes its own messages from `StopFailure` events. Delegated API failures end the run. Interactive sessions remain open and request attention. The OpenCode and OpenClaw wrappers also publish safe messages for terminal one-shot errors. OpenCode context compaction remains recoverable. Shared initialization reports proxy connectivity and GitHub setup failures. Codex, Hermes, OpenCode, and OpenClaw publish protocol configuration errors through the same envelope. Native errors without an adapter retain exit-status-only reporting.
+The existing completion bridge captures output and settles the task. Its message and resolution reach run details, task results, and completion notifications. A failure envelope never overrides a successful exit. Missing or invalid envelopes use a generic explanation with recovery advice.
 
 ## Skills
 

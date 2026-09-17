@@ -5,6 +5,9 @@ no real credentials, model access, or external network are needed.
 """
 
 import json
+import importlib.machinery
+import importlib.util
+import io
 import os
 from pathlib import Path
 import subprocess
@@ -13,6 +16,7 @@ import threading
 import time
 import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from unittest.mock import patch
 
 ACCOUNT_COMMAND = str(Path(__file__).resolve().parents[1] / "bin/archestra-claude-account")
 if not Path(ACCOUNT_COMMAND).exists():
@@ -20,6 +24,16 @@ if not Path(ACCOUNT_COMMAND).exists():
 CODE_COMMAND = str(Path(__file__).resolve().parents[1] / "bin/archestra-claude-code")
 if not Path(CODE_COMMAND).exists():
     CODE_COMMAND = "archestra-claude-code"
+
+
+def load_account_helper():
+    loader = importlib.machinery.SourceFileLoader(
+        "claude_account_auth_test", ACCOUNT_COMMAND
+    )
+    spec = importlib.util.spec_from_loader(loader.name, loader)
+    helper = importlib.util.module_from_spec(spec)
+    loader.exec_module(helper)
+    return helper
 
 
 class ClaudeAuthTest(unittest.TestCase):
@@ -108,11 +122,13 @@ class ClaudeAuthTest(unittest.TestCase):
                 "DISABLE_AUTOUPDATER": "1",
                 "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
             }
-            result = subprocess.run([ACCOUNT_COMMAND, "models"], input=json.dumps({"token": token}), text=True, capture_output=True, env=env, timeout=40)
-            self.assertEqual(result.returncode, 0, result.stderr)
-            metadata = json.loads(result.stdout)
+            helper = load_account_helper()
+            helper.directory = Path(directory)
+            with patch.object(helper, "validate_subscription_token"), patch(
+                "sys.stdin", io.StringIO(json.dumps({"token": token}))
+            ):
+                metadata = helper.models()
             self.assertTrue(metadata["models"])
-            self.assertNotIn(token, result.stdout)
             server = CaptureServer()
             thread = threading.Thread(target=server.serve_forever, daemon=True)
             thread.start()

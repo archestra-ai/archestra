@@ -19,12 +19,14 @@ import socket
 import subprocess
 import sys
 import time
+import urllib.error
+import urllib.request
 
 
 WIDTH = 500
 HEIGHT = 40
 API_TIMEOUT = 20
-# Leave five seconds for CLI cleanup inside the backend's 30-second exec budget.
+# Keep native model discovery bounded independently from the backend command.
 MODEL_METADATA_TIMEOUT = 24
 MAX_API_RESPONSE = 1024 * 1024
 MAX_INPUT = 4096
@@ -41,7 +43,15 @@ raw_log = directory / "terminal.raw"
 config_file = directory / "herdr-config.toml"
 socket_file = directory / "herdr.sock"
 client_socket_file = directory / "herdr-client.sock"
+credential_failed = directory / "credential-failed"
 flow_id = os.environ.get("ARCHESTRA_AGENT_RUNTIME_CLAUDE_FLOW_ID", "")
+
+
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Do not forward an OAuth credential to a redirected host."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
 
 
 def main():
@@ -297,6 +307,11 @@ def complete():
 
     token = captured_token()
     if token:
+        try:
+            validate_subscription_token(token)
+        except ValueError:
+            credential_failed.touch(mode=0o600)
+            return {"state": "failed"}
         return {
             "state": "connected",
             "token": token,
@@ -310,7 +325,37 @@ def models():
     token = request.get("token", "")
     if not isinstance(token, str) or not TOKEN.fullmatch(token):
         raise ValueError("Invalid subscription token")
+    try:
+        validate_subscription_token(token)
+    except ValueError:
+        credential_failed.touch(mode=0o600)
+        return {"state": "failed"}
     return {"state": "connected", "models": supported_models(token)}
+
+
+def validate_subscription_token(token):
+    """Confirm the captured token can authenticate a provider request.
+
+    Claude's initialize control message is local metadata discovery and may
+    succeed without an inference request. Probe the provider before the
+    backend persists a token, while discarding the response body so provider
+    errors and credentials never enter the account envelope or logs.
+    """
+    request = urllib.request.Request(
+        "https://api.anthropic.com/v1/models?limit=1",
+        headers={
+            "Authorization": f"Bearer {token}",
+            "anthropic-version": "2023-06-01",
+            "anthropic-beta": "oauth-2025-04-20",
+        },
+    )
+    try:
+        opener = urllib.request.build_opener(NoRedirect())
+        with opener.open(request, timeout=API_TIMEOUT) as response:
+            if not 200 <= response.status < 300:
+                raise ValueError("Claude rejected the subscription credential")
+    except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, OSError) as error:
+        raise ValueError("Claude rejected the subscription credential") from error
 
 
 def claim_submission():
@@ -345,15 +390,20 @@ def pane():
 
 
 def captured_token():
-    tokens = set(TOKEN.findall(re.sub(r"\s+", "", strip_ansi(pane()))))
+    # setup-token prints the credential on its own line. Removing all
+    # whitespace before matching makes the following instructions part of a
+    # greedy token, e.g. ``...Storethistokensecurely``.
+    tokens = set(TOKEN.findall(strip_ansi(pane())))
     if len(tokens) > 1:
         raise ValueError("Ambiguous subscription credential")
     return next(iter(tokens), None)
 
 
 def status():
+    if credential_failed.exists():
+        return {"state": "failed"}
     captured = strip_ansi(pane())
-    if TOKEN.search(re.sub(r"\s+", "", captured)):
+    if TOKEN.search(captured):
         return {"state": "connecting", "flowId": flow_id}
     if exit_file.exists() or not login_running():
         return {"state": "failed"}
@@ -445,6 +495,7 @@ def cleanup():
         config_file,
         socket_file,
         client_socket_file,
+        credential_failed,
     ):
         try:
             path.unlink()
@@ -554,6 +605,10 @@ def supported_models(token):
         except subprocess.TimeoutExpired:
             process.kill()
             process.wait()
+        for stream in (process.stdin, process.stdout):
+            close = getattr(stream, "close", None)
+            if close:
+                close()
 
 
 if __name__ == "__main__":

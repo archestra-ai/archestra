@@ -1,0 +1,87 @@
+{
+  "provider_auth_required": {
+    "phase": "credentials",
+    "message": "The provider sign-in has expired or was revoked.",
+    "resolution": "Reconnect the provider account used by this agent, then retry the run."
+  },
+  "codex_auth_required": {
+    "phase": "credentials",
+    "message": "ChatGPT sign-in has expired or was revoked.",
+    "resolution": "Reconnect your ChatGPT account in the agent settings, then retry the run."
+  },
+  "provider_credential_rejected": {
+    "phase": "credentials",
+    "message": "The configured provider credential was rejected.",
+    "resolution": "Open the agent settings, reconnect the provider account or select a valid API key, then retry."
+  },
+  "provider_permission_denied": {
+    "phase": "credentials",
+    "message": "The configured credential does not have permission to access the requested provider or model.",
+    "resolution": "Select a credential with access to this model in the agent settings, or choose an accessible model, then retry."
+  },
+  "model_unavailable": {
+    "phase": "provider",
+    "message": "The selected model is not available to this agent.",
+    "resolution": "Check the provider configuration and select an available model in the agent settings, then retry."
+  },
+  "proxy_unavailable": {
+    "phase": "startup",
+    "message": "The runtime could not connect to the model proxy.",
+    "resolution": "Check that the backend is healthy and reachable from the runtime, then retry."
+  },
+  "proxy_response_invalid": {
+    "phase": "startup",
+    "message": "The model proxy rejected the model discovery request.",
+    "resolution": "Check the provider endpoint and backend logs, then retry."
+  },
+  "runtime_restarted": {
+    "phase": "startup",
+    "message": "The runtime restarted before this turn finished.",
+    "resolution": "Review the retained output before retrying: some actions may already have completed, so the turn was not replayed automatically."
+  },
+  "agent_process_exited": {
+    "phase": "terminal",
+    "message": "The agent process stopped before reporting a result.",
+    "resolution": "Open the run logs to inspect the last output. Check the runtime image and memory limits before retrying."
+  },
+  "terminal_start_failed": {
+    "phase": "terminal",
+    "message": "The runtime could not start the agent terminal.",
+    "resolution": "Check the runtime startup logs and image configuration, then retry the run."
+  },
+  "credential_projection_timeout": {
+    "phase": "credentials",
+    "message": "The runtime could not load this turn's credentials before startup timed out.",
+    "resolution": "Check that the configured credentials still exist and that the runtime can mount its credential bundle, then retry."
+  },
+  "runtime_events_unavailable": {
+    "phase": "protocol",
+    "message": "The runtime event reporter could not initialize or save an event.",
+    "resolution": "Check the runtime startup logs and available workspace storage, then restart the runtime."
+  },
+  "runtime_unavailable": {
+    "phase": "startup",
+    "message": "The runtime became unavailable before a result was recorded.",
+    "resolution": "Review the run logs and runtime capacity, then retry after the runtime is available."
+  },
+  "provider_rate_limited": {
+    "phase": "provider",
+    "message": "The provider could not complete this turn because its rate limit was reached.",
+    "resolution": "Wait for the provider's limit to reset or select a credential with available capacity, then retry."
+  },
+  "provider_billing_required": {
+    "phase": "provider",
+    "message": "The provider account does not have enough credit or an active billing entitlement.",
+    "resolution": "Check the provider account's billing or subscription, then retry."
+  },
+  "provider_error": {
+    "phase": "provider",
+    "message": "The provider could not complete this turn.",
+    "resolution": "Review the run logs for the provider response and check provider availability before retrying."
+  },
+  "unknown_exit": {
+    "phase": "terminal",
+    "message": "The agent stopped without reporting a structured failure reason.",
+    "resolution": "Open the run logs to inspect the last output, then check the agent configuration before retrying."
+  }
+}

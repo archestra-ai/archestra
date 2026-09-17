@@ -16,14 +16,65 @@ if [ -n "${OPENAI_BASE_URL:-}" ] && [ -n "${OPENAI_API_KEY:-}" ]; then
   platform_ready=false
   attempt=1
   while [ "${attempt}" -le 30 ]; do
-    if curl --fail --silent --show-error --output /dev/null \
+    http_status=000
+    if http_status=$(curl --silent --output /dev/null --max-time 5 \
+      --write-out '%{http_code}' \
       --header "Authorization: Bearer ${OPENAI_API_KEY}" \
-      "${OPENAI_BASE_URL%/}/models"; then
-      platform_ready=true
-      break
+      "${OPENAI_BASE_URL%/}/models" 2>/dev/null); then
+      :
+    else
+      # curl still prints an HTTP status when the server returned one before
+      # closing the connection. Preserve it so permanent auth/configuration
+      # errors do not consume the transport retry budget.
+      http_status=${http_status:-000}
     fi
-    attempt=$((attempt + 1))
-    sleep 1
+    case "${http_status}" in
+      2[0-9][0-9])
+        platform_ready=true
+        break
+        ;;
+      401)
+        "$(dirname "$0")/archestra-agent-failure" provider_credential_rejected \
+          "The configured provider credential was rejected (HTTP 401). Reconnect or update the credential, then retry."
+        echo "archestra: the provider credential was rejected (HTTP 401); reconnect or update it, then retry" >&2
+        exit 69
+        ;;
+      403)
+        "$(dirname "$0")/archestra-agent-failure" provider_permission_denied \
+          "The configured provider credential does not have access to this model (HTTP 403). Choose an authorized credential, then retry."
+        echo "archestra: the provider credential cannot access this model (HTTP 403); choose an authorized credential, then retry" >&2
+        exit 69
+        ;;
+      404)
+        "$(dirname "$0")/archestra-agent-failure" model_unavailable \
+          "The selected model endpoint was not found (HTTP 404). Check the model and proxy configuration, then retry."
+        echo "archestra: the selected model endpoint was not found (HTTP 404); check the model and proxy configuration, then retry" >&2
+        exit 69
+        ;;
+      429)
+        "$(dirname "$0")/archestra-agent-failure" provider_rate_limited \
+          "The provider rate limit was reached during model discovery (HTTP 429). Wait or choose another credential, then retry."
+        echo "archestra: the provider rate limit was reached during model discovery (HTTP 429); wait or choose another credential, then retry" >&2
+        exit 69
+        ;;
+      4[0-9][0-9])
+        "$(dirname "$0")/archestra-agent-failure" proxy_response_invalid \
+          "The model proxy rejected the model discovery request (HTTP ${http_status}). Check the provider configuration, then retry."
+        echo "archestra: the model proxy rejected model discovery (HTTP ${http_status}); check the provider configuration, then retry" >&2
+        exit 69
+        ;;
+      *)
+        # Transport failures and 5xx responses are transient candidates. The
+        # fixed bound keeps startup from hanging forever when the proxy is
+        # unavailable, while all permanent 4xx responses return immediately.
+        ;;
+    esac
+    if [ "${attempt}" -lt 30 ]; then
+      attempt=$((attempt + 1))
+      sleep 1
+      continue
+    fi
+    break
   done
   if [ "${platform_ready}" != true ]; then
     echo "archestra: the Agent runtime could not reach the platform proxy" >&2

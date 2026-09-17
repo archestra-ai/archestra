@@ -14,6 +14,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
 import { AgentIcon } from "@/components/agent-icon";
+import { AgentRunDiagnostic } from "@/components/agent-run-diagnostic";
 import { AgentRunLiveness } from "@/components/agent-run-liveness";
 import { AgentRunLogs } from "@/components/agent-run-logs";
 import { AgentRunState } from "@/components/agent-run-state";
@@ -120,6 +121,7 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
                   <AgentRunState
                     state={run.state}
                     statusReason={run.statusReason}
+                    attentionState={run.attentionState}
                     lastModelActivityAt={run.lastModelActivityAt}
                     startedAt={run.startedAt}
                     endedAt={run.endedAt}
@@ -224,7 +226,16 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
       </header>
 
       <section className="flex min-h-0 flex-1 flex-col gap-3 p-4 md:p-6">
-        {run && live && <AgentRunLiveness run={run} />}
+        {run?.runtimeState?.diagnostic &&
+        (live || run.state === "TASK_STATE_FAILED") ? (
+          <AgentRunDiagnostic
+            diagnostic={run.runtimeState.diagnostic}
+            agentId={run.agent.id}
+            failed={run.state === "TASK_STATE_FAILED"}
+          />
+        ) : run && live ? (
+          <AgentRunLiveness run={run} />
+        ) : null}
         {isOwner && !live && run?.workspace && (
           <output className="flex shrink-0 flex-col gap-2 rounded-md border bg-muted/20 px-3 py-2.5 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
             <div className="flex min-w-0 items-start gap-2 sm:items-center">

@@ -209,6 +209,9 @@ class ClaudeCodeAccountRuntime {
       podName: pod.metadata?.name ?? "",
       operation: params.token ? "models" : "complete",
       input: { code: params.code, flowId: params.flowId, token: params.token },
+      // Completion includes provider validation and native model discovery;
+      // both are bounded independently inside the helper.
+      timeoutMs: 60_000,
     });
   }
 
@@ -237,6 +240,7 @@ class ClaudeCodeAccountRuntime {
       podName: string;
       operation: string;
       input?: { code?: string; flowId: string; token?: string };
+      timeoutMs?: number;
     },
   ): Promise<unknown> {
     const output = await execAgentRuntimeCommand({
@@ -248,6 +252,7 @@ class ClaudeCodeAccountRuntime {
       stdin: params.input
         ? Readable.from([JSON.stringify(params.input)])
         : undefined,
+      timeoutMs: params.timeoutMs,
       maxOutputBytes: 512 * 1024,
     });
     try {

@@ -246,6 +246,7 @@ globalThis.Bun = {
   const plugin = Object.values(mod).find((value) => typeof value === "function");
   const hooks = await plugin();
   const send = (event) => hooks.event({ event });
+  await send({ type: "session.created", properties: { info: { id: "main" } } });
   await send({ type: "session.status", properties: { sessionID: "main", status: { type: "busy" } } });
   await send({ type: "question.asked", properties: { sessionID: "main" } });
   await send({ type: "question.replied", properties: { sessionID: "main" } });

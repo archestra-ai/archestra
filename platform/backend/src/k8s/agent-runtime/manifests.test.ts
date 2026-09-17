@@ -119,9 +119,36 @@ describe("buildAgentRuntimeSandbox", () => {
   });
 
   it("includes the immutable task identity in each turn environment", () => {
-    expect(
-      buildAgentRuntimeTurnScript({ ...SPEC, runtimeScope: SPEC.namespace }),
-    ).toContain(`export ARCHESTRA_AGENT_RUNTIME_TASK_ID='${SPEC.taskId}'`);
+    const script = buildAgentRuntimeTurnScript({
+      ...SPEC,
+      runtimeScope: SPEC.namespace,
+    });
+    expect(script).toContain(
+      `export ARCHESTRA_AGENT_RUNTIME_TASK_ID='${SPEC.taskId}'`,
+    );
+    expect(script).toContain("archestra-agent-event context --path");
+    expect(script.indexOf("archestra-agent-event context --path")).toBeLessThan(
+      script.indexOf("archestra-agent-init"),
+    );
+  });
+
+  it("records a credential projection timeout before returning status 75", () => {
+    const script = buildAgentRuntimeTurnScript({
+      ...SPEC,
+      runtimeScope: SPEC.namespace,
+      renewableCredentials: {
+        GH_TOKEN: {
+          credentialId: "credential",
+          value: "secret",
+          expiresAt: Date.now() + 60_000,
+        },
+      },
+    });
+    expect(script).toContain('"code":"credential_projection_timeout"');
+    expect(script).toContain(
+      '"resolution":"Check that the configured credentials still exist',
+    );
+    expect(script).toContain("exit 75");
   });
 
   it("seeds the first child and refreshes credentials on the next turn", () => {
@@ -354,6 +381,12 @@ describe("buildAgentRuntimeSandbox", () => {
 
     expect(entrypoint?.value).toBe(
       [
+        `if command -v archestra-agent-event >/dev/null 2>&1 && [ -n "\${ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX:-}" ]; then`,
+        `  export ARCHESTRA_AGENT_RUNTIME_ATTEMPT_ID="\${ARCHESTRA_AGENT_RUNTIME_RUN_ID:-}"`,
+        `  if ! archestra-agent-event context --path "\${ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX}.events/context.json" --task "$ARCHESTRA_AGENT_RUNTIME_TASK_ID" --attempt "$ARCHESTRA_AGENT_RUNTIME_ATTEMPT_ID" >/dev/null 2>&1; then`,
+        '    echo "agent-runtime: could not initialize the event context; native event details may be unavailable" >&2',
+        "  fi",
+        "fi",
         "if command -v archestra-agent-init >/dev/null 2>&1; then archestra-agent-init; fi",
         `exec 'claude' '--task' 'it'\\''s a '\\''quoted'\\'' task; rm -rf /'`,
       ].join("\n"),
@@ -367,7 +400,13 @@ describe("buildAgentRuntimeSandbox", () => {
       (entry) => entry.name === "ARCHESTRA_AGENT_RUNTIME_ENTRYPOINT",
     );
     expect(entrypoint?.value).toBe(
-      "if command -v archestra-agent-init >/dev/null 2>&1; then archestra-agent-init; fi\n" +
+      `if command -v archestra-agent-event >/dev/null 2>&1 && [ -n "\${ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX:-}" ]; then\n` +
+        `  export ARCHESTRA_AGENT_RUNTIME_ATTEMPT_ID="\${ARCHESTRA_AGENT_RUNTIME_RUN_ID:-}"\n` +
+        `  if ! archestra-agent-event context --path "\${ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX}.events/context.json" --task "$ARCHESTRA_AGENT_RUNTIME_TASK_ID" --attempt "$ARCHESTRA_AGENT_RUNTIME_ATTEMPT_ID" >/dev/null 2>&1; then\n` +
+        '    echo "agent-runtime: could not initialize the event context; native event details may be unavailable" >&2\n' +
+        "  fi\n" +
+        "fi\n" +
+        "if command -v archestra-agent-init >/dev/null 2>&1; then archestra-agent-init; fi\n" +
         "exec archestra-runtime-agent",
     );
   });

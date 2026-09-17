@@ -9,7 +9,27 @@ describe("image-owned failure envelopes", () => {
   };
   test("accepts custom codes and preserves image-authored guidance", () => {
     expect(agentRuntimeFailureReason(`78\n${JSON.stringify(envelope)}\n`)).toBe(
-      `${envelope.message} (Runtime exit status 78.)`,
+      `${envelope.message}\n\nOpen the run logs to inspect the last output, then retry the run.`,
+    );
+  });
+  test("renders the typed resolution from the shared envelope", () => {
+    expect(
+      agentRuntimeFailureReason(
+        `75\n${JSON.stringify({
+          version: 1,
+          code: "terminal_start_failed",
+          phase: "terminal",
+          message: "The runtime could not start the agent terminal.",
+          resolution: "Check the runtime startup logs, then retry the run.",
+        })}`,
+      ),
+    ).toBe(
+      "The runtime could not start the agent terminal.\n\nCheck the runtime startup logs, then retry the run.",
+    );
+  });
+  test("gives a typed actionable fallback for an unannotated status 75", () => {
+    expect(agentRuntimeFailureReason("75")).toBe(
+      "The runtime became unavailable before a result was recorded.\n\nReview the run logs and runtime capacity, then retry after the runtime is available.",
     );
   });
   test.each([
@@ -24,7 +44,7 @@ describe("image-owned failure envelopes", () => {
     { ...envelope, rawDiagnostics: "private" },
   ])("rejects invalid envelopes: %j", (value) => {
     expect(agentRuntimeFailureReason(`78\n${JSON.stringify(value)}`)).toBe(
-      "The Agent Runtime turn exited with status 78",
+      "The agent stopped without reporting a structured failure reason.\n\nOpen the run logs to inspect the last output, then check the agent configuration before retrying. (Runtime exit status 78.)",
     );
   });
   test("bounds bytes as well as message length", () => {
@@ -32,7 +52,9 @@ describe("image-owned failure envelopes", () => {
       agentRuntimeFailureReason(
         `78\n${JSON.stringify({ ...envelope, message: "界".repeat(1500) })}`,
       ),
-    ).toBe("The Agent Runtime turn exited with status 78");
+    ).toBe(
+      "The agent stopped without reporting a structured failure reason.\n\nOpen the run logs to inspect the last output, then check the agent configuration before retrying. (Runtime exit status 78.)",
+    );
   });
   test.each([
     "78",
@@ -41,7 +63,7 @@ describe("image-owned failure envelopes", () => {
     '78\n{"version":1',
   ])("falls back for absent or incomplete envelopes: %s", (result) => {
     expect(agentRuntimeFailureReason(result)).toBe(
-      "The Agent Runtime turn exited with status 78",
+      "The agent stopped without reporting a structured failure reason.\n\nOpen the run logs to inspect the last output, then check the agent configuration before retrying. (Runtime exit status 78.)",
     );
   });
 });

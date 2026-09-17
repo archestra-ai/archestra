@@ -1,3 +1,4 @@
+import type { AgentRuntimeState } from "@archestra/shared";
 import {
   index,
   integer,
@@ -66,6 +67,7 @@ const agentRunsTable = pgTable(
     activeDeadlineSeconds: integer("active_deadline_seconds"),
     /** Native-client signal that the live process needs a person's attention. */
     attentionState: text("attention_state").$type<AgentRunAttentionState>(),
+    runtimeState: jsonb("runtime_state").$type<AgentRuntimeState>(),
     /** Revoked when the session ends; a live key outliving its runtime keeps billing. */
     virtualApiKeyId: uuid("virtual_api_key_id").references(
       () => virtualApiKeysTable.id,

@@ -1,3 +1,4 @@
+import { agentRuntimeError, formatAgentRuntimeError } from "@archestra/shared";
 import { describe, expect, test } from "vitest";
 import { buildTaskCompletionNotification } from "./task-completion-notification";
 
@@ -128,6 +129,18 @@ describe("buildTaskCompletionNotification", () => {
         output: "",
       }),
     ).toBe("Task failed. The deployment could not start.");
+  });
+
+  test("includes the provider recovery action in failed-run notifications", () => {
+    const error = agentRuntimeError("codex_auth_required");
+    const message = buildTaskCompletionNotification({
+      state: "TASK_STATE_FAILED",
+      statusReason: formatAgentRuntimeError(error),
+      output: "",
+    });
+    expect(message).toContain(error.message);
+    expect(message).toContain(error.resolution);
+    expect(message).not.toContain("75");
   });
 
   test("does not mistake a PR URL in failed-task output for success", () => {

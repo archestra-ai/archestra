@@ -189,6 +189,7 @@ describe("A2AManager full task mode", () => {
       runtimeScope: "archestra-dev",
       activeDeadlineSeconds: null,
       attentionState: null,
+      runtimeState: null,
       virtualApiKeyId: null,
       completionTarget: null,
       completionNotificationClaimedAt: null,

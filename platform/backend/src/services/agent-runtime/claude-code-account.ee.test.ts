@@ -77,6 +77,19 @@ test("read-only Vault keeps only a reference, reads rotated tokens, and never wr
     ...owner,
     vaultReference: "secret/data/personal#token",
   });
+  vi.mocked(claudeCodeAccountRuntime.complete).mockResolvedValueOnce({
+    state: "failed",
+  });
+  await expect(
+    manager.complete({ ...owner, flowId: pending.flowId as string }),
+  ).rejects.toMatchObject({ statusCode: 400 });
+  expect(await SecretModel.findAllRaw()).toHaveLength(0);
+  expect(
+    await ClaudeCodeAccountModel.find({
+      organizationId: organization.id,
+      userId: user.id,
+    }),
+  ).toBeNull();
   await manager.complete({ ...owner, flowId: pending.flowId as string });
   const credential = await ClaudeCodeAccountModel.find({
     organizationId: organization.id,

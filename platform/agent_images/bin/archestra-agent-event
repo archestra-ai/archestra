@@ -1,0 +1,2 @@
+#!/bin/sh
+exec python3 "$(dirname "$0")/archestra_agent_event.py" "$@"

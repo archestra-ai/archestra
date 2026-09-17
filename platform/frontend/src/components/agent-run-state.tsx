@@ -19,6 +19,7 @@ export function AgentRunState({
   compact = false,
   iconOnly = false,
   statusReason,
+  attentionState,
   lastModelActivityAt,
   startedAt,
   endedAt,
@@ -27,13 +28,15 @@ export function AgentRunState({
   compact?: boolean;
   iconOnly?: boolean;
   statusReason?: string | null;
+  attentionState?: AgentRun["attentionState"];
   lastModelActivityAt?: string | null;
   startedAt?: string;
   endedAt?: string | null;
 }) {
-  const presentation = runStatePresentation(
+  const presentation = runStatePresentation({
     state,
-    startedAt
+    attentionState,
+    noRecentActivity: startedAt
       ? hasNoRecentModelActivity({
           state,
           lastModelActivityAt: lastModelActivityAt ?? null,
@@ -41,7 +44,7 @@ export function AgentRunState({
           endedAt: endedAt ?? null,
         })
       : false,
-  );
+  });
   const [detailsOpen, setDetailsOpen] = useState(false);
   const dot = (
     <span
@@ -119,32 +122,51 @@ export function AgentRunState({
   );
 }
 
-function runStatePresentation(
-  state: AgentRun["state"],
+function runStatePresentation({
+  state,
+  attentionState = null,
   noRecentActivity = false,
-): {
+}: {
+  state: AgentRun["state"];
+  attentionState?: AgentRun["attentionState"];
+  noRecentActivity?: boolean;
+}): {
   label: string;
   dotClassName: string;
   pulse?: boolean;
 } {
+  switch (state) {
+    case "TASK_STATE_FAILED":
+      return { label: "Failed", dotClassName: "bg-destructive" };
+    case "TASK_STATE_REJECTED":
+      return { label: "Rejected", dotClassName: "bg-destructive" };
+    case "TASK_STATE_COMPLETED":
+      return { label: "Completed", dotClassName: "bg-muted-foreground/50" };
+    case "TASK_STATE_CANCELED":
+      return { label: "Canceled", dotClassName: "bg-muted-foreground/50" };
+    default:
+      break;
+  }
+
+  if (
+    attentionState === "input_required" ||
+    state === "TASK_STATE_INPUT_REQUIRED"
+  ) {
+    return { label: "Needs input", dotClassName: "bg-amber-500" };
+  }
+  if (
+    attentionState === "auth_required" ||
+    state === "TASK_STATE_AUTH_REQUIRED"
+  ) {
+    return { label: "Needs auth", dotClassName: "bg-amber-500" };
+  }
+
   switch (state) {
     case "TASK_STATE_WORKING":
       if (noRecentActivity) {
         return { label: "No recent activity", dotClassName: "bg-amber-500" };
       }
       return { label: "Running", dotClassName: "bg-emerald-500" };
-    case "TASK_STATE_COMPLETED":
-      return { label: "Completed", dotClassName: "bg-muted-foreground/50" };
-    case "TASK_STATE_FAILED":
-      return { label: "Failed", dotClassName: "bg-destructive" };
-    case "TASK_STATE_CANCELED":
-      return { label: "Canceled", dotClassName: "bg-muted-foreground/50" };
-    case "TASK_STATE_REJECTED":
-      return { label: "Rejected", dotClassName: "bg-destructive" };
-    case "TASK_STATE_INPUT_REQUIRED":
-      return { label: "Needs input", dotClassName: "bg-amber-500" };
-    case "TASK_STATE_AUTH_REQUIRED":
-      return { label: "Needs auth", dotClassName: "bg-amber-500" };
     case "TASK_STATE_SUBMITTED":
       return { label: "Starting", dotClassName: "bg-sky-500", pulse: true };
     default:

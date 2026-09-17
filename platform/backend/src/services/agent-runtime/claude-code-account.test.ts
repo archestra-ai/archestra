@@ -272,6 +272,30 @@ describe("Claude subscription secret lifecycle", () => {
       vi.useRealTimers();
     }
   });
+  test("rejects failed sign-ins without saving a credential and allows retry", async ({
+    makeOrganization,
+    makeAgent,
+    makeUser,
+  }) => {
+    const organization = await makeOrganization();
+    const owner = {
+      runtime: runtime(await makeAgent({ organizationId: organization.id })),
+      userId: (await makeUser()).id,
+    };
+    const pending = await manager.start(owner);
+    vi.mocked(claudeCodeAccountRuntime.complete).mockResolvedValueOnce({
+      state: "failed",
+    });
+    await expect(
+      manager.complete({ ...owner, flowId: pending.flowId as string }),
+    ).rejects.toMatchObject({ statusCode: 400 });
+    expect(await ClaudeCodeAccountModel.find(agentOwner(owner))).toBeNull();
+    expect(await SecretModel.findAllRaw()).toHaveLength(0);
+
+    expect(
+      await manager.complete({ ...owner, flowId: pending.flowId as string }),
+    ).toMatchObject({ state: "connected" });
+  });
 });
 
 const TOKEN = `sk-ant-oat01-${"example".repeat(8)}`;

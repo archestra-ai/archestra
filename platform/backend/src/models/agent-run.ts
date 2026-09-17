@@ -1,4 +1,4 @@
-import type { PaginationQuery } from "@archestra/shared";
+import type { AgentRuntimeState, PaginationQuery } from "@archestra/shared";
 import {
   and,
   asc,
@@ -9,6 +9,7 @@ import {
   isNotNull,
   isNull,
   lt,
+  notInArray,
   or,
   type SQL,
   sql,
@@ -197,6 +198,46 @@ class AgentRunModel {
         and(
           eq(schema.agentRunsTable.taskId, params.taskId),
           isNull(schema.agentRunsTable.endedAt),
+        ),
+      )
+      .returning({ id: schema.agentRunsTable.id });
+    return updated.length > 0;
+  }
+
+  static async updateRuntimeState(params: {
+    taskId: string;
+    state: AgentRuntimeState;
+    attentionState: AgentRunRecord["attentionState"];
+  }): Promise<boolean> {
+    const column = schema.agentRunsTable.runtimeState;
+    const updated = await db
+      .update(schema.agentRunsTable)
+      .set({
+        runtimeState: params.state,
+        attentionState: params.attentionState,
+      })
+      .where(
+        and(
+          eq(schema.agentRunsTable.taskId, params.taskId),
+          isNull(schema.agentRunsTable.endedAt),
+          inArray(
+            schema.agentRunsTable.taskId,
+            db
+              .select({ id: schema.a2aTasksTable.id })
+              .from(schema.a2aTasksTable)
+              .where(
+                notInArray(schema.a2aTasksTable.state, [
+                  ...A2A_TERMINAL_TASK_STATES,
+                ]),
+              ),
+          ),
+          or(
+            isNull(column),
+            and(
+              sql`${column}->>'attemptId' = ${params.state.attemptId}`,
+              sql`(${column}->>'sequence')::bigint < ${params.state.sequence}`,
+            ),
+          ),
         ),
       )
       .returning({ id: schema.agentRunsTable.id });

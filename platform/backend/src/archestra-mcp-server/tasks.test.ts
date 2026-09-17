@@ -1,4 +1,5 @@
 import {
+  agentRuntimeError,
   TOOL_CANCEL_RUN_FULL_NAME,
   TOOL_GET_RUN_FULL_NAME,
   TOOL_LIST_AGENT_RUNS_FULL_NAME,
@@ -394,6 +395,42 @@ describe("run tools", () => {
     expect(result.content).toEqual([
       { type: "text", text: "Error: Run not found" },
     ]);
+  });
+
+  test("get_run exposes the current task's actionable runtime diagnostic", async () => {
+    const task = await seedChatopsTask({
+      actorUserId: actorId,
+      withTarget: false,
+    });
+    const diagnostic = agentRuntimeError("codex_auth_required");
+    await AgentRunModel.updateRuntimeState({
+      taskId: task.id,
+      attentionState: "auth_required",
+      state: {
+        version: 1,
+        attemptId: crypto.randomUUID(),
+        sequence: 1,
+        eventId: crypto.randomUUID(),
+        source: "codex",
+        observedAt: new Date().toISOString(),
+        activity: "idle",
+        outcome: null,
+        diagnostic,
+      },
+    });
+    const result = await executeArchestraTool(
+      TOOL_GET_RUN_FULL_NAME,
+      { task_id: task.id },
+      context,
+    );
+    expect(result.isError).not.toBe(true);
+    expect(result.structuredContent).toMatchObject({
+      run: { task_id: task.id },
+      runtime_state: { source: "codex", diagnostic },
+    });
+    expect(JSON.stringify(result.structuredContent)).not.toContain(
+      "exit code 75",
+    );
   });
 
   test("get_run resolves the current turn from the original session ID", async () => {

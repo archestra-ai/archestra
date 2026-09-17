@@ -147,8 +147,9 @@ describe("disposable Claude sign-in Jobs", () => {
       ),
     );
     vi.mocked(execAgentRuntimeCommand).mockImplementation(
-      async ({ stdin, command }) => {
+      async ({ stdin, command, timeoutMs }) => {
         expect(command).toEqual(["archestra-claude-account", "complete"]);
+        expect(timeoutMs).toBe(60_000);
         let input = "";
         for await (const chunk of stdin ?? []) input += chunk;
         expect(JSON.parse(input)).toEqual({

@@ -29,8 +29,10 @@ ROOT = Path('/var/run/archestra')
 STATE = ROOT / 'terminal'
 SOCKET = STATE / 'control.sock'
 LAUNCH_LOCK = STATE / 'launch.lock'
+BINDING = STATE / 'pane-binding.json'
 SELF = str(Path(__file__).resolve())
 RECORDER = str(Path(__file__).with_name('archestra-pty-record'))
+HERDR_EVENT_PLUGIN = Path('/usr/local/share/archestra/herdr-plugin')
 SYNC_END = b'\x1b[?2026l'
 RESPONSE_LIMIT = 32 * 1024 * 1024
 STEER_LIMIT = 512 * 1024
@@ -49,8 +51,19 @@ processes = SimpleNamespace(**runpy.run_path(RECORDER))
 
 def save(path, value):
     temporary = path.with_suffix(path.suffix + '.tmp')
-    temporary.write_text(json.dumps(value))
+    with temporary.open('w', encoding='utf-8') as output:
+        output.write(json.dumps(value))
+        output.flush()
+        os.fsync(output.fileno())
     temporary.replace(path)
+    try:
+        descriptor = os.open(path.parent, os.O_RDONLY | getattr(os, 'O_DIRECTORY', 0))
+    except OSError:
+        return
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
 
 
 def read(path, default=None):
@@ -58,6 +71,17 @@ def read(path, default=None):
         return json.loads(path.read_text())
     except (FileNotFoundError, json.JSONDecodeError):
         return default
+
+
+def publish_binding(value):
+    # Rebinding must wait for a plugin's socket snapshot and event write, so
+    # that snapshot cannot be attributed across two different turns.
+    with BINDING.with_suffix('.lock').open('a') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        if value is None:
+            BINDING.unlink(missing_ok=True)
+        else:
+            save(BINDING, value)
 
 
 def acquire_launch_lock():
@@ -160,6 +184,14 @@ class Runtime:
         self.environment = {**os.environ, 'HERDR_SOCKET_PATH': str(STATE / 'herdr.sock'),
                             'XDG_CONFIG_HOME': str(STATE / 'config'),
                             'XDG_STATE_HOME': str(STATE / 'state')}
+        self.event_plugin_enabled = HERDR_EVENT_PLUGIN.is_dir()
+        if self.event_plugin_enabled:
+            self.environment['ARCHESTRA_AGENT_RUNTIME_EVENT_READY_FILE'] = str(
+                STATE / 'herdr-event-plugin.ready')
+            # The server environment is long-lived across turns.  The plugin
+            # reads this atomically replaced binding to select the immutable
+            # task/attempt context for the pane event it is handling.
+            self.environment['ARCHESTRA_AGENT_RUNTIME_PANE_BINDING_FILE'] = str(BINDING)
         # Herdr itself may normalize TERM for its native owner/pane runtime.
         # Carry the resolved pod values through a private handoff so the
         # recorder's first child still inherits the caller's environment.
@@ -195,6 +227,21 @@ class Runtime:
             '[experimental]\npane_history = false\n'
             '[update]\nversion_check = false\nmanifest_check = false\n'
             '[ui]\nmouse_scroll_lines = 1\n')
+        if self.event_plugin_enabled:
+            # The plugin registry is deliberately linked after the transient
+            # Herdr state reset and before the headless server starts.  Linking
+            # offline makes startup deterministic and avoids a second daemon.
+            linked = await asyncio.to_thread(
+                subprocess.run,
+                ['herdr', 'plugin', 'link', str(HERDR_EVENT_PLUGIN)],
+                env=self.environment,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+                check=False,
+            )
+            if linked.returncode != 0:
+                detail = linked.stderr.decode(errors='replace').strip()
+                raise RuntimeError(f'Herdr event plugin could not be linked{": " + detail if detail else ""}')
         self.server_log = open(STATE / 'server.log', 'ab', buffering=0)
         self.server = await asyncio.create_subprocess_exec('herdr', 'server', env=self.environment,
             stdin=subprocess.DEVNULL, stdout=self.server_log, stderr=self.server_log)
@@ -210,6 +257,15 @@ class Runtime:
                 await asyncio.sleep(.1)
         else:
             raise RuntimeError('Terminal server did not become ready')
+        if self.event_plugin_enabled:
+            for _ in range(100):
+                if (STATE / 'herdr-event-plugin.ready').is_file():
+                    break
+                if self.server.returncode is not None:
+                    raise RuntimeError('Herdr server exited before event plugin became ready')
+                await asyncio.sleep(.05)
+            else:
+                raise RuntimeError('Herdr event plugin did not become ready')
         workspace = await api(self.environment, 'workspace.create', cwd=os.getcwd(), label='agent')
         layout = await api(self.environment, 'layout.apply',
             workspace_id=workspace['workspace']['workspace_id'],
@@ -265,6 +321,7 @@ class Runtime:
             self.retained = None
             launch = STATE / 'launch.json'
             launch.unlink(missing_ok=True)
+            await asyncio.to_thread(publish_binding, None)
             await self.abort_paste()
             child = self.child()
             command_identity = child.get('child')
@@ -335,6 +392,29 @@ class Runtime:
         await self.stop()
         self.attention = {'active': False, 'label': ''}
         self.prefix = prefix
+        context_path = Path(f'{prefix}.events/context.json')
+        if context_path.is_file():
+            try:
+                context = json.loads(context_path.read_text(encoding='utf-8'))
+                task_id = context.get('taskId')
+                attempt_id = context.get('attemptId')
+                if not isinstance(task_id, str) or not isinstance(attempt_id, str):
+                    raise ValueError('event context identity is incomplete')
+                if task_id != Path(prefix).name:
+                    raise ValueError('event context task identity does not match the turn')
+            except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError) as error:
+                self.prefix = None
+                raise RuntimeError(f'Terminal event context is invalid: {error}') from error
+            await asyncio.to_thread(publish_binding, {
+                'version': 1,
+                'paneId': self.pane_id,
+                'prefix': prefix,
+                'context': str(context_path),
+                'taskId': task_id,
+                'attemptId': attempt_id,
+            })
+        else:
+            await asyncio.to_thread(publish_binding, None)
         save(STATE / 'launch.json', {'prefix': prefix, 'nonce': uuid.uuid4().hex})
         for _ in range(100):
             child = self.child()

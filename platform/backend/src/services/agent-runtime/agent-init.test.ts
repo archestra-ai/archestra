@@ -127,3 +127,121 @@ fi
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test.each([
+  ["401", "provider_credential_rejected", "credential was rejected"],
+  ["403", "provider_permission_denied", "does not have access to this model"],
+  ["404", "model_unavailable", "endpoint was not found"],
+  ["429", "provider_rate_limited", "rate limit was reached"],
+] as const)("stops model discovery immediately on HTTP %s", async (status, code, message) => {
+  const root = await mkdtemp(path.join(tmpdir(), "agent-init-http-"));
+  try {
+    const bin = path.join(root, "bin");
+    const runtime = path.join(root, "runtime");
+    await mkdir(bin);
+    await mkdir(runtime);
+    await writeFile(
+      path.join(bin, "curl"),
+      [
+        "#!/bin/sh",
+        "printf '%s' \"$TEST_HTTP_STATUS\"",
+        "printf '%s\\n' attempt >> \"$ARCHESTRA_AGENT_RUNTIME_DIR/curl-attempts\"",
+        "exit 22",
+        "",
+      ].join("\n"),
+    );
+    await writeFile(path.join(bin, "sleep"), "#!/bin/sh\nexit 0\n");
+    await chmod(path.join(bin, "curl"), 0o755);
+    await chmod(path.join(bin, "sleep"), 0o755);
+    const prefix = path.join(root, "turn");
+    const result = await exec(
+      "sh",
+      [
+        path.resolve(
+          import.meta.dirname,
+          "../../../../agent_images/bin/archestra-agent-init",
+        ),
+      ],
+      {
+        env: {
+          ...process.env,
+          PATH: `${bin}:${process.env.PATH}`,
+          HOME: root,
+          OPENAI_BASE_URL: "http://proxy.invalid/v1",
+          OPENAI_API_KEY: "synthetic-secret-do-not-forward",
+          TEST_HTTP_STATUS: status,
+          ARCHESTRA_AGENT_RUNTIME_DIR: runtime,
+          ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX: prefix,
+        },
+      },
+    ).catch((error) => error);
+
+    expect(result.code).toBe(69);
+    expect(await readFile(path.join(runtime, "curl-attempts"), "utf8")).toBe(
+      "attempt\n",
+    );
+    const failure = JSON.parse(await readFile(`${prefix}.failure`, "utf8"));
+    expect(failure).toMatchObject({ version: 1, code });
+    expect(failure.message).toContain(message);
+    expect(JSON.stringify(failure)).not.toContain("synthetic-secret");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("bounds transient model discovery failures and reports proxy_unavailable", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "agent-init-http-5xx-"));
+  try {
+    const bin = path.join(root, "bin");
+    const runtime = path.join(root, "runtime");
+    await mkdir(bin, { recursive: true });
+    await mkdir(runtime, { recursive: true });
+    await writeFile(
+      path.join(bin, "curl"),
+      [
+        "#!/bin/sh",
+        "printf '%s' \"$TEST_HTTP_STATUS\"",
+        "printf '%s\\n' attempt >> \"$ARCHESTRA_AGENT_RUNTIME_DIR/curl-attempts\"",
+        "exit 22",
+        "",
+      ].join("\n"),
+    );
+    await writeFile(path.join(bin, "sleep"), "#!/bin/sh\nexit 0\n");
+    await chmod(path.join(bin, "curl"), 0o755);
+    await chmod(path.join(bin, "sleep"), 0o755);
+    const prefix = path.join(root, "turn");
+    const result = await exec(
+      "sh",
+      [
+        path.resolve(
+          import.meta.dirname,
+          "../../../../agent_images/bin/archestra-agent-init",
+        ),
+      ],
+      {
+        env: {
+          ...process.env,
+          PATH: `${bin}:${process.env.PATH}`,
+          HOME: root,
+          OPENAI_BASE_URL: "http://proxy.invalid/v1",
+          OPENAI_API_KEY: "synthetic-secret-do-not-forward",
+          TEST_HTTP_STATUS: "503",
+          ARCHESTRA_AGENT_RUNTIME_DIR: runtime,
+          ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX: prefix,
+        },
+      },
+    ).catch((error) => error);
+
+    expect(result.code).toBe(69);
+    expect(
+      (await readFile(path.join(runtime, "curl-attempts"), "utf8"))
+        .trim()
+        .split("\n"),
+    ).toHaveLength(30);
+    const failure = JSON.parse(await readFile(`${prefix}.failure`, "utf8"));
+    expect(failure).toMatchObject({ version: 1, code: "proxy_unavailable" });
+    expect(JSON.stringify(failure)).not.toContain("synthetic-secret");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

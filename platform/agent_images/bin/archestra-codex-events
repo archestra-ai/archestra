@@ -1,0 +1,463 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Codex calls its legacy notify command with one JSON event argument. Newer
+# Codex releases write lifecycle events to the native rollout JSONL without
+# invoking notify for terminal failures, so this adapter also observes that
+# file while the native process remains alive.
+runtime_dir="${ARCHESTRA_AGENT_RUNTIME_DIR:-/var/run/archestra}"
+
+generation_current() {
+  local generation_file="${runtime_dir}/codex-turn-generation"
+  [[ -z "${ARCHESTRA_CODEX_NATIVE_GENERATION:-}" ]] \
+    || { [[ -s "${generation_file}" ]] \
+      && [[ "$(cat "${generation_file}" 2>/dev/null || true)" == "${ARCHESTRA_CODEX_NATIVE_GENERATION}" ]]; }
+}
+
+event_helper_available() {
+  local prefix="${ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX:-}"
+  [[ -n "${prefix}" ]] && command -v archestra-agent-event >/dev/null 2>&1 \
+    && [[ -f "${prefix}.events/context.json" ]]
+}
+
+emit_status() {
+  local turn_id="${1:-}"
+  local status="${2:-working}"
+  local attention="${3:-}"
+  local context="${ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX:-}.events/context.json"
+  local payload
+  if [[ -z "${turn_id}" ]] || ! generation_current || ! event_helper_available; then
+    return 0
+  fi
+  payload="$(jq -cn --arg status "${status}" --arg attention "${attention}" \
+    '{type:"agent.status",status:$status,attention:(if $attention == "" then null else $attention end)}')"
+  if ! archestra-agent-event emit --context "${context}" --source native-codex \
+    --event-key "status:${turn_id}:${status}:${attention}" "${payload}" \
+    >/dev/null; then
+    printf 'archestra-codex-events: status event could not be reported\n' >&2
+  fi
+}
+
+emit_diagnostic() {
+  local turn_id="${1:-}"
+  local code="${2:-provider_error}"
+  local context="${ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX:-}.events/context.json"
+  local payload
+  if [[ -z "${turn_id}" ]] || ! generation_current || ! event_helper_available; then
+    return 0
+  fi
+  if ! payload="$(jq -cn --arg code "${code}" \
+    '{type:"diagnostic",error:{code:$code}}')"; then
+    return 0
+  fi
+  if ! archestra-agent-event emit --context "${context}" --source native-codex \
+    --event-key "diagnostic:${turn_id}:${code}" "${payload}" \
+    >/dev/null; then
+    printf 'archestra-codex-events: diagnostic event could not be reported\n' >&2
+  fi
+}
+
+chatgpt_subscription_auth() {
+  local auth_file="${CODEX_HOME:-${runtime_dir}/codex}/auth.json"
+  [[ -s "${auth_file}" ]] \
+    && jq -e '.auth_mode == "chatgpt"' "${auth_file}" >/dev/null 2>&1
+}
+
+observe_transcript() {
+  local transcript="${1:-}"
+  local expected_session="${2:-}"
+  local offset_file="${runtime_dir}/codex-transcript-observer.offset"
+  local pid_file="${runtime_dir}/codex-transcript-observer.pid"
+
+  [[ -n "${transcript}" ]] || exit 64
+  observer_pid="$$"
+  observer_tmp="${pid_file}.tmp.$$"
+  printf '%s\n' "${observer_pid}" > "${observer_tmp}"
+  mv "${observer_tmp}" "${pid_file}"
+  exec python3 - "${BASH_SOURCE[0]}" observe "${transcript}" "${offset_file}" "${pid_file}" "${runtime_dir}" "${expected_session}" <<'PY'
+import json
+import os
+from pathlib import Path
+import signal
+import subprocess
+import sys
+import time
+
+adapter = sys.argv[1]
+transcript = Path(sys.argv[3])
+offset_path = Path(sys.argv[4])
+pid_path = Path(sys.argv[5])
+runtime = Path(sys.argv[6])
+expected_session = sys.argv[7]
+generation_path = runtime / "codex-turn-generation"
+expected_generation = os.environ.get("ARCHESTRA_CODEX_NATIVE_GENERATION", "")
+pid = str(os.getpid())
+active_callbacks = []
+
+def cleanup(*_signals):
+    for callback in active_callbacks:
+        try:
+            os.killpg(callback.pid, signal.SIGTERM)
+        except (ProcessLookupError, OSError):
+            pass
+    for callback in active_callbacks:
+        try:
+            callback.wait(timeout=0.5)
+        except subprocess.TimeoutExpired:
+            try:
+                os.killpg(callback.pid, signal.SIGKILL)
+            except (ProcessLookupError, OSError):
+                pass
+            try:
+                callback.wait(timeout=0.5)
+            except (subprocess.TimeoutExpired, OSError):
+                pass
+    try:
+        if pid_path.read_text(encoding="utf-8").strip() == pid:
+            pid_path.unlink()
+    except (FileNotFoundError, OSError):
+        pass
+    raise SystemExit(0)
+
+signal.signal(signal.SIGTERM, cleanup)
+signal.signal(signal.SIGINT, cleanup)
+try:
+    offset = int(offset_path.read_text(encoding="utf-8").strip())
+except (FileNotFoundError, ValueError, OSError):
+    offset = 0
+verified_session = not expected_session
+reporter_failure_offset = None
+
+def transcript_matches_session():
+    if not expected_session:
+        return True
+    try:
+        with transcript.open("rb") as stream:
+            for _ in range(32):
+                raw = stream.readline()
+                if not raw:
+                    return None
+                try:
+                    entry = json.loads(raw)
+                except (UnicodeDecodeError, json.JSONDecodeError):
+                    continue
+                if entry.get("type") != "session_meta":
+                    continue
+                payload = entry.get("payload")
+                if not isinstance(payload, dict):
+                    return False
+                observed_session = payload.get("id") or payload.get("session_id")
+                return observed_session == expected_session
+    except OSError:
+        return None
+    return None
+
+while True:
+    if expected_generation:
+        try:
+            if generation_path.read_text(encoding="utf-8").strip() != expected_generation:
+                cleanup()
+        except (FileNotFoundError, OSError):
+            cleanup()
+    if not verified_session:
+        session_matches = transcript_matches_session()
+        if session_matches is False:
+            cleanup()
+        if session_matches is not True:
+            time.sleep(0.1)
+            continue
+        verified_session = True
+    try:
+        size = transcript.stat().st_size
+    except OSError:
+        size = 0
+    if size < offset:
+        offset = 0
+    try:
+        with transcript.open("rb") as stream:
+            stream.seek(offset)
+            while True:
+                raw = stream.readline()
+                if not raw:
+                    break
+                if not raw.endswith(b"\n"):
+                    break
+                next_offset = stream.tell()
+                try:
+                    entry = json.loads(raw)
+                    if not isinstance(entry, dict):
+                        entry = {}
+                    payload = entry.get("payload")
+                    callback_ok = True
+                    if (
+                        entry.get("type") == "event_msg"
+                        and isinstance(payload, dict)
+                        and payload.get("type") in {"task_started", "task_complete"}
+                    ):
+                        observer_environment = os.environ.copy()
+                        observer_environment["ARCHESTRA_CODEX_NATIVE_OBSERVER"] = "1"
+                        try:
+                            callback = subprocess.Popen(
+                                [adapter, json.dumps(payload, separators=(",", ":"))],
+                                env=observer_environment,
+                                stdin=subprocess.DEVNULL,
+                                stdout=subprocess.DEVNULL,
+                                stderr=sys.stderr,
+                                start_new_session=True,
+                            )
+                        except OSError:
+                            callback_ok = False
+                        else:
+                            active_callbacks.append(callback)
+                        if callback_ok:
+                            try:
+                                callback.wait(timeout=5)
+                                callback_ok = callback.returncode == 0
+                            except subprocess.TimeoutExpired:
+                                callback_ok = False
+                            if not callback_ok and callback.poll() is None:
+                                try:
+                                    os.killpg(callback.pid, signal.SIGTERM)
+                                except (ProcessLookupError, OSError):
+                                    pass
+                                try:
+                                    callback.wait(timeout=1)
+                                except subprocess.TimeoutExpired:
+                                    try:
+                                        os.killpg(callback.pid, signal.SIGKILL)
+                                    except (ProcessLookupError, OSError):
+                                        pass
+                                    try:
+                                        callback.wait(timeout=1)
+                                    except (subprocess.TimeoutExpired, OSError):
+                                        pass
+                            active_callbacks.remove(callback)
+                        if not callback_ok:
+                            # Keep this record at the current offset so the
+                            # lifecycle event is retried after a transient
+                            # reporter failure.
+                            if reporter_failure_offset != offset:
+                                print("archestra-codex-events: lifecycle event reporter failed", file=sys.stderr)
+                                reporter_failure_offset = offset
+                            break
+                        reporter_failure_offset = None
+                except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+                    pass
+                offset = next_offset
+                try:
+                    temporary = offset_path.with_name(f".{offset_path.name}.tmp.{pid}")
+                    temporary.write_text(f"{offset}\n", encoding="utf-8")
+                    os.replace(temporary, offset_path)
+                except OSError:
+                    pass
+    except OSError:
+        pass
+    if os.environ.get("ARCHESTRA_AGENT_RUNTIME_MODE", "one_shot") == "one_shot" \
+        and ((runtime / "turn-complete").exists() or (runtime / "turn-complete.failed").exists()):
+        cleanup()
+    time.sleep(0.1)
+PY
+}
+
+if [[ "${1:-}" == "observe" ]]; then
+  observe_transcript "${2:-}" "${3:-}"
+  exit 0
+fi
+
+payload="${1:-}"
+if [[ -z "${payload}" ]] || ! jq -e 'type == "object"' >/dev/null 2>&1 <<<"${payload}"; then
+  exit 0
+fi
+
+dispatch_file="${runtime_dir}/codex-dispatch.json"
+if [[ -s "${dispatch_file}" ]]; then
+  # A retained native process can finish a callback after a new dispatch has
+  # started. Its inherited turn prefix must still be the immutable dispatch
+  # recorded by the current wrapper invocation.
+  if ! jq -e \
+    --arg task "${ARCHESTRA_AGENT_RUNTIME_TASK_ID:-}" \
+    --arg prefix "${ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX:-}" \
+    '.task_id == $task and .turn_prefix == $prefix' \
+    "${dispatch_file}" >/dev/null 2>&1; then
+    exit 0
+  fi
+fi
+if ! generation_current; then
+  exit 0
+fi
+
+event_type="$(jq -r '.type // empty' <<<"${payload}")"
+session_file="${runtime_dir}/codex-main-session"
+main_session=""
+if [[ -s "${session_file}" ]]; then
+  main_session="$(cat "${session_file}")"
+fi
+
+# Some native versions include the session/thread identity in notify events.
+# When present, require it to be the session recorded by SessionStart. Missing
+# identity is accepted for legacy task_complete events, which carry only a
+# turn_id and are delivered by the current Codex process.
+event_session="$(jq -r '.session_id // empty' <<<"${payload}")"
+if [[ -n "${main_session}" && -n "${event_session}" && "${event_session}" != "${main_session}" ]]; then
+  exit 0
+fi
+
+task_file="${runtime_dir}/task.md"
+task=""
+if [[ -s "${task_file}" ]]; then
+  task="$(cat "${task_file}")"
+fi
+current_turn_file="${runtime_dir}/codex-current-turn"
+attention_command="${ARCHESTRA_AGENT_ATTENTION_COMMAND:-archestra-agent-attention}"
+
+if [[ "${event_type}" == "agent-turn-complete" ]]; then
+  if [[ "${ARCHESTRA_AGENT_RUNTIME_MODE:-one_shot}" != "one_shot" ]]; then
+    exit 0
+  fi
+  answer="$(jq -r --arg task "${task}" '
+    if ((.["input-messages"] // []) | index($task)) != null
+    then .["last-assistant-message"] // empty
+    else empty
+    end
+  ' <<<"${payload}")"
+  if [[ -n "${answer}" ]]; then
+    printf '%s\n' "${answer}" > "${runtime_dir}/final-answer.txt"
+    touch "${runtime_dir}/turn-complete"
+  fi
+  exit 0
+fi
+
+if [[ "${event_type}" == "task_started" ]]; then
+  turn_id="$(jq -r '.turn_id // empty' <<<"${payload}")"
+  if [[ -z "${turn_id}" || ! "${turn_id}" =~ ^[A-Za-z0-9._:-]{1,128}$ ]]; then
+    exit 0
+  fi
+  if [[ ! -e "${current_turn_file}" ]] \
+    && [[ "${ARCHESTRA_CODEX_NATIVE_OBSERVER:-0}" != "1" ]]; then
+    exit 0
+  fi
+  if [[ -s "${current_turn_file}" ]] \
+    && [[ "$(cat "${current_turn_file}")" != "${turn_id}" ]]; then
+    exit 0
+  fi
+  if [[ ! -e "${current_turn_file}" ]]; then
+    generation_current || exit 0
+    temporary="${current_turn_file}.tmp.$$"
+    printf '%s\n' "${turn_id}" > "${temporary}"
+    mv "${temporary}" "${current_turn_file}"
+  fi
+  "${attention_command}" clear >/dev/null 2>&1 || true
+  emit_status "${turn_id}" working ""
+  exit 0
+fi
+
+if [[ "${event_type}" != "task_complete" ]]; then
+  exit 0
+fi
+
+turn_id="$(jq -r '.turn_id // empty' <<<"${payload}")"
+if [[ -z "${turn_id}" || ! "${turn_id}" =~ ^[A-Za-z0-9._:-]{1,128}$ ]]; then
+  exit 0
+fi
+if [[ ! -s "${current_turn_file}" ]] \
+  || [[ "$(cat "${current_turn_file}")" != "${turn_id}" ]]; then
+  exit 0
+fi
+
+error_present="$(jq -r 'if .error == null then "0" else "1" end' <<<"${payload}")"
+if [[ "${error_present}" == "1" ]]; then
+  # Prefer an explicit provider code. The fallback status extraction accepts
+  # only the stable native "unexpected status NNN" shape; it does not inspect
+  # terminal output or arbitrary provider prose.
+  provider_code="$(jq -r '
+    [
+      .error.codex_error_info,
+      .error.code,
+      .error.internal_code,
+      .error.provider_code,
+      .error.details.internal_code,
+      .error.details.error.internal_code,
+      .error.provider_error.internal_code,
+      .error.response.error.internal_code
+    ] | map(select(. == "provider_auth_required")) | .[0] // empty
+  ' <<<"${payload}")"
+  status="$(jq -r '
+    [
+      .http_status, .status_code, .status,
+      .error.http_status, .error.status_code, .error.status
+    ]
+    | map(select(type == "number" and . >= 100 and . <= 599))
+    | .[0] // empty
+  ' <<<"${payload}")"
+  if [[ -z "${status}" ]]; then
+    status="$(jq -r '
+      if .error.codex_error_info == "other"
+        and (.error.message | type) == "string"
+        and (.error.message | test("^unexpected status [1-5][0-9]{2}(\\s|$)"))
+      then (.error.message | capture("^unexpected status (?<status>[1-5][0-9]{2})(\\s|$)").status)
+      else empty
+      end
+    ' <<<"${payload}")"
+  fi
+
+  code="provider_error"
+  message="The Codex provider could not complete this turn. Check the provider configuration and retry."
+  if [[ "${provider_code}" == "provider_auth_required" ]] \
+    || { [[ "${status}" == "401" ]] && chatgpt_subscription_auth; }; then
+    code="codex_auth_required"
+    message="ChatGPT sign-in is no longer valid. Reconnect the ChatGPT account in Agent settings, then retry."
+  elif [[ "${status}" == "401" ]]; then
+    code="provider_credential_rejected"
+    message="The configured provider credential was rejected. Reconnect or update it, then retry."
+  elif [[ "${status}" == "403" ]]; then
+    code="provider_permission_denied"
+    message="The configured provider credential does not have access to this model. Choose an authorized credential, then retry."
+  elif [[ "${status}" == "404" ]]; then
+    code="model_unavailable"
+    message="The selected model is not available to this Agent. Check the model configuration, then retry."
+  elif [[ "${status}" == 429 ]]; then
+    code="provider_rate_limited"
+    message="The provider rate limit was reached. Wait or choose another credential, then retry."
+  elif [[ "${status}" =~ ^5[0-9]{2}$ ]]; then
+    code="proxy_unavailable"
+    message="The model proxy could not complete the request. Check proxy availability, then retry."
+  fi
+
+  if [[ "${ARCHESTRA_AGENT_RUNTIME_MODE:-one_shot}" == "interactive" ]]; then
+    generation_current || exit 0
+    if [[ "${code}" == "codex_auth_required" || "${code}" == "provider_credential_rejected" || "${code}" == "provider_permission_denied" ]]; then
+      ARCHESTRA_AGENT_RUNTIME_ATTENTION_KIND=auth_required "${attention_command}" set "Authentication needed" >/dev/null 2>&1 || true
+    else
+      "${attention_command}" set "Provider error" >/dev/null 2>&1 || true
+    fi
+    emit_diagnostic "${turn_id}" "${code}"
+    exit 0
+  fi
+
+  failure_command="$(dirname "${BASH_SOURCE[0]}")/archestra-agent-failure"
+  generation_current || exit 0
+  "${failure_command}" "${code}" "${message}" || true
+  if [[ "${ARCHESTRA_AGENT_RUNTIME_PLAIN:-0}" != "1" ]]; then
+    temporary="${runtime_dir}/final-answer.txt.tmp.$$"
+    printf '%s\n' "${message}" > "${temporary}"
+    mv "${temporary}" "${runtime_dir}/final-answer.txt"
+    : > "${runtime_dir}/turn-complete.failed"
+    : > "${runtime_dir}/turn-complete"
+  fi
+  exit 0
+fi
+
+answer="$(jq -r '.last_agent_message // empty' <<<"${payload}")"
+if [[ -z "${answer}" ]]; then
+  exit 0
+fi
+generation_current || exit 0
+"${attention_command}" clear >/dev/null 2>&1 || true
+emit_status "${turn_id}" working ""
+if [[ "${ARCHESTRA_AGENT_RUNTIME_MODE:-one_shot}" == "one_shot" \
+  && "${ARCHESTRA_AGENT_RUNTIME_PLAIN:-0}" != "1" ]]; then
+  temporary="${runtime_dir}/final-answer.txt.tmp.$$"
+  printf '%s\n' "${answer}" > "${temporary}"
+  mv "${temporary}" "${runtime_dir}/final-answer.txt"
+  touch "${runtime_dir}/turn-complete"
+fi

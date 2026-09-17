@@ -104,6 +104,7 @@ export function buildAgentRuntimeTurnScript(
         throw new Error("Invalid runtime environment variable name");
       return `export ${name}=${shellQuote(value)}`;
     }),
+    buildAgentRuntimeEventContextScript(),
     ...(spec.renewableCredentials
       ? [waitForCredentialProjection(spec.taskId)]
       : []),
@@ -348,8 +349,8 @@ export function buildAgentRuntimeSandbox(
                 {
                   name: "ARCHESTRA_AGENT_RUNTIME_ENTRYPOINT",
                   value: spec.renewableCredentials
-                    ? `${waitForCredentialProjection(spec.taskId)}\n${resolveEntrypoint(spec.command)}`
-                    : resolveEntrypoint(spec.command),
+                    ? `${buildAgentRuntimeEventContextScript()}\n${waitForCredentialProjection(spec.taskId)}\n${resolveEntrypoint(spec.command)}`
+                    : `${buildAgentRuntimeEventContextScript()}\n${resolveEntrypoint(spec.command)}`,
                 },
                 {
                   name: "ARCHESTRA_AGENT_RUNTIME_INPUT_FILE_COUNT",
@@ -573,6 +574,18 @@ function resolveEntrypoint(command: string[] | null): string {
   ].join("\n");
 }
 
+/** Bind native callbacks to this immutable task/launch before client startup. */
+function buildAgentRuntimeEventContextScript(): string {
+  return [
+    `if command -v archestra-agent-event >/dev/null 2>&1 && [ -n "\${ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX:-}" ]; then`,
+    `  export ARCHESTRA_AGENT_RUNTIME_ATTEMPT_ID="\${ARCHESTRA_AGENT_RUNTIME_RUN_ID:-}"`,
+    `  if ! archestra-agent-event context --path "\${ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX}.events/context.json" --task "$ARCHESTRA_AGENT_RUNTIME_TASK_ID" --attempt "$ARCHESTRA_AGENT_RUNTIME_ATTEMPT_ID" >/dev/null 2>&1; then`,
+    '    echo "agent-runtime: could not initialize the event context; native event details may be unavailable" >&2',
+    "  fi",
+    "fi",
+  ].join("\n");
+}
+
 function shellQuote(argument: string): string {
   return `'${argument.replaceAll("'", `'\\''`)}'`;
 }
@@ -598,8 +611,32 @@ function waitForCredentialProjection(taskId: string): string {
     "credential_polls=0",
     `until grep -qF ${shellQuote(`{"taskId":"${taskId}",`)} ${AGENT_RUNTIME_CREDENTIALS_FILE} 2>/dev/null; do`,
     "  credential_polls=$((credential_polls + 1))",
-    "  if [ \"$credential_polls\" -ge 180 ]; then echo 'Credential projection unavailable' >&2; exit 75; fi",
+    '  if [ "$credential_polls" -ge 180 ]; then',
+    `    if [ -n "\${ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX:-}" ]; then`,
+    `      failure="\${ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX}.failure"`,
+    "      cat > \"$failure.tmp\" <<'EOF'",
+    '{"version":1,"code":"credential_projection_timeout","phase":"credentials","message":"The runtime could not load this turn\'s credentials before startup timed out.","resolution":"Check that the configured credentials still exist and that the runtime can mount its credential bundle, then retry."}',
+    "EOF",
+    '      mv "$failure.tmp" "$failure"',
+    "      if command -v archestra-agent-event >/dev/null 2>&1; then",
+    `        printf '%s\\n' '{"type":"turn.finished","outcome":"failed","error":{"code":"credential_projection_timeout"}}' | archestra-agent-event emit --source supervisor --event-key credential-projection-timeout >/dev/null || echo 'Agent Runtime failure event could not be saved' >&2`,
+    "      fi",
+    "    fi",
+    "    echo 'Credential projection unavailable' >&2",
+    "    exit 75",
+    "  fi",
     "  sleep 1",
     "done",
   ].join("\n");
+}
+
+/** Read terminal activity without turning an absent marker into a Pod error. */
+export function buildAgentRuntimeActivityProbeCommand(
+  herdrSelected: boolean,
+  activityPath = "/var/run/archestra/development-activity",
+): string {
+  const path = shellQuote(activityPath);
+  return herdrSelected
+    ? `if [ -f ${path} ]; then cat ${path}; fi`
+    : `{ cat ${path} 2>/dev/null; tmux list-clients -F '#{client_activity}' 2>/dev/null; } | sort -nr | head -1`;
 }

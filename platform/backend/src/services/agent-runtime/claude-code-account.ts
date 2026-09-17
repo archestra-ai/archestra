@@ -158,6 +158,11 @@ class ClaudeCodeAccountManager {
           502,
           "Claude Code returned an invalid sign-in result",
         );
+      if (result.data.state === "failed")
+        throw new ApiError(
+          400,
+          "Claude Code sign-in could not be verified. Please try again.",
+        );
       if (result.data.state !== "connected")
         return { state: result.data.state, flowId: params.flowId };
       if (!token && !result.data.token)

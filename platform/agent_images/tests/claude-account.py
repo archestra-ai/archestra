@@ -98,6 +98,35 @@ class FakeProcess:
             raise subprocess.TimeoutExpired(self.args, timeout)
 
 
+class FakeResponse:
+    def __init__(self, status):
+        self.status = status
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_):
+        return False
+
+
+class FakeOpener:
+    def __init__(self, error):
+        self.error = error
+
+    def open(self, *_args, **_kwargs):
+        raise self.error
+
+
+class FakeSuccessOpener:
+    def __init__(self, response):
+        self.response = response
+        self.calls = []
+
+    def open(self, *args, **kwargs):
+        self.calls.append((args, kwargs))
+        return self.response
+
+
 class AccountTest(unittest.TestCase):
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()
@@ -107,6 +136,7 @@ class AccountTest(unittest.TestCase):
         helper.submitted = root / "submitted"
         helper.started = root / "started"
         helper.exit_file = root / "exit-status"
+        helper.credential_failed = root / "credential-failed"
         helper.state_file = root / "herdr-state.json"
         helper.raw_log = root / "terminal.raw"
         helper.config_file = root / "herdr-config.toml"
@@ -200,6 +230,16 @@ class AccountTest(unittest.TestCase):
         self.assertEqual(helper.captured_token(), TOKEN)
         self.assertEqual(helper.status(), {"state": "connecting", "flowId": "test-flow"})
 
+    def test_captured_token_does_not_include_setup_token_instructions(self):
+        helper.raw_log.write_text(
+            "Your OAuth token is ready:\n\n"
+            + TOKEN
+            + "\n\nStore this token securely. You won't be able to see it again.\n"
+            + "Use this token by setting: export CLAUDE_CODE_OAUTH_TOKEN=<token>\n",
+            encoding="utf-8",
+        )
+        self.assertEqual(helper.captured_token(), TOKEN)
+
     def test_authorization_code_is_submitted_once_over_the_socket_and_bound_to_flow(self):
         self.prepare_live_flow()
         code = "one-time-code"
@@ -227,6 +267,103 @@ class AccountTest(unittest.TestCase):
         self.assertIn("server.stop", methods)
         self.assertFalse(helper.raw_log.exists())
         self.assertFalse(helper.submitted.exists())
+
+    def test_complete_rejects_a_token_before_persisting_it_when_provider_denies_it(self):
+        self.prepare_live_flow()
+        helper.raw_log.write_text(TOKEN, encoding="utf-8")
+        with patch.object(
+            helper,
+            "validate_subscription_token",
+            side_effect=ValueError("Claude rejected the subscription credential"),
+        ) as validate, patch.object(helper, "supported_models") as models:
+            with patch("sys.stdin", io.StringIO(json.dumps({"flowId": helper.flow_id}))):
+                self.assertEqual(helper.complete(), {"state": "failed"})
+        validate.assert_called_once_with(TOKEN)
+        models.assert_not_called()
+        self.assertEqual(helper.status(), {"state": "failed"})
+
+    def test_complete_validates_a_captured_token_before_returning_it(self):
+        self.prepare_live_flow()
+        helper.raw_log.write_text(TOKEN, encoding="utf-8")
+        metadata = [{"value": "sonnet", "displayName": "Sonnet", "description": ""}]
+        with patch.object(helper, "validate_subscription_token") as validate, patch.object(
+            helper, "supported_models", return_value=metadata
+        ) as models:
+            with patch("sys.stdin", io.StringIO(json.dumps({"flowId": helper.flow_id}))):
+                result = helper.complete()
+        validate.assert_called_once_with(TOKEN)
+        models.assert_called_once_with(TOKEN)
+        self.assertEqual(result, {"state": "connected", "token": TOKEN, "models": metadata})
+
+    def test_models_rejects_a_denied_supplied_token_before_refreshing_metadata(self):
+        with patch.object(
+            helper,
+            "validate_subscription_token",
+            side_effect=ValueError("Claude rejected the subscription credential"),
+        ) as validate, patch.object(helper, "supported_models") as models:
+            with patch("sys.stdin", io.StringIO(json.dumps({"token": TOKEN}))):
+                self.assertEqual(helper.models(), {"state": "failed"})
+        validate.assert_called_once_with(TOKEN)
+        models.assert_not_called()
+
+    def test_models_command_serializes_metadata_without_the_subscription_token(self):
+        metadata = [{"value": "sonnet", "displayName": "Sonnet", "description": ""}]
+        with patch.object(helper, "validate_subscription_token"), patch.object(
+            helper, "supported_models", return_value=metadata
+        ):
+            result = self.invoke("models", {"token": TOKEN})
+        self.assertEqual(result, {"state": "connected", "models": metadata})
+
+    def test_token_validation_uses_anthropic_oauth_headers_and_discards_body(self):
+        opener = FakeSuccessOpener(FakeResponse(204))
+        with patch.object(
+            helper.urllib.request, "build_opener", return_value=opener
+        ) as build_opener:
+            helper.validate_subscription_token(TOKEN)
+        request = opener.calls[0][0][0]
+        self.assertEqual(
+            request.full_url,
+            "https://api.anthropic.com/v1/models?limit=1",
+        )
+        self.assertEqual(request.get_header("Authorization"), f"Bearer {TOKEN}")
+        self.assertEqual(request.get_header("Anthropic-version"), "2023-06-01")
+        self.assertEqual(request.get_header("Anthropic-beta"), "oauth-2025-04-20")
+        self.assertEqual(opener.calls[0][1]["timeout"], helper.API_TIMEOUT)
+        self.assertIsInstance(build_opener.call_args.args[0], helper.NoRedirect)
+
+    def test_token_validation_rejects_anthropic_401_without_provider_body(self):
+        with patch.object(
+            helper.urllib.request, "build_opener", return_value=FakeOpener(
+                helper.urllib.error.HTTPError(
+                    "https://api.anthropic.com/v1/models?limit=1",
+                    401,
+                    "Unauthorized",
+                    {},
+                    None,
+                )
+            ),
+        ):
+            with self.assertRaisesRegex(ValueError, "rejected"):
+                helper.validate_subscription_token(TOKEN)
+
+    def test_token_validation_rejects_http_errors_without_following_redirects(self):
+        for status in (401, 302, 307):
+            with self.subTest(status=status):
+                error = helper.urllib.error.HTTPError(
+                    "https://api.anthropic.com/v1/models?limit=1",
+                    status,
+                    "provider response",
+                    {},
+                    None,
+                )
+                with patch.object(
+                    helper.urllib.request,
+                    "build_opener",
+                    return_value=FakeOpener(error),
+                ) as build_opener:
+                    with self.assertRaisesRegex(ValueError, "rejected"):
+                        helper.validate_subscription_token(TOKEN)
+                self.assertIsInstance(build_opener.call_args.args[0], helper.NoRedirect)
 
     def test_models_accepts_metadata_after_original_deadline_before_new_deadline(self):
         clock = FakeClock()

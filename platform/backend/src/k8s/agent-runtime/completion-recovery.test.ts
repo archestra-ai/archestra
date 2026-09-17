@@ -234,7 +234,8 @@ test.for([
       ? { outcome: "succeeded" }
       : {
           outcome: "failed",
-          reason: "The Agent Runtime turn exited with status 7",
+          reason:
+            "The agent stopped without reporting a structured failure reason.\n\nOpen the run logs to inspect the last output, then check the agent configuration before retrying. (Runtime exit status 7.)",
         },
   );
 });
@@ -248,7 +249,75 @@ test("propagates a custom image failure without a platform code registry", async
   await expect(manager.waitForCompletion({ session: run })).resolves.toEqual({
     outcome: "failed",
     reason:
-      "The selected dataset is unavailable. Choose an existing dataset. (Runtime exit status 42.)",
+      "The selected dataset is unavailable. Choose an existing dataset.\n\nOpen the run logs to inspect the last output, then retry the run.",
+  });
+});
+
+test("persists a native failure arriving between the event read and process exit", async ({
+  run,
+}) => {
+  const eventResponse = JSON.stringify({
+    version: 1,
+    taskId: run.taskId,
+    attemptId: run.id,
+    events: [
+      {
+        version: 1,
+        eventId: "55555555-5555-4555-8555-555555555555",
+        taskId: run.taskId,
+        attemptId: run.id,
+        sequence: 1,
+        source: "native",
+        observedAt: "2026-09-17T12:00:00.000Z",
+        type: "turn.finished",
+        outcome: "failed",
+        error: {
+          code: "provider_auth_required",
+          phase: "credentials",
+          message: "The provider sign-in has expired or was revoked.",
+          resolution: "Reconnect the provider account, then retry the run.",
+        },
+      },
+    ],
+    nextSequence: 1,
+    hasMore: false,
+  });
+  let exitObserved = false;
+  vi.spyOn(Exec.prototype, "exec").mockImplementation(async (...args) => {
+    const command = (args[3] as string[]).join(" ");
+    if (command.includes("archestra-agent-event"))
+      args[4]?.write(
+        exitObserved
+          ? eventResponse
+          : JSON.stringify({
+              version: 1,
+              taskId: run.taskId,
+              attemptId: run.id,
+              events: [],
+              nextSequence: 0,
+              hasMore: false,
+            }),
+      );
+    else if (command.includes("read-turn-result")) {
+      exitObserved = true;
+      args[4]?.write("75");
+    }
+    args[8]?.({ status: "Success" });
+    return socket();
+  });
+
+  await expect(
+    manager.waitForCompletion({ session: run, pollIntervalMs: 1 }),
+  ).resolves.toEqual({
+    outcome: "failed",
+    reason:
+      "The provider sign-in has expired or was revoked.\n\nReconnect the provider account, then retry the run.",
+  });
+  expect(
+    (await AgentRunModel.findByTaskId(run.taskId))?.runtimeState,
+  ).toMatchObject({
+    outcome: "failed",
+    diagnostic: { code: "provider_auth_required" },
   });
 });
 
@@ -256,7 +325,8 @@ test("does not expose malformed failure payloads", async ({ run }) => {
   completeExec("78\nsynthetic-secret-and-private-diagnostics");
   await expect(manager.waitForCompletion({ session: run })).resolves.toEqual({
     outcome: "failed",
-    reason: "The Agent Runtime turn exited with status 78",
+    reason:
+      "The agent stopped without reporting a structured failure reason.\n\nOpen the run logs to inspect the last output, then check the agent configuration before retrying. (Runtime exit status 78.)",
   });
 });
 
@@ -411,7 +481,9 @@ test.for([
     session: run,
   });
   if (outcome === "worker-failure")
-    await expect(adoption).rejects.toThrow("turn exited with status 7");
+    await expect(adoption).rejects.toThrow(
+      "The agent stopped without reporting a structured failure reason",
+    );
   else await adoption;
   expect(observations).toBe(2);
   expect((await A2ATaskModel.findById(run.taskId))?.state).toBe(

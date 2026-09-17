@@ -189,6 +189,76 @@ class TerminalContract(unittest.TestCase):
         self.clients.append(result)
         return result
 
+    def test_repeated_native_attention_uses_the_event_journal(self):
+        prefix = ROOT / 'turns' / str(uuid.uuid4())
+        attempt = str(uuid.uuid4())
+        context = str(prefix) + '.events/context.json'
+        subprocess.run(['archestra-agent-event', 'context', '--path', context,
+                        '--task', prefix.name, '--attempt', attempt],
+                       check=True, stdout=subprocess.DEVNULL)
+        prefix.with_suffix('.session').write_text('sleep 30\n')
+        call('start', str(prefix))
+        environment = {**os.environ, 'HERDR_ENV': '1',
+                       'ARCHESTRA_AGENT_RUNTIME_TASK_ID': prefix.name,
+                       'ARCHESTRA_AGENT_RUNTIME_ATTEMPT_ID': attempt,
+                       'ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX': str(prefix)}
+        for args in [('set', 'Permission needed'), ('clear',), ('set', 'Permission needed')]:
+            subprocess.run(['archestra-agent-attention', *args], env=environment,
+                           check=True, capture_output=True, timeout=10)
+        output = subprocess.check_output(['archestra-agent-event', 'read', '--task', prefix.name])
+        events = [event for event in json.loads(output)['events'] if event['source'] == 'native-attention']
+        self.assertEqual([event['attention'] for event in events], ['input_required', None, 'input_required'])
+
+    def test_turn_replacement_waits_for_status_reconciliation(self):
+        prefixes = [ROOT / 'turns' / str(uuid.uuid4()) for _ in range(2)]
+        for prefix in prefixes:
+            subprocess.run(['archestra-agent-event', 'context',
+                            '--path', str(prefix) + '.events/context.json',
+                            '--task', prefix.name, '--attempt', str(uuid.uuid4())],
+                           check=True, stdout=subprocess.DEVNULL)
+            prefix.with_suffix('.session').write_text('sleep 30\n')
+        call('start', str(prefixes[0]))
+        binding = ROOT / 'terminal' / 'pane-binding.json'
+        with binding.with_suffix('.lock').open('a') as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            replacement = subprocess.Popen([HELPER, 'start', str(prefixes[1])],
+                                           stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            time.sleep(.5)
+            self.assertIsNone(replacement.poll())
+            self.assertEqual(json.loads(binding.read_text())['taskId'], prefixes[0].name)
+        _, stderr = replacement.communicate(timeout=10)
+        self.assertEqual(replacement.returncode, 0, stderr)
+        self.assertEqual(json.loads(binding.read_text())['taskId'], prefixes[1].name)
+
+    def test_private_plugin_publishes_real_herdr_status_hooks(self):
+        prefix = ROOT / 'turns' / str(uuid.uuid4())
+        subprocess.run(['archestra-agent-event', 'context',
+                        '--path', str(prefix) + '.events/context.json',
+                        '--task', prefix.name, '--attempt', str(uuid.uuid4())],
+                       check=True, stdout=subprocess.DEVNULL)
+        prefix.with_suffix('.session').write_text('sleep 30\n')
+        call('start', str(prefix))
+        binding = json.loads((ROOT / 'terminal' / 'pane-binding.json').read_text())
+
+        def events():
+            output = subprocess.check_output(['archestra-agent-event', 'read', '--task', prefix.name])
+            return [event for event in json.loads(output)['events'] if event['source'] == 'herdr']
+
+        for sequence, state in enumerate(('working', 'blocked', 'idle'), 1):
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
+                connection.settimeout(5)
+                connection.connect(str(ROOT / 'terminal' / 'herdr.sock'))
+                connection.sendall(json.dumps({'id': str(sequence), 'method': 'pane.report_agent',
+                    'params': {'pane_id': binding['paneId'], 'source': 'custom:runtime-test',
+                               'agent': 'runtime-test', 'state': state, 'seq': sequence}}).encode() + b'\n')
+                response = json.loads(connection.makefile('rb').readline())
+                self.assertNotIn('error', response)
+            expected = ('working', None) if state == 'working' else ('idle', 'input_required' if state == 'blocked' else None)
+            try:
+                until(lambda: any((event['status'], event['attention']) == expected for event in events()))
+            except AssertionError as error:
+                raise AssertionError(f'Herdr {state} did not reach the journal: {events()}; response: {response}') from error
+
     @staticmethod
     def run_tui(args, environment, tty_mode=False):
         command = [TUI_RUN, *args]

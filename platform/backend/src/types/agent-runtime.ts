@@ -1,4 +1,8 @@
-import { AGENT_RUN_ATTACH_PHASES, ApiError } from "@archestra/shared";
+import {
+  AGENT_RUN_ATTACH_PHASES,
+  AgentRuntimeStateSchema,
+  ApiError,
+} from "@archestra/shared";
 import {
   createInsertSchema,
   createSelectSchema,
@@ -240,6 +244,7 @@ export const SelectAgentRunRecordSchema = createSelectSchema(
   backend: AgentRuntimeBackendSchema,
   actorKind: AgentRunActorKindSchema,
   attentionState: z.union([AgentRunAttentionStateSchema, z.null()]),
+  runtimeState: AgentRuntimeStateSchema.nullable(),
   completionTarget: AgentRunCompletionTargetSchema.nullable(),
 });
 export const InsertAgentRunRecordSchema = createInsertSchema(
@@ -252,6 +257,7 @@ export const InsertAgentRunRecordSchema = createInsertSchema(
       .union([AgentRunAttentionStateSchema, z.null()])
       .optional(),
     completionTarget: AgentRunCompletionTargetSchema.nullable().optional(),
+    runtimeState: AgentRuntimeStateSchema.nullable().optional(),
   })
   .omit({ id: true, startedAt: true, endedAt: true });
 

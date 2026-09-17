@@ -75907,6 +75907,115 @@
                           }
                         ]
                       },
+                      "runtimeState": {
+                        "nullable": true,
+                        "type": "object",
+                        "properties": {
+                          "version": {
+                            "type": "number",
+                            "enum": [
+                              1
+                            ]
+                          },
+                          "attemptId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "sequence": {
+                            "type": "integer",
+                            "exclusiveMinimum": true,
+                            "maximum": 9007199254740991
+                          },
+                          "eventId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "source": {
+                            "type": "string",
+                            "maxLength": 80
+                          },
+                          "observedAt": {
+                            "type": "string",
+                            "format": "date-time",
+                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                          },
+                          "activity": {
+                            "type": "string",
+                            "enum": [
+                              "working",
+                              "idle",
+                              "unknown"
+                            ]
+                          },
+                          "outcome": {
+                            "nullable": true,
+                            "type": "string",
+                            "enum": [
+                              "failed",
+                              "succeeded"
+                            ]
+                          },
+                          "diagnostic": {
+                            "nullable": true,
+                            "type": "object",
+                            "properties": {
+                              "code": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 128,
+                                "pattern": "^[a-zA-Z0-9_.-]+$"
+                              },
+                              "phase": {
+                                "type": "string",
+                                "enum": [
+                                  "startup",
+                                  "credentials",
+                                  "provider",
+                                  "tool",
+                                  "terminal",
+                                  "protocol"
+                                ]
+                              },
+                              "message": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 2000
+                              },
+                              "resolution": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 1000
+                              },
+                              "httpStatus": {
+                                "type": "integer",
+                                "minimum": 100,
+                                "maximum": 599
+                              }
+                            },
+                            "required": [
+                              "code",
+                              "phase",
+                              "message",
+                              "resolution"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": [
+                          "version",
+                          "attemptId",
+                          "sequence",
+                          "eventId",
+                          "source",
+                          "observedAt",
+                          "activity",
+                          "outcome",
+                          "diagnostic"
+                        ],
+                        "additionalProperties": false
+                      },
                       "virtualApiKeyId": {
                         "nullable": true,
                         "type": "string",
@@ -76009,6 +76118,7 @@
                       "backend",
                       "runtimeScope",
                       "attentionState",
+                      "runtimeState",
                       "virtualApiKeyId",
                       "startedAt",
                       "endedAt",
@@ -76762,6 +76872,115 @@
                               }
                             ]
                           },
+                          "runtimeState": {
+                            "nullable": true,
+                            "type": "object",
+                            "properties": {
+                              "version": {
+                                "type": "number",
+                                "enum": [
+                                  1
+                                ]
+                              },
+                              "attemptId": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "sequence": {
+                                "type": "integer",
+                                "exclusiveMinimum": true,
+                                "maximum": 9007199254740991
+                              },
+                              "eventId": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "source": {
+                                "type": "string",
+                                "maxLength": 80
+                              },
+                              "observedAt": {
+                                "type": "string",
+                                "format": "date-time",
+                                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                              },
+                              "activity": {
+                                "type": "string",
+                                "enum": [
+                                  "working",
+                                  "idle",
+                                  "unknown"
+                                ]
+                              },
+                              "outcome": {
+                                "nullable": true,
+                                "type": "string",
+                                "enum": [
+                                  "failed",
+                                  "succeeded"
+                                ]
+                              },
+                              "diagnostic": {
+                                "nullable": true,
+                                "type": "object",
+                                "properties": {
+                                  "code": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 128,
+                                    "pattern": "^[a-zA-Z0-9_.-]+$"
+                                  },
+                                  "phase": {
+                                    "type": "string",
+                                    "enum": [
+                                      "startup",
+                                      "credentials",
+                                      "provider",
+                                      "tool",
+                                      "terminal",
+                                      "protocol"
+                                    ]
+                                  },
+                                  "message": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 2000
+                                  },
+                                  "resolution": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 1000
+                                  },
+                                  "httpStatus": {
+                                    "type": "integer",
+                                    "minimum": 100,
+                                    "maximum": 599
+                                  }
+                                },
+                                "required": [
+                                  "code",
+                                  "phase",
+                                  "message",
+                                  "resolution"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "required": [
+                              "version",
+                              "attemptId",
+                              "sequence",
+                              "eventId",
+                              "source",
+                              "observedAt",
+                              "activity",
+                              "outcome",
+                              "diagnostic"
+                            ],
+                            "additionalProperties": false
+                          },
                           "virtualApiKeyId": {
                             "nullable": true,
                             "type": "string",
@@ -76864,6 +77083,7 @@
                           "backend",
                           "runtimeScope",
                           "attentionState",
+                          "runtimeState",
                           "virtualApiKeyId",
                           "startedAt",
                           "endedAt",
@@ -77273,6 +77493,115 @@
                         }
                       ]
                     },
+                    "runtimeState": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "version": {
+                          "type": "number",
+                          "enum": [
+                            1
+                          ]
+                        },
+                        "attemptId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "sequence": {
+                          "type": "integer",
+                          "exclusiveMinimum": true,
+                          "maximum": 9007199254740991
+                        },
+                        "eventId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "source": {
+                          "type": "string",
+                          "maxLength": 80
+                        },
+                        "observedAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                        },
+                        "activity": {
+                          "type": "string",
+                          "enum": [
+                            "working",
+                            "idle",
+                            "unknown"
+                          ]
+                        },
+                        "outcome": {
+                          "nullable": true,
+                          "type": "string",
+                          "enum": [
+                            "failed",
+                            "succeeded"
+                          ]
+                        },
+                        "diagnostic": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "code": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128,
+                              "pattern": "^[a-zA-Z0-9_.-]+$"
+                            },
+                            "phase": {
+                              "type": "string",
+                              "enum": [
+                                "startup",
+                                "credentials",
+                                "provider",
+                                "tool",
+                                "terminal",
+                                "protocol"
+                              ]
+                            },
+                            "message": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 2000
+                            },
+                            "resolution": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 1000
+                            },
+                            "httpStatus": {
+                              "type": "integer",
+                              "minimum": 100,
+                              "maximum": 599
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "phase",
+                            "message",
+                            "resolution"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "version",
+                        "attemptId",
+                        "sequence",
+                        "eventId",
+                        "source",
+                        "observedAt",
+                        "activity",
+                        "outcome",
+                        "diagnostic"
+                      ],
+                      "additionalProperties": false
+                    },
                     "virtualApiKeyId": {
                       "nullable": true,
                       "type": "string",
@@ -77470,6 +77799,7 @@
                     "backend",
                     "runtimeScope",
                     "attentionState",
+                    "runtimeState",
                     "virtualApiKeyId",
                     "startedAt",
                     "endedAt",
@@ -77859,6 +78189,115 @@
                         }
                       ]
                     },
+                    "runtimeState": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "version": {
+                          "type": "number",
+                          "enum": [
+                            1
+                          ]
+                        },
+                        "attemptId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "sequence": {
+                          "type": "integer",
+                          "exclusiveMinimum": true,
+                          "maximum": 9007199254740991
+                        },
+                        "eventId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "source": {
+                          "type": "string",
+                          "maxLength": 80
+                        },
+                        "observedAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                        },
+                        "activity": {
+                          "type": "string",
+                          "enum": [
+                            "working",
+                            "idle",
+                            "unknown"
+                          ]
+                        },
+                        "outcome": {
+                          "nullable": true,
+                          "type": "string",
+                          "enum": [
+                            "failed",
+                            "succeeded"
+                          ]
+                        },
+                        "diagnostic": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "code": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128,
+                              "pattern": "^[a-zA-Z0-9_.-]+$"
+                            },
+                            "phase": {
+                              "type": "string",
+                              "enum": [
+                                "startup",
+                                "credentials",
+                                "provider",
+                                "tool",
+                                "terminal",
+                                "protocol"
+                              ]
+                            },
+                            "message": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 2000
+                            },
+                            "resolution": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 1000
+                            },
+                            "httpStatus": {
+                              "type": "integer",
+                              "minimum": 100,
+                              "maximum": 599
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "phase",
+                            "message",
+                            "resolution"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "version",
+                        "attemptId",
+                        "sequence",
+                        "eventId",
+                        "source",
+                        "observedAt",
+                        "activity",
+                        "outcome",
+                        "diagnostic"
+                      ],
+                      "additionalProperties": false
+                    },
                     "virtualApiKeyId": {
                       "nullable": true,
                       "type": "string",
@@ -77961,6 +78400,7 @@
                     "backend",
                     "runtimeScope",
                     "attentionState",
+                    "runtimeState",
                     "virtualApiKeyId",
                     "startedAt",
                     "endedAt",
@@ -363877,6 +364317,115 @@
                           }
                         ]
                       },
+                      "runtimeState": {
+                        "nullable": true,
+                        "type": "object",
+                        "properties": {
+                          "version": {
+                            "type": "number",
+                            "enum": [
+                              1
+                            ]
+                          },
+                          "attemptId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "sequence": {
+                            "type": "integer",
+                            "exclusiveMinimum": true,
+                            "maximum": 9007199254740991
+                          },
+                          "eventId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "source": {
+                            "type": "string",
+                            "maxLength": 80
+                          },
+                          "observedAt": {
+                            "type": "string",
+                            "format": "date-time",
+                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                          },
+                          "activity": {
+                            "type": "string",
+                            "enum": [
+                              "working",
+                              "idle",
+                              "unknown"
+                            ]
+                          },
+                          "outcome": {
+                            "nullable": true,
+                            "type": "string",
+                            "enum": [
+                              "failed",
+                              "succeeded"
+                            ]
+                          },
+                          "diagnostic": {
+                            "nullable": true,
+                            "type": "object",
+                            "properties": {
+                              "code": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 128,
+                                "pattern": "^[a-zA-Z0-9_.-]+$"
+                              },
+                              "phase": {
+                                "type": "string",
+                                "enum": [
+                                  "startup",
+                                  "credentials",
+                                  "provider",
+                                  "tool",
+                                  "terminal",
+                                  "protocol"
+                                ]
+                              },
+                              "message": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 2000
+                              },
+                              "resolution": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 1000
+                              },
+                              "httpStatus": {
+                                "type": "integer",
+                                "minimum": 100,
+                                "maximum": 599
+                              }
+                            },
+                            "required": [
+                              "code",
+                              "phase",
+                              "message",
+                              "resolution"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": [
+                          "version",
+                          "attemptId",
+                          "sequence",
+                          "eventId",
+                          "source",
+                          "observedAt",
+                          "activity",
+                          "outcome",
+                          "diagnostic"
+                        ],
+                        "additionalProperties": false
+                      },
                       "virtualApiKeyId": {
                         "nullable": true,
                         "type": "string",
@@ -364074,6 +364623,7 @@
                       "backend",
                       "runtimeScope",
                       "attentionState",
+                      "runtimeState",
                       "virtualApiKeyId",
                       "startedAt",
                       "endedAt",

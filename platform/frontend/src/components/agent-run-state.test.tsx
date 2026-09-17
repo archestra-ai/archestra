@@ -54,6 +54,19 @@ describe("AgentRunState", () => {
     expect(screen.queryByText("Needs input")).not.toBeInTheDocument();
   });
 
+  it("keeps a terminal lifecycle status ahead of stale attention", () => {
+    render(
+      <AgentRunState
+        state="TASK_STATE_COMPLETED"
+        attentionState="input_required"
+        compact
+      />,
+    );
+
+    expect(screen.getByText("Completed")).toBeInTheDocument();
+    expect(screen.queryByText("Needs input")).not.toBeInTheDocument();
+  });
+
   it("calls out an active run with no recent model activity", () => {
     vi.useFakeTimers();
     vi.setSystemTime("2026-09-03T12:00:00.000Z");

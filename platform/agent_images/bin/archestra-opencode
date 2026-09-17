@@ -9,6 +9,9 @@ if [[ "${ARCHESTRA_LLM_PROXY_PROTOCOL:-}" != "openai_responses" ]]; then
 fi
 
 runtime_dir="${ARCHESTRA_AGENT_RUNTIME_DIR:-/var/run/archestra}"
+image_bin_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+export ARCHESTRA_AGENT_FAILURE_COMMAND="${ARCHESTRA_AGENT_FAILURE_COMMAND:-${image_bin_dir}/archestra-agent-failure}"
+export ARCHESTRA_AGENT_EVENT_HELPER="${ARCHESTRA_AGENT_EVENT_HELPER:-${image_bin_dir}/archestra-agent-event}"
 runtime_mode="${ARCHESTRA_AGENT_RUNTIME_MODE:-one_shot}"
 config_file="${runtime_dir}/opencode.json"
 instructions_file="${runtime_dir}/opencode-instructions.md"
@@ -32,21 +35,94 @@ export OPENCODE_DISABLE_PROJECT_CONFIG=1
 # lifecycle events. Load only this generated plugin: project config discovery
 # remains disabled, so a checked-out repository cannot contribute plugins.
 cat > "${attention_plugin}" <<'PLUGIN'
+import { spawn } from "node:child_process";
+import { existsSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+
+async function runCommand(command, args, env = process.env) {
+  try {
+    const child = spawn(command, args, { env, stdio: ["ignore", "ignore", "pipe"] });
+    let stderr = "";
+    child.stderr?.on("data", (chunk) => {
+      if (stderr.length < 2048) stderr += String(chunk).slice(0, 2048 - stderr.length);
+    });
+    return await new Promise((resolve) => {
+      child.once("error", () => resolve({ code: 127, stderr }));
+      child.once("exit", (code) => resolve({ code: code ?? 1, stderr }));
+    });
+  } catch {
+    return { code: 127, stderr: "" };
+  }
+}
+
+function reportCommandFailure(label, result) {
+  if (!result || result.code === 0) return;
+  const detail = typeof result.stderr === "string"
+    ? result.stderr.replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(-512)
+    : "";
+  console.error(`archestra-opencode: ${label} failed${detail ? `: ${detail}` : ""}`);
+}
+
 export const ArchestraAttention = async () => {
   let primarySessionID;
+  const runtimeDir = process.env.ARCHESTRA_AGENT_RUNTIME_DIR ?? "/var/run/archestra";
+  const sessionFile = `${runtimeDir}/opencode-main-session`;
+  const attentionKindFile = `${runtimeDir}/opencode-attention-kind`;
+
+  const persistedPrimarySession = () => {
+    try {
+      const sessionID = readFileSync(sessionFile, "utf8").trim();
+      return sessionID || undefined;
+    } catch {
+      return undefined;
+    }
+  };
+
+  const clearFailureKind = () => {
+    try {
+      unlinkSync(attentionKindFile);
+    } catch {
+      // The marker is optional state; a missing marker is already clear.
+    }
+  };
+
+  const failureKind = () => {
+    try {
+      const kind = readFileSync(attentionKindFile, "utf8").trim();
+      return kind === "auth_required" ? kind : "";
+    } catch {
+      return "";
+    }
+  };
 
   const update = async (...args) => {
-    try {
-      const command = process.env.ARCHESTRA_AGENT_ATTENTION_COMMAND ?? "archestra-agent-attention";
-      const child = Bun.spawn([command, ...args], { stdout: "ignore", stderr: "ignore" });
-      await child.exited;
-    } catch {
-      // Attention reporting is best-effort and must never interrupt a run.
-    }
+    const command = process.env.ARCHESTRA_AGENT_ATTENTION_COMMAND ?? "archestra-agent-attention";
+    reportCommandFailure("attention update", await runCommand(command, args));
+  };
+
+  const clear = async () => {
+    clearFailureKind();
+    await update("clear");
+  };
+
+  const reportWaiting = async () => {
+    const kind = failureKind();
+    const command = process.env.ARCHESTRA_AGENT_ATTENTION_COMMAND ?? "archestra-agent-attention";
+    reportCommandFailure("attention update", await runCommand(command, ["set", "Waiting for input"], {
+      ...process.env,
+      ...(kind ? { ARCHESTRA_AGENT_RUNTIME_ATTENTION_KIND: kind } : {}),
+    }));
   };
 
   return {
     event: async ({ event }) => {
+      if (event.type === "session.created") {
+        const info = event.properties?.info;
+        if (info?.id && !info.parentID) {
+          if (!existsSync(sessionFile)) writeFileSync(sessionFile, `${info.id}\n`, "utf8");
+          primarySessionID = persistedPrimarySession() ?? info.id;
+        }
+        return;
+      }
       if (event.type === "question.asked") {
         await update("set", "Input requested");
         return;
@@ -58,17 +134,19 @@ export const ArchestraAttention = async () => {
       if (
         event.type === "question.replied" ||
         event.type === "question.rejected" ||
-        event.type === "permission.replied" ||
-        event.type === "session.error"
+        event.type === "permission.replied"
       ) {
-        await update("clear");
+        await clear();
         return;
       }
+      // session.error is handled by the transcript plugin after it confirms
+      // that the event belongs to the primary session. This hook must not
+      // let a child session's failure mutate the parent's attention state.
       if (event.type !== "session.status") return;
 
       if (event.properties.status.type === "busy") {
-        primarySessionID ??= event.properties.sessionID;
-        if (event.properties.sessionID === primarySessionID) await update("clear");
+        primarySessionID ??= persistedPrimarySession();
+        if (primarySessionID && event.properties.sessionID === primarySessionID) await clear();
         return;
       }
       if (event.properties.sessionID !== primarySessionID) return;
@@ -76,9 +154,9 @@ export const ArchestraAttention = async () => {
         event.properties.status.type === "idle" &&
         process.env.ARCHESTRA_AGENT_RUNTIME_MODE === "interactive"
       ) {
-        await update("set", "Waiting for input");
+        await reportWaiting();
       } else {
-        await update("clear");
+        await clear();
       }
     },
   };
@@ -87,8 +165,151 @@ PLUGIN
 chmod 0600 "${attention_plugin}"
 
 cat > "${transcript_plugin}" <<'PLUGIN'
-import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { spawn } from "node:child_process";
+import { existsSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { rename, writeFile } from "node:fs/promises";
+
+function nativeErrorClassification(error) {
+  // The proxy's explicit internal code is the only response body field we
+  // trust. Keep parsing bounded and never inspect provider error messages.
+  const responseBody = typeof error?.responseBody === "string"
+    ? error.responseBody
+    : typeof error?.data?.responseBody === "string"
+      ? error.data.responseBody
+      : undefined;
+  if (responseBody && responseBody.length <= 4096) {
+    try {
+      if (JSON.parse(responseBody)?.error?.internal_code === "provider_auth_required") {
+        return {
+          code: "provider_auth_required",
+          message: "OpenCode requires provider authentication. Reconnect the provider account, then retry.",
+        };
+      }
+    } catch {
+      // A provider response body is untrusted and does not affect fallback
+      // classification when it is malformed.
+    }
+  }
+  const status = Number.isInteger(error?.status)
+    ? error.status
+    : Number.isInteger(error?.statusCode)
+      ? error.statusCode
+      : Number.isInteger(error?.data?.status)
+        ? error.data.status
+        : Number.isInteger(error?.data?.statusCode)
+          ? error.data.statusCode
+          : undefined;
+  let code;
+  if (status === 401) code = "provider_credential_rejected";
+  else if (status === 403) code = "provider_permission_denied";
+  else if (status === 402) code = "provider_billing_required";
+  else if (status === 429) code = "provider_rate_limited";
+  else if (status === 404) code = "model_unavailable";
+  else {
+    switch (error?.name) {
+      case "AuthenticationError":
+      case "UnauthorizedError":
+      case "ProviderAuthError":
+        code = "provider_credential_rejected";
+        break;
+      case "PermissionDeniedError":
+      case "ForbiddenError":
+        code = "provider_permission_denied";
+        break;
+      case "BillingError":
+      case "PaymentRequiredError":
+        code = "provider_billing_required";
+        break;
+      case "RateLimitError":
+      case "TooManyRequestsError":
+        code = "provider_rate_limited";
+        break;
+      case "ModelNotFoundError":
+      case "UnknownModelError":
+        code = "model_unavailable";
+        break;
+      default:
+        code = "provider_error";
+    }
+  }
+  const messages = {
+    provider_auth_required: "OpenCode requires provider authentication. Reconnect the provider account, then retry.",
+    provider_credential_rejected: "OpenCode could not authenticate with the configured provider credential. Reconnect the provider account, then retry.",
+    provider_permission_denied: "OpenCode was denied access to the configured provider or model.",
+    provider_billing_required: "OpenCode could not use the provider account because billing or account entitlement is required.",
+    provider_rate_limited: "OpenCode reached a provider rate limit. Retry when account capacity is available.",
+    model_unavailable: "OpenCode could not find the configured model. Check the model and account access.",
+    provider_error: "OpenCode could not complete the provider request. Check the configured provider credential and model availability, then retry.",
+  };
+  return { code, message: messages[code] };
+}
+
+async function runRuntimeCommand(command, args, environment = process.env) {
+  try {
+    const child = spawn(command, args, { env: environment, stdio: ["ignore", "ignore", "pipe"] });
+    let stderr = "";
+    child.stderr?.on("data", (chunk) => {
+      if (stderr.length < 2048) stderr += String(chunk).slice(0, 2048 - stderr.length);
+    });
+    return await new Promise((resolve) => {
+      child.once("error", () => resolve({ code: 127, stderr }));
+      child.once("exit", (code) => resolve({ code: code ?? 1, stderr }));
+    });
+  } catch {
+    return { code: 127, stderr: "" };
+  }
+}
+
+function reportCommandFailure(label, result) {
+  if (!result || result.code === 0) return;
+  const detail = typeof result.stderr === "string"
+    ? result.stderr.replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(-512)
+    : "";
+  console.error(`archestra-opencode: ${label} failed${detail ? `: ${detail}` : ""}`);
+}
+
+async function emitDiagnostic(code, runtimeDir) {
+  const prefix = process.env.ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX;
+  const context = prefix ? `${prefix}.events/context.json` : undefined;
+  const helper = process.env.ARCHESTRA_AGENT_EVENT_HELPER ?? "archestra-agent-event";
+  if (!context || !existsSync(context)) return;
+  const payload = JSON.stringify({ type: "diagnostic", error: { code } });
+  reportCommandFailure("runtime diagnostic", await runRuntimeCommand(helper, [
+    "emit",
+    "--context",
+    context,
+    "--source",
+    "opencode-native",
+    payload,
+  ]));
+}
+
+async function reportInteractiveFailure(classification, runtimeDir) {
+  const kindFile = `${runtimeDir}/opencode-attention-kind`;
+  if (classification.code === "provider_auth_required" || classification.code === "provider_credential_rejected") {
+    const temporary = `${kindFile}.tmp`;
+    writeFileSync(temporary, "auth_required\n", "utf8");
+    renameSync(temporary, kindFile);
+  } else {
+    try {
+      unlinkSync(kindFile);
+    } catch {
+      // The marker is optional state; a missing marker is already clear.
+    }
+  }
+  const command = process.env.ARCHESTRA_AGENT_ATTENTION_COMMAND ?? "archestra-agent-attention";
+  reportCommandFailure("runtime attention", await runRuntimeCommand(
+    command,
+    ["set", "API error: check terminal"],
+    {
+      ...process.env,
+      ARCHESTRA_AGENT_RUNTIME_ATTENTION_KIND:
+        classification.code === "provider_auth_required" || classification.code === "provider_credential_rejected"
+          ? "auth_required"
+          : "input_required",
+    },
+  ));
+}
 
 function timestamp(info) {
   const value = info?.time?.created ?? info?.time?.completed;
@@ -178,18 +399,29 @@ export const ArchestraTranscript = async ({ client, directory }) => ({
 
     if (event.type === "session.error") {
       // OpenCode also emits this while automatically compacting context.
-      if (event.properties.error?.name === "ContextOverflowError") return;
-      if (process.env.ARCHESTRA_AGENT_RUNTIME_MODE !== "one_shot") return;
-      const message = "OpenCode could not complete the model request. Check the configured provider credential and model availability, then retry.";
-      const prefix = process.env.ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX;
-      if (prefix) {
+      if (event.properties.error?.name === "ContextOverflowError") {
         try {
-          writeFileSync(`${prefix}.failure.tmp`, JSON.stringify({ version: 1, code: "opencode_session_error", message }));
-          renameSync(`${prefix}.failure.tmp`, `${prefix}.failure`);
+          unlinkSync(`${runtimeDir}/opencode-attention-kind`);
         } catch {
-          // Keep the native failure status even if reporting is unavailable.
+          // The marker is optional state; a missing marker is already clear.
         }
+        reportCommandFailure("attention clear", await runRuntimeCommand(
+          process.env.ARCHESTRA_AGENT_ATTENTION_COMMAND ?? "archestra-agent-attention",
+          ["clear"],
+        ));
+        return;
       }
+      const classification = nativeErrorClassification(event.properties?.error);
+      if (process.env.ARCHESTRA_AGENT_RUNTIME_MODE !== "one_shot") {
+        await emitDiagnostic(classification.code, runtimeDir);
+        await reportInteractiveFailure(classification, runtimeDir);
+        return;
+      }
+      const message = classification.message;
+      reportCommandFailure("runtime failure", await runRuntimeCommand(
+        process.env.ARCHESTRA_AGENT_FAILURE_COMMAND ?? "archestra-agent-failure",
+        [classification.code, message],
+      ));
       if (process.env.ARCHESTRA_AGENT_RUNTIME_PLAIN === "1") return;
       writeFileSync(`${runtimeDir}/final-answer.txt`, `${message}\n`, "utf8");
       writeFileSync(`${runtimeDir}/turn-complete.failed`, "", "utf8");

@@ -24,6 +24,9 @@ else
 fi
 
 runtime_dir="${ARCHESTRA_AGENT_RUNTIME_DIR:-/var/run/archestra}"
+image_bin_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+export ARCHESTRA_AGENT_FAILURE_COMMAND="${ARCHESTRA_AGENT_FAILURE_COMMAND:-${image_bin_dir}/archestra-agent-failure}"
+export ARCHESTRA_AGENT_EVENT_HELPER="${ARCHESTRA_AGENT_EVENT_HELPER:-${image_bin_dir}/archestra-agent-event}"
 mcp_config="${runtime_dir}/claude-mcp.json"
 jq -n \
   --arg url "${ARCHESTRA_MCP_GATEWAY_URL:?}" \
@@ -130,24 +133,46 @@ fi
 # API failures fire StopFailure instead of Stop. Without this hook a delegated
 # TUI stays open forever, even though the provider has already rejected the turn.
 if [[ "$(jq -r '.hook_event_name // empty' <<<"${payload}")" == "StopFailure" ]]; then
+  auth_code=provider_credential_rejected
+  [[ "${ARCHESTRA_AGENT_RUNTIME_CLAUDE_AUTH:-}" == "subscription" ]] && auth_code=provider_auth_required
+  case "$(jq -r '.error // empty' <<<"${payload}")" in
+    authentication_failed|cloud_credential_error) code="$auth_code"; message="Claude Code authentication failed. Reconnect your Claude Code account for subscription runs, or check the configured provider credential." ;;
+    oauth_org_not_allowed) code=provider_permission_denied; message="Claude Code was denied access to the configured account or organization." ;;
+    account_on_hold|billing_error) code=provider_billing_required; message="Claude Code could not use the provider account because billing or account entitlement is required." ;;
+    rate_limit) code=provider_rate_limited; message="Claude Code reached a provider rate limit. Retry when account capacity is available." ;;
+    overloaded|server_error) code=provider_error; message="Claude Code could not complete the provider request. Retry when the provider is available." ;;
+    model_not_found) code=model_unavailable; message="Claude Code could not find the configured model. Check the model and account access." ;;
+    invalid_request|max_output_tokens) code=provider_error; message="Claude Code rejected the provider request. Check the configured model and account access." ;;
+    *) code=provider_error; message="Claude Code ended the turn after a provider error. Inspect the run terminal for details." ;;
+  esac
+
+  # Only the stable native error name selects a catalog code. Never forward
+  # provider error details or credentials into the runtime event contract.
+  emit_diagnostic() {
+    local prefix="${ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX:-}"
+    local helper="${ARCHESTRA_AGENT_EVENT_HELPER:-archestra-agent-event}"
+    local context
+    local diagnostic
+    [[ -n "$prefix" && -f "${prefix}.events/context.json" ]] || return 0
+    command -v "$helper" >/dev/null 2>&1 || [[ -f "$helper" ]] || return 0
+    diagnostic="$(jq -cn --arg code "$code" '{type:"diagnostic",error:{code:$code}}')" || return 0
+    "$helper" emit --context "${prefix}.events/context.json" --source claude-native \
+      "$diagnostic" >/dev/null 2>/dev/null || true
+  }
+
   if [[ "${ARCHESTRA_AGENT_RUNTIME_MODE:-one_shot}" != "one_shot" ]]; then
-    "${ARCHESTRA_AGENT_ATTENTION_COMMAND:-archestra-agent-attention}" set "API error: check terminal" || true
+    emit_diagnostic
+    attention_kind=input_required
+    [[ "$code" == "provider_auth_required" || "$code" == "provider_credential_rejected" ]] && attention_kind=auth_required
+    ARCHESTRA_AGENT_RUNTIME_ATTENTION_KIND="$attention_kind" \
+      "${ARCHESTRA_AGENT_ATTENTION_COMMAND:-archestra-agent-attention}" \
+      set "API error: check terminal" || true
     exit 0
   fi
-  case "$(jq -r '.error // empty' <<<"${payload}")" in
-    authentication_failed|cloud_credential_error) code=claude_authentication; message="Claude Code authentication failed. Reconnect your Claude Code account for subscription runs, or check the configured provider credential." ;;
-    oauth_org_not_allowed|account_on_hold|billing_error) code=claude_billing; message="Claude Code could not use the account. Check its billing status and organization access." ;;
-    rate_limit) code=claude_rate_limit; message="Claude Code reached a rate limit. Retry when account capacity is available." ;;
-    overloaded|server_error) code=claude_unavailable; message="Claude Code could not complete the API request. The provider may be temporarily unavailable; retry later." ;;
-    invalid_request|model_not_found|max_output_tokens) code=claude_request; message="Claude Code rejected the request. Check the configured model and account access." ;;
-    *) code=claude_api_error; message="Claude Code ended the turn after an API error. Inspect the run terminal for details." ;;
-  esac
-  # The image owns this safe summary. Never forward raw provider error details
-  # or credentials into the generic Runtime failure envelope.
-  if [[ -n "${ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX:-}" ]]; then
-    jq -n --arg code "$code" --arg message "$message" '{version:1,code:$code,message:$message}' > "${ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX}.failure.tmp"
-    mv "${ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX}.failure.tmp" "${ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX}.failure"
-  fi
+
+  # The common helper preserves the established legacy sidecar while also
+  # publishing the catalog-backed terminal failure event.
+  "${ARCHESTRA_AGENT_FAILURE_COMMAND}" "$code" "$message" || true
   printf '%s\n' "$message" > "${runtime_dir}/final-answer.txt"
   touch "${runtime_dir}/turn-complete.failed"
   touch "${runtime_dir}/turn-complete"

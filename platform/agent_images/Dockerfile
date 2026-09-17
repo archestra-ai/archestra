@@ -29,6 +29,10 @@ RUN pnpm --filter @archestra/runtime-agent build \
 
 COPY agent_images/bin /usr/local/bin
 RUN chmod 0755 /usr/local/bin/archestra-*
+COPY shared/agent-runtime-errors.json /usr/local/share/archestra/runtime-errors.json
+COPY agent_images/herdr/plugin /usr/local/share/archestra/herdr-plugin
+RUN chmod 0755 /usr/local/share/archestra/herdr-plugin/plugin.py \
+ && chmod 0644 /usr/local/share/archestra/herdr-plugin/herdr-plugin.toml
 
 # Herdr is pinned to the immutable v0.9.0 Linux release at source commit
 # b99002ac99b09e00b4ca692436cb15a6b0d676f1. Docker's automatic architecture
@@ -82,6 +86,7 @@ RUN --network=none \
     --mount=type=bind,source=agent_images/tests,target=/opt/agent-image-tests \
     --mount=type=tmpfs,target=/tmp \
     python3 /opt/agent-image-tests/pty-record.py \
+ && python3 /opt/agent-image-tests/runtime-events.py \
  && python3 /opt/agent-image-tests/terminal.py \
  && find /var/run/archestra -mindepth 1 -delete
 

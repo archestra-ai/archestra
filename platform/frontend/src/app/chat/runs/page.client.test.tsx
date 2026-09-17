@@ -1,3 +1,4 @@
+import { agentRuntimeError } from "@archestra/shared";
 import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -183,6 +184,57 @@ describe("AgentRunChatSession", () => {
       showManualCommand: false,
       showDisconnectedStatus: false,
     });
+  });
+
+  it("shows attention consistently when an open run is waiting for input", () => {
+    queryState.value.data = run({
+      state: "TASK_STATE_WORKING",
+      attentionState: "input_required",
+      endedAt: null,
+    });
+
+    render(<AgentRunChatSession taskId="task-1" />);
+
+    expect(screen.getByText("Needs input")).toBeInTheDocument();
+    expect(screen.getByText("Waiting for input")).toBeInTheDocument();
+    expect(screen.queryByText("Running")).not.toBeInTheDocument();
+  });
+
+  it("shows authentication attention consistently while an open run waits", () => {
+    queryState.value.data = run({
+      state: "TASK_STATE_WORKING",
+      attentionState: "auth_required",
+      endedAt: null,
+    });
+
+    render(<AgentRunChatSession taskId="task-1" />);
+
+    expect(screen.getByText("Needs auth")).toBeInTheDocument();
+    expect(screen.getByText("Authentication required")).toBeInTheDocument();
+    expect(screen.queryByText("Running")).not.toBeInTheDocument();
+  });
+
+  it("shows the provider recovery action while keeping an interactive terminal open", () => {
+    const diagnostic = agentRuntimeError("codex_auth_required");
+    queryState.value.data = run({
+      state: "TASK_STATE_WORKING",
+      attentionState: "auth_required",
+      runtimeState: { diagnostic },
+    });
+
+    render(<AgentRunChatSession taskId="task-1" />);
+
+    expect(screen.getByText(diagnostic.message)).toBeInTheDocument();
+    expect(screen.getByText(diagnostic.resolution)).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Agent settings" }),
+    ).toHaveAttribute("href", "/agents/00000000-0000-4000-8000-000000000001");
+    expect(screen.getByText("Live terminal task-1")).toBeInTheDocument();
+    expect(screen.getByText("Needs auth")).toBeInTheDocument();
+    expect(
+      screen.queryByText("Authentication required"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/exit code 75/i)).not.toBeInTheDocument();
   });
 
   it("refreshes run state when completion wins the terminal attach race", () => {

@@ -21473,6 +21473,23 @@ export type GetAgentRunsResponses = {
         backend: 'kubernetes';
         runtimeScope: string;
         attentionState: 'input_required' | 'auth_required' | null;
+        runtimeState: {
+            version: 1;
+            attemptId: string;
+            sequence: number;
+            eventId: string;
+            source: string;
+            observedAt: string;
+            activity: 'working' | 'idle' | 'unknown';
+            outcome: 'failed' | 'succeeded';
+            diagnostic: {
+                code: string;
+                phase: 'startup' | 'credentials' | 'provider' | 'tool' | 'terminal' | 'protocol';
+                message: string;
+                resolution: string;
+                httpStatus?: number;
+            } | null;
+        } | null;
         virtualApiKeyId: string | null;
         startedAt: string;
         endedAt: string | null;
@@ -21691,6 +21708,23 @@ export type GetMyAgentRunsResponses = {
             backend: 'kubernetes';
             runtimeScope: string;
             attentionState: 'input_required' | 'auth_required' | null;
+            runtimeState: {
+                version: 1;
+                attemptId: string;
+                sequence: number;
+                eventId: string;
+                source: string;
+                observedAt: string;
+                activity: 'working' | 'idle' | 'unknown';
+                outcome: 'failed' | 'succeeded';
+                diagnostic: {
+                    code: string;
+                    phase: 'startup' | 'credentials' | 'provider' | 'tool' | 'terminal' | 'protocol';
+                    message: string;
+                    resolution: string;
+                    httpStatus?: number;
+                } | null;
+            } | null;
             virtualApiKeyId: string | null;
             startedAt: string;
             endedAt: string | null;
@@ -21900,6 +21934,23 @@ export type GetMyAgentRunResponses = {
         backend: 'kubernetes';
         runtimeScope: string;
         attentionState: 'input_required' | 'auth_required' | null;
+        runtimeState: {
+            version: 1;
+            attemptId: string;
+            sequence: number;
+            eventId: string;
+            source: string;
+            observedAt: string;
+            activity: 'working' | 'idle' | 'unknown';
+            outcome: 'failed' | 'succeeded';
+            diagnostic: {
+                code: string;
+                phase: 'startup' | 'credentials' | 'provider' | 'tool' | 'terminal' | 'protocol';
+                message: string;
+                resolution: string;
+                httpStatus?: number;
+            } | null;
+        } | null;
         virtualApiKeyId: string | null;
         startedAt: string;
         endedAt: string | null;
@@ -22036,6 +22087,23 @@ export type UpdateAgentRunResponses = {
         backend: 'kubernetes';
         runtimeScope: string;
         attentionState: 'input_required' | 'auth_required' | null;
+        runtimeState: {
+            version: 1;
+            attemptId: string;
+            sequence: number;
+            eventId: string;
+            source: string;
+            observedAt: string;
+            activity: 'working' | 'idle' | 'unknown';
+            outcome: 'failed' | 'succeeded';
+            diagnostic: {
+                code: string;
+                phase: 'startup' | 'credentials' | 'provider' | 'tool' | 'terminal' | 'protocol';
+                message: string;
+                resolution: string;
+                httpStatus?: number;
+            } | null;
+        } | null;
         virtualApiKeyId: string | null;
         startedAt: string;
         endedAt: string | null;
@@ -94026,6 +94094,23 @@ export type GetProjectRunsResponses = {
         backend: 'kubernetes';
         runtimeScope: string;
         attentionState: 'input_required' | 'auth_required' | null;
+        runtimeState: {
+            version: 1;
+            attemptId: string;
+            sequence: number;
+            eventId: string;
+            source: string;
+            observedAt: string;
+            activity: 'working' | 'idle' | 'unknown';
+            outcome: 'failed' | 'succeeded';
+            diagnostic: {
+                code: string;
+                phase: 'startup' | 'credentials' | 'provider' | 'tool' | 'terminal' | 'protocol';
+                message: string;
+                resolution: string;
+                httpStatus?: number;
+            } | null;
+        } | null;
         virtualApiKeyId: string | null;
         startedAt: string;
         endedAt: string | null;

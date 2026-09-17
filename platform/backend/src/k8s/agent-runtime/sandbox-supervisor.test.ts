@@ -9,6 +9,46 @@ import { buildSandboxSupervisorScript } from "./sandbox-supervisor";
 describe.skipIf(!process.env.ARCHESTRA_TEST_SANDBOX_IMAGE)(
   "sandbox supervisor",
   () => {
+    it("binds the initial and follow-up attempts before starting their commands", () => {
+      const first = "11111111-1111-4111-8111-111111111111";
+      const second = "22222222-2222-4222-8222-222222222222";
+      const firstRun = "33333333-3333-4333-8333-333333333333";
+      const secondRun = "44444444-4444-4444-8444-444444444444";
+      const interrupted = "55555555-5555-4555-8555-555555555555";
+      const result = runInContainer(
+        `
+mkdir -p /var/run/archestra/turns
+cat > /var/run/archestra/turns/${first}.request <<'REQUEST'
+jq -e '.attemptId == "${firstRun}"' /var/run/archestra/terminal/pane-binding.json
+REQUEST
+wait_for /var/run/archestra/turns/${first}.exit
+test "$(cat /var/run/archestra/turns/${first}.exit)" = 0
+cat > /var/run/archestra/turns/${second}.request <<'REQUEST'
+export ARCHESTRA_AGENT_RUNTIME_RUN_ID='${secondRun}'
+jq -e '.attemptId == "${secondRun}"' /var/run/archestra/terminal/pane-binding.json
+REQUEST
+wait_for /var/run/archestra/turns/${second}.exit
+test "$(cat /var/run/archestra/turns/${second}.exit)" = 0
+touch /var/run/archestra/turns/${interrupted}.started
+cat > /var/run/archestra/turns/${interrupted}.request <<'REQUEST'
+export ARCHESTRA_AGENT_RUNTIME_RUN_ID='${secondRun}'
+touch /tmp/replayed-interrupted-turn
+REQUEST
+wait_for /var/run/archestra/turns/${interrupted}.exit
+test "$(cat /var/run/archestra/turns/${interrupted}.exit)" = 75
+test ! -f /tmp/replayed-interrupted-turn
+archestra-agent-event read --task ${interrupted} | jq -e '[.events[].error.code] == ["runtime_restarted"]'
+echo VERIFIED
+`,
+        {
+          ARCHESTRA_AGENT_RUNTIME_TASK_ID: first,
+          ARCHESTRA_AGENT_RUNTIME_RUN_ID: firstRun,
+        },
+      );
+      expect(result.status, result.stderr).toBe(0);
+      expect(result.stdout).toContain("VERIFIED");
+    }, 30_000);
+
     it("keeps the same CLI and terminal contents interactive after completing a turn", () => {
       const result = runInContainer(`
 mkdir -p /var/run/archestra/turns
@@ -147,6 +187,8 @@ touch /var/run/archestra/turns/1.started
 printf 'touch /var/run/archestra/replayed\n' > /var/run/archestra/turns/1.request
 wait_for /var/run/archestra/turns/1.exit
 test "$(cat /var/run/archestra/turns/1.exit)" = 75
+grep -q '"code":"runtime_restarted"' /var/run/archestra/turns/1.failure
+grep -q '"resolution"' /var/run/archestra/turns/1.failure
 test ! -f /var/run/archestra/replayed
 echo VERIFIED
 `);
@@ -156,7 +198,19 @@ echo VERIFIED
   },
 );
 
-function runInContainer(assertions: string) {
+describe("sandbox supervisor event binding", () => {
+  it("binds the immutable context before Herdr creates a recorder", () => {
+    const script = buildSandboxSupervisorScript();
+    const binding = script.indexOf('publish_event_context "$turn" "$request"');
+    expect(binding).toBeGreaterThan(-1);
+    expect(binding).toBeLessThan(script.indexOf(' start "$turn"'));
+  });
+});
+
+function runInContainer(
+  assertions: string,
+  environment: Record<string, string> = {},
+) {
   return spawnSync(
     "docker",
     [
@@ -165,6 +219,10 @@ function runInContainer(assertions: string) {
       "-i",
       "--network=none",
       "--entrypoint=/bin/sh",
+      ...Object.entries(environment).flatMap(([name, value]) => [
+        "--env",
+        `${name}=${value}`,
+      ]),
       process.env.ARCHESTRA_TEST_SANDBOX_IMAGE ?? "",
       "-s",
     ],

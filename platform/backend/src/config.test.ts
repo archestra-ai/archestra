@@ -3563,12 +3563,27 @@ describe("OpenAPPA feature configuration", () => {
     expect(parseOpenAppaConfig(enabled)).toEqual({
       enabled: false,
       yellEnabled: false,
+      postgresMaxConnections: 4,
     });
   });
   test("enables database policies without a container path", () => {
     expect(parseOpenAppaConfig("true")).toEqual({
       enabled: true,
       yellEnabled: true,
+      postgresMaxConnections: 4,
     });
+  });
+
+  test.each([
+    [undefined, 4],
+    ["", 4],
+    ["8", 8],
+    ["0", 4],
+    ["65", 4],
+    ["many", 4],
+  ])("reads the ledger pool size (value=%s)", (value, expected) => {
+    expect(
+      parseOpenAppaConfig("true", undefined, value).postgresMaxConnections,
+    ).toBe(expected);
   });
 });

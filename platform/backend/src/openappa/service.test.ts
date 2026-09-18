@@ -33,7 +33,7 @@ const session = {
 
 beforeEach(async () => {
   config.llmProxy.plugins = ["appa"];
-  config.openappa = { enabled: true, yellEnabled: false };
+  config.openappa = { ...config.openappa, enabled: true, yellEnabled: false };
   await GuardrailsDeploymentModel.setEnabled(true);
   vi.spyOn(database, "getDatabaseConnectionString").mockReturnValue(
     "postgresql://test:test@localhost/test",

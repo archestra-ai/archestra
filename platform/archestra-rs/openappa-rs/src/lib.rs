@@ -29,10 +29,11 @@ use serde_json::{Value, json, value::RawValue};
 use sha2::{Digest, Sha256};
 use std::{
     collections::HashMap,
+    num::NonZeroUsize,
     panic::AssertUnwindSafe,
     sync::{Arc, OnceLock},
 };
-use tokio::sync::{Mutex, OwnedMutexGuard};
+use tokio::sync::{Mutex, OwnedMutexGuard, OwnedSemaphorePermit, Semaphore};
 
 #[napi(object)]
 #[derive(Clone)]
@@ -52,8 +53,17 @@ static STATE: OnceLock<Mutex<Option<State>>> = OnceLock::new();
 struct State {
     runtime: Arc<Runtime>,
     store: Arc<LogStore>,
+    /// One permit per pooled connection, so a dispatch waits for a connection
+    /// here, asynchronously, and never inside the store.
+    connections: Arc<Semaphore>,
     policy_content: String,
     reporting: Option<ReportingOptions>,
+}
+
+/// Field order is drop order: the connection goes back before its permit does.
+struct Leased {
+    state: State,
+    _permit: OwnedSemaphorePermit,
 }
 
 fn state_mutex() -> &'static Mutex<Option<State>> {
@@ -279,9 +289,14 @@ fn identity(input: &Input) -> String {
 #[napi(js_name = "initializeOpenappa")]
 pub async fn initialize_openappa(
     database_url: String,
+    postgres_max_connections: u32,
     policy_content: String,
     reporting: Option<ReportingOptions>,
 ) -> napi::Result<()> {
+    let max_connections = usize::try_from(postgres_max_connections)
+        .ok()
+        .and_then(NonZeroUsize::new)
+        .ok_or_else(|| error("OpenAPPA needs at least one PostgreSQL connection"))?;
     let mut slot = state_mutex().lock().await;
     if slot.is_some() {
         return Ok(());
@@ -290,12 +305,18 @@ pub async fn initialize_openappa(
         appa_runtime::tls::install_crypto_provider();
         let mut config = policy::compile(&policy_content).map_err(error)?;
         config.reporting.agent_yell = reporting.is_some();
-        let store =
-            Arc::new(LogStore::open(Backend::Postgres { url: database_url }).map_err(error)?);
+        let store = Arc::new(
+            LogStore::open(Backend::Postgres {
+                url: database_url,
+                max_connections,
+            })
+            .map_err(error)?,
+        );
         let runtime = Runtime::open_with_store(config, store.clone(), None).map_err(error)?;
         Ok(State {
             runtime: Arc::new(runtime),
             store,
+            connections: Arc::new(Semaphore::new(max_connections.get())),
             policy_content,
             reporting,
         })
@@ -465,19 +486,21 @@ pub async fn execute_remedy_by_offer(
         .as_deref()
         .map(Principal::parse)
         .transpose()?;
-    let store = {
+    let state = {
         let slot = state_mutex().lock().await;
         slot.as_ref()
             .ok_or_else(|| error("OpenAPPA is not initialized"))?
-            .store
             .clone()
     };
-    let owner = lookup_offer_owner(
-        postgres_store(&store)?,
-        &input.organization_id,
-        &offer_id,
-        caller.as_ref(),
-    )?;
+    let owner = {
+        let leased = state.lease().await?;
+        lookup_offer_owner(
+            postgres_store(&leased.state.store)?,
+            &input.organization_id,
+            &offer_id,
+            caller.as_ref(),
+        )?
+    };
     let Some(owner) = owner else {
         return Ok(
             with_offer_status(render_unknown_offer()?, OfferStatusKind::Unknown)?.to_string(),
@@ -604,8 +627,27 @@ impl State {
         Ok(())
     }
 
+    /// This state over one pooled connection: the store is a lease of it and
+    /// the runtime records through that lease.
+    async fn lease(&self) -> napi::Result<Leased> {
+        let permit = self
+            .connections
+            .clone()
+            .acquire_owned()
+            .await
+            .map_err(error)?;
+        let store = Arc::new(self.store.lease().map_err(error)?);
+        Ok(Leased {
+            state: State {
+                runtime: Arc::new(self.runtime.on(store.clone())),
+                store,
+                ..self.clone()
+            },
+            _permit: permit,
+        })
+    }
+
     async fn dispatch(&self, input: Input) -> napi::Result<Value> {
-        let pg = postgres_store(&self.store)?;
         let actor_id = identity(&input);
         let parent = input.parent_id.clone().map(|id| Input {
             session_id: id,
@@ -616,23 +658,38 @@ impl State {
         } else if let Some(parent) = parent {
             let parent_key = identity(&parent);
             let organization_id = input.organization_id.clone();
-            pg.with_client(move |client| {
-                client
-                    .query_opt(
-                        "SELECT root, organization_id FROM openappa_sessions WHERE actor = $1",
-                        &[&parent_key],
-                    )?
-                    .and_then(|row| {
-                        (row.get::<_, String>(1) == organization_id)
-                            .then(|| row.get::<_, String>(0))
-                    })
-                    .ok_or_else(|| PostgresError("parent session has not started".into()))
-            })
-            .map_err(error)?
+            let leased = self.lease().await?;
+            postgres_store(&leased.state.store)?
+                .with_client(move |client| {
+                    client
+                        .query_opt(
+                            "SELECT root, organization_id FROM openappa_sessions WHERE actor = $1",
+                            &[&parent_key],
+                        )?
+                        .and_then(|row| {
+                            (row.get::<_, String>(1) == organization_id)
+                                .then(|| row.get::<_, String>(0))
+                        })
+                        .ok_or_else(|| PostgresError("parent session has not started".into()))
+                })
+                .map_err(error)?
         } else {
             actor_id.clone()
         };
         let _root = RootLock::acquire(root.clone()).await;
+        let leased = self.lease().await?;
+        leased.state.dispatch_on_lease(input, root, actor_id).await
+    }
+
+    /// The session lock and the runtime's appends lock the same key, which
+    /// only one connection can hold twice, so both run on this state's lease.
+    async fn dispatch_on_lease(
+        &self,
+        input: Input,
+        root: String,
+        actor_id: String,
+    ) -> napi::Result<Value> {
+        let pg = postgres_store(&self.store)?;
         let _lock = SessionLock::acquire(pg, root.clone())?;
         // Check every member of the family: continuing a parent while a child's
         // result is interrupted could otherwise bypass inherited restrictions.

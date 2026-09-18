@@ -31,7 +31,7 @@ for (const enabled of [false, true]) {
     seedAndAssignArchestraTools,
   }) => {
     config.llmProxy.plugins = enabled ? ["appa"] : [];
-    config.openappa = { enabled, yellEnabled: false };
+    config.openappa = { ...config.openappa, enabled, yellEnabled: false };
     const agent = await makeAgent();
     const user = await makeUser();
     await seedAndAssignArchestraTools(agent.id);

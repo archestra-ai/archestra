@@ -2015,11 +2015,39 @@ export function parseLlmProxyPlugins(
 export function parseOpenAppaConfig(
   enabled: string | undefined,
   yellEnabled?: string,
+  postgresMaxConnections?: string,
 ) {
   return {
     enabled: enabled === "true",
     yellEnabled: enabled === "true" && (yellEnabled ?? "true") === "true",
+    postgresMaxConnections: parseOpenAppaPostgresMaxConnections(
+      postgresMaxConnections,
+    ),
   };
+}
+
+const DEFAULT_OPENAPPA_POSTGRES_MAX_CONNECTIONS = 4;
+const MAX_OPENAPPA_POSTGRES_MAX_CONNECTIONS = 64;
+
+function parseOpenAppaPostgresMaxConnections(envValue?: string): number {
+  const value = envValue?.trim();
+  if (!value) {
+    return DEFAULT_OPENAPPA_POSTGRES_MAX_CONNECTIONS;
+  }
+
+  const parsed = Number.parseInt(value, 10);
+  if (
+    Number.isNaN(parsed) ||
+    parsed < 1 ||
+    parsed > MAX_OPENAPPA_POSTGRES_MAX_CONNECTIONS
+  ) {
+    logger.warn(
+      `Invalid ARCHESTRA_OPENAPPA_POSTGRES_MAX_CONNECTIONS value "${value}", using default ${DEFAULT_OPENAPPA_POSTGRES_MAX_CONNECTIONS}`,
+    );
+    return DEFAULT_OPENAPPA_POSTGRES_MAX_CONNECTIONS;
+  }
+
+  return parsed;
 }
 
 /**
@@ -2212,6 +2240,7 @@ const fileStorageS3Config = parseFileStorageS3Config({
 const openappa = parseOpenAppaConfig(
   process.env.ARCHESTRA_OPENAPPA_ENABLED,
   process.env.ARCHESTRA_OPENAPPA_YELL_ENABLED,
+  process.env.ARCHESTRA_OPENAPPA_POSTGRES_MAX_CONNECTIONS,
 );
 const llmProxyPlugins = parseLlmProxyPlugins(
   process.env.ARCHESTRA_LLM_PROXY_PLUGINS,

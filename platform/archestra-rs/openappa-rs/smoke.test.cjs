@@ -65,7 +65,11 @@ permits = { attention = ["email-review"] }
 [externals.authorities.email-operator]
 builtin = "hitl"
 `);
-  await native.initializeOpenappa(databaseUrl, readFileSync(policyPath, 'utf8'));
+  // Names this process's ledger connections so a test can end exactly those.
+  const ledgerName = `openappa-smoke-${randomUUID()}`;
+  const ledgerUrl = new URL(databaseUrl);
+  ledgerUrl.searchParams.set('application_name', ledgerName);
+  await native.initializeOpenappa(ledgerUrl.toString(), 4, readFileSync(policyPath, 'utf8'));
   const client = new Client({ connectionString: databaseUrl });
   await client.connect();
   t.after(() => { sanitizer.close(); client.end(); rmSync(dir, { recursive: true, force: true }); });
@@ -198,6 +202,23 @@ builtin = "hitl"
     for (const blocked of replies) {
       assert.equal(blocked.output_source, 'runtime', JSON.stringify(blocked));
       assert.ok(!blocked.approved_output.includes('raw sensitive payload'));
+    }
+  });
+
+  await t.test('ledger connections the server ended are replaced without a restart', async () => {
+    const readAcrossThePool = () => Promise.all(
+      Array.from({ length: 4 }, () => call(scope(), randomUUID(), 'read_plain')),
+    );
+    await readAcrossThePool();
+    const ended = await client.query(
+      'SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE application_name = $1',
+      [ledgerName],
+    );
+    assert.ok(ended.rowCount > 0, 'the pool held connections to end');
+    // The pool trusts a connection returned within the last second.
+    await new Promise(resolve => setTimeout(resolve, 1100));
+    for (const released of await readAcrossThePool()) {
+      assert.equal(released.decision, 'allow_call', JSON.stringify(released));
     }
   });
 

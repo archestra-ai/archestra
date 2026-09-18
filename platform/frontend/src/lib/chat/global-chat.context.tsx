@@ -498,6 +498,8 @@ function ChatSessionHook({
   const [manualCompactionActive, setManualCompactionActive] = useState(false);
   const generateTitleMutation = useGenerateConversationTitle();
   const resolveMcpElicitationMutation = useResolveChatMcpElicitation();
+  const { mutateAsync: resolveMcpElicitationAsync } =
+    resolveMcpElicitationMutation;
   // Destructure the stable mutateAsync (not the whole mutation object, whose
   // identity changes every render) so regenerateUserMessage stays referentially
   // stable and doesn't retrigger the session-sync effect on every render.
@@ -1425,7 +1427,7 @@ function ChatSessionHook({
       action: "accept" | "decline" | "cancel";
       content?: Record<string, string | number | boolean | string[]>;
     }) => {
-      const result = await resolveMcpElicitationMutation.mutateAsync({
+      const result = await resolveMcpElicitationAsync({
         id: response.id,
         conversationId,
         action: response.action,
@@ -1435,7 +1437,7 @@ function ChatSessionHook({
         setPendingMcpElicitation(null);
       }
     },
-    [conversationId, resolveMcpElicitationMutation],
+    [conversationId, resolveMcpElicitationAsync],
   );
   sessionRef.current = {
     conversationId,

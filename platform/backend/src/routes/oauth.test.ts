@@ -1374,6 +1374,11 @@ describe("OAuth routes", () => {
         },
       ) as Mock;
       vi.stubGlobal("fetch", fetchMock);
+      // Capture the external cache write without requiring PostgreSQL. The
+      // callback below reads the same state through the real PGlite database.
+      const cacheWrite = vi
+        .spyOn(cacheManager, "set")
+        .mockResolvedValue(undefined);
 
       const initiateResponse = await app.inject({
         method: "POST",
@@ -1389,11 +1394,9 @@ describe("OAuth routes", () => {
       });
 
       const state = initiateResponse.json().state;
-      // Keyv writes to PostgreSQL while the callback's atomic read uses PGlite
-      // in tests. Copy the actual initiated state rather than inventing it.
-      const oauthState = await cacheManager.get(
-        `${CacheKey.OAuthState}-${state}`,
-      );
+      const oauthState = cacheWrite.mock.calls.find(
+        ([key]) => key === `${CacheKey.OAuthState}-${state}`,
+      )?.[1];
       expect(oauthState).toBeDefined();
       await db.execute(sql`
       CREATE TABLE IF NOT EXISTS keyv_cache (

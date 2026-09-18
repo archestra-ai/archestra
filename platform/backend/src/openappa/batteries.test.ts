@@ -42,7 +42,7 @@ describe("battery attachment after a tool sync", () => {
       await OpenAppaEffectivePolicyModel.find(organizationId),
     ).toMatchObject({ rootRevision: 0, lastError: null });
     await expect(
-      openappaBatteriesService.organizationsUsingCatalog(catalog.id),
+      OpenAppaBatteryInstallModel.organizationIdsForCatalog(catalog.id),
     ).resolves.toEqual([organizationId]);
   });
 

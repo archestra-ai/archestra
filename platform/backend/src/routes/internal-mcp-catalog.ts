@@ -48,6 +48,7 @@ import {
   TeamModel,
   ToolModel,
 } from "@/models";
+import OpenAppaBatteryInstallModel from "@/models/openappa-battery-install";
 import { openappaBatteriesService } from "@/openappa/batteries";
 import { isByosEnabled, secretManager } from "@/secrets-manager";
 import { propagateAppCatalogChange } from "@/services/apps/app-mcp-backing";
@@ -1044,7 +1045,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
         // The rename moved every tool prefix the composed policy aliases.
         await openappaBatteriesService.recompileOrganizations(
-          await openappaBatteriesService.organizationsUsingCatalog(id),
+          await OpenAppaBatteryInstallModel.organizationIdsForCatalog(id),
         );
 
         // Downstream must see NO name diff: the row is already renamed, and
@@ -1679,7 +1680,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const affectedSources =
         await InternalMcpCatalogModel.findDeleteCascadeSourceIds(id);
       const batteryOrganizations =
-        await openappaBatteriesService.organizationsUsingCatalog(id);
+        await OpenAppaBatteryInstallModel.organizationIdsForCatalog(id);
       const success = await InternalMcpCatalogModel.delete(id);
       if (success) {
         await openappaBatteriesService.recompileOrganizations(
@@ -1751,7 +1752,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           catalogItem.id,
         );
       const batteryOrganizations =
-        await openappaBatteriesService.organizationsUsingCatalog(
+        await OpenAppaBatteryInstallModel.organizationIdsForCatalog(
           catalogItem.id,
         );
       const success = await InternalMcpCatalogModel.delete(catalogItem.id);

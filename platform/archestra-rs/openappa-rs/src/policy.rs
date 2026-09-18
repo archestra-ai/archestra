@@ -32,7 +32,17 @@ pub(crate) fn open(config: Config, store: Arc<LogStore>) -> Result<Runtime, Stri
         .map_err(|error| error.to_string())
 }
 
+/// The environment namespace the host keeps for itself: the bearer its helper
+/// bridge checks lives here. A `url` external of the root policy may name any
+/// other `APPA_` variable, but naming one of these would let a policy author send
+/// the host's own credential wherever the external points.
+pub(crate) const HOST_VARIABLE_PREFIX: &str = "APPA_ARCHESTRA_";
+
+/// Validate a root document: what an author may save, before the host composes it.
 pub(crate) fn validate(content: &str) -> Result<(), String> {
+    let document: toml::Table =
+        toml::from_str(content).map_err(|error| format!("root policy: {error}"))?;
+    refuse_host_variables(&document)?;
     let config = compile(content)?;
     let store = LogStore::open(Backend::Memory).map_err(|error| error.to_string())?;
     open(config, Arc::new(store))?;
@@ -70,6 +80,7 @@ pub(crate) fn compose(
 ) -> Result<String, String> {
     let mut document: toml::Table =
         toml::from_str(root).map_err(|error| format!("root policy: {error}"))?;
+    refuse_host_variables(&document)?;
     if document.contains_key("server_aliases") {
         return Err(
             "the root policy may not declare server_aliases: the host derives them from its catalogs"
@@ -145,6 +156,29 @@ fn bind_helpers(battery: &ComposeBattery) -> Result<String, String> {
         }
     }
     toml::to_string(&document).map_err(|error| error.to_string())
+}
+
+fn refuse_host_variables(document: &toml::Table) -> Result<(), String> {
+    let Some(toml::Value::Table(externals)) = document.get("externals") else {
+        return Ok(());
+    };
+    for (section, bindings) in externals {
+        let toml::Value::Table(bindings) = bindings else {
+            continue;
+        };
+        for (name, binding) in bindings {
+            if let Some(toml::Value::String(var)) = binding
+                .as_table()
+                .and_then(|binding| binding.get("token_env"))
+                && var.starts_with(HOST_VARIABLE_PREFIX)
+            {
+                return Err(format!(
+                    "externals.{section}.{name:?}: token_env may not name a {HOST_VARIABLE_PREFIX} variable, which the host keeps for itself"
+                ));
+            }
+        }
+    }
+    Ok(())
 }
 
 fn is_url_segment(name: &str) -> bool {
@@ -438,6 +472,14 @@ token_env = "APPA_PROVIDER_GITHUB_TOKEN"
         ] {
             assert!(compile(suffix).is_err());
         }
+    }
+
+    #[test]
+    fn refuses_host_variables_in_the_root() {
+        let root = "[policy]\nversion = 2\n[externals.authorities.review]\nurl = 'http://127.0.0.1:9000/api/openappa/helpers/x/y'\ntoken_env = \"APPA_ARCHESTRA_BRIDGE_TOKEN\"\n";
+        assert!(validate(root).is_err());
+        assert!(compose(root, &[], &[]).is_err());
+        assert!(validate("[policy]\nversion = 2\n").is_ok());
     }
 
     #[test]

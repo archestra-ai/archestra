@@ -14,7 +14,7 @@ test('validates policy semantics and refuses container access', async () => {
 });
 
 test('saved text changes enforcement for new sessions and preserves existing sessions', { skip: !databaseUrl }, async () => {
-  await native.initializeOpenappa(databaseUrl, allow);
+  await native.initializeOpenappa(databaseUrl, 2, allow);
   const scope = () => ({ organization_id: 'policy-test', caller_id: 'user:test', session_id: randomUUID() });
   const hook = async (session, event, policy) => JSON.parse(await native.dispatchHook(JSON.stringify({ ...session, ...event }), policy));
   const old = scope();
@@ -60,7 +60,7 @@ requires = { trust = "trusted" }
 url = "http://127.0.0.1:${server.address().port}/annotate"
 `;
   assert.deepEqual(await native.validateOpenappaPolicy(policy), []);
-  await native.initializeOpenappa(databaseUrl, policy);
+  await native.initializeOpenappa(databaseUrl, 2, policy);
   const scope = { organization_id: 'catch-all-test', caller_id: 'user:test', session_id: randomUUID() };
   const hook = async event => JSON.parse(await native.dispatchHook(JSON.stringify({ ...scope, ...event }), policy));
   assert.equal((await hook({ event: 'session_start' })).decision, 'ack');

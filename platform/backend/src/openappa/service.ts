@@ -190,6 +190,7 @@ async function binding(content: string) {
     url.searchParams.delete("schema");
     await module.initializeOpenappa(
       url.toString(),
+      config.openappa.postgresMaxConnections,
       content,
       openappaYellEnabled()
         ? {

@@ -3563,6 +3563,7 @@ describe("OpenAPPA feature configuration", () => {
     expect(parseOpenAppaConfig(enabled)).toEqual({
       enabled: false,
       yellEnabled: false,
+      offerSigningSecret: "",
       postgresMaxConnections: 4,
     });
   });
@@ -3570,8 +3571,16 @@ describe("OpenAPPA feature configuration", () => {
     expect(parseOpenAppaConfig("true")).toEqual({
       enabled: true,
       yellEnabled: true,
+      offerSigningSecret: "",
       postgresMaxConnections: 4,
     });
+    expect(
+      parseOpenAppaConfig("true", "true", "offer-signing-secret-at-least-32ch")
+        .offerSigningSecret,
+    ).toBe("offer-signing-secret-at-least-32ch");
+    expect(() => parseOpenAppaConfig("true", "true", "short")).toThrow(
+      "ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET must be at least 32 characters",
+    );
   });
 
   test.each([
@@ -3583,7 +3592,8 @@ describe("OpenAPPA feature configuration", () => {
     ["many", 4],
   ])("reads the ledger pool size (value=%s)", (value, expected) => {
     expect(
-      parseOpenAppaConfig("true", undefined, value).postgresMaxConnections,
+      parseOpenAppaConfig("true", undefined, undefined, value)
+        .postgresMaxConnections,
     ).toBe(expected);
   });
 });

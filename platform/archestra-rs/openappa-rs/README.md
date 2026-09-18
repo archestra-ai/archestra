@@ -131,7 +131,7 @@ the proxy filters model input, not data already stored or displayed by Chat.
 
 ## Storage and interrupted processing
 
-Migration `0471_openappa_native.sql` creates the event and receipt tables. Migration `0479_perpetual_malcolm_colcord.sql` adds the durable offer-owner index:
+Migration `0471_openappa_native.sql` creates the event and receipt tables. Migration `0479_perpetual_malcolm_colcord.sql` adds host-key indexes. Offer routing is a host-signed plaintext claim, not a table.
 
 | Table | Owner / purpose |
 | --- | --- |
@@ -140,7 +140,6 @@ Migration `0471_openappa_native.sql` creates the event and receipt tables. Migra
 | `openappa_sessions` | Scoped actor/root/parent mapping and start decision |
 | `openappa_operations` | Call, lifecycle, and remedy receipts |
 | `openappa_processed_results` | Result status, decision, and approved output |
-| `openappa_offer_owners` | Authenticated offer-to-session routing and client presentation metadata; not offer authorization |
 
 Rust owns event encoding, decoding, policy validation, replay, ordering, and
 compare-and-swap behavior. TypeScript does not interpret policy events. The
@@ -170,7 +169,7 @@ behavior, not exactly-once execution of arbitrary external services.
 
 ## Remedies and current limits
 
-`archestra__execute_remedy_plan` executes remedies through the native gate. Offer routing and receipts are durable in PostgreSQL (`openappa_offer_owners`). Any replica can resolve an offer after a restart or routing change. The recorded owner routes to the target session. The runtime validates the offer before execution.
+`archestra__execute_remedy_plan` executes remedies through the native gate. Offer routing is a signed plaintext claim on the notice and control call. Any replica verifies the HMAC and reconstructs the session. The runtime event log validates the offer before execution.
 
 Personal offers require their original user. Organization offers allow any caller in that organization. Unknown, unauthorized, or spent offers return terminal feedback without executing.
 
@@ -180,7 +179,9 @@ The proxy replaces a denied call with `archestra__get_remedy_plans`. The notice 
 
 The runtime withholds results for unreleased call IDs. Unrecognized or expired remedy calls return a terminal message telling the model that nothing was applied.
 
-Locked chats are refused while OpenAPPA is enabled. Agent and skill delegation are governed as ordinary tool calls. Sessions declaring provider-hosted tools or `tool_search` are refused with HTTP 400. Notice restoration runs on Anthropic Messages (including Bedrock InvokeModel), OpenAI Responses, and OpenAI Chat Completions. On other protocols, OpenAPPA evaluates calls and results, but notices stay in history as notice calls.
+Locked chats are refused while OpenAPPA is enabled. Agent and skill delegation are governed as ordinary tool calls. Sessions declaring provider-hosted tools or `tool_search` are refused with HTTP 400, except a hosted web search on OpenAI Responses (below). Notice restoration runs on Anthropic Messages (including Bedrock InvokeModel), OpenAI Responses, and OpenAI Chat Completions. On other protocols, OpenAPPA evaluates calls and results, but notices stay in history as notice calls.
+
+The provider runs a hosted `web_search` inside the inference call, so the proxy cannot stop the call; it rules on what the call brought in. It withholds the response from the first `web_search_call` item on — the search record, the text the model wrote with the results in view, and any calls after it — and submits that as the result of a `web_search` tool call. An admitted result passes through unchanged. A held one reaches the client as a notice in place of the withheld part, so the model never sees it in a later request unless a remedy releases it. List `web_search` under `confined_results` to have the runtime stage the result: accepting the offer returns it. Any other denial drops it, and the model searches again once the remedy allows the call. The query itself has already reached the provider, which holds the session's context anyway. A search-backed turn loses token streaming after the search starts, since the verdict needs the whole turn.
 
 Start new conversations when enabling this feature. Historical tool results
 from before activation have no native admission receipts and are refused;

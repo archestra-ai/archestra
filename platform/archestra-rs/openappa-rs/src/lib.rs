@@ -6,9 +6,9 @@ mod policy;
 use appa_eventlog::{
     Backend, LogStore,
     postgres::{
-        OfferOwnerKey, OfferOwnerRecord, OperationClaim, OperationKey, OperationRequest,
-        PostgresError, PostgresStore, ProcessedResultClaim, ProcessedResultKey,
-        ProcessedResultRequest, ReceiptBinding, ReceiptScope,
+        OperationClaim, OperationKey, OperationRequest, PostgresError, PostgresStore,
+        ProcessedResultClaim, ProcessedResultKey, ProcessedResultRequest, ReceiptBinding,
+        ReceiptScope,
     },
 };
 use appa_runtime::{
@@ -138,6 +138,16 @@ struct OfferInput {
     /// Authenticated caller identity.
     #[serde(default)]
     caller_id: Option<String>,
+    session_id: String,
+    #[serde(default)]
+    parent_id: Option<String>,
+    /// Principal that minted the offer, from verified host claims.
+    #[serde(default)]
+    owner_caller_id: Option<String>,
+    #[serde(default)]
+    tool: Option<String>,
+    #[serde(default)]
+    spelling: Option<String>,
     /// Client tool call ID for binding durable remedy receipts.
     #[serde(default)]
     tool_call_id: Option<String>,
@@ -296,10 +306,11 @@ fn postgres_store(store: &LogStore) -> napi::Result<&PostgresStore> {
 }
 
 fn identity(input: &Input) -> String {
-    format!(
-        "archestra:{:x}",
-        Sha256::digest(input.session_id.as_bytes())
-    )
+    session_actor(&input.session_id)
+}
+
+fn session_actor(session_id: &str) -> String {
+    format!("archestra:{:x}", Sha256::digest(session_id.as_bytes()))
 }
 
 #[napi(js_name = "initializeOpenappa")]
@@ -481,6 +492,12 @@ pub async fn execute_remedy_by_offer(
     {
         return Err(error("invalid organization identity"));
     }
+    if input.session_id.is_empty()
+        || input.session_id.len() > 1024
+        || input.session_id.chars().any(char::is_control)
+    {
+        return Err(error("invalid session identity"));
+    }
     match (input.execution_mode, &input.tool_call_id) {
         (ExecutionMode::Tracked, Some(tool_call_id))
             if !tool_call_id.is_empty()
@@ -494,9 +511,7 @@ pub async fn execute_remedy_by_offer(
     }
     let visible_arguments = object_raw(&input.arguments, "remedy arguments")?;
     let original_arguments = original_arguments_raw(&input.original_arguments)?;
-    let quoted: ExecuteRemedyPlanArgs =
-        serde_json::from_str(visible_arguments.get()).map_err(error)?;
-    let offer_id = OfferId(quoted.offer_id.clone());
+    let _: ExecuteRemedyPlanArgs = serde_json::from_str(visible_arguments.get()).map_err(error)?;
     let caller = input
         .caller_id
         .as_deref()
@@ -510,10 +525,9 @@ pub async fn execute_remedy_by_offer(
     };
     let owner = {
         let leased = state.lease().await?;
-        lookup_offer_owner(
+        routing_owner(
             postgres_store(&leased.state.store)?,
-            &input.organization_id,
-            &offer_id,
+            &input,
             caller.as_ref(),
         )?
     };
@@ -609,40 +623,6 @@ fn root_locks() -> &'static Mutex<HashMap<String, Arc<Mutex<()>>>> {
 }
 
 impl State {
-    /// Records only the offer ids exposed by the runtime's typed call denial.
-    /// Rendered notices and arbitrary tool output never create executable
-    /// offer ownership.
-    fn record_offers(
-        &self,
-        pg: &PostgresStore,
-        input: &Input,
-        root: &str,
-        presentation: Option<&RemedyPresentation>,
-    ) -> napi::Result<()> {
-        let offered = presentation_offer_ids(presentation);
-        if offered.is_empty() {
-            return Ok(());
-        }
-        let owner = OfferOwner {
-            organization_id: input.organization_id.clone(),
-            caller_id: input.caller_id.clone(),
-            session_id: input.session_id.clone(),
-            parent_id: input.parent_id.clone(),
-            root: root.to_owned(),
-            arguments: input
-                .original_arguments
-                .as_ref()
-                .or(input.arguments.as_ref())
-                .map(|arguments| arguments.get().to_owned()),
-            tool: input.tool.clone(),
-            spelling: input.spelling.clone(),
-        };
-        for offer_id in offered {
-            insert_offer_owner(pg, &offer_id, &owner)?;
-        }
-        Ok(())
-    }
-
     /// This state over one pooled connection: the store is a lease of it and
     /// the runtime records through that lease.
     async fn lease(&self) -> napi::Result<Leased> {
@@ -864,15 +844,21 @@ impl State {
                 }
                 return Ok(response);
             }
-            let quoted_offer = OfferId(args.offer_id.clone());
             let outcome = self
                 .runtime
                 .execute_embedded_remedy_with_options(&actor, args, presentation_options(&input))
                 .await;
-            let presentation = remedy_presentation(&outcome);
-            self.record_offers(pg, &input, &root, presentation)?;
-            let owner = lookup_offer_owner_record(pg, &input.organization_id, &quoted_offer)?;
-            let response = render_remedy_outcome(outcome, owner.as_ref())?;
+            let owner = OfferOwner {
+                organization_id: input.organization_id.clone(),
+                caller_id: input.caller_id.clone(),
+                session_id: input.session_id.clone(),
+                parent_id: input.parent_id.clone(),
+                root: root.clone(),
+                arguments: None,
+                tool: input.tool.clone(),
+                spelling: input.spelling.clone(),
+            };
+            let response = render_remedy_outcome(outcome, Some(&owner))?;
             finish_operation(pg, &input, &operation, &response, ReceiptBinding::Caller)?;
             if let Some(result_key) = result_key {
                 let approved = decision_text(&response)?;
@@ -978,9 +964,6 @@ impl State {
                 presentation_options(&input),
             )
             .await;
-            if input.event == HookEventKind::ToolCall {
-                self.record_offers(pg, &input, &root, outcome.presentation.as_ref())?;
-            }
             wire(&outcome.decision)?
         };
         finish_operation(pg, &input, &operation, &decision, ReceiptBinding::Session)?;
@@ -1078,7 +1061,6 @@ impl State {
         )
         .await;
         let decision = outcome.decision;
-        self.record_offers(pg, input, &actor.root.0, outcome.presentation.as_ref())?;
         if cancelled && !matches!(decision, HookDecision::Ack) {
             return Err(error("OpenAPPA could not settle a withheld tool call"));
         }
@@ -1108,7 +1090,7 @@ impl State {
             let refusal = json!({ "decision": "deny_call", "feedback": approved });
             refusal
         } else {
-            wire(&decision)?
+            with_presentation_offers(wire(&decision)?, outcome.presentation.as_ref())?
         };
         let output_source = if cancelled {
             OutputSource::Runtime
@@ -1255,6 +1237,29 @@ fn with_offer_status(response: Value, status: OfferStatusKind) -> napi::Result<V
     .map_err(error)
 }
 
+fn with_presentation_offers(
+    mut response: Value,
+    presentation: Option<&RemedyPresentation>,
+) -> napi::Result<Value> {
+    let offers = presentation_offer_ids(presentation);
+    if offers.is_empty() {
+        return Ok(response);
+    }
+    let object = response
+        .as_object_mut()
+        .ok_or_else(|| error("decision is not an object"))?;
+    object.insert(
+        "offers".to_owned(),
+        json!(
+            offers
+                .into_iter()
+                .map(|id| json!({ "offer_id": id.0 }))
+                .collect::<Vec<_>>()
+        ),
+    );
+    Ok(response)
+}
+
 fn presentation_offer_ids(presentation: Option<&RemedyPresentation>) -> Vec<OfferId> {
     presentation
         .map(|presentation| {
@@ -1348,17 +1353,6 @@ fn json_arguments_match(original: &str, proposed: &str) -> bool {
     ) {
         (Ok(original), Ok(proposed)) => original == proposed,
         _ => false,
-    }
-}
-
-fn remedy_presentation(outcome: &RemedyOutcome) -> Option<&RemedyPresentation> {
-    match outcome {
-        RemedyOutcome::Declined { presentation } => Some(presentation),
-        RemedyOutcome::Authorized { .. }
-        | RemedyOutcome::Substituted { .. }
-        | RemedyOutcome::Returned { .. }
-        | RemedyOutcome::NoAnswer { .. }
-        | RemedyOutcome::Refused { .. } => None,
     }
 }
 
@@ -1559,47 +1553,36 @@ fn proposed(input: &Input) -> napi::Result<ProposedCall> {
     })
 }
 
-fn lookup_offer_owner(
+fn routing_owner(
     pg: &PostgresStore,
-    organization_id: &str,
-    offer_id: &OfferId,
-    caller: Option<&Principal>,
+    input: &OfferInput,
+    spender: Option<&Principal>,
 ) -> napi::Result<Option<OfferOwner>> {
-    let record = pg
-        .offer_owner(OfferOwnerKey {
-            organization_id: organization_id.to_owned(),
-            offer_id: offer_id.0.clone(),
+    if !owner_can_be_spent_by(input.owner_caller_id.as_deref(), spender) {
+        return Ok(None);
+    }
+    let actor = session_actor(&input.session_id);
+    let organization_id = input.organization_id.clone();
+    let root = pg
+        .with_client(move |client| {
+            Ok(client
+                .query_opt(
+                    "SELECT root FROM openappa_sessions WHERE actor = $1 AND organization_id = $2",
+                    &[&actor, &organization_id],
+                )?
+                .map(|row| row.get::<_, String>(0)))
         })
         .map_err(error)?;
-    Ok(record
-        .filter(|record| owner_can_be_spent_by(record.scope.caller_id.as_deref(), caller))
-        .map(offer_owner_from_record))
-}
-
-fn lookup_offer_owner_record(
-    pg: &PostgresStore,
-    organization_id: &str,
-    offer_id: &OfferId,
-) -> napi::Result<Option<OfferOwner>> {
-    pg.offer_owner(OfferOwnerKey {
-        organization_id: organization_id.to_owned(),
-        offer_id: offer_id.0.clone(),
-    })
-    .map_err(error)
-    .map(|record| record.map(offer_owner_from_record))
-}
-
-fn offer_owner_from_record(record: OfferOwnerRecord) -> OfferOwner {
-    OfferOwner {
-        organization_id: record.scope.organization_id,
-        caller_id: record.scope.caller_id,
-        session_id: record.scope.session_id,
-        parent_id: record.parent_id,
-        root: record.root,
-        arguments: record.arguments,
-        tool: record.tool,
-        spelling: record.spelling,
-    }
+    Ok(root.map(|root| OfferOwner {
+        organization_id: input.organization_id.clone(),
+        caller_id: input.owner_caller_id.clone(),
+        session_id: input.session_id.clone(),
+        parent_id: input.parent_id.clone(),
+        root,
+        arguments: None,
+        tool: input.tool.clone(),
+        spelling: input.spelling.clone(),
+    }))
 }
 
 fn owner_can_be_spent_by(owner: Option<&str>, spender: Option<&Principal>) -> bool {
@@ -1615,28 +1598,6 @@ fn owner_can_be_spent_by(owner: Option<&str>, spender: Option<&Principal>) -> bo
         Ok(Some(Principal::App(_) | Principal::VirtualKey(_) | Principal::Opaque(_))) => true,
         Ok(None) | Err(_) => false,
     }
-}
-
-fn insert_offer_owner(
-    pg: &PostgresStore,
-    offer_id: &OfferId,
-    owner: &OfferOwner,
-) -> napi::Result<()> {
-    pg.store_offer_owner(OfferOwnerRecord {
-        scope: ReceiptScope {
-            organization_id: owner.organization_id.clone(),
-            caller_id: owner.caller_id.clone(),
-            session_id: owner.session_id.clone(),
-            binding: ReceiptBinding::Caller,
-        },
-        offer_id: offer_id.0.clone(),
-        root: owner.root.clone(),
-        parent_id: owner.parent_id.clone(),
-        arguments: owner.arguments.clone(),
-        tool: owner.tool.clone(),
-        spelling: owner.spelling.clone(),
-    })
-    .map_err(error)
 }
 
 fn claim_operation(

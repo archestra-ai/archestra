@@ -104,6 +104,8 @@ builtin = "hitl"
     return {
       organization_id: session.organization_id,
       caller_id: session.caller_id,
+      session_id: session.session_id,
+      owner_caller_id: session.owner_caller_id ?? session.caller_id,
       execution_mode: event.tool_call_id ? 'tracked' : 'untracked',
       original_arguments: JSON.stringify(original_arguments || event.arguments),
       presentation: { control_tool: 'archestra__execute_remedy_plan', supports_delegation: false },
@@ -238,9 +240,8 @@ builtin = "hitl"
     assert.ok(blocked.approved_output.includes(presentation.control_tool));
     assert.ok(!blocked.approved_output.includes('raw sensitive payload'));
     assert.equal(sanitizations, before + 1);
-    const owners = await client.query('SELECT offer_id FROM openappa_offer_owners WHERE organization_id=$1 AND session_id=$2', [session.organization_id, session.session_id]);
-    const stagedOffers = owners.rows.filter((row) => !initialIds.has(row.offer_id));
-    assert.ok(stagedOffers.length > 0, 'typed result-time offers were durably registered');
+    const stagedOffers = (blocked.offers ?? []).filter((offer) => !initialIds.has(offer.offer_id));
+    assert.ok(stagedOffers.length > 0, 'typed result-time offers were returned on the blocked result');
     const returned = await remoteOffer(session, { tool_call_id: 'accept-staged', arguments: { offer_id: stagedOffers[0].offer_id } });
     assert.notEqual(returned.result.isError, true);
     assert.equal(returned.approved_output, 'approved scrubbed output');
@@ -254,7 +255,7 @@ builtin = "hitl"
     const offer_id = denied.offers[0].offer_id;
     const event = { tool_call_id: 'provider-remedy-scope', arguments: { offer_id } };
     const wrongOrganization = await byOffer({ ...session, organization_id: `other-${randomUUID()}` }, event);
-    const wrongUser = await byOffer({ ...session, caller_id: 'user:wrong' }, event);
+    const wrongUser = await byOffer({ ...session, caller_id: 'user:wrong', owner_caller_id: 'user:owner' }, event);
     for (const response of [wrongOrganization, wrongUser]) {
       assert.equal(response.offer.status, 'unknown');
       assert.equal(response.reason, 'unknown_control_call');
@@ -267,7 +268,7 @@ builtin = "hitl"
   await t.test('credential-owned offers permit an authenticated same-organization spender', async () => {
     const session = scope('virtual-key:credential');
     const denied = await call(session, 'held', 'read_untrusted');
-    const response = await byOffer({ ...session, caller_id: 'user:spender' }, {
+    const response = await byOffer({ ...session, caller_id: 'user:spender', owner_caller_id: 'virtual-key:credential' }, {
       tool_call_id: 'credential-remedy',
       arguments: { offer_id: denied.offers[0].offer_id },
     });

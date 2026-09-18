@@ -24,6 +24,7 @@ import {
   readNotice,
   readRemedyExecution,
 } from "./notice";
+import type { OfferJws } from "./offer-claims";
 
 export type AppaWireFamily =
   | "anthropic:messages"
@@ -57,6 +58,26 @@ export function appaWireFamily(
  * Restores notice tool calls in request history back to original calls and rulings.
  * Updates model-visible history in place.
  */
+export function collectSignedOfferClaims(params: {
+  family: AppaWireFamily;
+  body: unknown;
+  isNoticeTool: (name: string) => boolean;
+  mayBeNoticeTool: (name: string) => boolean;
+}): OfferJws[] {
+  const claims: OfferJws[] = [];
+  const calls = toolCallSites({
+    family: params.family,
+    body: params.body,
+    match: (name) => params.isNoticeTool(name) || params.mayBeNoticeTool(name),
+  });
+  for (const call of calls) {
+    const notice = readNotice({ callId: call.id, arguments: call.arguments });
+    if (!notice?.offers) continue;
+    claims.push(...notice.offers);
+  }
+  return claims;
+}
+
 export function restoreAppaNotices(params: {
   family: AppaWireFamily;
   body: unknown;
@@ -253,6 +274,20 @@ export function providerHostedTool(tool: unknown): string | undefined {
 }
 
 /**
+ * A provider-hosted tool whose result this proxy can still withhold: a
+ * read-only lookup on a wire whose response adapter surfaces hosted calls, so
+ * what the provider ran is ruled on before any of it reaches the client.
+ */
+export function isResultGovernedHostedTool(params: {
+  family: AppaWireFamily | undefined;
+  tool: unknown;
+}): boolean {
+  const hosted = providerHostedTool(params.tool);
+  if (!hosted || !params.family) return false;
+  return RESULT_GOVERNED_HOSTED_TOOL_TYPES[params.family]?.has(hosted) === true;
+}
+
+/**
  * The client session this request belongs to, as the client itself reports it.
  *
  * A session id cannot come from static client configuration: it changes every
@@ -422,6 +457,12 @@ const CLIENT_RUN_TOOL_TYPES = new Set([
   "namespace",
   "tool_search",
 ]);
+
+const RESULT_GOVERNED_HOSTED_TOOL_TYPES: Partial<
+  Record<AppaWireFamily, ReadonlySet<string>>
+> = {
+  "openai:responses": new Set(["web_search", "web_search_preview"]),
+};
 
 /** Adjusts tool call IDs to match expected provider prefixes (fc_, ctc_). */
 function itemIdOfKind(id: string, type: keyof typeof ITEM_ID_PREFIXES): string {

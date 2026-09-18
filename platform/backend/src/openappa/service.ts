@@ -445,7 +445,7 @@ export async function processProxyResults(params: {
 type AppaCallDecision =
   | { kind: "allow" }
   | { kind: "control" }
-  | { kind: "deny"; feedback: string };
+  | { kind: "deny"; feedback: string; offers?: string[] };
 
 export async function evaluateToolCalls(
   session: OpenAppaSession,
@@ -513,6 +513,12 @@ export async function evaluateToolCalls(
       return {
         kind: "deny" as const,
         feedback: decisionMessage(decision),
+        offers:
+          decision.decision === "deny_call"
+            ? (decision.offers ?? [])
+                .map((offer) => offer.offer_id)
+                .filter((id) => id.length > 0)
+            : [],
       };
     }),
   );
@@ -547,6 +553,61 @@ export async function evaluateToolCalls(
   return results.map(
     (result) => (result as PromiseFulfilledResult<AppaCallDecision>).value,
   );
+}
+
+/** Verdict on a call the provider already ran. */
+type AppaHostedCallDecision =
+  | { kind: "release" }
+  | { kind: "hold"; feedback: string };
+
+/**
+ * Rules on calls the provider ran inside the inference call. Nothing can stop
+ * such a call, so the ruling is on what it brought in: a call the policy would
+ * have denied, or a result it stages, is held behind the ruling's offers and
+ * reaches the model only through a remedy. A policy that lists the tool under
+ * `confined_results` stages the result itself, so accepting the offer returns
+ * it; any other denial drops it, and the model searches again once allowed.
+ */
+export async function evaluateHostedToolCalls(
+  session: OpenAppaSession,
+  calls: ReadonlyArray<{
+    id: string;
+    name: string;
+    arguments: Record<string, unknown>;
+    output: string;
+  }>,
+  options: Parameters<typeof evaluateToolCalls>[2],
+): Promise<AppaHostedCallDecision[]> {
+  const decisions = await evaluateToolCalls(session, [...calls], options);
+  if (decisions.some((decision) => decision.kind === "deny")) {
+    await cancelCalls(
+      session,
+      calls.flatMap((call, index) =>
+        decisions[index].kind === "allow" ? [call.id] : [],
+      ),
+    );
+    return decisions.map((decision) =>
+      decision.kind === "deny"
+        ? { kind: "hold", feedback: decision.feedback }
+        : { kind: "release" },
+    );
+  }
+  const verdicts: AppaHostedCallDecision[] = [];
+  for (const call of calls) {
+    const approved = await approveToolResult({
+      session,
+      toolCallId: call.id,
+      output: call.output,
+      outcome: "success",
+      controlToolName: options.controlToolName,
+    });
+    verdicts.push(
+      approved.outputSource === "tool" && approved.content === call.output
+        ? { kind: "release" }
+        : { kind: "hold", feedback: approved.content },
+    );
+  }
+  return verdicts;
 }
 
 /** Cancels admitted tool calls when the carrier response is withheld. */
@@ -632,13 +693,19 @@ function decisionMessage(decision: NativeDecision): string {
 }
 
 /**
- * Executes a remedy using only the offer ID.
- * Resolves the originating session from the in-memory offer map within the organization.
+ * Executes a remedy using a verified host routing claim.
  */
 export async function executeRemedyByOffer(params: {
   organizationId: string;
   /** The principal the gateway authenticated, in the proxy's `user:<id>` form. */
   callerId?: string;
+  /** Minted session the signed offer claims name. */
+  sessionId: string;
+  parentId?: string;
+  /** Principal that minted the offer, from verified claims. */
+  ownerCallerId?: string;
+  tool?: string;
+  spelling?: string;
   /** Provider or client-supplied logical execution identity, when available. */
   toolCallId?: string;
   controlToolName?: string;
@@ -654,7 +721,14 @@ export async function executeRemedyByOffer(params: {
     module.executeRemedyByOffer(
       JSON.stringify({
         organization_id: params.organizationId,
+        session_id: params.sessionId,
         ...(params.callerId ? { caller_id: params.callerId } : {}),
+        ...(params.parentId ? { parent_id: params.parentId } : {}),
+        ...(params.ownerCallerId
+          ? { owner_caller_id: params.ownerCallerId }
+          : {}),
+        ...(params.tool ? { tool: params.tool } : {}),
+        ...(params.spelling ? { spelling: params.spelling } : {}),
         execution_mode: params.toolCallId ? "tracked" : "untracked",
         ...(params.toolCallId ? { tool_call_id: params.toolCallId } : {}),
         original_arguments: params.originalArguments,

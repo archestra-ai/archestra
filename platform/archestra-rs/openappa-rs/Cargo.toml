@@ -9,7 +9,9 @@ publish = false
 crate-type = ["cdylib"]
 
 [dependencies]
-# The embedded reporting helper currently requires upstream's daemon feature.
+# Pinned to the first commit after OpenAPPA v0.23.1, which adds the PostgreSQL
+# connection pool. The embedded reporting helper currently requires upstream's
+# daemon feature.
 appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "a2720de2cbdfada272ad9fd2d252b6937a454d16" }
 appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "a2720de2cbdfada272ad9fd2d252b6937a454d16" }
 appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "a2720de2cbdfada272ad9fd2d252b6937a454d16", features = ["postgres"] }

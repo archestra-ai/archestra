@@ -13,6 +13,7 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 
 def locate_helper():
@@ -217,6 +218,24 @@ class WorkspaceFilesTest(unittest.TestCase):
         )
         self.assertFalse(reply["ok"])
         self.assertEqual((self.root / "fresh.bin").read_bytes(), payload(8, b"theirs"))
+
+    def test_stale_staging_entries_are_swept_but_live_ones_survive(self):
+        """An abandoned snapshot holds its inode, so space is never reclaimed."""
+        (self.root / "pinned.bin").write_bytes(payload(2048))
+        snap = self.run_helper("snapshot", "pinned.bin")
+        staging = self.root / ".archestra-transfers"
+        stale = staging / ("0" * 32)
+        stale.write_bytes(b"abandoned")
+        old = time.time() - 7 * 60 * 60
+        os.utime(stale, (old, old))
+        # Sweeping happens when a transfer opens staging, not on unrelated reads.
+        self.run_helper("snapshot", "pinned.bin")
+        self.assertFalse(stale.exists(), "a stale entry should be removed")
+        self.assertTrue(
+            (staging / snap["transfer_id"]).exists(),
+            "a recent snapshot must survive",
+        )
+        self.assertEqual(self.read_range(snap["transfer_id"], 0, -1), payload(2048))
 
     def test_malformed_transfer_id_is_refused(self):
         reply = self.run_helper("write-stream", "../../etc/passwd", expect_ok=False)

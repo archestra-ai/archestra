@@ -12,12 +12,15 @@ import json
 import os
 import stat
 import sys
+import time
 import uuid
 
 MAX_BYTES = 4 * 1024 * 1024
 BLOCK_BYTES = 1024 * 1024
 STAGING = ".archestra-transfers"
 ABSENT = "-"
+# Comfortably beyond both a ticket's lifetime and a transfer's own timeout.
+STALE_SECONDS = 6 * 60 * 60
 
 
 def workspace_root():
@@ -119,14 +122,40 @@ def open_staging(root):
     """Open the staging directory, creating it with owner-only access.
 
     Staging sits inside the workspace so hard links stay on one filesystem.
+    Stale entries are removed here rather than by the caller. A control plane
+    can restart or lose a ticket, and an abandoned snapshot holds its inode, so
+    space the owner believes it freed would never come back.
     """
     try:
         os.mkdir(os.path.join(root, STAGING), 0o700)
     except FileExistsError:
         pass
-    return os.open(
+    directory = os.open(
         os.path.join(root, STAGING), os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
     )
+    sweep(directory)
+    return directory
+
+
+def sweep(staging):
+    """Remove staging entries older than any transfer could still be using.
+
+    The window is far longer than a transfer's own timeout, so this never
+    removes an entry a live transfer still reads.
+    """
+    cutoff = time.time() - STALE_SECONDS
+    try:
+        names = os.listdir(staging)
+    except OSError:
+        return
+    for name in names:
+        try:
+            info = os.stat(name, dir_fd=staging, follow_symlinks=False)
+            if stat.S_ISREG(info.st_mode) and info.st_mtime < cutoff:
+                os.unlink(name, dir_fd=staging)
+        except OSError:
+            # A concurrent transfer may finalize an entry while this runs.
+            continue
 
 
 def describe(info):

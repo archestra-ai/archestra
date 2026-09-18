@@ -277,6 +277,237 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     );
   });
 
+  /** A session that declares the run_tool dispatch surface beside the APPA pair. */
+  const dispatchPayload = (
+    stream: boolean,
+    messages: unknown[] = [{ role: "user", content: "List my meetings" }],
+  ) => {
+    const body = payload(stream, messages);
+    body.tools.push({
+      name: "archestra__run_tool",
+      description: "Dispatch a tool by name",
+      input_schema: { type: "object", properties: {} },
+    });
+    return body;
+  };
+  const dispatchCall = {
+    name: "archestra__run_tool",
+    input: { tool_name: "grain__list_meetings", tool_args: { limit: 5 } },
+  };
+
+  test.each([
+    true,
+    false,
+  ])("a denied run_tool dispatch reaches the client as a notice naming the target tool (stream=%s)", async (stream) => {
+    block = true;
+    options = {
+      includeToolUse: true,
+      streamStopReason: "tool_use",
+      nonStreamingToolUse: dispatchCall,
+      streamingToolUse: dispatchCall,
+    };
+
+    const response = await post(dispatchPayload(stream));
+
+    expect(response.statusCode, response.body).toBe(200);
+    // The runtime ruled on the dispatch's target — exact name and the target's
+    // own arguments — so named rules, annotator bindings, and the wildcard
+    // catch-all all apply to the tool that will actually execute.
+    expect(events.filter((event) => event.event === "tool_call")).toEqual([
+      expect.objectContaining({
+        tool: "grain__list_meetings",
+        arguments: { limit: 5 },
+      }),
+    ]);
+    const notice = noticeFrom(response.body, stream);
+    expect(notice.name).toBe("archestra__get_remedy_plans");
+    // The model reads the ruling against the tool it asked for, not the
+    // wrapper the call was transported in.
+    expect(notice.input.tool).toBe("grain__list_meetings");
+    expect(notice.input.arguments).toBe(JSON.stringify({ limit: 5 }));
+    expect(notice.input.ruling).toBe(
+      "[appa] NATIVE REFUSAL: execute_remedy_plan(offer_id: test-offer)",
+    );
+    expect(notice.input.notice).toEqual({ v: 1, call_id: notice.id });
+    expect(providerRequests).toHaveLength(1);
+  });
+
+  test("restores a denied dispatch as the target call and its ruling on the next request", async () => {
+    block = true;
+    options = {
+      includeToolUse: true,
+      streamStopReason: "tool_use",
+      nonStreamingToolUse: dispatchCall,
+      streamingToolUse: dispatchCall,
+    };
+    const first = await post(dispatchPayload(false));
+    const notice = noticeFrom(first.body, false);
+    block = false;
+
+    const second = await post(
+      dispatchPayload(false, [
+        { role: "user", content: "List my meetings" },
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "tool_use",
+              id: notice.id,
+              name: "archestra__get_remedy_plans",
+              input: notice.input,
+            },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: notice.id,
+              content: "rendered for the user",
+            },
+          ],
+        },
+      ]),
+    );
+
+    expect(second.statusCode, second.body).toBe(200);
+    const sent = providerRequests.at(-1) as {
+      messages: { role: string; content: Record<string, unknown>[] }[];
+    };
+    // History shows a direct call to the target with APPA's ruling as its
+    // result — the wrapper never enters the transcript the model reads.
+    expect(sent.messages[1].content[0]).toEqual({
+      type: "tool_use",
+      id: notice.id,
+      name: "grain__list_meetings",
+      input: { limit: 5 },
+    });
+    expect(sent.messages[2].content[0]).toMatchObject({
+      type: "tool_result",
+      tool_use_id: notice.id,
+      is_error: true,
+      content:
+        "[appa] NATIVE REFUSAL: execute_remedy_plan(offer_id: test-offer)",
+    });
+  });
+
+  test("releases the retried dispatch as the wrapper after the remedy, still ruled on as the target", async () => {
+    block = true;
+    options = {
+      includeToolUse: true,
+      streamStopReason: "tool_use",
+      nonStreamingToolUse: dispatchCall,
+      streamingToolUse: dispatchCall,
+    };
+    const first = await post(dispatchPayload(false));
+    const notice = noticeFrom(first.body, false);
+    block = false;
+
+    // The model spends the offer through the control tool.
+    const control = {
+      name: "archestra__execute_remedy_plan",
+      input: { offer_id: "test-offer" },
+    };
+    options = {
+      includeToolUse: true,
+      streamStopReason: "tool_use",
+      nonStreamingToolUse: control,
+      streamingToolUse: control,
+    };
+    const remedyResponse = await post(
+      dispatchPayload(false, [
+        { role: "user", content: "List my meetings" },
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "tool_use",
+              id: notice.id,
+              name: "archestra__get_remedy_plans",
+              input: notice.input,
+            },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: notice.id,
+              content: "rendered for the user",
+            },
+          ],
+        },
+      ]),
+    );
+    const remedy = noticeFrom(remedyResponse.body, false);
+    expect(remedy.name).toBe("archestra__execute_remedy_plan");
+
+    // The model retries the same envelope; the acceptance has narrowed the
+    // session, so the runtime releases it this time.
+    options = {
+      includeToolUse: true,
+      streamStopReason: "tool_use",
+      nonStreamingToolUse: dispatchCall,
+      streamingToolUse: dispatchCall,
+    };
+    const retry = await post(
+      dispatchPayload(false, [
+        { role: "user", content: "List my meetings" },
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "tool_use",
+              id: notice.id,
+              name: "archestra__get_remedy_plans",
+              input: notice.input,
+            },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: notice.id,
+              content: "rendered for the user",
+            },
+          ],
+        },
+        {
+          role: "assistant",
+          content: [{ type: "tool_use", ...remedy }],
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: remedy.id,
+              content: "Applied",
+            },
+          ],
+        },
+      ]),
+    );
+
+    expect(retry.statusCode, retry.body).toBe(200);
+    const released = noticeFrom(retry.body, false);
+    // The client receives the wrapper it can execute — never the unwrapped
+    // target, which it may not even have declared.
+    expect(released.name).toBe("archestra__run_tool");
+    expect(released.input).toEqual(dispatchCall.input);
+    // Both evaluations named the target to the runtime: the denial and the
+    // release after the remedy.
+    expect(
+      events
+        .filter((event) => event.event === "tool_call")
+        .map((event) => event.tool),
+    ).toEqual(["grain__list_meetings", "grain__list_meetings"]);
+  });
+
   test("restores the denied call and its ruling on the client's next request", async () => {
     block = true;
     const first = await post(payload(false));

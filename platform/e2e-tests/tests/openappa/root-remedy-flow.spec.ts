@@ -21,6 +21,12 @@
  *   5. The model retries the original call; it is released and returns the
  *      real result.
  *
+ * The second test repeats the flow with the model calling the restricted tool
+ * through `archestra__run_tool`, the only path a `search_and_run_only` agent
+ * has: the policy names the dispatch's target, so the denial notice and the
+ * restored history must name it too, while the released retry stays the
+ * wrapper the client can execute.
+ *
  * This spec requires a stack booted with `ARCHESTRA_OPENAPPA_ENABLED=true`.
  * It lives in the `openappa` Playwright project for exactly that reason and
  * must never be added to another project's testMatch — see the note on
@@ -34,9 +40,14 @@ import { getE2eRequestUrl, UI_BASE_URL, WIREMOCK_BASE_URL } from "../../consts";
 import { ensureWireMockAnthropicChatProvider } from "../../utils";
 import { expect, test } from "../api-fixtures";
 
+// Both scenarios mutate the deployment-wide switch and the shared policy, so
+// they cannot run beside each other under the project's fullyParallel default.
+test.describe.configure({ mode: "serial" });
+
 const NOTICE_TOOL = "archestra__get_remedy_plans";
 const CONTROL_TOOL = "archestra__execute_remedy_plan";
 const BLOCKED_TOOL = "archestra__list_skills";
+const DISPATCH_TOOL = "archestra__run_tool";
 
 /**
  * Extracts the live `offer_id` from the ruling the runtime wrote, which is in
@@ -324,6 +335,235 @@ test("denies a tool call, rules on it, and releases it after the model executes 
   }
 });
 
+// === The scripted provider turns ===========================================
+
+/**
+ * The dispatch variant: the model reaches the same restricted tool through
+ * `archestra__run_tool`, the way a `search_and_run_only` agent has to. The
+ * policy names the target, so the denial, the remedy, and the restored
+ * history must all carry the target's identity — never the wrapper's. The
+ * released retry is still the wrapper Chat can execute.
+ */
+test("rules a run_tool dispatch by its target: notice names it, remedy clears it, wrapper retries", async ({
+  request,
+  makeApiRequest,
+  createAgent,
+  deleteAgent,
+  syncModels,
+}) => {
+  test.setTimeout(180_000);
+
+  const suffix = randomUUID().replace(/-/g, "").slice(0, 12);
+  const marker = `appa-dispatch-e2e-${suffix}`;
+  const blockedCallId = `toolu_appa_${suffix}_blocked`;
+  const remedyCallId = `toolu_appa_${suffix}_remedy`;
+  const retryCallId = `toolu_appa_${suffix}_retry`;
+  const finalAnswer = `OpenAPPA dispatch flow ${suffix} completed end to end.`;
+  const dispatchInput = { tool_name: BLOCKED_TOOL, tool_args: {} };
+
+  const wireMockMappingIds: string[] = [];
+  let originalPolicy: GuardrailsPolicy | undefined;
+  let deploymentWasEnabled: boolean | undefined;
+  let agentId: string | undefined;
+  let conversationId: string | undefined;
+
+  try {
+    const deploymentResponse = await makeApiRequest({
+      request,
+      method: "get",
+      urlSuffix: "/api/guardrails-deployment",
+    });
+    const deployment = (await deploymentResponse.json()) as {
+      enabled: boolean;
+      featureEnabled: boolean;
+    };
+    expect(
+      deployment.featureEnabled,
+      "the stack was booted without ARCHESTRA_OPENAPPA_ENABLED=true — the openappa Playwright project requires it",
+    ).toBe(true);
+    deploymentWasEnabled = deployment.enabled;
+    if (!deployment.enabled) {
+      await makeApiRequest({
+        request,
+        method: "put",
+        urlSuffix: "/api/guardrails-deployment",
+        data: { enabled: true },
+      });
+    }
+
+    originalPolicy = await readPolicy(makeApiRequest, request);
+    await writePolicy(makeApiRequest, request, {
+      content: TEST_POLICY,
+      expectedRevision: originalPolicy.revision,
+    });
+
+    // The agent runs in the dispatch-only exposure mode, and the scripted
+    // provider calls the restricted tool through run_tool — the path a
+    // search_and_run_only agent must take for anything hidden.
+    const agentResponse = await createAgent(
+      request,
+      `OpenAPPA dispatch flow ${suffix}`,
+      "personal",
+    );
+    agentId = ((await agentResponse.json()) as { id: string }).id;
+    await makeApiRequest({
+      request,
+      method: "put",
+      urlSuffix: `/api/agents/${agentId}`,
+      data: { toolExposureMode: "search_and_run_only" },
+    });
+
+    const blockedToolId = await findToolId(
+      makeApiRequest,
+      request,
+      BLOCKED_TOOL,
+    );
+    await makeApiRequest({
+      request,
+      method: "post",
+      urlSuffix: `/api/agents/${agentId}/tools/${blockedToolId}`,
+      data: {},
+    });
+
+    const { apiKeyId, runtimeModel } =
+      await ensureWireMockAnthropicChatProvider({
+        request,
+        makeApiRequest,
+        syncModels,
+      });
+    await makeApiRequest({
+      request,
+      method: "put",
+      urlSuffix: `/api/agents/${agentId}`,
+      data: { llmApiKeyId: apiKeyId, modelId: runtimeModel.dbId },
+    });
+
+    const toolsResponse = await makeApiRequest({
+      request,
+      method: "get",
+      urlSuffix: `/api/chat/agents/${agentId}/mcp-tools`,
+    });
+    const advertised = ((await toolsResponse.json()) as { name: string }[]).map(
+      (tool) => tool.name,
+    );
+    expect(advertised).toEqual(
+      expect.arrayContaining([NOTICE_TOOL, CONTROL_TOOL, DISPATCH_TOOL]),
+    );
+
+    for (const mapping of [
+      proposeBlockedCallMapping({
+        marker,
+        blockedCallId,
+        toolName: DISPATCH_TOOL,
+        input: dispatchInput,
+      }),
+      executeRemedyMapping({ marker, blockedCallId, remedyCallId }),
+      retryBlockedCallMapping({
+        marker,
+        remedyCallId,
+        retryCallId,
+        toolName: DISPATCH_TOOL,
+        input: dispatchInput,
+      }),
+      finalAnswerMapping({ marker, retryCallId, finalAnswer }),
+    ]) {
+      wireMockMappingIds.push(await addWireMockMapping(request, mapping));
+    }
+
+    const conversationResponse = await makeApiRequest({
+      request,
+      method: "post",
+      urlSuffix: "/api/chat/conversations",
+      data: { agentId },
+    });
+    conversationId = ((await conversationResponse.json()) as { id: string }).id;
+
+    const events = await runChatTurn(request, {
+      conversationId,
+      prompt:
+        `${marker}: List the available skills by dispatching list_skills ` +
+        "through run_tool. If the call is blocked, read the remedy plans you " +
+        "are given, execute the offered plan with execute_remedy_plan using " +
+        "its exact offer_id, and then retry the dispatch.",
+    });
+
+    const toolInputs = collect<ToolInput>(events, "tool-input-available");
+    const toolOutputs = collect<ToolOutput>(events, "tool-output-available");
+
+    // The denied dispatch reached the client as the notice — in the dispatch's
+    // own position, under its own provider call id — but naming the TARGET.
+    expect(toolInputs.map((call) => call.toolName)).toEqual([
+      NOTICE_TOOL,
+      CONTROL_TOOL,
+      DISPATCH_TOOL,
+    ]);
+
+    const [notice, remedy, retry] = toolInputs;
+    expect(notice.toolCallId).toBe(blockedCallId);
+    const noticeInput = notice.input as {
+      tool: string;
+      arguments: unknown;
+      ruling: string;
+      notice: { v: number; call_id: string };
+    };
+    // The as-if-direct contract: the model reads the ruling against the tool
+    // it asked for, with that tool's own arguments — the wrapper is transport.
+    expect(noticeInput.tool).toBe(BLOCKED_TOOL);
+    expect(asObject(noticeInput.arguments)).toEqual({});
+    expect(noticeInput.ruling).toContain("[appa] Blocked");
+    expect(noticeInput.notice).toEqual({ v: 1, call_id: blockedCallId });
+
+    const ruling = textOf(outputFor(toolOutputs, notice.toolCallId));
+    const offerId = readOfferId(ruling);
+    expect((remedy.input as { offer_id: string }).offer_id).toBe(offerId);
+
+    // The retry is released as the wrapper the client declared, with the
+    // model's envelope arguments untouched — the client executes run_tool.
+    expect(retry.toolCallId).toBe(retryCallId);
+    expect(retry.input).toEqual(dispatchInput);
+    const released = textOf(outputFor(toolOutputs, retry.toolCallId));
+    expect(released).not.toContain("[appa] Blocked");
+    expect(released).not.toContain("Tool output withheld");
+    expect(released).not.toContain("The tool was not executed");
+
+    expect(assistantText(events)).toContain(finalAnswer);
+  } finally {
+    for (const mappingId of wireMockMappingIds) {
+      await request
+        .delete(`${WIREMOCK_BASE_URL}/__admin/mappings/${mappingId}`)
+        .catch(() => {});
+    }
+    if (conversationId) {
+      await makeApiRequest({
+        request,
+        method: "delete",
+        urlSuffix: `/api/chat/conversations/${conversationId}`,
+        ignoreStatusCheck: true,
+      }).catch(() => {});
+    }
+    if (agentId) await deleteAgent(request, agentId).catch(() => {});
+    if (originalPolicy) {
+      const current = await readPolicy(makeApiRequest, request).catch(
+        () => undefined,
+      );
+      if (current) {
+        await writePolicy(makeApiRequest, request, {
+          content: originalPolicy.content,
+          expectedRevision: current.revision,
+        }).catch(() => {});
+      }
+    }
+    if (deploymentWasEnabled === false) {
+      await makeApiRequest({
+        request,
+        method: "put",
+        urlSuffix: "/api/guardrails-deployment",
+        data: { enabled: false },
+      }).catch(() => {});
+    }
+  }
+});
+
 // === The scripted provider turns =============================================
 //
 // Four stubs on POST /anthropic/v1/messages, discriminated by which of this
@@ -334,6 +574,8 @@ test("denies a tool call, rules on it, and releases it after the model executes 
 function proposeBlockedCallMapping(params: {
   marker: string;
   blockedCallId: string;
+  toolName?: string;
+  input?: Record<string, unknown>;
 }): Record<string, unknown> {
   return anthropicMapping({
     priority: 1,
@@ -346,8 +588,8 @@ function proposeBlockedCallMapping(params: {
     events: toolUseEvents({
       messageId: "msg_appa_root_propose",
       callId: params.blockedCallId,
-      toolName: BLOCKED_TOOL,
-      input: {},
+      toolName: params.toolName ?? BLOCKED_TOOL,
+      input: params.input ?? {},
     }),
   });
 }
@@ -378,6 +620,8 @@ function retryBlockedCallMapping(params: {
   marker: string;
   remedyCallId: string;
   retryCallId: string;
+  toolName?: string;
+  input?: Record<string, unknown>;
 }): Record<string, unknown> {
   return anthropicMapping({
     priority: 3,
@@ -389,8 +633,8 @@ function retryBlockedCallMapping(params: {
     events: toolUseEvents({
       messageId: "msg_appa_root_retry",
       callId: params.retryCallId,
-      toolName: BLOCKED_TOOL,
-      input: {},
+      toolName: params.toolName ?? BLOCKED_TOOL,
+      input: params.input ?? {},
     }),
   });
 }

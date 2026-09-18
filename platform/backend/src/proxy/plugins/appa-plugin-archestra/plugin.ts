@@ -18,6 +18,7 @@ import type {
   LlmProxyToolResultsContext,
   LlmProxyToolResultsOutcome,
 } from "@/proxy/plugins/registry";
+import { normalizeToolCallsForPolicy } from "@/routes/proxy/llm-proxy-helpers";
 import {
   APPA_PLUGIN_TRUSTED_CONTEXT,
   type AppaClientAdapter,
@@ -146,6 +147,10 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         released.push(call);
         continue;
       }
+      // The registry pins `blocked` to the wire batch: the entry names the
+      // call as given. The identity the runtime ruled on — the dispatch's
+      // target — is what the notice and the refusal describe.
+      const identity = this.policyIdentity(binding, call);
       if (!notice) {
         // Refuse call and cancel admitted calls if client declares no notice tool.
         await cancelCalls(
@@ -161,9 +166,9 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
             refusalMessage: contentMessage,
             contentMessage,
             reason: "openappa_no_notice_tool",
-            blockedToolName: call.name,
+            blockedToolName: identity.name,
             blockedToolId: call.id,
-            toolInput: toolInputOf(call.arguments),
+            toolInput: toolInputOf(identity.arguments),
             allToolCallNames: calls.map((each) => each.name),
           },
         };
@@ -175,12 +180,11 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         arguments: JSON.stringify(
           buildNoticeArguments({
             id: call.id,
-            tool: call.name,
-            arguments: call.arguments,
+            tool: identity.name,
+            arguments: identity.arguments,
             result: decision.feedback,
-            custom: binding.request.customTools.has(call.name),
-            namespace:
-              call.namespace ?? binding.request.namespaces.get(call.name),
+            custom: identity.custom,
+            namespace: identity.namespace,
           }),
         ),
       });
@@ -214,6 +218,44 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           binding.adapter.normalizeLocalToolName(name),
         )
       : binding.canonicalizeToolName(name);
+  }
+
+  /**
+   * The identity a call is ruled on. A `run_tool` dispatch is evaluated as the
+   * tool it targets — target name and `tool_args` — so the denial the model
+   * reads, and the call history restores, name that tool exactly as if the
+   * client had called it directly. The unwrap is the same one evaluation used,
+   * so the notice can never describe a different call than the one ruled on.
+   */
+  private policyIdentity(
+    binding: AppaPluginBinding,
+    call: LlmProxyToolCallsContext["toolCalls"][number],
+  ): {
+    name: string;
+    arguments: string | Record<string, unknown>;
+    custom: boolean;
+    namespace?: string;
+  } {
+    const [normalized] = normalizeToolCallsForPolicy(
+      [{ name: call.name, arguments: call.arguments }],
+      (name) => this.canonicalize(binding, name),
+    );
+    if (normalized.isRunToolDispatchTarget) {
+      // The target has no declaration of its own on this wire: it is neither a
+      // free-form custom tool nor namespaced, whatever the wrapper's
+      // declaration says.
+      return {
+        name: normalized.toolCallName,
+        arguments: normalized.toolCallArgs,
+        custom: false,
+      };
+    }
+    return {
+      name: call.name,
+      arguments: call.arguments,
+      custom: binding.request.customTools.has(call.name),
+      namespace: call.namespace ?? binding.request.namespaces.get(call.name),
+    };
   }
 }
 

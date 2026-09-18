@@ -148,14 +148,14 @@ dedicated PostgreSQL connection thread supports the existing synchronous store
 API under async hook dispatch. The host's transaction and receipt SQL use that
 same connection.
 
-The initial native runtime serializes dispatch in-process. A PostgreSQL advisory
-lock serializes each trajectory family across backend processes. Before an
-operation that might consult an external authority, the binding commits a
-`pending` receipt. It then opens one transaction for all hook event writes and
-the completed receipt/approved output. Success commits both; errors roll back
-both. The runtime keeps no trajectory state in memory between events, so a
-failed dispatch leaves nothing else to discard. A durable pending receipt
-blocks further work in that family after an interruption.
+Dispatches for different trajectory families run concurrently. An in-process
+lock serializes each family within a backend process, and a PostgreSQL advisory
+lock serializes it across backend processes. Before an operation that might
+consult an external authority, the binding commits a `pending` receipt. Hook
+event writes and the completed receipt/approved output then commit as separate
+short transactions. The runtime keeps no trajectory state in memory between
+events, so a failed dispatch leaves nothing to discard. A durable pending
+receipt blocks further work in that family after an interruption.
 
 Completed result keys are session ID + tool call ID. Operation keys are session ID + operation ID. Remedy-execution receipts bind the authenticated spender. Submitting different result bytes under a completed result key returns the saved approved output without re-evaluating hooks. Submitting changed arguments under an existing logical call ID is refused.
 

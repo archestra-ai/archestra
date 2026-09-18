@@ -1,14 +1,27 @@
 /** Display public repository shorthand and Enterprise URLs without public avatar lookups for Enterprise owners. */
-export function getRepositoryDisplay(repository: string) {
+export function getRepositoryDisplay(
+  repository: string,
+  githubApiUrl?: string | null,
+) {
   const input = repository.trim();
-  const normalized = /^(?:www\.)?github\.com\//i.test(input)
-    ? `https://${input}`
-    : input;
   try {
+    const origin = new URL(githubApiUrl ?? "https://api.github.com");
+    if (origin.hostname === "api.github.com") {
+      origin.hostname = "github.com";
+    } else if (/^api\..+\.ghe\.com$/.test(origin.hostname)) {
+      origin.hostname = origin.hostname.slice(4);
+    }
+    const firstSegment = input.split("/")[0];
+    const hasHost =
+      firstSegment.includes(".") ||
+      firstSegment.includes(":") ||
+      firstSegment.toLowerCase() === origin.host.toLowerCase();
     const url = new URL(
-      /^[a-z][a-z\d+.-]*:/i.test(normalized)
-        ? normalized
-        : `https://github.com/${normalized}`,
+      /^[a-z][a-z\d+.-]*:\/\//i.test(input)
+        ? input
+        : hasHost
+          ? `${origin.protocol}//${input}`
+          : `${origin.origin}/${input}`,
     );
     const [owner = "", name = ""] = url.pathname.split("/").filter(Boolean);
     const repo = name.replace(/\.git$/, "");

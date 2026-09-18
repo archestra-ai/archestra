@@ -28,4 +28,28 @@ describe("getRepositoryDisplay", () => {
       avatarUrl: undefined,
     });
   });
+
+  it.each([
+    "acme/skills",
+    "git.example.com/acme/skills",
+    "https://git.example.com/acme/skills",
+  ])("resolves Enterprise input %s against its App host", (repository) => {
+    expect(
+      getRepositoryDisplay(repository, "https://git.example.com/api/v3"),
+    ).toEqual({
+      owner: "acme",
+      label: "git.example.com/acme/skills",
+      avatarUrl: undefined,
+    });
+  });
+
+  it("resolves Enterprise Cloud shorthand against the repository host", () => {
+    expect(
+      getRepositoryDisplay("acme/skills", "https://api.acme.ghe.com"),
+    ).toEqual({
+      owner: "acme",
+      label: "acme.ghe.com/acme/skills",
+      avatarUrl: undefined,
+    });
+  });
 });

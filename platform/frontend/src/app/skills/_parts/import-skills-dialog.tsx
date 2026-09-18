@@ -359,7 +359,12 @@ export function ImportSkillsDialog({
     label: repoSlug,
     owner: repoOwner,
     avatarUrl: repoAvatarUrl,
-  } = getRepositoryDisplay(repoUrl);
+  } = getRepositoryDisplay(
+    repoUrl,
+    authMethod === "github_app"
+      ? githubAppConfigs.find((app) => app.id === githubAppConfigId)?.githubUrl
+      : undefined,
+  );
 
   const totalImportable = discovered?.filter((s) => !s.exists).length ?? 0;
   const totalExisting = discovered?.filter((s) => s.exists).length ?? 0;

@@ -5,6 +5,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { hasRetainedSessionActivity } from "@/lib/agent-run-activity";
 import type { AgentRunSession } from "@/lib/agent-runtime.query";
 import { cn } from "@/lib/utils";
 
@@ -76,6 +77,20 @@ function runStateVisual({
     };
   }
   if (state === "TASK_STATE_COMPLETED") {
+    // Settled turn whose retained CLI is still making model requests.
+    if (
+      hasRetainedSessionActivity({
+        state,
+        endedAt: endedAt ?? null,
+        lastModelActivityAt: lastModelActivityAt ?? null,
+      })
+    ) {
+      return {
+        label: "Run active",
+        colorClassName: "text-emerald-500",
+        pulsing: false,
+      };
+    }
     return {
       label: "Run completed",
       colorClassName: "text-muted-foreground",

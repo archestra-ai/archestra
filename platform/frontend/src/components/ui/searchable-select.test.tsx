@@ -157,4 +157,30 @@ describe("SearchableSelect", () => {
         .closest("[data-slot='popover-content']"),
     ).toHaveAttribute("data-align", "end");
   });
+  it("selects the first enabled match with Arrow Down then Enter", async () => {
+    const user = userEvent.setup();
+    const onValueChange = vi.fn();
+
+    render(
+      <SearchableSelect
+        value=""
+        onValueChange={onValueChange}
+        placeholder="Select a model"
+        items={[
+          {
+            value: "legacy-haiku",
+            label: "Claude Haiku Legacy",
+            disabled: true,
+          },
+          { value: "haiku", label: "Claude Haiku" },
+        ]}
+      />,
+    );
+
+    await user.click(screen.getByRole("combobox"));
+    await user.type(screen.getByPlaceholderText("Search..."), "haiku");
+    await user.keyboard("{ArrowDown}{Enter}");
+
+    expect(onValueChange).toHaveBeenCalledWith("haiku");
+  });
 });

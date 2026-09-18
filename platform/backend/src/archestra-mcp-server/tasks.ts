@@ -9,6 +9,7 @@ import {
   TOOL_READ_WORKSPACE_FILE_SHORT_NAME,
   TOOL_START_RUN_SHORT_NAME,
   TOOL_STEER_RUN_SHORT_NAME,
+  TOOL_TRANSFER_WORKSPACE_FILE_SHORT_NAME,
   TOOL_WRITE_WORKSPACE_FILE_SHORT_NAME,
 } from "@archestra/shared";
 import { z } from "zod";
@@ -17,7 +18,7 @@ import type { A2AAttachment } from "@/agents/a2a-executor";
 import { watchChatOpsTask } from "@/agents/chatops/chatops-task-watcher";
 import { watchTaskCompletion } from "@/agents/task-completion-watcher";
 import { userHasPermission } from "@/auth/utils";
-import config from "@/config";
+import config, { getAppAssetBaseOrigin } from "@/config";
 import logger from "@/logging";
 import {
   A2AArtifactModel,
@@ -29,6 +30,7 @@ import {
   AgentWorkspaceModel,
 } from "@/models";
 import { RouteCategory } from "@/observability/tracing";
+import { AGENT_WORKSPACE_TRANSFER_PREFIX } from "@/routes/route-paths";
 import { resolveAgentRuntimeBackendDriver } from "@/services/agent-runtime/backends";
 import { preflightAgentRuntimeCredentials } from "@/services/agent-runtime/credentials";
 import { resolveAgentRuntime } from "@/services/agent-runtime/pod-run";
@@ -38,6 +40,10 @@ import {
 } from "@/services/agent-runtime/start-task";
 import { accessAgentWorkspaceFile } from "@/services/agent-runtime/workspace-files";
 import { deleteAgentWorkspace } from "@/services/agent-runtime/workspace-lifecycle";
+import {
+  WORKSPACE_TRANSFER_TICKET_TTL_MS,
+  workspaceTransferTickets,
+} from "@/services/agent-runtime/workspace-transfers";
 import {
   AGENT_RUNTIME_CREDENTIALS_REQUIRED_CODE,
   AgentRunAttentionStateSchema,
@@ -391,6 +397,97 @@ const registry = defineArchestraTools([
           error,
           "reading workspace file; use base64 encoding for binary content",
         );
+      }
+    },
+  }),
+  defineArchestraTool({
+    shortName: TOOL_TRANSFER_WORKSPACE_FILE_SHORT_NAME,
+    title: "Transfer Workspace File",
+    description:
+      "Copy a file between this machine and an Agent Runtime workspace without reading it. " +
+      "Use this to move deliverables, archives, and binaries of any size, including small ones: " +
+      "the bytes travel directly and never enter the conversation. " +
+      "Authorize the transfer here, then run the returned command in a shell. " +
+      "For a download, pass direction 'download' and run the command; it resumes automatically if interrupted. " +
+      "For an upload, first compute the local file's size and sha256, pass them here, then run the command. " +
+      "The runtime copy is pinned when you authorize a download, so a still-running agent cannot corrupt it. " +
+      "An upload refuses rather than overwrite a destination that changed since you authorized it. " +
+      "Use read_workspace_file instead only when you need to read a file's contents. " +
+      "Without a shell, fall back to read_workspace_file and write_workspace_file, which are capped at 4 MiB.",
+    schema: z.object({
+      task_id: z.string().uuid().describe("From start_run or list_runs."),
+      direction: z
+        .enum(["download", "upload"])
+        .describe("download reads from the workspace; upload writes to it."),
+      path: z
+        .string()
+        .min(1)
+        .max(4096)
+        .describe("Workspace-relative path, for example reports/summary.md."),
+      local_path: z
+        .string()
+        .min(1)
+        .max(4096)
+        .describe("Absolute path on this machine, used to build the command."),
+      size: z
+        .number()
+        .int()
+        .nonnegative()
+        .optional()
+        .describe("Upload only: the local file's size in bytes."),
+      sha256: z
+        .string()
+        .regex(/^[0-9a-f]{64}$/)
+        .optional()
+        .describe("Upload only: the local file's sha256, as hex."),
+    }),
+    handler: async ({ args, context }) => {
+      try {
+        const actor = requireActor(context);
+        if (
+          args.direction === "upload" &&
+          (args.size === undefined || !args.sha256)
+        ) {
+          return errorResult(
+            "An upload needs the local file's size and sha256. Compute them first, for example with shasum -a 256.",
+          );
+        }
+        const minted =
+          args.direction === "download"
+            ? await workspaceTransferTickets.mintDownload({
+                actor,
+                taskId: args.task_id,
+                path: args.path,
+              })
+            : await workspaceTransferTickets.mintUpload({
+                actor,
+                taskId: args.task_id,
+                path: args.path,
+                size: args.size as number,
+                sha256: args.sha256 as string,
+              });
+        const url = `${getAppAssetBaseOrigin()}${AGENT_WORKSPACE_TRANSFER_PREFIX}/${minted.ticket.id}/content`;
+        // Only metadata and a command cross this boundary. The file itself
+        // moves over HTTP, so its bytes never reach a model context.
+        return structuredSuccessResult({
+          direction: args.direction,
+          path: minted.ticket.path,
+          size: minted.ticket.size,
+          sha256: minted.ticket.sha256,
+          expires_in_seconds: Math.floor(
+            WORKSPACE_TRANSFER_TICKET_TTL_MS / 1000,
+          ),
+          command:
+            args.direction === "download"
+              ? `curl --fail-with-body --location --continue-at - --output ${shellQuoteArgument(args.local_path)} --header ${shellQuoteArgument(`Authorization: Bearer ${minted.token}`)} ${shellQuoteArgument(url)}`
+              : `curl --fail-with-body --upload-file ${shellQuoteArgument(args.local_path)} --header ${shellQuoteArgument("Content-Type: application/octet-stream")} --header ${shellQuoteArgument(`Authorization: Bearer ${minted.token}`)} ${shellQuoteArgument(url)}`,
+          next_step:
+            args.direction === "download"
+              ? "Run the command. Re-run the same command to resume an interrupted download."
+              : "Run the command. It reports the stored path, size and checksum on success.",
+        });
+      } catch (error) {
+        return catchError(error, "authorizing a workspace file transfer");
       }
     },
   }),
@@ -993,6 +1090,12 @@ const registry = defineArchestraTools([
 // Bounded by the API body limit (the base64 payload plus JSON-RPC envelope
 // must fit in one request) and by what a channel thread can reasonably hold.
 const MAX_RUN_FILE_BYTES = 40 * 1024 * 1024;
+
+/** Quote a value for a POSIX shell so a path or token cannot break the command
+ * the model is told to run. */
+function shellQuoteArgument(value: string): string {
+  return `'${value.replaceAll("'", `'\\''`)}'`;
+}
 
 export const toolEntries = registry.toolEntries;
 export const tools = registry.tools;

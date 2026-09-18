@@ -3,13 +3,6 @@ import { ApiError } from "@/types";
 import type { AppaChildTrajectory, AppaMatchContext } from "../types";
 import { readHeader } from "../utils";
 
-export function mintChildTrajectoryId(params: {
-  parentId: string;
-  childNativeId: string;
-}): string {
-  return `${params.parentId}:${params.childNativeId}`;
-}
-
 export function localToolName(name: string): string {
   const withoutFunctions = name.startsWith("functions.")
     ? name.slice("functions.".length)
@@ -140,6 +133,13 @@ function nativeId(value: string | undefined): string | undefined {
 
 function correlationError(message: string): ApiError {
   return new ApiError(400, message);
+}
+
+function mintChildTrajectoryId(params: {
+  parentId: string;
+  childNativeId: string;
+}): string {
+  return `${params.parentId}:${params.childNativeId}`;
 }
 
 function collectNamedChildren(

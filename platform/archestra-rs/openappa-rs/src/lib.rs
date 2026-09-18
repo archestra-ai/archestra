@@ -1280,8 +1280,10 @@ fn render_released_call(status: &str, call: &ProposedCall, owner: Option<&OfferO
     let tool = owner
         .and_then(|owner| owner.spelling.as_deref())
         .unwrap_or(&call.tool);
+    // A model that just ran a remedy moves straight on to the retry and never
+    // mentions it; the user must still learn which plan changed their session.
     format!(
-        "[appa] {status}. Call the {tool} tool again with exactly these arguments: {}",
+        "[appa] {status}. Tell the user in your reply which plan you accepted. Call the {tool} tool again with exactly these arguments: {}",
         call.arguments.get()
     )
 }
@@ -1640,7 +1642,7 @@ mod root_lock_tests {
 mod typed_tests {
     use super::{
         OfferId, OfferOwner, RemedyPresentation, json_arguments_match, owner_can_be_spent_by,
-        presentation_offer_ids, render_substituted_call,
+        presentation_offer_ids, render_released_call, render_substituted_call,
     };
     use appa_runtime_api::OfferedRemedy;
 
@@ -1712,6 +1714,10 @@ mod typed_tests {
         assert!(json_arguments_match(r#"{"value":1}"#, call.arguments.get()));
         assert!(render_substituted_call(&call, Some(&owner)).contains("client_tool"));
         assert!(render_substituted_call(&call, Some(&owner)).contains("Released unchanged"));
+        assert!(
+            render_released_call("Authorized", &call, Some(&owner))
+                .contains("Tell the user in your reply which plan you accepted.")
+        );
     }
 
     #[test]

@@ -140,15 +140,30 @@ function urlHost(serverUrl: string | null): string | null {
   }
 }
 
+/**
+ * The repository an image reference names, without tag or digest. A Docker Hub
+ * registry prefix is dropped, since a rule names Docker Hub images bare; any
+ * other registry stays part of the repository.
+ */
 function imageRepository(image: string | undefined): string | null {
   if (!image) return null;
   const withoutDigest = image.split("@")[0];
   const lastSlash = withoutDigest.lastIndexOf("/");
   const tagIndex = withoutDigest.indexOf(":", lastSlash + 1);
-  return (
+  const repository = (
     tagIndex === -1 ? withoutDigest : withoutDigest.slice(0, tagIndex)
   ).toLowerCase();
+  const [registry, ...path] = repository.split("/");
+  return path.length > 0 && DOCKER_HUB_REGISTRIES.has(registry)
+    ? path.join("/")
+    : repository;
 }
+
+const DOCKER_HUB_REGISTRIES = new Set([
+  "docker.io",
+  "index.docker.io",
+  "registry-1.docker.io",
+]);
 
 function normalizeName(name: string): string {
   return name

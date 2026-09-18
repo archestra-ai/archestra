@@ -27,6 +27,26 @@ describe("matchBatteries", () => {
         available,
       ),
     ).toEqual([{ battery: "github", evidence: "image" }]);
+    expect(
+      matchBatteries(
+        {
+          name: "Team chat",
+          serverUrl: null,
+          localConfig: { dockerImage: "docker.io/mcp/github:latest" },
+        },
+        available,
+      ),
+    ).toEqual([{ battery: "github", evidence: "image" }]);
+    expect(
+      matchBatteries(
+        {
+          name: "Team chat",
+          serverUrl: null,
+          localConfig: { dockerImage: "registry.example.com/mcp/github" },
+        },
+        available,
+      ),
+    ).toEqual([]);
   });
 
   test("a subdomain of a known host matches, an unrelated host with a familiar name falls back to the name", () => {

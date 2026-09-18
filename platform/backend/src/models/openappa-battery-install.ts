@@ -92,6 +92,22 @@ class OpenAppaBatteryInstallModel {
     return row;
   }
 
+  /** Insert unless the (organization, catalog, battery) install already exists. */
+  static async createIfAbsent(params: {
+    organizationId: string;
+    batteryName: string;
+    catalogId: string;
+    enabled: boolean;
+    credentialBindings: BatteryCredentialBindings;
+  }): Promise<BatteryInstall | null> {
+    const [row] = await db
+      .insert(table)
+      .values(params)
+      .onConflictDoNothing()
+      .returning();
+    return row ?? null;
+  }
+
   static async update(params: {
     id: string;
     organizationId: string;

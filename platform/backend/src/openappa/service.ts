@@ -226,8 +226,9 @@ async function withRuntime(
   try {
     if (!(await isGuardrailsV2Active()))
       throw new Error("Guardrails v2 is disabled");
-    const policy =
-      await openappaBatteriesService.effectivePolicyContent(organizationId);
+    const policy = (
+      await openappaBatteriesService.getEffectivePolicy(organizationId)
+    ).content;
     const module = await binding(policy);
     const rawResult = await call(module, policy);
     return NativeDecisionSchema.parse(JSON.parse(rawResult));

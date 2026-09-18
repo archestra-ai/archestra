@@ -25,7 +25,11 @@ describe("battery attachment after a tool sync", () => {
       name: "github__get_me",
       rawName: "get_me",
     });
-    await openappaBatteriesService.onCatalogToolsChanged(catalog.id);
+    // Two syncs of one catalog can overlap; the second must neither duplicate nor fail.
+    await Promise.all([
+      openappaBatteriesService.onCatalogToolsChanged(catalog.id),
+      openappaBatteriesService.onCatalogToolsChanged(catalog.id),
+    ]);
     await openappaBatteriesService.onCatalogToolsChanged(catalog.id);
     const installs = await OpenAppaBatteryInstallModel.list(organizationId);
     expect(installs).toHaveLength(1);

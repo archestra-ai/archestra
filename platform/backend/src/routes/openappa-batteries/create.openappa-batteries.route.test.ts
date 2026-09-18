@@ -117,7 +117,9 @@ describe("guardrails batteries", () => {
     expect(active?.contentHash).not.toBe(inactive?.contentHash);
     expect(active).toMatchObject({ lastError: null });
     await expect(
-      openappaBatteriesService.effectivePolicyContent(organizationId),
+      openappaBatteriesService
+        .getEffectivePolicy(organizationId)
+        .then((policy) => policy.content),
     ).resolves.toBe(active?.content);
 
     const disabled = await app.inject({
@@ -203,8 +205,9 @@ describe("guardrails batteries", () => {
       content: rootPolicy,
       expectedRevision: 0,
     });
-    const content =
-      await openappaBatteriesService.effectivePolicyContent(organizationId);
+    const content = await openappaBatteriesService
+      .getEffectivePolicy(organizationId)
+      .then((policy) => policy.content);
     const after = await OpenAppaEffectivePolicyModel.find(organizationId);
     expect(before).toMatchObject({ rootRevision: 0 });
     expect(after).toMatchObject({ rootRevision: 1, content, lastError: null });

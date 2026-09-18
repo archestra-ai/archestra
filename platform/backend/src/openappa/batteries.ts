@@ -45,6 +45,9 @@ class OpenAppaBatteriesService {
   /** Inspected uploads by content hash: the bytes fix the result. */
   private readonly inspected = new LRUCacheManager<NativeBatteryPackage>({
     maxSize: 32,
+    maxBytes: 64 * 1024 * 1024,
+    sizeOf: (battery) =>
+      battery.files.reduce((total, file) => total + file.text.length, 0),
     defaultTtl: 0,
   });
 
@@ -78,20 +81,12 @@ class OpenAppaBatteriesService {
       .sort((a, b) => a.name.localeCompare(b.name));
   }
 
-  /** The document the runtime opens for this organization, recomposed when the root moved. */
-  async effectivePolicyContent(organizationId: string): Promise<string> {
+  /** The policy the runtime opens for this organization, recomposed when the root moved. */
+  async getEffectivePolicy(organizationId: string): Promise<EffectivePolicy> {
     const root = await guardrailsPolicyService.get(organizationId);
     const effective = await OpenAppaEffectivePolicyModel.find(organizationId);
-    if (effective && effective.rootRevision === root.revision)
-      return effective.content;
-    return (await this.recompile(organizationId)).content;
-  }
-
-  async getEffectivePolicy(organizationId: string): Promise<EffectivePolicy> {
-    return (
-      (await OpenAppaEffectivePolicyModel.find(organizationId)) ??
-      (await this.recompile(organizationId))
-    );
+    if (effective && effective.rootRevision === root.revision) return effective;
+    return this.recompile(organizationId);
   }
 
   /**
@@ -104,18 +99,7 @@ class OpenAppaBatteriesService {
    * that lost to a newer store is redone from fresh inputs.
    */
   async recompile(organizationId: string): Promise<EffectivePolicy> {
-    const slot = this.recompiling.get(organizationId);
-    if (slot) {
-      slot.queued ??= slot.running
-        .catch(() => undefined)
-        .then(() => this.recompile(organizationId));
-      return slot.queued;
-    }
-    const running = this.recompileNow(organizationId).finally(() => {
-      this.recompiling.delete(organizationId);
-    });
-    this.recompiling.set(organizationId, { running, queued: null });
-    return running;
+    return (await this.recompose(organizationId)).policy;
   }
 
   async recompileAll(): Promise<void> {
@@ -147,20 +131,15 @@ class OpenAppaBatteriesService {
           (await this.plan(organizationId)).batteries.keys(),
         );
         for (const batteryName of matchBatteries(catalog, available)) {
-          const existing = await OpenAppaBatteryInstallModel.findByCatalog({
-            organizationId,
-            catalogId,
-            batteryName,
-          });
-          if (existing) continue;
-          await OpenAppaBatteryInstallModel.create({
+          // Concurrent syncs of one catalog race here; the unique index decides.
+          const attached = await OpenAppaBatteryInstallModel.createIfAbsent({
             organizationId,
             batteryName,
             catalogId,
             enabled: true,
             credentialBindings: {},
           });
-          organizationIds.add(organizationId);
+          if (attached) organizationIds.add(organizationId);
         }
       }
       for (const organizationId of organizationIds)
@@ -233,7 +212,6 @@ class OpenAppaBatteriesService {
       organizationId,
       ...install,
     });
-    await this.recompile(organizationId);
     return this.installView(organizationId, created.id);
   }
 
@@ -267,7 +245,6 @@ class OpenAppaBatteriesService {
       organizationId,
       ...changes,
     });
-    await this.recompile(organizationId);
     return this.installView(organizationId, id);
   }
 
@@ -287,6 +264,7 @@ class OpenAppaBatteriesService {
     files: BatteryPackageFile[];
   }): Promise<BatterySummary> {
     const native = await import("@archestra/openappa-rs");
+    const contentHash = hash(JSON.stringify(params.files));
     let inspected: NativeBatteryPackage;
     try {
       inspected = await native.inspectOpenappaBattery(params.files);
@@ -296,6 +274,7 @@ class OpenAppaBatteriesService {
         error instanceof Error ? error.message : String(error),
       );
     }
+    this.inspected.set(contentHash, inspected);
     if (inspected.name !== params.name)
       throw new ApiError(
         400,
@@ -305,7 +284,7 @@ class OpenAppaBatteriesService {
       organizationId: params.organizationId,
       name: inspected.name,
       description: inspected.description,
-      contentHash: hash(JSON.stringify(params.files)),
+      contentHash,
       files: params.files,
     });
     await this.recompile(params.organizationId);
@@ -345,25 +324,42 @@ class OpenAppaBatteriesService {
     );
   }
 
-  private async recompileNow(organizationId: string): Promise<EffectivePolicy> {
+  /** `recompile` with the install views the stored composition was planned from. */
+  private async recompose(organizationId: string): Promise<Recomposition> {
+    const slot = this.recompiling.get(organizationId);
+    if (slot) {
+      slot.queued ??= slot.running
+        .catch(() => undefined)
+        .then(() => this.recompose(organizationId));
+      return slot.queued;
+    }
+    const running = this.recomposeNow(organizationId).finally(() => {
+      this.recompiling.delete(organizationId);
+    });
+    this.recompiling.set(organizationId, { running, queued: null });
+    return running;
+  }
+
+  private async recomposeNow(organizationId: string): Promise<Recomposition> {
     for (let attempt = 0; attempt < RECOMPILE_ATTEMPTS; attempt++) {
       const expected = await OpenAppaEffectivePolicyModel.find(organizationId);
-      const values = await this.compose(organizationId);
-      const saved = await OpenAppaEffectivePolicyModel.save({
+      const { values, installs } = await this.compose(organizationId);
+      const policy = await OpenAppaEffectivePolicyModel.save({
         organizationId,
         values,
         expected,
       });
-      if (saved) return saved;
+      if (policy) return { policy, installs };
     }
     throw new Error(
       "the effective policy kept changing while it was being recomposed",
     );
   }
 
-  private async compose(
-    organizationId: string,
-  ): Promise<EffectivePolicyValues> {
+  private async compose(organizationId: string): Promise<{
+    values: EffectivePolicyValues;
+    installs: BatteryInstallView[];
+  }> {
     const root = await guardrailsPolicyService.get(organizationId);
     const plan = await this.plan(organizationId);
     const native = await import("@archestra/openappa-rs");
@@ -375,16 +371,19 @@ class OpenAppaBatteriesService {
     const composed = await native.composeOpenappaPolicy(input);
     const content = composed.content ?? root.content;
     return {
-      content,
-      contentHash: hash(content),
-      rootRevision: root.revision,
-      installFingerprint: hash(
-        JSON.stringify({
-          serverAliases: plan.serverAliases,
-          batteries: plan.composed,
-        }),
-      ),
-      error: composed.content === null ? composed.errors.join("\n") : null,
+      values: {
+        content,
+        contentHash: hash(content),
+        rootRevision: root.revision,
+        installFingerprint: hash(
+          JSON.stringify({
+            serverAliases: plan.serverAliases,
+            batteries: plan.composed,
+          }),
+        ),
+        error: composed.content === null ? composed.errors.join("\n") : null,
+      },
+      installs: plan.installs,
     };
   }
 
@@ -412,18 +411,22 @@ class OpenAppaBatteriesService {
       prefixes.add(serverName);
       prefixesByCatalog.set(tool.catalogId, prefixes);
     }
+    const bindable = new Set(
+      (await RuntimeCredentialDefinitionModel.list(organizationId))
+        .filter((definition) => definition.allowOrganization)
+        .map((definition) => definition.key),
+    );
     const helperOwners = new Set<string>();
-    const views: BatteryInstallView[] = [];
-    for (const install of installs) {
-      const status = await this.installStatus({
-        organizationId,
+    const views: BatteryInstallView[] = installs.map((install) => ({
+      ...install,
+      status: installStatus({
         install,
         battery: batteries.get(install.batteryName)?.package ?? null,
         conflicting: conflictingCatalogs.has(install.catalogId),
+        bindable,
         helperOwners,
-      });
-      views.push({ ...install, status });
-    }
+      }),
+    }));
     // Batteries may share a namespace; its alias then targets all their catalogs.
     const targetsByAlias = new Map<string, Set<string>>();
     const composed: ComposeBatteryInput[] = [];
@@ -457,35 +460,6 @@ class OpenAppaBatteriesService {
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([alias, targets]) => ({ alias, targets: [...targets].sort() }));
     return { batteries, installs: views, serverAliases, composed };
-  }
-
-  private async installStatus(params: {
-    organizationId: string;
-    install: BatteryInstall;
-    battery: NativeBatteryPackage | null;
-    conflicting: boolean;
-    helperOwners: Set<string>;
-  }): Promise<BatteryInstallStatus> {
-    const { organizationId, install, battery, conflicting, helperOwners } =
-      params;
-    if (!battery) return "unavailable";
-    if (!install.enabled) return "disabled";
-    if (conflicting) return "naming_conflict";
-    for (const credential of battery.credentials) {
-      const key = install.credentialBindings[credential];
-      if (!key) return "missing_credentials";
-      const definition = await RuntimeCredentialDefinitionModel.find({
-        organizationId,
-        key,
-      });
-      if (!definition?.allowOrganization) return "missing_credentials";
-    }
-    if (battery.externals.length > 0) {
-      // Helper consults name one install; the earliest enabled one owns them.
-      if (helperOwners.has(battery.name)) return "superseded";
-      helperOwners.add(battery.name);
-    }
-    return "active";
   }
 
   private async availableBatteries(
@@ -594,13 +568,13 @@ class OpenAppaBatteriesService {
     }
   }
 
+  /** Recompose after a write and answer with the install as the stored composition saw it. */
   private async installView(
     organizationId: string,
     id: string,
   ): Promise<BatteryInstallView> {
-    const view = (await this.plan(organizationId)).installs.find(
-      (install) => install.id === id,
-    );
+    const { installs } = await this.recompose(organizationId);
+    const view = installs.find((install) => install.id === id);
     if (!view) throw new ApiError(404, "Battery install not found");
     return view;
   }
@@ -620,12 +594,41 @@ type CompositionPlan = {
   composed: ComposeBatteryInput[];
 };
 
+type Recomposition = {
+  policy: EffectivePolicy;
+  installs: BatteryInstallView[];
+};
+
 type RecompileSlot = {
-  running: Promise<EffectivePolicy>;
-  queued: Promise<EffectivePolicy> | null;
+  running: Promise<Recomposition>;
+  queued: Promise<Recomposition> | null;
 };
 
 const RECOMPILE_ATTEMPTS = 3;
+
+function installStatus(params: {
+  install: BatteryInstall;
+  battery: NativeBatteryPackage | null;
+  conflicting: boolean;
+  /** Keys of the organization's credential definitions with an organization-level value. */
+  bindable: ReadonlySet<string>;
+  helperOwners: Set<string>;
+}): BatteryInstallStatus {
+  const { install, battery, conflicting, bindable, helperOwners } = params;
+  if (!battery) return "unavailable";
+  if (!install.enabled) return "disabled";
+  if (conflicting) return "naming_conflict";
+  for (const credential of battery.credentials) {
+    const key = install.credentialBindings[credential];
+    if (!key || !bindable.has(key)) return "missing_credentials";
+  }
+  if (battery.externals.length > 0) {
+    // Helper consults name one install; the earliest enabled one owns them.
+    if (helperOwners.has(battery.name)) return "superseded";
+    helperOwners.add(battery.name);
+  }
+  return "active";
+}
 
 function hash(content: string): string {
   return createHash("sha256").update(content).digest("hex");

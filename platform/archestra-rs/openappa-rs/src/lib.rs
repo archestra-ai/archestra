@@ -42,11 +42,12 @@ pub struct ReportingOptions {
     pub hostname: Option<String>,
 }
 
-/// Process-wide runtime slot. The mutex covers initialize, policy reload, and
-/// panic rebuild only. Dispatch runs concurrently: same-trajectory exclusion
-/// is the in-process root lock plus the ledger's advisory session lock, and
-/// every ledger write is a short self-committing transaction, so no outer
-/// transaction ever spans hook I/O.
+/// Process-wide runtime slot. The mutex covers initialize, policy reload, the
+/// start hook that opens a trajectory, and panic rebuild only. Dispatch
+/// otherwise runs concurrently: same-trajectory exclusion is the in-process
+/// root lock plus the ledger's advisory session lock, and every ledger write
+/// is a short self-committing transaction, so no outer transaction ever spans
+/// hook I/O.
 static STATE: OnceLock<Mutex<Option<State>>> = OnceLock::new();
 
 #[derive(Clone)]
@@ -419,25 +420,18 @@ async fn run(input: Input, policy_content: Option<String>) -> napi::Result<Strin
             let state = slot
                 .as_mut()
                 .ok_or_else(|| error("OpenAPPA is not initialized"))?;
-            if let Some(content) = policy_content
-                && content != state.policy_content
-            {
-                // Reloads are serialized by the mutex; when two concurrent
-                // dispatches carry different policy contents, the second one
-                // to acquire the mutex wins and the first reload is replaced.
-                // Each dispatch runs one hook event, and a session attaches
-                // one deployment snapshot per event, so an in-flight dispatch
-                // below keeps a coherent policy view either way; this clone's
-                // `config` is only read by the rebuild path under the mutex.
-                let mut config = policy::compile(&content).map_err(error)?;
-                config.reporting.agent_yell = state.reporting.is_some();
-                state.runtime.reload(config.clone()).map_err(error)?;
-                state.config = config;
-                state.policy_content = content;
+            // Reloads are serialized by the mutex; when concurrent dispatches
+            // carry different policy contents, the last one to take the mutex
+            // serves until the next reload. That can land before this
+            // dispatch's start, so the start serves its own content again
+            // (see `start_under`). This clone's `config` is only read by the
+            // rebuild path under the mutex.
+            if let Some(content) = policy_content.as_deref() {
+                state.serve(content)?;
             }
             state.clone()
         };
-        state.dispatch(input).await
+        state.dispatch(input, policy_content.as_deref()).await
     })
     .catch_unwind()
     .await;
@@ -464,6 +458,24 @@ async fn run(input: Input, policy_content: Option<String>) -> napi::Result<Strin
             }
         }
     }
+}
+
+/// Runs a start hook under the policy content its dispatch carried. A start
+/// opens a new root under whatever deployment serves at that moment, and the
+/// root keeps that policy for its whole life. A sibling dispatch carrying
+/// other content can reload after this dispatch's reload in `run`, so the
+/// start serves its own content again and opens under the same hold of the
+/// mutex, on the slot's runtime that `serve` reloads. A start only writes the
+/// ledger and makes no consult call, so the hold stays short.
+async fn start_under(policy_content: Option<&str>, start: HookEvent) -> napi::Result<HookDecision> {
+    let mut slot = state_mutex().lock().await;
+    let state = slot
+        .as_mut()
+        .ok_or_else(|| error("OpenAPPA is not initialized"))?;
+    if let Some(content) = policy_content {
+        state.serve(content)?;
+    }
+    Ok(hooks::handle(&state.runtime, start).await)
 }
 
 /// Executes a remedy plan by offer ID, resolving the owner session from PostgreSQL.
@@ -604,7 +616,21 @@ fn root_locks() -> &'static Mutex<HashMap<String, Arc<Mutex<()>>>> {
 }
 
 impl State {
-    async fn dispatch(&self, input: Input) -> napi::Result<Value> {
+    /// Makes `content` the serving policy unless it already is. A refused
+    /// candidate leaves the serving deployment in place.
+    fn serve(&mut self, content: &str) -> napi::Result<()> {
+        if content == self.policy_content {
+            return Ok(());
+        }
+        let mut config = policy::compile(content).map_err(error)?;
+        config.reporting.agent_yell = self.reporting.is_some();
+        self.runtime.reload(config.clone()).map_err(error)?;
+        self.config = config;
+        self.policy_content = content.to_owned();
+        Ok(())
+    }
+
+    async fn dispatch(&self, input: Input, policy_content: Option<&str>) -> napi::Result<Value> {
         let pg = postgres_store(&self.store)?;
         let actor_id = identity(&input);
         let parent = input.parent_id.clone().map(|id| Input {
@@ -684,7 +710,7 @@ impl State {
                     root: actor.root.clone(),
                 }
             };
-            let decision = hooks::handle(&self.runtime, start).await;
+            let decision = start_under(policy_content, start).await?;
             if !matches!(decision, HookDecision::Ack | HookDecision::Context { .. }) {
                 return Err(error(wire(&decision)?));
             }

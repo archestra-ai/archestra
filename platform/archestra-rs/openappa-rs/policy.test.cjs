@@ -1,6 +1,8 @@
 const assert = require('node:assert/strict');
-const { randomUUID } = require('node:crypto');
+const { createHash, randomUUID } = require('node:crypto');
 const { test } = require('node:test');
+const { setTimeout: delay } = require('node:timers/promises');
+const { Client } = require('../../backend/node_modules/pg');
 const native = require('./index.cjs');
 const { databaseUrl } = require('./test-database.cjs');
 const allow = '[policy]\nversion = 2\n[[policy.tool]]\nname = "read"\ndelta = {}\n';
@@ -29,6 +31,57 @@ test('saved text changes enforcement for new sessions and preserves existing ses
   const next = scope();
   assert.equal((await hook(next, { event: 'session_start' }, deny)).decision, 'ack');
   assert.notEqual((await hook(next, call, deny)).decision, 'allow_call');
+});
+
+test('a new session opens under the text its dispatch carried while a stale sibling reloads', { skip: !databaseUrl, timeout: 30000 }, async (t) => {
+  await native.initializeOpenappa(databaseUrl, allow);
+  // Holding a root's ledger advisory lock parks its dispatch after the reload
+  // and before the session opens. The runtime has one ledger connection, so
+  // every other ledger query of this process queues behind the parked one.
+  const ledger = new Client({ connectionString: databaseUrl });
+  await ledger.connect();
+  t.after(() => ledger.end());
+  const scope = () => ({ organization_id: 'policy-race-test', caller_id: 'user:test', session_id: randomUUID() });
+  const hook = async (session, event, policy) => JSON.parse(await native.dispatchHook(JSON.stringify({ ...session, ...event }), policy));
+  const root = (session) => `archestra:${createHash('sha256').update(session.session_id).digest('hex')}`;
+  const hold = (session) => ledger.query('SELECT pg_advisory_lock(hashtextextended($1, 0))', [root(session)]);
+  const release = (session) => ledger.query('SELECT pg_advisory_unlock(hashtextextended($1, 0))', [root(session)]);
+  const parked = async (session) => {
+    for (;;) {
+      const { rows } = await ledger.query(`SELECT EXISTS (
+        SELECT 1 FROM pg_locks WHERE locktype = 'advisory' AND NOT granted AND objsubid = 1
+          AND classid = ((hashtextextended($1, 0) >> 32) & 4294967295)::oid
+          AND objid = (hashtextextended($1, 0) & 4294967295)::oid) AS parked`, [root(session)]);
+      if (rows[0].parked) return;
+      await delay(10);
+    }
+  };
+  const opened = async (session) => (await ledger.query('SELECT EXISTS (SELECT 1 FROM openappa_events WHERE root = $1) AS opened', [root(session)])).rows[0].opened;
+  const call = { event: 'tool_call', operation_id: 'call:read', tool: 'read', arguments: {} };
+
+  // Serving the text from before the save.
+  assert.equal((await hook(scope(), { event: 'session_start' }, allow)).decision, 'ack');
+  const fresh = scope();
+  const stale = scope();
+  await hold(fresh);
+  await hold(stale);
+  // The fresh session read the saved text and reloads to it.
+  const freshStart = hook(fresh, { event: 'session_start' }, deny);
+  await parked(fresh);
+  // A request that read the text just before the save reloads back to it.
+  const staleStart = hook(stale, { event: 'session_start' }, allow);
+  await delay(250);
+  await release(fresh);
+  // The stale dispatch reaches its ledger lock only after its reload, and the
+  // fresh session cannot open while that lock query holds the connection.
+  await parked(stale);
+  assert.equal(await opened(fresh), false, 'the stale reload landed before the fresh session opened');
+  await release(stale);
+  assert.equal((await freshStart).decision, 'ack');
+  assert.equal((await staleStart).decision, 'ack');
+
+  assert.notEqual((await hook(fresh, call, deny)).decision, 'allow_call');
+  assert.equal((await hook(stale, call, allow)).decision, 'allow_call');
 });
 
 test('catch-all annotations admit unknown tools without changing trust or overriding explicit rules', { skip: !databaseUrl }, async (t) => {

@@ -21,10 +21,31 @@
 
 type RewrittenToolCall = { id: string; name: string; arguments: string };
 
-/** The `function_call` output item as the Responses API renders it. */
-export function responsesFunctionCallItem(toolCall: RewrittenToolCall) {
+type ResponsesFunctionCallItem = {
+  id?: string;
+  type: "function_call";
+  call_id: string;
+  name: string;
+  arguments: string;
+  status?: "completed" | "in_progress";
+};
+
+type ResponsesCustomCallItem = {
+  id?: string;
+  type: "custom_tool_call";
+  call_id: string;
+  name: string;
+  input: string;
+  status?: "completed" | "in_progress";
+};
+
+/** Renders a Responses `function_call` output item, preserving upstream item ID when available. */
+export function responsesFunctionCallItem(
+  toolCall: RewrittenToolCall,
+  itemId?: string,
+): ResponsesFunctionCallItem {
   return {
-    id: `fc_${toolCall.id}`,
+    id: itemId ?? `fc_${toolCall.id}`,
     call_id: toolCall.id,
     type: "function_call" as const,
     name: toolCall.name,
@@ -42,11 +63,28 @@ export function formatResponsesFunctionCallFrames(params: {
   toolCalls: RewrittenToolCall[];
   firstOutputIndex: number;
   nextSequenceNumber: () => number;
+  /** The item id upstream streamed for a call, by `call_id`. */
+  itemIdByCallId?: ReadonlyMap<string, string>;
+  /**
+   * Calls upstream streamed as custom tool calls and this rewrite left alone.
+   * They are re-emitted in their own shape: a client that registered a custom
+   * tool cannot execute it as a function call.
+   */
+  customCallIds?: ReadonlySet<string>;
 }): string[] {
   const { toolCalls, firstOutputIndex, nextSequenceNumber } = params;
   return toolCalls.flatMap((toolCall, offset) => {
     const outputIndex = firstOutputIndex + offset;
-    const item = responsesFunctionCallItem(toolCall);
+    const itemId = params.itemIdByCallId?.get(toolCall.id);
+    if (params.customCallIds?.has(toolCall.id)) {
+      return formatCustomToolCallFrames({
+        toolCall,
+        itemId,
+        outputIndex,
+        nextSequenceNumber,
+      });
+    }
+    const item = responsesFunctionCallItem(toolCall, itemId);
     return [
       toSse({
         type: "response.output_item.added",
@@ -93,13 +131,28 @@ export function rewriteResponsesOutput<TItem extends { type?: string }>(
   const replaced = new Set<string>();
   const next: Array<TItem | ReturnType<typeof responsesFunctionCallItem>> = [];
   for (const item of output) {
-    if (item.type === "function_call") {
+    if (item.type === "function_call" || item.type === "custom_tool_call") {
       const callId = (item as { call_id?: unknown }).call_id;
       const rewritten =
         typeof callId === "string" ? byCallId.get(callId) : undefined;
       if (rewritten) {
         replaced.add(rewritten.id);
-        next.push(responsesFunctionCallItem(rewritten));
+        // Notice tools are function calls; rewrite denied custom tools to function calls.
+        const isNotice = (item as { name?: unknown }).name !== rewritten.name;
+        next.push(
+          item.type === "custom_tool_call" && isNotice
+            ? (responsesFunctionCallItem(
+                rewritten,
+                (item as { id?: string }).id,
+              ) as unknown as TItem)
+            : item.type === "custom_tool_call"
+              ? item
+              : ({
+                  ...item,
+                  name: rewritten.name,
+                  arguments: rewritten.arguments,
+                } as TItem),
+        );
         continue;
       }
     }
@@ -113,6 +166,82 @@ export function rewriteResponsesOutput<TItem extends { type?: string }>(
   return next;
 }
 
+/**
+ * The four streaming frames of a custom tool call, whose input is free-form
+ * text: the item, its input deltas, the done marker, and the completed item.
+ */
+function formatCustomToolCallFrames(params: {
+  toolCall: RewrittenToolCall;
+  itemId: string | undefined;
+  outputIndex: number;
+  nextSequenceNumber: () => number;
+}): string[] {
+  const { toolCall, outputIndex, nextSequenceNumber } = params;
+  const id = params.itemId ?? `ctc_${toolCall.id}`;
+  // The proxy carries a custom call's one argument as `input`; the wire wants
+  // the text itself back.
+  const input = customToolInput(toolCall.arguments) ?? toolCall.arguments;
+  const item: ResponsesCustomCallItem = {
+    id,
+    call_id: toolCall.id,
+    type: "custom_tool_call" as const,
+    name: toolCall.name,
+    input,
+    status: "completed" as const,
+  };
+  return [
+    toSse({
+      type: "response.output_item.added",
+      output_index: outputIndex,
+      sequence_number: nextSequenceNumber(),
+      item: { ...item, input: "", status: "in_progress" },
+    }),
+    toSse({
+      type: "response.custom_tool_call_input.delta",
+      item_id: id,
+      output_index: outputIndex,
+      sequence_number: nextSequenceNumber(),
+      delta: input,
+    }),
+    toSse({
+      type: "response.custom_tool_call_input.done",
+      item_id: id,
+      output_index: outputIndex,
+      sequence_number: nextSequenceNumber(),
+      input,
+    }),
+    toSse({
+      type: "response.output_item.done",
+      output_index: outputIndex,
+      sequence_number: nextSequenceNumber(),
+      item,
+    }),
+  ];
+}
+
 export function toSse(event: unknown): string {
   return `data: ${JSON.stringify(event)}\n\n`;
+}
+
+/**
+ * The namespace a Responses call item names, as a field to spread into the
+ * proxy's own view of the call. Codex declares some tools in namespaces, and
+ * the provider expects a call to such a tool to name its namespace.
+ */
+export function namespaceOf(item: unknown): { namespace?: string } {
+  const namespace = (item as { namespace?: unknown } | null)?.namespace;
+  return typeof namespace === "string" && namespace !== "" ? { namespace } : {};
+}
+
+/** Parses the proxy's canonical custom-call wrapper at its wire boundary. */
+export function customToolInput(argumentsJson: string): string | undefined {
+  try {
+    const parsed: unknown = JSON.parse(argumentsJson);
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed))
+      return undefined;
+    const input = (parsed as { input?: unknown }).input;
+    return typeof input === "string" ? input : undefined;
+  } catch {
+    return undefined;
+  }
 }

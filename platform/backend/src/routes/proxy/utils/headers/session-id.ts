@@ -33,6 +33,7 @@ const CODEX_SESSION_ID_HEADER = "session-id";
 export type SessionSource =
   | typeof CLAUDE_METADATA_SESSION_SOURCE
   | "header"
+  | "appa_header"
   | "meta_header"
   | "openwebui_chat"
   | "codex_session"
@@ -155,7 +156,7 @@ export function extractSessionInfo({
  * Returns the trimmed session id, or `null` when the value is absent or matches
  * no known Claude format. Kept format-exhaustive for backward compatibility.
  */
-function parseClaudeMetadataSessionId(
+export function parseClaudeMetadataSessionId(
   userId: string | null | undefined,
 ): string | null {
   if (!userId) {

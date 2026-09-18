@@ -2115,4 +2115,14 @@ Policies are stored in PostgreSQL and edited in OpenAPPA. Container policy paths
 
 Reporting sends the agent’s message verbatim, plus filtered policy diagnostics. Reports identify Archestra and the hostname from `ARCHESTRA_FRONTEND_URL`. Agents can include their session’s policy decisions. Diagnostics exclude raw prompts, tool arguments, tool outputs, and session identifiers. Policy names remain visible. Messages must not contain secrets, personal data, or task content. Reporting does not change policies or grant tool permissions. The active policy must permit the `yell` tool, directly or through a matching wildcard. Restart the backend after changing the reporting flag.
 
-With the APPA flag off, existing Tool Guardrails run unchanged. The native APPA runtime and MCP remedy tool remain inactive. When enabled, APPA replaces the proxy's existing tool-call and tool-result policy checks. Errors fail closed. Chat shows blocked attempts as denied tool calls and returns APPA's feedback to the model. The model can choose a remedy and continue without another user message. Existing approval requirements still apply. External clients receive the existing text refusal; automatic continuation requires client support. See [the integration setup](https://github.com/archestra-ai/archestra/blob/main/platform/archestra-rs/openappa-rs/README.md) for current limitations.
+With OpenAPPA disabled, existing Tool Guardrails run unchanged. When enabled, OpenAPPA replaces proxy tool-call and tool-result checks. Errors fail closed. A blocked call returns as a `get_remedy_plans` notice tool call. The model inspects the ruling, selects a remedy with `execute_remedy_plan`, and retries. Tool requests must declare both APPA tools. Calls that need human approval stay blocked. See the [integration guide](https://github.com/archestra-ai/archestra/blob/main/platform/archestra-rs/openappa-rs/README.md) for current limitations.
+
+Notice restoration supports Anthropic Messages, OpenAI Responses, and OpenAI Chat Completions. Bedrock InvokeModel uses Anthropic restoration. Other protocols evaluate calls and results, but notices stay in history.
+
+Remedy offers and execution receipts are stored in PostgreSQL. Any backend replica can resolve an offer after a restart or routing change. The runtime validates the offer before execution.
+
+The proxy attaches the provider tool call ID to the remedy call. Standard MCP clients return this ID unchanged. Submitting the same ID and arguments returns the saved result. Submitting changed arguments under that ID is refused. Spent offers return terminal feedback.
+
+Sessions belong to authorized users within an organization. External client sessions are scoped to the authenticated credential. A personal offer requires its original user. An organization offer allows any caller in that organization.
+
+Requests without a session header share a fallback session per credential and agent. Uncredentialed loopback traffic is trusted as platform internal traffic.

@@ -8,6 +8,7 @@ import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
 
 import {
   APP_ID_HEADER,
+  APPA_SESSION_HEADER,
   ArchestraInternalErrorCode,
   type BillingMode,
   BUILT_IN_AGENT_IDS,
@@ -78,18 +79,21 @@ import {
   EVENT_GENAI_CONTENT_COMPLETION,
   type SpanTeamInfo,
 } from "@/observability/tracing";
+import { prepareAppaRequest } from "@/openappa/request";
 import {
-  APPA_CHAT_BLOCK_HEADER,
-  APPA_CHAT_BLOCK_VERSION,
-  encodeChatBlock,
-} from "@/openappa/chat-block";
-import {
+  APPA_PARENT_HEADER,
   isAppaChatSource,
   isAppaDelegatedRun,
+  isWellFormedAppaId,
   type OpenAppaSession,
+  openappaEnabled,
   sessionFromHeaders,
 } from "@/openappa/service";
-import { APPA_PLUGIN_TRUSTED_CONTEXT } from "@/proxy/plugins/appa-plugin-archestra/types";
+import { appaSessionIdentity, appaWireFamily } from "@/openappa/wire";
+import {
+  APPA_PLUGIN_TRUSTED_CONTEXT,
+  type AppaTrustedContext,
+} from "@/proxy/plugins/appa-plugin-archestra/types";
 import {
   getLlmProxyPluginRegistry,
   type LlmProxyPluginRegistry,
@@ -164,7 +168,6 @@ const {
  */
 export interface LLMProxyContext<TRequest> {
   openappaSession?: OpenAppaSession;
-  openappaChatRequestId?: string;
   pluginRegistry?: LlmProxyPluginRegistry;
   pluginContext?: LlmProxyRequestContext;
   /** Captured by the host after binding an authenticated APPA session. */
@@ -352,15 +355,6 @@ export async function handleLLMProxy<
   let oauthUserId: string | undefined;
   let regularVirtualKeyUserId: string | undefined;
 
-  // Session extraction reuses the resolved client attribution above to gate
-  // the Codex-specific signals, so client identification lives in one place.
-  const { sessionId, sessionSource } =
-    utils.headers.sessionId.extractSessionInfo({
-      headers: headersForExtraction,
-      body: bodyForExtraction,
-      externalAgentId,
-    });
-
   // Extract interaction source (chat, chatops, email, etc.)
   // Internal callers set X-Archestra-Source; external API requests default to "api".
   const rawSource = utils.headers.metaHeader.getHeaderValue(
@@ -379,6 +373,32 @@ export async function handleLLMProxy<
       ? "api"
       : parsedSource) ??
     "api";
+
+  // Session extraction reuses the resolved client attribution above to gate
+  // the Codex-specific signals, so client identification lives in one place.
+  // An external client's explicit OpenAPPA session names the runtime's root
+  // for this request, under the credential's scope, and the proxy log follows
+  // the id as the client sent it, so the two records join by that id under
+  // the runtime's scope prefix. Chat's
+  // header is its conversation id, which the ordinary path already records. Only while OpenAPPA is on: off, the header names nothing.
+  // A malformed header is left to the OpenAPPA session check, which refuses it.
+  const appaSessionHeader =
+    openappaEnabled() && !isAppaChatSource(source)
+      ? headersForExtraction[APPA_SESSION_HEADER.toLowerCase()]
+      : undefined;
+  const ordinarySession = utils.headers.sessionId.extractSessionInfo({
+    headers: headersForExtraction,
+    body: bodyForExtraction,
+    externalAgentId,
+  });
+  // The platform's own requests carry the same id in both headers, and keep
+  // their ordinary provenance; only a client that names its session in the
+  // OpenAPPA header alone is followed there.
+  const { sessionId, sessionSource } =
+    isWellFormedAppaId(appaSessionHeader) &&
+    ordinarySession.sessionId !== appaSessionHeader
+      ? { sessionId: appaSessionHeader, sessionSource: "appa_header" as const }
+      : ordinarySession;
   const inheritedContextUntrusted =
     utils.headers.metaHeader.getHeaderValue(
       headersForExtraction,
@@ -1105,8 +1125,17 @@ export async function handleLLMProxy<
       | Awaited<ReturnType<LlmProxyPluginRegistry["onToolResults"]>>
       | undefined;
     let openappaSession: OpenAppaSession | undefined;
+    let appaIdentity: { sessionId?: string; parentId?: string } = {};
+    // Chat's own requests arrive over loopback and bring no credential of
+    // this platform that proves nobody: the stored provider secret goes to
+    // the provider. A request that brings an organization credential and
+    // names a Chat source is a client's, whatever its headers say, and is
+    // governed as one: its session scoped to that credential, never bound
+    // to a conversation.
     const isInternalChat =
-      isAppaChatSource(source) && isLoopbackRequest(request);
+      isAppaChatSource(source) &&
+      isLoopbackRequest(request) &&
+      !((authenticatedApp || virtualKeyId) && !authenticatedUserId);
     if (hasProxyPlugins) {
       // APPA recognizes Chat only after the loopback caller's owner,
       // organization, profile, and conversation root have been bound below.
@@ -1126,8 +1155,19 @@ export async function handleLLMProxy<
           "OpenAPPA requires an authenticated proxy request",
         );
       }
+      // The person behind the request, when the platform authenticated one.
+      // A platform request over loopback names its user in a header the
+      // platform itself wrote; a request that brings a credential of its own
+      // is a client's, and its user is what that credential proves, not what
+      // a header says: over the frontend's loopback rewrite the header is
+      // anyone's to write. Chat keeps the header: its conversation is
+      // ownership-checked against it below.
       const appaUserId =
-        authenticatedUserId ?? (isInternalRequest ? userId : undefined);
+        authenticatedUserId ??
+        (isInternalRequest &&
+        (isInternalChat || (!authenticatedApp && !virtualKeyId))
+          ? userId
+          : undefined);
       // Delegated A2A runs share the parent's logging session, but have no
       // APPA child-return lifecycle. Keep their events out of that trajectory;
       // the existing guardrails still evaluate the child independently.
@@ -1137,17 +1177,79 @@ export async function handleLLMProxy<
         (!isInternalRequest ||
           !isAppaDelegatedRun(resolvedAgent.id, externalAgentId))
       ) {
+        const callerId = appaUserId
+          ? `user:${appaUserId}`
+          : authenticatedApp
+            ? `app:${authenticatedApp.id}`
+            : virtualKeyId
+              ? `virtual-key:${virtualKeyId}`
+              : undefined;
+        // Convert client-native session metadata into universal X-Appa-* headers.
+        const incomingAppaSessionHeader =
+          headersForExtraction[APPA_SESSION_HEADER.toLowerCase()];
+        const appaFamily = appaWireFamily(provider.interactionType);
+        appaIdentity = appaFamily
+          ? appaSessionIdentity({
+              family: appaFamily,
+              body,
+              headers: headersForExtraction,
+            })
+          : {};
+        if (
+          appaIdentity.sessionId &&
+          isWellFormedAppaId(appaIdentity.sessionId) &&
+          !incomingAppaSessionHeader
+        ) {
+          headersForExtraction[APPA_SESSION_HEADER.toLowerCase()] =
+            appaIdentity.sessionId;
+        }
+        if (
+          appaIdentity.parentId &&
+          isWellFormedAppaId(appaIdentity.parentId) &&
+          !headersForExtraction[APPA_PARENT_HEADER.toLowerCase()]
+        ) {
+          headersForExtraction[APPA_PARENT_HEADER.toLowerCase()] =
+            appaIdentity.parentId;
+        }
         openappaSession = sessionFromHeaders({
           headers: headersForExtraction,
           organizationId: resolvedAgent.organizationId,
-          callerId: appaUserId
-            ? `user:${appaUserId}`
-            : authenticatedApp
-              ? `app:${authenticatedApp.id}`
-              : virtualKeyId
-                ? `virtual-key:${virtualKeyId}`
-                : undefined,
+          callerId,
+          // Chat sessions use conversation IDs with verified ownership.
+          ...(isInternalChat
+            ? {}
+            : {
+                // Scope external sessions to the authenticated principal.
+                scope:
+                  isInternalRequest &&
+                  !authenticatedUserId &&
+                  !authenticatedApp &&
+                  !virtualKeyId &&
+                  incomingAppaSessionHeader !== undefined
+                    ? undefined
+                    : callerId,
+                // Bind fallback root if no session was provided.
+                fallbackSessionId: callerId
+                  ? `${callerId}@${resolvedAgent.id}`
+                  : undefined,
+              }),
         });
+        if (!openappaSession)
+          throw new ApiError(
+            400,
+            "OpenAPPA requires valid X-Appa-Session-ID and optional X-Appa-Parent-ID headers",
+          );
+        if (
+          callerId &&
+          openappaSession.session_id === `${callerId}@${resolvedAgent.id}`
+        ) {
+          // Every conversation of this credential on this agent now shares one
+          // root: a turn ending in one releases the offers of the others.
+          logger.warn(
+            { agentId: resolvedAgent.id, callerId },
+            "OpenAPPA bound a fallback root because the client reported no session",
+          );
+        }
       }
       pluginContext = {
         requestId: request.id,
@@ -1163,6 +1265,15 @@ export async function handleLLMProxy<
         resources: new Map(),
       };
       if (openappaSession) {
+        // A Chat session is a conversation, and the request must name the
+        // user whose conversation it is: without one there is nothing to
+        // check the binding against, so the request is refused rather than
+        // bound unchecked.
+        if (isInternalChat && !appaUserId)
+          throw new ApiError(
+            403,
+            "OpenAPPA Chat session requires the conversation's user",
+          );
         if (isInternalChat && appaUserId) {
           const conversationAgentId = await ConversationModel.getAgentIdForUser(
             openappaSession.session_id,
@@ -1180,14 +1291,26 @@ export async function handleLLMProxy<
             );
           }
         }
+        // Restores this request's denial notices and resolves its APPA tools,
+        // in the request body the adapters read from, before the provider
+        // request and the tool results are built from it.
+        // It refuses the request outright when the session cannot be governed,
+        // so reaching the line below means APPA really is enforcing this turn.
+        // The ordinary invocation policies still run: they are evaluated inside
+        // the plugin pass, before APPA reserves a call.
+        const appaRequest = prepareAppaRequest({
+          body,
+          interactionType: provider.interactionType,
+          session: appaIdentity,
+          canonicalizeToolName,
+        });
         pluginContext.resources.set(APPA_PLUGIN_TRUSTED_CONTEXT, {
           session: openappaSession,
           profileId: resolvedAgent.id,
           canonicalizeToolName,
-          ...(isAppaChatSource(source) && isLoopbackRequest(request)
-            ? { chatSource: source }
-            : {}),
-        });
+          request: appaRequest,
+          ...(isInternalChat ? { chatSource: source } : {}),
+        } satisfies AppaTrustedContext);
       }
       await pluginRegistry.onSessionInit(pluginContext);
       pluginSessionInitialized = true;
@@ -1428,17 +1551,8 @@ export async function handleLLMProxy<
       }
     }
 
-    const chatBlockCapability = headersForExtraction[APPA_CHAT_BLOCK_HEADER];
     const ctx: LLMProxyContext<TRequest> = {
       openappaSession,
-      openappaChatRequestId:
-        openappaSession &&
-        isInternalChat &&
-        typeof chatBlockCapability === "string" &&
-        chatBlockCapability.startsWith(`${APPA_CHAT_BLOCK_VERSION}:`) &&
-        isUuid(chatBlockCapability.slice(3))
-          ? chatBlockCapability.slice(3)
-          : undefined,
       ...(pluginContext ? { pluginRegistry, pluginContext } : {}),
       agent: resolvedAgent,
       originalRequest: requestAdapter.getOriginalRequest(),
@@ -1940,6 +2054,22 @@ async function handleStreaming<
       if (policyOutcome.wasRewritten)
         rewrittenToolCalls = policyOutcome.toolCalls;
       toolInvocationRefusal = policyOutcome.refusal;
+      // Record metrics for tool calls substituted with denial notices.
+      for (const blocked of policyOutcome.blocked) {
+        recordBlockedToolCallMetrics({
+          allToolCallNames: [blocked.name],
+          reason: blocked.reason,
+          agent,
+          teams,
+          userTeams,
+          sessionId,
+          resolvedUser,
+          providerName,
+          toolCallCount: 1,
+          actualModel,
+          source,
+        });
+      }
 
       logger.info(
         { refused: !!toolInvocationRefusal },
@@ -1955,16 +2085,7 @@ async function handleStreaming<
 
       // Drop the held tool-call events and use the existing refusal format.
       // Its text comes from APPA when enabled.
-      const chatBlock =
-        ctx.openappaChatRequestId && ctx.openappaSession
-          ? encodeChatBlock({
-              session: ctx.openappaSession,
-              requestId: ctx.openappaChatRequestId,
-              feedback: contentMessage,
-              calls: rewrittenToolCalls ?? toolCalls,
-            })
-          : contentMessage;
-      const refusalEvents = streamAdapter.formatCompleteTextSSE(chatBlock);
+      const refusalEvents = streamAdapter.formatCompleteTextSSE(contentMessage);
       for (const event of refusalEvents) {
         writeToClient(event);
       }
@@ -2428,6 +2549,8 @@ async function handleNonStreaming<
       id: toolCall.id,
       name: toolCall.name,
       arguments: JSON.stringify(toolCall.arguments),
+      // The namespace the model called the tool in, on a wire that has them.
+      ...(toolCall.namespace ? { namespace: toolCall.namespace } : {}),
     }));
     rewrittenToolCalls = planDispatchRewrites({
       supported: responseAdapter.withRewrittenToolCalls !== undefined,
@@ -2461,6 +2584,22 @@ async function handleNonStreaming<
     if (policyOutcome.wasRewritten)
       rewrittenToolCalls = policyOutcome.toolCalls;
     const toolInvocationRefusal = policyOutcome.refusal;
+    // Record metrics for tool calls substituted with denial notices.
+    for (const blocked of policyOutcome.blocked) {
+      recordBlockedToolCallMetrics({
+        allToolCallNames: [blocked.name],
+        reason: blocked.reason,
+        agent,
+        teams,
+        userTeams,
+        sessionId,
+        resolvedUser,
+        providerName,
+        toolCallCount: 1,
+        actualModel,
+        source,
+      });
+    }
 
     if (toolInvocationRefusal) {
       const { refusalMessage, contentMessage, reason, allToolCallNames } =
@@ -2470,18 +2609,9 @@ async function handleNonStreaming<
         `[${providerName}Proxy] Tool invocation blocked by policy`,
       );
 
-      const chatBlock =
-        ctx.openappaChatRequestId && ctx.openappaSession
-          ? encodeChatBlock({
-              session: ctx.openappaSession,
-              requestId: ctx.openappaChatRequestId,
-              feedback: contentMessage,
-              calls: rewrittenToolCalls ?? toolCalls,
-            })
-          : contentMessage;
       const refusalResponse = responseAdapter.toRefusalResponse(
-        ctx.openappaChatRequestId ? chatBlock : refusalMessage,
-        chatBlock,
+        refusalMessage,
+        contentMessage,
       );
 
       recordBlockedToolCallMetrics({
@@ -2559,6 +2689,12 @@ async function handleNonStreaming<
       );
 
       if (pluginRegistry && pluginContext) {
+        // A refusal is a terminal answer: the turn ends here, as it does on
+        // the streaming path, so the offers of this turn do not outlive it.
+        await pluginRegistry.onModelResponse({
+          ...pluginContext,
+          response: refusalResponse,
+        });
         await pluginRegistry.complete({
           ...pluginContext,
           response: refusalResponse,
@@ -2696,28 +2832,50 @@ async function evaluateProxyPluginToolCalls(
   refusal: LlmProxyToolCallRefusal | null;
   toolCalls: AccumulatedToolCall[];
   wasRewritten: boolean;
+  blocked: readonly { name: string; reason: string }[];
 }> {
   if (!registry || !context)
     return {
       refusal: await validate(toolCalls),
       toolCalls: [...toolCalls],
       wasRewritten: false,
+      blocked: [],
     };
+  // Capture argument values before plugins run, not mutable object references.
+  const originalCalls = toolCalls.map((call) => ({
+    ...call,
+    arguments:
+      typeof call.arguments === "string"
+        ? call.arguments
+        : JSON.stringify(call.arguments),
+  }));
   const outcome = await registry.onToolCalls(
     { ...context, toolCalls },
     validate,
   );
   if (outcome.decision === "allow") {
+    const releasedCalls = outcome.toolCalls.map((toolCall) => ({
+      ...toolCall,
+      arguments:
+        typeof toolCall.arguments === "string"
+          ? toolCall.arguments
+          : JSON.stringify(toolCall.arguments),
+    }));
     return {
       refusal: null,
-      toolCalls: outcome.toolCalls.map((toolCall) => ({
-        ...toolCall,
-        arguments:
-          typeof toolCall.arguments === "string"
-            ? toolCall.arguments
-            : JSON.stringify(toolCall.arguments),
-      })),
-      wasRewritten: outcome.toolCalls !== toolCalls,
+      toolCalls: releasedCalls,
+      wasRewritten:
+        releasedCalls.length !== originalCalls.length ||
+        releasedCalls.some((call, index) => {
+          const original = originalCalls[index];
+          return (
+            call.id !== original.id ||
+            call.name !== original.name ||
+            call.namespace !== original.namespace ||
+            call.arguments !== original.arguments
+          );
+        }),
+      blocked: outcome.blocked ?? [],
     };
   }
 
@@ -2725,6 +2883,7 @@ async function evaluateProxyPluginToolCalls(
     refusal: outcome.refusal,
     toolCalls: [...toolCalls],
     wasRewritten: false,
+    blocked: [],
   };
 }
 

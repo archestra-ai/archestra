@@ -7,6 +7,7 @@ import {
   parseFullToolName,
   TOOL_COPY_FILE_SHORT_NAME,
   TOOL_DOWNLOAD_FILE_SHORT_NAME,
+  TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
   TOOL_LIST_APP_VERSIONS_SHORT_NAME,
   TOOL_LIST_APPS_SHORT_NAME,
   TOOL_LOAD_SKILL_SHORT_NAME,
@@ -26,6 +27,7 @@ import { MemberModel, TeamModel, UserModel } from "@/models";
 import { agentActivationSkillPolicyService } from "@/services/agent-activation-skill-policy";
 import { selectEffectiveNativeSkills } from "@/services/agent-activation-skills";
 import type { OpenedApp } from "@/services/apps/opened-app-context";
+import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
 import { buildKnowledgeSearchInstruction } from "@/services/knowledge-search-instruction";
 import {
   buildSkillCatalogPrompt,
@@ -45,6 +47,19 @@ import type { ToolExposureMode } from "@/types";
 /** @public — canonical instruction text, asserted by the assembler tests. */
 export const TOOL_DENIAL_INSTRUCTION =
   "When a tool execution is not approved by the user, do not retry it. Explain what happened and ask the user what they'd like to do instead.";
+
+/**
+ * System prompt instruction for OpenAPPA remedy plans.
+ * Directs the model to act on remedy plans rather than halting when a tool is blocked.
+ *
+ * @public — asserted by the assembler tests.
+ */
+export function buildAppaRemedyInstruction(): string {
+  const executeRemedyPlan = archestraMcpBranding.getToolName(
+    TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
+  );
+  return `A blocked tool call comes back with a ruling as its result. The ruling explains the block and can offer remedy plans, each with an offer id. The plans are addressed to you, not to the user. Choose one, call ${executeRemedyPlan} with its exact offer id and plan, and do what its result says. The instruction above about unapproved tools does not apply to these rulings. Involve the user only when the ruling offers no plan, or when the choice between plans needs a judgment that only they can make. In that case, name the plans and what each one would change.`;
+}
 
 /** @public — canonical preamble for a project's instructions, asserted by the
  * assembler tests. */
@@ -218,6 +233,12 @@ export async function buildAgentSystemPrompt(params: {
     ? `${PROJECT_INSTRUCTIONS_PREFIX}\n\n${projectInstructions}`
     : null;
 
+  // Only while OpenAPPA is enforcing: with it off there are no rulings to act
+  // on and the instruction would describe tools the session cannot see.
+  const appaRemedyInstruction = (await isGuardrailsV2Active())
+    ? buildAppaRemedyInstruction()
+    : null;
+
   const openedAppPrompt = openedApp
     ? buildOpenedAppInstruction(openedApp, mcpTools)
     : null;
@@ -245,6 +266,7 @@ export async function buildAgentSystemPrompt(params: {
       knowledgeSearchInstruction,
       advisorConsultInstruction,
       TOOL_DENIAL_INSTRUCTION,
+      appaRemedyInstruction,
       toolResultInstructions,
       appBuildConductInstruction,
       hookSessionContext,

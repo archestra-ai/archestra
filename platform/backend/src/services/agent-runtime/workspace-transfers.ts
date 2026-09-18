@@ -17,7 +17,7 @@ import { authorizeAgentWorkspaceAccess } from "./workspace-files";
  * leaked ticket is not durable authority. */
 export const WORKSPACE_TRANSFER_TICKET_TTL_MS = 15 * 60 * 1000;
 
-export type WorkspaceTransferTicket = {
+type WorkspaceTransferTicket = {
   id: string;
   direction: WorkspaceTransferDirection;
   path: string;

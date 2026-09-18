@@ -160,6 +160,31 @@ export function SearchableSelect({
     </button>
   );
 
+  const handleArrowKeys = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+    e.preventDefault();
+
+    const options = Array.from(
+      e.currentTarget.querySelectorAll<HTMLButtonElement>(
+        "button:not(:disabled)",
+      ),
+    );
+    if (options.length === 0) return;
+
+    const current = options.indexOf(
+      document.activeElement as HTMLButtonElement,
+    );
+    const step = e.key === "ArrowDown" ? 1 : -1;
+
+    if (current < 0) {
+      options[step === 1 ? 0 : options.length - 1]?.focus();
+      return;
+    }
+
+    const next = (current + step + options.length) % options.length;
+    options[next]?.focus();
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (allowCustom && e.key === "Enter" && searchQuery && open) {
       e.preventDefault();
@@ -214,6 +239,7 @@ export function SearchableSelect({
           "max-h-[var(--radix-popover-content-available-height)] w-[var(--radix-popover-trigger-width)] overflow-hidden p-0",
           contentClassName,
         )}
+        onKeyDown={handleArrowKeys}
         align={contentAlign ?? "start"}
         side={contentSide}
         avoidCollisions={contentAvoidCollisions}

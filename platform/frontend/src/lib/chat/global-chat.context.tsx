@@ -33,6 +33,7 @@ import { toast } from "sonner";
 import { filterOptimisticToolCalls } from "@/components/chat/chat-messages.utils";
 import {
   type ChatMcpElicitationRequest,
+  isChoiceElicitationRequest,
   McpElicitationDialog,
 } from "@/components/chat/mcp-elicitation-dialog";
 import { collectArchestraToolInvalidations } from "@/lib/chat/archestra-tool-invalidations";
@@ -143,6 +144,12 @@ interface ChatSession {
     typeof useChat
   >["addToolApprovalResponse"];
   pendingMcpElicitation: ChatMcpElicitationRequest | null;
+  isResolvingMcpElicitation: boolean;
+  resolveMcpElicitation: (response: {
+    id: string;
+    action: "accept" | "decline" | "cancel";
+    content?: Record<string, string | number | boolean | string[]>;
+  }) => Promise<void>;
   /**
    * Background MCP tasks for the running turn, keyed by task id.
    *
@@ -1412,6 +1419,24 @@ function ChatSessionHook({
     },
     [stop],
   );
+  const resolveMcpElicitation = useCallback(
+    async (response: {
+      id: string;
+      action: "accept" | "decline" | "cancel";
+      content?: Record<string, string | number | boolean | string[]>;
+    }) => {
+      const result = await resolveMcpElicitationMutation.mutateAsync({
+        id: response.id,
+        conversationId,
+        action: response.action,
+        content: response.content,
+      });
+      if (result) {
+        setPendingMcpElicitation(null);
+      }
+    },
+    [conversationId, resolveMcpElicitationMutation],
+  );
   sessionRef.current = {
     conversationId,
     messages: displayedMessages,
@@ -1426,6 +1451,8 @@ function ChatSessionHook({
     addToolResult,
     addToolApprovalResponse,
     pendingMcpElicitation,
+    isResolvingMcpElicitation: resolveMcpElicitationMutation.isPending,
+    resolveMcpElicitation,
     mcpTasks,
     // Computed, not stored: the page paints the SDK error before onError has
     // run (so no flag set inside onError can suppress the first frame), and
@@ -1478,6 +1505,7 @@ function ChatSessionHook({
     addToolResult,
     addToolApprovalResponse,
     pendingMcpElicitation,
+    resolveMcpElicitation,
     mcpTasks,
     isRecoveringState,
     optimisticToolCalls,
@@ -1495,19 +1523,13 @@ function ChatSessionHook({
 
   return (
     <McpElicitationDialog
-      request={pendingMcpElicitation}
+      request={
+        isChoiceElicitationRequest(pendingMcpElicitation)
+          ? null
+          : pendingMcpElicitation
+      }
       isSubmitting={resolveMcpElicitationMutation.isPending}
-      onRespond={async ({ id, action, content }) => {
-        const result = await resolveMcpElicitationMutation.mutateAsync({
-          id,
-          conversationId,
-          action,
-          content,
-        });
-        if (result) {
-          setPendingMcpElicitation(null);
-        }
-      }}
+      onRespond={resolveMcpElicitation}
     />
   );
 }

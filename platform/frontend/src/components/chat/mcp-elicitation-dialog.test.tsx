@@ -159,12 +159,15 @@ describe("McpElicitationDialog", () => {
 
     render(
       <McpElicitationDialog
+        variant="inline"
         request={choiceRequest}
         isSubmitting={false}
         onRespond={onRespond}
       />,
     );
 
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByTestId("mcp-elicitation-card")).toBeInTheDocument();
     expect(
       screen.getByText("Accept this change for the rest of this session?"),
     ).toBeInTheDocument();

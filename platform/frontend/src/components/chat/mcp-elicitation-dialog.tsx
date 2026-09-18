@@ -48,10 +48,20 @@ type ElicitationField = {
   schema: FieldSchema;
 };
 
+export function isChoiceElicitationRequest(
+  request: ChatMcpElicitationRequest | null,
+) {
+  if (!request) {
+    return false;
+  }
+  return isChoiceForm(getElicitationFields(request.requestedSchema));
+}
+
 export function McpElicitationDialog({
   request,
   isSubmitting,
   onRespond,
+  variant = "dialog",
 }: {
   request: ChatMcpElicitationRequest | null;
   isSubmitting: boolean;
@@ -60,6 +70,7 @@ export function McpElicitationDialog({
     action: ElicitationAction;
     content?: Record<string, ElicitationContentValue>;
   }) => Promise<void>;
+  variant?: "dialog" | "inline";
 }) {
   const fields = useMemo(
     () => getElicitationFields(request?.requestedSchema),
@@ -96,6 +107,110 @@ export function McpElicitationDialog({
     await onRespond({ id: request.id, action });
   };
 
+  const choiceForm = isChoiceForm(fields);
+  const hideFieldLabels = choiceForm && fields.length === 1;
+  const fieldsBody = (
+    <div className="flex flex-col gap-4">
+      {request.mode === "url" && isHttpUrl(request.url) ? (
+        <a
+          href={request.url}
+          target="_blank"
+          rel="noreferrer"
+          className="text-sm text-primary underline underline-offset-4"
+        >
+          Open request
+        </a>
+      ) : null}
+
+      {fields.length === 0 ? (
+        <Textarea
+          value={String(values.response ?? "")}
+          onChange={(event) =>
+            setValues((current) => ({
+              ...current,
+              response: event.target.value,
+            }))
+          }
+          placeholder="Response"
+          aria-label="Response"
+          className="min-h-24"
+        />
+      ) : (
+        fields.map((field) => (
+          <ElicitationFieldInput
+            key={field.name}
+            field={field}
+            choiceStyle={choiceForm}
+            hideLabel={hideFieldLabels}
+            value={values[field.name]}
+            error={errors[field.name]}
+            onChange={(value) =>
+              setValues((current) => {
+                setErrors((currentErrors) => {
+                  if (!currentErrors[field.name]) {
+                    return currentErrors;
+                  }
+
+                  const nextErrors = { ...currentErrors };
+                  delete nextErrors[field.name];
+                  return nextErrors;
+                });
+
+                return { ...current, [field.name]: value };
+              })
+            }
+          />
+        ))
+      )}
+    </div>
+  );
+  const footer = (
+    <>
+      <Button
+        type="button"
+        variant="ghost"
+        disabled={isSubmitting}
+        onClick={() => void respondWithoutContent("decline")}
+      >
+        <XIcon />
+        Decline
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        disabled={isSubmitting}
+        onClick={() => void respondWithoutContent("cancel")}
+      >
+        Cancel
+      </Button>
+      <Button type="submit" disabled={isSubmitting}>
+        <CheckIcon />
+        Continue
+      </Button>
+    </>
+  );
+
+  if (variant === "inline") {
+    return (
+      <form
+        data-testid="mcp-elicitation-card"
+        className="not-prose mb-4 w-full overflow-hidden rounded-lg border border-border/60 bg-card shadow-sm"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void submit();
+        }}
+      >
+        <div className="border-b border-border/60 px-4 py-3 text-sm font-medium">
+          {request.message}
+        </div>
+        <div className="px-4 py-3">{fieldsBody}</div>
+        <div className="flex flex-wrap items-center justify-end gap-2 border-t border-border/60 px-4 py-3">
+          {footer}
+        </div>
+      </form>
+    );
+  }
+
   return (
     <StandardFormDialog
       open={true}
@@ -107,84 +222,9 @@ export function McpElicitationDialog({
       size="small"
       preventCloseOnInteractOutside
       onSubmit={submit}
-      footer={
-        <>
-          <Button
-            type="button"
-            variant="ghost"
-            disabled={isSubmitting}
-            onClick={() => void respondWithoutContent("decline")}
-          >
-            <XIcon />
-            Decline
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={isSubmitting}
-            onClick={() => void respondWithoutContent("cancel")}
-          >
-            Cancel
-          </Button>
-          <Button type="submit" disabled={isSubmitting}>
-            <CheckIcon />
-            Continue
-          </Button>
-        </>
-      }
+      footer={footer}
     >
-      <div className="flex flex-col gap-4">
-        {request.mode === "url" && isHttpUrl(request.url) ? (
-          <a
-            href={request.url}
-            target="_blank"
-            rel="noreferrer"
-            className="text-sm text-primary underline underline-offset-4"
-          >
-            Open request
-          </a>
-        ) : null}
-
-        {fields.length === 0 ? (
-          <Textarea
-            value={String(values.response ?? "")}
-            onChange={(event) =>
-              setValues((current) => ({
-                ...current,
-                response: event.target.value,
-              }))
-            }
-            placeholder="Response"
-            aria-label="Response"
-            className="min-h-24"
-          />
-        ) : (
-          fields.map((field) => (
-            <ElicitationFieldInput
-              key={field.name}
-              field={field}
-              choiceStyle={isChoiceForm(fields)}
-              value={values[field.name]}
-              error={errors[field.name]}
-              onChange={(value) =>
-                setValues((current) => {
-                  setErrors((currentErrors) => {
-                    if (!currentErrors[field.name]) {
-                      return currentErrors;
-                    }
-
-                    const nextErrors = { ...currentErrors };
-                    delete nextErrors[field.name];
-                    return nextErrors;
-                  });
-
-                  return { ...current, [field.name]: value };
-                })
-              }
-            />
-          ))
-        )}
-      </div>
+      {fieldsBody}
     </StandardFormDialog>
   );
 }
@@ -192,12 +232,14 @@ export function McpElicitationDialog({
 function ElicitationFieldInput({
   field,
   choiceStyle,
+  hideLabel = false,
   value,
   error,
   onChange,
 }: {
   field: ElicitationField;
   choiceStyle: boolean;
+  hideLabel?: boolean;
   value: unknown;
   error?: string;
   onChange: (value: unknown) => void;
@@ -232,13 +274,18 @@ function ElicitationFieldInput({
   if (enumValues?.length && choiceStyle) {
     return (
       <div className="flex flex-col gap-2">
-        <p className="text-sm font-medium">
-          {field.label}
-          {field.required ? <span className="text-destructive">*</span> : null}
-        </p>
+        {hideLabel ? null : (
+          <p className="text-sm font-medium">
+            {field.label}
+            {field.required ? (
+              <span className="text-destructive">*</span>
+            ) : null}
+          </p>
+        )}
         <RadioGroup
           value={String(value ?? "")}
           onValueChange={onChange}
+          aria-label={hideLabel ? field.label : undefined}
           aria-invalid={Boolean(error)}
           aria-describedby={error ? errorId : undefined}
           className="flex flex-col gap-2"

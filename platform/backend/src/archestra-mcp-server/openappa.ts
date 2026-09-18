@@ -7,6 +7,7 @@ import { z } from "zod";
 import config from "@/config";
 import { NoticeArguments, RemedyExecutionSchema } from "@/openappa/notice";
 import { OfferJwsSchema, verifyOfferClaims } from "@/openappa/offer-claims";
+import { pendingRulings } from "@/openappa/pending-rulings";
 import {
   chatOpenAppaSession,
   executeRemedyByOffer,
@@ -114,11 +115,18 @@ const registry = defineArchestraTools([
     description:
       "Read why the guardrails policy blocked a tool call and which remedy plans it offers. The platform gives you this call in place of a blocked call. It runs nothing and changes nothing. The plans are for you. When the ruling offers a plan, name it to the user, choose it, and call execute_remedy_plan with the offer_id and plan from the ruling. Then retry the original call. If the ruling offers no plan, explain the block. If you need the user's decision, use ask_user, never a plain-text question.",
     schema: NoticeArguments,
-    async handler({ args }) {
+    async handler({ args, context }) {
       // The ruling the runtime already made, carried by the call itself. This
       // opens no root, emits no OpenAPPA event and reads no policy: the runtime
       // refused the call when it was proposed, and this is that refusal being
       // delivered to the model's own loop.
+      if (context.openappaSession) {
+        pendingRulings.remember({
+          organizationId: context.openappaSession.organization_id,
+          sessionId: context.openappaSession.session_id,
+          ruling: args.ruling,
+        });
+      }
       return { content: [{ type: "text", text: args.ruling }] };
     },
   }),
@@ -211,6 +219,13 @@ const registry = defineArchestraTools([
           originalArguments ?? JSON.stringify(submittedSemantic),
         args: remedy,
       });
+      // The offer was used; a later ask_user answer must not re-answer it.
+      if (context.openappaSession) {
+        pendingRulings.consume({
+          organizationId: context.openappaSession.organization_id,
+          sessionId: context.openappaSession.session_id,
+        });
+      }
       return byOffer.result;
     },
   }),

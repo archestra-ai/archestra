@@ -4,6 +4,7 @@ import {
   ARCHESTRA_MCP_SERVER_NAME,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
 } from "@archestra/shared";
+import { pendingRulings } from "@/openappa/pending-rulings";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { Agent } from "@/types";
 import { type ArchestraContext, executeArchestraTool } from ".";
@@ -169,6 +170,97 @@ describe("chat tool execution", () => {
       action: "accept",
       selected: ["Accept for this session", "Ask later"],
     });
+  });
+
+  test("ask_user accept repeats the pending remedy ruling as the next step", async () => {
+    const sessionId = `ask-ruling-${testAgent.id}`;
+    pendingRulings.remember({
+      organizationId: mockContext.organizationId as string,
+      sessionId,
+      ruling:
+        '[appa] Blocked: this call cannot run yet.\n\nContinue:\n  - Accept this change for the rest of this session:\n    archestra__execute_remedy_plan(offer_id: "abc123", plan: "Accept")',
+    });
+    mockContext = {
+      ...mockContext,
+      openappaSession: {
+        organization_id: mockContext.organizationId as string,
+        session_id: sessionId,
+      },
+      elicitation: {
+        elicit: async () => ({
+          status: "answered" as const,
+          result: {
+            action: "accept" as const,
+            content: { choice: "Accept for this session" },
+          },
+        }),
+      },
+    };
+
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}ask_user`,
+      {
+        question: "Accept this change for the rest of this session?",
+        options: [
+          { label: "Accept for this session" },
+          { label: "Do not accept" },
+        ],
+      },
+      mockContext,
+    );
+    expect(result.isError).toBe(false);
+    const text = (result.content[0] as any).text as string;
+    expect(text).toContain("The user picked: Accept for this session.");
+    expect(text).toContain("continue now exactly as the ruling says");
+    expect(text).toContain('offer_id: "abc123"');
+    // Consume-once: the ruling must not answer a later question.
+    const second = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}ask_user`,
+      {
+        question: "Unrelated question?",
+        options: [{ label: "One" }, { label: "Two" }],
+      },
+      mockContext,
+    );
+    expect((second.content[0] as any).text).not.toContain("offer_id");
+  });
+
+  test("ask_user decline with a pending ruling tells the model to stop", async () => {
+    const sessionId = `ask-decline-${testAgent.id}`;
+    pendingRulings.remember({
+      organizationId: mockContext.organizationId as string,
+      sessionId,
+      ruling: "[appa] Blocked: this call cannot run yet.",
+    });
+    mockContext = {
+      ...mockContext,
+      openappaSession: {
+        organization_id: mockContext.organizationId as string,
+        session_id: sessionId,
+      },
+      elicitation: {
+        elicit: async () => ({
+          status: "answered" as const,
+          result: { action: "decline" as const },
+        }),
+      },
+    };
+
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}ask_user`,
+      {
+        question: "Accept this change for the rest of this session?",
+        options: [
+          { label: "Accept for this session" },
+          { label: "Do not accept" },
+        ],
+      },
+      mockContext,
+    );
+    expect(result.isError).toBe(false);
+    expect((result.content[0] as any).text).toContain(
+      "The user did not accept the remedy. Do not retry the blocked call and do not ask again.",
+    );
   });
 
   test("ask_user returns decline without selected options", async () => {

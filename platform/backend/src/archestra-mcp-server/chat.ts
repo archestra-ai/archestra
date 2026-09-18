@@ -4,6 +4,7 @@ import {
 } from "@archestra/shared";
 import { z } from "zod";
 import logger from "@/logging";
+import { pendingRulings } from "@/openappa/pending-rulings";
 import { archestraMcpBranding } from "./branding";
 import {
   catchError,
@@ -12,6 +13,7 @@ import {
   errorResult,
   structuredSuccessResult,
 } from "./helpers";
+import type { ArchestraContext } from "./types";
 
 // === Constants ===
 
@@ -142,13 +144,19 @@ const registry = defineArchestraTools([
       }
 
       const { result } = outcome;
+      const pendingRuling = consumePendingRuling(context);
       if (result.action !== "accept") {
         const action = result.action === "decline" ? "decline" : "cancel";
         return structuredSuccessResult(
           { action, selected: [] },
-          action === "decline"
-            ? "The user declined to pick. Do not proceed with the question."
-            : "The user dismissed the question. Do not ask it again unless the user brings it up.",
+          [
+            action === "decline"
+              ? "The user declined to pick."
+              : "The user dismissed the question.",
+            pendingRuling
+              ? "The user did not accept the remedy. Do not retry the blocked call and do not ask again. Tell the user the action stays blocked."
+              : "Do not proceed with the question.",
+          ].join(" "),
         );
       }
 
@@ -166,7 +174,16 @@ const registry = defineArchestraTools([
 
       return structuredSuccessResult(
         { action: "accept", selected },
-        `The user picked: ${selected.join(", ")}. Act on this choice.`,
+        [
+          `The user picked: ${selected.join(", ")}. Act on this choice.`,
+          pendingRuling
+            ? `A remedy ruling is still pending. If the pick accepts it, continue now exactly as the ruling says — call ${archestraMcpBranding.getToolName(
+                "execute_remedy_plan",
+              )} with the offer_id and plan from the ruling, then retry the blocked call. If the pick rejects it, stop. Do not ask the user again.\n\n${pendingRuling}`
+            : "",
+        ]
+          .filter((part) => part.length > 0)
+          .join(" "),
       );
     },
   }),
@@ -200,6 +217,21 @@ function buildSingleChoiceSchema(
 
 function optionKey(index: number) {
   return `option_${index}`;
+}
+
+/**
+ * Take the remedy ruling pending for this session, if any. Consume-once: the
+ * user has now answered, so the ruling must not leak into a later question.
+ */
+function consumePendingRuling(context: ArchestraContext): string | undefined {
+  const session = context.openappaSession;
+  if (!session) {
+    return undefined;
+  }
+  return pendingRulings.consume({
+    organizationId: session.organization_id,
+    sessionId: session.session_id,
+  });
 }
 
 function buildMultiChoiceSchema(

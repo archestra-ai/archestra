@@ -444,7 +444,7 @@ export async function processProxyResults(params: {
 type AppaCallDecision =
   | { kind: "allow" }
   | { kind: "control" }
-  | { kind: "deny"; feedback: string };
+  | { kind: "deny"; feedback: string; offers?: string[] };
 
 export async function evaluateToolCalls(
   session: OpenAppaSession,
@@ -512,6 +512,12 @@ export async function evaluateToolCalls(
       return {
         kind: "deny" as const,
         feedback: decisionMessage(decision),
+        offers:
+          decision.decision === "deny_call"
+            ? (decision.offers ?? [])
+                .map((offer) => offer.offer_id)
+                .filter((id) => id.length > 0)
+            : [],
       };
     }),
   );
@@ -631,13 +637,19 @@ function decisionMessage(decision: NativeDecision): string {
 }
 
 /**
- * Executes a remedy using only the offer ID.
- * Resolves the originating session from the in-memory offer map within the organization.
+ * Executes a remedy using a verified host routing claim.
  */
 export async function executeRemedyByOffer(params: {
   organizationId: string;
   /** The principal the gateway authenticated, in the proxy's `user:<id>` form. */
   callerId?: string;
+  /** Minted session the signed offer claims name. */
+  sessionId: string;
+  parentId?: string;
+  /** Principal that minted the offer, from verified claims. */
+  ownerCallerId?: string;
+  tool?: string;
+  spelling?: string;
   /** Provider or client-supplied logical execution identity, when available. */
   toolCallId?: string;
   controlToolName?: string;
@@ -653,7 +665,14 @@ export async function executeRemedyByOffer(params: {
     module.executeRemedyByOffer(
       JSON.stringify({
         organization_id: params.organizationId,
+        session_id: params.sessionId,
         ...(params.callerId ? { caller_id: params.callerId } : {}),
+        ...(params.parentId ? { parent_id: params.parentId } : {}),
+        ...(params.ownerCallerId
+          ? { owner_caller_id: params.ownerCallerId }
+          : {}),
+        ...(params.tool ? { tool: params.tool } : {}),
+        ...(params.spelling ? { spelling: params.spelling } : {}),
         execution_mode: params.toolCallId ? "tracked" : "untracked",
         ...(params.toolCallId ? { tool_call_id: params.toolCallId } : {}),
         original_arguments: params.originalArguments,

@@ -24,6 +24,7 @@ import {
   readNotice,
   readRemedyExecution,
 } from "./notice";
+import type { OfferJws } from "./offer-claims";
 
 export type AppaWireFamily =
   | "anthropic:messages"
@@ -57,6 +58,26 @@ export function appaWireFamily(
  * Restores notice tool calls in request history back to original calls and rulings.
  * Updates model-visible history in place.
  */
+export function collectSignedOfferClaims(params: {
+  family: AppaWireFamily;
+  body: unknown;
+  isNoticeTool: (name: string) => boolean;
+  mayBeNoticeTool: (name: string) => boolean;
+}): OfferJws[] {
+  const claims: OfferJws[] = [];
+  const calls = toolCallSites({
+    family: params.family,
+    body: params.body,
+    match: (name) => params.isNoticeTool(name) || params.mayBeNoticeTool(name),
+  });
+  for (const call of calls) {
+    const notice = readNotice({ callId: call.id, arguments: call.arguments });
+    if (!notice?.offers) continue;
+    claims.push(...notice.offers);
+  }
+  return claims;
+}
+
 export function restoreAppaNotices(params: {
   family: AppaWireFamily;
   body: unknown;

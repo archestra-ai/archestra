@@ -161,6 +161,7 @@ cmd_up() {
     --env-file "${SCRIPT_DIR}/e2e-lite-platform.env" \
     -e "ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE=${MCP_SERVER_BASE_IMAGE}" \
     -e "ARCHESTRA_OPENAPPA_ENABLED=${ARCHESTRA_OPENAPPA_ENABLED:-false}" \
+    -e "ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET=${ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET:-e2e-openappa-offer-signing-secret}" \
     -v /var/run/docker.sock:/var/run/docker.sock \
     -v "${PLATFORM_DIR}/e2e-tests/fixtures/a2a-test-agent:/opt/archestra-e2e/a2a-test-agent:ro" \
     "${image}" > /dev/null

@@ -4,7 +4,9 @@ import {
   TOOL_GET_REMEDY_PLANS_SHORT_NAME,
 } from "@archestra/shared";
 import { z } from "zod";
+import config from "@/config";
 import { NoticeArguments, RemedyExecutionSchema } from "@/openappa/notice";
+import { OfferJwsSchema, verifyOfferClaims } from "@/openappa/offer-claims";
 import {
   chatOpenAppaSession,
   executeRemedyByOffer,
@@ -129,9 +131,28 @@ const registry = defineArchestraTools([
       execution: RemedyExecutionSchema.optional().describe(
         "Transport record added by the proxy for retry identity and exact history restoration. It does not authorize the remedy.",
       ),
+      protected: OfferJwsSchema.shape.protected
+        .optional()
+        .describe(
+          "Flattened JWS protected header (RFC 7515). Added by the proxy.",
+        ),
+      payload: OfferJwsSchema.shape.payload
+        .optional()
+        .describe(
+          "Flattened JWS unencoded payload (RFC 7797). Added by the proxy.",
+        ),
+      signature: OfferJwsSchema.shape.signature
+        .optional()
+        .describe("Flattened JWS signature (RFC 7515). Added by the proxy."),
     }),
     async handler({ args, context }) {
-      const { execution, ...submittedArguments } = args;
+      const {
+        execution,
+        protected: protectedHeader,
+        payload,
+        signature,
+        ...submittedArguments
+      } = args;
       const submittedSemantic =
         RemedyPlanArgumentsSchema.parse(submittedArguments);
       const originalArguments = execution?.original_arguments;
@@ -160,33 +181,37 @@ const registry = defineArchestraTools([
       // `plan` remains in the exact original arguments for receipt matching but
       // is not runtime remedy input.
       const { plan: _plan, ...remedy } = submittedSemantic;
-      // The durable offer owner is the sole source of root, actor, and policy
-      // context. Client headers and conversation ids do not participate.
-      const byOffer = context.organizationId
-        ? await executeRemedyByOffer({
-            organizationId: context.organizationId,
-            // The offer belongs to the person it was minted for. The proxy
-            // names a person as `user:<id>`, and so does the gateway here. An
-            // offer the proxy minted under a credential names no person, and a
-            // person of the organization may spend it.
-            ...(context.userId ? { callerId: `user:${context.userId}` } : {}),
-            toolCallId: execution?.call_id ?? context.currentToolCallId,
-            controlToolName: execution?.tool_name,
-            originalArguments:
-              originalArguments ?? JSON.stringify(submittedSemantic),
-            args: remedy,
-          })
-        : undefined;
-      if (byOffer) return byOffer.result;
-      return {
-        isError: true,
-        content: [
-          {
-            type: "text",
-            text: "OpenAPPA remedy execution requires an authenticated organization",
-          },
-        ],
-      };
+      const claims = verifyOfferClaims(
+        {
+          protected: protectedHeader,
+          payload,
+          signature,
+        },
+        config.openappa.offerSigningSecret,
+      );
+      if (
+        !context.organizationId ||
+        !claims ||
+        claims.offer_id !== submittedSemantic.offer_id ||
+        claims.organization_id !== context.organizationId
+      ) {
+        return unknownOfferResult();
+      }
+      const byOffer = await executeRemedyByOffer({
+        organizationId: context.organizationId,
+        ...(context.userId ? { callerId: `user:${context.userId}` } : {}),
+        sessionId: claims.session_id,
+        ...(claims.parent_id ? { parentId: claims.parent_id } : {}),
+        ...(claims.caller_id ? { ownerCallerId: claims.caller_id } : {}),
+        ...(claims.tool ? { tool: claims.tool } : {}),
+        ...(claims.spelling ? { spelling: claims.spelling } : {}),
+        toolCallId: execution?.call_id ?? context.currentToolCallId,
+        controlToolName: execution?.tool_name,
+        originalArguments:
+          originalArguments ?? JSON.stringify(submittedSemantic),
+        args: remedy,
+      });
+      return byOffer.result;
     },
   }),
 ] as const);
@@ -198,6 +223,18 @@ function result(value: object) {
   return {
     content: [{ type: "text" as const, text: JSON.stringify(value) }],
     structuredContent: { ...value },
+  };
+}
+
+function unknownOfferResult() {
+  return {
+    isError: true,
+    content: [
+      {
+        type: "text" as const,
+        text: "[appa] No live offer with this id",
+      },
+    ],
   };
 }
 

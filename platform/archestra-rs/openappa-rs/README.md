@@ -131,7 +131,7 @@ the proxy filters model input, not data already stored or displayed by Chat.
 
 ## Storage and interrupted processing
 
-Migration `0471_openappa_native.sql` creates the event and receipt tables. Migration `0479_perpetual_malcolm_colcord.sql` adds the durable offer-owner index:
+Migration `0471_openappa_native.sql` creates the event and receipt tables. Migration `0479_perpetual_malcolm_colcord.sql` adds host-key indexes. Offer routing is a host-signed plaintext claim, not a table.
 
 | Table | Owner / purpose |
 | --- | --- |
@@ -140,7 +140,6 @@ Migration `0471_openappa_native.sql` creates the event and receipt tables. Migra
 | `openappa_sessions` | Scoped actor/root/parent mapping and start decision |
 | `openappa_operations` | Call, lifecycle, and remedy receipts |
 | `openappa_processed_results` | Result status, decision, and approved output |
-| `openappa_offer_owners` | Authenticated offer-to-session routing and client presentation metadata; not offer authorization |
 
 Rust owns event encoding, decoding, policy validation, replay, ordering, and
 compare-and-swap behavior. TypeScript does not interpret policy events. A
@@ -167,7 +166,7 @@ behavior, not exactly-once execution of arbitrary external services.
 
 ## Remedies and current limits
 
-`archestra__execute_remedy_plan` executes remedies through the native gate. Offer routing and receipts are durable in PostgreSQL (`openappa_offer_owners`). Any replica can resolve an offer after a restart or routing change. The recorded owner routes to the target session. The runtime validates the offer before execution.
+`archestra__execute_remedy_plan` executes remedies through the native gate. Offer routing is a signed plaintext claim on the notice and control call. Any replica verifies the HMAC and reconstructs the session. The runtime event log validates the offer before execution.
 
 Personal offers require their original user. Organization offers allow any caller in that organization. Unknown, unauthorized, or spent offers return terminal feedback without executing.
 

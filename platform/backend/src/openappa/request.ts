@@ -10,11 +10,13 @@ import {
 } from "@archestra/shared";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { ApiError } from "@/types";
+import type { OfferJws } from "./offer-claims";
 import {
   type AppaSessionIdentity,
   type AppaWireFamily,
   appaTurnBoundaries,
   appaWireFamily,
+  collectSignedOfferClaims,
   declaredToolName,
   declaredToolNamespaces,
   declaredTools,
@@ -46,6 +48,8 @@ export type AppaPreparedRequest = {
   spellings: ReadonlyMap<string, string>;
   promptOperationId?: string;
   turnEndOperationId?: string;
+  /** Signed offer routing collected from notices before restoration. */
+  offerClaims?: OfferJws[];
 };
 
 /**
@@ -71,10 +75,23 @@ export function prepareAppaRequest(params: {
     );
   }
   let historicalControlToolName: string | undefined;
+  let offerClaims: OfferJws[] | undefined;
   const session = params.session ?? {
     provenance: "none" as const,
   };
   if (family) {
+    const noticeMatch = {
+      isNoticeTool: (name: string) =>
+        shortToolName(params.canonicalizeToolName(name)) ===
+        TOOL_GET_REMEDY_PLANS_SHORT_NAME,
+      mayBeNoticeTool: (name: string) => NOTICE_TOOL_SPELLING.test(name),
+    };
+    const collected = collectSignedOfferClaims({
+      family,
+      body: params.body,
+      ...noticeMatch,
+    });
+    if (collected.length > 0) offerClaims = collected;
     historicalControlToolName = restoreAppaRemedyExecutions({
       family,
       body: params.body,
@@ -88,14 +105,7 @@ export function prepareAppaRequest(params: {
     restoreAppaNotices({
       family,
       body: params.body,
-      isNoticeTool: (name) =>
-        shortToolName(params.canonicalizeToolName(name)) ===
-        TOOL_GET_REMEDY_PLANS_SHORT_NAME,
-      // A client decorates the gateway's tools with a label of its own, and a
-      // request that declares no tools gives the canonicalizer nothing to learn
-      // that label from. Spelling alone is enough to *try* a call, because a
-      // notice proves itself by its own record; one that does not is left alone.
-      mayBeNoticeTool: (name) => NOTICE_TOOL_SPELLING.test(name),
+      ...noticeMatch,
     });
   }
 
@@ -108,6 +118,7 @@ export function prepareAppaRequest(params: {
       spellings: new Map(),
       customTools: new Set(),
       namespaces: new Map(),
+      ...(offerClaims ? { offerClaims } : {}),
     };
   }
   if (family) refuseCodexCodeMode({ family, declared, body: params.body });
@@ -183,6 +194,7 @@ export function prepareAppaRequest(params: {
     customTools,
     namespaces: declaredToolNamespaces(params.body),
     ...(family ? appaTurnBoundaries({ family, body: params.body }) : {}),
+    ...(offerClaims ? { offerClaims } : {}),
   };
 }
 

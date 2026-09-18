@@ -3563,12 +3563,21 @@ describe("OpenAPPA feature configuration", () => {
     expect(parseOpenAppaConfig(enabled)).toEqual({
       enabled: false,
       yellEnabled: false,
+      offerSigningSecret: "",
     });
   });
   test("enables database policies without a container path", () => {
     expect(parseOpenAppaConfig("true")).toEqual({
       enabled: true,
       yellEnabled: true,
+      offerSigningSecret: "",
     });
+    expect(
+      parseOpenAppaConfig("true", "true", "offer-signing-secret-at-least-32ch")
+        .offerSigningSecret,
+    ).toBe("offer-signing-secret-at-least-32ch");
+    expect(() => parseOpenAppaConfig("true", "true", "short")).toThrow(
+      "ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET must be at least 32 characters",
+    );
   });
 });

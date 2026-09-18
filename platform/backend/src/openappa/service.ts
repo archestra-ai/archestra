@@ -405,6 +405,7 @@ function isOutputDecision(
 export async function processProxyResults(params: {
   session: OpenAppaSession;
   results: CommonToolResult[];
+  canonicalize: (name: string) => string;
   controlToolName?: string;
   trustedChat?: boolean;
 }) {
@@ -413,6 +414,8 @@ export async function processProxyResults(params: {
   for (const result of params.results) {
     if (params.trustedChat && isSeededAppRenderToolResult(result.content))
       continue;
+    // The runtime released no ask_user call, so it would withhold the answer.
+    if (isAskUser(result.name, params.canonicalize)) continue;
     const error =
       extractMcpToolError(result) ?? extractMcpToolError(result.content);
     const outcome: ExecutionOutcome =
@@ -483,12 +486,7 @@ export async function evaluateToolCalls(
       if (options.controlToolName && call.name === options.controlToolName) {
         return { kind: "control" as const };
       }
-      // Asking the user is a conversation primitive, not a governed tool.
-      if (
-        archestraMcpBranding.getToolShortName(
-          options.canonicalize(call.name),
-        ) === TOOL_ASK_USER_SHORT_NAME
-      ) {
+      if (isAskUser(call.name, options.canonicalize)) {
         return { kind: "allow" as const };
       }
       const tool =
@@ -765,4 +763,16 @@ function nativePresentation(controlToolName?: string): {
       archestraMcpBranding.getToolName(TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME),
     supports_delegation: false,
   };
+}
+
+/**
+ * Asking the user is a conversation primitive, not a governed tool: its call
+ * is never ruled on, so the runtime holds no record of it, and its result is
+ * the user's own answer.
+ */
+function isAskUser(name: string, canonicalize: (name: string) => string) {
+  return (
+    archestraMcpBranding.getToolShortName(canonicalize(name)) ===
+    TOOL_ASK_USER_SHORT_NAME
+  );
 }

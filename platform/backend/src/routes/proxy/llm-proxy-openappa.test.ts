@@ -738,6 +738,48 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     expect(sent.messages[2].content[0].content).toBe("APPROVED REPLACEMENT");
   });
 
+  test("hands the model the user's ask_user answer as the tool returned it", async () => {
+    // The runtime never rules on ask_user, so it holds no record of the call
+    // and would answer its result with a withheld notice.
+    const answer = "The user picked: Accept for this session.";
+    const body = payload(false, [
+      { role: "user", content: "Check the weather" },
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "tool_use",
+            id: "toolu_ask",
+            name: "archestra__ask_user",
+            input: {
+              question: "Accept for this session?",
+              options: [
+                { label: "Accept for this session" },
+                { label: "Do not accept" },
+              ],
+            },
+          },
+        ],
+      },
+      {
+        role: "user",
+        content: [
+          { type: "tool_result", tool_use_id: "toolu_ask", content: answer },
+        ],
+      },
+    ]);
+    options = { includeToolUse: false, streamStopReason: "end_turn" };
+
+    const response = await post(body);
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(events.map((event) => event.event)).not.toContain("tool_result");
+    const sent = providerRequests.at(-1) as {
+      messages: { role: string; content: Record<string, unknown>[] }[];
+    };
+    expect(sent.messages[2].content[0].content).toBe(answer);
+  });
+
   test("reports one prompt and one turn end for a turn that runs no tool", async () => {
     options = { includeToolUse: false, streamStopReason: "end_turn" };
 

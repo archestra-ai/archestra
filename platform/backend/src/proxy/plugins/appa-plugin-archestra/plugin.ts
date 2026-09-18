@@ -90,6 +90,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     const result = await processProxyResults({
       session: binding.session,
       results: [...context.toolResults],
+      canonicalize: (name) => this.canonicalize(binding, name),
       controlToolName:
         binding.request.tools?.controlToolName ??
         binding.request.historicalControlToolName,

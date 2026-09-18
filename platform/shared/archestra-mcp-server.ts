@@ -169,6 +169,8 @@ export const TOOL_POST_RUN_FILE_SHORT_NAME = "post_run_file";
 export const TOOL_READ_WORKSPACE_FILE_SHORT_NAME = "read_workspace_file";
 export const TOOL_WRITE_WORKSPACE_FILE_SHORT_NAME = "write_workspace_file";
 export const TOOL_DELETE_WORKSPACE_SHORT_NAME = "delete_workspace";
+export const TOOL_TRANSFER_WORKSPACE_FILE_SHORT_NAME =
+  "transfer_workspace_file";
 // Attach a credential the calling client already holds to a runtime Agent, so a
 // handoff can carry the CLI auth the local session was using. Personal scope
 // only, and only for Agents that opted in to accepting client-supplied values.
@@ -320,6 +322,7 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_READ_WORKSPACE_FILE_SHORT_NAME,
   TOOL_WRITE_WORKSPACE_FILE_SHORT_NAME,
   TOOL_DELETE_WORKSPACE_SHORT_NAME,
+  TOOL_TRANSFER_WORKSPACE_FILE_SHORT_NAME,
   TOOL_TRANSFER_CREDENTIAL_SHORT_NAME,
   TOOL_DOWNLOAD_FILE_SHORT_NAME,
   TOOL_UPLOAD_FILE_SHORT_NAME,
@@ -525,6 +528,7 @@ export const ARCHESTRA_TOOL_GROUP_BY_SHORT_NAME: Record<
   post_run_file: "tasks",
   read_workspace_file: "tasks",
   write_workspace_file: "tasks",
+  transfer_workspace_file: "tasks",
   delete_workspace: "tasks",
   transfer_credential: "tasks",
   download_file: "skill_sandbox",

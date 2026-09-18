@@ -119,6 +119,25 @@ export interface AgentRuntimeBackendDriver {
     session: AgentRunRecord;
     request: AgentWorkspaceFileRequest;
   }): Promise<AgentWorkspaceFileResult>;
+  /** Run one transfer control operation, such as stat, snapshot or finalize.
+   *
+   * Replies are small JSON, so they are collected. Upload bodies arrive through
+   * stdin and are never held in memory.
+   */
+  runWorkspaceTransferCommand(params: {
+    session: AgentRunRecord;
+    args: string[];
+    stdin?: Readable;
+    timeoutMs: number;
+  }): Promise<unknown>;
+  /** Stream a snapshot's bytes from an offset. Length -1 reads to the end. */
+  readWorkspaceTransferRange(params: {
+    session: AgentRunRecord;
+    transferId: string;
+    offset: number;
+    length: number;
+    timeoutMs: number;
+  }): Promise<{ stdout: Readable; completed: Promise<void> }>;
   /** Remove compute while preserving the workspace's durable volumes. */
   suspendWorkspace(
     session: Pick<AgentRunRecord, "id" | "runtimeScope" | "workloadName">,

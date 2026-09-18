@@ -2359,6 +2359,7 @@ Required RBAC permission: `plugin:admin`
 |------|-------------|--------------------------|
 | `delete_workspace` | Permanently delete a retained runtime workspace and all of its files. | `agent:read` |
 | `read_workspace_file` | Read a file from your Agent Runtime's retained workspace using a run ID. | `agent:read` |
+| `transfer_workspace_file` | Copy a file between this machine and an Agent Runtime workspace without reading it. | `agent:read` |
 | `write_workspace_file` | Create a file in your Agent Runtime's retained workspace using a run ID. | `agent:read` |
 | `start_run` | Create a NEW run only for work that has no prior runtime session. | `agent:read` |
 | `get_run` | Read a run's state and the output it has produced so far. | `agent:read` |
@@ -2392,6 +2393,22 @@ Required RBAC permission: `agent:read`
 | `task_id` | `string` | Yes |  |
 | `path` | `string` | Yes |  |
 | `encoding` | `"utf8" \| "base64"` | No |  |
+
+
+#### transfer_workspace_file
+
+Required RBAC permission: `agent:read`
+
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `task_id` | `string` | Yes | From start_run or list_runs. |
+| `direction` | `"download" \| "upload"` | Yes | download reads from the workspace; upload writes to it. |
+| `path` | `string` | Yes | Workspace-relative path, for example reports/summary.md. |
+| `local_path` | `string` | Yes | Absolute path on this machine, used to build the command. |
+| `size` | `integer` | No | Upload only: the local file's size in bytes. |
+| `sha256` | `string` | No | Upload only: the local file's sha256, as hex. |
 
 
 #### write_workspace_file

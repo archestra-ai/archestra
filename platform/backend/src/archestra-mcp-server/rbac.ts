@@ -198,6 +198,7 @@ export const TOOL_PERMISSIONS: Record<
   post_run_file: { resource: "agent", action: "read" },
   read_workspace_file: { resource: "agent", action: "read" },
   write_workspace_file: { resource: "agent", action: "read" },
+  transfer_workspace_file: { resource: "agent", action: "read" },
   delete_workspace: { resource: "agent", action: "read" },
   // Writes only the caller's own personal credential, so it needs no elevated
   // permission; the handler additionally requires access to the target Agent

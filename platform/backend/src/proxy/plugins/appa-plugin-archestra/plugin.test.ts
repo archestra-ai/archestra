@@ -78,6 +78,35 @@ describe("APPA client adapters", () => {
 });
 
 describe("AppaPluginArchestra", () => {
+  test("rebinds a child request onto the adapter-minted trajectory", async () => {
+    const evaluateToolCalls = vi
+      .spyOn(appaService, "evaluateToolCalls")
+      .mockResolvedValue([{ kind: "allow" }]);
+    const plugin = new AppaPluginArchestra([new AppaClaudeCodeAdapter()]);
+    const context = requestContext({
+      sessionId: "user:user|s1",
+      canonicalizeToolName: (name) => name,
+    });
+    context.headers = {
+      "user-agent": "claude-code/1",
+      "x-claude-code-session-id": "s1",
+      "x-claude-code-agent-id": "a1",
+    };
+    try {
+      await plugin.onSessionInit(context);
+      await plugin.onToolCalls({
+        ...context,
+        toolCalls: [{ id: "1", name: "Bash", arguments: {} }],
+      });
+      expect(evaluateToolCalls.mock.calls[0]?.[0]).toMatchObject({
+        session_id: "user:user|s1:a1",
+        parent_id: "user:user|s1",
+      });
+    } finally {
+      evaluateToolCalls.mockRestore();
+    }
+  });
+
   test("keeps bindings private to each request and deletes them at cleanup", async () => {
     const canonicalizedNames: string[] = [];
     const evaluateToolCalls = vi
@@ -89,9 +118,13 @@ describe("AppaPluginArchestra", () => {
     const plugin = new AppaPluginArchestra([
       {
         id: "test-adapter",
+        trajectoryPrefix: "test",
         matches: () => true,
         classifyToolName: () => "local",
         normalizeLocalToolName: (name) => `local:${name}`,
+        isSpawnTool: () => false,
+        namesChildren: () => [],
+        bindChildTrajectory: () => undefined,
       },
     ]);
     const first = requestContext({

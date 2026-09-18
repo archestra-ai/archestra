@@ -18,6 +18,7 @@ import type {
   LlmProxyToolResultsContext,
   LlmProxyToolResultsOutcome,
 } from "@/proxy/plugins/registry";
+import { ApiError } from "@/types";
 import {
   APPA_PLUGIN_TRUSTED_CONTEXT,
   type AppaClientAdapter,
@@ -55,14 +56,23 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       turnOpen: false,
       chat: trustedContext.chatSource !== undefined,
     };
+    const matchContext = {
+      headers: context.headers,
+      requestBody: context.requestBody,
+      trustedContext: cloneTrustedContext(trustedContext),
+    };
     const adapter = this.clientAdapters.find((candidate) =>
-      candidate.matches({
-        headers: context.headers,
-        requestBody: context.requestBody,
-        trustedContext: cloneTrustedContext(trustedContext),
-      }),
+      candidate.matches(matchContext),
     );
     binding.adapter = adapter;
+    const child = adapter?.bindChildTrajectory(matchContext);
+    if (child) {
+      binding.session = {
+        ...binding.session,
+        session_id: withCallerScope(binding.session, child.sessionId),
+        parent_id: withCallerScope(binding.session, child.parentId),
+      };
+    }
     this.bindings.set(context.resources, binding);
   }
 
@@ -126,6 +136,19 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     const binding = this.bindings.get(context.resources);
     if (!binding) return;
     const calls = [...context.toolCalls];
+    const rootId = binding.session.parent_id ?? binding.session.session_id;
+    if (binding.adapter) {
+      for (const call of calls) {
+        protectNamedChildren({
+          children: binding.adapter.namesChildren({
+            rootId,
+            arguments: call.arguments,
+          }),
+          rootId,
+          spawn: binding.adapter.isSpawnTool(call.name),
+        });
+      }
+    }
     const decisions = await evaluateToolCalls(binding.session, calls, {
       canonicalize: (name) => this.canonicalize(binding, name),
       ...(binding.request.tools
@@ -236,6 +259,31 @@ function cloneTrustedContext(context: AppaTrustedContext): AppaTrustedContext {
     ...context,
     session: { ...context.session },
   };
+}
+
+function withCallerScope(session: OpenAppaSession, id: string): string {
+  if (!session.caller_id) return id;
+  const prefix = `${session.caller_id}|`;
+  return session.session_id.startsWith(prefix) && !id.startsWith(prefix)
+    ? `${prefix}${id}`
+    : id;
+}
+
+function protectNamedChildren(params: {
+  children: string[];
+  rootId: string;
+  spawn: boolean;
+}): void {
+  for (const child of params.children) {
+    if (child === params.rootId || !child.startsWith(`${params.rootId}:`)) {
+      throw new ApiError(
+        400,
+        params.spawn
+          ? "OpenAPPA spawn named a child trajectory that is not bound to this parent"
+          : "OpenAPPA child trajectory is not bound to this parent",
+      );
+    }
+  }
 }
 
 /** Attaches execution metadata frame to remedy calls for receipt validation. */

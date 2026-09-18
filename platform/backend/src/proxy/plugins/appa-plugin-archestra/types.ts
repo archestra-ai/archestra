@@ -16,14 +16,39 @@ export type AppaTrustedContext = {
   chatSource?: AppaChatSource;
 };
 
+export type AppaMatchContext = {
+  headers: Readonly<Record<string, string | string[] | undefined>>;
+  requestBody: unknown;
+  trustedContext?: AppaTrustedContext;
+};
+
+/** Server-minted child identity. `sessionId` is the child; `parentId` is the root. */
+export type AppaChildTrajectory = {
+  sessionId: string;
+  parentId: string;
+};
+
 export type AppaClientAdapter = {
   readonly id: string;
+  /** Prefix for this client's native spawn/child namespace. */
+  readonly trajectoryPrefix: string;
   /** Client signals select tool syntax, not authority; they may be spoofed. */
-  matches(context: {
-    headers: Readonly<Record<string, string | string[] | undefined>>;
-    requestBody: unknown;
-    trustedContext?: AppaTrustedContext;
-  }): boolean;
+  matches(context: AppaMatchContext): boolean;
   classifyToolName(name: string): "gateway" | "local";
   normalizeLocalToolName(name: string): string;
+  /** True when this local tool starts a delegated child run. */
+  isSpawnTool(name: string): boolean;
+  /**
+   * Family children a call's arguments name, in the same namespace as
+   * `bindChildTrajectory` mints, so `names_children` matches opened children.
+   */
+  namesChildren(params: { rootId: string; arguments: unknown }): string[];
+  /**
+   * Bind a delegated child request to a server-minted trajectory. Returns
+   * undefined for a root request. Throws when correlation headers are absent,
+   * duplicate, reused, or bound to another parent.
+   */
+  bindChildTrajectory(
+    context: AppaMatchContext,
+  ): AppaChildTrajectory | undefined;
 };

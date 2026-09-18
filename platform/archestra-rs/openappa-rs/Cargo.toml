@@ -19,7 +19,7 @@ napi = { version = "3", features = ["tokio_rt"] }
 napi-derive = "3"
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["raw_value"] }
-sha2 = "0.10"
+sha2 = "0.11"
 toml = "1.1"
 tokio = { version = "1", features = ["sync", "time"] }
 futures-util = "0.3"

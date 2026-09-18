@@ -183,6 +183,32 @@ describe("client trajectory identity", () => {
       expect(compactionTurn.sessionId).toBe(before.sessionId);
     });
 
+    test("an out-of-band compaction under a new thread id is a fresh root, not a reopen", () => {
+      // A summarizer request that compresses another thread's context must
+      // not reopen that thread's root: mixing the two trajectories would
+      // let a compaction escape the labels the original root accumulated.
+      // Restoration of the carried notices is independent of which root the
+      // request binds (pinned at the wire and route layers).
+      const original = extractAppaSessionIdentity({
+        family: "openai:responses",
+        body: { client_metadata: codexTurnMetadata() },
+        headers: codexHeaders,
+      });
+      const outOfBand = extractAppaSessionIdentity({
+        family: "openai:responses",
+        body: {
+          client_metadata: codexTurnMetadata({
+            thread_id: CODEX_FORK_THREAD,
+            request_kind: "compaction",
+          }),
+        },
+        headers: { ...codexHeaders, "x-openai-subagent": "compact" },
+      });
+
+      expect(outOfBand.sessionId).toBe(CODEX_FORK_THREAD);
+      expect(outOfBand.sessionId).not.toBe(original.sessionId);
+    });
+
     test("reads the canonical turn-metadata blob under client_metadata", () => {
       expect(
         extractAppaSessionIdentity({
@@ -351,6 +377,33 @@ describe("client trajectory identity", () => {
       });
 
       expect(compaction.sessionId).toBe(before.sessionId);
+    });
+
+    test("an out-of-band compaction under a new session id is a fresh root", () => {
+      const original = extractAppaSessionIdentity({
+        family: "openai:chatCompletions",
+        body: {},
+        headers: { ...openCodeHeaders, "x-session-id": OPENCODE_SESSION },
+      });
+      const outOfBand = extractAppaSessionIdentity({
+        family: "openai:chatCompletions",
+        body: {
+          messages: [
+            {
+              role: "user",
+              content:
+                "Summarize: user asked about the weather; get_remedy_plans ruling …",
+            },
+          ],
+        },
+        headers: {
+          ...openCodeHeaders,
+          "x-session-id": OPENCODE_FORK_SESSION,
+        },
+      });
+
+      expect(outOfBand.sessionId).toBe(OPENCODE_FORK_SESSION);
+      expect(outOfBand.sessionId).not.toBe(original.sessionId);
     });
 
     test("reads the hosted-provider session header", () => {

@@ -909,6 +909,63 @@ describe("denial notice restoration", () => {
     });
   });
 
+  test("an out-of-band compaction of another session's context still restores notices", () => {
+    // A summarizer request stamped with a fresh session still carries the
+    // original trajectory's sealed notices. Restoration is a function of the
+    // body, not of which root the request binds, and it runs even when the
+    // request declares no tools — the typical shape of an out-of-band
+    // compaction. The provider is owed the original calls and the rulings.
+    const body = {
+      client_metadata: {
+        session_id: "f5be22fa-3d3a-44ce-8d37-d0073acd5174",
+        thread_id: "01a085a0-ca43-7671-9450-8508eddef38d",
+        request_kind: "compaction",
+      },
+      input: [
+        { role: "user", content: "clean the build dir" },
+        {
+          type: "function_call",
+          id: "fc_1",
+          call_id: "call_1",
+          name: NOTICE,
+          status: "completed",
+          arguments: JSON.stringify(
+            notice("shell", { command: "rm -rf build" }, "call_1"),
+          ),
+        },
+        {
+          type: "function_call_output",
+          call_id: "call_1",
+          output: "client text",
+        },
+      ],
+    };
+
+    prepareAppaRequest({
+      body,
+      interactionType: "openai:responses",
+      session: {
+        sessionId: "01a085a0-ca43-7671-9450-8508eddef38d",
+        provenance: "codex-turn-metadata",
+      },
+      canonicalizeToolName: canonicalize,
+    });
+
+    expect(body.input[1]).toEqual({
+      type: "function_call",
+      id: "fc_1",
+      call_id: "call_1",
+      name: "shell",
+      status: "completed",
+      arguments: JSON.stringify({ command: "rm -rf build" }),
+    });
+    expect(body.input[2]).toEqual({
+      type: "function_call_output",
+      call_id: "call_1",
+      output: "[appa] Blocked: this call cannot run yet.",
+    });
+  });
+
   test("leaves a client's own custom tool alone, even carrying notice-shaped arguments", () => {
     // A review argued a user-defined custom tool could be mistaken for a notice
     // and have its call rewritten — the denied call would then be executed by

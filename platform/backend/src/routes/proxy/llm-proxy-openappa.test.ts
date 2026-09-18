@@ -14,6 +14,7 @@ import * as toolInvocation from "@/guardrails/tool-invocation";
 import * as trustedData from "@/guardrails/trusted-data";
 import { ModelModel, VirtualApiKeyModel } from "@/models";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
+import { buildNoticeArguments } from "@/openappa/notice";
 import { createAppaLlmProxyPlugin } from "@/proxy/plugins/appa-plugin-archestra";
 import { registerLlmProxyPlugin } from "@/proxy/plugins/registry";
 import { buildExternalAppRenderResult } from "@/services/apps/app-render-result";
@@ -1774,6 +1775,7 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
   let userId: string;
   let events: Array<Record<string, unknown>>;
   let providerCalls: number;
+  let providerBodies: unknown[];
   let unregisterAppaPlugin: () => void;
 
   beforeEach(async ({ makeAgent, makeMember, makeUser }) => {
@@ -1807,6 +1809,7 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
     await makeMember(userId, agent.organizationId);
     events = [];
     providerCalls = 0;
+    providerBodies = [];
     native.initializeOpenappa.mockResolvedValue(undefined);
     native.dispatchHook.mockImplementation(async (raw: string) => {
       const event = JSON.parse(raw);
@@ -1825,8 +1828,9 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
       () =>
         ({
           responses: {
-            create: async () => {
+            create: async (params: unknown) => {
               providerCalls += 1;
+              providerBodies.push(params);
               return {
                 async *[Symbol.asyncIterator]() {
                   yield {
@@ -2031,6 +2035,67 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
         session_id: `user:${userId}|${CODEX_THREAD}`,
       }),
     );
+  });
+
+  test("an out-of-band compaction of another session's context binds a fresh root and still restores notices", async () => {
+    // A summarizer request that compresses thread A's denied history under a
+    // new thread id must not reopen A's root (that would launder A's labels
+    // into a clean trajectory) and must still restore the notices so the
+    // provider sees the original call and the ruling, never the envelope.
+    const noticeArguments = buildNoticeArguments({
+      id: "call_1",
+      tool: "shell",
+      arguments: { command: "rm -rf build" },
+      result: "[appa] Blocked: this call cannot run yet.",
+    });
+    const payload = {
+      ...codexPayload({
+        session_id: CODEX_RESUMED_SESSION,
+        thread_id: CODEX_FORK_THREAD,
+        request_kind: "compaction",
+      }),
+      input: [
+        { role: "user", content: "clean the build dir" },
+        {
+          type: "function_call",
+          id: "fc_1",
+          call_id: "call_1",
+          name: "archestra__get_remedy_plans",
+          status: "completed",
+          arguments: JSON.stringify(noticeArguments),
+        },
+        {
+          type: "function_call_output",
+          call_id: "call_1",
+          output: "client text",
+        },
+      ],
+    };
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/responses`,
+      remoteAddress: "127.0.0.1",
+      headers: { ...codexHeaders(), "x-openai-subagent": "compact" },
+      payload: payload as Record<string, unknown>,
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        session_id: `user:${userId}|${CODEX_FORK_THREAD}`,
+      }),
+    );
+    expect(events).not.toContainEqual(
+      expect.objectContaining({
+        session_id: `user:${userId}|${CODEX_THREAD}`,
+      }),
+    );
+    const sent = JSON.stringify(providerBodies);
+    expect(sent).toContain('"name":"shell"');
+    expect(sent).toContain("APPROVED REPLACEMENT");
+    expect(sent).not.toContain("client text");
+    expect(sent).not.toContain("archestra__get_remedy_plans");
   });
 
   test("contradictory Codex trajectory metadata is refused before the provider", async () => {

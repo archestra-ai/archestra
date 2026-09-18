@@ -11,8 +11,10 @@ const native = vi.hoisted(() => {
     release = resolve;
   });
   const composed: string[][] = [];
+  const failures = { next: false };
   return {
     composed,
+    failures,
     releaseFirst: () => release?.(),
     listBundledOpenappaBatteries: vi.fn(async () => [
       {
@@ -29,6 +31,10 @@ const native = vi.hoisted(() => {
     composeOpenappaPolicy: vi.fn(
       async (input: { root: string; batteries: Array<{ name: string }> }) => {
         composed.push(input.batteries.map((battery) => battery.name));
+        if (failures.next) {
+          failures.next = false;
+          throw new Error("the runtime crashed while composing");
+        }
         // The first composition has read its inputs and now stalls, so a
         // write can land while it is in flight.
         if (composed.length === 1) await gate;
@@ -84,5 +90,35 @@ describe("recompile coalescing", () => {
     expect(
       await OpenAppaEffectivePolicyModel.find(organizationId),
     ).toMatchObject({ installFingerprint: second.installFingerprint });
+  });
+
+  test("a failed recompose leaves a row the next read recomposes instead of serving", async ({
+    makeOrganization,
+    makeInternalMcpCatalog,
+  }) => {
+    const organizationId = (await makeOrganization()).id;
+    const stored = await openappaBatteriesService.recompile(organizationId);
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      name: "Acme",
+    });
+    await OpenAppaBatteryInstallModel.create({
+      organizationId,
+      batteryName: "acme",
+      catalogId: catalog.id,
+      enabled: true,
+      credentialBindings: {},
+    });
+    native.failures.next = true;
+    await expect(
+      openappaBatteriesService.recompile(organizationId),
+    ).rejects.toThrow();
+    expect(
+      (await OpenAppaEffectivePolicyModel.find(organizationId))?.rootRevision,
+    ).toBeLessThan(0);
+    const served =
+      await openappaBatteriesService.getEffectivePolicy(organizationId);
+    expect(served.rootRevision).toBe(stored.rootRevision);
+    expect(served.installFingerprint).not.toBe(stored.installFingerprint);
   });
 });

@@ -60,6 +60,17 @@ class OpenAppaEffectivePolicyModel {
       .returning();
     return updated ?? null;
   }
+
+  /** Mark the stored row as needing recomposition: the next read recomposes before serving. */
+  static async invalidate(organizationId: string): Promise<void> {
+    await db
+      .update(table)
+      .set({ rootRevision: STALE_ROOT_REVISION })
+      .where(eq(table.organizationId, organizationId));
+  }
 }
+
+/** No root revision is negative, so a row marked with this never matches the current root. */
+const STALE_ROOT_REVISION = -1;
 
 export default OpenAppaEffectivePolicyModel;

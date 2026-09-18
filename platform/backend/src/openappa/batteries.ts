@@ -363,7 +363,17 @@ class OpenAppaBatteriesService {
         enabled: true,
         credentialBindings: {},
       });
-      created ||= attached !== null;
+      if (!attached) continue;
+      created = true;
+      logger.info(
+        {
+          organizationId,
+          catalogId: catalog.id,
+          batteryName,
+          installId: attached.id,
+        },
+        "OpenAPPA battery attached to a matching MCP catalog entry",
+      );
     }
     return created;
   }
@@ -386,9 +396,23 @@ class OpenAppaBatteriesService {
         .then(() => this.recompose(organizationId));
       return slot.queued;
     }
-    const running = this.recomposeNow(organizationId).finally(() => {
-      this.recompiling.delete(organizationId);
-    });
+    const running = this.recomposeNow(organizationId)
+      .catch(async (error) => {
+        // Whatever the caller does with the failure, the stored row may be
+        // behind the write that triggered this; the next read recomposes.
+        await OpenAppaEffectivePolicyModel.invalidate(organizationId).catch(
+          (invalidation) => {
+            logger.warn(
+              { organizationId, error: invalidation },
+              "OpenAPPA effective policy could not be marked stale",
+            );
+          },
+        );
+        throw error;
+      })
+      .finally(() => {
+        this.recompiling.delete(organizationId);
+      });
     this.recompiling.set(organizationId, { running, queued: null });
     return running;
   }

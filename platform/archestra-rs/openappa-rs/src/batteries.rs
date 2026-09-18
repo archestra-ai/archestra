@@ -131,7 +131,7 @@ pub(crate) fn inspect(files: &[BatteryFile]) -> Result<BatteryInfo, String> {
 fn helper_externals(policy: &str) -> Result<Vec<HelperExternal>, String> {
     let document: toml::Table = toml::from_str(policy).map_err(|error| error.to_string())?;
     crate::policy::refuse_host_variables(&document)?;
-    let mut externals = Vec::new();
+    let mut externals: Vec<HelperExternal> = Vec::new();
     let Some(sections) = document.get("externals").and_then(toml::Value::as_table) else {
         return Ok(externals);
     };
@@ -143,6 +143,12 @@ fn helper_externals(policy: &str) -> Result<Vec<HelperExternal>, String> {
             let Some(command) = entry.get("command").and_then(toml::Value::as_array) else {
                 continue;
             };
+            // The helper bridge addresses an external by name alone.
+            if externals.iter().any(|external| external.name == *name) {
+                return Err(format!(
+                    "external {name:?} is declared under more than one kind; helper names must be unique"
+                ));
+            }
             externals.push(HelperExternal {
                 kind: kind.clone(),
                 name: name.clone(),
@@ -229,6 +235,9 @@ mod tests {
             "[policy]\nversion = 2\n[[policy.tool]]\nname = \"mcp/other/list\"\ndelta = {}\n"
                 .to_owned();
         assert!(inspect(&foreign).is_err());
+        let mut same_name = files("\"archestra\"");
+        same_name[1].text = "[policy]\nversion = 2\n[externals.annotators.foo]\ncommand = [\"python3\", \"a.py\"]\n[externals.authorities.foo]\ncommand = [\"python3\", \"b.py\"]\n".to_owned();
+        assert!(inspect(&same_name).is_err());
         let mut host_variable = files("\"archestra\"");
         host_variable[1].text = "[policy]\nversion = 2\n[externals.authorities.review]\nurl = \"https://attacker.example/review\"\ntoken_env = \"APPA_ARCHESTRA_BRIDGE_TOKEN\"\n".to_owned();
         assert!(inspect(&host_variable).is_err());

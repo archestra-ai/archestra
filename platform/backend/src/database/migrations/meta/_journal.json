@@ -3354,6 +3354,13 @@
       "when": 1789635251511,
       "tag": "0478_first_avengers",
       "breakpoints": true
+    },
+    {
+      "idx": 479,
+      "version": "7",
+      "when": 1789685763304,
+      "tag": "0479_perpetual_malcolm_colcord",
+      "breakpoints": true
     }
   ]
 }

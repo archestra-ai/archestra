@@ -8,7 +8,11 @@ import type { TokenAuthContext } from "@/clients/mcp-client";
 import config from "@/config";
 import logger from "@/logging";
 import { AgentModel, AgentRunModel, McpToolCallModel } from "@/models";
-import { APPA_SESSION_HEADER, sessionFromHeaders } from "@/openappa/service";
+import {
+  APPA_SESSION_HEADER,
+  isWellFormedAppaId,
+  sessionFromHeaders,
+} from "@/openappa/service";
 import { skillsSurfaceEnabled } from "@/services/agent-skill-resolution";
 import {
   AgentRunAttentionStateSchema,
@@ -109,6 +113,30 @@ function stripRequestHeader(request: IncomingMessage, name: string): void {
 }
 
 /**
+ * An external client may explicitly supply a logical call id for remedy
+ * idempotency. JSON-RPC ids are transport correlation values and are reusable,
+ * so they must never become durable receipt keys.
+ */
+function logicalToolCallId(body: Record<string, unknown>): string | undefined {
+  if (body.method !== "tools/call") return;
+  const params = body.params;
+  if (!params || typeof params !== "object" || Array.isArray(params)) return;
+  const meta = (params as Record<string, unknown>)._meta;
+  if (!meta || typeof meta !== "object" || Array.isArray(meta)) return;
+  const value = (meta as Record<string, unknown>)[
+    "com.archestra/logicalToolCallId"
+  ];
+  if (
+    typeof value !== "string" ||
+    value.length === 0 ||
+    Buffer.byteLength(value, "utf8") > 256 ||
+    !isWellFormedAppaId(value)
+  )
+    return;
+  return value;
+}
+
+/**
  * Record a gateway handshake.
  *
  * Both revisions produce one: `initialize` for 2025-11-25 and `server/discover`
@@ -168,6 +196,7 @@ async function handleMcpPostRequest(
   const { revision } = resolution;
   const body = request.body as Record<string, unknown>;
   const runId = readHeader(request, RUN_ID_HEADER);
+  const currentToolCallId = logicalToolCallId(body);
 
   // Read from the raw body: the SDK's request schemas drop unknown params, so
   // these are gone by the time a request handler runs.
@@ -197,20 +226,43 @@ async function handleMcpPostRequest(
     "MCP gateway POST request received (stateless)",
   );
 
+  // Validate and parse OpenAPPA session headers.
+  let openappaSession: ReturnType<typeof sessionFromHeaders>;
+  try {
+    // Scope header-named sessions to the authenticated user principal.
+    // Tokens without a user identity execute offers by offer_id alone.
+    const namedSession = request.headers[APPA_SESSION_HEADER.toLowerCase()];
+    if (namedSession !== undefined && !isWellFormedAppaId(namedSession))
+      throw new ApiError(
+        400,
+        "OpenAPPA requires valid X-Appa-Session-ID and optional X-Appa-Parent-ID headers",
+      );
+    openappaSession =
+      namedSession !== undefined &&
+      tokenAuthContext?.organizationId &&
+      tokenAuthContext.userId
+        ? sessionFromHeaders({
+            headers: request.headers,
+            organizationId: tokenAuthContext.organizationId,
+            callerId: `user:${tokenAuthContext.userId}`,
+            scope: `user:${tokenAuthContext.userId}`,
+          })
+        : undefined;
+  } catch (error) {
+    if (!(error instanceof ApiError)) throw error;
+    reply.status(error.statusCode);
+    return {
+      jsonrpc: "2.0",
+      error: { code: -32600, message: error.message },
+      id: (request.body as { id?: string | number })?.id ?? null,
+    };
+  }
+
   try {
     // Create fresh server and transport for each request (stateless mode)
     const { server } = await createAgentServer({
-      openappaSession:
-        request.headers[APPA_SESSION_HEADER.toLowerCase()] &&
-        tokenAuthContext?.organizationId
-          ? sessionFromHeaders({
-              headers: request.headers,
-              organizationId: tokenAuthContext.organizationId,
-              callerId: tokenAuthContext.userId
-                ? `user:${tokenAuthContext.userId}`
-                : undefined,
-            })
-          : undefined,
+      openappaSession,
+      currentToolCallId,
       agentId: profileId,
       tokenAuth: tokenAuthContext,
       runId,

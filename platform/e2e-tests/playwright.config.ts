@@ -22,6 +22,7 @@ const projectNames = {
   identityProvidersSaml: "identity-providers-saml",
   api: "api",
   apiK8s: "api-k8s",
+  openappa: "openappa",
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
   // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -45,6 +46,13 @@ const testPatterns = {
   // Vault K8s startup test — runs in a dedicated CI job with Vault K8s auth
   vaultK8s: "**/vault-k8s-startup.spec.ts",
   llmProxy: "**/llm-proxy/**/*.spec.ts",
+  // OpenAPPA specs need a stack booted with ARCHESTRA_OPENAPPA_ENABLED=true,
+  // which the ordinary lite stack is deliberately NOT: with it on the proxy
+  // rejects any tool-declaring request that omits the two APPA tools, which
+  // other lite specs rely on. So these live in their own project, run by
+  // their own CI leg against their own stack, and must stay out of every
+  // other project's testMatch.
+  openappa: "**/openappa/**/*.spec.ts",
 };
 
 const uiTestMatch = [
@@ -151,6 +159,7 @@ const browserTestIgnore = [
   testPatterns.identityProviders,
   testPatterns.quickstart,
   testPatterns.llmProxy,
+  testPatterns.openappa,
 ];
 
 /**
@@ -329,6 +338,20 @@ export default defineConfig({
       name: projectNames.api,
       testDir: "./tests",
       testMatch: apiTestMatch,
+      use: {
+        ...devices["Desktop Chrome"],
+        storageState: adminAuthFile,
+      },
+      dependencies: dependencies.testProjects,
+    },
+    // OpenAPPA root tool flow (lite environment, but a stack booted with
+    // ARCHESTRA_OPENAPPA_ENABLED=true — see scripts/e2e-lite.sh and the
+    // `openappa` leg of the lite E2E matrix). Never add these specs to another
+    // project: against an OpenAPPA-off stack they cannot pass.
+    {
+      name: projectNames.openappa,
+      testDir: "./tests",
+      testMatch: testPatterns.openappa,
       use: {
         ...devices["Desktop Chrome"],
         storageState: adminAuthFile,

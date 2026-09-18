@@ -47,6 +47,10 @@ Treat `message` as public task output. Image authors must remove credentials and
 
 The built-in Archestra image reports configuration, startup, and session failures. The maintained Claude Code wrapper publishes its own messages from `StopFailure` events. Delegated API failures end the run. Interactive sessions remain open and request attention. The OpenCode and OpenClaw wrappers also publish safe messages for terminal one-shot errors. OpenCode context compaction remains recoverable. Shared initialization reports proxy connectivity and GitHub setup failures. Codex, Hermes, OpenCode, and OpenClaw publish protocol configuration errors through the same envelope. Native errors without an adapter retain exit-status-only reporting.
 
+The Codex wrapper reads terminal `task_complete.error` events from the main session's structured rollout. Failed delegated turns publish the upstream message after credential redaction and settle as failed. Interactive sessions request attention. Earlier resumed turns, subagent errors, and transient retries cannot fail the current turn. Rebuild maintained Codex images and advance derived-image pins to receive this behavior.
+
+Runtime-owned startup and process failures also publish envelopes. Their messages distinguish credential projection timeouts, interrupted turns after Pod replacement, and processes that exit without reporting a result. Interrupted turns are never replayed automatically.
+
 ## Skills
 
 Agent skills are exposed as MCP tools through `ARCHESTRA_MCP_GATEWAY_URL`, authenticated with `ARCHESTRA_MCP_GATEWAY_TOKEN`. A custom client must support MCP `tools/list` and `tools/call`, expose the returned tools to its model, and return tool results to the model. No separate Archestra SDK or skill installation is required.

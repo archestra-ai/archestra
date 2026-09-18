@@ -14,6 +14,7 @@ import {
   AGENT_RUNTIME_STEER_FIFO,
 } from "@/services/agent-runtime/runtime-contract";
 import type { AgentRuntimeResources } from "@/types";
+import { buildRuntimeFailureEnvelopeScript } from "./failure-envelope";
 import {
   AGENT_RUNTIME_TASK_LABEL,
   AGENT_RUNTIME_WORKSPACE_LABEL,
@@ -578,7 +579,16 @@ function waitForCredentialProjection(taskId: string): string {
     "credential_polls=0",
     `until grep -qF ${shellQuote(`{"taskId":"${taskId}",`)} ${AGENT_RUNTIME_CREDENTIALS_FILE} 2>/dev/null; do`,
     "  credential_polls=$((credential_polls + 1))",
-    "  if [ \"$credential_polls\" -ge 180 ]; then echo 'Credential projection unavailable' >&2; exit 75; fi",
+    '  if [ "$credential_polls" -ge 180 ]; then',
+    buildRuntimeFailureEnvelopeScript({
+      prefixVariable: "ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX",
+      code: "runtime.credential_projection_timeout",
+      message:
+        "The Agent Runtime could not load this turn's credentials before the startup timeout. The agent did not start. Retry the turn; if this persists, ask an administrator to check the runtime credential projection.",
+    }),
+    "    echo 'Credential projection unavailable' >&2",
+    "    exit 75",
+    "  fi",
     "  sleep 1",
     "done",
   ].join("\n");

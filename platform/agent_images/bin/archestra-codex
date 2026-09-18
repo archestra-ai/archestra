@@ -59,6 +59,11 @@ if [[ "${event}" == "SessionStart" ]]; then
   if [[ -n "${session_id}" && ! -e "${session_file}" ]]; then
     printf '%s\n' "${session_id}" > "${session_file}"
   fi
+  if [[ -n "${transcript}" && -s "${session_file}" ]] \
+    && [[ "${session_id}" == "$(cat "${session_file}")" ]]; then
+    printf '%s\n' "${transcript}" > "${runtime_dir}/codex-main-transcript.tmp"
+    mv "${runtime_dir}/codex-main-transcript.tmp" "${runtime_dir}/codex-main-transcript"
+  fi
   printf '{}\n'
   exit 0
 fi
@@ -247,24 +252,25 @@ if [[ "${ARCHESTRA_AGENT_RUNTIME_CONTINUE:-0}" == "1" ]]; then
   common_args=(resume "$(cat "${session_file}")" "${common_args[@]}")
 fi
 
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+failure_watch=(python3 "${script_dir}/archestra-codex-failure-watch")
 case "${runtime_mode}" in
   interactive)
     # No subcommand means Codex's native full-screen TUI. The positional prompt
     # starts the first turn; subsequent terminal input stays in the same Codex
     # conversation until the person exits or stops the execution.
-    exec codex "${common_args[@]}" -- "$(cat "${task_file}")"
+    exec "${failure_watch[@]}" codex "${common_args[@]}" -- "$(cat "${task_file}")"
     ;;
   one_shot)
     if [[ "${ARCHESTRA_AGENT_RUNTIME_PLAIN:-0}" == "1" ]]; then
-      exec codex exec \
+      exec "${failure_watch[@]}" codex exec \
         --color always \
         "${common_args[@]}" \
         --skip-git-repo-check \
         -- "$(cat "${task_file}")"
     fi
 
-    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    exec "${script_dir}/archestra-tui-run" \
+    exec "${failure_watch[@]}" "${script_dir}/archestra-tui-run" \
       "${runtime_dir}/turn-complete" \
       "${runtime_dir}/final-answer.txt" \
       codex "${common_args[@]}" -- "$(cat "${task_file}")"

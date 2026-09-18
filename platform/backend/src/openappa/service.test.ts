@@ -468,6 +468,29 @@ describe("APPA feature boundary", () => {
     expect(native.dispatchHook).not.toHaveBeenCalled();
   });
 
+  test("releases ask_user without evaluating it against the policy", async () => {
+    const decisions = await evaluateToolCalls(
+      session,
+      [
+        {
+          id: "ask-call",
+          name: "mcp__archestra__ask_user",
+          arguments: {
+            question: "Accept for this session?",
+            options: [
+              { label: "Accept for this session" },
+              { label: "Do not accept" },
+            ],
+          },
+        },
+      ],
+      { canonicalize: (name) => name.replace(/^mcp__/, "") },
+    );
+
+    expect(decisions).toEqual([{ kind: "allow" }]);
+    expect(native.dispatchHook).not.toHaveBeenCalled();
+  });
+
   test.each([
     "agent__research",
     "skill__research",

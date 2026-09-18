@@ -3,6 +3,7 @@ import {
   APPA_SESSION_HEADER,
   extractMcpToolError,
   isSeededAppRenderToolResult,
+  TOOL_ASK_USER_SHORT_NAME,
   TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
 } from "@archestra/shared";
 import {
@@ -481,6 +482,14 @@ export async function evaluateToolCalls(
       // Direct remedy control calls bypass evaluation and execute via gateway.
       if (options.controlToolName && call.name === options.controlToolName) {
         return { kind: "control" as const };
+      }
+      // Asking the user is a conversation primitive, not a governed tool.
+      if (
+        archestraMcpBranding.getToolShortName(
+          options.canonicalize(call.name),
+        ) === TOOL_ASK_USER_SHORT_NAME
+      ) {
+        return { kind: "allow" as const };
       }
       const tool =
         archestraMcpBranding.getToolShortName(

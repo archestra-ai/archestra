@@ -18,6 +18,7 @@ import {
   declaredToolName,
   declaredToolNamespaces,
   declaredTools,
+  isResultGovernedHostedTool,
   providerHostedTool,
   restoreAppaNotices,
   restoreAppaRemedyExecutions,
@@ -111,13 +112,16 @@ export function prepareAppaRequest(params: {
     };
   }
   if (family) refuseCodexCodeMode({ family, declared, body: params.body });
-  refuseProviderHostedTools(declared);
+  refuseProviderHostedTools({ family, declared });
   refuseDeferredTools(declared);
 
   const found = new Map<string, string>();
   const spellings = new Map<string, string>();
   const customTools = new Set<string>();
   for (const tool of declared) {
+    // The provider runs it, so the client never names or calls it: its calls
+    // are ruled on from the response, not matched against a declared spelling.
+    if (isResultGovernedHostedTool({ family, tool })) continue;
     const name = declaredToolName(tool);
     if (name === undefined) {
       // A tool this proxy cannot name is a tool it cannot gate or render.
@@ -232,11 +236,18 @@ function refuseDeferredTools(declared: readonly unknown[]): void {
   }
 }
 
-/** Refuses sessions declaring provider-hosted tools that bypass proxy gating. */
-function refuseProviderHostedTools(declared: readonly unknown[]): void {
-  for (const tool of declared) {
+/**
+ * Refuses sessions declaring provider-hosted tools that bypass proxy gating.
+ * A hosted tool whose result this wire can withhold is governed instead.
+ */
+function refuseProviderHostedTools(params: {
+  family: AppaWireFamily | undefined;
+  declared: readonly unknown[];
+}): void {
+  for (const tool of params.declared) {
     const hosted = providerHostedTool(tool);
     if (!hosted) continue;
+    if (isResultGovernedHostedTool({ family: params.family, tool })) continue;
     throw new ApiError(
       400,
       `OpenAPPA cannot govern the provider-hosted tool \`${hosted}\`, which runs inside the provider. Remove it from this session or disable OpenAPPA for this client.`,

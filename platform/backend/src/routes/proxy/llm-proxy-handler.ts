@@ -108,6 +108,7 @@ import {
   DUAL_LLM_KEEPALIVE_SSE_COMMENT,
   type DualLlmAnalysis,
   type GatewayAgent,
+  type HostedToolCall,
   type InsertInteraction,
   type InteractionAuthMethod,
   type InteractionRequest,
@@ -1733,6 +1734,9 @@ async function handleStreaming<
   } = ctx;
 
   const providerName = provider.provider;
+  if (pluginContext && pluginRegistry?.governsHostedToolCalls(pluginContext)) {
+    streamAdapter.withholdHostedToolCalls?.();
+  }
   let billingMode = initialBillingMode;
   const streamStartTime = Date.now();
   let firstChunkTime: number | undefined;
@@ -2007,8 +2011,43 @@ async function handleStreaming<
 
     logger.info("Stream loop completed, processing final events");
 
-    // Evaluate tool invocation policies
-    const toolCalls = streamAdapter.state.toolCalls;
+    const hostedToolCalls = streamAdapter.getHostedToolCalls?.() ?? [];
+    const hostedHold = streamAdapter.formatHeldHostedToolCallsSSE
+      ? await holdProxyPluginHostedToolCalls(
+          pluginRegistry,
+          pluginContext,
+          hostedToolCalls,
+        )
+      : null;
+    if (hostedHold && streamAdapter.formatHeldHostedToolCallsSSE) {
+      for (const blocked of hostedHold.blocked) {
+        recordBlockedToolCallMetrics({
+          allToolCallNames: [blocked.name],
+          reason: blocked.reason,
+          agent,
+          teams,
+          userTeams,
+          sessionId,
+          resolvedUser,
+          providerName,
+          toolCallCount: 1,
+          actualModel,
+          source,
+        });
+      }
+      const heldEvents = streamAdapter.formatHeldHostedToolCallsSSE(
+        hostedHold.notices,
+      );
+      if (!reply.raw.destroyed) {
+        for (const event of heldEvents) {
+          writeToClient(event);
+        }
+      }
+    }
+
+    // Evaluate tool invocation policies. A held turn's own calls rest on what
+    // was withheld, so they went with it.
+    const toolCalls = hostedHold ? [] : streamAdapter.state.toolCalls;
     let toolInvocationRefusal: LlmProxyToolCallRefusal | null = null;
 
     let rewrittenToolCalls: AccumulatedToolCall[] | null = null;
@@ -2103,7 +2142,10 @@ async function handleStreaming<
         actualModel,
         source,
       });
-    } else if (toolCalls.length > 0) {
+    } else if (
+      toolCalls.length > 0 ||
+      (!hostedHold && hostedToolCalls.length > 0)
+    ) {
       // Policy allowed them, so hand the buffered events over now. Read once:
       // getRawToolCallEvents must not be called in a condition and again for
       // the flush, or a snapshot-per-call adapter would still work but a
@@ -2536,7 +2578,30 @@ async function handleNonStreaming<
     },
   });
 
-  const toolCalls = responseAdapter.getToolCalls();
+  const hostedHold = responseAdapter.withHeldHostedToolCalls
+    ? await holdProxyPluginHostedToolCalls(
+        ctx.pluginRegistry,
+        ctx.pluginContext,
+        responseAdapter.getHostedToolCalls?.() ?? [],
+      )
+    : null;
+  for (const blocked of hostedHold?.blocked ?? []) {
+    recordBlockedToolCallMetrics({
+      allToolCallNames: [blocked.name],
+      reason: blocked.reason,
+      agent,
+      teams,
+      userTeams,
+      sessionId,
+      resolvedUser,
+      providerName,
+      toolCallCount: 1,
+      actualModel,
+      source,
+    });
+  }
+  // A held turn's own calls rest on what was withheld, so they go with it.
+  const toolCalls = hostedHold ? [] : responseAdapter.getToolCalls();
   logger.debug(
     { toolCallCount: toolCalls.length },
     `[${providerName}Proxy] Non-streaming response received, checking tool invocation policies`,
@@ -2711,9 +2776,11 @@ async function handleNonStreaming<
   // (logged) shape it produced, so `getLoggedResponse` below must observe the
   // same call that produced the client response.
   const unobservedClientResponse =
-    rewrittenToolCalls && responseAdapter.withRewrittenToolCalls
-      ? responseAdapter.withRewrittenToolCalls(rewrittenToolCalls)
-      : responseAdapter.getOriginalResponse();
+    hostedHold && responseAdapter.withHeldHostedToolCalls
+      ? responseAdapter.withHeldHostedToolCalls(hostedHold.notices)
+      : rewrittenToolCalls && responseAdapter.withRewrittenToolCalls
+        ? responseAdapter.withRewrittenToolCalls(rewrittenToolCalls)
+        : responseAdapter.getOriginalResponse();
   let clientResponse = unobservedClientResponse;
   if (pluginRegistry && pluginContext) {
     const pluginResponse = await pluginRegistry.onModelResponse({
@@ -2884,6 +2951,38 @@ async function evaluateProxyPluginToolCalls(
     toolCalls: [...toolCalls],
     wasRewritten: false,
     blocked: [],
+  };
+}
+
+/**
+ * The notices that stand in for the provider-run part of a turn, or null when
+ * that part is the client's to have. Runs before the turn's own calls are
+ * checked: what a hosted call brought in is ruled on first.
+ */
+async function holdProxyPluginHostedToolCalls(
+  registry: LlmProxyPluginRegistry | undefined,
+  context: LlmProxyRequestContext | undefined,
+  hostedToolCalls: readonly HostedToolCall[],
+): Promise<{
+  notices: AccumulatedToolCall[];
+  blocked: readonly { name: string; reason: string }[];
+} | null> {
+  if (!registry || !context || hostedToolCalls.length === 0) return null;
+  const outcome = await registry.onHostedToolCalls({
+    ...context,
+    hostedToolCalls,
+  });
+  if (outcome.decision === "release") return null;
+  return {
+    notices: outcome.notices.map((notice) => ({
+      id: notice.id,
+      name: notice.name,
+      arguments:
+        typeof notice.arguments === "string"
+          ? notice.arguments
+          : JSON.stringify(notice.arguments),
+    })),
+    blocked: outcome.blocked,
   };
 }
 

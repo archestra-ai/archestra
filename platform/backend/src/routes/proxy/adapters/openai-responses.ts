@@ -26,6 +26,7 @@ import type {
   CommonToolCall,
   CommonToolResult,
   CreateClientOptions,
+  HostedToolCall,
   LLMProvider,
   LLMRequestAdapter,
   LLMResponseAdapter,
@@ -43,8 +44,11 @@ import { createOpenAiCodexResponsesClient } from "./openai-codex-responses-clien
 import { formatResponsesStreamErrorFrame } from "./responses-stream-error-frame";
 import {
   customToolInput,
+  firstHostedOutputIndex,
   formatResponsesFunctionCallFrames,
+  holdResponsesHostedOutput,
   namespaceOf,
+  responsesHostedToolCalls,
   rewriteResponsesOutput,
   toSse,
 } from "./responses-tool-call-rewrite";
@@ -441,6 +445,19 @@ class OpenAiResponsesResponseAdapter
     } as unknown as OpenAiResponsesResponse;
   }
 
+  getHostedToolCalls(): HostedToolCall[] {
+    return responsesHostedToolCalls(this.response.output);
+  }
+
+  withHeldHostedToolCalls(
+    notices: Array<{ id: string; name: string; arguments: string }>,
+  ): OpenAiResponsesResponse {
+    return {
+      ...this.response,
+      output: holdResponsesHostedOutput(this.response.output, notices),
+    } as unknown as OpenAiResponsesResponse;
+  }
+
   toRefusalResponse(
     refusalMessage: string,
     contentMessage: string,
@@ -496,6 +513,20 @@ class OpenAiResponsesStreamAdapter
     string,
     { id: string; name: string; arguments: string; namespace?: string }
   >();
+  private withholdsHosted = false;
+  /**
+   * Set from the first hosted call on. What the model wrote after it rests on
+   * what that call brought in, so none of it is the client's until ruled on.
+   */
+  private hosted: {
+    textBefore: string;
+    events: OpenAiResponsesStreamChunk[];
+    items: Map<string, { type?: string }>;
+  } | null = null;
+
+  withholdHostedToolCalls(): void {
+    this.withholdsHosted = true;
+  }
 
   processChunk(chunk: OpenAiResponsesStreamChunk): ChunkProcessingResult {
     if (this.state.timing.firstChunkTime === null) {
@@ -509,6 +540,20 @@ class OpenAiResponsesStreamAdapter
         this.state.usage = fromResponsesUsage(chunk.response.usage);
       }
     }
+
+    if (
+      this.withholdsHosted &&
+      this.hosted === null &&
+      chunk.type === "response.output_item.added" &&
+      firstHostedOutputIndex([chunk.item]) === 0
+    ) {
+      this.hosted = {
+        textBefore: this.state.text,
+        events: [],
+        items: new Map(),
+      };
+    }
+    if (this.hosted) return this.withholdChunk(chunk, this.hosted);
 
     if (chunk.type === "response.output_text.delta") {
       this.state.text += chunk.delta;
@@ -693,7 +738,56 @@ class OpenAiResponsesStreamAdapter
   }
 
   getRawToolCallEvents(): string[] {
-    return this.state.rawToolCallEvents.map((event) => toSse(event));
+    return [
+      ...(this.hosted?.events ?? []),
+      ...this.state.rawToolCallEvents,
+    ].map((event) => toSse(event));
+  }
+
+  getHostedToolCalls(): HostedToolCall[] {
+    return this.hosted
+      ? responsesHostedToolCalls([...this.hosted.items.values()])
+      : [];
+  }
+
+  formatHeldHostedToolCallsSSE(
+    notices: StreamAccumulatorState["toolCalls"],
+  ): string[] {
+    const upstream = this.completedResponse;
+    this.state.text = this.hosted?.textBefore ?? this.state.text;
+    this.state.rawToolCallEvents = [];
+    this.state.toolCalls = [...notices];
+    this.state.stopReason = "tool_calls";
+    this.toolCallsByItemId.clear();
+    this.customCallIds.clear();
+    this.hosted = null;
+    this.completedResponse = null;
+    const base =
+      upstream && Array.isArray(upstream.output)
+        ? {
+            ...upstream,
+            output: holdResponsesHostedOutput(upstream.output, notices),
+          }
+        : this.toProviderResponse();
+    const held = {
+      ...base,
+      usage: base.usage ?? toResponsesUsage(this.state.usage),
+    } as unknown as OpenAiResponsesResponse;
+    this.completedResponse = held;
+    let sequence = Date.now();
+    const frames = formatResponsesFunctionCallFrames({
+      toolCalls: notices,
+      firstOutputIndex: held.output.length - notices.length,
+      nextSequenceNumber: () => sequence++,
+    });
+    frames.push(
+      toSse({
+        type: "response.completed",
+        sequence_number: sequence++,
+        response: held,
+      }),
+    );
+    return frames;
   }
 
   formatCompleteTextSSE(text: string): string[] {
@@ -748,13 +842,17 @@ class OpenAiResponsesStreamAdapter
         customCallIds.add(call.id);
     }
     let sequence = Date.now();
-    const frames = formatResponsesFunctionCallFrames({
-      toolCalls,
-      firstOutputIndex,
-      nextSequenceNumber: () => sequence++,
-      itemIdByCallId,
-      customCallIds,
-    });
+    // Released with the turn: what was withheld beside the calls goes first.
+    const frames = (this.hosted?.events ?? []).map((event) => toSse(event));
+    frames.push(
+      ...formatResponsesFunctionCallFrames({
+        toolCalls,
+        firstOutputIndex,
+        nextSequenceNumber: () => sequence++,
+        itemIdByCallId,
+        customCallIds,
+      }),
+    );
     const rewritten = {
       ...base,
       output: rewriteResponsesOutput(upstreamOutput, toolCalls),
@@ -858,6 +956,46 @@ class OpenAiResponsesStreamAdapter
       output: outputItems,
       usage: this.state.usage ? toResponsesUsage(this.state.usage) : undefined,
     } as unknown as OpenAiResponsesResponse;
+  }
+
+  /** Accumulates a chunk of the provider-run part of the turn without forwarding it. */
+  private withholdChunk(
+    chunk: OpenAiResponsesStreamChunk,
+    hosted: NonNullable<OpenAiResponsesStreamAdapter["hosted"]>,
+  ): ChunkProcessingResult {
+    if (
+      chunk.type === "response.output_item.added" ||
+      chunk.type === "response.output_item.done"
+    ) {
+      const item = chunk.item as { id?: string; type?: string };
+      if (typeof item.id === "string") hosted.items.set(item.id, item);
+    }
+    if (chunk.type === "response.output_text.delta") {
+      this.state.text += chunk.delta;
+    }
+    const isFinal =
+      chunk.type === "response.completed" ||
+      chunk.type === "response.failed" ||
+      chunk.type === "response.incomplete";
+    if (chunk.type === "response.completed") {
+      this.completedResponse =
+        chunk.response as unknown as OpenAiResponsesResponse;
+      this.state.stopReason =
+        this.state.toolCalls.length > 0 ? "tool_calls" : "stop";
+    } else if (isFinal) {
+      this.state.stopReason = "length";
+    }
+    // Calls stay where the release path reads them; the terminal frame joins
+    // them so it still reaches the client last.
+    if (isResponsesToolCallChunk(chunk)) {
+      this.captureToolCallChunk(chunk);
+      this.state.rawToolCallEvents.push(chunk);
+    } else if (isFinal) {
+      this.state.rawToolCallEvents.push(chunk);
+    } else {
+      hosted.events.push(chunk);
+    }
+    return { sseData: null, isToolCallChunk: true, isFinal };
   }
 
   private captureToolCallChunk(chunk: OpenAiResponsesStreamChunk): void {

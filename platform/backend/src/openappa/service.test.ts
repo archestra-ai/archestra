@@ -12,6 +12,7 @@ import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import {
   cancelCalls,
+  evaluateHostedToolCalls,
   evaluateToolCalls,
   executeRemedyByOffer,
   processProxyResults,
@@ -196,6 +197,87 @@ describe("APPA feature boundary", () => {
         ([raw]) => JSON.parse(raw).operation_id,
       ),
     ).toEqual(["call:first", "call:second"]);
+  });
+
+  test("holds what a provider-run call brought in behind the runtime's staged ruling", async () => {
+    native.dispatchHook.mockImplementation(async (raw: string) => {
+      const event = JSON.parse(raw);
+      return JSON.stringify(
+        event.event === "tool_result"
+          ? {
+              decision: "replace_output",
+              approved_output: "[appa] staged; accept offer-7",
+              output_source: "runtime",
+            }
+          : { decision: "allow_call" },
+      );
+    });
+
+    const decisions = await evaluateHostedToolCalls(
+      session,
+      [
+        {
+          id: "ws_1",
+          name: "web_search",
+          arguments: { query: "rust" },
+          output: "search tail",
+        },
+      ],
+      { canonicalize: (name) => name },
+    );
+
+    expect(decisions).toEqual([
+      { kind: "hold", feedback: "[appa] staged; accept offer-7" },
+    ]);
+    expect(
+      native.dispatchHook.mock.calls.map(([raw]) => {
+        const { event, operation_id, tool_call_id, output } = JSON.parse(raw);
+        return { event, operation_id, tool_call_id, output };
+      }),
+    ).toEqual([
+      { event: "tool_call", operation_id: "call:ws_1" },
+      { event: "tool_result", tool_call_id: "ws_1", output: "search tail" },
+    ]);
+  });
+
+  test("releases a provider-run result the runtime admits unchanged", async () => {
+    native.dispatchHook.mockImplementation(async (raw: string) =>
+      JSON.stringify(
+        JSON.parse(raw).event === "tool_result"
+          ? { decision: "ack" }
+          : { decision: "allow_call" },
+      ),
+    );
+
+    expect(
+      await evaluateHostedToolCalls(
+        session,
+        [{ id: "ws_1", name: "web_search", arguments: {}, output: "tail" }],
+        { canonicalize: (name) => name },
+      ),
+    ).toEqual([{ kind: "release" }]);
+  });
+
+  test("a provider-run call the policy denies is held without submitting its result", async () => {
+    native.dispatchHook.mockResolvedValue(
+      JSON.stringify({
+        decision: "deny_call",
+        feedback: "[appa] trust would fall; accept offer-9",
+      }),
+    );
+
+    expect(
+      await evaluateHostedToolCalls(
+        session,
+        [{ id: "ws_1", name: "web_search", arguments: {}, output: "tail" }],
+        { canonicalize: (name) => name },
+      ),
+    ).toEqual([
+      { kind: "hold", feedback: "[appa] trust would fall; accept offer-9" },
+    ]);
+    expect(
+      native.dispatchHook.mock.calls.map(([raw]) => JSON.parse(raw).event),
+    ).toEqual(["tool_call"]);
   });
 
   test("admits multiple calls before any result arrives", async () => {

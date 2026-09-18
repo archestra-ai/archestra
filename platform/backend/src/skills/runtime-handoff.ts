@@ -13,7 +13,15 @@ Treat "hand this work over to ${DEFAULT_APP_NAME}" and "spin this up in ${DEFAUL
 
 ## Discover once
 
-Find the actual tool names and schemas through archestra__search_tools when available, then call them through archestra__run_tool. The lifecycle tools are start_run, get_run, list_runs, steer_run, and cancel_run. Do not guess older names such as start_task or steer_task. If a required tool is unavailable, explain which capability the connected gateway needs; do not substitute an unrelated tool or change permissions. A handoff needs start_run, get_run, list_runs, steer_run, cancel_run, list_agents, read_workspace_file, and write_workspace_file assigned to the gateway: without start_run and list_agents you can only continue an existing session, never begin a new handoff, and without read_workspace_file and write_workspace_file you cannot transfer patches or retrieve deliverables. Ask the user to have an admin add the missing ones, and derive the gateway link from this client's own MCP configuration rather than assuming a host, since every deployment is self-hosted: read the configured gateway URL (Claude Code: the mcpServers entry in ~/.claude.json; Cursor: ~/.cursor/mcp.json; Codex: its config.toml), which has the form <origin>/v1/mcp/<gateway-slug>, keep that origin, and point them at <origin>/mcp/gateways. When no gateway URL is configured or the config is unreadable, say so and ask for the deployment URL instead of guessing one.
+Use archestra__search_tools to discover tool names and schemas, then archestra__run_tool to call them, when available. Check the tools needed for this handoff:
+
+- Choose an Agent and start work: list_agents, start_run.
+- Find, inspect, continue, or stop a session: list_runs, get_run, steer_run, cancel_run.
+- Copy files through a local shell: transfer_workspace_file.
+- Read or write file contents through the conversation: read_workspace_file, write_workspace_file. Each has a 4 MiB limit.
+- Supply a missing personal credential, with approval: transfer_credential.
+
+If a needed tool is missing, name it and ask an admin to add it to the connected gateway. Do not change permissions yourself. Link to <origin>/mcp/gateways, using the origin from this client's configured MCP gateway URL. If that URL is unavailable, ask for the deployment URL. Never guess the host.
 
 Use list_agents to identify an accessible Agent with executionMode set to runtime. Foreground agents do not retain a runtime workspace or support steering. Reuse the user's chosen Agent. Ask only when the choice or scope cannot be determined.
 
@@ -21,12 +29,12 @@ Use list_agents to identify an accessible Agent with executionMode set to runtim
 
 1. If this work already has a runtime session, call get_run with its saved session ID (as task_id). Recover a lost ID with list_runs on the known Agent. Do not choose among ambiguous matches without the user.
 2. For NEW runtime work, call start_run once. Put the handoff in message and include needed documents or patches in attachments: name, contentType, contentBase64. Files are staged before execution. A path on the laptop is not a file the runtime can read.
-3. For EXISTING runtime work, use steer_run immediately, including while the run is working. Do not wait for completion to send a correction. It continues the same workspace and saved conversation, including after a previous turn finishes. Send additional files with write_workspace_file using workspace-relative paths before referring to them in the follow-up.
+3. For EXISTING runtime work, use steer_run immediately, including while the run is working. Do not wait for completion to send a correction. It continues the same workspace and saved conversation, including after a previous turn finishes. Transfer any needed files before the follow-up, using the file tools below.
 4. Save the returned session_id and run_url in the conversation's handoff note. The task ID can change between turns; the session ID stays stable. Poll get_run until startup is confirmed or it reports a failure. An accepted request alone does not prove the work started.
 
 A runtime workspace may already run the project's development environment, started by the image's own bootstrap before your first turn. Record in the handoff message which services the local session had running and how they were started, then ask the runtime to report what is already serving before it starts anything. Starting a second stack on top of a running one wastes the workspace, and no particular tool is guaranteed to exist in an image.
 
-Tell the receiving agent to inspect the actual runtime and bootstrap state, not infer its capabilities from a repository Dockerfile alone. Reuse existing setup; recreate only missing, task-required setup using repository guidance and allowed runtime capabilities. Verify service readiness with real checks, such as a health request or task-relevant connection, and report setup differences and blockers. Use existing approved access; missing credentials are a blocker, not permission to provision or transfer secrets.
+Tell the receiving agent to inspect the actual runtime and bootstrap state, not infer its capabilities from a repository Dockerfile alone. Reuse existing setup; recreate only missing, task-required setup using repository guidance and allowed runtime capabilities. Verify service readiness with real checks, such as a health request or task-relevant connection, and report setup differences and blockers. Use existing approved access. If a credential is missing, follow the credential instructions below.
 
 Check retained_until against the user's intended pickup time. For overnight work, do not promise next-morning pickup if the workspace expires first. Explain the deadline and obtain an appropriate retention setting or an authorized durable delivery destination before the user leaves.
 
@@ -34,11 +42,19 @@ A retry must never create another session. After an ambiguous timeout, inspect t
 
 ## Pick up in any client
 
-Read get_run with the saved session ID. Read requests for the original goal and current turn before interpreting a short follow-up; terminal output alone may show only setup commands. Report what completed, what remains, and any failed checks. Read deliverables with read_workspace_file using workspace-relative paths (for example, reports/summary.md); use base64 for binary files. Output can be truncated: retrieve the actual deliverable instead of treating a partial response as complete.
+Read get_run with the saved session ID. Read requests for the original goal and current turn before interpreting a short follow-up; terminal output alone may show only setup commands. Report what completed, what remains, and any failed checks. Retrieve deliverables with the file tools below. Never treat truncated output as a complete deliverable.
 
 To reach a service running inside the workspace, give the user its run_url: the run's connection details there carry the ready-made commands for attaching a terminal and forwarding ports. Never hand-write cluster commands from memory. Ask the runtime which ports it actually has listening rather than assuming a probe succeeded, because tools such as ss and netstat may be absent and their failure reads as an empty result. Workspace services commonly bind loopback only, which forwards normally.
 
-If work will continue locally, coordinate a stopping point with the runtime and verify it stopped writing before applying its files. cancel_run stops active work while preserving the workspace. Download results before retention expires. Never delete a workspace as part of handoff.
+If work will continue locally, coordinate a stopping point with the runtime and verify it stopped writing before applying its files. cancel_run preserves the workspace, but its response alone does not prove the process stopped writing. Download results before retention expires. Never delete a workspace as part of handoff.
+
+## Transfer files and credentials
+
+Use transfer_workspace_file to copy files, including small files and binaries. Supply a workspace-relative path and an absolute local path. For uploads, first compute the local file's size and SHA-256. Run the returned shell command to move the bytes without putting them in the conversation. Repeat that command to resume an interrupted download while its ticket is valid. Check the downloaded file against the returned checksum.
+
+Use read_workspace_file when the conversation needs a file's contents. Without a shell, use read_workspace_file and write_workspace_file for files up to 4 MiB. Use base64 for binary content. For larger files, ask for an approved destination instead.
+
+Prefer the Agent's configured credentials. If a task needs a missing credential, use transfer_credential only with the user's approval. The Agent must enable allowAgentSuppliedCredentialValues. Explain that the secret enters the model context and client transcript, despite redaction in the platform's tool-call log. Use Settings if that exposure is unacceptable or the credential is organization-wide. A transferred credential applies to all of this user's runs on that Agent, starting with the next turn. Transfer it before start_run or steer_run. Never put secrets in handoff notes or file attachments.
 
 ## Resume locally
 
@@ -64,7 +80,7 @@ For committed work reachable by the runtime, include the repository URL and exac
 
 Tell the runtime to check out the exact base, check patch applicability, and apply only supplied changes. Before making new edits, preserve a comparison snapshot of the transferred working tree, including selected untracked files. This is the return-patch baseline; it already contains the local edits. Include the remaining task, checks to run, and limits on commits, pushes, and publication. Never send credentials in the handoff message; use the Agent's configured connections.
 
-Before returning work locally, ask for the base commit, handed-off snapshot, changed files, test results, unresolved conflicts, and a short continuation note. When local uncommitted work was transferred, request an incremental, binary-capable patch against the handed-off snapshot, including newly created files. A patch against the original commit would repeat local edits and may not apply. Keep any full patch separately and label its baseline. Fetch a published branch only when publication was authorized; otherwise retrieve a patch and selected new files using read_workspace_file. Large deliverables need an accessible repository or artifact location approved by the user.
+Before returning work locally, ask for the base commit, handed-off snapshot, changed files, test results, unresolved conflicts, and a short continuation note. When local uncommitted work was transferred, request an incremental, binary-capable patch against the handed-off snapshot, including newly created files. A patch against the original commit would repeat local edits and may not apply. Keep any full patch separately and label its baseline. Fetch a published branch only when publication was authorized. Otherwise, retrieve the patch and selected new files with transfer_workspace_file. Without a shell, use read_workspace_file within its 4 MiB limit or ask for an approved artifact destination.
 
 Inspect the local working tree again before applying results. Preserve edits made since handoff. Verify the base and check patch applicability before applying; surface conflicts instead of resetting, overwriting, or force-pushing. Run the relevant checks locally, then summarize what is ready and what still needs work.
 

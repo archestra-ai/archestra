@@ -142,10 +142,12 @@ Migration `0471_openappa_native.sql` creates the event and receipt tables. Migra
 | `openappa_processed_results` | Result status, decision, and approved output |
 
 Rust owns event encoding, decoding, policy validation, replay, ordering, and
-compare-and-swap behavior. TypeScript does not interpret policy events. A
-dedicated PostgreSQL connection thread supports the existing synchronous store
-API under async hook dispatch. The host's transaction and receipt SQL use that
-same connection.
+compare-and-swap behavior. TypeScript does not interpret policy events. The
+store keeps a pool of PostgreSQL connections, each on its own thread, sized by
+`ARCHESTRA_OPENAPPA_POSTGRES_MAX_CONNECTIONS`. A dispatch leases one connection
+and runs the advisory lock, the receipt SQL and the runtime's event writes on
+it: the lock and the event writes take the same key, which only one connection
+can hold twice. The pool replaces a connection the server has ended.
 
 Dispatches for different trajectory families run concurrently. An in-process
 lock serializes each family within a backend process, and a PostgreSQL advisory

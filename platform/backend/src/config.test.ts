@@ -3564,6 +3564,7 @@ describe("OpenAPPA feature configuration", () => {
       enabled: false,
       yellEnabled: false,
       offerSigningSecret: "",
+      postgresMaxConnections: 4,
     });
   });
   test("enables database policies without a container path", () => {
@@ -3571,6 +3572,7 @@ describe("OpenAPPA feature configuration", () => {
       enabled: true,
       yellEnabled: true,
       offerSigningSecret: "",
+      postgresMaxConnections: 4,
     });
     expect(
       parseOpenAppaConfig("true", "true", "offer-signing-secret-at-least-32ch")
@@ -3579,5 +3581,19 @@ describe("OpenAPPA feature configuration", () => {
     expect(() => parseOpenAppaConfig("true", "true", "short")).toThrow(
       "ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET must be at least 32 characters",
     );
+  });
+
+  test.each([
+    [undefined, 4],
+    ["", 4],
+    ["8", 8],
+    ["0", 4],
+    ["65", 4],
+    ["many", 4],
+  ])("reads the ledger pool size (value=%s)", (value, expected) => {
+    expect(
+      parseOpenAppaConfig("true", undefined, undefined, value)
+        .postgresMaxConnections,
+    ).toBe(expected);
   });
 });

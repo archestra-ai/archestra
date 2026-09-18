@@ -16,7 +16,7 @@ test('validates policy semantics and refuses container access', async () => {
 });
 
 test('saved text changes enforcement for new sessions and preserves existing sessions', { skip: !databaseUrl }, async () => {
-  await native.initializeOpenappa(databaseUrl, allow);
+  await native.initializeOpenappa(databaseUrl, 2, allow);
   const scope = () => ({ organization_id: 'policy-test', caller_id: 'user:test', session_id: randomUUID() });
   const hook = async (session, event, policy) => JSON.parse(await native.dispatchHook(JSON.stringify({ ...session, ...event }), policy));
   const old = scope();
@@ -34,10 +34,11 @@ test('saved text changes enforcement for new sessions and preserves existing ses
 });
 
 test('a new session opens under the text its dispatch carried while a stale sibling reloads', { skip: !databaseUrl, timeout: 30000 }, async (t) => {
-  await native.initializeOpenappa(databaseUrl, allow);
-  // Holding a root's ledger advisory lock parks its dispatch after the reload
-  // and before the session opens. The runtime has one ledger connection, so
-  // every other ledger query of this process queues behind the parked one.
+  // A pool of one would serialize fresh and stale on the same connection,
+  // masking the race: this needs both to hold a connection at once.
+  await native.initializeOpenappa(databaseUrl, 2, allow);
+  // Holding a root's ledger advisory lock parks its dispatch on its own
+  // pooled connection after the reload and before the session opens.
   const ledger = new Client({ connectionString: databaseUrl });
   await ledger.connect();
   t.after(() => ledger.end());
@@ -113,7 +114,7 @@ requires = { trust = "trusted" }
 url = "http://127.0.0.1:${server.address().port}/annotate"
 `;
   assert.deepEqual(await native.validateOpenappaPolicy(policy), []);
-  await native.initializeOpenappa(databaseUrl, policy);
+  await native.initializeOpenappa(databaseUrl, 2, policy);
   const scope = { organization_id: 'catch-all-test', caller_id: 'user:test', session_id: randomUUID() };
   const hook = async event => JSON.parse(await native.dispatchHook(JSON.stringify({ ...scope, ...event }), policy));
   assert.equal((await hook({ event: 'session_start' })).decision, 'ack');

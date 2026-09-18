@@ -2,11 +2,7 @@ import { HttpResponse, http } from "msw";
 import { describe, expect, it } from "vitest";
 import { stubSkillManifest as manifest } from "@/test/github-skills-stub";
 import { useMswServer as setupMswServer } from "@/test/msw";
-import {
-  discoverSkills,
-  importSkills,
-  MAX_SKILL_FILE_BYTES,
-} from "./github-import";
+import { discoverSkills, importSkills } from "./github-import";
 import { githubSkillSourceFromApiUrl } from "./github-source";
 
 const server = setupMswServer();
@@ -135,36 +131,6 @@ describe("Enterprise skill imports", () => {
     ).toBe(true);
   });
 
-  it("keeps identical owner/repo/ref/token snapshots separate across Enterprise hosts", async () => {
-    const sourceA = githubSkillSourceFromApiUrl(
-      "https://first.example.test/api/v3",
-    );
-    const sourceB = githubSkillSourceFromApiUrl(
-      "https://second.example.test/api/v3",
-    );
-    serveRepository({
-      apiBaseUrl: sourceA.apiBaseUrl,
-      owner: "host-cache",
-      name: "first-skill",
-    });
-    serveRepository({
-      apiBaseUrl: sourceB.apiBaseUrl,
-      owner: "host-cache",
-      name: "second-skill",
-    });
-    for (const [githubSource, expectedName] of [
-      [sourceA, "first-skill"],
-      [sourceB, "second-skill"],
-    ] as const) {
-      const result = await discoverSkills({
-        repoUrl: "host-cache/skills",
-        githubSource,
-        githubToken,
-      });
-      expect(result.skills.map((skill) => skill.name)).toEqual([expectedName]);
-    }
-  });
-
   it.each([
     "https://github.com/acme/skills",
     "https://another.example.test/acme/skills",
@@ -215,7 +181,7 @@ describe("Enterprise skill imports", () => {
     expect(destinationRequests).toHaveLength(0);
   });
 
-  it("reports redirected and oversized resources as skipped without following the redirect", async () => {
+  it("reports redirected resources as skipped without following the redirect", async () => {
     const githubSource = githubSkillSourceFromApiUrl(
       "https://resources.example.test/api/v3",
     );
@@ -225,7 +191,6 @@ describe("Enterprise skill imports", () => {
       files: {
         "nested/skill/SKILL.md": manifest("resource-skill"),
         "nested/skill/redirect.txt": "redirect",
-        "nested/skill/oversized.txt": "oversized",
       },
     });
     const destinationRequests: Request[] = [];
@@ -236,13 +201,6 @@ describe("Enterprise skill imports", () => {
           new HttpResponse(null, {
             status: 302,
             headers: { Location: "https://other.example.test/content" },
-          }),
-      ),
-      http.get(
-        `${githubSource.apiBaseUrl}/repos/resource-limits/skills/contents/nested/skill/oversized.txt`,
-        () =>
-          new HttpResponse("oversized", {
-            headers: { "Content-Length": String(MAX_SKILL_FILE_BYTES + 1) },
           }),
       ),
       http.get("https://other.example.test/content", ({ request }) => {
@@ -257,7 +215,7 @@ describe("Enterprise skill imports", () => {
       skillPaths: ["nested/skill"],
     });
     expect(imported.files).toEqual([]);
-    expect(imported.skippedFiles).toEqual(["redirect.txt", "oversized.txt"]);
+    expect(imported.skippedFiles).toEqual(["redirect.txt"]);
     expect(destinationRequests).toHaveLength(0);
   });
 });

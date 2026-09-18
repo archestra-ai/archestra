@@ -53,6 +53,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { BulkRangeSelectionController } from "@/lib/bulk-range-selection";
+import { getRepositoryDisplay } from "@/lib/github/repository-display";
 import { useGithubAppConfigs } from "@/lib/github-app-config.query";
 import { useCreateGithubPat, useGithubPats } from "@/lib/github-pat.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
@@ -354,12 +355,11 @@ export function ImportSkillsDialog({
     .filter(Boolean)
     .join(", ");
 
-  const repoSlug = repoUrl
-    .replace(/^https?:\/\//, "")
-    .replace(/^github\.com\//, "")
-    .replace(/\.git$/, "")
-    .replace(/\/$/, "");
-  const repoOwner = repoSlug.split("/")[0];
+  const {
+    label: repoSlug,
+    owner: repoOwner,
+    avatarUrl: repoAvatarUrl,
+  } = getRepositoryDisplay(repoUrl);
 
   const totalImportable = discovered?.filter((s) => !s.exists).length ?? 0;
   const totalExisting = discovered?.filter((s) => s.exists).length ?? 0;
@@ -445,7 +445,7 @@ export function ImportSkillsDialog({
         <div className="flex flex-col items-center justify-center gap-4 py-10">
           <Avatar className="size-14">
             <AvatarImage
-              src={`https://github.com/${repoOwner}.png?size=128`}
+              src={repoAvatarUrl ? `${repoAvatarUrl}?size=128` : undefined}
               alt=""
             />
             <AvatarFallback>
@@ -464,7 +464,7 @@ export function ImportSkillsDialog({
               <div className="flex items-center gap-3 border-b bg-muted/30 px-4 py-3">
                 <Avatar className="size-8 shrink-0">
                   <AvatarImage
-                    src={`https://github.com/${repoOwner}.png?size=64`}
+                    src={repoAvatarUrl ? `${repoAvatarUrl}?size=64` : undefined}
                     alt=""
                   />
                   <AvatarFallback className="text-xs">
@@ -507,7 +507,9 @@ export function ImportSkillsDialog({
                 <div className="flex items-center gap-3 border-b bg-muted/30 px-4 py-2.5">
                   <Avatar className="size-7 shrink-0">
                     <AvatarImage
-                      src={`https://github.com/${repoOwner}.png?size=64`}
+                      src={
+                        repoAvatarUrl ? `${repoAvatarUrl}?size=64` : undefined
+                      }
                       alt=""
                     />
                     <AvatarFallback className="text-xs">

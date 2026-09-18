@@ -12,6 +12,15 @@ describe("parseRepoFromSourceRef", () => {
       .toBe("eph5xx/tiebreaker");
   });
 
+  it("keeps Enterprise repositories distinct from public repositories", () => {
+    expect(
+      parseRepoFromSourceRef("acme/skills@main:pdf", "https://git.example.com"),
+    ).toBe("https://git.example.com/acme/skills");
+    expect(
+      parseRepoFromSourceRef("acme/skills@main:pdf", "https://github.com"),
+    ).toBe("acme/skills");
+  });
+
   it("ignores the internal ref built-in skills carry", () => {
     expect(parseRepoFromSourceRef("builtin:archestra-platform-operations")) //
       .toBeNull();
@@ -28,6 +37,18 @@ describe("githubSourceUrlAtCommit", () => {
       }),
     ).toBe(
       `https://github.com/eph5xx/tiebreaker/tree/${COMMIT}/skills/tiebreaker`,
+    );
+  });
+
+  it("links an Enterprise version to the saved source host", () => {
+    expect(
+      githubSourceUrlAtCommit({
+        sourceRef: "acme/skills@main:my skills/pdf",
+        sourceOrigin: "https://git.example.com",
+        commit: COMMIT,
+      }),
+    ).toBe(
+      `https://git.example.com/acme/skills/tree/${COMMIT}/my%20skills/pdf`,
     );
   });
 

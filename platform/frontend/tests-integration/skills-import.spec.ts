@@ -3,6 +3,7 @@ import {
   catalogSkillSeed,
   githubPreviewSeed,
   makeImportedSkill,
+  skillsListSeed,
 } from "../src/mocks/data/skills";
 import { expect, test } from "./fixtures";
 
@@ -155,6 +156,148 @@ test.describe("Skills import", () => {
     await expect(
       selectDialog.getByRole("checkbox", { name: "Deselect Beta skill" }),
     ).toBeVisible();
+  });
+
+  test("Enterprise App imports preserve the custom source and daily sync without public owner lookups", async ({
+    page,
+    skillsNewPage,
+    mswControl,
+  }) => {
+    const sourceOrigin = "https://git.example.com";
+    const repoUrl = `${sourceOrigin}/enterprise-team/skills`;
+    const appId = "11111111-1111-4111-8111-111111111111";
+    const skillPath = "packages/skills/pdf";
+    const imported = makeImportedSkill({
+      name: "Enterprise PDF",
+      sourceOrigin,
+      sourceRef: `enterprise-team/skills@main:${skillPath}`,
+      githubAppConfigId: appId,
+      githubSyncInterval: "1d",
+      githubSyncRef: "main",
+    });
+    await mswControl.use({
+      method: "get",
+      url: "/api/credentials",
+      body: [
+        {
+          id: appId,
+          name: "Enterprise App",
+          kind: "github_app",
+          allowOrganization: true,
+        },
+      ],
+    });
+    await mswControl.use({
+      method: "post",
+      url: "/api/skills/github/discover",
+      body: {
+        repoUrl,
+        ref: "main",
+        skills: [
+          {
+            skillPath,
+            name: imported.name,
+            description: "Read PDF files",
+            compatibility: null,
+            allowedTools: null,
+            templated: false,
+            fileCount: 2,
+            exists: false,
+          },
+        ],
+      },
+    });
+    await mswControl.use({
+      method: "post",
+      url: "/api/skills/github/import",
+      body: { created: [imported], skipped: [], skippedFiles: [] },
+    });
+    await mswControl.use({
+      method: "get",
+      url: "/api/skills",
+      body: {
+        ...skillsListSeed,
+        data: [{ ...skillsListSeed.data[0], ...imported }],
+        pagination: { ...skillsListSeed.pagination, total: 1 },
+      },
+    });
+    const publicOwnerLookups: string[] = [];
+    page.on("request", (request) => {
+      const url = new URL(request.url());
+      if (
+        url.hostname === "github.com" &&
+        url.pathname === "/enterprise-team.png"
+      ) {
+        publicOwnerLookups.push(request.url());
+      }
+    });
+
+    await skillsNewPage.goto();
+    await skillsNewPage.customGithubUrlCard.click();
+    const discoverDialog = page.getByRole("dialog", {
+      name: "Import skills from GitHub",
+    });
+    await discoverDialog.getByLabel("Repository URL").fill(repoUrl);
+    await expect(
+      discoverDialog.getByRole("combobox", { name: "Keep in sync" }),
+    ).toContainText("Once a day");
+    await discoverDialog
+      .getByRole("button", { name: "Authentication & subpath" })
+      .click();
+    await discoverDialog
+      .getByRole("combobox", { name: "Authentication" })
+      .click();
+    await page.getByRole("option", { name: "GitHub App", exact: true }).click();
+    await discoverDialog
+      .getByRole("combobox", { name: "GitHub App Configuration" })
+      .click();
+    await page
+      .getByRole("option", { name: "Enterprise App", exact: true })
+      .click();
+    await discoverDialog.getByLabel("Subpath").fill("packages/skills");
+    const discoverRequest = page.waitForRequest(
+      (request) =>
+        request.method() === "POST" &&
+        new URL(request.url()).pathname.endsWith("/api/skills/github/discover"),
+    );
+    await discoverDialog
+      .getByRole("button", { name: "Discover", exact: true })
+      .click();
+    expect((await discoverRequest).postDataJSON()).toEqual({
+      repoUrl,
+      path: "packages/skills",
+      githubAppConfigId: appId,
+    });
+
+    const selectDialog = page.getByRole("dialog", {
+      name: "Select skills to import",
+    });
+    await expect(selectDialog).toContainText(
+      "git.example.com/enterprise-team/skills",
+    );
+    await expect(selectDialog).toContainText("1 of 1 selected");
+    const importRequest = page.waitForRequest(
+      (request) =>
+        request.method() === "POST" &&
+        new URL(request.url()).pathname.endsWith("/api/skills/github/import"),
+    );
+    await selectDialog.getByRole("button", { name: /^Import/ }).click();
+    expect((await importRequest).postDataJSON()).toEqual({
+      repoUrl,
+      path: "packages/skills",
+      githubAppConfigId: appId,
+      skillPaths: [skillPath],
+      scope: "personal",
+      teamIds: [],
+      userIds: [],
+      sync: { interval: "1d" },
+    });
+    await expect(selectDialog).toBeHidden();
+    await expect(
+      page.getByRole("heading", { name: "Skills", exact: true }),
+    ).toBeVisible();
+    await expect(page.getByText(repoUrl, { exact: true })).toBeVisible();
+    expect(publicOwnerLookups).toEqual([]);
   });
 
   test("a repo-root catalog skill (empty skillPath) reaches the confirm step and can be previewed", async ({

@@ -100,6 +100,12 @@ describe("GET /api/connection-setups/script/:token", () => {
   for (const { clientId, enabled, instructions, expected } of [
     {
       clientId: "claude-code",
+      enabled: undefined,
+      instructions: null,
+      expected: DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS,
+    },
+    {
+      clientId: "claude-code",
       enabled: true,
       instructions: null,
       expected: DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS,
@@ -155,7 +161,7 @@ describe("GET /api/connection-setups/script/:token", () => {
       const response = await fetchScript(rawToken);
       expect(response.statusCode, response.body).toBe(200);
       if (expected) {
-        expect(response.body).toContain(expected);
+        expect(response.body).toContain(expected.replaceAll("'", "'\\''"));
         expect(response.body).toContain(
           clientId === "codex"
             ? "developer_instructions="

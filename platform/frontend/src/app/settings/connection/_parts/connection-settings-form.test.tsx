@@ -94,22 +94,32 @@ beforeEach(() => {
 });
 
 describe("ConnectionSettingsForm", () => {
-  it("saves custom handoff instructions, resets the default, and allows disabling an empty draft", async () => {
+  it("preserves instructions when toggled and allows disabling an empty draft", async () => {
     const user = userEvent.setup();
     render(<ConnectionSettingsForm />);
-    expect(
-      screen.queryByRole("textbox", { name: "Runtime handoff instructions" }),
-    ).not.toBeInTheDocument();
-    const toggle = screen.getByRole("switch", {
-      name: "Suggest runtime handoff",
-    });
-    await user.click(toggle);
     const editor = screen.getByRole("textbox", {
       name: "Runtime handoff instructions",
     });
+    expect(editor).toBeVisible();
+    expect(editor).toBeEnabled();
     expect(editor).toHaveValue(DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS);
+    const toggle = screen.getByRole("switch", {
+      name: "Suggest runtime handoff",
+    });
+    expect(toggle).toBeChecked();
     await user.clear(editor);
     await user.type(editor, "Offer overnight work.");
+    await user.click(toggle);
+    expect(editor).toBeDisabled();
+    expect(editor).toHaveValue("Offer overnight work.");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(mutate).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        connectionRuntimeHandoffEnabled: false,
+        connectionRuntimeHandoffInstructions: "Offer overnight work.",
+      }),
+    );
+    await user.click(toggle);
     await user.click(screen.getByRole("button", { name: "Save" }));
     expect(mutate).toHaveBeenLastCalledWith(
       expect.objectContaining({
@@ -117,20 +127,14 @@ describe("ConnectionSettingsForm", () => {
         connectionRuntimeHandoffInstructions: "Offer overnight work.",
       }),
     );
-    await user.click(screen.getByRole("button", { name: "Reset to default" }));
-    await user.click(screen.getByRole("button", { name: "Save" }));
-    expect(mutate).toHaveBeenLastCalledWith(
-      expect.objectContaining({ connectionRuntimeHandoffInstructions: null }),
-    );
     await user.clear(editor);
     mutate.mockClear();
     await user.click(screen.getByRole("button", { name: "Save" }));
     expect(mutate).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert")).toBeVisible();
     await user.click(toggle);
-    // A different setting keeps the form dirty after restoring the off default.
-    await user.click(
-      screen.getByRole("switch", { name: "Offer skills on the Connect page" }),
-    );
+    expect(editor).toBeDisabled();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Save" }));
     expect(mutate).toHaveBeenLastCalledWith(
       expect.objectContaining({
@@ -138,6 +142,24 @@ describe("ConnectionSettingsForm", () => {
         connectionRuntimeHandoffInstructions: null,
       }),
     );
+  });
+
+  it("respects a saved disabled handoff setting", () => {
+    const organization = vi.mocked(useOrganization)();
+    vi.mocked(useOrganization).mockReturnValue({
+      ...organization,
+      data: {
+        ...organization.data,
+        connectionRuntimeHandoffEnabled: false,
+      },
+    } as ReturnType<typeof useOrganization>);
+    render(<ConnectionSettingsForm />);
+    expect(
+      screen.getByRole("switch", { name: "Suggest runtime handoff" }),
+    ).not.toBeChecked();
+    expect(
+      screen.getByRole("textbox", { name: "Runtime handoff instructions" }),
+    ).toBeDisabled();
   });
 
   it("omits the plugin setting and its PATCH field when plugins are unavailable", async () => {

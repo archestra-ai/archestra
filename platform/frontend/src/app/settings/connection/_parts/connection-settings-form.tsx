@@ -25,7 +25,6 @@ import {
   SettingsSaveBar,
   SettingsSectionStack,
 } from "@/components/settings/settings-block";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MultiSelectCombobox } from "@/components/ui/multi-select-combobox";
@@ -73,7 +72,7 @@ export function ConnectionSettingsForm() {
   const [skillsEnabled, setSkillsEnabled] = useState(true);
   const [llmProxyEnabled, setLlmProxyEnabled] = useState(true);
   const [pluginsEnabled, setPluginsEnabled] = useState(true);
-  const [runtimeHandoffEnabled, setRuntimeHandoffEnabled] = useState(false);
+  const [runtimeHandoffEnabled, setRuntimeHandoffEnabled] = useState(true);
   const [runtimeHandoffInstructions, setRuntimeHandoffInstructions] = useState(
     DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS,
   );
@@ -101,7 +100,7 @@ export function ConnectionSettingsForm() {
     setLlmProxyEnabled(organization.connectionLlmProxyEnabled);
     setPluginsEnabled(organization.connectionPluginsEnabled);
     setRuntimeHandoffEnabled(
-      organization.connectionRuntimeHandoffEnabled ?? false,
+      organization.connectionRuntimeHandoffEnabled ?? true,
     );
     setRuntimeHandoffInstructions(
       organization.connectionRuntimeHandoffInstructions ??
@@ -150,7 +149,7 @@ export function ConnectionSettingsForm() {
   const serverLlmProxyEnabled = organization?.connectionLlmProxyEnabled ?? true;
   const serverPluginsEnabled = organization?.connectionPluginsEnabled ?? true;
   const serverRuntimeHandoffEnabled =
-    organization?.connectionRuntimeHandoffEnabled ?? false;
+    organization?.connectionRuntimeHandoffEnabled ?? true;
   const serverRuntimeHandoffInstructions =
     organization?.connectionRuntimeHandoffInstructions ??
     DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS;
@@ -258,6 +257,36 @@ export function ConnectionSettingsForm() {
         return (
           <>
             <SettingsSectionStack>
+              <SettingsBlock
+                title="Suggest runtime handoff"
+                description="Let your coding agent suggest moving work to Agent Runtime."
+                control={
+                  <Switch
+                    checked={runtimeHandoffEnabled}
+                    onCheckedChange={setRuntimeHandoffEnabled}
+                    disabled={locked}
+                    aria-label="Suggest runtime handoff"
+                  />
+                }
+              >
+                <Textarea
+                  aria-label="Runtime handoff instructions"
+                  value={runtimeHandoffInstructions}
+                  onChange={(event) =>
+                    setRuntimeHandoffInstructions(event.target.value)
+                  }
+                  rows={8}
+                  maxLength={20000}
+                  disabled={locked || !runtimeHandoffEnabled}
+                />
+                {runtimeHandoffEnabled &&
+                  !runtimeHandoffInstructions.trim() && (
+                    <p role="alert" className="mt-2 text-sm text-destructive">
+                      Enter instructions.
+                    </p>
+                  )}
+              </SettingsBlock>
+
               <SettingRow
                 title="Default MCP Gateway"
                 description="Pre-selected for everyone; users can still switch."
@@ -500,54 +529,6 @@ export function ConnectionSettingsForm() {
                     aria-label="Offer plugins on the Connect page"
                   />
                 </SettingRow>
-              )}
-
-              <SettingRow
-                title="Suggest runtime handoff"
-                description="Add handoff instructions to Claude Code, Codex, Copilot CLI, and Claude Desktop. Cursor requires a manual User Rules step. Requires an MCP gateway. Rerun setup after changes, including disabling."
-              >
-                <Switch
-                  checked={runtimeHandoffEnabled}
-                  onCheckedChange={setRuntimeHandoffEnabled}
-                  disabled={locked}
-                  aria-label="Suggest runtime handoff"
-                />
-              </SettingRow>
-              {runtimeHandoffEnabled && (
-                <SettingSection
-                  title="Runtime handoff instructions"
-                  description="Rerun Connect setup and start a new client session after edits or disabling. Reload your shell for CLI clients. Desktop supports up to 3,000 characters. Update or remove Cursor User Rules manually. Explicit CLI configuration takes precedence."
-                >
-                  <div className="space-y-3">
-                    <Textarea
-                      aria-label="Runtime handoff instructions"
-                      value={runtimeHandoffInstructions}
-                      onChange={(event) =>
-                        setRuntimeHandoffInstructions(event.target.value)
-                      }
-                      rows={8}
-                      maxLength={20000}
-                      disabled={locked}
-                    />
-                    {!runtimeHandoffInstructions.trim() && (
-                      <p role="alert" className="text-sm text-destructive">
-                        Enter instructions or reset to the default.
-                      </p>
-                    )}
-                    <Button
-                      type="button"
-                      variant="outline"
-                      disabled={locked}
-                      onClick={() =>
-                        setRuntimeHandoffInstructions(
-                          DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS,
-                        )
-                      }
-                    >
-                      Reset to default
-                    </Button>
-                  </div>
-                </SettingSection>
               )}
 
               <SettingSection

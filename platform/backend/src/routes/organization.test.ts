@@ -628,6 +628,9 @@ describe("organization routes", () => {
 
   describe("PATCH /api/organization/connection-settings - default provider keys", () => {
     test("saves handoff instructions and records their audit diff", async () => {
+      await OrganizationModel.patch(organizationId, {
+        connectionRuntimeHandoffEnabled: false,
+      });
       const response = await app.inject({
         method: "PATCH",
         url: "/api/organization/connection-settings",

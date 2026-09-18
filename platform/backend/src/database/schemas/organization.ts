@@ -387,7 +387,7 @@ const organizationsTable = pgTable("organization", {
 
   connectionRuntimeHandoffEnabled: boolean("connection_runtime_handoff_enabled")
     .notNull()
-    .default(false),
+    .default(true),
   /** Null uses the shipped handoff suggestion instructions. */
   connectionRuntimeHandoffInstructions: text(
     "connection_runtime_handoff_instructions",

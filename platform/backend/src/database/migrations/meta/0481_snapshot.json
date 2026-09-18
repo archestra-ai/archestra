@@ -18187,7 +18187,7 @@
           "type": "boolean",
           "primaryKey": false,
           "notNull": true,
-          "default": false
+          "default": true
         },
         "connection_runtime_handoff_instructions": {
           "name": "connection_runtime_handoff_instructions",

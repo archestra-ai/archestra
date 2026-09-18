@@ -1301,13 +1301,19 @@ export async function createAgentServer(params: {
  */
 export function createStatelessTransport(
   agentId: string,
+  options?: { sseResponse?: boolean },
 ): StreamableHTTPServerTransport {
   logger.info({ agentId }, "Creating stateless transport instance");
 
-  // Create transport in stateless mode (no session persistence)
+  // Create transport in stateless mode (no session persistence).
+  // JSON responses are the default: single request/response pairs stay plain
+  // JSON for simple clients. A client that declares a server-initiated
+  // capability (elicitation, sampling, ...) gets SSE instead — in
+  // enableJsonResponse mode the SDK transport has no channel for a mid-call
+  // server-initiated request and silently drops it.
   const transport = new StreamableHTTPServerTransport({
     sessionIdGenerator: undefined, // Stateless mode - no sessions
-    enableJsonResponse: true, // Use JSON responses instead of SSE
+    enableJsonResponse: options?.sseResponse !== true,
   });
 
   logger.info({ agentId }, "Stateless transport instance created");
@@ -2447,8 +2453,29 @@ function createGatewayUserElicit(params: {
         params: request.params as Record<string, unknown>,
       },
     });
-    if (!canElicit) {
-      return { status: "no_viewer" };
+    // In-band elicitation first whenever the client declared it: the answer
+    // arrives on a separate POST and is routed back to this Server, so the
+    // client renders its native form. MRTR is the fallback for a client that
+    // acts on an InputRequiredResult but never declared elicitation.
+    if (canElicit) {
+      try {
+        return {
+          status: "answered",
+          result: ElicitResultSchema.parse(
+            await extra.sendRequest(request, ElicitResultSchema),
+          ),
+        };
+      } catch (error) {
+        logger.warn(
+          {
+            agentId,
+            toolName,
+            error: error instanceof Error ? error.message : String(error),
+          },
+          "MCP elicitation request was not completed by caller",
+        );
+        return { status: "no_viewer" };
+      }
     }
 
     if (mrtrEnabled) {
@@ -2461,24 +2488,7 @@ function createGatewayUserElicit(params: {
       });
     }
 
-    try {
-      return {
-        status: "answered",
-        result: ElicitResultSchema.parse(
-          await extra.sendRequest(request, ElicitResultSchema),
-        ),
-      };
-    } catch (error) {
-      logger.warn(
-        {
-          agentId,
-          toolName,
-          error: error instanceof Error ? error.message : String(error),
-        },
-        "MCP elicitation request was not completed by caller",
-      );
-      return { status: "no_viewer" };
-    }
+    return { status: "no_viewer" };
   };
 }
 

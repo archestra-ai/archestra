@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { RUN_ID_HEADER } from "@archestra/shared";
+import type { JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
@@ -24,6 +25,10 @@ import {
 import { trackBackgroundWork } from "@/utils/background-work";
 import { getPublicRequestOrigin } from "../request-origin";
 import {
+  clientCapabilityKey,
+  clientCapabilityStore,
+} from "./client-capabilities";
+import {
   dispatchLegacySseMessage,
   LEGACY_SSE_MESSAGES_SEGMENT,
   LegacySseSessionRegistry,
@@ -32,12 +37,14 @@ import {
   wantsLegacySseStream,
 } from "./legacy-sse";
 import {
+  clientSupportsInputRequest,
   deriveStatePrincipal,
   extractMrtrParams,
   readClientCapabilities,
   supportsInputRequired,
   verifyRequestState,
 } from "./mrtr";
+import { pendingInboundRequests } from "./pending-inbound-requests";
 import {
   buildDiscoverResult,
   extractTraceContext,
@@ -195,6 +202,23 @@ async function handleMcpPostRequest(
 ): Promise<unknown> {
   const { revision } = resolution;
   const body = request.body as Record<string, unknown>;
+
+  // A bare JSON-RPC response/error (no method) answers a server-initiated
+  // request (elicitation/create, sampling, ...) sent mid-call on an earlier
+  // POST. Each POST builds a fresh Server, so the answer must be routed back
+  // to the transport that still holds the pending request rather than a new
+  // one. Unknown ids fall through to ordinary handling, which ignores them.
+  if (body.method === undefined && body.id !== undefined && body.id !== null) {
+    const pending = pendingInboundRequests.consume({
+      id: body.id as string | number,
+    });
+    if (pending) {
+      pending.transport.onmessage?.(body as unknown as JSONRPCMessage);
+      reply.status(202);
+      return;
+    }
+  }
+
   const runId = readHeader(request, RUN_ID_HEADER);
   const currentToolCallId = logicalToolCallId(body);
 
@@ -214,6 +238,30 @@ async function handleMcpPostRequest(
   }
   const isInitialize =
     typeof body?.method === "string" && body.method === "initialize";
+
+  const capabilityKey = clientCapabilityKey({
+    profileId,
+    tokenId: tokenAuthContext?.tokenId,
+    userId: tokenAuthContext?.userId,
+  });
+  if (isInitialize) {
+    // A legacy client declares its capabilities once, here, and the next
+    // POST builds a fresh Server that no longer knows them. Remember them so
+    // a later call can still tell whether this client answers a
+    // server-initiated request (elicitation, sampling, ...).
+    const capabilities = (
+      body?.params as { capabilities?: unknown } | undefined
+    )?.capabilities;
+    if (capabilities !== undefined) {
+      clientCapabilityStore.remember({ key: capabilityKey, capabilities });
+    }
+  }
+
+  // Capabilities for this call: per-request `_meta` (2026-07-28 clients)
+  // first, the initialize-time declaration (legacy clients) after.
+  const clientCapabilities =
+    readClientCapabilities(body) ??
+    clientCapabilityStore.lookup({ key: capabilityKey });
 
   fastify.log.trace(
     {
@@ -272,14 +320,54 @@ async function handleMcpPostRequest(
         enabled: revision === STATELESS_MCP_PROTOCOL_REVISION,
         inputResponses: mrtrParams.inputResponses,
         round: mrtrRound,
-        clientCapabilities: readClientCapabilities(body),
+        clientCapabilities,
       },
     });
-    const transport = createStatelessTransport(profileId);
+    // A client that declares a server-initiated capability may be asked a
+    // question mid-call (elicitation/create, sampling, ...). That needs an
+    // SSE response stream: in JSON-response mode the transport silently drops
+    // the mid-call request and the call hangs until the SDK timeout.
+    const declaresServerInitiated = SERVER_INITIATED_METHODS.some((method) =>
+      clientSupportsInputRequest({
+        clientCapabilities,
+        request: { method, params: {} },
+      }),
+    );
+    // A call that may detach as a task keeps JSON: after detach there is no
+    // live stream to elicit on, and the task must fail instead of elicit.
+    const declaresTasks = (() => {
+      if (typeof clientCapabilities !== "object" || clientCapabilities === null)
+        return false;
+      const extensions = (clientCapabilities as Record<string, unknown>)
+        .extensions;
+      return (
+        typeof extensions === "object" &&
+        extensions !== null &&
+        "io.modelcontextprotocol/tasks" in extensions
+      );
+    })();
+    const sseResponse = declaresServerInitiated && !declaresTasks;
+
+    const transport = createStatelessTransport(profileId, { sseResponse });
 
     fastify.log.trace({ profileId }, "Connecting server to transport");
     await server.connect(transport);
     fastify.log.trace({ profileId }, "Server connected to transport");
+
+    // Register every server-initiated request the call sends so the client's
+    // answer POST (a separate request in stateless mode) can be routed back
+    // to this Server instead of a fresh one.
+    const originalSend = transport.send.bind(transport);
+    transport.send = async (message, options) => {
+      if (isServerInitiatedRequestMessage(message)) {
+        pendingInboundRequests.register({
+          id: message.id,
+          transport,
+          agentId: profileId,
+        });
+      }
+      return originalSend(message, options);
+    };
 
     fastify.log.trace({ profileId }, "Calling transport.handleRequest");
 
@@ -934,6 +1022,24 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
 function readHeader(request: FastifyRequest, name: string): string | undefined {
   const value = request.headers[name.toLowerCase()];
   return Array.isArray(value) ? value[0] : value;
+}
+
+const SERVER_INITIATED_METHODS = [
+  "elicitation/create",
+  "sampling/createMessage",
+  "roots/list",
+] as const;
+
+function isServerInitiatedRequestMessage(
+  message: JSONRPCMessage,
+): message is JSONRPCMessage & { id: string | number } {
+  return (
+    typeof message === "object" &&
+    message !== null &&
+    "method" in message &&
+    "id" in message &&
+    message.id !== undefined
+  );
 }
 
 function runtimeTokenMatchesRun(params: {

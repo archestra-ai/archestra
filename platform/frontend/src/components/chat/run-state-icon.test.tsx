@@ -46,8 +46,6 @@ describe("RunStateIcon", () => {
       />,
     );
     expect(screen.getByLabelText("Run active")).toBeInTheDocument();
-
-    // Activity that stopped long ago: the session went idle after all.
     rerender(
       <RunStateIcon
         state="TASK_STATE_COMPLETED"
@@ -57,8 +55,6 @@ describe("RunStateIcon", () => {
       />,
     );
     expect(screen.getByLabelText("Run completed")).toBeInTheDocument();
-
-    // Activity from before the turn ended says nothing about the session.
     rerender(
       <RunStateIcon
         state="TASK_STATE_COMPLETED"

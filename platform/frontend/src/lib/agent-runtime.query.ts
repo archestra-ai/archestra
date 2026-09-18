@@ -77,8 +77,6 @@ export function useMyAgentRuns(enabled = true) {
       ) {
         return 3_000;
       }
-      // Keep a slow watch on turns that just ended: the list would otherwise
-      // never notice a retained session working again or a continuation.
       return runs.some((run) => hasRecentlyEnded(run, now)) ? 10_000 : false;
     },
   });

@@ -145,8 +145,6 @@ function runStatePresentation({
       }
       return { label: "Running", dotClassName: "bg-emerald-500" };
     case "TASK_STATE_COMPLETED":
-      // The turn is settled, but its retained CLI is still making model
-      // requests — the person watching the terminal sees it working.
       if (retainedSessionActive) {
         return { label: "Running", dotClassName: "bg-emerald-500" };
       }

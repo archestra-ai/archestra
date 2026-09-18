@@ -77,7 +77,6 @@ function runStateVisual({
     };
   }
   if (state === "TASK_STATE_COMPLETED") {
-    // Settled turn whose retained CLI is still making model requests.
     if (
       hasRetainedSessionActivity({
         state,

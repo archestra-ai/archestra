@@ -46,6 +46,62 @@ describe("MessagesRequestSchema", () => {
 
     expect(parsed.thinking).toEqual({ type: "adaptive" });
   });
+
+  test("accepts Claude Code custom tools without a type", () => {
+    const parsed = MessagesRequestSchema.parse({
+      model: "claude-opus-4-6",
+      messages: [{ role: "user", content: "hi" }],
+      max_tokens: 1024,
+      tools: [
+        {
+          name: "Read",
+          description: "Read a file",
+          input_schema: { type: "object", properties: {} },
+        },
+      ],
+    });
+
+    expect(parsed.tools?.[0]).toMatchObject({ name: "Read" });
+  });
+
+  test("forwards Anthropic tool types the schema does not enumerate", () => {
+    // Fastify replaces request.body with the Zod parse result. A closed
+    // discriminatedUnion on tools[].type 400s the whole Claude Code request
+    // (`body/tools/N/type Invalid input`) before the proxy or OpenAPPA runs.
+    const searchTool = {
+      name: "tool_search_tool_bm25",
+      type: "tool_search_tool_bm25_20251119",
+      cache_control: { type: "ephemeral" },
+    };
+    const mcpToolset = {
+      type: "mcp_toolset",
+      mcp_server_name: "my_gateway",
+    };
+    const parsed = MessagesRequestSchema.parse({
+      model: "claude-opus-4-6",
+      messages: [{ role: "user", content: "hi" }],
+      max_tokens: 1024,
+      tools: [
+        {
+          name: "Read",
+          input_schema: { type: "object", properties: {} },
+        },
+        { type: "bash_20250124", name: "bash" },
+        searchTool,
+        mcpToolset,
+      ],
+    });
+
+    expect(parsed.tools).toEqual([
+      {
+        name: "Read",
+        input_schema: { type: "object", properties: {} },
+      },
+      { type: "bash_20250124", name: "bash" },
+      searchTool,
+      mcpToolset,
+    ]);
+  });
 });
 
 describe("MessagesResponseSchema", () => {

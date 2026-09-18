@@ -59,6 +59,9 @@ RUN pnpm add --global @openai/codex@0.153.0 \
  && codex --version \
  && chown -R 1000:1000 /home/node
 USER 1000:1000
+RUN --network=none \
+    --mount=type=bind,source=agent_images/tests,target=/tmp/agent-image-tests \
+    python3 /tmp/agent-image-tests/codex-failure.py
 
 FROM agent-base AS agent-opencode
 USER root

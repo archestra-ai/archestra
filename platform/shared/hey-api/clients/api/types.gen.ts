@@ -1494,23 +1494,28 @@ export type AnthropicMessagesRequestInput = {
             [key: string]: unknown;
         };
         description?: string;
+        [key: string]: unknown;
     } | {
         name: 'bash';
         type: 'bash_20250124';
         cache_control?: unknown;
+        [key: string]: unknown;
     } | {
         name: 'str_replace_editor';
         type: 'text_editor_20250124';
         cache_control?: unknown;
+        [key: string]: unknown;
     } | {
         name: 'str_replace_based_edit_tool';
         type: 'text_editor_20250429';
         cache_control?: unknown;
+        [key: string]: unknown;
     } | {
         name: 'str_replace_based_edit_tool';
         type: 'text_editor_20250728';
         cache_control?: unknown;
         max_characters?: number | null;
+        [key: string]: unknown;
     } | {
         name: 'web_search';
         type: 'web_search_20250305';
@@ -1519,6 +1524,10 @@ export type AnthropicMessagesRequestInput = {
         cache_control?: unknown;
         max_uses?: number | null;
         user_location?: unknown;
+        [key: string]: unknown;
+    } | {
+        type: string;
+        [key: string]: unknown;
     }>;
     top_k?: number;
     top_p?: number;
@@ -7785,23 +7794,28 @@ export type AnthropicMessagesRequest = {
             [key: string]: unknown;
         };
         description?: string;
+        [key: string]: unknown;
     } | {
         name: 'bash';
         type: 'bash_20250124';
         cache_control?: unknown;
+        [key: string]: unknown;
     } | {
         name: 'str_replace_editor';
         type: 'text_editor_20250124';
         cache_control?: unknown;
+        [key: string]: unknown;
     } | {
         name: 'str_replace_based_edit_tool';
         type: 'text_editor_20250429';
         cache_control?: unknown;
+        [key: string]: unknown;
     } | {
         name: 'str_replace_based_edit_tool';
         type: 'text_editor_20250728';
         cache_control?: unknown;
         max_characters?: number | null;
+        [key: string]: unknown;
     } | {
         name: 'web_search';
         type: 'web_search_20250305';
@@ -7810,6 +7824,10 @@ export type AnthropicMessagesRequest = {
         cache_control?: unknown;
         max_uses?: number | null;
         user_location?: unknown;
+        [key: string]: unknown;
+    } | {
+        type: string;
+        [key: string]: unknown;
     }>;
     top_k?: number;
     top_p?: number;
@@ -33613,23 +33631,28 @@ export type BedrockInvokeWithDefaultAgentAndModelData = {
                 [key: string]: unknown;
             };
             description?: string;
+            [key: string]: unknown;
         } | {
             name: 'bash';
             type: 'bash_20250124';
             cache_control?: unknown;
+            [key: string]: unknown;
         } | {
             name: 'str_replace_editor';
             type: 'text_editor_20250124';
             cache_control?: unknown;
+            [key: string]: unknown;
         } | {
             name: 'str_replace_based_edit_tool';
             type: 'text_editor_20250429';
             cache_control?: unknown;
+            [key: string]: unknown;
         } | {
             name: 'str_replace_based_edit_tool';
             type: 'text_editor_20250728';
             cache_control?: unknown;
             max_characters?: number | null;
+            [key: string]: unknown;
         } | {
             name: 'web_search';
             type: 'web_search_20250305';
@@ -33638,6 +33661,10 @@ export type BedrockInvokeWithDefaultAgentAndModelData = {
             cache_control?: unknown;
             max_uses?: number | null;
             user_location?: unknown;
+            [key: string]: unknown;
+        } | {
+            type: string;
+            [key: string]: unknown;
         }>;
         top_k?: number;
         top_p?: number;
@@ -33943,23 +33970,28 @@ export type BedrockInvokeWithAgentAndModelData = {
                 [key: string]: unknown;
             };
             description?: string;
+            [key: string]: unknown;
         } | {
             name: 'bash';
             type: 'bash_20250124';
             cache_control?: unknown;
+            [key: string]: unknown;
         } | {
             name: 'str_replace_editor';
             type: 'text_editor_20250124';
             cache_control?: unknown;
+            [key: string]: unknown;
         } | {
             name: 'str_replace_based_edit_tool';
             type: 'text_editor_20250429';
             cache_control?: unknown;
+            [key: string]: unknown;
         } | {
             name: 'str_replace_based_edit_tool';
             type: 'text_editor_20250728';
             cache_control?: unknown;
             max_characters?: number | null;
+            [key: string]: unknown;
         } | {
             name: 'web_search';
             type: 'web_search_20250305';
@@ -33968,6 +34000,10 @@ export type BedrockInvokeWithAgentAndModelData = {
             cache_control?: unknown;
             max_uses?: number | null;
             user_location?: unknown;
+            [key: string]: unknown;
+        } | {
+            type: string;
+            [key: string]: unknown;
         }>;
         top_k?: number;
         top_p?: number;
@@ -34274,23 +34310,28 @@ export type BedrockInvokeStreamWithDefaultAgentAndModelData = {
                 [key: string]: unknown;
             };
             description?: string;
+            [key: string]: unknown;
         } | {
             name: 'bash';
             type: 'bash_20250124';
             cache_control?: unknown;
+            [key: string]: unknown;
         } | {
             name: 'str_replace_editor';
             type: 'text_editor_20250124';
             cache_control?: unknown;
+            [key: string]: unknown;
         } | {
             name: 'str_replace_based_edit_tool';
             type: 'text_editor_20250429';
             cache_control?: unknown;
+            [key: string]: unknown;
         } | {
             name: 'str_replace_based_edit_tool';
             type: 'text_editor_20250728';
             cache_control?: unknown;
             max_characters?: number | null;
+            [key: string]: unknown;
         } | {
             name: 'web_search';
             type: 'web_search_20250305';
@@ -34299,6 +34340,10 @@ export type BedrockInvokeStreamWithDefaultAgentAndModelData = {
             cache_control?: unknown;
             max_uses?: number | null;
             user_location?: unknown;
+            [key: string]: unknown;
+        } | {
+            type: string;
+            [key: string]: unknown;
         }>;
         top_k?: number;
         top_p?: number;
@@ -34537,23 +34582,28 @@ export type BedrockInvokeStreamWithAgentAndModelData = {
                 [key: string]: unknown;
             };
             description?: string;
+            [key: string]: unknown;
         } | {
             name: 'bash';
             type: 'bash_20250124';
             cache_control?: unknown;
+            [key: string]: unknown;
         } | {
             name: 'str_replace_editor';
             type: 'text_editor_20250124';
             cache_control?: unknown;
+            [key: string]: unknown;
         } | {
             name: 'str_replace_based_edit_tool';
             type: 'text_editor_20250429';
             cache_control?: unknown;
+            [key: string]: unknown;
         } | {
             name: 'str_replace_based_edit_tool';
             type: 'text_editor_20250728';
             cache_control?: unknown;
             max_characters?: number | null;
+            [key: string]: unknown;
         } | {
             name: 'web_search';
             type: 'web_search_20250305';
@@ -34562,6 +34612,10 @@ export type BedrockInvokeStreamWithAgentAndModelData = {
             cache_control?: unknown;
             max_uses?: number | null;
             user_location?: unknown;
+            [key: string]: unknown;
+        } | {
+            type: string;
+            [key: string]: unknown;
         }>;
         top_k?: number;
         top_p?: number;
@@ -49517,23 +49571,28 @@ export type GetInteractionsResponses = {
                         [key: string]: unknown;
                     };
                     description?: string;
+                    [key: string]: unknown;
                 } | {
                     name: 'bash';
                     type: 'bash_20250124';
                     cache_control?: unknown;
+                    [key: string]: unknown;
                 } | {
                     name: 'str_replace_editor';
                     type: 'text_editor_20250124';
                     cache_control?: unknown;
+                    [key: string]: unknown;
                 } | {
                     name: 'str_replace_based_edit_tool';
                     type: 'text_editor_20250429';
                     cache_control?: unknown;
+                    [key: string]: unknown;
                 } | {
                     name: 'str_replace_based_edit_tool';
                     type: 'text_editor_20250728';
                     cache_control?: unknown;
                     max_characters?: number | null;
+                    [key: string]: unknown;
                 } | {
                     name: 'web_search';
                     type: 'web_search_20250305';
@@ -49542,6 +49601,10 @@ export type GetInteractionsResponses = {
                     cache_control?: unknown;
                     max_uses?: number | null;
                     user_location?: unknown;
+                    [key: string]: unknown;
+                } | {
+                    type: string;
+                    [key: string]: unknown;
                 }>;
                 top_k?: number;
                 top_p?: number;
@@ -49757,23 +49820,28 @@ export type GetInteractionsResponses = {
                         [key: string]: unknown;
                     };
                     description?: string;
+                    [key: string]: unknown;
                 } | {
                     name: 'bash';
                     type: 'bash_20250124';
                     cache_control?: unknown;
+                    [key: string]: unknown;
                 } | {
                     name: 'str_replace_editor';
                     type: 'text_editor_20250124';
                     cache_control?: unknown;
+                    [key: string]: unknown;
                 } | {
                     name: 'str_replace_based_edit_tool';
                     type: 'text_editor_20250429';
                     cache_control?: unknown;
+                    [key: string]: unknown;
                 } | {
                     name: 'str_replace_based_edit_tool';
                     type: 'text_editor_20250728';
                     cache_control?: unknown;
                     max_characters?: number | null;
+                    [key: string]: unknown;
                 } | {
                     name: 'web_search';
                     type: 'web_search_20250305';
@@ -49782,6 +49850,10 @@ export type GetInteractionsResponses = {
                     cache_control?: unknown;
                     max_uses?: number | null;
                     user_location?: unknown;
+                    [key: string]: unknown;
+                } | {
+                    type: string;
+                    [key: string]: unknown;
                 }>;
                 top_k?: number;
                 top_p?: number;
@@ -56593,23 +56665,28 @@ export type GetInteractionResponses = {
                     [key: string]: unknown;
                 };
                 description?: string;
+                [key: string]: unknown;
             } | {
                 name: 'bash';
                 type: 'bash_20250124';
                 cache_control?: unknown;
+                [key: string]: unknown;
             } | {
                 name: 'str_replace_editor';
                 type: 'text_editor_20250124';
                 cache_control?: unknown;
+                [key: string]: unknown;
             } | {
                 name: 'str_replace_based_edit_tool';
                 type: 'text_editor_20250429';
                 cache_control?: unknown;
+                [key: string]: unknown;
             } | {
                 name: 'str_replace_based_edit_tool';
                 type: 'text_editor_20250728';
                 cache_control?: unknown;
                 max_characters?: number | null;
+                [key: string]: unknown;
             } | {
                 name: 'web_search';
                 type: 'web_search_20250305';
@@ -56618,6 +56695,10 @@ export type GetInteractionResponses = {
                 cache_control?: unknown;
                 max_uses?: number | null;
                 user_location?: unknown;
+                [key: string]: unknown;
+            } | {
+                type: string;
+                [key: string]: unknown;
             }>;
             top_k?: number;
             top_p?: number;
@@ -56833,23 +56914,28 @@ export type GetInteractionResponses = {
                     [key: string]: unknown;
                 };
                 description?: string;
+                [key: string]: unknown;
             } | {
                 name: 'bash';
                 type: 'bash_20250124';
                 cache_control?: unknown;
+                [key: string]: unknown;
             } | {
                 name: 'str_replace_editor';
                 type: 'text_editor_20250124';
                 cache_control?: unknown;
+                [key: string]: unknown;
             } | {
                 name: 'str_replace_based_edit_tool';
                 type: 'text_editor_20250429';
                 cache_control?: unknown;
+                [key: string]: unknown;
             } | {
                 name: 'str_replace_based_edit_tool';
                 type: 'text_editor_20250728';
                 cache_control?: unknown;
                 max_characters?: number | null;
+                [key: string]: unknown;
             } | {
                 name: 'web_search';
                 type: 'web_search_20250305';
@@ -56858,6 +56944,10 @@ export type GetInteractionResponses = {
                 cache_control?: unknown;
                 max_uses?: number | null;
                 user_location?: unknown;
+                [key: string]: unknown;
+            } | {
+                type: string;
+                [key: string]: unknown;
             }>;
             top_k?: number;
             top_p?: number;
@@ -76308,6 +76398,49 @@ export type McpGatewayPostResponses = {
     200: unknown;
 };
 
+export type McpGatewaySseMessageData = {
+    body: {
+        [key: string]: unknown;
+    };
+    path: {
+        profileId: string;
+    };
+    query: {
+        sessionId: string;
+    };
+    url: '/v1/mcp/{profileId}/messages';
+};
+
+export type McpGatewaySseMessageErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string;
+        message: string;
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string;
+        message: string;
+    };
+};
+
+export type McpGatewaySseMessageError = McpGatewaySseMessageErrors[keyof McpGatewaySseMessageErrors];
+
+export type McpGatewaySseMessageResponses = {
+    /**
+     * Default Response
+     */
+    202: {
+        accepted: true;
+    };
+};
+
+export type McpGatewaySseMessageResponse = McpGatewaySseMessageResponses[keyof McpGatewaySseMessageResponses];
+
 export type ReportAgentRuntimeStatusData = {
     body: {
         taskId: string;
@@ -79066,9 +79199,11 @@ export type GetMcpToolCallsResponses = {
             toolCall: {
                 id: string;
                 name: string;
+                namespace?: string;
                 arguments: {
                     [key: string]: unknown;
                 };
+                kind?: 'function' | 'custom';
             } | {
                 __lockedChatSealed: string;
             } | {
@@ -79180,9 +79315,11 @@ export type GetMcpToolCallResponses = {
         toolCall: {
             id: string;
             name: string;
+            namespace?: string;
             arguments: {
                 [key: string]: unknown;
             };
+            kind?: 'function' | 'custom';
         } | {
             __lockedChatSealed: string;
         } | {
@@ -98958,6 +99095,7 @@ export type GetSkillsResponses = {
             };
             sourceType: 'manual' | 'github' | 'built_in';
             sourceRef: string | null;
+            sourceOrigin: string | null;
             sourceCommit: string | null;
             githubSyncInterval: '15m' | '1h' | '1d' | null;
             githubSyncRef: string | null;
@@ -99145,6 +99283,7 @@ export type CreateSkillResponses = {
         };
         sourceType: 'manual' | 'github' | 'built_in';
         sourceRef: string | null;
+        sourceOrigin: string | null;
         sourceCommit: string | null;
         githubSyncInterval: '15m' | '1h' | '1d' | null;
         githubSyncRef: string | null;
@@ -99381,6 +99520,7 @@ export type GetSkillResponses = {
         };
         sourceType: 'manual' | 'github' | 'built_in';
         sourceRef: string | null;
+        sourceOrigin: string | null;
         sourceCommit: string | null;
         githubSyncInterval: '15m' | '1h' | '1d' | null;
         githubSyncRef: string | null;
@@ -99572,6 +99712,7 @@ export type UpdateSkillResponses = {
         };
         sourceType: 'manual' | 'github' | 'built_in';
         sourceRef: string | null;
+        sourceOrigin: string | null;
         sourceCommit: string | null;
         githubSyncInterval: '15m' | '1h' | '1d' | null;
         githubSyncRef: string | null;
@@ -100307,6 +100448,7 @@ export type RestoreSkillResponses = {
         };
         sourceType: 'manual' | 'github' | 'built_in';
         sourceRef: string | null;
+        sourceOrigin: string | null;
         sourceCommit: string | null;
         githubSyncInterval: '15m' | '1h' | '1d' | null;
         githubSyncRef: string | null;
@@ -100543,6 +100685,7 @@ export type ResetSkillResponses = {
         };
         sourceType: 'manual' | 'github' | 'built_in';
         sourceRef: string | null;
+        sourceOrigin: string | null;
         sourceCommit: string | null;
         githubSyncInterval: '15m' | '1h' | '1d' | null;
         githubSyncRef: string | null;
@@ -100707,6 +100850,7 @@ export type UpdateSkillGithubSyncResponses = {
         };
         sourceType: 'manual' | 'github' | 'built_in';
         sourceRef: string | null;
+        sourceOrigin: string | null;
         sourceCommit: string | null;
         githubSyncInterval: '15m' | '1h' | '1d' | null;
         githubSyncRef: string | null;
@@ -101263,6 +101407,7 @@ export type ImportGithubSkillsResponses = {
             };
             sourceType: 'manual' | 'github' | 'built_in';
             sourceRef: string | null;
+            sourceOrigin: string | null;
             sourceCommit: string | null;
             githubSyncInterval: '15m' | '1h' | '1d' | null;
             githubSyncRef: string | null;

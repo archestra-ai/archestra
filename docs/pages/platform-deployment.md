@@ -954,12 +954,6 @@ kubectl rollout status deployment/agent-sandbox-controller -n agent-sandbox-syst
 
 The controller does not install a container isolation runtime. Check your cluster's admission policies and image architecture before enabling workloads.
 
-#### Claude Subscription Sign-In
-
-Claude subscription sign-in uses backend HTTPS requests instead of a Kubernetes workload. The backend needs outbound HTTPS access to `platform.claude.com` for token exchange. Model discovery needs access to `api.anthropic.com`. Browsers need access to `claude.ai` and its sign-in redirects.
-
-Environment egress policies govern runtime workloads, not these backend account requests. Runtime inference still follows the Agent's Environment policy. Tokens remain in the configured secrets backend.
-
 #### Provider Setup
 
 | Cluster | Setup |
@@ -970,7 +964,7 @@ Environment egress policies govern runtime workloads, not these backend account 
 | EKS Auto Mode | Use an Auto Mode storage class with `ebs.csi.eks.amazonaws.com`. Check your NodePool and image compatibility. |
 | Self-Managed Kubernetes | Configure a compatible OCI runtime, CSI driver, and dynamically provisioned storage class. |
 
-For zonal disks, use `WaitForFirstConsumer` binding and compatible node zones. Node-local storage cannot preserve a workspace after node loss. Use the storage and node-selector settings below to select compatible resources.
+For zonal disks, use `WaitForFirstConsumer` binding and compatible node zones. Node-local storage cannot preserve files after node loss. Use the storage and node-selector settings below to select compatible resources.
 
 #### Startup Troubleshooting
 
@@ -990,13 +984,23 @@ The prefetch uses the runtime namespace's default ServiceAccount image pull secr
 Fresh nodes still need their first download. An unavailable image does not block other images or Agent launches.
 <!-- SPDX-SnippetEnd -->
 
-#### Warm Workspaces
+#### Warm Pools
 
-Warm pools prepare empty workspaces before tasks arrive. Compatible Agents share a pool within the same Environment. Each new workspace claims one Sandbox exclusively. Used workspaces never return to the pool.
+A warm pool keeps Kubernetes containers running before anyone starts a task. A new run takes an unused container, reducing startup time. Archestra then prepares a replacement for the next run.
 
-Set `ARCHESTRA_AGENT_RUNTIME_WARM_POOL_SIZE=1` to keep one spare workspace per configuration. `ARCHESTRA_AGENT_RUNTIME_WARM_POOL_MAX_POOLS` defaults to `4` and limits prepared configurations. Spare workspaces consume CPU, memory, and persistent storage.
+Agents in the same Environment share a pool when their container settings match. These include the image, CPU, memory, storage, node placement, and network policy. For example, two Agents using the same Claude Code setup share one pool. They do not each need a spare container.
 
-The controller extensions above provide allocation and replenishment. Pools contain no task credentials and start without network access. Claimed workspaces use the Agent's existing network policy. Missing pools or extensions fall back to normal startup. Empty pools allocate a new workspace. Setting the size to `0` removes spare capacity without deleting claimed workspaces.
+Warm pools are disabled by default. After installing the controller extensions above, add this to your Helm values:
+
+```yaml
+archestra:
+  env:
+    ARCHESTRA_AGENT_RUNTIME_WARM_POOL_SIZE: "1"
+```
+
+This keeps one spare container for each matching group of Agents. Archestra prepares up to four groups by default. Set `ARCHESTRA_AGENT_RUNTIME_WARM_POOL_MAX_POOLS` to change that limit. Spare containers reserve CPU, memory, and persistent storage even while idle.
+
+Each spare has no task credentials or network access. Once assigned, it uses the Agent's network policy and never returns to the pool. When no spare is available, the run starts a new container normally. Setting the size to `0` removes unused spares and preserves containers already assigned to runs.
 
 #### Privileged Containers
 
@@ -1008,13 +1012,13 @@ Privilege requires all three settings:
 2. Elevated permissions enabled on the Agent.
 3. A node runtime and cluster admission policy that allow privileged containers.
 
-The deployment setting does not override cloud-provider restrictions. Images running nested Docker must also prepare the node's cgroup setup. After workspace resumption, restart Docker and any development services.
+The deployment setting does not override cloud-provider restrictions. Images running nested Docker must also prepare the node's cgroup setup. After resuming a run, restart Docker and any development services.
 
 #### Runtime Configuration
 
 Configure deployment defaults below; individual Agents can override supported run settings. For agent setup and everyday use, see [Agent Runtime](/docs/platform-agent-runtime).
 
-On GKE, custom Sandbox controllers can produce a “not backed by a controller” scale-down warning. Active runs must finish before their nodes can be removed safely. Idle workspace suspension releases pods through the runtime lifecycle. Setting `safe-to-evict: "true"` permits interruptions; persisted files do not preserve running processes.
+On GKE, custom Sandbox controllers can produce a “not backed by a controller” scale-down warning. Active runs must finish before their nodes can be removed safely. Archestra releases pods when idle runs are suspended. Setting `safe-to-evict: "true"` permits interruptions; persisted files do not preserve running processes.
 
 - **`ARCHESTRA_AGENT_RUNTIME_ENABLED`** - Enables Agent Runtime. A run can carry the credentials of the person who started it, so this gate is independent of `ARCHESTRA_BETA` and never turns on by implication.
   - Default: `false`
@@ -1039,14 +1043,14 @@ On GKE, custom Sandbox controllers can produce a “not backed by a controller�
 - **`ARCHESTRA_AGENT_RUNTIME_CPU_REQUEST`**, **`ARCHESTRA_AGENT_RUNTIME_MEMORY_REQUEST`**, **`ARCHESTRA_AGENT_RUNTIME_MEMORY_LIMIT`** - Pod resources for a run whose Agent sets none. There is no CPU limit by default: throttling an agent mid-turn reads as a hang rather than back-pressure.
   - Defaults: `500m`, `1Gi`, `4Gi`
 
-- **`ARCHESTRA_AGENT_RUNTIME_WARM_POOL_SIZE`** - Spare workspaces per compatible runtime configuration. `0` disables warming.
+- **`ARCHESTRA_AGENT_RUNTIME_WARM_POOL_SIZE`** - Spare containers per [warm pool](#warm-pools). `0` disables warm pools.
   - Default: `0`
-- **`ARCHESTRA_AGENT_RUNTIME_WARM_POOL_MAX_POOLS`** - Maximum prepared configurations per deployment. Additional configurations start normally without reserved capacity.
+- **`ARCHESTRA_AGENT_RUNTIME_WARM_POOL_MAX_POOLS`** - Maximum warm pools per deployment. Agents outside these pools start containers on demand.
   - Default: `4`
-- **`ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_SIZE`** - Persistent volume capacity for each Agent Sandbox workspace. Stores runtime state, client sessions, and working files under `/home/node`. Privileged workspaces also store `/var/lib/docker` on this volume.
+- **`ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_SIZE`** - Persistent volume capacity for each run. Stores runtime state, client sessions, and working files under `/home/node`. Privileged containers also store `/var/lib/docker` on this volume.
   - Default: `20Gi`
 
-- **`ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_CLASS`** - Storage class for workspace volumes. Use a CSI-backed class with `WaitForFirstConsumer` when nodes span zones. See [Agent Runtime setup](#agent-runtime).
+- **`ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_CLASS`** - Storage class for Agent Runtime volumes. Use a CSI-backed class with `WaitForFirstConsumer` when nodes span zones. See [Agent Runtime setup](#agent-runtime).
   - Default: the cluster's default storage class
 
 - **`ARCHESTRA_AGENT_RUNTIME_POD_START_TIMEOUT_SECONDS`** - How long a launched run may stay pending before it is declared failed. Raise it when runs land on an autoscaled node pool — node creation plus a large image pull can pass the default.
@@ -2102,7 +2106,9 @@ To learn more about enterprise licensing, see the [pricing model](/docs/platform
 ### OpenAPPA Tool Guardrails (experimental)
 
 - `ARCHESTRA_OPENAPPA_ENABLED`: defaults to `false`. Explicit `true` enables OpenAPPA and its policy editor.
+- `ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET`: HMAC secret for offer routing JWS on `get_remedy_plans` / `execute_remedy_plan`. The proxy attaches a flattened JWS JSON Serialization (RFC 7515 §7.2.2) with an unencoded payload (RFC 7797): `protected`, `payload`, `signature`. This is JWS (integrity), not JWE (encryption). `protected` carries `alg` (`HS256`) and `kid` (`default`); unknown algorithms fail closed. Remedy arguments (`offer_id`, `plan`) and the execution receipt stay outside the JWS. Required when OpenAPPA is enabled. Every backend replica must use the same value.
 - `ARCHESTRA_OPENAPPA_YELL_ENABLED`: defaults to `true`. Set `false` to disable reporting. With OpenAPPA and Guardrails v2 enabled, exposes agent feedback reporting. Reports go to Archestra’s shared HTTPS receiver, private GCS storage, and internal Slack channel. No GCP credentials are required in your deployment.
+- `ARCHESTRA_OPENAPPA_POSTGRES_MAX_CONNECTIONS`: defaults to `4`. Each backend process opens up to this many PostgreSQL connections for OpenAPPA. A guardrail check holds one connection until it finishes, including its calls to external authorities. Checks beyond the limit wait up to 30 seconds, then fail. Raise the value if your policies consult slow authorities.
 - `ARCHESTRA_LLM_PROXY_PLUGINS`: comma-separated plugin list, empty by default. Enabling OpenAPPA automatically registers its plugin. The list alone does not enable APPA.
 
 Policies are stored in PostgreSQL and edited in OpenAPPA. Container policy paths are no longer used. Save your existing policy in the editor when upgrading. Saved revisions apply to new conversations. Existing conversations keep their original policy.
@@ -2111,4 +2117,14 @@ Policies are stored in PostgreSQL and edited in OpenAPPA. Container policy paths
 
 Reporting sends the agent’s message verbatim, plus filtered policy diagnostics. Reports identify Archestra and the hostname from `ARCHESTRA_FRONTEND_URL`. Agents can include their session’s policy decisions. Diagnostics exclude raw prompts, tool arguments, tool outputs, and session identifiers. Policy names remain visible. Messages must not contain secrets, personal data, or task content. Reporting does not change policies or grant tool permissions. The active policy must permit the `yell` tool, directly or through a matching wildcard. Restart the backend after changing the reporting flag.
 
-With the APPA flag off, existing Tool Guardrails run unchanged. The native APPA runtime and MCP remedy tool remain inactive. When enabled, APPA replaces the proxy's existing tool-call and tool-result policy checks. Errors fail closed. Chat shows blocked attempts as denied tool calls and returns APPA's feedback to the model. The model can choose a remedy and continue without another user message. Existing approval requirements still apply. External clients receive the existing text refusal; automatic continuation requires client support. See [the integration setup](https://github.com/archestra-ai/archestra/blob/main/platform/archestra-rs/openappa-rs/README.md) for current limitations.
+With OpenAPPA disabled, existing Tool Guardrails run unchanged. When enabled, OpenAPPA replaces proxy tool-call and tool-result checks. Errors fail closed. A blocked call returns as a `get_remedy_plans` notice tool call. The model inspects the ruling, selects a remedy with `execute_remedy_plan`, and retries. Tool requests must declare both APPA tools. Calls that need human approval stay blocked. See the [integration guide](https://github.com/archestra-ai/archestra/blob/main/platform/archestra-rs/openappa-rs/README.md) for current limitations.
+
+Notice restoration supports Anthropic Messages, OpenAI Responses, and OpenAI Chat Completions. Bedrock InvokeModel uses Anthropic restoration. Other protocols evaluate calls and results, but notices stay in history.
+
+Remedy routing is a signed plaintext claim on the notice and control call. Any backend replica verifies the HMAC and reconstructs the session. The event log is the authority for whether the offer still stands.
+
+The proxy attaches the provider tool call ID to the remedy call. Standard MCP clients return this ID unchanged. Submitting the same ID and arguments returns the saved result. Submitting changed arguments under that ID is refused. Spent offers return terminal feedback.
+
+Sessions belong to authorized users within an organization. External client sessions are scoped to the authenticated credential. A personal offer requires its original user. An offer id alone cannot be spent; the caller must present a valid signature for that offer.
+
+Requests without a session header share a fallback session per credential and agent. Uncredentialed loopback traffic is trusted as platform internal traffic.

@@ -11,6 +11,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { hasRetainedSessionActivity } from "@/lib/agent-run-activity";
 import type { AgentRun } from "@/lib/agent-runtime.query";
 import { cn } from "@/lib/utils";
 
@@ -31,9 +32,9 @@ export function AgentRunState({
   startedAt?: string;
   endedAt?: string | null;
 }) {
-  const presentation = runStatePresentation(
+  const presentation = runStatePresentation({
     state,
-    startedAt
+    noRecentActivity: startedAt
       ? hasNoRecentModelActivity({
           state,
           lastModelActivityAt: lastModelActivityAt ?? null,
@@ -41,7 +42,12 @@ export function AgentRunState({
           endedAt: endedAt ?? null,
         })
       : false,
-  );
+    retainedSessionActive: hasRetainedSessionActivity({
+      state,
+      endedAt: endedAt ?? null,
+      lastModelActivityAt: lastModelActivityAt ?? null,
+    }),
+  });
   const [detailsOpen, setDetailsOpen] = useState(false);
   const dot = (
     <span
@@ -119,10 +125,15 @@ export function AgentRunState({
   );
 }
 
-function runStatePresentation(
-  state: AgentRun["state"],
-  noRecentActivity = false,
-): {
+function runStatePresentation({
+  state,
+  noRecentActivity,
+  retainedSessionActive,
+}: {
+  state: AgentRun["state"];
+  noRecentActivity: boolean;
+  retainedSessionActive: boolean;
+}): {
   label: string;
   dotClassName: string;
   pulse?: boolean;
@@ -134,6 +145,9 @@ function runStatePresentation(
       }
       return { label: "Running", dotClassName: "bg-emerald-500" };
     case "TASK_STATE_COMPLETED":
+      if (retainedSessionActive) {
+        return { label: "Running", dotClassName: "bg-emerald-500" };
+      }
       return { label: "Completed", dotClassName: "bg-muted-foreground/50" };
     case "TASK_STATE_FAILED":
       return { label: "Failed", dotClassName: "bg-destructive" };

@@ -18,6 +18,7 @@ export const ARCHESTRA_MCP_CATALOG_ID = "00000000-0000-4000-8000-000000000001";
 export const ARCHESTRA_TOOL_PREFIX = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}`;
 
 export const TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME = "execute_remedy_plan";
+export const TOOL_GET_REMEDY_PLANS_SHORT_NAME = "get_remedy_plans";
 export const TOOL_WHOAMI_SHORT_NAME = "whoami";
 export const TOOL_CREATE_AGENT_SHORT_NAME = "create_agent";
 export const TOOL_GET_AGENT_SHORT_NAME = "get_agent";
@@ -216,6 +217,7 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_WHOAMI_SHORT_NAME,
   TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
   "yell",
+  TOOL_GET_REMEDY_PLANS_SHORT_NAME,
   "get_guardrails_policy",
   "validate_guardrails_policy",
   "update_guardrails_policy",
@@ -407,6 +409,7 @@ export const ARCHESTRA_TOOL_GROUP_BY_SHORT_NAME: Record<
   whoami: "identity",
   execute_remedy_plan: "identity",
   yell: "identity",
+  get_remedy_plans: "identity",
   get_guardrails_policy: "policies",
   validate_guardrails_policy: "policies",
   update_guardrails_policy: "policies",

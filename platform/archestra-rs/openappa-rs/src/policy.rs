@@ -2,27 +2,17 @@
 use appa_eventlog::{Backend, LogStore};
 use appa_runtime::{
     api::Runtime,
-    config::{Binding, Config, ExternalBindings},
+    config::{Config, HostDefaults},
 };
-use serde::Deserialize;
-use std::{collections::BTreeMap, sync::Arc, time::Duration};
+use std::{sync::Arc, time::Duration};
 
 pub(crate) fn compile(content: &str) -> Result<Config, String> {
-    let document: Document = toml::from_str(content).map_err(|error| error.to_string())?;
-    let mut bindings = ExternalBindings::new(
-        Duration::from_millis(document.externals.timeout_ms),
-        document.externals.max_body_bytes,
-    );
-    if let Some(timeout) = document.externals.review_timeout_ms {
-        bindings.review_timeout_ms = timeout;
-    }
-    bindings.authorities = convert(document.externals.authorities)?;
-    bindings.sanitizers = convert(document.externals.sanitizers)?;
-    bindings.annotators = convert(document.externals.annotators)?;
-    bindings.audience = convert(document.externals.audience)?;
-    Config::embedded(
-        toml::to_string(&document.policy).map_err(|error| error.to_string())?,
-        bindings,
+    Config::hosted(
+        content,
+        HostDefaults {
+            consult_timeout: Duration::from_millis(5000),
+            max_body_bytes: 65536,
+        },
     )
     .map_err(|error| error.to_string())
 }
@@ -34,73 +24,13 @@ pub(crate) fn validate(content: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn convert(entries: BTreeMap<String, External>) -> Result<BTreeMap<String, Binding>, String> {
-    entries
-        .into_iter()
-        .map(|(name, entry)| {
-            let binding = match (entry.url, entry.builtin, entry.token_env) {
-                (Some(url), None, token_env) => Binding::Url { url, token_env },
-                (None, Some(builtin), None) => Binding::Builtin(builtin),
-                _ => {
-                    return Err(format!(
-                        "External {name} needs either url (with optional token_env) or builtin"
-                    ));
-                }
-            };
-            Ok((name, binding))
-        })
-        .collect()
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct Document {
-    policy: toml::Value,
-    #[serde(default)]
-    externals: Externals,
-}
-
-// Policy editors configure remote/builtin bindings, never backend shell access
-// or file includes. Reject unsupported fields rather than silently dropping them.
-#[derive(Deserialize)]
-#[serde(default, deny_unknown_fields)]
-struct Externals {
-    timeout_ms: u64,
-    review_timeout_ms: Option<u64>,
-    max_body_bytes: usize,
-    authorities: BTreeMap<String, External>,
-    sanitizers: BTreeMap<String, External>,
-    annotators: BTreeMap<String, External>,
-    audience: BTreeMap<String, External>,
-}
-impl Default for Externals {
-    fn default() -> Self {
-        Self {
-            timeout_ms: 5000,
-            review_timeout_ms: None,
-            max_body_bytes: 65536,
-            authorities: BTreeMap::new(),
-            sanitizers: BTreeMap::new(),
-            annotators: BTreeMap::new(),
-            audience: BTreeMap::new(),
-        }
-    }
-}
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct External {
-    url: Option<String>,
-    token_env: Option<String>,
-    builtin: Option<String>,
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[tokio::test]
     async fn embedded_remedy_accepts_symbolic_audience_without_sources() {
-        use appa_runtime::{hooks, mcp};
+        use appa_runtime::hooks;
         use appa_runtime_api::{Actor, HookDecision, HookEvent, ProposedCall, TrajectoryId};
 
         let config = compile(
@@ -161,10 +91,13 @@ requires = { audience = { within = ["internal"] } }
             .await,
             HookDecision::PassControl
         );
-        let result =
-            mcp::execute_embedded_remedy(&runtime, &actor, serde_json::from_value(args).unwrap())
-                .await;
-        assert_ne!(result.is_error, Some(true), "{result:?}");
+        let result = runtime
+            .execute_embedded_remedy(&actor, serde_json::from_value(args).unwrap())
+            .await;
+        assert!(
+            !matches!(result, appa_runtime::api::RemedyOutcome::Refused { .. }),
+            "{result:?}"
+        );
         assert!(matches!(
             hooks::handle(&runtime, call()).await,
             HookDecision::AllowCall { .. }

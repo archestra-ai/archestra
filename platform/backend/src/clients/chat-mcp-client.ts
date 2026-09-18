@@ -87,8 +87,10 @@ export function createLoopbackGatewayTransport(
 }
 
 /**
- * The gateway has no standalone GET SSE stream. Answer the SDK's optional poll
- * locally to avoid a loopback request and its DB-backed authentication work.
+ * GET on the gateway opens the legacy HTTP+SSE stream, which this Streamable
+ * HTTP client has no use for: nothing is ever pushed to it. Answer the SDK's
+ * optional poll locally instead of holding a loopback connection open and
+ * paying its DB-backed authentication work.
  * This transport has no authProvider; adding one would require limiting this
  * shortcut to the gateway URL so OAuth metadata GET requests reach the network.
  */

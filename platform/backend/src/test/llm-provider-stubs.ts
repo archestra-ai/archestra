@@ -44,6 +44,8 @@ export interface AnthropicStubOptions {
    * a client-decorated name. Implies a `tool_use` stop reason.
    */
   nonStreamingToolUse?: { name: string; input: Record<string, unknown> };
+  /** Emit this tool call through the streamed input-json deltas. */
+  streamingToolUse?: { name: string; input: Record<string, unknown> };
 }
 
 export interface GeminiStubOptions {
@@ -413,6 +415,9 @@ function createOpenAiStream(options: OpenAiStubOptions) {
 }
 
 function createAnthropicStream(options: AnthropicStubOptions) {
+  const streamingArguments = options.streamingToolUse
+    ? JSON.stringify(options.streamingToolUse.input)
+    : undefined;
   const chunks: Anthropic.Messages.MessageStreamEvent[] = [
     {
       type: "message_start",
@@ -486,7 +491,7 @@ function createAnthropicStream(options: AnthropicStubOptions) {
           type: "tool_use",
           id: "toolu_test_weather",
           caller: { type: "direct" },
-          name: "get_weather",
+          name: options.streamingToolUse?.name ?? "get_weather",
           input: {},
         },
       },
@@ -495,7 +500,7 @@ function createAnthropicStream(options: AnthropicStubOptions) {
         index: 0,
         delta: {
           type: "input_json_delta",
-          partial_json: '{"location":"',
+          partial_json: streamingArguments?.slice(0, 10) ?? '{"location":"',
         },
       },
       {
@@ -503,7 +508,7 @@ function createAnthropicStream(options: AnthropicStubOptions) {
         index: 0,
         delta: {
           type: "input_json_delta",
-          partial_json: 'San Francisco",',
+          partial_json: streamingArguments?.slice(10, 20) ?? 'San Francisco",',
         },
       },
       {
@@ -511,7 +516,7 @@ function createAnthropicStream(options: AnthropicStubOptions) {
         index: 0,
         delta: {
           type: "input_json_delta",
-          partial_json: '"unit":"fahrenheit"}',
+          partial_json: streamingArguments?.slice(20) ?? '"unit":"fahrenheit"}',
         },
       },
       {

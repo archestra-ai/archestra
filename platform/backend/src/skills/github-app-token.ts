@@ -4,6 +4,10 @@ import {
 } from "@/models";
 import { resolveCredentialValue } from "@/services/credentials";
 import { ApiError } from "@/types";
+import {
+  type GithubSkillSource,
+  githubSkillSourceFromApiUrl,
+} from "./github-source";
 
 /**
  * Read a stored GitHub personal access token (org-scoped, managed at
@@ -30,13 +34,7 @@ export async function resolveGithubPatToken(params: {
   return token;
 }
 
-/**
- * Exchange a stored GitHub App config (org-scoped, github.com only) for a
- * short-lived installation token. Shared by the interactive import route
- * (which layers a per-user RBAC check on top) and the background skill sync
- * worker (system context, no user). Throws `ApiError` when the config is
- * missing or unusable; callers surface or record the message.
- */
+/** Existing plugin and OpenAPPA imports remain restricted to github.com. */
 export async function resolveGithubAppInstallationToken(params: {
   githubAppConfigId: string;
   organizationId: string;
@@ -55,6 +53,28 @@ export async function resolveGithubAppInstallationToken(params: {
     );
   }
 
+  return resolveInstallationToken(params);
+}
+
+/** Skill imports support the configured Enterprise API as well as github.com. */
+export async function resolveGithubSkillAppCredentials(params: {
+  githubAppConfigId: string;
+  organizationId: string;
+}): Promise<{ githubToken: string; githubSource: GithubSkillSource }> {
+  const appConfig = await GithubAppConfigModel.findByIdForOrganization({
+    id: params.githubAppConfigId,
+    organizationId: params.organizationId,
+  });
+  if (!appConfig) throw new ApiError(404, "GitHub App configuration not found");
+  const githubSource = githubSkillSourceFromApiUrl(appConfig.githubUrl);
+  const githubToken = await resolveInstallationToken(params);
+  return { githubToken, githubSource };
+}
+
+async function resolveInstallationToken(params: {
+  githubAppConfigId: string;
+  organizationId: string;
+}): Promise<string> {
   const definition = await RuntimeCredentialDefinitionModel.findById({
     id: params.githubAppConfigId,
     organizationId: params.organizationId,

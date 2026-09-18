@@ -2,13 +2,13 @@
 title: Agent Runtime (Beta)
 category: Agents
 order: 7
-description: Configure isolated workspaces for coding agents and delegated tasks
+description: Run coding agents and delegated tasks in isolated containers
 lastUpdated: "2026-09-17"
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-Agent Runtime gives an Agent an isolated workspace for coding, running commands, and long-running tasks. You can follow its terminal output, send instructions, and continue work in the same workspace.
+Agent Runtime runs an Agent in its own Kubernetes container for coding, commands, and long-running tasks. You can follow its terminal output, send instructions, and continue work with the same files.
 
 A dedicated runtime belongs to an existing Agent. It uses that Agent's instructions, tools, Environment, and access rules. Choose the built-in agent, Claude Code, Codex, OpenCode, Hermes, OpenClaw, or your own image.
 
@@ -16,9 +16,9 @@ Chat and Projects open an interactive terminal for Agents with a dedicated runti
 
 ## Runtime Backend
 
-Deployments can [prepare warm workspaces](/docs/platform-deployment#warm-workspaces) to reduce startup time. Compatible Agents share spare capacity; every new workspace remains isolated.
+Administrators can enable [warm pools](/docs/platform-deployment#warm-pools) to start containers before tasks arrive. New runs use these spare containers to reduce startup time.
 
-Kubernetes is currently the supported runtime backend. Archestra manages task state, credentials, cancellation, and run history. The cluster supplies the workspace where the Agent executes commands.
+Kubernetes is currently the supported runtime backend. Archestra manages task state, credentials, cancellation, and run history. The cluster runs the containers where Agents execute commands.
 
 ## Cluster Prerequisites
 
@@ -46,9 +46,9 @@ Use an image containing the tools your task needs. A coding image might include 
 
 ### Environments And Network Egress
 
-Workspaces use the Agent's [Environment](/docs/platform-environments), including its namespace and network egress policy. Without an override, the organization default applies, followed by the built-in **Public internet** policy.
+Containers use the Agent's [Environment](/docs/platform-environments), including its namespace and network egress policy. Without an override, the organization default applies, followed by the built-in **Public internet** policy.
 
-Allow the repositories, package registries, and services your task needs. Archestra keeps its control plane and DNS reachable. Continuing a workspace applies the current policy; changing execution namespaces requires a new workspace.
+Allow the repositories, package registries, and services your task needs. Archestra keeps its control plane and DNS reachable. Continuing a run applies the current policy. Changing execution namespaces requires a new run.
 
 See [Network Egress Policies](/docs/platform-environments#network-egress-policies) for policy modes and cluster support.
 
@@ -85,11 +85,11 @@ The Agent's [Skills policy](/docs/platform-agents#skills) applies to every maint
 
 Runtime startup instructions include a compact preview of available skill names and descriptions. The MCP discovery tool also advertises this preview to connected clients. Clients load full instructions and bundled resources on demand. Scripts return as text; binary assets return as base64. Clients can save these files and run them using their own tools. The image must contain any dependencies the skill requires.
 
-The [Code Sandbox](/docs/platform-code-sandbox) is separate from the Agent Runtime workspace. Its `/skills` paths are available through sandbox tools, not the runtime's local shell.
+The [Code Sandbox](/docs/platform-code-sandbox) is separate from the Agent Runtime container. Its `/skills` paths are available through sandbox tools, not the runtime's local shell.
 
 ## Bring Your Own Image
 
-Use a custom image to add development tools or run your own Agent client. Set its image, command, and arguments on the Agent. Archestra supplies the task, credentials, workspace, and live terminal.
+Use a custom image to add development tools or run your own Agent client. Set its image, command, and arguments on the Agent. Archestra supplies the task, credentials, storage, and live terminal.
 
 Custom clients must connect to the injected MCP gateway and support listing and calling tools. Use `list_skills` and `load_skill` for skill instructions and resources. No additional Archestra SDK is required. Native skill directories and slash commands are client-specific.
 
@@ -124,21 +124,21 @@ Read the task from `ARCHESTRA_AGENT_RUNTIME_TASK` and instructions from `ARCHEST
 
 The built-in [Archestra Agent](https://github.com/archestra-ai/archestra/tree/main/platform/runtime-agent) uses AI SDK and the MCP SDK. Use its source as an example for configuration, local tools, and follow-up handling. For clients outside the runtime, see [External Agent Clients](#external-agent-clients).
 
-### Workspace Continuations
+### Continuing Work
 
 These lifecycle rules apply to maintained and custom images.
 
-Follow-ups reuse the workspace's files and saved conversation. If the original interactive process is still alive, you can reattach to it. After suspension, the client restores its saved state in a new process.
+Follow-ups reuse the files and saved conversation from the original run. If the original interactive process is still alive, you can reattach to it. After suspension, the client restores its saved state in a new process.
 
-Idle workspaces pause to release compute. Suspension preserves files, but stops shell processes and development servers. Restart those services when resuming work. The Agent's **Maximum duration** sets the workspace retention deadline, using the deployment default when unset. Follow-up turns do not extend it. Run-history retention is separate from workspace retention.
+Idle containers pause to release compute. Suspension preserves files, but stops shell processes and development servers. Restart those services when resuming work. The Agent's **Maximum duration** sets how long its container and files are kept. The deployment default applies when unset. Follow-up turns do not extend it. Run history has a separate retention period.
 
-Stopping a run preserves its workspace and output. Deleting a workspace permanently removes its files; saved run history remains available. Finish or cancel active work before deletion. Save final deliverables to a repository or download them before expiry.
+Stopping a run preserves its files and output. Deleting its container and storage permanently removes the files. Saved run history remains available. Finish or cancel active work before deletion. Save final deliverables to a repository or download them before expiry.
 
 Custom clients should restore saved state when `ARCHESTRA_AGENT_RUNTIME_CONTINUE=1` and re-read credentials on each invocation. Keep that state under `/home/node`. Interrupted work is not automatically replayed, because it may already have changed external systems.
 
-### Workspace Files
+### Files
 
-External clients can use `read_workspace_file` and `write_workspace_file` without starting another Agent turn. Each accepts a run ID and a workspace-relative path. File access can wake a paused workspace, but does not extend its retention deadline.
+External clients can use `read_workspace_file` and `write_workspace_file` without starting another Agent turn. Each accepts a run ID and a path relative to the run’s working directory. File access can wake a paused container, but does not extend its retention deadline.
 
 Only the original run owner can access these files. See the [MCP tool reference](/docs/platform-archestra-mcp-server) for request schemas and overwrite behavior.
 
@@ -214,7 +214,7 @@ A local coding client or another system can connect through the MCP Gateway and 
 3. `get_run` or `list_runs` to read progress and results.
 4. `steer_run` or `cancel_run` to intervene.
 
-Steering completed work starts another turn in the retained workspace. A2A clients can continue with the same `contextId`. See [A2A and SDKs](/docs/platform-agent-triggers-webhook-a2a#sdks) for direct integrations.
+Steering completed work starts another turn using the saved files and conversation. A2A clients can continue with the same `contextId`. See [A2A and SDKs](/docs/platform-agent-triggers-webhook-a2a#sdks) for direct integrations.
 
 ### Client Handoff
 
@@ -222,13 +222,13 @@ The built-in **Agent Runtime Handoff** skill guides work between connected clien
 
 Send the current goal, decisions, remaining work, and required files when handing off. Input files arrive before the first turn starts. Local file paths alone do not transfer their contents.
 
-Keep the returned session link when switching clients. The connected client can read the original request to recover the task context. Follow-ups reach the same workspace and saved conversation, including while work is running. An unavailable session reports an error instead of silently starting another workspace.
+Keep the returned session link when switching clients. The connected client can read the original request to recover the task context. Follow-ups reach the same files and saved conversation, including while work is running. An unavailable session reports an error instead of silently starting a new session.
 
-For repository work, include the exact base commit and any local changes. Request a return patch relative to the handed-off working tree so it does not repeat existing local edits. Review it against your current working tree before applying it. For documents, retrieve the finished file from the retained workspace.
+For repository work, include the exact base commit and any local changes. Request a return patch relative to the handed-off working tree so it does not repeat existing local edits. Review it against your current working tree before applying it. For documents, retrieve the finished file from the run.
 
-You can hand off unfinished repository work before closing your laptop. Check that the workspace retention deadline covers your planned return. The repository workflow saves a local handoff note outside tracked source files. A fresh conversation can use it to recover the task and session link.
+You can hand off unfinished repository work before closing your laptop. Check that the files will be kept until your planned return. The repository workflow saves a local handoff note outside tracked source files. A fresh conversation can use it to recover the task and session link.
 
-Ask your client to “bring it back and continue here” to resume locally. It retrieves changes, checks for conflicts, and runs the relevant checks. Stop remote editing before continuing locally. Expired workspaces retain run history, but their files are unavailable.
+Ask your client to “bring it back and continue here” to resume locally. It retrieves changes, checks for conflicts, and runs the relevant checks. Stop remote editing before continuing locally. After expiry, run history remains available, but files do not.
 
 ### Messaging Channels
 
@@ -244,7 +244,7 @@ Private mode can use the verified sender's personal credentials. Internal and Pu
 
 ## Work With Runs In Chat
 
-Select a runtime Agent in Chat and send a task to open its live terminal. Attach files before starting so the Agent can read them in its workspace. Startup progress and failures appear alongside the run.
+Select a runtime Agent in Chat and send a task to open its live terminal. Attach files before starting so the Agent can read them in its container. Startup progress and failures appear alongside the run.
 
 You can leave the page while work continues. Reopen it from the sidebar to see current output or retained history. Runs indicate when input is needed or progress has stalled. Send follow-up instructions to continue the work.
 
@@ -266,7 +266,7 @@ The Agent's **Runs** tab opens live terminals and completed recordings. Reattach
 
 Run ownership follows the user who started it, not the Agent creator. Sharing grants read-only output access, never an interactive terminal. Agent administrators can read output even without an explicit share. Project access also permits reading runs when paired with permission to read all project sessions.
 
-Recordings preserve earlier terminal output, including screens replaced by redraws. Run history remains available after workspace removal and follows the configured retention period. See [Deployment](/docs/platform-deployment#agent-runtime) for retention and transcript limits.
+Recordings preserve earlier terminal output, including screens replaced by redraws. Run history remains available after the container and files are removed and follows the configured retention period. See [Deployment](/docs/platform-deployment#agent-runtime) for retention and transcript limits.
 
 ## Monitor Runtime Health
 

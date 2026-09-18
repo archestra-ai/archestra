@@ -8,6 +8,7 @@ import RuntimeCredentialConnectionModel from "@/models/runtime-credential-connec
 import RuntimeCredentialDefinitionModel from "@/models/runtime-credential-definition";
 import { openappaBatteriesService } from "@/openappa/batteries";
 import { createFastifyInstance, type FastifyInstanceWithZod } from "@/server";
+import { deleteRuntimeCredentialDefinition } from "@/services/agent-runtime/runtime-credentials";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import routes from "./openappa-batteries.routes";
@@ -121,6 +122,16 @@ describe("guardrails batteries", () => {
         .getEffectivePolicy(organizationId)
         .then((policy) => policy.content),
     ).resolves.toBe(active?.content);
+
+    // Deleting the definition strands the binding and deactivates the install.
+    await deleteRuntimeCredentialDefinition({
+      organizationId,
+      key: "github-token",
+    });
+    expect(
+      (await OpenAppaEffectivePolicyModel.find(organizationId))
+        ?.installFingerprint,
+    ).toBe(inactive?.installFingerprint);
 
     const disabled = await app.inject({
       method: "PATCH",
@@ -342,6 +353,26 @@ describe("guardrails batteries", () => {
         payload: { credentialBindings },
       });
       expect(rebound.statusCode).toBe(403);
+      const boundByAdmin = await app.inject({
+        method: "PATCH",
+        url: `/api/openappa/battery-installs/${unbound.json().id}`,
+        payload: { credentialBindings },
+      });
+      expect(boundByAdmin.json()).toMatchObject({ status: "active" });
+      const replaced = await managerApp.inject({
+        method: "PUT",
+        url: "/api/openappa/battery-packages/github",
+        payload: {
+          files: [
+            {
+              path: "appa-package.toml",
+              text: 'schema = 1\nname = "github"\ndescription = "Replaced"\n[battery]\npolicy = "appa.toml"\nhosts = ["archestra"]\nnamespaces = ["github"]\n',
+            },
+            { path: "appa.toml", text: "[policy]\nversion = 2\n" },
+          ],
+        },
+      });
+      expect(replaced.statusCode).toBe(403);
     } finally {
       await managerApp.close();
     }

@@ -176,6 +176,7 @@ describe("battery helper bridge", () => {
         },
       ];
       await openappaBatteriesService.uploadPackage({
+        userId,
         organizationId,
         name: "acme",
         files,

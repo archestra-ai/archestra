@@ -25,6 +25,7 @@ import type {
   BatteryInstall,
   BatteryInstallStatus,
   BatteryInstallView,
+  BatteryPackage,
   BatteryPackageFile,
   BatterySummary,
   CreateBatteryInstall,
@@ -103,7 +104,6 @@ class OpenAppaBatteriesService {
   }
 
   async recompileAll(): Promise<void> {
-    if (!config.openappa.enabled) return;
     await this.recompileOrganizations(await OrganizationModel.findAllIds());
   }
 
@@ -127,23 +127,29 @@ class OpenAppaBatteriesService {
           ? await OrganizationModel.findAllIds()
           : [catalog.organizationId];
       for (const organizationId of served) {
-        const available = new Set(
-          (await this.plan(organizationId)).batteries.keys(),
-        );
-        for (const batteryName of matchBatteries(catalog, available)) {
-          // Concurrent syncs of one catalog race here; the unique index decides.
-          const attached = await OpenAppaBatteryInstallModel.createIfAbsent({
-            organizationId,
-            batteryName,
-            catalogId,
-            enabled: true,
-            credentialBindings: {},
-          });
-          if (attached) organizationIds.add(organizationId);
+        try {
+          const available = new Set(
+            (await this.availableBatteries(organizationId)).keys(),
+          );
+          for (const batteryName of matchBatteries(catalog, available)) {
+            // Concurrent syncs of one catalog race here; the unique index decides.
+            const attached = await OpenAppaBatteryInstallModel.createIfAbsent({
+              organizationId,
+              batteryName,
+              catalogId,
+              enabled: true,
+              credentialBindings: {},
+            });
+            if (attached) organizationIds.add(organizationId);
+          }
+        } catch (error) {
+          logger.warn(
+            { catalogId, organizationId, error },
+            "OpenAPPA battery attachment after tool sync failed",
+          );
         }
       }
-      for (const organizationId of organizationIds)
-        await this.recompile(organizationId);
+      await this.recompileOrganizations([...organizationIds]);
     } catch (error) {
       logger.warn(
         { catalogId, error },
@@ -158,6 +164,7 @@ class OpenAppaBatteriesService {
   }
 
   async recompileOrganizations(organizationIds: string[]): Promise<void> {
+    if (!config.openappa.enabled) return;
     for (const organizationId of organizationIds) {
       try {
         await this.recompile(organizationId);
@@ -189,17 +196,6 @@ class OpenAppaBatteriesService {
         catalog.organizationId !== organizationId)
     )
       throw new ApiError(404, "MCP catalog entry not found");
-    if (
-      await OpenAppaBatteryInstallModel.findByCatalog({
-        organizationId,
-        catalogId: install.catalogId,
-        batteryName: install.batteryName,
-      })
-    )
-      throw new ApiError(
-        409,
-        "This battery is already installed for that catalog entry",
-      );
     await this.requireBindableCredentials({
       userId,
       organizationId,
@@ -208,10 +204,15 @@ class OpenAppaBatteriesService {
     });
     if (install.enabled)
       await this.requireSoleHelperOwner({ organizationId, battery, id: null });
-    const created = await OpenAppaBatteryInstallModel.create({
+    const created = await OpenAppaBatteryInstallModel.createIfAbsent({
       organizationId,
       ...install,
     });
+    if (!created)
+      throw new ApiError(
+        409,
+        "This battery is already installed for that catalog entry",
+      );
     return this.installView(organizationId, created.id);
   }
 
@@ -259,10 +260,33 @@ class OpenAppaBatteriesService {
 
   /** Validate an uploaded package natively and store it under its manifest name. */
   async uploadPackage(params: {
+    userId: string;
     organizationId: string;
     name: string;
     files: BatteryPackageFile[];
   }): Promise<BatterySummary> {
+    // New code for an installed battery inherits its credential bindings, so
+    // the uploader must be allowed what binding them requires.
+    const bound = (
+      await OpenAppaBatteryInstallModel.list(params.organizationId)
+    ).some(
+      (install) =>
+        install.batteryName === params.name &&
+        Object.keys(install.credentialBindings).length > 0,
+    );
+    if (
+      bound &&
+      !(await userHasPermission(
+        params.userId,
+        params.organizationId,
+        "credential",
+        "read",
+      ))
+    )
+      throw new ApiError(
+        403,
+        "Credential read permission is required to replace a battery with bound credentials",
+      );
     const native = await import("@archestra/openappa-rs");
     const contentHash = hash(JSON.stringify(params.files));
     let inspected: NativeBatteryPackage;
@@ -319,12 +343,21 @@ class OpenAppaBatteriesService {
     organizationId: string,
     name: string,
   ): Promise<NativeBatteryPackage | null> {
+    const uploaded = await OpenAppaBatteryPackageModel.find({
+      organizationId,
+      name,
+    });
+    const inspected = uploaded ? await this.inspect(uploaded) : null;
     return (
-      (await this.availableBatteries(organizationId)).get(name)?.package ?? null
+      inspected ??
+      (await this.bundledBatteries()).find(
+        (battery) => battery.name === name,
+      ) ??
+      null
     );
   }
 
-  /** `recompile` with the install views the stored composition was planned from. */
+  /** `recompile`, also yielding the install views the stored composition was planned from. */
   private async recompose(organizationId: string): Promise<Recomposition> {
     const slot = this.recompiling.get(organizationId);
     if (slot) {
@@ -465,35 +498,53 @@ class OpenAppaBatteriesService {
   private async availableBatteries(
     organizationId: string,
   ): Promise<AvailableBatteries> {
+    const batteries: AvailableBatteries = new Map();
+    for (const bundled of await this.bundledBatteries())
+      batteries.set(bundled.name, { source: "bundled", package: bundled });
+    for (const uploaded of await OpenAppaBatteryPackageModel.list(
+      organizationId,
+    )) {
+      const inspected = await this.inspect(uploaded);
+      if (inspected)
+        batteries.set(inspected.name, {
+          source: "organization",
+          package: inspected,
+        });
+    }
+    return batteries;
+  }
+
+  private async bundledBatteries(): Promise<NativeBatteryPackage[]> {
     const native = await import("@archestra/openappa-rs");
     this.bundled ??= native.listBundledOpenappaBatteries().catch((error) => {
       this.bundled = null;
       throw error;
     });
-    const batteries: AvailableBatteries = new Map();
-    for (const bundled of await this.bundled)
-      batteries.set(bundled.name, { source: "bundled", package: bundled });
-    for (const uploaded of await OpenAppaBatteryPackageModel.list(
-      organizationId,
-    )) {
-      try {
-        let inspected = this.inspected.get(uploaded.contentHash);
-        if (!inspected) {
-          inspected = await native.inspectOpenappaBattery(uploaded.files);
-          this.inspected.set(uploaded.contentHash, inspected);
-        }
-        batteries.set(inspected.name, {
-          source: "organization",
-          package: inspected,
-        });
-      } catch (error) {
-        logger.warn(
-          { organizationId, battery: uploaded.name, error },
-          "Stored OpenAPPA battery package no longer validates; ignoring it",
-        );
-      }
+    return this.bundled;
+  }
+
+  /** A stored package that no longer validates is logged and treated as absent. */
+  private async inspect(
+    uploaded: BatteryPackage,
+  ): Promise<NativeBatteryPackage | null> {
+    const cached = this.inspected.get(uploaded.contentHash);
+    if (cached) return cached;
+    const native = await import("@archestra/openappa-rs");
+    try {
+      const inspected = await native.inspectOpenappaBattery(uploaded.files);
+      this.inspected.set(uploaded.contentHash, inspected);
+      return inspected;
+    } catch (error) {
+      logger.warn(
+        {
+          organizationId: uploaded.organizationId,
+          battery: uploaded.name,
+          error,
+        },
+        "Stored OpenAPPA battery package no longer validates; ignoring it",
+      );
+      return null;
     }
-    return batteries;
   }
 
   private async requireBattery(

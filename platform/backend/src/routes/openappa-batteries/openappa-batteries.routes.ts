@@ -135,6 +135,7 @@ const routes: FastifyPluginAsyncZod = async (app) => {
     },
     async (request) =>
       openappaBatteriesService.uploadPackage({
+        userId: request.user.id,
         organizationId: request.organizationId,
         name: request.params.name,
         files: request.body.files,

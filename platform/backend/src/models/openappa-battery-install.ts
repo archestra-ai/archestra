@@ -38,24 +38,6 @@ class OpenAppaBatteryInstallModel {
     return row ?? null;
   }
 
-  static async findByCatalog(params: {
-    organizationId: string;
-    catalogId: string;
-    batteryName: string;
-  }): Promise<BatteryInstall | null> {
-    const [row] = await db
-      .select()
-      .from(table)
-      .where(
-        and(
-          eq(table.organizationId, params.organizationId),
-          eq(table.catalogId, params.catalogId),
-          eq(table.batteryName, params.batteryName),
-        ),
-      );
-    return row ?? null;
-  }
-
   static async organizationIdsForCatalog(catalogId: string) {
     const rows = await db
       .selectDistinct({ organizationId: table.organizationId })

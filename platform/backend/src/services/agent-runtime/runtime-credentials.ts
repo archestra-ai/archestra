@@ -3,6 +3,7 @@ import {
   RuntimeCredentialConnectionModel,
   RuntimeCredentialDefinitionModel,
 } from "@/models";
+import { openappaBatteriesService } from "@/openappa/batteries";
 import { isByosEnabled } from "@/secrets-manager";
 import { githubUserConnectionManager } from "@/services/github-user-connection";
 import type {
@@ -144,6 +145,10 @@ export async function deleteRuntimeCredentialDefinition(params: {
     organizationId: params.organizationId,
     credentialId: params.key,
   });
+  // A battery install bound to this definition just lost its activation.
+  await openappaBatteriesService.recompileOrganizations([
+    params.organizationId,
+  ]);
   return deleted;
 }
 

@@ -244,9 +244,11 @@ export class Authnz {
       // JWT validation is handled by the Bot Framework adapter
       url.startsWith("/api/webhooks/chatops/") ||
       // Workspace transfer bodies are moved by a plain HTTP client that holds
-      // no session. The single-use ticket on the request is the proof, and the
-      // route re-runs the owner-only workspace gate before any byte moves.
-      url.startsWith(AGENT_WORKSPACE_TRANSFER_PREFIX)
+      // no session. The ticket on the request is the proof, and the route
+      // re-runs the owner-only workspace gate before any byte moves. The
+      // trailing slash keeps this exemption to the transfer endpoints, so a
+      // later sibling path cannot inherit it by name alone.
+      url.startsWith(`${AGENT_WORKSPACE_TRANSFER_PREFIX}/`)
     ) {
       return true;
     }

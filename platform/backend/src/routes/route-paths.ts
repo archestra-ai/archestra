@@ -104,8 +104,10 @@ export const GOOGLE_DRIVE_OAUTH_CALLBACK_PATH =
 export const ARCHESTRA_CATALOG_PROXY_PREFIX = "/api/archestra-catalog";
 
 /** Transfer bodies are carried by a plain HTTP client holding no session. A
- * single-use ticket authorizes each request, and the route re-runs the
- * owner-only workspace gate before any byte moves. */
+ * ticket authorizes each request, and the route re-runs the owner-only
+ * workspace gate before any byte moves. A download ticket stays usable for its
+ * whole lifetime so an interrupted transfer can resume; only an upload ticket
+ * is consumed on success. */
 export const AGENT_WORKSPACE_TRANSFER_PREFIX = "/api/agent-workspace-transfers";
 
 /** Stateless APPA annotator: returns no restrictions and reads no user data. */

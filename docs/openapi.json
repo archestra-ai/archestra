@@ -4177,7 +4177,7 @@
           "tools": {
             "type": "array",
             "items": {
-              "oneOf": [
+              "anyOf": [
                 {
                   "type": "object",
                   "properties": {
@@ -4205,7 +4205,8 @@
                   "required": [
                     "name",
                     "input_schema"
-                  ]
+                  ],
+                  "additionalProperties": {}
                 },
                 {
                   "type": "object",
@@ -4229,7 +4230,8 @@
                   "required": [
                     "name",
                     "type"
-                  ]
+                  ],
+                  "additionalProperties": {}
                 },
                 {
                   "type": "object",
@@ -4253,7 +4255,8 @@
                   "required": [
                     "name",
                     "type"
-                  ]
+                  ],
+                  "additionalProperties": {}
                 },
                 {
                   "type": "object",
@@ -4277,7 +4280,8 @@
                   "required": [
                     "name",
                     "type"
-                  ]
+                  ],
+                  "additionalProperties": {}
                 },
                 {
                   "type": "object",
@@ -4305,7 +4309,8 @@
                   "required": [
                     "name",
                     "type"
-                  ]
+                  ],
+                  "additionalProperties": {}
                 },
                 {
                   "type": "object",
@@ -4350,7 +4355,20 @@
                   "required": [
                     "name",
                     "type"
-                  ]
+                  ],
+                  "additionalProperties": {}
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type"
+                  ],
+                  "additionalProperties": {}
                 }
               ]
             }
@@ -24784,7 +24802,7 @@
           "tools": {
             "type": "array",
             "items": {
-              "oneOf": [
+              "anyOf": [
                 {
                   "type": "object",
                   "properties": {
@@ -24813,7 +24831,7 @@
                     "name",
                     "input_schema"
                   ],
-                  "additionalProperties": false
+                  "additionalProperties": {}
                 },
                 {
                   "type": "object",
@@ -24838,7 +24856,7 @@
                     "name",
                     "type"
                   ],
-                  "additionalProperties": false
+                  "additionalProperties": {}
                 },
                 {
                   "type": "object",
@@ -24863,7 +24881,7 @@
                     "name",
                     "type"
                   ],
-                  "additionalProperties": false
+                  "additionalProperties": {}
                 },
                 {
                   "type": "object",
@@ -24888,7 +24906,7 @@
                     "name",
                     "type"
                   ],
-                  "additionalProperties": false
+                  "additionalProperties": {}
                 },
                 {
                   "type": "object",
@@ -24917,7 +24935,7 @@
                     "name",
                     "type"
                   ],
-                  "additionalProperties": false
+                  "additionalProperties": {}
                 },
                 {
                   "type": "object",
@@ -24963,7 +24981,19 @@
                     "name",
                     "type"
                   ],
-                  "additionalProperties": false
+                  "additionalProperties": {}
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type"
+                  ],
+                  "additionalProperties": {}
                 }
               ]
             }
@@ -119974,7 +120004,7 @@
                   "tools": {
                     "type": "array",
                     "items": {
-                      "oneOf": [
+                      "anyOf": [
                         {
                           "type": "object",
                           "properties": {
@@ -120002,7 +120032,8 @@
                           "required": [
                             "name",
                             "input_schema"
-                          ]
+                          ],
+                          "additionalProperties": {}
                         },
                         {
                           "type": "object",
@@ -120026,7 +120057,8 @@
                           "required": [
                             "name",
                             "type"
-                          ]
+                          ],
+                          "additionalProperties": {}
                         },
                         {
                           "type": "object",
@@ -120050,7 +120082,8 @@
                           "required": [
                             "name",
                             "type"
-                          ]
+                          ],
+                          "additionalProperties": {}
                         },
                         {
                           "type": "object",
@@ -120074,7 +120107,8 @@
                           "required": [
                             "name",
                             "type"
-                          ]
+                          ],
+                          "additionalProperties": {}
                         },
                         {
                           "type": "object",
@@ -120102,7 +120136,8 @@
                           "required": [
                             "name",
                             "type"
-                          ]
+                          ],
+                          "additionalProperties": {}
                         },
                         {
                           "type": "object",
@@ -120147,7 +120182,20 @@
                           "required": [
                             "name",
                             "type"
-                          ]
+                          ],
+                          "additionalProperties": {}
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "type"
+                          ],
+                          "additionalProperties": {}
                         }
                       ]
                     }
@@ -121555,7 +121603,7 @@
                   "tools": {
                     "type": "array",
                     "items": {
-                      "oneOf": [
+                      "anyOf": [
                         {
                           "type": "object",
                           "properties": {
@@ -121583,7 +121631,8 @@
                           "required": [
                             "name",
                             "input_schema"
-                          ]
+                          ],
+                          "additionalProperties": {}
                         },
                         {
                           "type": "object",
@@ -121607,7 +121656,8 @@
                           "required": [
                             "name",
                             "type"
-                          ]
+                          ],
+                          "additionalProperties": {}
                         },
                         {
                           "type": "object",
@@ -121631,7 +121681,8 @@
                           "required": [
                             "name",
                             "type"
-                          ]
+                          ],
+                          "additionalProperties": {}
                         },
                         {
                           "type": "object",
@@ -121655,7 +121706,8 @@
                           "required": [
                             "name",
                             "type"
-                          ]
+                          ],
+                          "additionalProperties": {}
                         },
                         {
                           "type": "object",
@@ -121683,7 +121735,8 @@
                           "required": [
                             "name",
                             "type"
-                          ]
+                          ],
+                          "additionalProperties": {}
                         },
                         {
                           "type": "object",
@@ -121728,7 +121781,20 @@
                           "required": [
                             "name",
                             "type"
-                          ]
+                          ],
+                          "additionalProperties": {}
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "type"
+                          ],
+                          "additionalProperties": {}
                         }
                       ]
                     }
@@ -123146,7 +123212,7 @@
                   "tools": {
                     "type": "array",
                     "items": {
-                      "oneOf": [
+                      "anyOf": [
                         {
                           "type": "object",
                           "properties": {
@@ -123174,7 +123240,8 @@
                           "required": [
                             "name",
                             "input_schema"
-                          ]
+                          ],
+                          "additionalProperties": {}
                         },
                         {
                           "type": "object",
@@ -123198,7 +123265,8 @@
                           "required": [
                             "name",
                             "type"
-                          ]
+                          ],
+                          "additionalProperties": {}
                         },
                         {
                           "type": "object",
@@ -123222,7 +123290,8 @@
                           "required": [
                             "name",
                             "type"
-                          ]
+                          ],
+                          "additionalProperties": {}
                         },
                         {
                           "type": "object",
@@ -123246,7 +123315,8 @@
                           "required": [
                             "name",
                             "type"
-                          ]
+                          ],
+                          "additionalProperties": {}
                         },
                         {
                           "type": "object",
@@ -123274,7 +123344,8 @@
                           "required": [
                             "name",
                             "type"
-                          ]
+                          ],
+                          "additionalProperties": {}
                         },
                         {
                           "type": "object",
@@ -123319,7 +123390,20 @@
                           "required": [
                             "name",
                             "type"
-                          ]
+                          ],
+                          "additionalProperties": {}
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "type"
+                          ],
+                          "additionalProperties": {}
                         }
                       ]
                     }
@@ -124492,7 +124576,7 @@
                   "tools": {
                     "type": "array",
                     "items": {
-                      "oneOf": [
+                      "anyOf": [
                         {
                           "type": "object",
                           "properties": {
@@ -124520,7 +124604,8 @@
                           "required": [
                             "name",
                             "input_schema"
-                          ]
+                          ],
+                          "additionalProperties": {}
                         },
                         {
                           "type": "object",
@@ -124544,7 +124629,8 @@
                           "required": [
                             "name",
                             "type"
-                          ]
+                          ],
+                          "additionalProperties": {}
                         },
                         {
                           "type": "object",
@@ -124568,7 +124654,8 @@
                           "required": [
                             "name",
                             "type"
-                          ]
+                          ],
+                          "additionalProperties": {}
                         },
                         {
                           "type": "object",
@@ -124592,7 +124679,8 @@
                           "required": [
                             "name",
                             "type"
-                          ]
+                          ],
+                          "additionalProperties": {}
                         },
                         {
                           "type": "object",
@@ -124620,7 +124708,8 @@
                           "required": [
                             "name",
                             "type"
-                          ]
+                          ],
+                          "additionalProperties": {}
                         },
                         {
                           "type": "object",
@@ -124665,7 +124754,20 @@
                           "required": [
                             "name",
                             "type"
-                          ]
+                          ],
+                          "additionalProperties": {}
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "type"
+                          ],
+                          "additionalProperties": {}
                         }
                       ]
                     }
@@ -181857,7 +181959,7 @@
                                       "tools": {
                                         "type": "array",
                                         "items": {
-                                          "oneOf": [
+                                          "anyOf": [
                                             {
                                               "type": "object",
                                               "properties": {
@@ -181886,7 +181988,7 @@
                                                 "name",
                                                 "input_schema"
                                               ],
-                                              "additionalProperties": false
+                                              "additionalProperties": {}
                                             },
                                             {
                                               "type": "object",
@@ -181911,7 +182013,7 @@
                                                 "name",
                                                 "type"
                                               ],
-                                              "additionalProperties": false
+                                              "additionalProperties": {}
                                             },
                                             {
                                               "type": "object",
@@ -181936,7 +182038,7 @@
                                                 "name",
                                                 "type"
                                               ],
-                                              "additionalProperties": false
+                                              "additionalProperties": {}
                                             },
                                             {
                                               "type": "object",
@@ -181961,7 +182063,7 @@
                                                 "name",
                                                 "type"
                                               ],
-                                              "additionalProperties": false
+                                              "additionalProperties": {}
                                             },
                                             {
                                               "type": "object",
@@ -181990,7 +182092,7 @@
                                                 "name",
                                                 "type"
                                               ],
-                                              "additionalProperties": false
+                                              "additionalProperties": {}
                                             },
                                             {
                                               "type": "object",
@@ -182036,7 +182138,19 @@
                                                 "name",
                                                 "type"
                                               ],
-                                              "additionalProperties": false
+                                              "additionalProperties": {}
+                                            },
+                                            {
+                                              "type": "object",
+                                              "properties": {
+                                                "type": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "type"
+                                              ],
+                                              "additionalProperties": {}
                                             }
                                           ]
                                         }
@@ -183216,7 +183330,7 @@
                                       "tools": {
                                         "type": "array",
                                         "items": {
-                                          "oneOf": [
+                                          "anyOf": [
                                             {
                                               "type": "object",
                                               "properties": {
@@ -183245,7 +183359,7 @@
                                                 "name",
                                                 "input_schema"
                                               ],
-                                              "additionalProperties": false
+                                              "additionalProperties": {}
                                             },
                                             {
                                               "type": "object",
@@ -183270,7 +183384,7 @@
                                                 "name",
                                                 "type"
                                               ],
-                                              "additionalProperties": false
+                                              "additionalProperties": {}
                                             },
                                             {
                                               "type": "object",
@@ -183295,7 +183409,7 @@
                                                 "name",
                                                 "type"
                                               ],
-                                              "additionalProperties": false
+                                              "additionalProperties": {}
                                             },
                                             {
                                               "type": "object",
@@ -183320,7 +183434,7 @@
                                                 "name",
                                                 "type"
                                               ],
-                                              "additionalProperties": false
+                                              "additionalProperties": {}
                                             },
                                             {
                                               "type": "object",
@@ -183349,7 +183463,7 @@
                                                 "name",
                                                 "type"
                                               ],
-                                              "additionalProperties": false
+                                              "additionalProperties": {}
                                             },
                                             {
                                               "type": "object",
@@ -183395,7 +183509,19 @@
                                                 "name",
                                                 "type"
                                               ],
-                                              "additionalProperties": false
+                                              "additionalProperties": {}
+                                            },
+                                            {
+                                              "type": "object",
+                                              "properties": {
+                                                "type": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "type"
+                                              ],
+                                              "additionalProperties": {}
                                             }
                                           ]
                                         }
@@ -217053,7 +217179,7 @@
                                 "tools": {
                                   "type": "array",
                                   "items": {
-                                    "oneOf": [
+                                    "anyOf": [
                                       {
                                         "type": "object",
                                         "properties": {
@@ -217082,7 +217208,7 @@
                                           "name",
                                           "input_schema"
                                         ],
-                                        "additionalProperties": false
+                                        "additionalProperties": {}
                                       },
                                       {
                                         "type": "object",
@@ -217107,7 +217233,7 @@
                                           "name",
                                           "type"
                                         ],
-                                        "additionalProperties": false
+                                        "additionalProperties": {}
                                       },
                                       {
                                         "type": "object",
@@ -217132,7 +217258,7 @@
                                           "name",
                                           "type"
                                         ],
-                                        "additionalProperties": false
+                                        "additionalProperties": {}
                                       },
                                       {
                                         "type": "object",
@@ -217157,7 +217283,7 @@
                                           "name",
                                           "type"
                                         ],
-                                        "additionalProperties": false
+                                        "additionalProperties": {}
                                       },
                                       {
                                         "type": "object",
@@ -217186,7 +217312,7 @@
                                           "name",
                                           "type"
                                         ],
-                                        "additionalProperties": false
+                                        "additionalProperties": {}
                                       },
                                       {
                                         "type": "object",
@@ -217232,7 +217358,19 @@
                                           "name",
                                           "type"
                                         ],
-                                        "additionalProperties": false
+                                        "additionalProperties": {}
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "type": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "type"
+                                        ],
+                                        "additionalProperties": {}
                                       }
                                     ]
                                   }
@@ -218412,7 +218550,7 @@
                                 "tools": {
                                   "type": "array",
                                   "items": {
-                                    "oneOf": [
+                                    "anyOf": [
                                       {
                                         "type": "object",
                                         "properties": {
@@ -218441,7 +218579,7 @@
                                           "name",
                                           "input_schema"
                                         ],
-                                        "additionalProperties": false
+                                        "additionalProperties": {}
                                       },
                                       {
                                         "type": "object",
@@ -218466,7 +218604,7 @@
                                           "name",
                                           "type"
                                         ],
-                                        "additionalProperties": false
+                                        "additionalProperties": {}
                                       },
                                       {
                                         "type": "object",
@@ -218491,7 +218629,7 @@
                                           "name",
                                           "type"
                                         ],
-                                        "additionalProperties": false
+                                        "additionalProperties": {}
                                       },
                                       {
                                         "type": "object",
@@ -218516,7 +218654,7 @@
                                           "name",
                                           "type"
                                         ],
-                                        "additionalProperties": false
+                                        "additionalProperties": {}
                                       },
                                       {
                                         "type": "object",
@@ -218545,7 +218683,7 @@
                                           "name",
                                           "type"
                                         ],
-                                        "additionalProperties": false
+                                        "additionalProperties": {}
                                       },
                                       {
                                         "type": "object",
@@ -218591,7 +218729,19 @@
                                           "name",
                                           "type"
                                         ],
-                                        "additionalProperties": false
+                                        "additionalProperties": {}
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "type": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "type"
+                                        ],
+                                        "additionalProperties": {}
                                       }
                                     ]
                                   }

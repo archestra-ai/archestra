@@ -233,6 +233,9 @@ const registry = defineArchestraTools([
               required: ["action"],
             },
           });
+          // Unified elicitation protocol: Chat and MRTR clients both resolve to
+          // an { action, content } envelope where action="accept" with content.action="approve"
+          // yields approve, action="decline" yields deny, and action="cancel" yields undefined (NoAnswer).
           if (outcome.status === "answered") {
             if (outcome.result.action === "accept") {
               const contentAction = outcome.result.content?.action;
@@ -252,7 +255,7 @@ const registry = defineArchestraTools([
               GATEWAY_INPUT_REQUEST_KEY
             ] as { action?: string; content?: { action?: string } } | undefined;
             if (supplied !== undefined) {
-              // Retry round: consume verified user answer from requestState
+              // Retry round: consume verified user answer from requestState using the same envelope shape.
               if (supplied.action === "accept") {
                 ruling =
                   supplied.content?.action === "deny" ? "deny" : "approve";

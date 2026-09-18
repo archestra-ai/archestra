@@ -124,6 +124,8 @@ export interface SetupScriptContext {
   mcp: SetupScriptMcpSection | null;
   proxy: SetupScriptProxySection | null;
   skills: SetupScriptSkillsSection | null;
+  /** Claude Code only; copied locally by setup, never fetched at launch. */
+  runtimeHandoffInstructions?: string | null;
 }
 
 /**

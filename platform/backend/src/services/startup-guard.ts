@@ -111,6 +111,7 @@ export interface StartupGuardContext {
   mcp: StartupGuardMcpSection | null;
   proxy: StartupGuardProxySection | null;
   skills: StartupGuardSkillsSection | null;
+  runtimeHandoffInstructions?: string | null;
 }
 
 /**
@@ -285,6 +286,10 @@ export function buildStartupGuardContext(
         }
       : null,
     skills: ctx.skills,
+    runtimeHandoffInstructions:
+      ctx.clientId === "claude-code" && ctx.mcp
+        ? ctx.runtimeHandoffInstructions
+        : null,
   };
 }
 
@@ -1145,9 +1150,37 @@ export function buildStartupGuardInstallSection(
     client,
     functionName: refreshFunctionName,
   });
+  const promptPath = `${guardPath}.prompt.md`;
+  const handoffEnabled =
+    client.clientId === "claude-code" &&
+    !!ctx.mcp &&
+    !!ctx.runtimeHandoffInstructions;
+  const promptInstall =
+    client.clientId !== "claude-code"
+      ? ""
+      : handoffEnabled
+        ? `printf '%s' ${sh(ctx.runtimeHandoffInstructions ?? "")} > "${promptPath}"\nchmod 600 "${promptPath}"`
+        : `rm -f "${promptPath}"`;
+  const promptArgs = handoffEnabled
+    ? `
+  local archestra_add_prompt=1 archestra_arg
+  case "\${1:-}" in
+    auth|mcp|plugin|plugins|install|uninstall|update|upgrade|doctor|setup-token|completion|completions|config|agents) archestra_add_prompt=0 ;;
+  esac
+  for archestra_arg in "$@"; do
+    case "$archestra_arg" in
+      --) break ;;
+      --system-prompt|--system-prompt=*|--system-prompt-file|--system-prompt-file=*|--append-system-prompt|--append-system-prompt=*|--append-system-prompt-file|--append-system-prompt-file=*|--help|-h|--version|-v) archestra_add_prompt=0 ;;
+    esac
+  done
+  if [ "$archestra_add_prompt" = 1 ] && [ -f "${guardPath}" ] && [ -r "${promptPath}" ] && ! grep -qx mcp "$HOME/${client.skipRelpath}" 2>/dev/null; then
+    set -- --append-system-prompt-file "${promptPath}" "$@"
+  fi`
+    : "";
 
   return `say ${sh(`Installing the ${ctx.appName} startup guard for ${client.label}`)}
 mkdir -p "$(dirname "${guardPath}")"
+${promptInstall}
 # A guard installed BEFORE the version-check feature has no GUARD_FORMAT_VERSION
 # stamp and no [U] update check, so at launch it can never nudge the user to
 # re-connect on its own — the [U] launch prompt only exists in version-aware
@@ -1187,7 +1220,7 @@ ${refreshBlock}
 ${client.binary}() {
   if [ -x "$HOME/${client.scriptRelpath}" ]; then
     "$HOME/${client.scriptRelpath}" "$@" || true
-  fi
+  fi${promptArgs}
   command ${client.binary} "$@"
   archestra_client_status=$?
   ${refreshBlock ? `${refreshFunctionName} "$@" || true` : ":"}

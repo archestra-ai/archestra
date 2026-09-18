@@ -1,6 +1,7 @@
 import {
   CLAUDE_CODE_CLIENT_ID,
   COPILOT_CLI_CLIENT_ID,
+  DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS,
   EXTERNAL_AGENT_ID_HEADER,
   VIRTUAL_KEY_HEADER,
 } from "@archestra/shared";
@@ -9,6 +10,7 @@ import { vi } from "vitest";
 import {
   ConnectionSetupModel,
   MemberModel,
+  OrganizationModel,
   PluginModel,
   SkillModel,
   SkillShareLinkModel,
@@ -92,6 +94,61 @@ describe("GET /api/connection-setups/script/:token", () => {
       method: "GET",
       url: `/api/connection-setups/script/${rawToken}`,
       remoteAddress: nextRemoteAddress(),
+    });
+  }
+
+  for (const { clientId, enabled, instructions, expected } of [
+    {
+      clientId: "claude-code",
+      enabled: true,
+      instructions: null,
+      expected: DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS,
+    },
+    {
+      clientId: "claude-code",
+      enabled: true,
+      instructions: "Offer remote research.",
+      expected: "Offer remote research.",
+    },
+    {
+      clientId: "claude-code",
+      enabled: false,
+      instructions: "Disabled instructions.",
+      expected: null,
+    },
+    {
+      clientId: "codex",
+      enabled: true,
+      instructions: "Claude only instructions.",
+      expected: null,
+    },
+  ]) {
+    test(`renders current handoff settings for ${clientId} (enabled=${enabled}, instructions=${instructions})`, async ({
+      makeAgent,
+    }) => {
+      const gateway = await makeAgent({
+        organizationId,
+        agentType: "mcp_gateway",
+      });
+      const { rawToken } = await createSetup({
+        clientId,
+        platform: "linux",
+        baseUrl: "http://localhost:9000/v1",
+        mcpGatewayId: gateway.id,
+      });
+      await OrganizationModel.patch(organizationId, {
+        connectionRuntimeHandoffEnabled: enabled,
+        connectionRuntimeHandoffInstructions: instructions,
+      });
+      const response = await fetchScript(rawToken);
+      expect(response.statusCode, response.body).toBe(200);
+      if (expected) {
+        expect(response.body).toContain(expected);
+        expect(response.body).toContain("set -- --append-system-prompt-file");
+      } else {
+        expect(response.body).not.toContain(instructions);
+        expect(response.body).not.toContain("--append-system-prompt-file");
+      }
     });
   }
 

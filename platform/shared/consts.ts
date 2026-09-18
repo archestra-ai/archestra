@@ -300,6 +300,10 @@ export type StartupGuardClientId = keyof typeof STARTUP_GUARD_INSTALL;
  */
 export const STARTUP_GUARD_FORMAT_VERSION = 1;
 
+export const DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS = `When a task would benefit from background execution or continuation across devices, offer to move it to an available Agent Runtime through the connected MCP gateway. Explain the benefit briefly and wait for the user to agree before transferring work. If the user declines, continue locally without repeating the offer for that task.
+
+Check that a suitable runtime agent is accessible before offering it. Load the Agent Runtime Handoff skill before transferring work. Reuse an existing runtime session for the same task. Do not transfer secrets or promise capabilities the runtime does not have.`;
+
 /**
  * Header name for external agent ID.
  * Clients can pass this header to associate interactions with their own agent identifiers.

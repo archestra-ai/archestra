@@ -1,3 +1,4 @@
+import { DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS } from "@archestra/shared";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
@@ -93,6 +94,52 @@ beforeEach(() => {
 });
 
 describe("ConnectionSettingsForm", () => {
+  it("saves custom handoff instructions, resets the default, and allows disabling an empty draft", async () => {
+    const user = userEvent.setup();
+    render(<ConnectionSettingsForm />);
+    expect(
+      screen.queryByRole("textbox", { name: "Runtime handoff instructions" }),
+    ).not.toBeInTheDocument();
+    const toggle = screen.getByRole("switch", {
+      name: "Suggest runtime handoff",
+    });
+    await user.click(toggle);
+    const editor = screen.getByRole("textbox", {
+      name: "Runtime handoff instructions",
+    });
+    expect(editor).toHaveValue(DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS);
+    await user.clear(editor);
+    await user.type(editor, "Offer overnight work.");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(mutate).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        connectionRuntimeHandoffEnabled: true,
+        connectionRuntimeHandoffInstructions: "Offer overnight work.",
+      }),
+    );
+    await user.click(screen.getByRole("button", { name: "Reset to default" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(mutate).toHaveBeenLastCalledWith(
+      expect.objectContaining({ connectionRuntimeHandoffInstructions: null }),
+    );
+    await user.clear(editor);
+    mutate.mockClear();
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(mutate).not.toHaveBeenCalled();
+    await user.click(toggle);
+    // A different setting keeps the form dirty after restoring the off default.
+    await user.click(
+      screen.getByRole("switch", { name: "Offer skills on the Connect page" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(mutate).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        connectionRuntimeHandoffEnabled: false,
+        connectionRuntimeHandoffInstructions: null,
+      }),
+    );
+  });
+
   it("omits the plugin setting and its PATCH field when plugins are unavailable", async () => {
     const user = userEvent.setup();
     vi.mocked(useFeature).mockReturnValue(undefined);

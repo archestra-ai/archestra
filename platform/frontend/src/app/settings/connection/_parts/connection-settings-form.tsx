@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS,
   providerRequiresPerUserCredential,
   type SupportedProvider,
 } from "@archestra/shared";
@@ -24,12 +25,14 @@ import {
   SettingsSaveBar,
   SettingsSectionStack,
 } from "@/components/settings/settings-block";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MultiSelectCombobox } from "@/components/ui/multi-select-combobox";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { SingleSelectCombobox } from "@/components/ui/single-select-combobox";
 import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import { useProfiles } from "@/lib/agent.query";
 import config from "@/lib/config/config";
 import { useFeature } from "@/lib/config/config.query";
@@ -70,6 +73,10 @@ export function ConnectionSettingsForm() {
   const [skillsEnabled, setSkillsEnabled] = useState(true);
   const [llmProxyEnabled, setLlmProxyEnabled] = useState(true);
   const [pluginsEnabled, setPluginsEnabled] = useState(true);
+  const [runtimeHandoffEnabled, setRuntimeHandoffEnabled] = useState(false);
+  const [runtimeHandoffInstructions, setRuntimeHandoffInstructions] = useState(
+    DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS,
+  );
   const pluginsFeatureEnabled = useFeature("plugins") === true;
   const { data: providerApiKeys } = useLlmProviderApiKeys();
   const providerCatalog = useModelProviderCatalog();
@@ -93,6 +100,13 @@ export function ConnectionSettingsForm() {
     setSkillsEnabled(organization.connectionSkillsEnabled);
     setLlmProxyEnabled(organization.connectionLlmProxyEnabled);
     setPluginsEnabled(organization.connectionPluginsEnabled);
+    setRuntimeHandoffEnabled(
+      organization.connectionRuntimeHandoffEnabled ?? false,
+    );
+    setRuntimeHandoffInstructions(
+      organization.connectionRuntimeHandoffInstructions ??
+        DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS,
+    );
   }, [organization]);
 
   const updateMutation = useUpdateConnectionSettings(
@@ -135,6 +149,11 @@ export function ConnectionSettingsForm() {
   const serverSkillsEnabled = organization?.connectionSkillsEnabled ?? true;
   const serverLlmProxyEnabled = organization?.connectionLlmProxyEnabled ?? true;
   const serverPluginsEnabled = organization?.connectionPluginsEnabled ?? true;
+  const serverRuntimeHandoffEnabled =
+    organization?.connectionRuntimeHandoffEnabled ?? false;
+  const serverRuntimeHandoffInstructions =
+    organization?.connectionRuntimeHandoffInstructions ??
+    DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS;
 
   const hasChanges =
     JSON.stringify(defaultProviderKeys) !==
@@ -145,6 +164,8 @@ export function ConnectionSettingsForm() {
       JSON.stringify(serverShownClients) ||
     skillsEnabled !== serverSkillsEnabled ||
     llmProxyEnabled !== serverLlmProxyEnabled ||
+    runtimeHandoffEnabled !== serverRuntimeHandoffEnabled ||
+    runtimeHandoffInstructions !== serverRuntimeHandoffInstructions ||
     (pluginsFeatureEnabled && pluginsEnabled !== serverPluginsEnabled) ||
     baseUrlsDirty;
 
@@ -156,9 +177,17 @@ export function ConnectionSettingsForm() {
       : selected;
 
   const handleSave = () => {
+    if (runtimeHandoffEnabled && !runtimeHandoffInstructions.trim()) return;
     updateMutation.mutate({
       connectionDefaultMcpGatewayId: gatewayId,
       connectionDefaultClientId: defaultClientId,
+      connectionRuntimeHandoffEnabled: runtimeHandoffEnabled,
+      connectionRuntimeHandoffInstructions:
+        !runtimeHandoffInstructions.trim() ||
+        runtimeHandoffInstructions.trim() ===
+          DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS
+          ? null
+          : runtimeHandoffInstructions.trim(),
       connectionShownClientIds: collapseIfAll(shownClientIds, ALL_CLIENT_IDS),
       connectionBaseUrls: collapseBaseUrlMeta(envBaseUrls, baseUrlMeta),
       connectionDefaultProviderKeys:
@@ -186,6 +215,8 @@ export function ConnectionSettingsForm() {
     setSkillsEnabled(serverSkillsEnabled);
     setLlmProxyEnabled(serverLlmProxyEnabled);
     setPluginsEnabled(serverPluginsEnabled);
+    setRuntimeHandoffEnabled(serverRuntimeHandoffEnabled);
+    setRuntimeHandoffInstructions(serverRuntimeHandoffInstructions);
   };
 
   const setBaseUrlDescription = (url: string, description: string) =>
@@ -469,6 +500,54 @@ export function ConnectionSettingsForm() {
                     aria-label="Offer plugins on the Connect page"
                   />
                 </SettingRow>
+              )}
+
+              <SettingRow
+                title="Suggest runtime handoff"
+                description="Add instructions to the Claude Code system prompt through its shell wrapper. Requires an MCP gateway. Rerun setup to apply changes, including disabling."
+              >
+                <Switch
+                  checked={runtimeHandoffEnabled}
+                  onCheckedChange={setRuntimeHandoffEnabled}
+                  disabled={locked}
+                  aria-label="Suggest runtime handoff"
+                />
+              </SettingRow>
+              {runtimeHandoffEnabled && (
+                <SettingSection
+                  title="Runtime handoff instructions"
+                  description="Rerun Connect setup and reload your shell to apply edits or disable this feature. Start a new Claude session to use the updated prompt. Explicit system-prompt flags take precedence."
+                >
+                  <div className="space-y-3">
+                    <Textarea
+                      aria-label="Runtime handoff instructions"
+                      value={runtimeHandoffInstructions}
+                      onChange={(event) =>
+                        setRuntimeHandoffInstructions(event.target.value)
+                      }
+                      rows={8}
+                      maxLength={20000}
+                      disabled={locked}
+                    />
+                    {!runtimeHandoffInstructions.trim() && (
+                      <p role="alert" className="text-sm text-destructive">
+                        Enter instructions or reset to the default.
+                      </p>
+                    )}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={locked}
+                      onClick={() =>
+                        setRuntimeHandoffInstructions(
+                          DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS,
+                        )
+                      }
+                    >
+                      Reset to default
+                    </Button>
+                  </div>
+                </SettingSection>
               )}
 
               <SettingSection

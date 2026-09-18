@@ -627,6 +627,60 @@ describe("organization routes", () => {
   });
 
   describe("PATCH /api/organization/connection-settings - default provider keys", () => {
+    test("saves handoff instructions and records their audit diff", async () => {
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/connection-settings",
+        payload: {
+          connectionRuntimeHandoffEnabled: true,
+          connectionRuntimeHandoffInstructions: "  Offer overnight work.  ",
+        },
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      expect(await OrganizationModel.getById(organizationId)).toMatchObject({
+        connectionRuntimeHandoffEnabled: true,
+        connectionRuntimeHandoffInstructions: "Offer overnight work.",
+      });
+      const [audit] = await db
+        .select()
+        .from(schema.auditLogsTable)
+        .where(eq(schema.auditLogsTable.action, "organization.updated"));
+      expect(audit?.before).toMatchObject({
+        connectionRuntimeHandoffEnabled: false,
+        connectionRuntimeHandoffInstructions: null,
+      });
+      expect(audit?.after).toMatchObject({
+        connectionRuntimeHandoffEnabled: true,
+        connectionRuntimeHandoffInstructions: "Offer overnight work.",
+      });
+      const reset = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/connection-settings",
+        payload: {
+          connectionRuntimeHandoffEnabled: false,
+          connectionRuntimeHandoffInstructions: null,
+        },
+      });
+      expect(reset.statusCode).toBe(200);
+      expect(reset.json()).toMatchObject({
+        connectionRuntimeHandoffEnabled: false,
+        connectionRuntimeHandoffInstructions: null,
+      });
+    });
+
+    test.each([
+      "   ",
+      "x".repeat(20001),
+      "bad\u0000text",
+    ])("rejects invalid handoff instructions (%#)", async (instructions) => {
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/connection-settings",
+        payload: { connectionRuntimeHandoffInstructions: instructions },
+      });
+      expect(response.statusCode).toBe(400);
+    });
+
     test("rejects a per-user provider (GitHub Copilot) as a default key", async () => {
       const key = await LlmProviderApiKeyModel.create({
         organizationId,

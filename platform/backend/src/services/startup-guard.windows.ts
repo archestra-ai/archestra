@@ -909,9 +909,36 @@ export function buildWindowsStartupGuardInstallSection(
   try { Invoke-Archestra${client.binary}MarketplaceRefresh -ClientArgs $args | Out-Null } catch { }
   $global:LASTEXITCODE = $archClientExit`
     : "";
+  const promptRelpath = `${client.psScriptRelpath}.prompt.md`;
+  const handoffEnabled =
+    client.clientId === "claude-code" &&
+    !!ctx.mcp &&
+    !!ctx.runtimeHandoffInstructions;
+  const promptInstall =
+    client.clientId !== "claude-code"
+      ? ""
+      : handoffEnabled
+        ? `[IO.File]::WriteAllBytes((Join-Path $env:USERPROFILE ${psq(promptRelpath)}), [Convert]::FromBase64String('${Buffer.from(ctx.runtimeHandoffInstructions ?? "", "utf8").toString("base64")}'))`
+        : `Remove-Item -Force -ErrorAction SilentlyContinue (Join-Path $env:USERPROFILE ${psq(promptRelpath)})`;
+  const promptArgs = handoffEnabled
+    ? `
+    $archLaunchArgs = @($args)
+    $archAddPrompt = $true
+    if ($args.Count -gt 0 -and $args[0] -in @('auth', 'mcp', 'plugin', 'plugins', 'install', 'uninstall', 'update', 'upgrade', 'doctor', 'setup-token', 'completion', 'completions', 'config', 'agents')) { $archAddPrompt = $false }
+    foreach ($archArg in $args) {
+      if ($archArg -eq '--') { break }
+      if ($archArg -match '^--(system-prompt|system-prompt-file|append-system-prompt|append-system-prompt-file)(=|$)' -or $archArg -in @('--help', '-h', '--version', '-v')) { $archAddPrompt = $false }
+    }
+    $archPromptPath = Join-Path $env:USERPROFILE ${psq(promptRelpath)}
+    $archSkipped = @(Get-Content -Path (Join-Path $env:USERPROFILE ${psq(client.skipRelpath)}) -ErrorAction SilentlyContinue)
+    if ($archAddPrompt -and (Test-Path $archGuard) -and (Test-Path $archPromptPath) -and 'mcp' -notin $archSkipped) {
+      $archLaunchArgs = @('--append-system-prompt-file', $archPromptPath) + $archLaunchArgs
+    }`
+    : "";
   return `Say ${psq(`Installing the ${ctx.appName} startup guard for ${client.label}`)}
 $archGuardPath = Join-Path $env:USERPROFILE ${psq(client.psScriptRelpath)}
 $null = New-Item -ItemType Directory -Force -Path (Split-Path -Parent $archGuardPath)
+${promptInstall}
 # A guard installed BEFORE the version-check feature has no $GuardFormatVersion
 # stamp and no [U] update check, so at launch it can never nudge the user to
 # re-connect on its own. Running connect is the one moment we can lift such a
@@ -950,8 +977,8 @@ function ${client.binary} {
       Where-Object { $_.CommandType -in @('Application', 'ExternalScript') } |
       Select-Object -First 1
   }
-  if ($archReal) {
-    & $archReal.Source @args
+  if ($archReal) {${promptArgs}
+    & $archReal.Source ${handoffEnabled ? "@archLaunchArgs" : "@args"}
     ${refreshCall}
   }
   else { Write-Error "${client.binary} executable not found on PATH" }

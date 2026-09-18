@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import {
   DEFAULT_APP_NAME,
+  DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS,
   providerDisplayNames,
   RouteId,
   STARTUP_GUARD_FORMAT_VERSION,
@@ -1125,6 +1126,13 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
       appName,
       mcp,
       proxy,
+      runtimeHandoffInstructions:
+        setup.clientId === "claude-code" &&
+        mcp &&
+        organization.connectionRuntimeHandoffEnabled
+          ? (organization.connectionRuntimeHandoffInstructions ??
+            DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS)
+          : null,
     },
     marketplaceRender,
   };

@@ -3,7 +3,7 @@ title: Connect Your Agents
 category: Archestra Platform
 order: 8
 description: How the one-command setup script connects your AI tools, and how to audit or undo it
-lastUpdated: 2026-09-15
+lastUpdated: 2026-09-18
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -232,6 +232,14 @@ You can turn off **LLM Proxy on Connect**, **Skills on Connect**, and **Plugins 
 The same page holds the defaults it pre-selects — an MCP gateway, a client, and the provider key a setup command's virtual key maps to — and the base URLs it hands out.
 
 Which model providers the page offers is not set here. That is one deployment-wide list, under **Settings → LLM → Model providers**.
+
+### Runtime Handoff Instructions
+
+**Suggest runtime handoff** adds configurable instructions to Claude Code's system prompt. It is off by default. Setup must include an MCP gateway with access to Agent Runtime tools. The default instructions ask Claude to offer suitable remote work and wait for your consent.
+
+The existing shell wrapper passes a local file through `--append-system-prompt-file`. Claude's built-in prompt stays intact. Explicit system-prompt flags take precedence. Other clients are unchanged.
+
+After saving edits or disabling the feature, rerun Connect setup and reload your shell. Start a new Claude conversation; resumed conversations can retain their previous prompt. Disabling removes the local instruction file during setup. Instructions guide the model; they do not guarantee an offer or start remote work automatically.
 
 ## Use Case
 

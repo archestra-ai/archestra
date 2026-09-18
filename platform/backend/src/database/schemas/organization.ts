@@ -385,6 +385,14 @@ const organizationsTable = pgTable("organization", {
     .notNull()
     .default(true),
 
+  connectionRuntimeHandoffEnabled: boolean("connection_runtime_handoff_enabled")
+    .notNull()
+    .default(false),
+  /** Null uses the shipped handoff suggestion instructions. */
+  connectionRuntimeHandoffInstructions: text(
+    "connection_runtime_handoff_instructions",
+  ),
+
   /**
    * Admin overrides of the built-in model-provider catalog, keyed by provider
    * id. A `hidden` entry is switched off everywhere: the provider disappears

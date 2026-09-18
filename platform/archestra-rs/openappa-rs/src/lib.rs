@@ -29,10 +29,11 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json, value::RawValue};
 use sha2::{Digest, Sha256};
 use std::{
+    collections::HashMap,
     panic::AssertUnwindSafe,
     sync::{Arc, OnceLock},
 };
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, OwnedMutexGuard};
 
 #[napi(object)]
 #[derive(Clone)]
@@ -41,14 +42,24 @@ pub struct ReportingOptions {
     pub hostname: Option<String>,
 }
 
+/// Process-wide runtime slot. The mutex covers initialize, policy reload, and
+/// panic rebuild only. Dispatch runs concurrently: same-trajectory exclusion
+/// is the in-process root lock plus the ledger's advisory session lock, and
+/// every ledger write is a short self-committing transaction, so no outer
+/// transaction ever spans hook I/O.
 static STATE: OnceLock<Mutex<Option<State>>> = OnceLock::new();
 
+#[derive(Clone)]
 struct State {
     runtime: Arc<Runtime>,
     config: Config,
     store: Arc<LogStore>,
     policy_content: String,
     reporting: Option<ReportingOptions>,
+}
+
+fn state_mutex() -> &'static Mutex<Option<State>> {
+    STATE.get_or_init(|| Mutex::new(None))
 }
 
 /// Identity context associated with a denial offer for cross-replica routing.
@@ -259,6 +270,7 @@ fn postgres_store(store: &LogStore) -> napi::Result<&PostgresStore> {
         .postgres()
         .ok_or_else(|| error("OpenAPPA requires PostgreSQL storage"))
 }
+
 fn identity(input: &Input) -> String {
     format!(
         "archestra:{:x}",
@@ -272,7 +284,7 @@ pub async fn initialize_openappa(
     policy_content: String,
     reporting: Option<ReportingOptions>,
 ) -> napi::Result<()> {
-    let mut slot = STATE.get_or_init(|| Mutex::new(None)).lock().await;
+    let mut slot = state_mutex().lock().await;
     if slot.is_some() {
         return Ok(());
     }
@@ -390,20 +402,30 @@ fn validate(input: &Input) -> napi::Result<()> {
 
 /// Runs one validated event against the shared runtime.
 async fn run(input: Input, policy_content: Option<String>) -> napi::Result<String> {
-    let mut slot = STATE.get_or_init(|| Mutex::new(None)).lock().await;
-    let state = slot
-        .as_mut()
-        .ok_or_else(|| error("OpenAPPA is not initialized"))?;
     let result = AssertUnwindSafe(async {
-        if let Some(content) = policy_content
-            && content != state.policy_content
-        {
-            let mut config = policy::compile(&content).map_err(error)?;
-            config.reporting.agent_yell = state.reporting.is_some();
-            state.runtime.reload(config.clone()).map_err(error)?;
-            state.config = config;
-            state.policy_content = content;
-        }
+        let state = {
+            let mut slot = state_mutex().lock().await;
+            let state = slot
+                .as_mut()
+                .ok_or_else(|| error("OpenAPPA is not initialized"))?;
+            if let Some(content) = policy_content
+                && content != state.policy_content
+            {
+                // Reloads are serialized by the mutex; when two concurrent
+                // dispatches carry different policy contents, the second one
+                // to acquire the mutex wins and the first reload is replaced.
+                // Each dispatch runs one hook event, and a session attaches
+                // one deployment snapshot per event, so an in-flight dispatch
+                // below keeps a coherent policy view either way; this clone's
+                // `config` is only read by the rebuild path under the mutex.
+                let mut config = policy::compile(&content).map_err(error)?;
+                config.reporting.agent_yell = state.reporting.is_some();
+                state.runtime.reload(config.clone()).map_err(error)?;
+                state.config = config;
+                state.policy_content = content;
+            }
+            state.clone()
+        };
         state.dispatch(input).await
     })
     .catch_unwind()
@@ -413,9 +435,18 @@ async fn run(input: Input, policy_content: Option<String>) -> napi::Result<Strin
         failure => {
             // A rollback must also discard tentative in-memory vouches and
             // turn markers. Durable pending receipts remain fail-closed.
-            let rebuilt = Runtime::open_with_store(state.config.clone(), state.store.clone(), None)
-                .map_err(error)?;
-            state.runtime = Arc::new(rebuilt);
+            // Dispatches already in flight keep their cloned `Arc<Runtime>`:
+            // that is safe because each hook event rebuilds its engine view
+            // from the durable log, the discarded tentative state is exactly
+            // what a failure must drop, and their receipts fence the same
+            // trajectory against the rebuilt runtime until they settle.
+            let mut slot = state_mutex().lock().await;
+            if let Some(state) = slot.as_mut() {
+                let rebuilt =
+                    Runtime::open_with_store(state.config.clone(), state.store.clone(), None)
+                        .map_err(error)?;
+                state.runtime = Arc::new(rebuilt);
+            }
             match failure {
                 Ok(Err(error)) => Err(error),
                 _ => Err(error("OpenAPPA panicked; operation was not released")),
@@ -458,18 +489,19 @@ pub async fn execute_remedy_by_offer(
         .as_deref()
         .map(Principal::parse)
         .transpose()?;
-    let owner = {
-        let slot = STATE.get_or_init(|| Mutex::new(None)).lock().await;
-        let state = slot
-            .as_ref()
-            .ok_or_else(|| error("OpenAPPA is not initialized"))?;
-        lookup_offer_owner(
-            postgres_store(&state.store)?,
-            &input.organization_id,
-            &offer_id,
-            caller.as_ref(),
-        )?
+    let store = {
+        let slot = state_mutex().lock().await;
+        slot.as_ref()
+            .ok_or_else(|| error("OpenAPPA is not initialized"))?
+            .store
+            .clone()
     };
+    let owner = lookup_offer_owner(
+        postgres_store(&store)?,
+        &input.organization_id,
+        &offer_id,
+        caller.as_ref(),
+    )?;
     let Some(owner) = owner else {
         return Ok(
             with_offer_status(render_unknown_offer()?, OfferStatusKind::Unknown)?.to_string(),
@@ -529,6 +561,36 @@ impl Drop for SessionLock {
             Ok(())
         });
     }
+}
+
+/// In-process per-trajectory exclusion. The advisory session lock only
+/// excludes other connections: on this process's one ledger connection it is
+/// reentrant, so it cannot order this process's own dispatches. Unrelated
+/// roots overlap freely; dispatches for one root queue here. One root is one
+/// chat session, so the registry grows with the distinct sessions this
+/// process has served, a few hundred bytes each — the same lifetime the
+/// sandbox handle slots keep. Removing an entry is not safe while a later
+/// dispatch could already be queued on it, so entries stay for the process's
+/// life; revisit only if distinct-root counts grow unbounded in production.
+static ROOT_LOCKS: OnceLock<Mutex<HashMap<String, Arc<Mutex<()>>>>> = OnceLock::new();
+
+struct RootLock {
+    _guard: OwnedMutexGuard<()>,
+}
+
+impl RootLock {
+    async fn acquire(root: String) -> Self {
+        let lock = {
+            let mut registry = root_locks().lock().await;
+            registry.entry(root).or_default().clone()
+        };
+        let _guard = lock.lock_owned().await;
+        Self { _guard }
+    }
+}
+
+fn root_locks() -> &'static Mutex<HashMap<String, Arc<Mutex<()>>>> {
+    ROOT_LOCKS.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
 impl State {
@@ -594,6 +656,7 @@ impl State {
         } else {
             actor_id.clone()
         };
+        let _root = RootLock::acquire(root.clone()).await;
         let _lock = SessionLock::acquire(pg, root.clone())?;
         // Check every member of the family: continuing a parent while a child's
         // result is interrupted could otherwise bypass inherited restrictions.
@@ -634,7 +697,6 @@ impl State {
                 return Err(error("session identity changed"));
             }
         } else {
-            let tx = pg.begin().map_err(error)?;
             let start = if let Some(child) = &actor.child {
                 HookEvent::ChildStart {
                     root: actor.root.clone(),
@@ -659,7 +721,6 @@ impl State {
                     &[&id, &root, &input.organization_id, &input.caller_id, &input.session_id, &input.parent_id, &start_decision])?;
                 Ok(())
             }).map_err(error)?;
-            tx.commit().map_err(error)?;
         }
 
         if input.event == HookEventKind::SessionStart {
@@ -713,7 +774,6 @@ impl State {
                     ProcessedResultClaim::Complete { decision, .. } => return Ok(decision),
                 }
             }
-            let tx = pg.begin().map_err(error)?;
             let args: ExecuteRemedyPlanArgs =
                 serde_json::from_str(required_arguments(&input)?).map_err(error)?;
             let call = ProposedCall {
@@ -758,7 +818,6 @@ impl State {
                     pg.complete_processed_result(result_key, approved, response.clone())
                         .map_err(error)?;
                 }
-                tx.commit().map_err(error)?;
                 return Ok(response);
             }
             let quoted_offer = OfferId(args.offer_id.clone());
@@ -776,7 +835,6 @@ impl State {
                 pg.complete_processed_result(result_key, approved, response.clone())
                     .map_err(error)?;
             }
-            tx.commit().map_err(error)?;
             return Ok(response);
         }
 
@@ -817,7 +875,6 @@ impl State {
         )? {
             return Ok(decision);
         }
-        let tx = pg.begin().map_err(error)?;
         let decision = if input.event == HookEventKind::Yell {
             let reporting = self
                 .reporting
@@ -883,7 +940,6 @@ impl State {
             wire(&outcome.decision)?
         };
         finish_operation(pg, &input, &operation, &decision, ReceiptBinding::Session)?;
-        tx.commit().map_err(error)?;
         Ok(decision)
     }
 
@@ -952,7 +1008,6 @@ impl State {
             },
             (false, Some(ExecutionOutcome::Unknown) | None) => ToolOutcome::Indeterminate,
         };
-        let tx = pg.begin().map_err(error)?;
         let event = if call.spawn {
             // No child return is guessed from an opaque tool result. The child
             // must have reported ChildEnd through its adapter first.
@@ -1045,7 +1100,6 @@ impl State {
         let approved = decision_text(&response)?;
         pg.complete_processed_result(key, approved, response.clone())
             .map_err(error)?;
-        tx.commit().map_err(error)?;
         Ok(response)
     }
 }
@@ -1588,6 +1642,41 @@ fn finish_operation(
 struct YellArguments {
     message: String,
     with_trajectory: bool,
+}
+
+#[cfg(test)]
+mod root_lock_tests {
+    use super::RootLock;
+    use futures_util::FutureExt;
+
+    // One test function: the registry is process-global, so parallel test
+    // bodies would contend for it and a single `now_or_never` poll could
+    // observe a momentarily held registry instead of the root under test.
+    #[test]
+    fn same_roots_serialize_while_other_roots_overlap() {
+        // An uncontended acquire settles without an executor; a contended one
+        // stays pending, so `now_or_never` observes exclusion directly.
+        let held = RootLock::acquire("held-root".to_owned())
+            .now_or_never()
+            .expect("an uncontended root acquires immediately");
+        assert!(
+            RootLock::acquire("held-root".to_owned())
+                .now_or_never()
+                .is_none(),
+            "a second dispatch for the same root must wait"
+        );
+        let other = RootLock::acquire("other-root".to_owned())
+            .now_or_never()
+            .expect("a different root acquires while another is held");
+        drop(other);
+        drop(held);
+        assert!(
+            RootLock::acquire("held-root".to_owned())
+                .now_or_never()
+                .is_some(),
+            "a released root can be acquired again"
+        );
+    }
 }
 
 #[cfg(test)]

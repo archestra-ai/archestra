@@ -201,7 +201,9 @@ describe("client trajectory identity", () => {
 
       expect(fork.sessionId).toBe(CODEX_FORK_THREAD);
       expect(fork.sessionId).not.toBe(parent.sessionId);
-      expect(fork.parentId).toBe(CODEX_THREAD);
+      // A client fork is not a spawn-prepared child: no parent id is stamped,
+      // or the runtime would refuse the forked session outright.
+      expect(fork.parentId).toBeUndefined();
     });
 
     test("a compaction turn stays on the thread's root", () => {
@@ -361,7 +363,7 @@ describe("client trajectory identity", () => {
       });
     });
 
-    test("maps x-parent-session-id to the APPA parent when it differs from the session", () => {
+    test("x-parent-session-id is not stamped: the runtime refuses unprepared children", () => {
       expect(
         extractAppaSessionIdentity({
           family: "openai:chatCompletions",
@@ -374,7 +376,7 @@ describe("client trajectory identity", () => {
         }),
       ).toMatchObject({
         sessionId: OPENCODE_FORK_SESSION,
-        parentId: OPENCODE_SESSION,
+        parentId: undefined,
         provenance: "opencode-session-header",
       });
     });

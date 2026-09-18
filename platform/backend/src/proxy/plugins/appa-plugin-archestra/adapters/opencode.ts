@@ -62,16 +62,14 @@ export class AppaOpenCodeAdapter implements AppaClientAdapter {
         "OpenAPPA cannot bind contradictory OpenCode session headers",
       );
     }
-    const parentId = readHeader(context.headers, "x-parent-session-id");
-    const identity = normal
-      ? { sessionId: normal, provenance: "opencode-session-header" as const }
-      : hosted
-        ? { sessionId: hosted, provenance: "opencode-hosted-header" as const }
-        : undefined;
-    if (!identity) return undefined;
-    return {
-      ...identity,
-      ...(parentId && parentId !== identity.sessionId ? { parentId } : {}),
-    };
+    if (normal) {
+      // `x-parent-session-id` marks a task child, but the runtime only opens
+      // a child on a spawn the parent prepared — stamping it would refuse the
+      // session. A client fork or task opens a fresh root instead.
+      return { sessionId: normal, provenance: "opencode-session-header" };
+    }
+    return hosted
+      ? { sessionId: hosted, provenance: "opencode-hosted-header" }
+      : undefined;
   }
 }

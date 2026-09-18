@@ -326,7 +326,7 @@ describe("rendering runtime text for this client", () => {
         arguments: JSON.stringify({ limit: 5 }),
         ruling:
           "[appa] Refused: grain__list_meetings needs the internal audience",
-        notice: { v: 1, call_id: "dispatch-1" },
+        notice: { v: 1, call_id: "dispatch-1", session: "dispatch-session" },
       });
       // `blocked` stays the wire batch's bookkeeping: the registry pins its
       // name to the call as given. The ruled-on identity lives in the notice.

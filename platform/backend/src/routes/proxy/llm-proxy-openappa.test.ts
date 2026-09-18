@@ -337,7 +337,11 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     expect(notice.input.ruling).toBe(
       "[appa] NATIVE REFUSAL: execute_remedy_plan(offer_id: test-offer)",
     );
-    expect(notice.input.notice).toEqual({ v: 1, call_id: notice.id });
+    expect(notice.input.notice).toMatchObject({
+      v: 1,
+      call_id: notice.id,
+      session: expect.any(String),
+    });
     expect(providerRequests).toHaveLength(1);
   });
 
@@ -1764,7 +1768,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     expect(response.body).not.toContain('"type":"tool_use"');
   });
 
-  test("Claude Code compact then a new session stamps parent_id so the child shares the parent root", async () => {
+  test("Claude Code compact stays on the root and a new session opens a fresh root with no parent id", async () => {
     const parent = "claude-label-parent";
     const child = "claude-label-child";
     const compactBody = payload(false);
@@ -1789,22 +1793,28 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       "x-archestra-source": "api",
     });
     expect(response.statusCode, response.body).toBe(200);
-    expect(events).toContainEqual(
-      expect.objectContaining({
-        event: "session_start",
-        session_id: expect.stringContaining(child),
-        parent_id: expect.stringContaining(parent),
-      }),
-    );
+    // The runtime opens children only on a spawn the parent prepared; a bare
+    // parent id would refuse the forked session outright. A client fork opens
+    // a fresh root: same label state as a stranger, nothing smeared.
+    const starts = events.filter((event) => event.event === "session_start");
+    expect(starts).toHaveLength(1);
+    expect(starts[0].session_id).toContain(child);
+    expect(starts[0].parent_id).toBeUndefined();
   });
 
-  test("Chat compaction then a new conversation stamps parent_id so labels stay on the parent root", async ({
+  test("Chat compaction stays on the conversation root and a new conversation opens a fresh root", async ({
     makeConversation,
   }) => {
     const compact = await post(payload(false), {
       "x-archestra-source": "chat:compaction",
     });
     expect(compact.statusCode, compact.body).toBe(200);
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        event: "session_start",
+        session_id: expect.stringContaining(sessionId),
+      }),
+    );
     events.length = 0;
     const childConversation = await makeConversation(agent.id, {
       userId,
@@ -1815,13 +1825,10 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       "x-archestra-source": "chat",
     });
     expect(response.statusCode, response.body).toBe(200);
-    expect(events).toContainEqual(
-      expect.objectContaining({
-        event: "session_start",
-        session_id: expect.stringContaining(childConversation.id),
-        parent_id: expect.stringContaining(sessionId),
-      }),
-    );
+    const starts = events.filter((event) => event.event === "session_start");
+    expect(starts).toHaveLength(1);
+    expect(starts[0].session_id).toContain(childConversation.id);
+    expect(starts[0].parent_id).toBeUndefined();
   });
 });
 
@@ -2242,7 +2249,7 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
     expect(events).toHaveLength(0);
   });
 
-  test("Codex compaction then a new thread stamps parent_id so the child shares the parent root", async () => {
+  test("Codex compaction stays on the thread and a new thread opens a fresh root with no parent id", async () => {
     const compact = await app.inject({
       method: "POST",
       url: `/v1/openai/${agent.id}/responses`,
@@ -2255,6 +2262,12 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
       }) as Record<string, unknown>,
     });
     expect(compact.statusCode, compact.body).toBe(200);
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        event: "session_start",
+        session_id: expect.stringContaining(CODEX_THREAD),
+      }),
+    );
     events.length = 0;
     const response = await app.inject({
       method: "POST",
@@ -2264,6 +2277,7 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
       payload: codexPayload({
         session_id: CODEX_RESUMED_SESSION,
         thread_id: CODEX_FORK_THREAD,
+        forked_from_thread_id: CODEX_THREAD,
       }) as Record<string, unknown>,
     });
     expect(response.statusCode, response.body).toBe(200);
@@ -2271,12 +2285,14 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
       expect.objectContaining({
         event: "session_start",
         session_id: expect.stringContaining(CODEX_FORK_THREAD),
-        parent_id: expect.stringContaining(CODEX_THREAD),
       }),
     );
+    const starts = events.filter((event) => event.event === "session_start");
+    expect(starts).toHaveLength(1);
+    expect(starts[0].parent_id).toBeUndefined();
   });
 
-  test("OpenCode compaction then a new session stamps parent_id so the child shares the parent root", async () => {
+  test("OpenCode compaction stays on the session and a new session opens a fresh root with no parent id", async () => {
     const compact = await app.inject({
       method: "POST",
       url: `/v1/openai/${agent.id}/chat/completions`,
@@ -2296,6 +2312,12 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
       } as Record<string, unknown>,
     });
     expect(compact.statusCode, compact.body).toBe(200);
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        event: "session_start",
+        session_id: expect.stringContaining(OPENCODE_SESSION),
+      }),
+    );
     events.length = 0;
     const response = await app.inject({
       method: "POST",
@@ -2304,6 +2326,7 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
       headers: {
         ...openCodeHeaders(),
         "x-session-id": OPENCODE_FORK_SESSION,
+        "x-parent-session-id": OPENCODE_SESSION,
       },
       payload: openCodePayload() as Record<string, unknown>,
     });
@@ -2312,8 +2335,10 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
       expect.objectContaining({
         event: "session_start",
         session_id: expect.stringContaining(OPENCODE_FORK_SESSION),
-        parent_id: expect.stringContaining(OPENCODE_SESSION),
       }),
     );
+    const starts = events.filter((event) => event.event === "session_start");
+    expect(starts).toHaveLength(1);
+    expect(starts[0].parent_id).toBeUndefined();
   });
 });

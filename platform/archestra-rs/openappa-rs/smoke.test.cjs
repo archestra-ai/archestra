@@ -384,7 +384,7 @@ builtin = "hitl"
     assert.match(JSON.stringify(human.result.content), /unreachable|gave no answer/);
   });
 
-  await t.test('compact (same session) and fork (parent_id) keep the parent trajectory labels', async () => {
+  await t.test('compact keeps labels on the root; an unprepared fork is refused; a stranger stays clean', async () => {
     const parent = scope();
     const before = await call(parent, 'write-before-taint', 'write_public');
     assert.equal(before.decision, 'allow_call', JSON.stringify(before));
@@ -399,6 +399,8 @@ builtin = "hitl"
     assert.equal((await call(parent, 'taint-run', 'read_untrusted')).decision, 'allow_call');
     await result(parent, 'taint-run', 'restricted contents');
 
+    // Compaction replays the same session id: the root reopens and the taint
+    // is still on it.
     const afterCompact = await call(parent, 'write-after-compact', 'write_public');
     assert.notEqual(
       afterCompact.decision,
@@ -406,22 +408,13 @@ builtin = "hitl"
       'same session after further turns still carries the taint',
     );
 
+    // A child only opens on a fork the parent's spawn prepared: a bare
+    // parent_id cannot smear or inherit the parent's labels.
     const child = { ...parent, session_id: randomUUID(), parent_id: parent.session_id };
-    const afterFork = await call(child, 'write-after-fork', 'write_public');
-    assert.notEqual(
-      afterFork.decision,
-      'allow_call',
-      'child with parent_id shares the parent root labels',
+    await assert.rejects(
+      () => call(child, 'write-after-fork', 'write_public'),
+      /no prepared fork to open this child/,
     );
-    const parentRoot = (await client.query(
-      'SELECT root FROM openappa_sessions WHERE session_id=$1',
-      [parent.session_id],
-    )).rows[0].root;
-    const childRoot = (await client.query(
-      'SELECT root FROM openappa_sessions WHERE session_id=$1',
-      [child.session_id],
-    )).rows[0].root;
-    assert.equal(childRoot, parentRoot);
 
     const stranger = scope();
     const strangerWrite = await call(stranger, 'write-stranger', 'write_public');

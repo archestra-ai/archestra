@@ -99,6 +99,7 @@ import {
   UnmuteMcpServerAlertQuerySchema,
   UuidIdSchema,
 } from "@/types";
+import { trackBackgroundWork } from "@/utils/background-work";
 import {
   broadcastMcpInstallationStatus,
   broadcastMcpServersChanged,
@@ -1060,8 +1061,10 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   catalogId: capturedCatalogId,
                   mcpServerId: mcpServer.id,
                 });
-                await openappaBatteriesService.onCatalogToolsChanged(
-                  capturedCatalogId,
+                trackBackgroundWork(
+                  openappaBatteriesService.onCatalogToolsChanged(
+                    capturedCatalogId,
+                  ),
                 );
 
                 // Set status to success after tools are fetched
@@ -3453,7 +3456,9 @@ async function connectAndGetToolsForInstallation(params: {
       mcpServerId: params.mcpServerId,
       enterpriseTransportCredential: installDiscoveryCredential,
     });
-    await openappaBatteriesService.onCatalogToolsChanged(catalogItem.id);
+    trackBackgroundWork(
+      openappaBatteriesService.onCatalogToolsChanged(catalogItem.id),
+    );
     return tools;
   } catch (error) {
     if (
@@ -3502,7 +3507,9 @@ async function connectAndGetToolsForInstallation(params: {
         expiresInSeconds: null,
       },
     });
-    await openappaBatteriesService.onCatalogToolsChanged(catalogItem.id);
+    trackBackgroundWork(
+      openappaBatteriesService.onCatalogToolsChanged(catalogItem.id),
+    );
     return tools;
   }
 }

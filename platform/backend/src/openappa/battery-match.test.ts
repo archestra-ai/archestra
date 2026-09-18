@@ -74,4 +74,19 @@ describe("matchBatteries", () => {
       ),
     ).toEqual([]);
   });
+
+  test("a name fragment matches whole words only", () => {
+    expect(
+      matchBatteries(
+        { name: "github-mcp (prod)", serverUrl: null, localConfig: null },
+        available,
+      ),
+    ).toEqual(["github"]);
+    expect(
+      matchBatteries(
+        { name: "Notional planning", serverUrl: null, localConfig: null },
+        available,
+      ),
+    ).toEqual([]);
+  });
 });

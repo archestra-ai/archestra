@@ -16,7 +16,7 @@ export function matchBatteries(
 ): string[] {
   const host = urlHost(catalog.serverUrl);
   const image = imageRepository(catalog.localConfig?.dockerImage);
-  const name = normalizeName(catalog.name);
+  const name = ` ${normalizeName(catalog.name)} `;
   const strong: string[] = [];
   const weak: string[] = [];
   for (const rule of BATTERY_MATCH_RULES) {
@@ -30,7 +30,7 @@ export function matchBatteries(
         (known) => image === known || image.startsWith(`${known}/`),
       );
     if (byHost || byImage) strong.push(rule.battery);
-    else if (rule.names.some((alias) => name.includes(alias)))
+    else if (rule.names.some((alias) => name.includes(` ${alias} `)))
       weak.push(rule.battery);
   }
   return strong.length > 0 ? strong : weak;
@@ -42,7 +42,7 @@ type BatteryMatchRule = {
   hosts: string[];
   /** Container image repositories without a tag, matched exactly or as a prefix path. */
   images: string[];
-  /** Normalized catalog-name fragments (lower case, single spaces). */
+  /** Normalized catalog-name fragments (lower case, single spaces), matched on word boundaries. */
   names: string[];
 };
 

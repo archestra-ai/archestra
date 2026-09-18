@@ -59,6 +59,7 @@ import {
   ResourceVisibilityScopeSchema,
   UuidIdSchema,
 } from "@/types";
+import { trackBackgroundWork } from "@/utils/background-work";
 import { broadcastMcpInstallationStatus } from "@/websocket";
 import { archestraMcpBranding } from "./branding";
 import {
@@ -1680,7 +1681,9 @@ async function discoverLocalMcpServerTools(params: {
       owner: agentOwner(params.ownerAgentId),
       tokenAuth: params.tokenAuth,
     });
-    await openappaBatteriesService.onCatalogToolsChanged(catalogItem.id);
+    trackBackgroundWork(
+      openappaBatteriesService.onCatalogToolsChanged(catalogItem.id),
+    );
     broadcastMcpInstallationStatus(mcpServer.id, "success", null);
   } catch (err) {
     logger.error(
@@ -1732,7 +1735,9 @@ async function discoverRemoteMcpServerTools(params: {
       owner: agentOwner(params.ownerAgentId),
       tokenAuth: params.tokenAuth,
     });
-    await openappaBatteriesService.onCatalogToolsChanged(catalogItem.id);
+    trackBackgroundWork(
+      openappaBatteriesService.onCatalogToolsChanged(catalogItem.id),
+    );
   } catch (err) {
     logger.error(
       { err, mcpServerId: mcpServer.id },

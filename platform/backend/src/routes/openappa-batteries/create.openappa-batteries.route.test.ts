@@ -285,6 +285,65 @@ describe("guardrails batteries", () => {
     ).toMatchObject({ source: "bundled" });
   });
 
+  test("binding a credential needs credential read permission on top of organization management", async ({
+    makeUser,
+    makeCustomRole,
+    makeMember,
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const manager = await makeUser();
+    const role = await makeCustomRole(organizationId, {
+      permission: {
+        organization: ["update"],
+        toolPolicy: ["read", "update"],
+      },
+    });
+    await makeMember(manager.id, organizationId, { role: role.role });
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      name: "GitHub",
+    });
+    await makeTool({
+      catalogId: catalog.id,
+      name: "github__get_me",
+      rawName: "get_me",
+    });
+    const credentialBindings = await bindGithubToken();
+    const managerApp = createFastifyInstance();
+    managerApp.addHook("onRequest", async (request) => {
+      Object.assign(request, { user: manager, organizationId });
+    });
+    await managerApp.register(routes);
+    try {
+      const bound = await managerApp.inject({
+        method: "POST",
+        url: "/api/openappa/battery-installs",
+        payload: {
+          batteryName: "github",
+          catalogId: catalog.id,
+          credentialBindings,
+        },
+      });
+      expect(bound.statusCode).toBe(403);
+      const unbound = await managerApp.inject({
+        method: "POST",
+        url: "/api/openappa/battery-installs",
+        payload: { batteryName: "github", catalogId: catalog.id },
+      });
+      expect(unbound.statusCode).toBe(200);
+      expect(unbound.json()).toMatchObject({ status: "missing_credentials" });
+      const rebound = await managerApp.inject({
+        method: "PATCH",
+        url: `/api/openappa/battery-installs/${unbound.json().id}`,
+        payload: { credentialBindings },
+      });
+      expect(rebound.statusCode).toBe(403);
+    } finally {
+      await managerApp.close();
+    }
+  });
+
   test("a member without organization management cannot install", async ({
     makeUser,
     makeMember,

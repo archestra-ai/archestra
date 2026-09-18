@@ -5,6 +5,8 @@ import type {
   ServerAliasInput,
 } from "@archestra/openappa-rs";
 import { parseFullToolName } from "@archestra/shared";
+import { userHasPermission } from "@/auth";
+import { LRUCacheManager } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
@@ -37,7 +39,14 @@ const OPENAPPA_BRIDGE_TOKEN_ENV = "APPA_ARCHESTRA_BRIDGE_TOKEN";
 class OpenAppaBatteriesService {
   /** Presented by the runtime on every helper consult; minted at boot, never stored. */
   readonly bridgeToken = randomBytes(32).toString("hex");
-  private readonly recompiling = new Map<string, Promise<EffectivePolicy>>();
+  private readonly recompiling = new Map<string, RecompileSlot>();
+  /** The bundled list is immutable per binary; crossing napi copies every file. */
+  private bundled: Promise<NativeBatteryPackage[]> | null = null;
+  /** Inspected uploads by content hash: the bytes fix the result. */
+  private readonly inspected = new LRUCacheManager<NativeBatteryPackage>({
+    maxSize: 32,
+    defaultTtl: 0,
+  });
 
   constructor() {
     // The native runtime resolves url `token_env` variables from the process
@@ -89,31 +98,29 @@ class OpenAppaBatteriesService {
    * Compose root + installed batteries and store the result. A composition the
    * runtime refuses stores the root alone with the refusal, so the runtime never
    * runs a stale document and the refusal is one-shot per root revision.
-   * Concurrent callers for one organization share a single composition, and a
-   * composition that lost to a newer store is redone from fresh inputs.
+   * A caller always gets a composition that started after it called: one that
+   * is already running may have read inputs older than the caller's write, so
+   * later callers share a single follow-up queued behind it. A composition
+   * that lost to a newer store is redone from fresh inputs.
    */
   async recompile(organizationId: string): Promise<EffectivePolicy> {
-    const inFlight = this.recompiling.get(organizationId);
-    if (inFlight) return inFlight;
-    const work = this.recompileNow(organizationId).finally(() => {
+    const slot = this.recompiling.get(organizationId);
+    if (slot) {
+      slot.queued ??= slot.running
+        .catch(() => undefined)
+        .then(() => this.recompile(organizationId));
+      return slot.queued;
+    }
+    const running = this.recompileNow(organizationId).finally(() => {
       this.recompiling.delete(organizationId);
     });
-    this.recompiling.set(organizationId, work);
-    return work;
+    this.recompiling.set(organizationId, { running, queued: null });
+    return running;
   }
 
   async recompileAll(): Promise<void> {
     if (!config.openappa.enabled) return;
-    for (const organizationId of await OrganizationModel.findAllIds()) {
-      try {
-        await this.recompile(organizationId);
-      } catch (error) {
-        logger.warn(
-          { organizationId, error },
-          "OpenAPPA effective policy recompile failed",
-        );
-      }
-    }
+    await this.recompileOrganizations(await OrganizationModel.findAllIds());
   }
 
   /**
@@ -185,10 +192,11 @@ class OpenAppaBatteriesService {
   }
 
   async createInstall(params: {
+    userId: string;
     organizationId: string;
     install: CreateBatteryInstall;
   }): Promise<BatteryInstallView> {
-    const { organizationId, install } = params;
+    const { userId, organizationId, install } = params;
     const battery = await this.requireBattery(
       organizationId,
       install.batteryName,
@@ -213,21 +221,14 @@ class OpenAppaBatteriesService {
         409,
         "This battery is already installed for that catalog entry",
       );
-    await this.requireBindableCredentials(
+    await this.requireBindableCredentials({
+      userId,
       organizationId,
       battery,
-      install.credentialBindings,
-    );
-    if (battery.externals.length > 0 && install.enabled) {
-      const others = (
-        await OpenAppaBatteryInstallModel.list(organizationId)
-      ).filter((other) => other.batteryName === battery.name && other.enabled);
-      if (others.length > 0)
-        throw new ApiError(
-          409,
-          "A battery with helper scripts can be enabled for one catalog entry at a time",
-        );
-    }
+      bindings: install.credentialBindings,
+    });
+    if (install.enabled)
+      await this.requireSoleHelperOwner({ organizationId, battery, id: null });
     const created = await OpenAppaBatteryInstallModel.create({
       organizationId,
       ...install,
@@ -237,11 +238,12 @@ class OpenAppaBatteriesService {
   }
 
   async updateInstall(params: {
+    userId: string;
     organizationId: string;
     id: string;
     changes: UpdateBatteryInstall;
   }): Promise<BatteryInstallView> {
-    const { organizationId, id, changes } = params;
+    const { userId, organizationId, id, changes } = params;
     const existing = await OpenAppaBatteryInstallModel.find({
       id,
       organizationId,
@@ -252,30 +254,14 @@ class OpenAppaBatteriesService {
       existing.batteryName,
     );
     if (changes.credentialBindings)
-      await this.requireBindableCredentials(
+      await this.requireBindableCredentials({
+        userId,
         organizationId,
         battery,
-        changes.credentialBindings,
-      );
-    if (
-      battery.externals.length > 0 &&
-      changes.enabled === true &&
-      !existing.enabled
-    ) {
-      const others = (
-        await OpenAppaBatteryInstallModel.list(organizationId)
-      ).filter(
-        (other) =>
-          other.batteryName === battery.name &&
-          other.enabled &&
-          other.id !== id,
-      );
-      if (others.length > 0)
-        throw new ApiError(
-          409,
-          "A battery with helper scripts can be enabled for one catalog entry at a time",
-        );
-    }
+        bindings: changes.credentialBindings,
+      });
+    if (changes.enabled === true && !existing.enabled)
+      await this.requireSoleHelperOwner({ organizationId, battery, id });
     await OpenAppaBatteryInstallModel.update({
       id,
       organizationId,
@@ -438,7 +424,8 @@ class OpenAppaBatteriesService {
       });
       views.push({ ...install, status });
     }
-    const serverAliases: ServerAliasInput[] = [];
+    // Batteries may share a namespace; its alias then targets all their catalogs.
+    const targetsByAlias = new Map<string, Set<string>>();
     const composed: ComposeBatteryInput[] = [];
     for (const [name, { package: battery }] of [...batteries].sort(([a], [b]) =>
       a.localeCompare(b),
@@ -447,15 +434,13 @@ class OpenAppaBatteriesService {
         (view) => view.batteryName === name && view.status === "active",
       );
       if (active.length === 0) continue;
-      const targets = [
-        ...new Set(
-          active.flatMap((view) => [
-            ...(prefixesByCatalog.get(view.catalogId) ?? []),
-          ]),
-        ),
-      ].sort();
-      for (const namespace of battery.namespaces)
-        serverAliases.push({ alias: namespace, targets });
+      for (const namespace of battery.namespaces) {
+        const targets = targetsByAlias.get(namespace) ?? new Set<string>();
+        for (const view of active)
+          for (const prefix of prefixesByCatalog.get(view.catalogId) ?? [])
+            targets.add(prefix);
+        targetsByAlias.set(namespace, targets);
+      }
       const owner = battery.externals.length > 0 ? active[0] : null;
       composed.push({
         name,
@@ -468,6 +453,9 @@ class OpenAppaBatteriesService {
           : undefined,
       });
     }
+    const serverAliases: ServerAliasInput[] = [...targetsByAlias]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([alias, targets]) => ({ alias, targets: [...targets].sort() }));
     return { batteries, installs: views, serverAliases, composed };
   }
 
@@ -504,14 +492,22 @@ class OpenAppaBatteriesService {
     organizationId: string,
   ): Promise<AvailableBatteries> {
     const native = await import("@archestra/openappa-rs");
+    this.bundled ??= native.listBundledOpenappaBatteries().catch((error) => {
+      this.bundled = null;
+      throw error;
+    });
     const batteries: AvailableBatteries = new Map();
-    for (const bundled of await native.listBundledOpenappaBatteries())
+    for (const bundled of await this.bundled)
       batteries.set(bundled.name, { source: "bundled", package: bundled });
     for (const uploaded of await OpenAppaBatteryPackageModel.list(
       organizationId,
     )) {
       try {
-        const inspected = await native.inspectOpenappaBattery(uploaded.files);
+        let inspected = this.inspected.get(uploaded.contentHash);
+        if (!inspected) {
+          inspected = await native.inspectOpenappaBattery(uploaded.files);
+          this.inspected.set(uploaded.contentHash, inspected);
+        }
         batteries.set(inspected.name, {
           source: "organization",
           package: inspected,
@@ -535,12 +531,50 @@ class OpenAppaBatteriesService {
     return battery;
   }
 
-  private async requireBindableCredentials(
-    organizationId: string,
-    battery: NativeBatteryPackage,
-    bindings: Record<string, string>,
-  ): Promise<void> {
-    for (const [credential, key] of Object.entries(bindings)) {
+  /** Only a battery with helper scripts is bound to one enabled install, the consult target. */
+  private async requireSoleHelperOwner(params: {
+    organizationId: string;
+    battery: NativeBatteryPackage;
+    /** The install being enabled, exempt from the check. */
+    id: string | null;
+  }): Promise<void> {
+    const { organizationId, battery, id } = params;
+    if (battery.externals.length === 0) return;
+    const others = (
+      await OpenAppaBatteryInstallModel.list(organizationId)
+    ).filter(
+      (other) =>
+        other.batteryName === battery.name && other.enabled && other.id !== id,
+    );
+    if (others.length > 0)
+      throw new ApiError(
+        409,
+        "A battery with helper scripts can be enabled for one catalog entry at a time",
+      );
+  }
+
+  /**
+   * Binding hands the credential's organization value to the battery's helper,
+   * so the binder needs to be allowed to read credentials, not only to manage
+   * the organization.
+   */
+  private async requireBindableCredentials(params: {
+    userId: string;
+    organizationId: string;
+    battery: NativeBatteryPackage;
+    bindings: Record<string, string>;
+  }): Promise<void> {
+    const { userId, organizationId, battery, bindings } = params;
+    const entries = Object.entries(bindings);
+    if (
+      entries.length > 0 &&
+      !(await userHasPermission(userId, organizationId, "credential", "read"))
+    )
+      throw new ApiError(
+        403,
+        "Credential read permission is required to bind runtime credentials",
+      );
+    for (const [credential, key] of entries) {
       if (!battery.credentials.includes(credential))
         throw new ApiError(
           400,
@@ -584,6 +618,11 @@ type CompositionPlan = {
   installs: BatteryInstallView[];
   serverAliases: ServerAliasInput[];
   composed: ComposeBatteryInput[];
+};
+
+type RecompileSlot = {
+  running: Promise<EffectivePolicy>;
+  queued: Promise<EffectivePolicy> | null;
 };
 
 const RECOMPILE_ATTEMPTS = 3;

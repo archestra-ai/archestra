@@ -80,6 +80,7 @@ const routes: FastifyPluginAsyncZod = async (app) => {
     },
     async (request) =>
       openappaBatteriesService.createInstall({
+        userId: request.user.id,
         organizationId: request.organizationId,
         install: request.body,
       }),
@@ -97,6 +98,7 @@ const routes: FastifyPluginAsyncZod = async (app) => {
     },
     async (request) =>
       openappaBatteriesService.updateInstall({
+        userId: request.user.id,
         organizationId: request.organizationId,
         id: request.params.id,
         changes: request.body,

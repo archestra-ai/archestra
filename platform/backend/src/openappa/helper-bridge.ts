@@ -1,5 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 import config from "@/config";
+import { withDeadline } from "@/k8s/mcp-server-runtime";
 import logger from "@/logging";
 import OpenAppaBatteryInstallModel from "@/models/openappa-battery-install";
 import { sandboxRuntimeService } from "@/sandbox-runtime/sandbox-runtime-service";
@@ -46,14 +47,36 @@ class OpenAppaHelperBridge {
     request: string;
   }): Promise<HelperConsultOutcome> {
     const startedAt = Date.now();
-    const outcome = await this.run(params);
+    const context = {
+      installId: params.installId,
+      externalName: params.externalName,
+    };
+    const work = this.run(params);
+    let outcome: HelperConsultOutcome;
+    try {
+      outcome = await withDeadline(
+        work,
+        HELPER_DEADLINE_MS,
+        () => new HelperDeadlineError(),
+      );
+    } catch (error) {
+      if (!(error instanceof HelperDeadlineError)) throw error;
+      work.then(
+        (late) =>
+          logger.info(
+            { ...context, outcome: late.kind },
+            "OpenAPPA battery helper settled after its deadline",
+          ),
+        (late) =>
+          logger.warn(
+            { ...context, error: late },
+            "OpenAPPA battery helper failed after its deadline",
+          ),
+      );
+      outcome = { kind: "timed_out" };
+    }
     logger.info(
-      {
-        installId: params.installId,
-        externalName: params.externalName,
-        outcome: outcome.kind,
-        durationMs: Date.now() - startedAt,
-      },
+      { ...context, outcome: outcome.kind, durationMs: Date.now() - startedAt },
       "OpenAPPA battery helper consulted",
     );
     return outcome;
@@ -110,37 +133,32 @@ class OpenAppaHelperBridge {
     const cwd = skillRootPath(battery.name);
     let executed: Awaited<ReturnType<typeof sandboxRuntimeService.runCommand>>;
     try {
-      // A cold engine session counts against the consult budget too.
-      const run = sandboxRuntimeService.attach(CONSUMER_ID).then(() =>
-        sandboxRuntimeService.runCommand({
-          command: external.command.map(shellQuote).join(" "),
-          cwd,
-          timeoutSeconds: HELPER_EXEC_TIMEOUT_SECONDS,
-          replayEntries: [
-            {
-              kind: "skill_mount",
-              skillMount: {
+      await sandboxRuntimeService.attach(CONSUMER_ID);
+      executed = await sandboxRuntimeService.runCommand({
+        command: external.command.map(shellQuote).join(" "),
+        cwd,
+        timeoutSeconds: HELPER_EXEC_TIMEOUT_SECONDS,
+        replayEntries: [
+          {
+            kind: "skill_mount",
+            skillMount: {
+              skillName: battery.name,
+              files: battery.files.map((file) => ({
                 skillName: battery.name,
-                files: battery.files.map((file) => ({
-                  skillName: battery.name,
-                  path: file.path,
-                  encoding: "utf8",
-                  content: file.text,
-                })),
-              },
+                path: file.path,
+                encoding: "utf8",
+                content: file.text,
+              })),
             },
-          ],
-          secretEnv,
-          stdin: params.request,
-          outputBytesLimit: config.skillsSandbox.outputBytesLimit,
-          fileSizeLimitBytes: config.skillsSandbox.artifactBytesLimit,
-          cpuSeconds: config.skillsSandbox.cpuLimit,
-          memoryBytes: config.skillsSandbox.memoryLimit,
-        }),
-      );
-      const raced = await withDeadline(run, HELPER_DEADLINE_MS);
-      if (raced === DEADLINE) return { kind: "timed_out" };
-      executed = raced;
+          },
+        ],
+        secretEnv,
+        stdin: params.request,
+        outputBytesLimit: config.skillsSandbox.outputBytesLimit,
+        fileSizeLimitBytes: config.skillsSandbox.artifactBytesLimit,
+        cpuSeconds: config.skillsSandbox.cpuLimit,
+        memoryBytes: config.skillsSandbox.memoryLimit,
+      });
     } catch (error) {
       logger.warn(
         { installId: install.id, externalName: external.name, error },
@@ -166,22 +184,8 @@ export const openappaHelperBridge = new OpenAppaHelperBridge();
 const CONSUMER_ID = "openappa-helper-bridge";
 /** The helper's own execution budget inside the container. */
 const HELPER_EXEC_TIMEOUT_SECONDS = 4;
-const DEADLINE = Symbol("deadline");
 
-async function withDeadline<T>(
-  work: Promise<T>,
-  ms: number,
-): Promise<T | typeof DEADLINE> {
-  let timer: NodeJS.Timeout | undefined;
-  const deadline = new Promise<typeof DEADLINE>((resolve) => {
-    timer = setTimeout(() => resolve(DEADLINE), ms);
-  });
-  try {
-    return await Promise.race([work, deadline]);
-  } finally {
-    clearTimeout(timer);
-  }
-}
+class HelperDeadlineError extends Error {}
 
 function parseJsonObject(text: string): Record<string, unknown> | null {
   try {

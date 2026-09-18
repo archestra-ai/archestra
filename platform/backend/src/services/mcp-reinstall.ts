@@ -16,6 +16,7 @@ import type {
   McpServer,
   McpServerReinstallReason,
 } from "@/types";
+import { trackBackgroundWork } from "@/utils/background-work";
 import { broadcastMcpInstallationStatus } from "@/websocket";
 
 /**
@@ -519,7 +520,9 @@ async function syncToolsForServer(
     catalogId: catalogItem.id,
     mcpServerId: server.id,
   });
-  await openappaBatteriesService.onCatalogToolsChanged(catalogItem.id);
+  trackBackgroundWork(
+    openappaBatteriesService.onCatalogToolsChanged(catalogItem.id),
+  );
 
   logger.info(
     {

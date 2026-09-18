@@ -206168,7 +206168,8 @@
                 "claude-desktop",
                 "codex",
                 "copilot-cli",
-                "cursor"
+                "cursor",
+                "opencode"
               ]
             },
             "in": "query",
@@ -404528,7 +404529,8 @@
                 "claude-desktop",
                 "codex",
                 "copilot-cli",
-                "cursor"
+                "cursor",
+                "opencode"
               ]
             },
             "in": "query",
@@ -405083,7 +405085,8 @@
                           "claude-desktop",
                           "codex",
                           "copilot-cli",
-                          "cursor"
+                          "cursor",
+                          "opencode"
                         ]
                       }
                     }

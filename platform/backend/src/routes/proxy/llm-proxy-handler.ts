@@ -327,7 +327,8 @@ export async function handleLLMProxy<
   // app from the request and record it (Claude clients → "anthropic_claude"
   // from the request body; Codex clients → "openai_codex" from the
   // client_metadata body shape or the originator/User-Agent headers the Codex
-  // CLI stamps on every request; Cursor → "cursor" from its User-Agent).
+  // CLI stamps on every request; Cursor → "cursor" from its User-Agent;
+  // OpenCode → "opencode" from its User-Agent or originator).
   const externalAgentId =
     utils.headers.externalAgentId.getExternalAgentId(headersForExtraction) ??
     utils.headers.clientApp.detectClaudeClientId(bodyForExtraction) ??
@@ -335,7 +336,8 @@ export async function handleLLMProxy<
       headersForExtraction,
       bodyForExtraction,
     ) ??
-    utils.headers.clientApp.detectCursorClientId(headersForExtraction);
+    utils.headers.clientApp.detectCursorClientId(headersForExtraction) ??
+    utils.headers.clientApp.detectOpenCodeClientId(headersForExtraction);
   const runId = utils.headers.runId.getRunId(headersForExtraction);
   const authOverride = (
     request as FastifyRequest & { llmProxyAuthOverride?: LLMProxyAuthOverride }

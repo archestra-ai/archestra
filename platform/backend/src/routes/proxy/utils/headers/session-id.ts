@@ -4,11 +4,19 @@ import {
   codexClientMetadataSessionId,
   isCodexClientAgentId,
   isCodexSessionId,
+  isOpenCodeClientAgentId,
   SESSION_ID_HEADER,
 } from "@archestra/shared";
 import { getHeaderValue, parseMetaHeader } from "./meta-header";
 
 const OPENWEBUI_CHAT_ID_HEADER = "x-openwebui-chat-id";
+/** OpenCode's session headers, most specific first; `session-id` is Responses-only. */
+const OPENCODE_SESSION_ID_HEADERS = [
+  "x-session-id",
+  "x-session-affinity",
+  "x-opencode-session",
+  "session-id",
+] as const;
 
 /**
  * The Codex CLI stamps its session id on every request in a `session-id` header
@@ -38,6 +46,7 @@ export type SessionSource =
   | "meta_header"
   | "openwebui_chat"
   | "codex_session"
+  | "opencode_session"
   | typeof CLAUDE_CODE_HEADER_SESSION_SOURCE
   | "openai_user"
   | null;
@@ -58,11 +67,15 @@ export interface SessionInfo {
  * 4. Codex session id — only when `externalAgentId` is a Codex client id:
  *    `client_metadata.session_id` body field first, then the `session-id`
  *    request header (source: 'codex_session')
- * 5. Claude Code `x-claude-code-session-id` (source: 'claude_code_header').
+ * 5. OpenCode session id — only when `externalAgentId` is the OpenCode client
+ *    id: `x-session-id`, `x-session-affinity`, `x-opencode-session`, then the
+ *    `session-id` header its Responses requests carry (source:
+ *    'opencode_session')
+ * 6. Claude Code `x-claude-code-session-id` (source: 'claude_code_header').
  *    `/fork` mints a new id here; `metadata.user_id.session_id` often does not
  *    change, so this must beat claude_metadata or forks collapse in the logs.
- * 6. Claude/Anthropic metadata.user_id (source: 'claude_metadata')
- * 7. OpenAI user field (source: 'openai_user')
+ * 7. Claude/Anthropic metadata.user_id (source: 'claude_metadata')
+ * 8. OpenAI user field (source: 'openai_user')
  *
  * @param headers - The request headers object
  * @param body - The request body (may contain metadata.user_id, user, or
@@ -130,7 +143,21 @@ export function extractSessionInfo({
     }
   }
 
-  // Priority 5: Claude Code's own session header. `/fork` mints a new value
+  // Priority 5: OpenCode's session id, gated on the resolved client
+  // attribution for the same reason as Codex: these header names are generic.
+  if (isOpenCodeClientAgentId(externalAgentId)) {
+    for (const header of OPENCODE_SESSION_ID_HEADERS) {
+      const openCodeSessionId = getHeaderValue(headers, header)?.trim();
+      if (openCodeSessionId) {
+        return {
+          sessionId: openCodeSessionId,
+          sessionSource: "opencode_session",
+        };
+      }
+    }
+  }
+
+  // Priority 6: Claude Code's own session header. `/fork` mints a new value
   // here while `metadata.user_id.session_id` stays on the parent conversation.
   const claudeCodeSessionId = getHeaderValue(
     headers,
@@ -143,7 +170,7 @@ export function extractSessionInfo({
     };
   }
 
-  // Priority 6: Claude/Anthropic metadata.user_id (any known format)
+  // Priority 7: Claude/Anthropic metadata.user_id (any known format)
   const claudeSessionId = parseClaudeMetadataSessionId(body?.metadata?.user_id);
   if (claudeSessionId) {
     return {
@@ -152,7 +179,7 @@ export function extractSessionInfo({
     };
   }
 
-  // Priority 6: OpenAI user field (some clients use this for session tracking)
+  // Priority 8: OpenAI user field (some clients use this for session tracking)
   const user = body?.user;
   if (user && typeof user === "string" && user.trim().length > 0) {
     return { sessionId: user.trim(), sessionSource: "openai_user" };

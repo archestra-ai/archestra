@@ -2,6 +2,7 @@ import {
   CLAUDE_CODE_HEADER_SESSION_SOURCE,
   CLAUDE_METADATA_SESSION_SOURCE,
   CODEX_CLIENT_ID,
+  OPENCODE_CLIENT_ID,
   SESSION_ID_HEADER,
 } from "@archestra/shared";
 import { describe, expect, test } from "vitest";
@@ -319,6 +320,30 @@ describe("extractSessionInfo", () => {
   // handler passes in (explicit X-Archestra-Agent-Id header, or client-app
   // auto-discovery from client_metadata/originator/User-Agent — see
   // client-app.test.ts for the identification paths).
+  test.each([
+    [{ "x-session-id": "ses_a", "x-session-affinity": "ses_a" }, "ses_a"],
+    // OpenCode's Responses requests carry only `session-id`.
+    [{ "session-id": "ses_b", originator: "opencode" }, "ses_b"],
+  ])("OpenCode attribution groups its requests by OpenCode's session id", (headers, expected) => {
+    expect(
+      extractSessionInfo({
+        headers,
+        body: undefined,
+        externalAgentId: OPENCODE_CLIENT_ID,
+      }),
+    ).toEqual({ sessionId: expected, sessionSource: "opencode_session" });
+  });
+
+  test("an x-session-id header without OpenCode attribution is not read as a session", () => {
+    expect(
+      extractSessionInfo({
+        headers: { "x-session-id": "ses_a" },
+        body: undefined,
+        externalAgentId: undefined,
+      }),
+    ).toEqual({ sessionId: null, sessionSource: null });
+  });
+
   test("Codex attribution: client_metadata.session_id wins over the session-id header", () => {
     const result = extractSessionInfo({
       headers: { "session-id": "019f66bc-ffff-72d1-b927-4d96fad7dc3a" },

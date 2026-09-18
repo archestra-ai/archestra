@@ -42,7 +42,8 @@ const OPENAPPA_BRIDGE_TOKEN_ENV = "APPA_ARCHESTRA_BRIDGE_TOKEN";
 class OpenAppaBatteriesService {
   /** Presented by the runtime on every helper consult; minted at boot, never stored. */
   readonly bridgeToken = randomBytes(32).toString("hex");
-  private readonly recompiling = new Map<string, RecompileSlot>();
+  private readonly recompiling = new Map<string, Slot<Recomposition>>();
+  private readonly syncing = new Map<string, Slot<void>>();
   /** Concurrent dispatches of one organization share a single policy read. */
   private readonly reading = new Map<string, Promise<EffectivePolicy>>();
   /** The bundled list is immutable per binary; crossing napi copies every file. */
@@ -121,6 +122,12 @@ class OpenAppaBatteriesService {
    */
   async onCatalogToolsChanged(catalogId: string): Promise<void> {
     if (!config.openappa.enabled) return;
+    // A reinstall syncs every install of a catalog at once: overlapping syncs
+    // of one catalog share a sweep, and one more follows for the writes since.
+    return coalesce(this.syncing, catalogId, () => this.syncCatalog(catalogId));
+  }
+
+  private async syncCatalog(catalogId: string): Promise<void> {
     try {
       const catalog = await InternalMcpCatalogModel.findById(catalogId, {
         expandSecrets: false,
@@ -283,7 +290,7 @@ class OpenAppaBatteriesService {
     name: string;
     files: BatteryPackageFile[];
   }): Promise<BatterySummary> {
-    const native = await import("@archestra/openappa-rs");
+    const native = await loadNative();
     const contentHash = hash(JSON.stringify(params.files));
     let inspected: NativeBatteryPackage;
     try {
@@ -429,15 +436,8 @@ class OpenAppaBatteriesService {
 
   /** `recompile`, also yielding the install views the stored composition was planned from. */
   private async recompose(organizationId: string): Promise<Recomposition> {
-    const slot = this.recompiling.get(organizationId);
-    if (slot) {
-      slot.queued ??= slot.running
-        .catch(() => undefined)
-        .then(() => this.recompose(organizationId));
-      return slot.queued;
-    }
-    const running = this.recomposeNow(organizationId)
-      .catch(async (error) => {
+    return coalesce(this.recompiling, organizationId, () =>
+      this.recomposeNow(organizationId).catch(async (error) => {
         // Whatever the caller does with the failure, the stored row may be
         // behind the write that triggered this; the next read recomposes.
         await OpenAppaEffectivePolicyModel.invalidate(organizationId).catch(
@@ -449,12 +449,8 @@ class OpenAppaBatteriesService {
           },
         );
         throw error;
-      })
-      .finally(() => {
-        this.recompiling.delete(organizationId);
-      });
-    this.recompiling.set(organizationId, { running, queued: null });
-    return running;
+      }),
+    );
   }
 
   private async recomposeNow(organizationId: string): Promise<Recomposition> {
@@ -493,7 +489,7 @@ class OpenAppaBatteriesService {
     installFingerprint: string;
   }): Promise<EffectivePolicyValues> {
     const { root, plan, installFingerprint } = params;
-    const native = await import("@archestra/openappa-rs");
+    const native = await loadNative();
     const composed = await native.composeOpenappaPolicy({
       root: root.content,
       serverAliases: plan.serverAliases,
@@ -627,7 +623,7 @@ class OpenAppaBatteriesService {
   }
 
   private async bundledBatteries(): Promise<NativeBatteryPackage[]> {
-    const native = await import("@archestra/openappa-rs");
+    const native = await loadNative();
     this.bundled ??= native.listBundledOpenappaBatteries().catch((error) => {
       this.bundled = null;
       throw error;
@@ -646,7 +642,7 @@ class OpenAppaBatteriesService {
     if (cached) return cached;
     const stored = await OpenAppaBatteryPackageModel.find(uploaded);
     if (!stored) return null;
-    const native = await import("@archestra/openappa-rs");
+    const native = await loadNative();
     try {
       const inspected = await native.inspectOpenappaBattery(stored.files);
       this.inspected.set(stored.contentHash, inspected);
@@ -792,10 +788,34 @@ type Recomposition = {
   installs: BatteryInstallView[];
 };
 
-type RecompileSlot = {
-  running: Promise<Recomposition>;
-  queued: Promise<Recomposition> | null;
-};
+type Slot<T> = { running: Promise<T>; queued: Promise<T> | null };
+
+/**
+ * Runs `work` for `key` unless a run is in flight. A call during a run queues
+ * exactly one follow-up, which starts after the run ends and so sees every
+ * write made before the call; a caller never joins a run that began before
+ * its own write.
+ */
+function coalesce<T>(
+  slots: Map<string, Slot<T>>,
+  key: string,
+  work: () => Promise<T>,
+): Promise<T> {
+  const slot = slots.get(key);
+  if (slot) {
+    slot.queued ??= slot.running
+      .catch(() => undefined)
+      .then(() => coalesce(slots, key, work));
+    return slot.queued;
+  }
+  const running = work().finally(() => {
+    slots.delete(key);
+  });
+  slots.set(key, { running, queued: null });
+  return running;
+}
+
+const loadNative = () => import("@archestra/openappa-rs");
 
 const RECOMPILE_ATTEMPTS = 3;
 const RECOMPILE_CONCURRENCY = 4;

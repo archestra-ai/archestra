@@ -133,37 +133,29 @@ fn helper_externals(policy: &str) -> Result<Vec<HelperExternal>, String> {
     crate::policy::refuse_host_variables(&document)?;
     crate::policy::refuse_url_externals(&document)?;
     let mut externals: Vec<HelperExternal> = Vec::new();
-    let Some(sections) = document.get("externals").and_then(toml::Value::as_table) else {
-        return Ok(externals);
-    };
-    for (kind, section) in sections {
-        let Some(section) = section.as_table() else {
+    for (kind, name, entry) in crate::policy::external_bindings(&document) {
+        let Some(command) = entry.get("command").and_then(toml::Value::as_array) else {
             continue;
         };
-        for (name, entry) in section {
-            let Some(command) = entry.get("command").and_then(toml::Value::as_array) else {
-                continue;
-            };
-            // The helper bridge addresses an external by name alone.
-            if externals.iter().any(|external| external.name == *name) {
-                return Err(format!(
-                    "external {name:?} is declared under more than one kind; helper names must be unique"
-                ));
-            }
-            externals.push(HelperExternal {
-                kind: kind.clone(),
-                name: name.clone(),
-                command: command
-                    .iter()
-                    .filter_map(toml::Value::as_str)
-                    .map(str::to_owned)
-                    .collect(),
-                token_env: entry
-                    .get("token_env")
-                    .and_then(toml::Value::as_str)
-                    .map(str::to_owned),
-            });
+        // The helper bridge addresses an external by name alone.
+        if externals.iter().any(|external| external.name == name) {
+            return Err(format!(
+                "external {name:?} is declared under more than one kind; helper names must be unique"
+            ));
         }
+        externals.push(HelperExternal {
+            kind: kind.to_owned(),
+            name: name.to_owned(),
+            command: command
+                .iter()
+                .filter_map(toml::Value::as_str)
+                .map(str::to_owned)
+                .collect(),
+            token_env: entry
+                .get("token_env")
+                .and_then(toml::Value::as_str)
+                .map(str::to_owned),
+        });
     }
     Ok(externals)
 }

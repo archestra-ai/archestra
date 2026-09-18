@@ -193,7 +193,7 @@ pub(crate) fn refuse_host_variables(document: &toml::Table) -> Result<(), String
 }
 
 /// Every `[externals.<section>.<name>]` binding table, with its section and name.
-fn external_bindings(document: &toml::Table) -> Vec<(&str, &str, &toml::Table)> {
+pub(crate) fn external_bindings(document: &toml::Table) -> Vec<(&str, &str, &toml::Table)> {
     let Some(toml::Value::Table(externals)) = document.get("externals") else {
         return Vec::new();
     };

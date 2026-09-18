@@ -166,8 +166,9 @@ fn refuse_host_keys(document: &toml::Table) -> Result<(), String> {
     refuse_host_variables(document)
 }
 
-/// A battery reaches out only through the host's helper bridge.
-fn refuse_url_externals(document: &toml::Table) -> Result<(), String> {
+/// A battery reaches out only through the host's helper bridge: a url external
+/// would leave the API host with none of the bridge's guards.
+pub(crate) fn refuse_url_externals(document: &toml::Table) -> Result<(), String> {
     let Some(toml::Value::Table(externals)) = document.get("externals") else {
         return Ok(());
     };

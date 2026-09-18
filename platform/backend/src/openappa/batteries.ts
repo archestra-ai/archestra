@@ -573,10 +573,16 @@ class OpenAppaBatteriesService {
     const batteries: AvailableBatteries = new Map();
     for (const bundled of await this.bundledBatteries())
       batteries.set(bundled.name, { source: "bundled", package: bundled });
-    for (const uploaded of await OpenAppaBatteryPackageModel.listSummaries(
-      organizationId,
-    )) {
-      const inspected = await this.inspect(uploaded);
+    // Each cache miss reads a package's files and validates them natively;
+    // independent packages overlap instead of queueing behind one another.
+    const inspections = await mapWithConcurrency(
+      await OpenAppaBatteryPackageModel.listSummaries(organizationId),
+      RECOMPILE_CONCURRENCY,
+      (uploaded) => this.inspect(uploaded),
+    );
+    for (const inspection of inspections) {
+      if (inspection.status === "rejected") throw inspection.reason;
+      const inspected = inspection.value;
       if (inspected)
         batteries.set(inspected.name, {
           source: "organization",

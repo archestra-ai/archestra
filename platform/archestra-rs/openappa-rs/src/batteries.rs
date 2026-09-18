@@ -131,6 +131,7 @@ pub(crate) fn inspect(files: &[BatteryFile]) -> Result<BatteryInfo, String> {
 fn helper_externals(policy: &str) -> Result<Vec<HelperExternal>, String> {
     let document: toml::Table = toml::from_str(policy).map_err(|error| error.to_string())?;
     crate::policy::refuse_host_variables(&document)?;
+    crate::policy::refuse_url_externals(&document)?;
     let mut externals: Vec<HelperExternal> = Vec::new();
     let Some(sections) = document.get("externals").and_then(toml::Value::as_table) else {
         return Ok(externals);
@@ -140,13 +141,6 @@ fn helper_externals(policy: &str) -> Result<Vec<HelperExternal>, String> {
             continue;
         };
         for (name, entry) in section {
-            // A battery's externals run through the host's helper bridge; a url
-            // external would reach out from the host with none of its guards.
-            if entry.get("url").is_some() {
-                return Err(format!(
-                    "external {name:?} declares a url; a battery's externals must be command helpers"
-                ));
-            }
             let Some(command) = entry.get("command").and_then(toml::Value::as_array) else {
                 continue;
             };

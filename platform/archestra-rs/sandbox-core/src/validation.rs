@@ -85,7 +85,16 @@ pub(crate) fn validate_stdin(stdin: Option<&str>) -> Result<()> {
     }
 }
 
+/// bound on a variable name: names are inlined into engine queries and echoed
+/// in error messages, so they must stay short.
+const MAX_ENV_NAME_BYTES: usize = 128;
+
+/// an upper-case POSIX identifier. the bare `_` is refused because bash
+/// overwrites `$_` on every command, so such a secret would never be readable.
 fn is_env_name(name: &str) -> bool {
+    if name.len() > MAX_ENV_NAME_BYTES || name == "_" {
+        return false;
+    }
     let mut chars = name.chars();
     match chars.next() {
         Some(first) if first.is_ascii_uppercase() || first == '_' => {
@@ -455,15 +464,26 @@ mod tests {
 
     #[test]
     fn validate_secret_env_accepts_posix_upper_case_names() {
-        let vars = ["TOK", "_LEADING", "GITHUB_TOKEN_2", "A"].map(secret);
+        let at_limit = "A".repeat(MAX_ENV_NAME_BYTES);
+        let vars = [
+            "TOK",
+            "_LEADING",
+            "__",
+            "GITHUB_TOKEN_2",
+            "A",
+            at_limit.as_str(),
+        ]
+        .map(secret);
         assert!(validate_secret_env(&vars).is_ok());
         assert!(validate_secret_env(&[]).is_ok());
     }
 
     #[test]
     fn validate_secret_env_rejects_malformed_names() {
+        let too_long = "A".repeat(MAX_ENV_NAME_BYTES + 1);
         for bad in [
             "",
+            "_",
             "lower",
             "1LEADING",
             "WITH-DASH",
@@ -471,6 +491,7 @@ mod tests {
             "A=B",
             "Ä",
             "NUL\0",
+            too_long.as_str(),
         ] {
             assert!(
                 matches!(

@@ -1,6 +1,6 @@
 {
-  "id": "15f9f841-bc39-4870-ad13-338e763aa76d",
-  "prevId": "c0b0c164-5fd8-46c0-ad31-7e233d7ac71b",
+  "id": "b7960d72-86ff-4281-9866-74f3ce2b99d9",
+  "prevId": "15f9f841-bc39-4870-ad13-338e763aa76d",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -26378,7 +26378,23 @@
           "notNull": true
         }
       },
-      "indexes": {},
+      "indexes": {
+        "openappa_host_keys_root_idx": {
+          "name": "openappa_host_keys_root_idx",
+          "columns": [
+            {
+              "expression": "root",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {},
       "compositePrimaryKeys": {
         "openappa_host_keys_key_root_pk": {
@@ -26466,7 +26482,65 @@
           "default": "now()"
         }
       },
-      "indexes": {},
+      "indexes": {
+        "openappa_offer_owners_session_idx": {
+          "name": "openappa_offer_owners_session_idx",
+          "columns": [
+            {
+              "expression": "organization_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "session_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "caller_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "openappa_offer_owners_root_idx": {
+          "name": "openappa_offer_owners_root_idx",
+          "columns": [
+            {
+              "expression": "root",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "openappa_offer_owners_created_at_idx": {
+          "name": "openappa_offer_owners_created_at_idx",
+          "columns": [
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {},
       "compositePrimaryKeys": {
         "openappa_offer_owners_pk": {

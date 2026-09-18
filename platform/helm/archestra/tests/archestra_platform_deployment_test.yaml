@@ -1841,6 +1841,46 @@ tests:
             name: ARCHESTRA_AUTH_SECRET
             value: "auth-secret-helm-tests-32-chars!"
 
+  - it: should set ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET from the generated offer-signing-secret key
+    documentIndex: 1
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-archestra-platform-auth
+                key: offer-signing-secret
+                optional: true
+
+  - it: should use secretKeyRef for explicit ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET (sensitive env var)
+    documentIndex: 1
+    set:
+      archestra.env:
+        ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET: "offer-signing-helm-tests-32-chars!"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-archestra-platform-auth
+                key: archestra-openappa-offer-signing-secret
+
+  - it: should not expose explicit ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET value as plaintext
+    documentIndex: 1
+    set:
+      archestra.env:
+        ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET: "offer-signing-helm-tests-32-chars!"
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET
+            value: "offer-signing-helm-tests-32-chars!"
+
   # Service type tests
   - it: should default to ClusterIP service type
     documentIndex: 0

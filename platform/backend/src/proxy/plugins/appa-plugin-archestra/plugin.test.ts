@@ -156,6 +156,47 @@ describe("AppaPluginArchestra", () => {
       evaluateToolCalls.mockRestore();
     }
   });
+
+  test("rules a Codex call inside an MCP namespace as the gateway's tool", async () => {
+    // Codex declares the gateway's tools in its `mcp__<server>` namespace
+    // under their bare names; ruling them as Codex builtins would miss the
+    // policy's gateway rules and the ask_user exemption alike.
+    const ruledAs: string[] = [];
+    const evaluateToolCalls = vi
+      .spyOn(appaService, "evaluateToolCalls")
+      .mockImplementation(async (_session, calls, options) => {
+        ruledAs.push(...calls.map((call) => options.canonicalize(call.name)));
+        return calls.map(() => ({ kind: "allow" }) as const);
+      });
+    const plugin = new AppaPluginArchestra([new AppaCodexAdapter()]);
+    const context = requestContext({
+      sessionId: "codex-namespace-session",
+      canonicalizeToolName: (name) => name,
+    });
+    const trusted = context.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as Record<string, unknown>;
+    trusted.request = {
+      ...(trusted.request as Record<string, unknown>),
+      namespaces: new Map([["archestra__ask_user", "mcp__my_gateway"]]),
+    };
+    context.headers = { originator: "codex_cli_rs" };
+
+    try {
+      await plugin.onSessionInit(context);
+      await plugin.onToolCalls({
+        ...context,
+        toolCalls: [
+          { id: "ask", name: "archestra__ask_user", arguments: {} },
+          { id: "shell", name: "exec_command", arguments: {} },
+        ],
+      });
+
+      expect(ruledAs).toEqual(["archestra__ask_user", "builtin:exec_command"]);
+    } finally {
+      evaluateToolCalls.mockRestore();
+    }
+  });
 });
 
 describe("rendering runtime text for this client", () => {

@@ -289,7 +289,13 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
   // === Internal helpers ===
 
   private canonicalize(binding: AppaPluginBinding, name: string): string {
-    return binding.adapter?.classifyToolName(name) === "local"
+    // Codex declares an MCP server's tools inside that server's namespace,
+    // under their bare names: they are the gateway's tools, not local ones.
+    const inMcpNamespace = binding.request.namespaces
+      .get(name)
+      ?.startsWith(CODEX_MCP_NAMESPACE_PREFIX);
+    return binding.adapter?.classifyToolName(name) === "local" &&
+      !inMcpNamespace
       ? binding.canonicalizeToolName(
           binding.adapter.normalizeLocalToolName(name),
         )
@@ -334,6 +340,9 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     };
   }
 }
+
+/** Codex names the namespace of an MCP server's tools `mcp__<server>`. */
+const CODEX_MCP_NAMESPACE_PREFIX = "mcp__";
 
 function getTrustedContext(
   resources: ReadonlyMap<PropertyKey, unknown>,

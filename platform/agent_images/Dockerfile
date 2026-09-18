@@ -34,6 +34,10 @@ RUN mkdir -p /home/node/workspace /var/run/archestra \
 USER 1000:1000
 WORKDIR /home/node/workspace
 
+RUN --network=none \
+    --mount=type=bind,source=agent_images/tests,target=/tmp/agent-image-tests \
+    python3 /tmp/agent-image-tests/workspace-files.py
+
 FROM agent-base AS agent-archestra
 
 FROM agent-base AS agent-claude-code

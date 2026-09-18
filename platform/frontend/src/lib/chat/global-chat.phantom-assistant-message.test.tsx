@@ -45,7 +45,10 @@ vi.mock("@/lib/chat/chat.query", () => ({
   useConversationUpdatedCacheSync: () => {},
 }));
 
-vi.mock("@/components/chat/mcp-elicitation-dialog", () => ({
+vi.mock("@/components/chat/mcp-elicitation-dialog", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("@/components/chat/mcp-elicitation-dialog")
+  >()),
   McpElicitationDialog: () => null,
 }));
 

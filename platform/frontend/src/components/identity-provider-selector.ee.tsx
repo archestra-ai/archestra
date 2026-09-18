@@ -51,7 +51,7 @@ export function IdentityProviderSelector({
         recordSsoSignInAttempt(
           getValidatedRedirectPath(searchParams.get("redirectTo")),
         );
-        await authClient.signIn.sso({
+        const { error } = await authClient.signIn.sso({
           providerId,
           callbackURL,
           /**
@@ -59,6 +59,9 @@ export function IdentityProviderSelector({
            */
           errorCallbackURL: `${window.location.origin}/auth/sign-in`,
         });
+        if (error) {
+          throw new Error(error.message);
+        }
       } catch {
         toast.error("Failed to initiate SSO sign-in");
       }

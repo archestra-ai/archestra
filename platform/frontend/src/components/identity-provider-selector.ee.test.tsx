@@ -1,12 +1,33 @@
-import { render, screen } from "@testing-library/react";
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { HttpResponse, http } from "msw";
+import { setupServer } from "msw/node";
 import { useSearchParams } from "next/navigation";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { toast } from "sonner";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import { usePublicIdentityProviders } from "@/lib/auth/identity-provider.query.ee";
 import { hasSsoSignInAttempt } from "@/lib/auth/sso-sign-in-attempt";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { usePublicEnterpriseCoreActive } from "@/lib/config/config.query";
 import { IdentityProviderSelector } from "./identity-provider-selector.ee";
+
+const server = setupServer();
+
+beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
+afterEach(() => server.resetHandlers());
+afterAll(() => server.close());
+
+vi.mock("sonner");
 
 // Mock next/navigation
 vi.mock("next/navigation");
@@ -42,6 +63,12 @@ describe("IdentityProviderSelector", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     window.sessionStorage.clear();
+    vi.mocked(authClient.signIn.sso)
+      .mockReset()
+      .mockResolvedValue({
+        data: { url: "https://idp.example.com/authorize", redirect: true },
+        error: null,
+      });
     vi.mocked(useSearchParams).mockReturnValue(
       mockSearchParams as unknown as ReturnType<typeof useSearchParams>,
     );
@@ -50,6 +77,38 @@ describe("IdentityProviderSelector", () => {
       isLoading: false,
     } as ReturnType<typeof usePublicIdentityProviders>);
     vi.mocked(usePublicEnterpriseCoreActive).mockReturnValue(true);
+  });
+
+  it("shows an error when the SSO endpoint returns an HTTP error", async () => {
+    server.use(
+      http.post(`${window.location.origin}/api/auth/sign-in/sso`, () =>
+        HttpResponse.json(
+          { code: "discovery_not_found", message: "Discovery failed" },
+          { status: 400 },
+        ),
+      ),
+    );
+    const { authClient: realAuthClient } = await vi.importActual<
+      typeof import("@/lib/clients/auth/auth-client")
+    >("@/lib/clients/auth/auth-client");
+    vi.mocked(authClient.signIn.sso).mockImplementation((params) =>
+      realAuthClient.signIn.sso(params),
+    );
+    const user = userEvent.setup();
+
+    render(<IdentityProviderSelector />);
+    await user.click(screen.getByRole("button", { name: /sign in with/i }));
+
+    await expect(
+      vi.mocked(authClient.signIn.sso).mock.results[0].value,
+    ).resolves.toMatchObject({
+      error: { status: 400 },
+    });
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith(
+        "Failed to initiate SSO sign-in",
+      );
+    });
   });
 
   describe("callbackURL handling", () => {

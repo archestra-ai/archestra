@@ -1,0 +1,22 @@
+diff --git a/dist/index.mjs b/dist/index.mjs
+index 9f665e0423a261216436c5a35e98d6722c156704..ca50296dfe7524dabc608aa995116c175a1250c3 100644
+--- a/dist/index.mjs
++++ b/dist/index.mjs
+@@ -624,7 +624,7 @@ function selectTokenEndpointAuthMethod(doc, existing) {
+ * Returns true if we need discovery at runtime to complete the token exchange
+ * and validation. Specifically checks for:
+ * - `tokenEndpoint` - required for exchanging authorization code for tokens
+-* - `jwksEndpoint` - required for validating ID token signatures
++* - `userInfoEndpoint` or `jwksEndpoint` - required for retrieving user identity
+ * - `authorizationEndpoint` - required for redirecting users to the IdP for login
+ *
+ * @param config - Partial OIDC config from the provider
+@@ -632,7 +632,7 @@ function selectTokenEndpointAuthMethod(doc, existing) {
+ */
+ function needsRuntimeDiscovery(config) {
+ 	if (!config) return true;
+-	return !config.tokenEndpoint || !config.jwksEndpoint || !config.authorizationEndpoint;
++	return !config.tokenEndpoint || !config.authorizationEndpoint || (!config.userInfoEndpoint && !config.jwksEndpoint);
+ }
+ /**
+ * Runs runtime OIDC discovery when the stored config is missing required

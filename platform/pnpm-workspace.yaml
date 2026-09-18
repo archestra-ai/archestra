@@ -159,6 +159,10 @@ packageExtensions:
       zod: ^4.3.4
 
 patchedDependencies:
+  # OAuth providers with explicit userinfo endpoints (GitHub) do not need JWKS.
+  # Keep endpoint safety checks and discovery for ID-token-only configurations.
+  # Remove once upstream supports these configurations during sign-in/callback.
+  '@better-auth/sso@1.6.22': patches/@better-auth__sso@1.6.22.patch
   # Native Ollama /api/chat sends `"content": ""` on every thinking-phase chunk,
   # and the package opened the text part on `content != null` and processed text
   # before thinking — so the UI text part was created before the reasoning part

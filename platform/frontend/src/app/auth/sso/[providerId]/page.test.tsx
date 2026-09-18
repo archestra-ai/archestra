@@ -1,8 +1,21 @@
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import { LINKED_IDP_SSO_MODE } from "@archestra/shared";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { HttpResponse, http } from "msw";
+import { setupServer } from "msw/node";
 import { useParams, useSearchParams } from "next/navigation";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { toast } from "sonner";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import { createLinkedIdentityProviderIntent } from "@/lib/auth/linked-idp";
 import {
   getSsoSignInRedirectPath,
@@ -11,6 +24,13 @@ import {
 import { authClient } from "@/lib/clients/auth/auth-client";
 import IdpInitiatedSsoPage from "./page";
 
+const server = setupServer();
+
+beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
+afterEach(() => server.resetHandlers());
+afterAll(() => server.close());
+
+vi.mock("sonner");
 vi.mock("next/navigation");
 
 vi.mock("@/components/app-logo", () => ({
@@ -39,9 +59,12 @@ describe("IdpInitiatedSsoPage", () => {
     vi.mocked(useSearchParams).mockReturnValue({
       get: vi.fn().mockReturnValue(null),
     } as unknown as ReturnType<typeof useSearchParams>);
-    vi.mocked(authClient.signIn.sso).mockResolvedValue(
-      undefined as Awaited<ReturnType<typeof authClient.signIn.sso>>,
-    );
+    vi.mocked(authClient.signIn.sso)
+      .mockReset()
+      .mockResolvedValue({
+        data: { url: "https://idp.example.com/authorize", redirect: true },
+        error: null,
+      });
     vi.mocked(createLinkedIdentityProviderIntent).mockResolvedValue({
       intentId: "intent-123",
       redirectTo: "/chat/conv-123",
@@ -107,13 +130,56 @@ describe("IdpInitiatedSsoPage", () => {
     expect(hasSsoSignInAttempt()).toBe(false);
   });
 
+  it("shows the error and allows retry after an HTTP error response", async () => {
+    let attempts = 0;
+    server.use(
+      http.post(`${window.location.origin}/api/auth/sign-in/sso`, () => {
+        attempts += 1;
+        return attempts === 1
+          ? HttpResponse.json(
+              { code: "discovery_not_found", message: "Discovery failed" },
+              { status: 400 },
+            )
+          : HttpResponse.json({ url: null, redirect: false });
+      }),
+    );
+    const { authClient: realAuthClient } = await vi.importActual<
+      typeof import("@/lib/clients/auth/auth-client")
+    >("@/lib/clients/auth/auth-client");
+    vi.mocked(authClient.signIn.sso).mockImplementation((params) =>
+      realAuthClient.signIn.sso(params),
+    );
+    const user = userEvent.setup();
+
+    render(<IdpInitiatedSsoPage />);
+
+    const retry = await screen.findByRole("button", { name: "Try Again" });
+    await expect(
+      vi.mocked(authClient.signIn.sso).mock.results[0].value,
+    ).resolves.toMatchObject({
+      error: { status: 400 },
+    });
+    expect(toast.error).toHaveBeenCalledWith("Failed to initiate SSO sign-in");
+    await user.click(retry);
+
+    await waitFor(() => expect(attempts).toBe(2));
+    await expect(
+      vi.mocked(authClient.signIn.sso).mock.results[1].value,
+    ).resolves.toMatchObject({ error: null });
+    expect(
+      screen.queryByRole("button", { name: "Try Again" }),
+    ).not.toBeInTheDocument();
+    expect(toast.error).toHaveBeenCalledTimes(1);
+  });
+
   it("retries SSO when the initial request fails", async () => {
     const user = userEvent.setup();
     vi.mocked(authClient.signIn.sso)
       .mockRejectedValueOnce(new Error("SSO failed"))
-      .mockResolvedValueOnce(
-        undefined as Awaited<ReturnType<typeof authClient.signIn.sso>>,
-      );
+      .mockResolvedValueOnce({
+        data: { url: "https://idp.example.com/authorize", redirect: true },
+        error: null,
+      });
 
     render(<IdpInitiatedSsoPage />);
 

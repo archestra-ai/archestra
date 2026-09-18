@@ -17,6 +17,11 @@ pub(crate) const SKILL_SANDBOX_USER: &str = "1000:1000";
 /// the most secret variables one run may carry; a bound on engine-side secret
 /// registrations per exec, not a product limit.
 const MAX_SECRET_ENV_VARS: usize = 16;
+/// per-value bound on a secret: credentials are small, and every byte is
+/// inlined into a `setSecret` query held in memory across the session queue.
+const MAX_SECRET_VALUE_BYTES: usize = 64 * 1024;
+/// bound on the live command's stdin, which is inlined into the exec query.
+const MAX_STDIN_BYTES: usize = 1024 * 1024;
 
 /// variables the Dagger backend sets on the warm base or during replay
 /// (`build_warm_base` / the skill-mount PYTHONPATH layer). a caller-supplied
@@ -60,8 +65,24 @@ pub(crate) fn validate_secret_env(vars: &[SecretEnvVar]) -> Result<()> {
                 var.name
             )));
         }
+        if var.value.len() > MAX_SECRET_VALUE_BYTES {
+            return Err(SandboxError::InvalidInput(format!(
+                "secret environment variable {} exceeds {MAX_SECRET_VALUE_BYTES} bytes",
+                var.name
+            )));
+        }
     }
     Ok(())
+}
+
+pub(crate) fn validate_stdin(stdin: Option<&str>) -> Result<()> {
+    match stdin {
+        Some(bytes) if bytes.len() > MAX_STDIN_BYTES => Err(SandboxError::InvalidInput(format!(
+            "stdin exceeds {MAX_STDIN_BYTES} bytes: {} bytes",
+            bytes.len()
+        ))),
+        _ => Ok(()),
+    }
 }
 
 fn is_env_name(name: &str) -> bool {
@@ -479,6 +500,24 @@ mod tests {
             .collect();
         assert!(validate_secret_env(&too_many).is_err());
         assert!(validate_secret_env(&too_many[..MAX_SECRET_ENV_VARS]).is_ok());
+    }
+
+    #[test]
+    fn validate_secret_env_and_stdin_bound_their_byte_size() {
+        let at_limit = SecretEnvVar {
+            name: "TOK".into(),
+            value: "x".repeat(MAX_SECRET_VALUE_BYTES),
+        };
+        assert!(validate_secret_env(std::slice::from_ref(&at_limit)).is_ok());
+        let over = SecretEnvVar {
+            value: "x".repeat(MAX_SECRET_VALUE_BYTES + 1),
+            ..at_limit
+        };
+        assert!(validate_secret_env(&[over]).is_err());
+
+        assert!(validate_stdin(None).is_ok());
+        assert!(validate_stdin(Some(&"y".repeat(MAX_STDIN_BYTES))).is_ok());
+        assert!(validate_stdin(Some(&"y".repeat(MAX_STDIN_BYTES + 1))).is_err());
     }
 
     #[test]

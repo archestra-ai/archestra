@@ -12,7 +12,7 @@ mod validation;
 
 use crate::validation::{
     skill_root_path, validate_artifact_path, validate_cwd, validate_file_encoding,
-    validate_host_file_path, validate_secret_env, validate_snapshot_file_path,
+    validate_host_file_path, validate_secret_env, validate_snapshot_file_path, validate_stdin,
     validate_upload_path,
 };
 
@@ -485,6 +485,7 @@ pub async fn run_sandbox(input: RunSandboxInput) -> Result<CommandExecution> {
     validate_cwd(&input.cwd)?;
     let secret_env = input.secret_env.unwrap_or_default();
     validate_secret_env(&secret_env)?;
+    validate_stdin(input.stdin.as_deref())?;
     let target = runtime_target_from(input.environment)?;
     let replay_steps = replay_entries_to_steps(input.replay_entries, input.spool_root.as_deref())?;
     let req = backend::RunRequest {

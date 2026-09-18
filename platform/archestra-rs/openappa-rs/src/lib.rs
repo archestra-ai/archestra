@@ -414,6 +414,10 @@ async fn run(input: Input, policy_content: Option<String>) -> napi::Result<Strin
                 // Reloads are serialized by the mutex; when two concurrent
                 // dispatches carry different policy contents, the second one
                 // to acquire the mutex wins and the first reload is replaced.
+                // Each dispatch runs one hook event, and a session attaches
+                // one deployment snapshot per event, so an in-flight dispatch
+                // below keeps a coherent policy view either way; this clone's
+                // `config` is only read by the rebuild path under the mutex.
                 let mut config = policy::compile(&content).map_err(error)?;
                 config.reporting.agent_yell = state.reporting.is_some();
                 state.runtime.reload(config.clone()).map_err(error)?;
@@ -431,6 +435,11 @@ async fn run(input: Input, policy_content: Option<String>) -> napi::Result<Strin
         failure => {
             // A rollback must also discard tentative in-memory vouches and
             // turn markers. Durable pending receipts remain fail-closed.
+            // Dispatches already in flight keep their cloned `Arc<Runtime>`:
+            // that is safe because each hook event rebuilds its engine view
+            // from the durable log, the discarded tentative state is exactly
+            // what a failure must drop, and their receipts fence the same
+            // trajectory against the rebuilt runtime until they settle.
             let mut slot = state_mutex().lock().await;
             if let Some(state) = slot.as_mut() {
                 let rebuilt =
@@ -557,10 +566,12 @@ impl Drop for SessionLock {
 /// In-process per-trajectory exclusion. The advisory session lock only
 /// excludes other connections: on this process's one ledger connection it is
 /// reentrant, so it cannot order this process's own dispatches. Unrelated
-/// roots overlap freely; dispatches for one root queue here. Entries stay for
-/// the process's life, like the sandbox handle slots: one small mutex per
-/// session root, never removed while a later dispatch could still be queued
-/// on it.
+/// roots overlap freely; dispatches for one root queue here. One root is one
+/// chat session, so the registry grows with the distinct sessions this
+/// process has served, a few hundred bytes each — the same lifetime the
+/// sandbox handle slots keep. Removing an entry is not safe while a later
+/// dispatch could already be queued on it, so entries stay for the process's
+/// life; revisit only if distinct-root counts grow unbounded in production.
 static ROOT_LOCKS: OnceLock<Mutex<HashMap<String, Arc<Mutex<()>>>>> = OnceLock::new();
 
 struct RootLock {

@@ -15,7 +15,6 @@ export interface BatteryFileInput {
 export interface BatteryPackage {
   name: string
   description: string
-  hosts: Array<string>
   namespaces: Array<string>
   policy: string
   helpers: Array<string>

@@ -107,34 +107,19 @@ class OpenAppaHelperBridge {
     );
     if (!battery || !external) return { kind: "not_found" };
 
+    const resolved = await Promise.all(
+      battery.credentials.map((credential) =>
+        this.resolveCredential({ install, credential }),
+      ),
+    );
     const secretEnv: Array<{ name: string; value: string }> = [];
-    for (const credential of battery.credentials) {
-      const key = install.credentialBindings[credential];
-      if (!key)
+    for (const entry of resolved) {
+      if ("failure" in entry)
         return {
           kind: "failed",
-          reason: `credential ${credential} is unbound`,
+          reason: `credential ${entry.credential} ${entry.failure}`,
         };
-      let value: string | null;
-      try {
-        value = await resolveCredentialValue({
-          organizationId: install.organizationId,
-          credentialId: key,
-          scope: "organization",
-        });
-      } catch (error) {
-        logger.warn(
-          { installId: install.id, credential, error },
-          "OpenAPPA battery credential could not be resolved",
-        );
-        value = null;
-      }
-      if (value === null)
-        return {
-          kind: "failed",
-          reason: `credential ${credential} has no organization value`,
-        };
-      secretEnv.push({ name: credential, value });
+      secretEnv.push({ name: entry.credential, value: entry.value });
     }
 
     const cwd = skillRootPath(battery.name);
@@ -184,9 +169,43 @@ class OpenAppaHelperBridge {
       ? { kind: "answered", answer }
       : { kind: "failed", reason: "the helper did not print a JSON object" };
   }
+
+  private async resolveCredential(params: {
+    install: {
+      id: string;
+      organizationId: string;
+      credentialBindings: Record<string, string>;
+    };
+    credential: string;
+  }): Promise<ResolvedCredential> {
+    const { install, credential } = params;
+    const key = install.credentialBindings[credential];
+    if (!key) return { credential, failure: "is unbound" };
+    let value: string | null;
+    try {
+      value = await resolveCredentialValue({
+        organizationId: install.organizationId,
+        credentialId: key,
+        scope: "organization",
+      });
+    } catch (error) {
+      logger.warn(
+        { installId: install.id, credential, error },
+        "OpenAPPA battery credential could not be resolved",
+      );
+      value = null;
+    }
+    return value === null
+      ? { credential, failure: "has no organization value" }
+      : { credential, value };
+  }
 }
 
 export const openappaHelperBridge = new OpenAppaHelperBridge();
+
+type ResolvedCredential =
+  | { credential: string; value: string }
+  | { credential: string; failure: string };
 
 const CONSUMER_ID = "openappa-helper-bridge";
 /** The helper's own execution budget inside the container. */

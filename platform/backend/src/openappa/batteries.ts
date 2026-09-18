@@ -21,7 +21,7 @@ import RuntimeCredentialDefinitionModel from "@/models/runtime-credential-defini
 import ToolModel from "@/models/tool";
 import { OPENAPPA_HELPERS_PREFIX } from "@/routes/route-paths";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
-import { ApiError } from "@/types";
+import { ApiError, type InternalMcpCatalog } from "@/types";
 import type {
   BatteryInstall,
   BatteryInstallStatus,
@@ -133,29 +133,19 @@ class OpenAppaBatteriesService {
         catalog.organizationId === null
           ? await OrganizationModel.findAllIds()
           : [catalog.organizationId];
-      for (const organizationId of served) {
-        try {
-          const available = new Set(
-            (await this.availableBatteries(organizationId)).keys(),
-          );
-          for (const batteryName of matchBatteries(catalog, available)) {
-            // Concurrent syncs of one catalog race here; the unique index decides.
-            const attached = await OpenAppaBatteryInstallModel.createIfAbsent({
-              organizationId,
-              batteryName,
-              catalogId,
-              enabled: true,
-              credentialBindings: {},
-            });
-            if (attached) organizationIds.add(organizationId);
-          }
-        } catch (error) {
+      const attached = await mapWithConcurrency(
+        served,
+        RECOMPILE_CONCURRENCY,
+        (organizationId) => this.attachMatching({ organizationId, catalog }),
+      );
+      attached.forEach((result, index) => {
+        if (result.status === "rejected")
           logger.warn(
-            { catalogId, organizationId, error },
+            { catalogId, organizationId: served[index], error: result.reason },
             "OpenAPPA battery attachment after tool sync failed",
           );
-        }
-      }
+        else if (result.value) organizationIds.add(served[index] as string);
+      });
       await this.recompileOrganizations([...organizationIds]);
     } catch (error) {
       logger.warn(
@@ -352,6 +342,30 @@ class OpenAppaBatteriesService {
       ) ??
       null
     );
+  }
+
+  /** Attach every battery the catalog stands for; true when a new install was created. */
+  private async attachMatching(params: {
+    organizationId: string;
+    catalog: InternalMcpCatalog;
+  }): Promise<boolean> {
+    const { organizationId, catalog } = params;
+    const available = new Set(
+      (await this.availableBatteries(organizationId)).keys(),
+    );
+    let created = false;
+    for (const batteryName of matchBatteries(catalog, available)) {
+      // Concurrent syncs of one catalog race here; the unique index decides.
+      const attached = await OpenAppaBatteryInstallModel.createIfAbsent({
+        organizationId,
+        batteryName,
+        catalogId: catalog.id,
+        enabled: true,
+        credentialBindings: {},
+      });
+      created ||= attached !== null;
+    }
+    return created;
   }
 
   private async readEffectivePolicy(

@@ -405,7 +405,6 @@ pub struct BatteryExternal {
 pub struct BatteryPackage {
     pub name: String,
     pub description: String,
-    pub hosts: Vec<String>,
     pub namespaces: Vec<String>,
     pub policy: String,
     pub helpers: Vec<String>,
@@ -420,7 +419,6 @@ impl From<&batteries::BatteryInfo> for BatteryPackage {
         BatteryPackage {
             name: info.name.clone(),
             description: info.description.clone(),
-            hosts: info.hosts.clone(),
             namespaces: info.namespaces.clone(),
             policy: info.policy.clone(),
             helpers: info.helpers.clone(),

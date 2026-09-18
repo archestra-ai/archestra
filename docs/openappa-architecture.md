@@ -113,9 +113,10 @@ Helper scripts never run on the API host. The composer rewrites every `command`
 binding into a URL binding on the loopback helper bridge,
 `POST /api/openappa/helpers/<install id>/<external name>`, authenticated by a
 per-process bearer the backend mints at boot and exports as
-`APPA_ARCHESTRA_BRIDGE_TOKEN`. A root policy may not name an `APPA_ARCHESTRA_`
-variable in a `token_env` of its own, so an author cannot point the runtime, bearer
-in hand, at another install's helper. The bridge refuses non-loopback sockets and any other
+`APPA_ARCHESTRA_BRIDGE_TOKEN`. Neither a root policy nor a battery may name an
+`APPA_ARCHESTRA_` variable in a `token_env` of its own (validation, upload and
+composition all refuse it), so no author can send the runtime, bearer in hand, to
+another install's helper or to an outside URL. The bridge refuses non-loopback sockets and any other
 bearer, resolves the install's credentials at organization scope, mounts the battery
 files into a fresh sandbox container under `/skills/<battery>`, passes the consult
 envelope on stdin and the credential as a Dagger secret, and returns the helper's

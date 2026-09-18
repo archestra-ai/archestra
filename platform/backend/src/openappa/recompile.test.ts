@@ -18,7 +18,6 @@ const native = vi.hoisted(() => {
       {
         name: "acme",
         description: "",
-        hosts: ["archestra"],
         namespaces: ["acme"],
         policy: "",
         helpers: [],

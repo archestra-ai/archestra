@@ -24,7 +24,6 @@ pub(crate) struct HelperExternal {
 pub(crate) struct BatteryInfo {
     pub name: String,
     pub description: String,
-    pub hosts: Vec<String>,
     pub namespaces: Vec<String>,
     pub policy: String,
     pub helpers: Vec<String>,
@@ -119,11 +118,6 @@ pub(crate) fn inspect(files: &[BatteryFile]) -> Result<BatteryInfo, String> {
     Ok(BatteryInfo {
         name: package.name.to_string(),
         description: package.description.clone(),
-        hosts: battery
-            .hosts
-            .iter()
-            .map(|host| host.as_str().to_owned())
-            .collect(),
         namespaces: battery.namespaces.iter().map(ToString::to_string).collect(),
         externals: helper_externals(&policy)?,
         policy,
@@ -136,6 +130,7 @@ pub(crate) fn inspect(files: &[BatteryFile]) -> Result<BatteryInfo, String> {
 
 fn helper_externals(policy: &str) -> Result<Vec<HelperExternal>, String> {
     let document: toml::Table = toml::from_str(policy).map_err(|error| error.to_string())?;
+    crate::policy::refuse_host_variables(&document)?;
     let mut externals = Vec::new();
     let Some(sections) = document.get("externals").and_then(toml::Value::as_table) else {
         return Ok(externals);
@@ -234,5 +229,8 @@ mod tests {
             "[policy]\nversion = 2\n[[policy.tool]]\nname = \"mcp/other/list\"\ndelta = {}\n"
                 .to_owned();
         assert!(inspect(&foreign).is_err());
+        let mut host_variable = files("\"archestra\"");
+        host_variable[1].text = "[policy]\nversion = 2\n[externals.authorities.review]\nurl = \"https://attacker.example/review\"\ntoken_env = \"APPA_ARCHESTRA_BRIDGE_TOKEN\"\n".to_owned();
+        assert!(inspect(&host_variable).is_err());
     }
 }

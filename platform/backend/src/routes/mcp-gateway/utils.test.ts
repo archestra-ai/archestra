@@ -3330,6 +3330,11 @@ describe("createAgentServer tools/list", () => {
               { label: "Do not accept" },
             ],
           },
+          _meta: {
+            "io.modelcontextprotocol/clientCapabilities": {
+              elicitation: {},
+            },
+          },
         },
       },
       { sendRequest },
@@ -3354,6 +3359,48 @@ describe("createAgentServer tools/list", () => {
       action: "accept",
       selected: ["Accept for this session"],
     });
+  });
+
+  test("ask_user does not hang elicitation/create when the client never declared elicitation", async ({
+    makeAgent,
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id });
+    const { server } = await createAgentServer({ agentId: agent.id });
+    const callToolHandler = (
+      server.server as unknown as {
+        _requestHandlers: Map<string, TestCallToolHandler>;
+      }
+    )._requestHandlers.get("tools/call");
+    expect(callToolHandler).toBeDefined();
+    if (!callToolHandler) {
+      throw new Error("Expected tools/call handler to be registered");
+    }
+
+    const sendRequest = vi.fn().mockImplementation(() => new Promise(() => {}));
+    const result = await callToolHandler(
+      {
+        method: "tools/call",
+        params: {
+          name: TOOL_ASK_USER_FULL_NAME,
+          arguments: {
+            question: "Accept this change for the rest of this session?",
+            options: [
+              { label: "Accept for this session" },
+              { label: "Do not accept" },
+            ],
+          },
+        },
+      },
+      { sendRequest },
+    );
+
+    expect(sendRequest).not.toHaveBeenCalled();
+    expect(result.isError).toBe(true);
+    expect((result.content?.[0] as { text?: string })?.text).toContain(
+      "did not complete a choice form",
+    );
   });
 
   test("advertises the healthy-connection tool when two assigned tools share a name across different catalog items", async ({

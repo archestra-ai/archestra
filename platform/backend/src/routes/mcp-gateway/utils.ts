@@ -132,6 +132,7 @@ import {
   buildGatewayServerCapabilities,
   buildPrivateListCacheHint,
   isResourceUnavailableError,
+  MCP_CLIENT_CAPABILITIES_META_KEY,
   RESOURCE_NOT_FOUND_ERROR_CODE,
   withCompleteResultEnvelope,
   withPrivateCacheHint,
@@ -983,6 +984,9 @@ export async function createAgentServer(params: {
                     mrtrEnabled,
                     agentId,
                     toolName: name,
+                    requestMeta: request.params._meta as
+                      | Record<string, unknown>
+                      | undefined,
                   }),
                 },
               });
@@ -2397,19 +2401,22 @@ function createGatewayUserElicit(params: {
       request: ElicitRequest,
       resultSchema: typeof ElicitResultSchema,
     ) => Promise<unknown>;
+    _meta?: Record<string, unknown>;
   };
   mrtr?: {
     inputResponses?: InputResponses;
+    clientCapabilities?: unknown;
   };
   mrtrEnabled: boolean;
   agentId: string;
   toolName: string;
+  requestMeta?: Record<string, unknown>;
 }): (args: {
   toolName: string;
   message: string;
   requestedSchema?: unknown;
 }) => Promise<ArchestraElicitationOutcome> {
-  const { extra, mrtr, mrtrEnabled, agentId, toolName } = params;
+  const { extra, mrtr, mrtrEnabled, agentId, toolName, requestMeta } = params;
 
   return async ({ message, requestedSchema }) => {
     const supplied = mrtr?.inputResponses?.[GATEWAY_INPUT_REQUEST_KEY];
@@ -2428,6 +2435,21 @@ function createGatewayUserElicit(params: {
         requestedSchema,
       },
     } as ElicitRequest;
+
+    const clientCapabilities =
+      mrtr?.clientCapabilities ??
+      extra._meta?.[MCP_CLIENT_CAPABILITIES_META_KEY] ??
+      requestMeta?.[MCP_CLIENT_CAPABILITIES_META_KEY];
+    const canElicit = clientSupportsInputRequest({
+      clientCapabilities,
+      request: {
+        method: "elicitation/create",
+        params: request.params as Record<string, unknown>,
+      },
+    });
+    if (!canElicit) {
+      return { status: "no_viewer" };
+    }
 
     if (mrtrEnabled) {
       throw new InputRequiredSignal({

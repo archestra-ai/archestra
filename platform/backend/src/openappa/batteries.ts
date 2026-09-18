@@ -34,7 +34,7 @@ import type {
   UpdateBatteryInstall,
 } from "@/types/openappa-batteries";
 import { mapWithConcurrency } from "@/utils/concurrency";
-import { matchBatteries } from "./battery-match";
+import { matchBatteries, matchesAnyRule } from "./battery-match";
 
 /** The variable a composed policy names for the bridge bearer; its value is per process. */
 const OPENAPPA_BRIDGE_TOKEN_ENV = "APPA_ARCHESTRA_BRIDGE_TOKEN";
@@ -136,10 +136,13 @@ class OpenAppaBatteriesService {
       const organizationIds = new Set(
         await OpenAppaBatteryInstallModel.organizationIdsForCatalog(catalogId),
       );
-      const served =
-        catalog.organizationId === null
-          ? await OrganizationModel.findAllIds()
-          : [catalog.organizationId];
+      // Most catalogs stand for no battery at all and skip the sweep.
+      let served: string[] = [];
+      if (matchesAnyRule(catalog))
+        served =
+          catalog.organizationId === null
+            ? await OrganizationModel.findAllIds()
+            : [catalog.organizationId];
       const attached = await mapWithConcurrency(
         served,
         RECOMPILE_CONCURRENCY,
@@ -315,12 +318,12 @@ class OpenAppaBatteriesService {
         params.userId,
         params.organizationId,
         "credential",
-        "read",
+        "update",
       ))
     )
       throw new ApiError(
         403,
-        "Credential read permission is required to upload a battery with helper scripts",
+        "Credential update permission is required to upload a battery with helper scripts",
       );
     await OpenAppaBatteryPackageModel.upsert({
       organizationId: params.organizationId,
@@ -697,8 +700,8 @@ class OpenAppaBatteriesService {
 
   /**
    * Binding hands the credential's organization value to the battery's helper,
-   * so the binder needs to be allowed to read credentials, not only to manage
-   * the organization.
+   * so binding takes the permission that sets an organization credential's
+   * value, not only the one that manages the organization.
    */
   private async requireBindableCredentials(params: {
     userId: string;
@@ -710,11 +713,11 @@ class OpenAppaBatteriesService {
     const entries = Object.entries(bindings);
     if (
       entries.length > 0 &&
-      !(await userHasPermission(userId, organizationId, "credential", "read"))
+      !(await userHasPermission(userId, organizationId, "credential", "update"))
     )
       throw new ApiError(
         403,
-        "Credential read permission is required to bind runtime credentials",
+        "Credential update permission is required to bind runtime credentials",
       );
     for (const [credential, key] of entries) {
       if (!battery.credentials.includes(credential))

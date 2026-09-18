@@ -390,7 +390,7 @@ describe("guardrails batteries", () => {
     ).toMatchObject({ source: "bundled" });
   });
 
-  test("binding a credential needs credential read permission on top of organization management", async ({
+  test("binding a credential needs credential update permission on top of organization management", async ({
     makeUser,
     makeCustomRole,
     makeMember,

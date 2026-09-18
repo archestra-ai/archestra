@@ -3,6 +3,7 @@ import { and, eq } from "drizzle-orm";
 import config from "@/config";
 import db, { schema } from "@/database";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
+import OpenAppaBatteryInstallModel from "@/models/openappa-battery-install";
 import OpenAppaEffectivePolicyModel from "@/models/openappa-effective-policy";
 import RuntimeCredentialConnectionModel from "@/models/runtime-credential-connection";
 import RuntimeCredentialDefinitionModel from "@/models/runtime-credential-definition";
@@ -218,6 +219,36 @@ describe("guardrails batteries", () => {
         })
       ).statusCode,
     ).toBe(409);
+  });
+
+  test("two installs claiming a battery's helpers at once end with one owner", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const credentialBindings = await bindGithubToken();
+    const catalogs = await Promise.all([
+      makeInternalMcpCatalog({ organizationId }),
+      makeInternalMcpCatalog({ organizationId }),
+    ]);
+    const responses = await Promise.all(
+      catalogs.map((catalog) =>
+        app.inject({
+          method: "POST",
+          url: "/api/openappa/battery-installs",
+          payload: {
+            batteryName: "github",
+            catalogId: catalog.id,
+            credentialBindings,
+          },
+        }),
+      ),
+    );
+    expect(responses.map((response) => response.statusCode).sort()).toEqual([
+      200, 409,
+    ]);
+    const installs = (
+      await OpenAppaBatteryInstallModel.list(organizationId)
+    ).filter((install) => install.batteryName === "github");
+    expect(installs).toHaveLength(1);
   });
 
   test("a catalog whose tool namespace holds a double underscore is refused", async ({

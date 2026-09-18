@@ -105,7 +105,9 @@ catalog rename, catalog delete, and tool sync, and hourly for every organization
 backstop. Before each dispatch the runtime compares the stored root revision to the
 latest one and recomposes on a mismatch. Installing an MCP server whose catalog
 matches a bundled battery attaches the battery automatically: enabled on a server
-URL host or container image match, disabled on a name-only match. A battery without
+URL host or container image match, disabled on a name-only match. The host or image
+is the catalog entry's own claim, so the permission to register MCP servers
+(`mcpRegistry`) is what lets a user attach a bundled battery. A battery without
 helpers activates at once; a battery with helpers stays `missing_credentials` until
 every declared credential is bound to an organization-level runtime credential, and
 only one install of such a battery is active per organization. A battery's externals

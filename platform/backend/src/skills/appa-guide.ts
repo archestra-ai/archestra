@@ -19,10 +19,13 @@ not change it.
 Call \`archestra__get_guardrails_policy\` with no arguments. Read the returned
 \`content\` and \`revision\`. This is the organization's own policy text; the
 batteries installed for MCP servers compose into what is enforced on top of it,
-and they are managed in Studio, not through this tool. If the user only asked to
-inspect or explain, summarize what this text lets run, what data it restricts,
-and what it blocks, and say that installed batteries add their own rules.
-Do not save or propose unrelated changes.
+and they are managed in Studio, not through this tool. The returned
+\`effective\` is what the runtime enforces: its \`content\` is the composed
+policy, and its \`error\` is set when the last composition failed, in which
+case only the root text is enforced. If the user only asked to inspect or
+explain, summarize what is enforced from \`effective.content\`, note which
+rules come from batteries rather than the root text, and report an
+\`effective.error\` as a problem to fix. Do not save or propose unrelated changes.
 
 ## Inspect installed MCP servers
 
@@ -72,9 +75,12 @@ scan or save policy rules; follow these steps when handling the user's request.
    combine your intended change with those edits, and validate before retrying.
    Never just increase N and resend the old text. If the edits conflict in
    meaning, ask the user which behavior they want.
-7. Read back the saved policy. Briefly report the change and its save number.
-   Saved policies apply to new conversations. This conversation keeps its
-   original policy; a successful save does not prove the new behavior here.
+7. Read back the saved policy. If the save's \`effective.error\` is set, the
+   root text saved but its composition with the installed batteries failed and
+   only the root text is enforced: report that as a problem, not a success.
+   Otherwise briefly report the change and its save number. Saved policies
+   apply to new conversations. This conversation keeps its original policy; a
+   successful save does not prove the new behavior here.
 
 ## Boundaries
 

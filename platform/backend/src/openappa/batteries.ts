@@ -207,7 +207,16 @@ class OpenAppaBatteriesService {
         409,
         "This battery is already installed for that catalog entry",
       );
-    return this.installView(organizationId, created.id);
+    const view = await this.installView(organizationId, created.id);
+    if (view.status !== "superseded") return view;
+    // Two installs claiming a battery's helpers at once both pass the check
+    // above; the composition names one owner and this one yields.
+    await OpenAppaBatteryInstallModel.delete({
+      id: created.id,
+      organizationId,
+    });
+    await this.recompile(organizationId);
+    throw helpersClaimedMeanwhile();
   }
 
   async updateInstall(params: {
@@ -243,7 +252,17 @@ class OpenAppaBatteriesService {
       organizationId,
       ...changes,
     });
-    return this.installView(organizationId, id);
+    const view = await this.installView(organizationId, id);
+    if (!claimsHelpers || view.status !== "superseded") return view;
+    // Another install claimed the helpers between the check and this write.
+    await OpenAppaBatteryInstallModel.update({
+      id,
+      organizationId,
+      enabled: existing.enabled,
+      credentialBindings: existing.credentialBindings,
+    });
+    await this.recompile(organizationId);
+    throw helpersClaimedMeanwhile();
   }
 
   async deleteInstall(params: {
@@ -719,6 +738,13 @@ class OpenAppaBatteriesService {
 }
 
 export const openappaBatteriesService = new OpenAppaBatteriesService();
+
+function helpersClaimedMeanwhile(): ApiError {
+  return new ApiError(
+    409,
+    "Another install of this battery became active at the same time",
+  );
+}
 
 type AvailableBatteries = Map<
   string,

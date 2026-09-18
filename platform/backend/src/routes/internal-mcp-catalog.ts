@@ -1820,9 +1820,13 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(409, conflict);
       }
 
-      return reply.send({
-        success: await InternalMcpCatalogModel.restore(id),
-      });
+      const success = await InternalMcpCatalogModel.restore(id);
+      // The restored tools rejoin the composed aliases.
+      if (success)
+        await openappaBatteriesService.recompileOrganizations(
+          await OpenAppaBatteryInstallModel.organizationIdsForCatalog(id),
+        );
+      return reply.send({ success });
     },
   );
 

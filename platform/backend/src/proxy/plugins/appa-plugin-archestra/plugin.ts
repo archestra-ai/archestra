@@ -2,6 +2,7 @@ import { buildNoticeArguments, type RemedyExecution } from "@/openappa/notice";
 import {
   cancelCalls,
   endTurn,
+  evaluateHostedToolCalls,
   evaluateToolCalls,
   notePrompt,
   type OpenAppaSession,
@@ -10,6 +11,8 @@ import {
 import type {
   LlmProxyBeforeModelContext,
   LlmProxyContextTrust,
+  LlmProxyHostedToolCallsContext,
+  LlmProxyHostedToolCallsOutcome,
   LlmProxyModelResponseContext,
   LlmProxyPlugin,
   LlmProxyRequestContext,
@@ -118,6 +121,52 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       return stamped;
     });
     if (changed) return { decision: "allow", toolCalls };
+  }
+
+  governsHostedToolCalls(context: LlmProxyRequestContext): boolean {
+    return this.bindings.get(context.resources)?.request.tools !== undefined;
+  }
+
+  async onHostedToolCalls(
+    context: LlmProxyHostedToolCallsContext,
+  ): Promise<LlmProxyHostedToolCallsOutcome | undefined> {
+    const binding = this.bindings.get(context.resources);
+    const tools = binding?.request.tools;
+    if (!binding || !tools) return;
+    const calls = [...context.hostedToolCalls];
+    const decisions = await evaluateHostedToolCalls(binding.session, calls, {
+      canonicalize: (name) => this.canonicalize(binding, name),
+      controlToolName: tools.controlToolName,
+    });
+    const held = calls.flatMap((call, index) => {
+      const decision = decisions[index];
+      return decision.kind === "hold"
+        ? [{ call, feedback: decision.feedback }]
+        : [];
+    });
+    if (held.length === 0) return { decision: "release" };
+    // The client must run the notices, so the turn stays open.
+    binding.turnOpen = true;
+    return {
+      decision: "hold",
+      notices: held.map(({ call, feedback }) => ({
+        id: call.id,
+        name: tools.noticeToolName,
+        arguments: JSON.stringify(
+          buildNoticeArguments({
+            id: call.id,
+            tool: call.name,
+            arguments: call.arguments,
+            result: feedback,
+          }),
+        ),
+      })),
+      blocked: held.map(({ call, feedback }) => ({
+        id: call.id,
+        name: call.name,
+        reason: feedback,
+      })),
+    };
   }
 
   async onToolCalls(

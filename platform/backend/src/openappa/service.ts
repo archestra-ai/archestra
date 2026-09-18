@@ -548,6 +548,61 @@ export async function evaluateToolCalls(
   );
 }
 
+/** Verdict on a call the provider already ran. */
+type AppaHostedCallDecision =
+  | { kind: "release" }
+  | { kind: "hold"; feedback: string };
+
+/**
+ * Rules on calls the provider ran inside the inference call. Nothing can stop
+ * such a call, so the ruling is on what it brought in: a call the policy would
+ * have denied, or a result it stages, is held behind the ruling's offers and
+ * reaches the model only through a remedy. A policy that lists the tool under
+ * `confined_results` stages the result itself, so accepting the offer returns
+ * it; any other denial drops it, and the model searches again once allowed.
+ */
+export async function evaluateHostedToolCalls(
+  session: OpenAppaSession,
+  calls: ReadonlyArray<{
+    id: string;
+    name: string;
+    arguments: Record<string, unknown>;
+    output: string;
+  }>,
+  options: Parameters<typeof evaluateToolCalls>[2],
+): Promise<AppaHostedCallDecision[]> {
+  const decisions = await evaluateToolCalls(session, [...calls], options);
+  if (decisions.some((decision) => decision.kind === "deny")) {
+    await cancelCalls(
+      session,
+      calls.flatMap((call, index) =>
+        decisions[index].kind === "allow" ? [call.id] : [],
+      ),
+    );
+    return decisions.map((decision) =>
+      decision.kind === "deny"
+        ? { kind: "hold", feedback: decision.feedback }
+        : { kind: "release" },
+    );
+  }
+  const verdicts: AppaHostedCallDecision[] = [];
+  for (const call of calls) {
+    const approved = await approveToolResult({
+      session,
+      toolCallId: call.id,
+      output: call.output,
+      outcome: "success",
+      controlToolName: options.controlToolName,
+    });
+    verdicts.push(
+      approved.outputSource === "tool" && approved.content === call.output
+        ? { kind: "release" }
+        : { kind: "hold", feedback: approved.content },
+    );
+  }
+  return verdicts;
+}
+
 /** Cancels admitted tool calls when the carrier response is withheld. */
 export async function cancelCalls(
   session: OpenAppaSession,

@@ -253,6 +253,20 @@ export function providerHostedTool(tool: unknown): string | undefined {
 }
 
 /**
+ * A provider-hosted tool whose result this proxy can still withhold: a
+ * read-only lookup on a wire whose response adapter surfaces hosted calls, so
+ * what the provider ran is ruled on before any of it reaches the client.
+ */
+export function isResultGovernedHostedTool(params: {
+  family: AppaWireFamily | undefined;
+  tool: unknown;
+}): boolean {
+  const hosted = providerHostedTool(params.tool);
+  if (!hosted || !params.family) return false;
+  return RESULT_GOVERNED_HOSTED_TOOL_TYPES[params.family]?.has(hosted) === true;
+}
+
+/**
  * The client session this request belongs to, as the client itself reports it.
  *
  * A session id cannot come from static client configuration: it changes every
@@ -422,6 +436,12 @@ const CLIENT_RUN_TOOL_TYPES = new Set([
   "namespace",
   "tool_search",
 ]);
+
+const RESULT_GOVERNED_HOSTED_TOOL_TYPES: Partial<
+  Record<AppaWireFamily, ReadonlySet<string>>
+> = {
+  "openai:responses": new Set(["web_search", "web_search_preview"]),
+};
 
 /** Adjusts tool call IDs to match expected provider prefixes (fc_, ctc_). */
 function itemIdOfKind(id: string, type: keyof typeof ITEM_ID_PREFIXES): string {

@@ -123,9 +123,9 @@ Two MCP tools handle remedies:
 
 The model selects each remedy. The proxy releases the model's `execute_remedy_plan` call to the client for execution.
 
-Remedy offers and execution receipts are stored in PostgreSQL (`openappa_offer_owners`). Any backend replica can resolve an offer after a restart or routing change. The runtime validates the offer before execution.
+Remedy routing is a flattened JWS (RFC 7515 §7.2.2, RFC 7797 unencoded payload) on the denial notice and `execute_remedy_plan` call: `protected`, `payload`, `signature`. That is integrity (JWS), not encryption (JWE). `protected.alg` selects the verify method; unknown algorithms fail closed. The event log is the authority for whether the offer still stands. A claim carries no expiry: it is a routing token, not an authorization, and the event log's operation idempotency gates the spend — replaying a claim from another conversation can only reach an offer the same session minted, and never twice.
 
-Session receipts belong to authorized users within an organization. A personal offer requires its original user. An organization offer allows any caller in that organization. Spent, unknown, or unauthorized offers return terminal feedback without executing.
+Session receipts belong to authorized users within an organization. A personal offer requires its original user. An offer id alone cannot be spent; the caller must present a valid signature for that offer. Spent, unknown, or unauthorized offers return terminal feedback without executing.
 
 Interactive human approval is not connected. Calls requiring human approval stay blocked.
 

@@ -10,6 +10,7 @@
  */
 import { isDeepStrictEqual } from "node:util";
 import { z } from "zod";
+import { type OfferJws, OfferJwsSchema } from "./offer-claims";
 
 /** Incremented when the notice payload structure changes. */
 const NOTICE_VERSION = 1;
@@ -51,6 +52,7 @@ export const NoticeArguments = z
     arguments: FunctionArguments,
     ruling: z.string().min(1),
     notice: NoticeMetadata.extend({ custom: z.literal(true).optional() }),
+    offers: z.array(OfferJwsSchema).optional(),
   })
   .superRefine((value, context) => {
     if (!value.notice.custom) return;
@@ -105,12 +107,15 @@ type AppaNotice = {
   custom?: boolean;
   /** The namespace of the original tool declaration (e.g. in Codex). */
   namespace?: string;
+  /** Signed offer routing claims. Not used for restoration. */
+  offers?: OfferJws[];
 };
 
 export function buildNoticeArguments(
   notice: Omit<AppaNotice, "original"> & {
     /** Original call arguments as an object or JSON string. */
     arguments: Record<string, unknown> | string;
+    offers?: OfferJws[];
   },
 ): z.infer<typeof NoticeArguments> {
   const original = normalizeOriginalCall({
@@ -133,6 +138,9 @@ export function buildNoticeArguments(
       ...(notice.custom ? { custom: true } : {}),
       ...(notice.namespace ? { namespace: notice.namespace } : {}),
     },
+    ...(notice.offers && notice.offers.length > 0
+      ? { offers: notice.offers }
+      : {}),
   };
 }
 
@@ -147,7 +155,7 @@ export function readNotice(params: {
       : params.arguments,
   );
   if (!parsed.success) return null;
-  const { tool, arguments: args, ruling, notice } = parsed.data;
+  const { tool, arguments: args, ruling, notice, offers } = parsed.data;
   if (notice.call_id !== params.callId) return null;
   const original = normalizeOriginalCall({
     custom: notice.custom,
@@ -161,6 +169,7 @@ export function readNotice(params: {
     result: ruling,
     ...(notice.custom ? { custom: true } : {}),
     ...(notice.namespace ? { namespace: notice.namespace } : {}),
+    ...(offers && offers.length > 0 ? { offers } : {}),
   };
 }
 

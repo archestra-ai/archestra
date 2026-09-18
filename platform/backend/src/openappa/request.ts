@@ -10,14 +10,17 @@ import {
 } from "@archestra/shared";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { ApiError } from "@/types";
+import type { OfferJws } from "./offer-claims";
 import {
   type AppaSessionIdentity,
   type AppaWireFamily,
   appaTurnBoundaries,
   appaWireFamily,
+  collectSignedOfferClaims,
   declaredToolName,
   declaredToolNamespaces,
   declaredTools,
+  isResultGovernedHostedTool,
   providerHostedTool,
   restoreAppaNotices,
   restoreAppaRemedyExecutions,
@@ -46,6 +49,8 @@ export type AppaPreparedRequest = {
   spellings: ReadonlyMap<string, string>;
   promptOperationId?: string;
   turnEndOperationId?: string;
+  /** Signed offer routing collected from notices before restoration. */
+  offerClaims?: OfferJws[];
 };
 
 /**
@@ -71,10 +76,23 @@ export function prepareAppaRequest(params: {
     );
   }
   let historicalControlToolName: string | undefined;
+  let offerClaims: OfferJws[] | undefined;
   const session = params.session ?? {
     provenance: "none" as const,
   };
   if (family) {
+    const noticeMatch = {
+      isNoticeTool: (name: string) =>
+        shortToolName(params.canonicalizeToolName(name)) ===
+        TOOL_GET_REMEDY_PLANS_SHORT_NAME,
+      mayBeNoticeTool: (name: string) => NOTICE_TOOL_SPELLING.test(name),
+    };
+    const collected = collectSignedOfferClaims({
+      family,
+      body: params.body,
+      ...noticeMatch,
+    });
+    if (collected.length > 0) offerClaims = collected;
     historicalControlToolName = restoreAppaRemedyExecutions({
       family,
       body: params.body,
@@ -88,14 +106,7 @@ export function prepareAppaRequest(params: {
     restoreAppaNotices({
       family,
       body: params.body,
-      isNoticeTool: (name) =>
-        shortToolName(params.canonicalizeToolName(name)) ===
-        TOOL_GET_REMEDY_PLANS_SHORT_NAME,
-      // A client decorates the gateway's tools with a label of its own, and a
-      // request that declares no tools gives the canonicalizer nothing to learn
-      // that label from. Spelling alone is enough to *try* a call, because a
-      // notice proves itself by its own record; one that does not is left alone.
-      mayBeNoticeTool: (name) => NOTICE_TOOL_SPELLING.test(name),
+      ...noticeMatch,
     });
   }
 
@@ -108,16 +119,20 @@ export function prepareAppaRequest(params: {
       spellings: new Map(),
       customTools: new Set(),
       namespaces: new Map(),
+      ...(offerClaims ? { offerClaims } : {}),
     };
   }
   if (family) refuseCodexCodeMode({ family, declared, body: params.body });
-  refuseProviderHostedTools(declared);
+  refuseProviderHostedTools({ family, declared });
   refuseDeferredTools(declared);
 
   const found = new Map<string, string>();
   const spellings = new Map<string, string>();
   const customTools = new Set<string>();
   for (const tool of declared) {
+    // The provider runs it, so the client never names or calls it: its calls
+    // are ruled on from the response, not matched against a declared spelling.
+    if (isResultGovernedHostedTool({ family, tool })) continue;
     const name = declaredToolName(tool);
     if (name === undefined) {
       // A tool this proxy cannot name is a tool it cannot gate or render.
@@ -183,6 +198,7 @@ export function prepareAppaRequest(params: {
     customTools,
     namespaces: declaredToolNamespaces(params.body),
     ...(family ? appaTurnBoundaries({ family, body: params.body }) : {}),
+    ...(offerClaims ? { offerClaims } : {}),
   };
 }
 
@@ -232,11 +248,18 @@ function refuseDeferredTools(declared: readonly unknown[]): void {
   }
 }
 
-/** Refuses sessions declaring provider-hosted tools that bypass proxy gating. */
-function refuseProviderHostedTools(declared: readonly unknown[]): void {
-  for (const tool of declared) {
+/**
+ * Refuses sessions declaring provider-hosted tools that bypass proxy gating.
+ * A hosted tool whose result this wire can withhold is governed instead.
+ */
+function refuseProviderHostedTools(params: {
+  family: AppaWireFamily | undefined;
+  declared: readonly unknown[];
+}): void {
+  for (const tool of params.declared) {
     const hosted = providerHostedTool(tool);
     if (!hosted) continue;
+    if (isResultGovernedHostedTool({ family: params.family, tool })) continue;
     throw new ApiError(
       400,
       `OpenAPPA cannot govern the provider-hosted tool \`${hosted}\`, which runs inside the provider. Remove it from this session or disable OpenAPPA for this client.`,

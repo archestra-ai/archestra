@@ -10,13 +10,28 @@ import logger from "@/logging";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { signOfferClaims, unsignedOfferClaims } from "./offer-claims";
 import {
   cancelCalls,
+  evaluateHostedToolCalls,
   evaluateToolCalls,
   executeRemedyByOffer,
   processProxyResults,
   sessionFromHeaders,
 } from "./service";
+
+function signedRemedyArgs(offerId = "offer-1") {
+  const jws = signOfferClaims(
+    unsignedOfferClaims({
+      organizationId: "org",
+      sessionId: "conversation",
+      callerId: "user:alice",
+      offerId,
+    }),
+    "test-offer-signing-secret-32chars",
+  );
+  return { offer_id: offerId, ...jws };
+}
 
 const native = vi.hoisted(() => ({
   initializeOpenappa: vi.fn(),
@@ -33,7 +48,11 @@ const session = {
 
 beforeEach(async () => {
   config.llmProxy.plugins = ["appa"];
-  config.openappa = { enabled: true, yellEnabled: false };
+  config.openappa = {
+    enabled: true,
+    yellEnabled: false,
+    offerSigningSecret: "test-offer-signing-secret-32chars",
+  };
   await GuardrailsDeploymentModel.setEnabled(true);
   vi.spyOn(database, "getDatabaseConnectionString").mockReturnValue(
     "postgresql://test:test@localhost/test",
@@ -189,13 +208,98 @@ describe("APPA feature boundary", () => {
 
     expect(decisions).toEqual([
       { kind: "allow" },
-      { kind: "deny", feedback: "[appa] a call is already outstanding" },
+      {
+        kind: "deny",
+        feedback: "[appa] a call is already outstanding",
+        offers: [],
+      },
     ]);
     expect(
       native.dispatchHook.mock.calls.map(
         ([raw]) => JSON.parse(raw).operation_id,
       ),
     ).toEqual(["call:first", "call:second"]);
+  });
+
+  test("holds what a provider-run call brought in behind the runtime's staged ruling", async () => {
+    native.dispatchHook.mockImplementation(async (raw: string) => {
+      const event = JSON.parse(raw);
+      return JSON.stringify(
+        event.event === "tool_result"
+          ? {
+              decision: "replace_output",
+              approved_output: "[appa] staged; accept offer-7",
+              output_source: "runtime",
+            }
+          : { decision: "allow_call" },
+      );
+    });
+
+    const decisions = await evaluateHostedToolCalls(
+      session,
+      [
+        {
+          id: "ws_1",
+          name: "web_search",
+          arguments: { query: "rust" },
+          output: "search tail",
+        },
+      ],
+      { canonicalize: (name) => name },
+    );
+
+    expect(decisions).toEqual([
+      { kind: "hold", feedback: "[appa] staged; accept offer-7" },
+    ]);
+    expect(
+      native.dispatchHook.mock.calls.map(([raw]) => {
+        const { event, operation_id, tool_call_id, output } = JSON.parse(raw);
+        return { event, operation_id, tool_call_id, output };
+      }),
+    ).toEqual([
+      { event: "tool_call", operation_id: "call:ws_1" },
+      { event: "tool_result", tool_call_id: "ws_1", output: "search tail" },
+    ]);
+  });
+
+  test("releases a provider-run result the runtime admits unchanged", async () => {
+    native.dispatchHook.mockImplementation(async (raw: string) =>
+      JSON.stringify(
+        JSON.parse(raw).event === "tool_result"
+          ? { decision: "ack" }
+          : { decision: "allow_call" },
+      ),
+    );
+
+    expect(
+      await evaluateHostedToolCalls(
+        session,
+        [{ id: "ws_1", name: "web_search", arguments: {}, output: "tail" }],
+        { canonicalize: (name) => name },
+      ),
+    ).toEqual([{ kind: "release" }]);
+  });
+
+  test("a provider-run call the policy denies is held without submitting its result", async () => {
+    native.dispatchHook.mockResolvedValue(
+      JSON.stringify({
+        decision: "deny_call",
+        feedback: "[appa] trust would fall; accept offer-9",
+      }),
+    );
+
+    expect(
+      await evaluateHostedToolCalls(
+        session,
+        [{ id: "ws_1", name: "web_search", arguments: {}, output: "tail" }],
+        { canonicalize: (name) => name },
+      ),
+    ).toEqual([
+      { kind: "hold", feedback: "[appa] trust would fall; accept offer-9" },
+    ]);
+    expect(
+      native.dispatchHook.mock.calls.map(([raw]) => JSON.parse(raw).event),
+    ).toEqual(["tool_call"]);
   });
 
   test("admits multiple calls before any result arrives", async () => {
@@ -269,7 +373,7 @@ describe("APPA feature boundary", () => {
     } else {
       expect(await check).toEqual([
         { kind: "allow" },
-        { kind: "deny", feedback: "Policy denied" },
+        { kind: "deny", feedback: "Policy denied", offers: [] },
         { kind: "allow" },
       ]);
       expect([...open]).toEqual(["unrelated", "first", "third"]);
@@ -411,7 +515,7 @@ describe("APPA feature boundary", () => {
       { canonicalize: (name) => name },
     );
     expect(denied).toEqual([
-      { kind: "deny", feedback: "Parent policy denied" },
+      { kind: "deny", feedback: "Parent policy denied", offers: [] },
     ]);
   });
 
@@ -488,7 +592,7 @@ describe("APPA feature boundary", () => {
     );
     const result = await executeArchestraTool(
       "archestra__execute_remedy_plan",
-      { offer_id: "offer" },
+      signedRemedyArgs("offer"),
       {
         agent: { id: "agent", name: "Assistant" },
         agentId: "agent",
@@ -552,7 +656,7 @@ describe("APPA feature boundary", () => {
     const elicit = vi.fn();
     const result = await executeArchestraTool(
       "archestra__execute_remedy_plan",
-      { offer_id: "human-offer" },
+      signedRemedyArgs("human-offer"),
       {
         agent: { id: "agent", name: "Assistant" },
         agentId: "agent",
@@ -963,6 +1067,7 @@ describe("remedy by offer", () => {
 
     const result = await executeRemedyByOffer({
       organizationId: "org",
+      sessionId: "session",
       toolCallId: "client-remedy-1",
       originalArguments: '{"offer_id":"offer-1"}',
       args: { offer_id: "offer-1" },
@@ -974,6 +1079,7 @@ describe("remedy by offer", () => {
     });
     expect(JSON.parse(native.executeRemedyByOffer.mock.calls[0][0])).toEqual({
       organization_id: "org",
+      session_id: "session",
       execution_mode: "tracked",
       tool_call_id: "client-remedy-1",
       original_arguments: '{"offer_id":"offer-1"}',
@@ -996,6 +1102,7 @@ describe("remedy by offer", () => {
     await expect(
       executeRemedyByOffer({
         organizationId: "org",
+        sessionId: "session",
         toolCallId: "client-remedy-2",
         originalArguments: '{"offer_id":"offer"}',
         args: { offer_id: "offer" },
@@ -1022,6 +1129,7 @@ describe("remedy by offer", () => {
     await expect(
       executeRemedyByOffer({
         organizationId: "org",
+        sessionId: "session",
         toolCallId: "client-remedy-malformed",
         originalArguments: '{"offer_id":"offer"}',
         args: { offer_id: "offer" },
@@ -1082,6 +1190,7 @@ describe("remedy by offer", () => {
 
     const answer = await executeRemedyByOffer({
       organizationId: "org",
+      sessionId: "session",
       toolCallId: "client-remedy-3",
       originalArguments: '{"offer_id":"offer-9"}',
       args: { offer_id: "offer-9" },
@@ -1102,7 +1211,7 @@ describe("remedy by offer", () => {
 
     const result = await executeArchestraTool(
       "archestra__execute_remedy_plan",
-      { offer_id: "offer-1" },
+      signedRemedyArgs(),
       {
         agent: { id: "3c0f2458-f26a-4b05-9571-a64dca1d65a7", name: "Chat" },
         agentId: "3c0f2458-f26a-4b05-9571-a64dca1d65a7",
@@ -1152,21 +1261,7 @@ describe("remedy by offer", () => {
     });
   });
 
-  test("returns an unknown offer's terminal result when the client names no session", async () => {
-    native.executeRemedyByOffer.mockResolvedValueOnce(
-      JSON.stringify({
-        decision: "mcp_result",
-        offer: { status: "unknown" },
-        result: {
-          isError: true,
-          content: [
-            { type: "text", text: "[appa] No live offer with this id" },
-          ],
-        },
-      }),
-    );
-
-    // The durable by-offer lookup needs no caller-selected session context.
+  test("returns an unknown offer's terminal result when the client names no signed claims", async () => {
     const result = await executeArchestraTool(
       "archestra__execute_remedy_plan",
       { offer_id: "offer-1" },
@@ -1178,10 +1273,12 @@ describe("remedy by offer", () => {
       },
     );
 
-    expect(native.executeRemedyByOffer).toHaveBeenCalledTimes(1);
+    expect(native.executeRemedyByOffer).not.toHaveBeenCalled();
     expect(native.dispatchHook).not.toHaveBeenCalled();
-    // The runtime's refusal reaches the model verbatim, error flag intact.
-    expect(result).toMatchObject({ isError: true });
+    expect(result).toMatchObject({
+      isError: true,
+      content: [{ type: "text", text: "[appa] No live offer with this id" }],
+    });
   });
 
   test("executes an untracked remedy without inventing a receipt identity", async () => {
@@ -1199,7 +1296,7 @@ describe("remedy by offer", () => {
     );
     const result = await executeArchestraTool(
       "archestra__execute_remedy_plan",
-      { offer_id: "offer-1" },
+      signedRemedyArgs(),
       {
         agent: {
           id: "3c0f2458-f26a-4b05-9571-a64dca1d65a7",
@@ -1212,6 +1309,8 @@ describe("remedy by offer", () => {
     expect(result).toMatchObject({ isError: true });
     expect(JSON.parse(native.executeRemedyByOffer.mock.calls[0][0])).toEqual({
       organization_id: "org",
+      session_id: "conversation",
+      owner_caller_id: "user:alice",
       execution_mode: "untracked",
       original_arguments: '{"offer_id":"offer-1"}',
       arguments: { offer_id: "offer-1" },
@@ -1234,7 +1333,7 @@ describe("remedy by offer", () => {
 
     await executeArchestraTool(
       "archestra__execute_remedy_plan",
-      { offer_id: "offer-1" },
+      signedRemedyArgs(),
       {
         agent: { id: "3c0f2458-f26a-4b05-9571-a64dca1d65a7", name: "Gateway" },
         agentId: "3c0f2458-f26a-4b05-9571-a64dca1d65a7",
@@ -1248,7 +1347,9 @@ describe("remedy by offer", () => {
     // gateway names the same person the same way when it spends it.
     expect(JSON.parse(native.executeRemedyByOffer.mock.calls[0][0])).toEqual({
       organization_id: "org",
+      session_id: "conversation",
       caller_id: "user:alice",
+      owner_caller_id: "user:alice",
       execution_mode: "tracked",
       tool_call_id: "remedy-3",
       original_arguments: '{"offer_id":"offer-1"}',
@@ -1275,7 +1376,7 @@ describe("remedy by offer", () => {
     const result = await executeArchestraTool(
       "archestra__execute_remedy_plan",
       {
-        offer_id: "offer-1",
+        ...signedRemedyArgs(),
         plan: "accept the policy's restriction on this session's readers",
         execution: {
           v: 1,
@@ -1299,6 +1400,8 @@ describe("remedy by offer", () => {
 
     expect(JSON.parse(native.executeRemedyByOffer.mock.calls[0][0])).toEqual({
       organization_id: "org",
+      session_id: "conversation",
+      owner_caller_id: "user:alice",
       execution_mode: "tracked",
       tool_call_id: "provider-control-2",
       original_arguments:
@@ -1377,7 +1480,7 @@ describe("remedy by offer", () => {
     await executeArchestraTool(
       "archestra__execute_remedy_plan",
       {
-        offer_id: "offer-1",
+        ...signedRemedyArgs(),
         return_schema: { type: "object", properties: { a: {}, b: {} } },
         execution: {
           v: 1,

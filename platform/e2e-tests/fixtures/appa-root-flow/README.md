@@ -36,8 +36,9 @@ provider, no fake gateway and no patched runtime.
    - `tilt get uiresources` reports the stack up
    - `http://localhost:9000/health` answers
    - `http://localhost:3000` loads
-2. OpenAPPA enabled on the backend: `ARCHESTRA_OPENAPPA_ENABLED=true` in
-   `platform/.env`, and the deployment-wide **Guardrails v2** switch turned on
+  2. OpenAPPA enabled on the backend: `ARCHESTRA_OPENAPPA_ENABLED=true` and
+    `ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET` set in `platform/.env`, and the
+    deployment-wide **Guardrails v2** switch turned on
    in the platform settings. The flag alone enforces nothing. With the flag
    off, `http://localhost:3000/openappa` 404s and the proxy gates nothing.
 3. The three client CLIs on `PATH` (Archestra Chat needs none — it is driven
@@ -425,7 +426,7 @@ qualification in the way noted.
 
 | Client | Setting | Why |
 | --- | --- | --- |
-| Codex | `web_search = "disabled"` | Web search runs **inside** the provider, so no call reaches the proxy to gate. APPA refuses a session that declares a provider-hosted tool it cannot govern. |
+| Codex | `web_search = "disabled"` | Web search runs **inside** the provider, so the proxy rules on its result rather than its call, and the lab policy declares no `web_search` tool. Left on, a search the model chooses to run would be held as an unknown tool and derail the scenario. |
 | Codex | `[features] code_mode_host = false` | Codex's code mode, on by default in recent builds, wraps every call in an `exec` program: the wire declares only `exec` and `wait`, so nothing can be gated and no notice tool exists. With it off, a model whose catalog entry allows direct tools declares them and the notice loop works. A model whose entry is `code_mode_only` (`gpt-5.6-luna`, for one) does not: Codex reports `Code Mode is unavailable because code-mode host is disabled`, still declares only `exec`, and the proxy refuses the session with `direct tool mode only`. Give such a model a catalog override, next row. |
 | Codex | `tools.apply_patch_tool_type = "function"` (and `features.apply_patch_freeform=false`) | Codex's default free-form custom `apply_patch` carries one text argument. The proxy governs custom tools, but the function form keeps this qualification on the JSON path the other clients use. Flip this only when you are deliberately testing the free-form custom tool path. |
 | Codex | a model Codex has a **catalog entry** for (`gpt-5.1-codex`; override with `ARCHESTRA_CODEX_MODEL`) | Two separate failures hide here. A model whose entry has `supports_search_tool = true` (`gpt-5.5`) defers its MCP tools to a provider-side tool search: the wire declares a `tool_search` tool and none of the APPA tools, and the proxy refuses the session with `defers its tools to a tool search`. A model Codex has no catalog entry for is worse, because it fails quietly: Codex logs `Model metadata for <model> not found. Defaulting to fallback metadata`, the session opens normally because the declaration does reach the proxy, and then Codex's own router rejects the notice call with `ERROR codex_core::tools::router: error=unsupported call: archestra__get_remedy_plans`. The run still reaches an answer — restoration supplies the ruling on the next request, which is the interrupted-notice path — so it looks like a pass unless you read the stderr. Confirm the gateway is advertising both tools (`tools/list` on `/v1/mcp/<gateway>` returns `archestra__get_remedy_plans` and `archestra__execute_remedy_plan`) before blaming the proxy. |

@@ -2106,6 +2106,7 @@ To learn more about enterprise licensing, see the [pricing model](/docs/platform
 ### OpenAPPA Tool Guardrails (experimental)
 
 - `ARCHESTRA_OPENAPPA_ENABLED`: defaults to `false`. Explicit `true` enables OpenAPPA and its policy editor.
+- `ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET`: HMAC secret for offer routing JWS on `get_remedy_plans` / `execute_remedy_plan`. The proxy attaches a flattened JWS JSON Serialization (RFC 7515 §7.2.2) with an unencoded payload (RFC 7797): `protected`, `payload`, `signature`. This is JWS (integrity), not JWE (encryption). `protected` carries `alg` (`HS256`) and `kid` (`default`); unknown algorithms fail closed. Remedy arguments (`offer_id`, `plan`) and the execution receipt stay outside the JWS. Required when OpenAPPA is enabled. Every backend replica must use the same value.
 - `ARCHESTRA_OPENAPPA_YELL_ENABLED`: defaults to `true`. Set `false` to disable reporting. With OpenAPPA and Guardrails v2 enabled, exposes agent feedback reporting. Reports go to Archestra’s shared HTTPS receiver, private GCS storage, and internal Slack channel. No GCP credentials are required in your deployment.
 - `ARCHESTRA_LLM_PROXY_PLUGINS`: comma-separated plugin list, empty by default. Enabling OpenAPPA automatically registers its plugin. The list alone does not enable APPA.
 
@@ -2119,10 +2120,10 @@ With OpenAPPA disabled, existing Tool Guardrails run unchanged. When enabled, Op
 
 Notice restoration supports Anthropic Messages, OpenAI Responses, and OpenAI Chat Completions. Bedrock InvokeModel uses Anthropic restoration. Other protocols evaluate calls and results, but notices stay in history.
 
-Remedy offers and execution receipts are stored in PostgreSQL. Any backend replica can resolve an offer after a restart or routing change. The runtime validates the offer before execution.
+Remedy routing is a signed plaintext claim on the notice and control call. Any backend replica verifies the HMAC and reconstructs the session. The event log is the authority for whether the offer still stands.
 
 The proxy attaches the provider tool call ID to the remedy call. Standard MCP clients return this ID unchanged. Submitting the same ID and arguments returns the saved result. Submitting changed arguments under that ID is refused. Spent offers return terminal feedback.
 
-Sessions belong to authorized users within an organization. External client sessions are scoped to the authenticated credential. A personal offer requires its original user. An organization offer allows any caller in that organization.
+Sessions belong to authorized users within an organization. External client sessions are scoped to the authenticated credential. A personal offer requires its original user. An offer id alone cannot be spent; the caller must present a valid signature for that offer.
 
 Requests without a session header share a fallback session per credential and agent. Uncredentialed loopback traffic is trusted as platform internal traffic.

@@ -179,7 +179,11 @@ describe("SearchableSelect", () => {
 
     await user.click(screen.getByRole("combobox"));
     await user.type(screen.getByPlaceholderText("Search..."), "haiku");
-    await user.keyboard("{ArrowDown}{Enter}");
+    await user.keyboard("{ArrowDown}");
+
+    expect(screen.getByRole("button", { name: "Claude Haiku" })).toHaveFocus();
+
+    await user.keyboard("{Enter}");
 
     expect(onValueChange).toHaveBeenCalledWith("haiku");
   });

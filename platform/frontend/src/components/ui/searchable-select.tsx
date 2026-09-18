@@ -137,7 +137,7 @@ export function SearchableSelect({
         setSearchQuery("");
       }}
       className={cn(
-        "relative flex w-full cursor-default select-none items-center justify-between rounded-sm px-2 py-1.5 text-left text-sm outline-none transition-colors hover:bg-accent hover:text-accent-foreground",
+        "relative flex w-full cursor-default select-none items-center justify-between rounded-sm px-2 py-1.5 text-left text-sm outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground",
         value === item.value && "bg-accent/50",
         item.disabled &&
           "cursor-not-allowed opacity-60 hover:bg-transparent hover:text-inherit",

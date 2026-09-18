@@ -13,6 +13,7 @@ import { z } from "zod";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import config from "@/config";
 import { getDatabaseConnectionString } from "@/database";
+import logger from "@/logging";
 import { normalizeToolCallsForPolicy } from "@/routes/proxy/llm-proxy-helpers";
 import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
@@ -569,11 +570,23 @@ export async function evaluateToolCalls(
       // A failure withholds the whole response, so the calls the runtime already
       // admitted from it will never run. Settle exactly those; other in-flight
       // calls must remain open.
-      await Promise.allSettled(
+      const results = await Promise.allSettled(
         admitted.map((id) =>
           dispatch(session, { event: "cancel_call", tool_call_id: id }),
         ),
       );
+      for (const [index, result] of results.entries()) {
+        if (result.status === "rejected") {
+          logger.warn(
+            {
+              err: result.reason,
+              toolCallId: admitted[index],
+              sessionId: session.session_id,
+            },
+            "Failed to cancel OpenAPPA admitted call during batch failure cleanup",
+          );
+        }
+      }
     }
   }
 }
@@ -586,11 +599,23 @@ export async function cancelCalls(
   session: OpenAppaSession,
   ids: readonly string[],
 ): Promise<void> {
-  await Promise.allSettled(
+  const results = await Promise.allSettled(
     ids.map((id) =>
       dispatch(session, { event: "cancel_call", tool_call_id: id }),
     ),
   );
+  for (const [index, result] of results.entries()) {
+    if (result.status === "rejected") {
+      logger.warn(
+        {
+          err: result.reason,
+          toolCallId: ids[index],
+          sessionId: session.session_id,
+        },
+        "Failed to cancel OpenAPPA admitted call",
+      );
+    }
+  }
 }
 
 /** Reports the start of a user turn, before the model is called. */

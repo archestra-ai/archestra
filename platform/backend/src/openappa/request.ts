@@ -77,7 +77,6 @@ export function prepareAppaRequest(params: {
   let historicalControlToolName: string | undefined;
   const session = params.session ?? {
     provenance: "none" as const,
-    ambiguous: false,
   };
   if (family) {
     historicalControlToolName = restoreAppaRemedyExecutions({

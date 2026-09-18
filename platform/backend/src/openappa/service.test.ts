@@ -6,10 +6,12 @@ import {
 } from "@/archestra-mcp-server";
 import config from "@/config";
 import * as database from "@/database";
+import logger from "@/logging";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import {
+  cancelCalls,
   evaluateToolCalls,
   executeRemedyByOffer,
   processProxyResults,
@@ -22,6 +24,7 @@ const native = vi.hoisted(() => ({
   executeRemedyByOffer: vi.fn(),
 }));
 vi.mock("@archestra/openappa-rs", () => native);
+vi.mock("@/logging");
 const session = {
   organization_id: "org",
   caller_id: "user:alice",
@@ -309,6 +312,28 @@ describe("APPA feature boundary", () => {
         { canonicalize: (name) => name },
       ),
     ).rejects.toThrow("OpenAPPA could not safely complete");
+  });
+
+  test("cancels admitted calls via Promise.allSettled and logs failure when cancellation rejects", async () => {
+    vi.mocked(logger.warn).mockClear();
+    native.dispatchHook.mockImplementation(async (raw: string) => {
+      const event = JSON.parse(raw);
+      if (event.event === "cancel_call") {
+        if (event.tool_call_id === "bad") throw new Error("database timeout");
+        return JSON.stringify({ decision: "ack" });
+      }
+      return JSON.stringify({ decision: "allow_call" });
+    });
+
+    await cancelCalls(session, ["good", "bad"]);
+
+    expect(vi.mocked(logger.warn)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        toolCallId: "bad",
+        sessionId: "conversation",
+      }),
+      "Failed to cancel OpenAPPA admitted call",
+    );
   });
 
   test("releases the model's own remedy call without proposing it again", async () => {

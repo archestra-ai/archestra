@@ -41,8 +41,6 @@ export type AppaSessionIdentity = {
     | "metadata-session-id"
     | "conversation"
     | "none";
-  /** Competing heuristic values were present; the parent chooses the scope. */
-  ambiguous?: boolean;
 };
 
 /** The wire families this proxy can restore notices on. */
@@ -297,7 +295,6 @@ export function appaSessionIdentity(params: {
       sessionId: explicit,
       parentId,
       provenance: "appa-header",
-      ambiguous: false,
     };
 
   const body = asRecord(params.body);
@@ -315,10 +312,6 @@ export function appaSessionIdentity(params: {
         sessionId: claudeCode,
         parentId,
         provenance: "claude-code-header",
-        // The header is Claude Code's process session; metadata.user_id is an
-        // account/device field that can be opaque. They are not competing
-        // identity claims, so preserve the header's established precedence.
-        ambiguous: false,
       };
     }
     if (metadataSession) {
@@ -329,10 +322,9 @@ export function appaSessionIdentity(params: {
         sessionId: metadataSession,
         parentId,
         provenance: "claude-metadata",
-        ambiguous: false,
       };
     }
-    return { parentId, provenance: "none", ambiguous: false };
+    return { parentId, provenance: "none" };
   }
 
   const cacheKey = field(body?.prompt_cache_key);
@@ -343,25 +335,20 @@ export function appaSessionIdentity(params: {
       sessionId: cacheKey,
       parentId,
       provenance: "prompt-cache-key",
-      // Cache partitions and conversation references serve different client
-      // purposes. They have always been ordered fallbacks, not conflicts.
-      ambiguous: false,
     };
   if (declared)
     return {
       sessionId: declared,
       parentId,
       provenance: "metadata-session-id",
-      ambiguous: false,
     };
   return conversation
     ? {
         sessionId: conversation,
         parentId,
         provenance: "conversation",
-        ambiguous: false,
       }
-    : { parentId, provenance: "none", ambiguous: false };
+    : { parentId, provenance: "none" };
 }
 
 /**

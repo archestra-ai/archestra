@@ -1813,7 +1813,6 @@ describe("client session identity", () => {
       sessionId: CLAUDE_SESSION,
       parentId: undefined,
       provenance: "claude-code-header",
-      ambiguous: false,
     });
   });
 
@@ -1830,7 +1829,6 @@ describe("client session identity", () => {
       sessionId: CLAUDE_SESSION,
       parentId: undefined,
       provenance: "claude-metadata",
-      ambiguous: false,
     });
   });
 
@@ -1888,7 +1886,6 @@ describe("client session identity", () => {
       sessionId: "chat-conversation",
       parentId: "parent-root",
       provenance: "appa-header",
-      ambiguous: false,
     });
   });
 
@@ -1904,7 +1901,6 @@ describe("client session identity", () => {
     ).toMatchObject({
       parentId: undefined,
       provenance: "none",
-      ambiguous: false,
     });
   });
 
@@ -1918,7 +1914,6 @@ describe("client session identity", () => {
     ).toMatchObject({
       sessionId: "claude-session",
       provenance: "claude-code-header",
-      ambiguous: false,
     });
   });
 
@@ -1935,7 +1930,6 @@ describe("client session identity", () => {
     expect(session).toMatchObject({
       sessionId: "conversation-a",
       provenance: "prompt-cache-key",
-      ambiguous: false,
     });
     expect(() =>
       prepareAppaRequest({

@@ -22,7 +22,7 @@ Set `ARCHESTRA_OPENAPPA_ENABLED=true` to enable the OpenAPPA sidebar entry in St
 
 The built-in APPA Guide skill helps agents inspect, explain, and edit this policy. It uses the same read, validate, and update tools as the editor. The skill is available only while APPA is enabled.
 
-APPA checks each call before releasing it. Allowed calls can run in parallel, and their results can arrive in any order. Denied calls become remedy notices; allowed calls in the same response can still run.
+APPA evaluates each tool call before releasing it. Allowed calls run in parallel, and their results can return in any order. When a call is denied, the proxy returns a remedy notice. Other allowed calls in the same response still run.
 
 The default policy has no rules for specific tools. A catch-all annotator adds no restrictions or label changes. Explicit tool rules take precedence over this fallback.
 

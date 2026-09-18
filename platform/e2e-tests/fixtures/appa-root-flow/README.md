@@ -5,33 +5,20 @@ proxy against the four supported clients — Claude Code, Codex, OpenCode and
 Archestra Chat — on a running development stack. A human or an agent executes
 it.
 
-> **The acceptance-plan path is now automated.** The Archestra Chat scenario
-> below — deny → `get_remedy_plans` notice → ruling → `execute_remedy_plan` →
-> released retry — runs in CI as
-> `platform/e2e-tests/tests/openappa/root-remedy-flow.spec.ts`, in the
-> `openappa` Playwright project, on the `openappa` leg of the lite E2E job —
-> every leg boots its own stack, and that one boots with
-> `ARCHESTRA_OPENAPPA_ENABLED=true`. It runs behind the `run-e2e` label, in the
-> merge queue and nightly, like the rest of the suite. It mocks exactly one
-> boundary — the upstream Anthropic Messages API, via WireMock.
+> **The acceptance-plan path is automated.** The Archestra Chat scenario
+> (deny → `get_remedy_plans` notice → ruling → `execute_remedy_plan` →
+> retry) runs in CI as `platform/e2e-tests/tests/openappa/root-remedy-flow.spec.ts`
+> in the `openappa` Playwright project. It mocks only the upstream Anthropic
+> Messages API via WireMock.
 >
-> Everything else here still needs a human: the three third-party CLIs, the
-> sanitizer and authority paths (S2, S3, S4), the planless path (S5), and the
-> per-client configuration table. This runbook remains the source for all of
-> it — see "What this does not cover".
+> Other scenarios require manual execution: third-party CLIs, sanitizer and
+> authority paths (S2, S3, S4), and the unconfigured tool path (S5).
 
 ## What this proves
 
-The proxy rewrites a denied tool call into a `get_remedy_plans` notice call.
-The notice carries the blocked call and the ruling in plain text. The proxy
-restores the notice on every later request without stored state. The model
-then picks a remedy and executes it with `execute_remedy_plan` through the
-Archestra MCP gateway.
+The proxy replaces a denied tool call with `get_remedy_plans`. The notice carries the blocked call and the ruling in plain text. The proxy restores the notice on subsequent requests without database state. The model selects a remedy and executes it using `execute_remedy_plan` via the Archestra MCP gateway.
 
-The run exercises that end to end with the **real** client, the **real** LLM
-proxy, the **real** OpenAPPA runtime, the **real** MCP gateway and a **real**
-provider. One policy covers every client, because the proxy submits each
-client's own tool names.
+This verifies the end-to-end flow with the real client, LLM proxy, OpenAPPA runtime, MCP gateway, and provider. One policy covers all clients because the proxy submits client-specific tool names.
 
 ## What it deliberately mocks
 

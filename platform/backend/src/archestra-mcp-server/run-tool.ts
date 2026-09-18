@@ -96,16 +96,13 @@ async function runToolHandler({
   context: ArchestraContext;
 }): Promise<CallToolResult> {
   const requestedName = args.tool_name;
-  // The remedy tools are the platform's own control surface, and the runtime
-  // refuses them behind run_tool as undeclared tools. That refusal reads as a
-  // dead end, so the model is told to call the tool directly instead.
+  // Remedy tools must be called directly, not through run_tool.
   const controlShortName = await controlToolShortName(requestedName);
   if (controlShortName) {
     const fullName = archestraMcpBranding.getToolName(controlShortName);
     return dispatchRefusalResult({
       code: "control_tool_via_run_tool",
-      // The notice tool is never the model's to call: the platform places
-      // that call itself in place of a blocked one.
+      // The notice tool is placed by the platform and cannot be called directly.
       message:
         controlShortName === TOOL_GET_REMEDY_PLANS_SHORT_NAME
           ? "[appa] The platform places the remedy-plans call itself when it blocks a call, and its result is already in the conversation. Do not call it."

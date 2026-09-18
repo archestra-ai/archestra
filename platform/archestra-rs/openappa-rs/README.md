@@ -102,15 +102,13 @@ Chat sends `X-Appa-Session-ID` using the conversation ID. The model constructor
 also supports `X-Appa-Parent-ID`; the initial top-level Chat flow omits it.
 The proxy derives the organization from the resolved agent. Internal agent runs,
 including Chat, Slack and A2A, use the existing local-request trust boundary.
-Caller identity provides audit attribution. For external clients, it scopes
-the session and binds remedy offers to the authenticated principal. External callers
-authenticate through existing proxy mechanisms.
+Caller identity provides audit attribution. For external clients, it scopes the session and binds remedy offers to the authenticated credential. External callers authenticate through existing proxy mechanisms.
 
-The native actor ID hashes only the session ID. Authorized participants share guardrail state within one organization. A caller change does not create a new root. An organization change is refused.
+The native actor ID hashes the session ID. Authorized users share guardrail state within one organization. An organization change is refused.
 
-For external clients, the proxy scopes the session ID to the authenticated credential before the runtime sees it. Another credential cannot join a personal session by repeating its ID. The remedy gateway resolves the recorded owner and never uses a caller-supplied session header as a fallback. The host checks access before it selects a shared thread. A changed parent is refused.
+The proxy scopes external session IDs to the authenticated credential. Another credential cannot join a personal session by repeating its ID. The remedy gateway resolves the recorded owner and ignores caller-supplied session headers. A changed parent is refused.
 
-`SessionStart` restores the existing trajectory. The proxy sends `Prompt` at the start of each user turn. It sends `TurnEnd` only after a terminal model answer. Abandoned-call cleanup and unused remedy-permit lifetime remain unchanged. Detached MCP task execution remains disabled while the flag is enabled.
+`SessionStart` restores the existing trajectory. The proxy sends `Prompt` at the start of each user turn, and `TurnEnd` after a terminal model answer. Detached MCP tasks remain disabled while OpenAPPA is enabled.
 
 Both streaming and non-streaming proxy paths call `ToolCall`; existing streaming
 buffers retain tool deltas until the decision completes. Existing name
@@ -133,7 +131,7 @@ the proxy filters model input, not data already stored or displayed by Chat.
 
 ## Storage and interrupted processing
 
-Migration `0471_openappa_native.sql` creates the event and receipt tables. Migration `0479_chunky_bedlam.sql` adds the durable offer-owner index:
+Migration `0471_openappa_native.sql` creates the event and receipt tables. Migration `0479_perpetual_malcolm_colcord.sql` adds the durable offer-owner index:
 
 | Table | Owner / purpose |
 | --- | --- |
@@ -158,15 +156,7 @@ the completed receipt/approved output. Success commits both; errors roll back
 both and discard tentative in-memory runtime state. A durable pending receipt
 blocks further work in that family after an interruption.
 
-Completed result keys are session ID + tool-call ID. Ordinary operation keys
-are session ID + operation ID. Those receipts belong to the authorized session;
-caller identity remains attribution. Remedy-execution receipts additionally
-bind the authenticated spender. Resending different result bytes under a
-completed result key returns the saved approved output, without another hook,
-sanitizer, or annotator call. This is distinct from remedy request arguments:
-changing those under an existing logical call ID is refused.
-Calls with reused operation IDs and changed arguments are refused. Result
-correlation uses the original checked call even after compaction removes it.
+Completed result keys are session ID + tool call ID. Operation keys are session ID + operation ID. Remedy-execution receipts bind the authenticated spender. Submitting different result bytes under a completed result key returns the saved approved output without re-evaluating hooks. Submitting changed arguments under an existing logical call ID is refused.
 
 Pending receipts deliberately require operator investigation. Inspect the
 scoped operation/result, native event history, and external authority records.
@@ -177,27 +167,17 @@ behavior, not exactly-once execution of arbitrary external services.
 
 ## Remedies and current limits
 
-`archestra__execute_remedy_plan` executes remedies through the native gate. Offer routing and execution receipts are durable in PostgreSQL. Any replica can resolve an offer after a restart or routing change. The recorded owner routes to the minted session but does not authorize execution. The runtime validates the offer and the control-call vouch.
+`archestra__execute_remedy_plan` executes remedies through the native gate. Offer routing and receipts are durable in PostgreSQL (`openappa_offer_owners`). Any replica can resolve an offer after a restart or routing change. The recorded owner routes to the target session. The runtime validates the offer before execution.
 
-Ordinary session receipts belong to authorized participants in one organization. A personal offer requires its originating user; an organization-scoped offer allows an organization caller. Remedy-execution receipts additionally bind the actual authenticated spender. Unknown, unauthorized, and spent offers return terminal feedback without applying a remedy.
+Personal offers require their original user. Organization offers allow any caller in that organization. Unknown, unauthorized, or spent offers return terminal feedback without executing.
 
-The embedded API carries typed remedy outcomes, refusal reasons, and offer descriptions. Registration and terminal handling use those fields rather than rendered text. Interactive human approval is not implemented. Calls requiring it remain blocked.
+The embedded API returns typed remedy outcomes, refusal reasons, and offer descriptions. Interactive human approval is not implemented. Calls requiring human approval stay blocked.
 
-The same logical call ID and arguments return the durable result without another execution. Changed arguments under that ID are refused. A new ID for a spent offer receives terminal feedback. The proxy writes a typed execution frame with the provider's real tool call ID. Ordinary MCP clients return it without changes. History restoration removes the frame and restores the original argument bytes before provider forwarding, even when the current request declares no tools. JSON-RPC request IDs are not logical retry IDs. Direct calls need a stable host-supplied ID. An interrupted execution without a committed result fails closed.
+The proxy replaces a denied call with `archestra__get_remedy_plans`. The notice preserves the original call position and provider call ID. It carries the blocked tool, its arguments, and the policy ruling in plain text. Other allowed calls in the same response run normally. On later requests, the proxy restores each notice to the original tool call and injects the ruling as its result.
 
-The proxy replaces a denied call with `archestra__get_remedy_plans`. The notice keeps the original call position and provider call ID. It carries the blocked tool, its arguments, and the policy ruling in plain text. Allowed calls in the same batch remain available. On later requests, the proxy restores each notice to the original call and injects the ruling as its result.
+The runtime withholds results for unreleased call IDs. Unrecognized or expired remedy calls return a terminal message telling the model that nothing was applied.
 
-The runtime withholds results submitted under unreleased call IDs.
-Recorded remedy outputs are returned by logical call ID, regardless of client serialization wrappers.
-For the remedy control tool, unrecognized or expired calls return a terminal
-message advising the model that nothing was applied and to ask the user.
-
-Locked chats are refused while enabled because native tables do not use browser-held keys.
-Agent and skill delegation are governed as ordinary tool calls.
-Sessions declaring provider-hosted tools or `tool_search` are refused with HTTP 400.
-Full notice restoration runs on Anthropic Messages (including Bedrock InvokeModel),
-OpenAI Responses, and OpenAI Chat Completions.
-On other protocols, OpenAPPA rules on calls and results, but notices remain recorded in history as notice calls.
+Locked chats are refused while OpenAPPA is enabled. Agent and skill delegation are governed as ordinary tool calls. Sessions declaring provider-hosted tools or `tool_search` are refused with HTTP 400. Notice restoration runs on Anthropic Messages (including Bedrock InvokeModel), OpenAI Responses, and OpenAI Chat Completions. On other protocols, OpenAPPA evaluates calls and results, but notices stay in history as notice calls.
 
 Start new conversations when enabling this feature. Historical tool results
 from before activation have no native admission receipts and are refused;

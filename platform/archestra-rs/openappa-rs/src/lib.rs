@@ -51,9 +51,7 @@ struct State {
     reporting: Option<ReportingOptions>,
 }
 
-/// The identity a typed denial was minted under. This is deliberately an
-/// owned, serializable receipt boundary so durable storage can restore the
-/// same actor without reconstructing it from rendered policy text.
+/// Identity context associated with a denial offer for cross-replica routing.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct OfferOwner {
     pub organization_id: String,
@@ -97,25 +95,20 @@ impl Principal {
     }
 }
 
-/// An external client quoting an offer it can only name, not place.
+/// Request payload to execute a remedy by offer ID.
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct OfferInput {
     organization_id: String,
-    /// The principal the gateway authenticated, when it knows one. An offer
-    /// belongs to the caller whose session it was minted for.
+    /// Authenticated caller identity.
     #[serde(default)]
     caller_id: Option<String>,
-    /// The actual client tool-call id when the client can supply one. It binds
-    /// transport retries to a durable remedy receipt; it is never synthesized
-    /// from an offer id.
+    /// Client tool call ID for binding durable remedy receipts.
     #[serde(default)]
     tool_call_id: Option<String>,
     arguments: Box<RawValue>,
     execution_mode: ExecutionMode,
-    /// Full semantic JSON before the gateway removes transport-only execution
-    /// data. This stays a string at the NAPI boundary so an accidental wrapper
-    /// cannot make its structure look like the visible runtime arguments.
+    /// Original argument JSON string before execution metadata stripping.
     original_arguments: String,
     presentation: PresentationInput,
 }
@@ -253,8 +246,7 @@ fn result_presentation_options(input: &Input, call: &RecordedCall) -> EmbeddedPr
 }
 
 fn native_presentation_options() -> EmbeddedPresentationOptions {
-    // The gateway has no delegated-remedy execution transport. Legacy receipts
-    // may lack presentation metadata, so never inherit the CLI's capability.
+    // Default presentation options without delegation transport.
     EmbeddedPresentationOptions {
         supports_delegation: false,
         include_display_plan: true,
@@ -324,7 +316,7 @@ pub async fn dispatch_hook(input: String, policy_content: Option<String>) -> nap
     run(input, policy_content).await
 }
 
-/// Rejects a malformed host request before anything is written for it.
+/// Validates input fields and event requirements before processing.
 fn validate(input: &Input) -> napi::Result<()> {
     // A session id may carry the proxy's principal scope in front of the id
     // the client named, so it gets the same room as the other identities.
@@ -432,16 +424,7 @@ async fn run(input: Input, policy_content: Option<String>) -> napi::Result<Strin
     }
 }
 
-/// Executes a remedy for a caller that can name the offer but not its session.
-///
-/// The gateway serves clients whose MCP traffic carries no session at all, so
-/// the offer id has to resolve the session by itself. It does, to the session
-/// the denial was minted for — and only within the organization the caller is
-/// authenticated to, so an id guessed across organizations names nothing.
-///
-/// A miss is answered, not raised: the model reads the answer, and what it
-/// must read is that re-proposing the blocked call will not produce a usable
-/// offer — that is the loop a bare error sent it into.
+/// Executes a remedy plan by offer ID, resolving the owner session from PostgreSQL.
 #[napi(js_name = "executeRemedyByOffer")]
 pub async fn execute_remedy_by_offer(
     input: String,
@@ -494,8 +477,7 @@ pub async fn execute_remedy_by_offer(
     };
     let input = Input {
         organization_id: owner.organization_id,
-        // The receipt scopes the actual authenticated spender, not the owner
-        // whose prior offer supplied routing. This prevents cross-spender replay.
+        // Scopes receipt to the authenticated spender to prevent replay.
         caller_id: input.caller_id.clone(),
         session_id: owner.session_id,
         parent_id: owner.parent_id,

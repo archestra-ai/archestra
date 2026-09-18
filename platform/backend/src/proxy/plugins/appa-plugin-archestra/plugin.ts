@@ -29,9 +29,9 @@ type AppaPluginBinding = {
   canonicalizeToolName: (name: string) => string;
   adapter: AppaClientAdapter | undefined;
   request: AppaTrustedContext["request"];
-  /** Set once the model's response carried a call the client still has to run. */
+  /** True when the model's response contained tool calls awaiting client execution. */
   turnOpen: boolean;
-  /** True on the proxy's loopback Chat path. Chat has no subagent tool. */
+  /** True on internal loopback Chat requests. */
   chat: boolean;
 };
 
@@ -46,8 +46,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     this.bindings.delete(context.resources);
     const trustedContext = getTrustedContext(context.resources);
     if (!trustedContext) return;
-    // Other plugins share resources, but APPA's session and adapter selection do
-    // not. Copy the host binding before any adapter receives it.
+    // Copy trusted context before adapter inspection to isolate plugin state.
     const binding: AppaPluginBinding = {
       session: { ...trustedContext.session },
       canonicalizeToolName: trustedContext.canonicalizeToolName,
@@ -64,7 +63,6 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       }),
     );
     binding.adapter = adapter;
-    // Unknown clients still get APPA enforcement using the proxy's canonical names.
     this.bindings.set(context.resources, binding);
   }
 
@@ -73,7 +71,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
   ): Promise<LlmProxyToolResultsOutcome | undefined> {
     const binding = this.bindings.get(context.resources);
     if (!binding) return;
-    // Toolless requests with results still submit those results to the runtime.
+    // Requests with results submit them to runtime even if current request declares no tools.
     if (!binding.request.tools && context.toolResults.length === 0) return;
     const result = await processProxyResults({
       session: binding.session,
@@ -84,8 +82,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       trustedChat: binding.chat,
     });
     return {
-      // Native renders runtime output for the declared client surface. Never
-      // infer presentation from text or rewrite a tool's own output.
+      // Use runtime-approved output for tool results.
       toolResultUpdates: Object.fromEntries(
         Object.entries(result.toolResultUpdates).map(([id, result]) => [
           id,
@@ -102,7 +99,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
 
   async onBeforeModel(context: LlmProxyBeforeModelContext): Promise<void> {
     const binding = this.bindings.get(context.resources);
-    // Requests without declared tools do not start an OpenAPPA turn.
+    // Only requests declaring tools open an OpenAPPA turn.
     if (!binding?.request.tools || !binding.request.promptOperationId) return;
     await notePrompt(binding.session, binding.request.promptOperationId);
   }
@@ -150,8 +147,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         continue;
       }
       if (!notice) {
-        // If a model calls a tool when none were declared, refuse and cancel
-        // any admitted calls from this batch.
+        // Refuse call and cancel admitted calls if client declares no notice tool.
         await cancelCalls(
           binding.session,
           calls.flatMap((each, at) =>
@@ -183,8 +179,6 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
             arguments: call.arguments,
             result: decision.feedback,
             custom: binding.request.customTools.has(call.name),
-            // The call's own namespace, as the model wrote it; the declared
-            // one when the adapter carries none.
             namespace:
               call.namespace ?? binding.request.namespaces.get(call.name),
           }),
@@ -192,7 +186,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       });
     }
 
-    // The client owes a result for every call released here, so the turn stays open.
+    // Keep turn open while tool calls are awaiting client execution.
     binding.turnOpen = true;
     if (blocked.length === 0) return;
     return { decision: "allow", toolCalls: released, blocked };
@@ -244,11 +238,7 @@ function cloneTrustedContext(context: AppaTrustedContext): AppaTrustedContext {
   };
 }
 
-/**
- * Only the origin-verified control decision reaches this path. The envelope is
- * transport metadata, not model authority: native still authenticates offer
- * ownership before it can act on the call.
- */
+/** Attaches execution metadata frame to remedy calls for receipt validation. */
 function stampControlExecution(
   call: LlmProxyToolCallsContext["toolCalls"][number],
 ): LlmProxyToolCallsContext["toolCalls"][number] {
@@ -260,8 +250,6 @@ function stampControlExecution(
   try {
     argumentsValue = JSON.parse(originalArguments);
   } catch {
-    // The public tool schema will reject malformed control input. Do not invent
-    // an envelope around a value we cannot faithfully preserve.
     return call;
   }
   if (
@@ -286,11 +274,7 @@ function stampControlExecution(
   };
 }
 
-/**
- * A refused call's arguments as the object the guardrails report: a streamed
- * call carries them as JSON text, and text that is not a JSON object is
- * reported under its own key rather than dropped.
- */
+/** Parses tool input into an object for guardrail refusal reporting. */
 function toolInputOf(
   args: string | Record<string, unknown>,
 ): Record<string, unknown> {

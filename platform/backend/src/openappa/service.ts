@@ -42,17 +42,12 @@ const ResultDecisionFields = {
   reason: z.string().optional(),
 };
 
-/** Structured remedies are authoritative; feedback prose never creates one. */
+/** Structured remedy offers from the native runtime. */
 const NativeOfferSchema = z
   .object({ offer_id: z.string().min(1) })
   .passthrough();
 
-/**
- * Native's public API is JSON, so this is the complete validation boundary.
- * Output source and runtime cause are data, never inferred from presentation
- * text. Persisted decisions from before the field existed safely default to
- * tool output, which is never rewritten for a client.
- */
+/** Validation schema for decisions returned by the native runtime. */
 const NativeDecisionSchema = z
   .discriminatedUnion("decision", [
     z.object({ decision: z.literal("ack"), ...ResultDecisionFields }),
@@ -220,10 +215,7 @@ async function dispatch(
   );
 }
 
-/**
- * One runtime call, with the policy the organization runs and the failure
- * shape every caller gets: a native or database fault is never forwarded.
- */
+/** Executes a callback with the loaded native runtime and organization policy. */
 async function withRuntime(
   organizationId: string,
   call: (
@@ -239,8 +231,7 @@ async function withRuntime(
     const rawResult = await call(module, policy.content);
     return NativeDecisionSchema.parse(JSON.parse(rawResult));
   } catch (error) {
-    // Do not forward native/database diagnostics or credentials to the client.
-    // The cause is available to the existing server-side error logger.
+    // Do not forward internal diagnostics or credentials to clients.
     const failure = new ApiError(
       503,
       "OpenAPPA could not safely complete this operation",
@@ -262,10 +253,8 @@ export function chatOpenAppaSession(
   };
 }
 
-/** An OpenAPPA session or parent id as a header may carry it. */
+/** Validates that a session or parent ID is non-empty and within byte limits. */
 export function isWellFormedAppaId(value: unknown): value is string {
-  // Bytes, as the runtime counts them: a header of a few hundred multibyte
-  // characters must be refused here, not by the runtime as a failure.
   return (
     typeof value === "string" &&
     value.length > 0 &&
@@ -277,9 +266,9 @@ export function isWellFormedAppaId(value: unknown): value is string {
 /**
  * Resolves an OpenAPPA session from universal X-Appa-* headers.
  *
- * Operates on the uniform header contract:
- * - X-Appa-Session-ID: required trajectory ID
- * - X-Appa-Parent-ID: optional parent trajectory ID for child sessions
+ * Headers:
+ * - X-Appa-Session-ID: session trajectory ID
+ * - X-Appa-Parent-ID: optional parent ID for child sessions
  */
 export function sessionFromHeaders(params: {
   headers: Record<string, unknown>;
@@ -410,13 +399,7 @@ function isOutputDecision(
 }
 
 /**
- * Submits this request's tool results to the runtime.
- *
- * Every result is submitted, including results the client recorded against a
- * denial notice or its own remedy call. Which calls were released, denied, or
- * never seen is the runtime's own record, keyed by the provider call id it was
- * given — never a claim read out of client-supplied history, which a client
- * could write to skip a real result's enforcement.
+ * Submits tool results to the OpenAPPA runtime for evaluation and updates.
  */
 export async function processProxyResults(params: {
   session: OpenAppaSession;
@@ -427,14 +410,8 @@ export async function processProxyResults(params: {
   await startSession(params.session);
   const updates: Record<string, ProcessedToolResult> = {};
   for (const result of params.results) {
-    // Opening an app seeds a platform-authored render, not an executed call.
-    // It has no APPA admission to settle. Only trusted Chat can prove the
-    // platform origin; an external client can copy a marker into its output.
     if (params.trustedChat && isSeededAppRenderToolResult(result.content))
       continue;
-    // Like existing proxy guardrails, consume the client's reported result.
-    // This is protocol-level completion, not independent proof of execution.
-    // Explicit tool errors remain failures; a reported cancellation is unknown.
     const error =
       extractMcpToolError(result) ?? extractMcpToolError(result.content);
     const outcome: ExecutionOutcome =
@@ -463,13 +440,7 @@ export async function processProxyResults(params: {
   };
 }
 
-/**
- * What the proxy does with one call the model proposed.
- *
- * `control` is the model's own remedy call: the client executes it against this
- * runtime, so it is released without a second OpenAPPA event — the gateway
- * dispatches the one control `ToolCall` when the client actually runs it.
- */
+/** Decision for a proposed tool call. */
 type AppaCallDecision =
   | { kind: "allow" }
   | { kind: "control" }
@@ -485,7 +456,7 @@ export async function evaluateToolCalls(
   },
 ): Promise<AppaCallDecision[]> {
   const ids = new Set<string>();
-  // Validate the whole response before any call acquires a native dispatch.
+  // Validate tool call IDs and arguments before dispatch.
   for (const call of calls) {
     if (!call.id || ids.has(call.id)) {
       throw new ApiError(400, "OpenAPPA requires distinct tool-call IDs");
@@ -509,20 +480,11 @@ export async function evaluateToolCalls(
   try {
     for (const [index, call] of calls.entries()) {
       const target = normalized[index];
-      // Origin-bound: only the tool this session declared through the platform's
-      // own endpoint is the control tool. A lookalike on another MCP server
-      // canonicalizes to that server's name and stays an ordinary checked call.
-      //
-      // This is also why the call never needs a canonical respelling before it
-      // reaches the runtime: the genuine control call is answered here and is
-      // never dispatched as a tool_call, and respelling anything else to
-      // `appa/execute_remedy_plan` would hand a lookalike the control tool's
-      // identity.
+      // Direct remedy control calls bypass evaluation and execute via gateway.
       if (options.controlToolName && call.name === options.controlToolName) {
         decisions.push({ kind: "control" });
         continue;
       }
-      // Reporting is the one built-in the policy names canonically.
       const tool =
         archestraMcpBranding.getToolShortName(
           options.canonicalize(target.toolCallName),
@@ -533,18 +495,12 @@ export async function evaluateToolCalls(
         event: "tool_call",
         operation_id: `call:${call.id}`,
         tool,
-        // The client's own name for a direct call, so a remedy result can name
-        // the tool the way the client calls it. A dispatch through run_tool
-        // names its target instead, and the wrapper's name would mislead.
         ...(tool !== call.name && options.canonicalize(call.name) === tool
           ? { spelling: call.name }
           : {}),
-        // Native owns client-facing ruling text. It needs the control tool as
-        // declared by this client; proxy code must not respell prose later.
         presentation: nativePresentation(options.controlToolName),
         arguments: JSON.parse(target.toolCallArgs),
-        // Delegation is an ordinary tool until the child-return adapter exists.
-        // Its request and output still pass through the parent's policy.
+        // Delegation evaluates through the parent policy until child adapters exist.
         spawn: false,
       };
       const decision = await dispatch(session, event);
@@ -556,8 +512,7 @@ export async function evaluateToolCalls(
         decisions.push({ kind: "allow" });
         continue;
       }
-      // A denial is this call's own ruling, delivered as a notice; the rest of
-      // the batch stands, so nothing admitted so far is withdrawn.
+      // Denied calls return as notices; other calls in the batch stand.
       decisions.push({
         kind: "deny",
         feedback: decisionMessage(decision),
@@ -567,9 +522,7 @@ export async function evaluateToolCalls(
     return decisions;
   } finally {
     if (!settled) {
-      // A failure withholds the whole response, so the calls the runtime already
-      // admitted from it will never run. Settle exactly those; other in-flight
-      // calls must remain open.
+      // Cancel admitted calls from this batch if evaluation failed mid-batch.
       const results = await Promise.allSettled(
         admitted.map((id) =>
           dispatch(session, { event: "cancel_call", tool_call_id: id }),
@@ -591,10 +544,7 @@ export async function evaluateToolCalls(
   }
 }
 
-/**
- * Withdraws calls the runtime admitted that the client will never run, because
- * the response that carried them is withheld.
- */
+/** Cancels admitted tool calls when the carrier response is withheld. */
 export async function cancelCalls(
   session: OpenAppaSession,
   ids: readonly string[],

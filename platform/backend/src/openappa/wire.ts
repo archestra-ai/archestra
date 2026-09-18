@@ -54,11 +54,8 @@ export function appaWireFamily(
 }
 
 /**
- * Restores every notice call in this request's history, in place.
- *
- * Model-visible history only. What the runtime makes of a call and its result
- * stays the runtime's own record, so a client that writes a notice of its own
- * changes what the model reads and nothing that is enforced.
+ * Restores notice tool calls in request history back to original calls and rulings.
+ * Updates model-visible history in place.
  */
 export function restoreAppaNotices(params: {
   family: AppaWireFamily;
@@ -277,8 +274,9 @@ export function providerHostedTool(tool: unknown): string | undefined {
  *    conversation: `prompt_cache_key` (OpenAI's own per-conversation cache
  *    partition), then an explicit `metadata.session_id`, then `conversation`.
  *
- * Returns nothing when the client identifies no session; the caller decides
- * what to bind then, and must not simply refuse the request.
+/**
+ * Detects session identity from request headers or body.
+ * Returns the session ID, optional parent ID, and provenance.
  */
 export function appaSessionIdentity(params: {
   family: AppaWireFamily;
@@ -316,9 +314,7 @@ export function appaSessionIdentity(params: {
       };
     }
     if (metadataSession) {
-      // Claude Code's JSON blob, its older `user_…_session_<uuid>` string, or
-      // an opaque string elsewhere. The proxy log reads the same forms, so the
-      // two records join on one id.
+      // Claude Code session ID from user_id metadata.
       return {
         sessionId: metadataSession,
         parentId,
@@ -353,12 +349,8 @@ export function appaSessionIdentity(params: {
 }
 
 /**
- * The turn this request starts, when it starts one.
- *
- * A request whose last message is the user speaking opens a turn; one that ends
- * in tool results is the same turn continuing. The ids are digests of the
- * history they describe, so a retried request reports the same turn rather than
- * a second one, and two identical prompts in one conversation still differ.
+ * Computes turn boundary IDs for this request.
+ * User messages start a turn; tool results continue the active turn.
  */
 export function appaTurnBoundaries(params: {
   family: AppaWireFamily;
@@ -435,12 +427,7 @@ const CLIENT_RUN_TOOL_TYPES = new Set([
   "tool_search",
 ]);
 
-/**
- * The item id of a Responses call or output, respelled for its kind: an id
- * starts with `fc_` on a function call and `ctc_` on a custom tool call, with
- * `fco_` and `ctco_` on their outputs, and the provider rejects an id under
- * another kind's prefix. An id under no known prefix is left alone.
- */
+/** Adjusts tool call IDs to match expected provider prefixes (fc_, ctc_). */
 function itemIdOfKind(id: string, type: keyof typeof ITEM_ID_PREFIXES): string {
   const prefix = ITEM_ID_PREFIXES[type];
   for (const other of Object.values(ITEM_ID_PREFIXES)) {
@@ -457,13 +444,7 @@ const ITEM_ID_PREFIXES = {
   custom_tool_call_output: "ctco_",
 } as const;
 
-/**
- * A namespace declaration's members, under the names the model calls them by.
- *
- * Codex groups an MCP server's tools under one `namespace` declaration and then
- * calls a member by its own name, not by a namespaced one, so the members are
- * what this proxy must resolve, strip and match against.
- */
+/** Extracts member tools declared inside a Codex namespace declaration. */
 function namespaceMembers(tool: unknown): unknown[] | undefined {
   const record = asRecord(tool);
   return record?.type === "namespace" && Array.isArray(record.tools)
@@ -471,13 +452,7 @@ function namespaceMembers(tool: unknown): unknown[] | undefined {
     : undefined;
 }
 
-/**
- * True when the last thing in this history is the user, not a tool result.
- *
- * Anthropic and Chat Completions put results in a message of their own, so the
- * shape is the role plus the block types; Responses puts them in the input list
- * as their own items.
- */
+/** Returns true if the final item in history is a user message rather than a tool result. */
 function endsWithUserTurn(params: {
   family: AppaWireFamily;
   body: unknown;
@@ -809,7 +784,7 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
 
 const MAX_CANONICAL_JSON_DEPTH = 64;
 
-/** JSON's canonical form for semantic retry fingerprints, bounded by depth and proxy body limit. */
+/** Serializes value to canonical JSON, bounded by depth and proxy bodyLimit. */
 export function canonicalJson(
   value: unknown,
   options?: { maxDepth?: number; maxBytes?: number },
@@ -884,10 +859,7 @@ function asArray(value: unknown): unknown[] | undefined {
   return Array.isArray(value) ? value : undefined;
 }
 
-/**
- * A stable non-cryptographic digest of a text. Equal texts give equal digests,
- * which is what a retried request needs to report the same turn.
- */
+/** Non-cryptographic fingerprint digest for retry idempotency. */
 function digestOf(text: string): string {
   return fingerprint(text);
 }

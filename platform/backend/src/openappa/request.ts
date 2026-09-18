@@ -1,7 +1,7 @@
 /**
  * Prepares an OpenAPPA request before provider dispatch:
- * 1. Restores denial notices in conversation history back to original calls.
- * 2. Resolves session APPA tools and validates safety guardrails (failing closed).
+ * 1. Restores denial notices in history back to original calls and rulings.
+ * 2. Resolves session remedy tools and validates client declarations.
  */
 import {
   type ArchestraToolShortName,
@@ -25,35 +25,31 @@ import {
 } from "./wire";
 
 export type AppaRequestTools = {
-  /** This session's spelling of the control tool. */
+  /** Client-declared spelling of the control tool. */
   controlToolName: string;
-  /** This session's spelling of the denial notice tool. */
+  /** Client-declared spelling of the denial notice tool. */
   noticeToolName: string;
 };
 
 export type AppaPreparedRequest = {
-  /** Absent when the request declares no tools, which opens no root. */
+  /** Absent when the request declares no tools. */
   tools: AppaRequestTools | undefined;
-  /** Presentation only, not proof that the current request can call a tool. */
+  /** Presentation name of historical control tool from previous turns. */
   historicalControlToolName?: string;
-  /** This client's own session identity, read off its request. */
+  /** Session identity resolved from client request. */
   session: AppaSessionIdentity;
-  /** Tools this client declared as free-form custom tools. */
+  /** Tools declared as free-form custom tools. */
   customTools: ReadonlySet<string>;
-  /** Tool name → the namespace this client declared it in (Codex). */
+  /** Tool name to declaration namespace mapping (Codex). */
   namespaces: ReadonlyMap<string, string>;
-  /** Canonical tool name → the spelling this client declared for it. */
+  /** Canonical tool name to declared spelling mapping. */
   spellings: ReadonlyMap<string, string>;
   promptOperationId?: string;
   turnEndOperationId?: string;
 };
 
 /**
- * Restores this request's denial notices and resolves its APPA tools.
- *
- * Restoration runs even for a request that declares no tools — OpenCode's title
- * generation, a summarizer — because those still carry the conversation's
- * history and must show the provider what really happened.
+ * Restores denial notices in history and resolves APPA tools for this request.
  */
 export function prepareAppaRequest(params: {
   body: unknown;
@@ -178,9 +174,7 @@ export function prepareAppaRequest(params: {
     );
   }
 
-  // The model must never see the notice tool: it is the proxy's own projection,
-  // and a model that knows the name could call it or write one into history.
-  // The client keeps it, because the client is what executes it.
+  // Strip notice tool from provider request so the model cannot invoke it directly.
   stripAppaTools({ body: params.body, names: new Set([noticeToolName]) });
   return {
     tools: { controlToolName, noticeToolName },
@@ -203,12 +197,7 @@ function shortToolName(name: string): ArchestraToolShortName | null {
   return archestraMcpBranding.getToolShortName(name);
 }
 
-/**
- * OpenCode spells a gateway's tool `<label>_<branded name>`, a form the
- * canonicalizer does not read. The label still has to be one of this
- * organization's gateways: it counts only when the canonicalizer anchors the
- * same label in the `mcp__<label>__` form it does read.
- */
+/** Resolves OpenCode tool names formatted as <label>_<branded_name>. */
 function anchoredLabelShort(
   name: string,
   canonicalize: (name: string) => string,
@@ -230,12 +219,7 @@ function anchoredLabelShort(
   return null;
 }
 
-/**
- * A client that declares a `tool_search` tool defers the rest of its tools to
- * a search the model runs later — Codex does this for MCP tools on models
- * that support it. Those tools are not on the wire, the remedy tools among
- * them cannot be seen, and no call to them can be gated.
- */
+/** Refuses sessions where tools are deferred to a provider tool search. */
 function refuseDeferredTools(declared: readonly unknown[]): void {
   const deferred = declared.some(
     (tool) => asToolDeclaration(tool)?.type === "tool_search",
@@ -248,13 +232,11 @@ function refuseDeferredTools(declared: readonly unknown[]): void {
   }
 }
 
+/** Refuses sessions declaring provider-hosted tools that bypass proxy gating. */
 function refuseProviderHostedTools(declared: readonly unknown[]): void {
   for (const tool of declared) {
     const hosted = providerHostedTool(tool);
     if (!hosted) continue;
-    // The provider runs these itself and reports them as results, so no call
-    // reaches this proxy to gate. Governing the rest of the session would claim
-    // a coverage it does not have.
     throw new ApiError(
       400,
       `OpenAPPA cannot govern the provider-hosted tool \`${hosted}\`, which runs inside the provider. Remove it from this session or disable OpenAPPA for this client.`,
@@ -262,13 +244,7 @@ function refuseProviderHostedTools(declared: readonly unknown[]): void {
   }
 }
 
-/**
- * Codex code mode wraps tool calls inside an `exec` custom tool whose arguments
- * are a shell program, so the calls this proxy would gate never appear on the
- * wire as calls. Direct tool mode is the supported configuration; code mode is
- * refused before a root opens or the provider is called, even when it exposes
- * the APPA tools directly, because everything else still runs inside `exec`.
- */
+/** Refuses Codex code mode where tool calls are wrapped inside an exec program. */
 function refuseCodexCodeMode(params: {
   family: AppaWireFamily;
   declared: readonly unknown[];

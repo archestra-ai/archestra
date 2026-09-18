@@ -1,19 +1,8 @@
 # Archestra × OpenAPPA
 
-OpenAPPA evaluates tool calls and results at the LLM proxy guardrail checkpoints.
-The proxy discovers session identity from native client headers or an explicit `X-Appa-Session-ID`.
-External client sessions are scoped to their authenticated principal (`user:<id>`, `app:<id>`, or `virtual-key:<id>`).
-This prevents one organization member from attaching to another member's session by guessing its ID.
-Two MCP tools complete the negotiation loop: `archestra__get_remedy_plans` and `archestra__execute_remedy_plan`.
+OpenAPPA evaluates tool calls and tool results at the LLM proxy guardrails. The proxy detects session identity from client headers or an explicit `X-Appa-Session-ID`. External client sessions are scoped to the authenticated credential (`user:<id>`, `app:<id>`, or `virtual-key:<id>`). This prevents callers from accessing another user's session by guessing its ID. Two MCP tools manage remedies: `archestra__get_remedy_plans` and `archestra__execute_remedy_plan`.
 
-Session state is keyed by session ID.
-Platform-internal requests (such as Slack threads) use shared session IDs over loopback.
-Chat requests require an authenticated user who owns the target conversation.
-External requests always require platform credentials.
-Uncredentialed loopback is the platform trust boundary; a frontend forwarding `/v1` over loopback extends that boundary to its callers.
-Without a session signal, requests share a fallback root per credential and agent.
-The unreleased session-key migration clears old sessions, events, and receipts.
-Saved policies remain intact.
+Session state is keyed by session ID. Internal requests over loopback use shared session IDs. Chat requests require an authenticated user who owns the conversation. External requests require platform credentials. Uncredentialed loopback is the platform trust boundary. Requests without a session header share a fallback session per credential and agent.
 
 ## Startup configuration
 
@@ -116,48 +105,35 @@ sequenceDiagram
   end
 ```
 
-A denied call is replaced in place with a call to `archestra__get_remedy_plans`.
-The notice keeps the original call position and provider call ID.
-Its arguments carry the blocked tool, its proposed arguments, and the policy ruling in plain text.
-The ruling is not encoded, allowing client-side classifiers (such as Claude Code auto-mode) to inspect the text directly.
-The client executes the notice through its normal tool loop.
-The model reads the ruling and offered remedy plans, then acts on them in the same turn.
+The proxy replaces a denied call with `archestra__get_remedy_plans`. The notice keeps the original call position and provider call ID. Notice arguments contain the blocked tool name, proposed arguments, and the policy ruling in plain text. The ruling is unencoded so client classifiers (such as Claude Code auto-mode) inspect plain text. The client executes the notice through its normal tool loop. The model reads the ruling and selects an offered remedy plan in the same turn.
 
-On subsequent requests, the proxy restores each notice back to the original tool call and injects the ruling as its result.
-Restoration is a stateless, pure function of the request body.
-Restoration needs no lookup beyond the typed records in history, so it survives restarts and replica changes.
-The runtime withholds results submitted under call IDs it never released.
-For remedy results, it returns the recorded output by logical call ID, regardless of the client's serialization wrapper.
+On later requests, the proxy restores notice calls back to original tool calls and injects the ruling as their result. Restoration is a stateless pure function of the request body. It requires no database lookup, surviving restarts and replica changes. The runtime withholds results for call IDs it never released.
 
 ## Remedies
 
 Two MCP tools handle remedies:
-1. `archestra__get_remedy_plans`: Returns the ruling and remedy plans carried in the notice arguments. It runs no code and changes no state.
-2. `archestra__execute_remedy_plan`: Executes the remedy plan chosen by the model through the embedded OpenAPPA runtime.
+1. `archestra__get_remedy_plans`: Returns the ruling and remedy plans from the notice arguments. It executes no code and changes no state.
+2. `archestra__execute_remedy_plan`: Runs the remedy plan selected by the model through the embedded OpenAPPA runtime.
 
-The model selects every remedy. The proxy releases the model's own `execute_remedy_plan` call for the client to execute.
+The model selects each remedy. The proxy releases the model's `execute_remedy_plan` call to the client for execution.
 
-Offer routing and execution receipts are durable in PostgreSQL. Any backend replica can resolve an offer after a restart or routing change. The recorded owner routes the call to its session. The runtime still validates the offer lifecycle and control-call vouch.
+Remedy offers and execution receipts are stored in PostgreSQL (`openappa_offer_owners`). Any backend replica can resolve an offer after a restart or routing change. The runtime validates the offer before execution.
 
-Ordinary session receipts belong to authorized participants in one organization. A personal offer requires its originating user; an organization-scoped offer allows an organization caller. Remedy-execution receipts additionally bind the actual authenticated spender. Unknown, unauthorized, and spent offers return terminal feedback without applying a remedy.
+Session receipts belong to authorized users within an organization. A personal offer requires its original user. An organization offer allows any caller in that organization. Spent, unknown, or unauthorized offers return terminal feedback without executing.
 
-The embedded API carries typed remedy outcomes, refusal reasons, and offer descriptions. The host uses these fields rather than rendered text.
-
-Interactive human approval is not connected. Calls requiring human approval remain blocked.
+Interactive human approval is not connected. Calls requiring human approval stay blocked.
 
 ## Persistence and current limits
 
-The Rust binding stores event batches, policy snapshots, sessions, and receipts in PostgreSQL. Completed processing receipts commit with runtime events. Repeated results return their saved admitted output. Interrupted work remains pending and fails closed.
+The Rust binding stores event batches, policy snapshots, sessions, and receipts in PostgreSQL. Completed receipts commit with runtime events. Repeated results return their saved output. Interrupted work fails closed.
 
-The proxy sends `Prompt` at the start of each user turn. It sends `TurnEnd` only after a terminal model answer. Before releasing a remedy call, it adds a typed execution frame with the provider's real tool call ID, displayed tool name, and original argument bytes. Ordinary MCP clients return this frame without a client change. Before forwarding later history, the proxy removes the frame and restores the original arguments, even when the current request has no tools. The gateway rejects a frame whose semantic arguments differ from the visible call.
+The proxy sends `Prompt` at the start of each user turn, and `TurnEnd` after a terminal model answer. Before releasing a remedy call, the proxy attaches a typed execution frame with the provider tool call ID and original arguments. Standard MCP clients return this frame unchanged. Before forwarding later history to providers, the proxy removes the frame and restores the original arguments.
 
-The same logical call ID and arguments return the durable result without another execution. Reusing an ID with different arguments is refused. A new ID for a spent offer returns terminal feedback. JSON-RPC request IDs are not logical retry IDs. Direct calls need a stable host-supplied logical ID. An interrupted execution without a committed result remains blocked because the external action may already have occurred.
+Submitting the same logical call ID and arguments returns the saved result without re-execution. Submitting changed arguments under that ID is refused. Spent offers return terminal feedback.
 
-Full notice restoration runs on Anthropic Messages (including Bedrock InvokeModel), OpenAI Responses, and OpenAI Chat Completions.
-Azure Responses tool traffic is refused while OpenAPPA is enabled; Azure Chat Completions remains supported.
-On other protocols (Gemini, Bedrock Converse, Cohere, native Ollama), OpenAPPA rules on calls and results, but notices remain recorded in history as notice calls.
-Interactive human review, child subagent delegation, and operator recovery remain follow-up work.
-Start new conversations when enabling APPA: old tool results have no receipts.
+Notice restoration runs on Anthropic Messages (including Bedrock InvokeModel), OpenAI Responses, and OpenAI Chat Completions. Other protocols evaluate calls and results, but notices remain in history as notice calls. Azure Responses tool traffic is refused while OpenAPPA is enabled.
+
+Start new conversations after enabling OpenAPPA. Tool results from before activation have no receipts and are refused.
 
 ## Build and deployment
 

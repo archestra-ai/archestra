@@ -2,18 +2,7 @@
 /* eslint-disable */
 export declare function dispatchHook(input: string, policyContent?: string | undefined | null): Promise<string>
 
-/**
- * Executes a remedy for a caller that can name the offer but not its session.
- *
- * The gateway serves clients whose MCP traffic carries no session at all, so
- * the offer id has to resolve the session by itself. It does, to the session
- * the denial was minted for — and only within the organization the caller is
- * authenticated to, so an id guessed across organizations names nothing.
- *
- * A miss is answered, not raised: the model reads the answer, and what it
- * must read is that re-proposing the blocked call will not produce a usable
- * offer — that is the loop a bare error sent it into.
- */
+/** Executes a remedy plan by offer ID, resolving the owner session from PostgreSQL. */
 export declare function executeRemedyByOffer(input: string, policyContent?: string | undefined | null): Promise<string>
 
 export declare function initializeOpenappa(databaseUrl: string, policyContent: string, reporting?: ReportingOptions | undefined | null): Promise<void>

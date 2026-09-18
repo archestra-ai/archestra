@@ -2,11 +2,11 @@
  * OpenAPPA denial notices.
  *
  * When OpenAPPA blocks a tool call, the proxy replaces it with a notice tool call.
- * The notice preserves the original call ID and position, and carries the ruling
- * in plain text so client safety classifiers inspect clear text rather than encoded tokens.
+ * The notice keeps the original call ID and position, and carries the ruling
+ * in plain text so client safety classifiers inspect clear text.
  *
- * On subsequent requests, the proxy restores notice calls back to original tool calls
- * and injects the ruling as their result. Restoration is a stateless pure function.
+ * On later requests, the proxy restores notice calls back to original tool calls
+ * and injects the ruling as their result.
  */
 import { isDeepStrictEqual } from "node:util";
 import { z } from "zod";
@@ -14,11 +14,7 @@ import { z } from "zod";
 /** Incremented when the notice payload structure changes. */
 const NOTICE_VERSION = 1;
 
-/**
- * A notice call's arguments, as the client and the transcript see them: the
- * blocked call in the clear, the ruling in the clear, and beside them the
- * record restoration needs to put the call back where it was.
- */
+/** Notice call metadata used to restore the original call on subsequent turns. */
 const NoticeMetadata = z.object({
   v: z.literal(NOTICE_VERSION),
   call_id: z.string().min(1),
@@ -31,16 +27,14 @@ const FunctionArguments = z.union([
 ]);
 
 /**
- * A provider-history-only receipt on a direct execute_remedy_plan call. The
- * gateway consumes it, while the next provider request receives the original
- * arguments again so the receipt never becomes model-visible history.
+ * Receipt metadata attached to a direct execute_remedy_plan call.
+ * Consumed by the gateway and stripped before forwarding to the model provider.
  */
 export const RemedyExecutionSchema = z.object({
   v: z.literal(1),
   kind: z.literal("appa_remedy"),
   call_id: z.string().min(1).max(512),
-  // Display context only. The gateway cannot reconstruct a client's decorated
-  // model-facing spelling from its bare MCP tool name.
+  // Display context only for client-decorated tool names.
   tool_name: z.string().min(1).max(512),
   original_arguments: z
     .string()
@@ -48,9 +42,8 @@ export const RemedyExecutionSchema = z.object({
 });
 
 /**
- * The public MCP-tool schema. It stays strict at this shared boundary: a
- * function call carries an object or validated JSON-object text, while custom
- * calls carry only their one free-form `input` string.
+ * Schema for notice arguments. Standard function calls accept JSON objects;
+ * custom tool calls accept an object with an input string.
  */
 export const NoticeArguments = z
   .object({
@@ -116,11 +109,7 @@ type AppaNotice = {
 
 export function buildNoticeArguments(
   notice: Omit<AppaNotice, "original"> & {
-    /**
-     * Compatibility input for notices already produced by the proxy. Custom
-     * calls have always used `{ input: string }`; normalize that legacy shape
-     * here rather than making every caller parse it independently.
-     */
+    /** Original call arguments as an object or JSON string. */
     arguments: Record<string, unknown> | string;
   },
 ): z.infer<typeof NoticeArguments> {
@@ -175,12 +164,7 @@ export function readNotice(params: {
   };
 }
 
-/**
- * Reads an execution receipt attached to a direct control call.
- *
- * This is presentation/history cleanup only. A malformed receipt is ignored;
- * it never grants authority and never changes which remedy the gateway ran.
- */
+/** Reads an execution receipt attached to a direct remedy control call. */
 export function readRemedyExecution(params: {
   callId: string;
   toolName: string;
@@ -216,10 +200,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/**
- * Notice JSON is protocol input, so it is parsed exactly once here. A custom
- * tool is free-form text, never an arbitrary object coerced with `String()`.
- */
+/** Normalizes notice arguments into a typed function call or custom tool call. */
 function normalizeOriginalCall(params: {
   custom: boolean | undefined;
   arguments: unknown;

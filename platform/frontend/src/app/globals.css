@@ -17,6 +17,15 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Release completed animations: Streamdown's default `both` fill keeps
+   an opacity compositing effect per word, making long streams stall chat typing.
+   Backwards fill preserves word and list-marker fades; their final opacity
+   and color already match the underlying styles. */
+[data-sd-animate],
+[data-sd-animate-marker]::marker {
+  animation-fill-mode: backwards;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);

@@ -106,7 +106,7 @@
     "require-in-the-middle": "8.0.1",
     "simple-icons": "^16.11.0",
     "sonner": "^2.0.7",
-    "streamdown": "^2.4.0",
+    "streamdown": "^2.6.0",
     "tailwind-merge": "^3.5.0",
     "ua-parser-js": "^1.0.41",
     "use-stick-to-bottom": "^1.1.3",

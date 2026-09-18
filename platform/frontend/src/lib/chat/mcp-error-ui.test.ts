@@ -9,10 +9,10 @@ import {
   parseAuthRequired,
   parseExpiredAuth,
   parsePolicyDenied,
-  resolveAssistantTextAuthState,
   resolveMcpAppToolCallAuthState,
   resolveToolAuthState,
   type ToolAuthState,
+  toConnectableAuthState,
 } from "./mcp-error-ui";
 
 describe("parsePolicyDenied", () => {
@@ -104,6 +104,31 @@ describe("parsePolicyDenied", () => {
     const text =
       "The tool invocation was denied by policy but has no structured format";
     expect(parsePolicyDenied(text)).toBeNull();
+  });
+});
+
+describe("auth error text envelopes", () => {
+  it.each([
+    "whitespace",
+    "malformed",
+  ])("keeps authentication prompts actionable in %s text", (form) => {
+    const required =
+      'Authentication required for "Example". Please visit: https://example.com/mcp/registry?install=example';
+    const expired =
+      'Expired or invalid authentication for "Example". Please visit: https://example.com/mcp/registry?reauth=example';
+    const wrap = (text: string) =>
+      form === "whitespace"
+        ? ` \n\t${JSON.stringify({ message: text })}`
+        : `{incomplete envelope\n${text}`;
+
+    expect(parseAuthRequired(wrap(required))).toMatchObject({
+      catalogName: "Example",
+      actionUrl: "https://example.com/mcp/registry?install=example",
+    });
+    expect(parseExpiredAuth(wrap(expired))).toEqual({
+      catalogName: "Example",
+      reauthUrl: "https://example.com/mcp/registry?reauth=example",
+    });
   });
 });
 
@@ -643,11 +668,14 @@ describe("resolveMcpAppToolCallAuthState", () => {
   });
 });
 
-describe("resolveAssistantTextAuthState", () => {
+describe("toConnectableAuthState", () => {
   it("returns auth state for assistant auth instructions", () => {
     expect(
-      resolveAssistantTextAuthState(
-        'Authentication required for "slack-remote".\n\nTo set up your credentials, visit this URL: http://localhost:3000/mcp/registry?install=cat_slack',
+      toConnectableAuthState(
+        resolveToolAuthState({
+          errorText:
+            'Authentication required for "slack-remote".\n\nTo set up your credentials, visit this URL: http://localhost:3000/mcp/registry?install=cat_slack',
+        }),
       ),
     ).toEqual({
       kind: "auth-required",

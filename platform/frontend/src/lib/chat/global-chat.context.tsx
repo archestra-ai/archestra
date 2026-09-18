@@ -22,6 +22,7 @@ import {
 import {
   createContext,
   type ReactNode,
+  startTransition,
   useCallback,
   useContext,
   useEffect,
@@ -240,9 +241,12 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   // Per-conversation timers that clear the animation, so they don't cancel each other
   const titleAnimationTimersRef = useRef(new Map<string, NodeJS.Timeout>());
 
-  // Increment version when sessions change (triggers re-renders in consumers)
+  // Streaming updates can render a large transcript. Keep that work
+  // interruptible so an input event does not synchronously flush it.
   const notifySessionUpdate = useCallback(() => {
-    setSessionVersion((v) => v + 1);
+    startTransition(() => {
+      setSessionVersion((v) => v + 1);
+    });
   }, []);
 
   const markTitleAnimating = useCallback((conversationId: string) => {

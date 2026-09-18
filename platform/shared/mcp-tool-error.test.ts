@@ -10,6 +10,31 @@ import {
 import { buildToolInvocationRefusalMessages } from "./tool-refusal";
 
 describe("extractMcpToolError", () => {
+  it.each([
+    "plain",
+    "quoted",
+    "envelope",
+    "leading whitespace",
+    "malformed JSON prefix",
+  ])("recognizes refusal text in %s form", (form) => {
+    const refusal =
+      "I tried to invoke the example__read tool with the following arguments: {}. " +
+      "Tool call blocked: restricted access";
+    const inputs: Record<string, string> = {
+      plain: refusal,
+      quoted: JSON.stringify(refusal),
+      envelope: JSON.stringify({ message: refusal }),
+      "leading whitespace": ` \n\t${JSON.stringify({ message: refusal })}`,
+      "malformed JSON prefix": `{incomplete envelope\n${refusal}`,
+    };
+
+    expect(extractMcpToolError(inputs[form])).toMatchObject({
+      type: "policy_denied",
+      toolName: "example__read",
+      input: {},
+    });
+  });
+
   it("extracts a direct MCP tool error object", () => {
     expect(
       extractMcpToolError({

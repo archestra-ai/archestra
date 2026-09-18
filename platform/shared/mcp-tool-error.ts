@@ -192,12 +192,12 @@ function extractMcpToolErrorRecursive(
     return null;
   }
 
-  const direct = McpToolErrorSchema.safeParse(input);
-  if (direct.success) {
-    return normalizeMcpToolError(direct.data);
-  }
-
   if (typeof input === "string") {
+    // Ordinary chat text is checked on every streamed update. Avoid allocating
+    // validation errors and throwing JSON syntax errors for plain prose.
+    if (!/^\s*[[{"]/.test(input)) {
+      return parsePolicyDeniedMcpToolError(input);
+    }
     try {
       return extractMcpToolErrorRecursive(JSON.parse(input), depth + 1);
     } catch {
@@ -207,6 +207,11 @@ function extractMcpToolErrorRecursive(
 
   if (typeof input !== "object") {
     return null;
+  }
+
+  const direct = McpToolErrorSchema.safeParse(input);
+  if (direct.success) {
+    return normalizeMcpToolError(direct.data);
   }
 
   const objectWithFields = input as {

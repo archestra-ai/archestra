@@ -331724,6 +331724,13 @@
                     "connectionPluginsEnabled": {
                       "type": "boolean"
                     },
+                    "connectionRuntimeHandoffEnabled": {
+                      "type": "boolean"
+                    },
+                    "connectionRuntimeHandoffInstructions": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "modelProviderOverrides": {
                       "nullable": true,
                       "type": "object",
@@ -331919,6 +331926,8 @@
                     "connectionSkillsEnabled",
                     "connectionLlmProxyEnabled",
                     "connectionPluginsEnabled",
+                    "connectionRuntimeHandoffEnabled",
+                    "connectionRuntimeHandoffInstructions",
                     "modelProviderOverrides",
                     "messagingChannelOverrides",
                     "knowledgeConnectorOverrides",
@@ -332807,6 +332816,13 @@
                     "connectionPluginsEnabled": {
                       "type": "boolean"
                     },
+                    "connectionRuntimeHandoffEnabled": {
+                      "type": "boolean"
+                    },
+                    "connectionRuntimeHandoffInstructions": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "modelProviderOverrides": {
                       "nullable": true,
                       "type": "object",
@@ -333002,6 +333018,8 @@
                     "connectionSkillsEnabled",
                     "connectionLlmProxyEnabled",
                     "connectionPluginsEnabled",
+                    "connectionRuntimeHandoffEnabled",
+                    "connectionRuntimeHandoffInstructions",
                     "modelProviderOverrides",
                     "messagingChannelOverrides",
                     "knowledgeConnectorOverrides",
@@ -334145,6 +334163,13 @@
                     "connectionPluginsEnabled": {
                       "type": "boolean"
                     },
+                    "connectionRuntimeHandoffEnabled": {
+                      "type": "boolean"
+                    },
+                    "connectionRuntimeHandoffInstructions": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "modelProviderOverrides": {
                       "nullable": true,
                       "type": "object",
@@ -334340,6 +334365,8 @@
                     "connectionSkillsEnabled",
                     "connectionLlmProxyEnabled",
                     "connectionPluginsEnabled",
+                    "connectionRuntimeHandoffEnabled",
+                    "connectionRuntimeHandoffInstructions",
                     "modelProviderOverrides",
                     "messagingChannelOverrides",
                     "knowledgeConnectorOverrides",
@@ -335080,6 +335107,13 @@
                     "connectionPluginsEnabled": {
                       "type": "boolean"
                     },
+                    "connectionRuntimeHandoffEnabled": {
+                      "type": "boolean"
+                    },
+                    "connectionRuntimeHandoffInstructions": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "modelProviderOverrides": {
                       "nullable": true,
                       "type": "object",
@@ -335275,6 +335309,8 @@
                     "connectionSkillsEnabled",
                     "connectionLlmProxyEnabled",
                     "connectionPluginsEnabled",
+                    "connectionRuntimeHandoffEnabled",
+                    "connectionRuntimeHandoffInstructions",
                     "modelProviderOverrides",
                     "messagingChannelOverrides",
                     "knowledgeConnectorOverrides",
@@ -336015,6 +336051,13 @@
                     "connectionPluginsEnabled": {
                       "type": "boolean"
                     },
+                    "connectionRuntimeHandoffEnabled": {
+                      "type": "boolean"
+                    },
+                    "connectionRuntimeHandoffInstructions": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "modelProviderOverrides": {
                       "nullable": true,
                       "type": "object",
@@ -336210,6 +336253,8 @@
                     "connectionSkillsEnabled",
                     "connectionLlmProxyEnabled",
                     "connectionPluginsEnabled",
+                    "connectionRuntimeHandoffEnabled",
+                    "connectionRuntimeHandoffInstructions",
                     "modelProviderOverrides",
                     "messagingChannelOverrides",
                     "knowledgeConnectorOverrides",
@@ -336962,6 +337007,13 @@
                     "connectionPluginsEnabled": {
                       "type": "boolean"
                     },
+                    "connectionRuntimeHandoffEnabled": {
+                      "type": "boolean"
+                    },
+                    "connectionRuntimeHandoffInstructions": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "modelProviderOverrides": {
                       "nullable": true,
                       "type": "object",
@@ -337157,6 +337209,8 @@
                     "connectionSkillsEnabled",
                     "connectionLlmProxyEnabled",
                     "connectionPluginsEnabled",
+                    "connectionRuntimeHandoffEnabled",
+                    "connectionRuntimeHandoffInstructions",
                     "modelProviderOverrides",
                     "messagingChannelOverrides",
                     "knowledgeConnectorOverrides",
@@ -337469,6 +337523,15 @@
                   },
                   "connectionPluginsEnabled": {
                     "type": "boolean"
+                  },
+                  "connectionRuntimeHandoffEnabled": {
+                    "type": "boolean"
+                  },
+                  "connectionRuntimeHandoffInstructions": {
+                    "nullable": true,
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 20000
                   },
                   "connectionBaseUrls": {
                     "nullable": true,
@@ -337963,6 +338026,13 @@
                     "connectionPluginsEnabled": {
                       "type": "boolean"
                     },
+                    "connectionRuntimeHandoffEnabled": {
+                      "type": "boolean"
+                    },
+                    "connectionRuntimeHandoffInstructions": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "modelProviderOverrides": {
                       "nullable": true,
                       "type": "object",
@@ -338158,6 +338228,8 @@
                     "connectionSkillsEnabled",
                     "connectionLlmProxyEnabled",
                     "connectionPluginsEnabled",
+                    "connectionRuntimeHandoffEnabled",
+                    "connectionRuntimeHandoffInstructions",
                     "modelProviderOverrides",
                     "messagingChannelOverrides",
                     "knowledgeConnectorOverrides",
@@ -338936,6 +339008,13 @@
                     "connectionPluginsEnabled": {
                       "type": "boolean"
                     },
+                    "connectionRuntimeHandoffEnabled": {
+                      "type": "boolean"
+                    },
+                    "connectionRuntimeHandoffInstructions": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "modelProviderOverrides": {
                       "nullable": true,
                       "type": "object",
@@ -339131,6 +339210,8 @@
                     "connectionSkillsEnabled",
                     "connectionLlmProxyEnabled",
                     "connectionPluginsEnabled",
+                    "connectionRuntimeHandoffEnabled",
+                    "connectionRuntimeHandoffInstructions",
                     "modelProviderOverrides",
                     "messagingChannelOverrides",
                     "knowledgeConnectorOverrides",
@@ -339941,6 +340022,13 @@
                     "connectionPluginsEnabled": {
                       "type": "boolean"
                     },
+                    "connectionRuntimeHandoffEnabled": {
+                      "type": "boolean"
+                    },
+                    "connectionRuntimeHandoffInstructions": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "modelProviderOverrides": {
                       "nullable": true,
                       "type": "object",
@@ -340136,6 +340224,8 @@
                     "connectionSkillsEnabled",
                     "connectionLlmProxyEnabled",
                     "connectionPluginsEnabled",
+                    "connectionRuntimeHandoffEnabled",
+                    "connectionRuntimeHandoffInstructions",
                     "modelProviderOverrides",
                     "messagingChannelOverrides",
                     "knowledgeConnectorOverrides",
@@ -340890,6 +340980,13 @@
                     "connectionPluginsEnabled": {
                       "type": "boolean"
                     },
+                    "connectionRuntimeHandoffEnabled": {
+                      "type": "boolean"
+                    },
+                    "connectionRuntimeHandoffInstructions": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "modelProviderOverrides": {
                       "nullable": true,
                       "type": "object",
@@ -341085,6 +341182,8 @@
                     "connectionSkillsEnabled",
                     "connectionLlmProxyEnabled",
                     "connectionPluginsEnabled",
+                    "connectionRuntimeHandoffEnabled",
+                    "connectionRuntimeHandoffInstructions",
                     "modelProviderOverrides",
                     "messagingChannelOverrides",
                     "knowledgeConnectorOverrides",
@@ -341870,6 +341969,13 @@
                     "connectionPluginsEnabled": {
                       "type": "boolean"
                     },
+                    "connectionRuntimeHandoffEnabled": {
+                      "type": "boolean"
+                    },
+                    "connectionRuntimeHandoffInstructions": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "modelProviderOverrides": {
                       "nullable": true,
                       "type": "object",
@@ -342065,6 +342171,8 @@
                     "connectionSkillsEnabled",
                     "connectionLlmProxyEnabled",
                     "connectionPluginsEnabled",
+                    "connectionRuntimeHandoffEnabled",
+                    "connectionRuntimeHandoffInstructions",
                     "modelProviderOverrides",
                     "messagingChannelOverrides",
                     "knowledgeConnectorOverrides",
@@ -342787,6 +342895,13 @@
                     "connectionPluginsEnabled": {
                       "type": "boolean"
                     },
+                    "connectionRuntimeHandoffEnabled": {
+                      "type": "boolean"
+                    },
+                    "connectionRuntimeHandoffInstructions": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "modelProviderOverrides": {
                       "nullable": true,
                       "type": "object",
@@ -342982,6 +343097,8 @@
                     "connectionSkillsEnabled",
                     "connectionLlmProxyEnabled",
                     "connectionPluginsEnabled",
+                    "connectionRuntimeHandoffEnabled",
+                    "connectionRuntimeHandoffInstructions",
                     "modelProviderOverrides",
                     "messagingChannelOverrides",
                     "knowledgeConnectorOverrides",
@@ -344892,6 +345009,13 @@
                     "connectionPluginsEnabled": {
                       "type": "boolean"
                     },
+                    "connectionRuntimeHandoffEnabled": {
+                      "type": "boolean"
+                    },
+                    "connectionRuntimeHandoffInstructions": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "modelProviderOverrides": {
                       "nullable": true,
                       "type": "object",
@@ -345087,6 +345211,8 @@
                     "connectionSkillsEnabled",
                     "connectionLlmProxyEnabled",
                     "connectionPluginsEnabled",
+                    "connectionRuntimeHandoffEnabled",
+                    "connectionRuntimeHandoffInstructions",
                     "modelProviderOverrides",
                     "messagingChannelOverrides",
                     "knowledgeConnectorOverrides",

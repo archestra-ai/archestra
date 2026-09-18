@@ -3375,6 +3375,13 @@
       "when": 1789734363412,
       "tag": "0481_drop_openappa_offer_owners",
       "breakpoints": true
+    },
+    {
+      "idx": 482,
+      "version": "7",
+      "when": 1789769471078,
+      "tag": "0482_runtime_handoff_instructions",
+      "breakpoints": true
     }
   ]
 }

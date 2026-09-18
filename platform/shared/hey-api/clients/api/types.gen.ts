@@ -86192,6 +86192,8 @@ export type GetOrganizationResponses = {
         connectionSkillsEnabled: boolean;
         connectionLlmProxyEnabled: boolean;
         connectionPluginsEnabled: boolean;
+        connectionRuntimeHandoffEnabled: boolean;
+        connectionRuntimeHandoffInstructions: string | null;
         modelProviderOverrides: {
             [key: string]: {
                 hidden?: boolean;
@@ -86511,6 +86513,8 @@ export type UpdateAppearanceSettingsResponses = {
         connectionSkillsEnabled: boolean;
         connectionLlmProxyEnabled: boolean;
         connectionPluginsEnabled: boolean;
+        connectionRuntimeHandoffEnabled: boolean;
+        connectionRuntimeHandoffInstructions: string | null;
         modelProviderOverrides: {
             [key: string]: {
                 hidden?: boolean;
@@ -86713,6 +86717,8 @@ export type UpdateSecuritySettingsResponses = {
         connectionSkillsEnabled: boolean;
         connectionLlmProxyEnabled: boolean;
         connectionPluginsEnabled: boolean;
+        connectionRuntimeHandoffEnabled: boolean;
+        connectionRuntimeHandoffInstructions: string | null;
         modelProviderOverrides: {
             [key: string]: {
                 hidden?: boolean;
@@ -86910,6 +86916,8 @@ export type UpdateMcpSettingsResponses = {
         connectionSkillsEnabled: boolean;
         connectionLlmProxyEnabled: boolean;
         connectionPluginsEnabled: boolean;
+        connectionRuntimeHandoffEnabled: boolean;
+        connectionRuntimeHandoffInstructions: string | null;
         modelProviderOverrides: {
             [key: string]: {
                 hidden?: boolean;
@@ -87107,6 +87115,8 @@ export type UpdateSkillsSettingsResponses = {
         connectionSkillsEnabled: boolean;
         connectionLlmProxyEnabled: boolean;
         connectionPluginsEnabled: boolean;
+        connectionRuntimeHandoffEnabled: boolean;
+        connectionRuntimeHandoffInstructions: string | null;
         modelProviderOverrides: {
             [key: string]: {
                 hidden?: boolean;
@@ -87305,6 +87315,8 @@ export type UpdateAgentSettingsResponses = {
         connectionSkillsEnabled: boolean;
         connectionLlmProxyEnabled: boolean;
         connectionPluginsEnabled: boolean;
+        connectionRuntimeHandoffEnabled: boolean;
+        connectionRuntimeHandoffInstructions: string | null;
         modelProviderOverrides: {
             [key: string]: {
                 hidden?: boolean;
@@ -87355,6 +87367,8 @@ export type UpdateConnectionSettingsData = {
         connectionSkillsEnabled?: boolean;
         connectionLlmProxyEnabled?: boolean;
         connectionPluginsEnabled?: boolean;
+        connectionRuntimeHandoffEnabled?: boolean;
+        connectionRuntimeHandoffInstructions?: string | null;
         connectionBaseUrls?: Array<{
             url: string;
             description?: string;
@@ -87516,6 +87530,8 @@ export type UpdateConnectionSettingsResponses = {
         connectionSkillsEnabled: boolean;
         connectionLlmProxyEnabled: boolean;
         connectionPluginsEnabled: boolean;
+        connectionRuntimeHandoffEnabled: boolean;
+        connectionRuntimeHandoffInstructions: string | null;
         modelProviderOverrides: {
             [key: string]: {
                 hidden?: boolean;
@@ -87727,6 +87743,8 @@ export type UpdateIntegrationSettingsResponses = {
         connectionSkillsEnabled: boolean;
         connectionLlmProxyEnabled: boolean;
         connectionPluginsEnabled: boolean;
+        connectionRuntimeHandoffEnabled: boolean;
+        connectionRuntimeHandoffInstructions: string | null;
         modelProviderOverrides: {
             [key: string]: {
                 hidden?: boolean;
@@ -87934,6 +87952,8 @@ export type UpdateDefaultEnvironmentResponses = {
         connectionSkillsEnabled: boolean;
         connectionLlmProxyEnabled: boolean;
         connectionPluginsEnabled: boolean;
+        connectionRuntimeHandoffEnabled: boolean;
+        connectionRuntimeHandoffInstructions: string | null;
         modelProviderOverrides: {
             [key: string]: {
                 hidden?: boolean;
@@ -88136,6 +88156,8 @@ export type UpdateAuthSettingsResponses = {
         connectionSkillsEnabled: boolean;
         connectionLlmProxyEnabled: boolean;
         connectionPluginsEnabled: boolean;
+        connectionRuntimeHandoffEnabled: boolean;
+        connectionRuntimeHandoffInstructions: string | null;
         modelProviderOverrides: {
             [key: string]: {
                 hidden?: boolean;
@@ -88340,6 +88362,8 @@ export type UpdateKnowledgeSettingsResponses = {
         connectionSkillsEnabled: boolean;
         connectionLlmProxyEnabled: boolean;
         connectionPluginsEnabled: boolean;
+        connectionRuntimeHandoffEnabled: boolean;
+        connectionRuntimeHandoffInstructions: string | null;
         modelProviderOverrides: {
             [key: string]: {
                 hidden?: boolean;
@@ -88534,6 +88558,8 @@ export type DropEmbeddingConfigResponses = {
         connectionSkillsEnabled: boolean;
         connectionLlmProxyEnabled: boolean;
         connectionPluginsEnabled: boolean;
+        connectionRuntimeHandoffEnabled: boolean;
+        connectionRuntimeHandoffInstructions: string | null;
         modelProviderOverrides: {
             [key: string]: {
                 hidden?: boolean;
@@ -89078,6 +89104,8 @@ export type CompleteOnboardingResponses = {
         connectionSkillsEnabled: boolean;
         connectionLlmProxyEnabled: boolean;
         connectionPluginsEnabled: boolean;
+        connectionRuntimeHandoffEnabled: boolean;
+        connectionRuntimeHandoffInstructions: string | null;
         modelProviderOverrides: {
             [key: string]: {
                 hidden?: boolean;

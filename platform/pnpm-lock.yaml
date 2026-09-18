@@ -51,7 +51,7 @@ overrides:
   dompurify: 3.4.13
   glob: 11.1.0
   esbuild: '>=0.28.1'
-  adm-zip: 0.6.0
+  adm-zip: 0.6.1
   mdast-util-to-hast: 13.2.1
   express: 5.2.0
   express-rate-limit: 8.3.1
@@ -6519,8 +6519,8 @@ packages:
   adaptivecards@1.2.3:
     resolution: {integrity: sha512-amQ5OSW3OpIkrxVKLjxVBPk/T49yuOtnqs1z5ZPfZr0+OpTovzmiHbyoAGDIsu5SNYHwOZFp/3LGOnRaALFa/g==}
 
-  adm-zip@0.6.0:
-    resolution: {integrity: sha512-XleryMhbuksdKtofnWZ9Sk+4CUTbms4Mb/EU32SZwToAyZ5RgVos/ki8n+yr0LWHOGKuakbXTuuYNHLQjhddgg==}
+  adm-zip@0.6.1:
+    resolution: {integrity: sha512-Xwrja8nx9e5o2N1my4DsKCeKpdrnACyr1wtbPxBDgGzKzKyE9kRtBFA8mWldI+RVlD7CBZNWY/wQ2+ydwOR6kQ==}
     engines: {node: '>=14.0'}
 
   agent-base@6.0.2:
@@ -17267,7 +17267,7 @@ snapshots:
 
   adaptivecards@1.2.3: {}
 
-  adm-zip@0.6.0: {}
+  adm-zip@0.6.1: {}
 
   agent-base@6.0.2:
     dependencies:
@@ -18835,7 +18835,7 @@ snapshots:
 
   generative-bayesian-network@2.1.83:
     dependencies:
-      adm-zip: 0.6.0
+      adm-zip: 0.6.1
       tslib: 2.8.1
 
   gensync@1.0.0-beta.2: {}
@@ -21309,8 +21309,7 @@ snapshots:
 
   semver@7.7.4: {}
 
-  semver@7.8.5:
-    optional: true
+  semver@7.8.5: {}
 
   send@1.2.1:
     dependencies:

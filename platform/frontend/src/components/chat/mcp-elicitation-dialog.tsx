@@ -547,6 +547,7 @@ function getDefaultValues(fields: ElicitationField[]) {
     return { response: "" };
   }
 
+  const choiceForm = isChoiceForm(fields);
   return Object.fromEntries(
     fields.map((field) => {
       if (field.schema.default !== undefined) {
@@ -555,7 +556,7 @@ function getDefaultValues(fields: ElicitationField[]) {
       if (field.schema.type === "boolean") {
         return [field.name, false];
       }
-      if (!isChoiceForm(fields)) {
+      if (!choiceForm) {
         const firstEnumValue = field.schema.enum?.find(
           (item) => typeof item === "string",
         );

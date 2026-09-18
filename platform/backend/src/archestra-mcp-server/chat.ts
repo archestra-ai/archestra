@@ -228,10 +228,6 @@ function optionKey(index: number) {
 }
 
 /**
- * Take the remedy ruling pending for this session, if any. Consume-once: the
- * user has now answered, so the ruling must not leak into a later question.
- */
-/**
  * Verified offer ids from the envelopes the proxy stamped onto this call.
  * Anything unsigned, signed for another organization, or minted with a
  * different secret is dropped — the tool only ever repeats offers the

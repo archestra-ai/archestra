@@ -171,6 +171,10 @@ export const TOOL_WRITE_WORKSPACE_FILE_SHORT_NAME = "write_workspace_file";
 export const TOOL_DELETE_WORKSPACE_SHORT_NAME = "delete_workspace";
 export const TOOL_TRANSFER_WORKSPACE_FILE_SHORT_NAME =
   "transfer_workspace_file";
+// Attach a credential the calling client already holds to a runtime Agent, so a
+// handoff can carry the CLI auth the local session was using. Personal scope
+// only, and only for Agents that opted in to accepting client-supplied values.
+export const TOOL_TRANSFER_CREDENTIAL_SHORT_NAME = "transfer_credential";
 export const TOOL_DOWNLOAD_FILE_SHORT_NAME = "download_file";
 export const TOOL_UPLOAD_FILE_SHORT_NAME = "upload_file";
 // persistent files: produced by agents, scoped to a conversation (or a project)
@@ -319,6 +323,7 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_WRITE_WORKSPACE_FILE_SHORT_NAME,
   TOOL_DELETE_WORKSPACE_SHORT_NAME,
   TOOL_TRANSFER_WORKSPACE_FILE_SHORT_NAME,
+  TOOL_TRANSFER_CREDENTIAL_SHORT_NAME,
   TOOL_DOWNLOAD_FILE_SHORT_NAME,
   TOOL_UPLOAD_FILE_SHORT_NAME,
   TOOL_SEARCH_FILES_SHORT_NAME,
@@ -525,6 +530,7 @@ export const ARCHESTRA_TOOL_GROUP_BY_SHORT_NAME: Record<
   write_workspace_file: "tasks",
   transfer_workspace_file: "tasks",
   delete_workspace: "tasks",
+  transfer_credential: "tasks",
   download_file: "skill_sandbox",
   upload_file: "skill_sandbox",
 
@@ -722,6 +728,8 @@ export const TOOL_RUN_COMMAND_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_RUN_COMMAND_SHORT_NAME}` as const;
 export const TOOL_START_RUN_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_START_RUN_SHORT_NAME}` as const;
+export const TOOL_TRANSFER_CREDENTIAL_FULL_NAME =
+  `${ARCHESTRA_TOOL_PREFIX}${TOOL_TRANSFER_CREDENTIAL_SHORT_NAME}` as const;
 export const TOOL_GET_RUN_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_GET_RUN_SHORT_NAME}` as const;
 export const TOOL_LIST_RUNS_FULL_NAME =

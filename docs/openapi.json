@@ -47730,6 +47730,9 @@
                                           "additionalProperties": false
                                         }
                                       },
+                                      "allowAgentSuppliedCredentialValues": {
+                                        "type": "boolean"
+                                      },
                                       "claudeCode": {
                                         "type": "object",
                                         "properties": {
@@ -49384,6 +49387,9 @@
                                   "additionalProperties": false
                                 }
                               },
+                              "allowAgentSuppliedCredentialValues": {
+                                "type": "boolean"
+                              },
                               "claudeCode": {
                                 "type": "object",
                                 "properties": {
@@ -50460,6 +50466,9 @@
                           ]
                         }
                       },
+                      "allowAgentSuppliedCredentialValues": {
+                        "type": "boolean"
+                      },
                       "claudeCode": {
                         "type": "object",
                         "properties": {
@@ -51173,6 +51182,9 @@
                             ],
                             "additionalProperties": false
                           }
+                        },
+                        "allowAgentSuppliedCredentialValues": {
+                          "type": "boolean"
                         },
                         "claudeCode": {
                           "type": "object",
@@ -52883,6 +52895,9 @@
                               "additionalProperties": false
                             }
                           },
+                          "allowAgentSuppliedCredentialValues": {
+                            "type": "boolean"
+                          },
                           "claudeCode": {
                             "type": "object",
                             "properties": {
@@ -54222,6 +54237,9 @@
                             ],
                             "additionalProperties": false
                           }
+                        },
+                        "allowAgentSuppliedCredentialValues": {
+                          "type": "boolean"
                         },
                         "claudeCode": {
                           "type": "object",
@@ -55632,6 +55650,9 @@
                                 "additionalProperties": false
                               }
                             },
+                            "allowAgentSuppliedCredentialValues": {
+                              "type": "boolean"
+                            },
                             "claudeCode": {
                               "type": "object",
                               "properties": {
@@ -56724,6 +56745,9 @@
                             "additionalProperties": false
                           }
                         },
+                        "allowAgentSuppliedCredentialValues": {
+                          "type": "boolean"
+                        },
                         "claudeCode": {
                           "type": "object",
                           "properties": {
@@ -57746,6 +57770,9 @@
                           ]
                         }
                       },
+                      "allowAgentSuppliedCredentialValues": {
+                        "type": "boolean"
+                      },
                       "claudeCode": {
                         "type": "object",
                         "properties": {
@@ -58276,6 +58303,9 @@
                             ],
                             "additionalProperties": false
                           }
+                        },
+                        "allowAgentSuppliedCredentialValues": {
+                          "type": "boolean"
                         },
                         "claudeCode": {
                           "type": "object",
@@ -60661,6 +60691,9 @@
                             "additionalProperties": false
                           }
                         },
+                        "allowAgentSuppliedCredentialValues": {
+                          "type": "boolean"
+                        },
                         "claudeCode": {
                           "type": "object",
                           "properties": {
@@ -61745,6 +61778,9 @@
                             ],
                             "additionalProperties": false
                           }
+                        },
+                        "allowAgentSuppliedCredentialValues": {
+                          "type": "boolean"
                         },
                         "claudeCode": {
                           "type": "object",
@@ -69660,6 +69696,9 @@
                             ],
                             "additionalProperties": false
                           }
+                        },
+                        "allowAgentSuppliedCredentialValues": {
+                          "type": "boolean"
                         },
                         "claudeCode": {
                           "type": "object",

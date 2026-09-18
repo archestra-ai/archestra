@@ -130,7 +130,13 @@ def open_staging(root):
 
 
 def describe(info):
-    return {"size": info.st_size, "mtime_ns": info.st_mtime_ns, "ino": info.st_ino}
+    # Nanosecond times and inodes exceed the range a JSON consumer can hold as
+    # an exact number, so they travel as strings and stay comparable.
+    return {
+        "size": info.st_size,
+        "mtime_ns": str(info.st_mtime_ns),
+        "ino": str(info.st_ino),
+    }
 
 
 def stat_path(path):

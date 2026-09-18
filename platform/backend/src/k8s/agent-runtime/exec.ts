@@ -49,7 +49,9 @@ export function streamAgentRuntimeCommand(params: {
   const timer = setTimeout(
     () =>
       finish(
-        new AgentRuntimeCommandTransportError("Agent Runtime command timed out"),
+        new AgentRuntimeCommandTransportError(
+          "Agent Runtime command timed out",
+        ),
       ),
     params.timeoutMs,
   );

@@ -15,6 +15,23 @@ export async function accessAgentWorkspaceFile(params: {
   request: AgentWorkspaceFileRequest;
 }) {
   const request = AgentWorkspaceFileRequestSchema.parse(params.request);
+  const session = await authorizeAgentWorkspaceAccess(params);
+  return resolveAgentRuntimeBackendDriver(session.backend).accessWorkspaceFile({
+    session,
+    request,
+  });
+}
+
+/** Run the owner-only workspace gate and return the session behind it.
+ *
+ * Transfers repeat this for every request rather than trusting a ticket alone,
+ * so a resumed chunk revalidates ownership, lifecycle and retention, and keeps
+ * extending the workspace's deadline while bytes are still moving.
+ */
+export async function authorizeAgentWorkspaceAccess(params: {
+  actor: A2AActor;
+  taskId: string;
+}) {
   const session = await AgentRunModel.findByTaskId(params.taskId);
   if (
     !session ||
@@ -64,8 +81,5 @@ export async function accessAgentWorkspaceFile(params: {
       "Workspace lifecycle changed; retry after it is resumed",
     );
   }
-  return resolveAgentRuntimeBackendDriver(session.backend).accessWorkspaceFile({
-    session,
-    request,
-  });
+  return session;
 }

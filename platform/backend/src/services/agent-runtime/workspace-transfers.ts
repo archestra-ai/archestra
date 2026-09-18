@@ -159,18 +159,30 @@ class WorkspaceTransferTickets {
       );
     }
     const destination = params.ticket.destination;
-    const result = await driver.runWorkspaceTransferCommand({
-      session,
-      args: [
-        "finalize",
-        params.ticket.entryId,
-        params.ticket.path,
-        params.ticket.sha256,
-        destination.present ? destination.ino : "-",
-        destination.present ? destination.mtimeNs : "0",
-      ],
-      timeoutMs: CONTROL_TIMEOUT_MS,
-    });
+    const result = await driver
+      .runWorkspaceTransferCommand({
+        session,
+        args: [
+          "finalize",
+          params.ticket.entryId,
+          params.ticket.path,
+          params.ticket.sha256,
+          destination.present ? destination.ino : "-",
+          destination.present ? destination.mtimeNs : "0",
+        ],
+        timeoutMs: CONTROL_TIMEOUT_MS,
+      })
+      .catch((error: unknown) => {
+        // Losing a race for the destination is a conflict, not a bad request.
+        // The staged upload is kept so the caller can still decide what to do.
+        if (
+          error instanceof ApiError &&
+          error.message.includes("destination changed")
+        ) {
+          throw new ApiError(409, error.message);
+        }
+        throw error;
+      });
     this.tickets.delete(params.ticket.id);
     return camelize(result);
   }

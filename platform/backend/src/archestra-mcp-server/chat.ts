@@ -147,8 +147,8 @@ const registry = defineArchestraTools([
         return structuredSuccessResult(
           { action, selected: [] },
           action === "decline"
-            ? "The user declined to pick."
-            : "The user dismissed the question.",
+            ? "The user declined to pick. Do not proceed with the question."
+            : "The user dismissed the question. Do not ask it again unless the user brings it up.",
         );
       }
 
@@ -166,7 +166,7 @@ const registry = defineArchestraTools([
 
       return structuredSuccessResult(
         { action: "accept", selected },
-        selected.join(", "),
+        `The user picked: ${selected.join(", ")}. Act on this choice.`,
       );
     },
   }),

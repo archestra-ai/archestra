@@ -169,48 +169,45 @@ fn refuse_host_keys(document: &toml::Table) -> Result<(), String> {
 /// A battery reaches out only through the host's helper bridge: a url external
 /// would leave the API host with none of the bridge's guards.
 pub(crate) fn refuse_url_externals(document: &toml::Table) -> Result<(), String> {
-    let Some(toml::Value::Table(externals)) = document.get("externals") else {
-        return Ok(());
-    };
-    for (section, bindings) in externals {
-        let toml::Value::Table(bindings) = bindings else {
-            continue;
-        };
-        for (name, binding) in bindings {
-            if binding
-                .as_table()
-                .is_some_and(|binding| binding.contains_key("url"))
-            {
-                return Err(format!(
-                    "externals.{section}.{name:?} declares a url; a battery's externals must be command helpers"
-                ));
-            }
+    for (section, name, binding) in external_bindings(document) {
+        if binding.contains_key("url") {
+            return Err(format!(
+                "externals.{section}.{name:?} declares a url; a battery's externals must be command helpers"
+            ));
         }
     }
     Ok(())
 }
 
 pub(crate) fn refuse_host_variables(document: &toml::Table) -> Result<(), String> {
-    let Some(toml::Value::Table(externals)) = document.get("externals") else {
-        return Ok(());
-    };
-    for (section, bindings) in externals {
-        let toml::Value::Table(bindings) = bindings else {
-            continue;
-        };
-        for (name, binding) in bindings {
-            if let Some(toml::Value::String(var)) = binding
-                .as_table()
-                .and_then(|binding| binding.get("token_env"))
-                && var.starts_with(HOST_VARIABLE_PREFIX)
-            {
-                return Err(format!(
-                    "externals.{section}.{name:?}: token_env may not name a {HOST_VARIABLE_PREFIX} variable, which the host keeps for itself"
-                ));
-            }
+    for (section, name, binding) in external_bindings(document) {
+        if let Some(toml::Value::String(var)) = binding.get("token_env")
+            && var.starts_with(HOST_VARIABLE_PREFIX)
+        {
+            return Err(format!(
+                "externals.{section}.{name:?}: token_env may not name a {HOST_VARIABLE_PREFIX} variable, which the host keeps for itself"
+            ));
         }
     }
     Ok(())
+}
+
+/// Every `[externals.<section>.<name>]` binding table, with its section and name.
+fn external_bindings(document: &toml::Table) -> Vec<(&str, &str, &toml::Table)> {
+    let Some(toml::Value::Table(externals)) = document.get("externals") else {
+        return Vec::new();
+    };
+    externals
+        .iter()
+        .filter_map(|(section, bindings)| bindings.as_table().map(|bindings| (section, bindings)))
+        .flat_map(|(section, bindings)| {
+            bindings.iter().filter_map(move |(name, binding)| {
+                binding
+                    .as_table()
+                    .map(|binding| (section.as_str(), name.as_str(), binding))
+            })
+        })
+        .collect()
 }
 
 fn is_url_segment(name: &str) -> bool {

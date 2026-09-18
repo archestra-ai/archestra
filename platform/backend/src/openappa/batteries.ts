@@ -207,16 +207,16 @@ class OpenAppaBatteriesService {
         409,
         "This battery is already installed for that catalog entry",
       );
-    const view = await this.installView(organizationId, created.id);
-    if (view.status !== "superseded") return view;
-    // Two installs claiming a battery's helpers at once both pass the check
-    // above; the composition names one owner and this one yields.
-    await OpenAppaBatteryInstallModel.delete({
-      id: created.id,
+    return this.claimedView({
       organizationId,
+      id: created.id,
+      withdraw: async () => {
+        await OpenAppaBatteryInstallModel.delete({
+          id: created.id,
+          organizationId,
+        });
+      },
     });
-    await this.recompile(organizationId);
-    throw helpersClaimedMeanwhile();
   }
 
   async updateInstall(params: {
@@ -252,17 +252,19 @@ class OpenAppaBatteriesService {
       organizationId,
       ...changes,
     });
-    const view = await this.installView(organizationId, id);
-    if (!claimsHelpers || view.status !== "superseded") return view;
-    // Another install claimed the helpers between the check and this write.
-    await OpenAppaBatteryInstallModel.update({
-      id,
+    if (!claimsHelpers) return this.installView(organizationId, id);
+    return this.claimedView({
       organizationId,
-      enabled: existing.enabled,
-      credentialBindings: existing.credentialBindings,
+      id,
+      withdraw: async () => {
+        await OpenAppaBatteryInstallModel.update({
+          id,
+          organizationId,
+          enabled: existing.enabled,
+          credentialBindings: existing.credentialBindings,
+        });
+      },
     });
-    await this.recompile(organizationId);
-    throw helpersClaimedMeanwhile();
   }
 
   async deleteInstall(params: {
@@ -379,26 +381,39 @@ class OpenAppaBatteriesService {
     for (const { battery, evidence } of matchBatteries(catalog, available)) {
       // Concurrent syncs of one catalog race here; the unique index decides.
       // A name alone is a suggestion: the install waits disabled for review.
-      const attached = await OpenAppaBatteryInstallModel.createIfAbsent({
-        organizationId,
-        batteryName: battery,
-        catalogId: catalog.id,
-        enabled: evidence !== "name",
-        credentialBindings: {},
-      });
-      if (!attached) continue;
-      created = true;
-      logger.info(
-        {
+      // One battery's failure is logged so the ones already attached compose.
+      try {
+        const attached = await OpenAppaBatteryInstallModel.createIfAbsent({
           organizationId,
-          catalogId: catalog.id,
           batteryName: battery,
-          evidence,
-          installId: attached.id,
-          enabled: attached.enabled,
-        },
-        "OpenAPPA battery attached to a matching MCP catalog entry",
-      );
+          catalogId: catalog.id,
+          enabled: evidence !== "name",
+          credentialBindings: {},
+        });
+        if (!attached) continue;
+        created = true;
+        logger.info(
+          {
+            organizationId,
+            catalogId: catalog.id,
+            batteryName: battery,
+            evidence,
+            installId: attached.id,
+            enabled: attached.enabled,
+          },
+          "OpenAPPA battery attached to a matching MCP catalog entry",
+        );
+      } catch (error) {
+        logger.warn(
+          {
+            organizationId,
+            catalogId: catalog.id,
+            batteryName: battery,
+            error,
+          },
+          "OpenAPPA battery could not be attached to a matching MCP catalog entry",
+        );
+      }
     }
     return created;
   }
@@ -726,6 +741,27 @@ class OpenAppaBatteriesService {
   }
 
   /** Recompose after a write and answer with the install as the stored composition saw it. */
+  /**
+   * The view of an install that claimed a battery's helpers. Two claims at
+   * once both pass the sole-owner check; the composition then names one owner,
+   * and the install it supersedes is withdrawn and its caller told to retry.
+   */
+  private async claimedView(params: {
+    organizationId: string;
+    id: string;
+    withdraw: () => Promise<void>;
+  }): Promise<BatteryInstallView> {
+    const { organizationId, id, withdraw } = params;
+    const view = await this.installView(organizationId, id);
+    if (view.status !== "superseded") return view;
+    await withdraw();
+    await this.recompile(organizationId);
+    throw new ApiError(
+      409,
+      "Another install of this battery became active at the same time",
+    );
+  }
+
   private async installView(
     organizationId: string,
     id: string,
@@ -738,13 +774,6 @@ class OpenAppaBatteriesService {
 }
 
 export const openappaBatteriesService = new OpenAppaBatteriesService();
-
-function helpersClaimedMeanwhile(): ApiError {
-  return new ApiError(
-    409,
-    "Another install of this battery became active at the same time",
-  );
-}
 
 type AvailableBatteries = Map<
   string,

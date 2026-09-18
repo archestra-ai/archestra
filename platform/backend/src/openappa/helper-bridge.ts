@@ -1,8 +1,11 @@
 import { timingSafeEqual } from "node:crypto";
+import type { EnvironmentTarget } from "@archestra/sandbox-rs";
 import config from "@/config";
+import { daggerEnvironmentRuntimeManager } from "@/k8s/dagger-environment-runtime/manager";
 import { withDeadline } from "@/k8s/mcp-server-runtime";
 import logger from "@/logging";
 import OpenAppaBatteryInstallModel from "@/models/openappa-battery-install";
+import OrganizationModel from "@/models/organization";
 import { sandboxRuntimeService } from "@/sandbox-runtime/sandbox-runtime-service";
 import { resolveCredentialValue } from "@/services/credentials";
 import { skillRootPath } from "@/skills-sandbox/runtime-image";
@@ -117,11 +120,12 @@ class OpenAppaHelperBridge {
       if ("failure" in entry)
         return {
           kind: "failed",
-          reason: `credential ${entry.credential} ${entry.failure}`,
+          reason: `credential ${entry.credential} ${CREDENTIAL_FAILURES[entry.failure]}`,
         };
       secretEnv.push({ name: entry.credential, value: entry.value });
     }
 
+    const environment = await this.organizationEngine(install.organizationId);
     const cwd = skillRootPath(battery.name);
     let executed: Awaited<ReturnType<typeof sandboxRuntimeService.runCommand>>;
     try {
@@ -145,6 +149,7 @@ class OpenAppaHelperBridge {
           },
         ],
         secretEnv,
+        environment,
         stdin: params.request,
         outputBytesLimit: config.skillsSandbox.outputBytesLimit,
         fileSizeLimitBytes: config.skillsSandbox.artifactBytesLimit,
@@ -180,7 +185,7 @@ class OpenAppaHelperBridge {
   }): Promise<ResolvedCredential> {
     const { install, credential } = params;
     const key = install.credentialBindings[credential];
-    if (!key) return { credential, failure: "is unbound" };
+    if (!key) return { credential, failure: "unbound" };
     let value: string | null;
     try {
       value = await resolveCredentialValue({
@@ -196,8 +201,25 @@ class OpenAppaHelperBridge {
       value = null;
     }
     return value === null
-      ? { credential, failure: "has no organization value" }
+      ? { credential, failure: "no_organization_value" }
       : { credential, value };
+  }
+
+  /**
+   * The engine the organization's own sandbox runs use, carrying its egress
+   * policy. An operator-supplied runner host serves every run from the
+   * process default instead, as it does for unbound agents.
+   */
+  private async organizationEngine(
+    organizationId: string,
+  ): Promise<EnvironmentTarget | undefined> {
+    if (config.daggerRuntime.runnerHost) return undefined;
+    const organization =
+      await OrganizationModel.getDefaultEngineTarget(organizationId);
+    if (!organization) return undefined;
+    return daggerEnvironmentRuntimeManager.organizationDefaultTarget(
+      organization,
+    );
   }
 }
 
@@ -205,7 +227,14 @@ export const openappaHelperBridge = new OpenAppaHelperBridge();
 
 type ResolvedCredential =
   | { credential: string; value: string }
-  | { credential: string; failure: string };
+  | { credential: string; failure: CredentialFailure };
+
+type CredentialFailure = "unbound" | "no_organization_value";
+
+const CREDENTIAL_FAILURES: Record<CredentialFailure, string> = {
+  unbound: "is unbound",
+  no_organization_value: "has no organization value",
+};
 
 const CONSUMER_ID = "openappa-helper-bridge";
 /** The helper's own execution budget inside the container. */

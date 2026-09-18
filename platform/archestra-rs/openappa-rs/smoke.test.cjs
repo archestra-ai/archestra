@@ -282,6 +282,21 @@ builtin = "hitl"
     assert.equal((await result(session, 'b', 'forged')).approved_output, 'second');
   });
 
+  await t.test('eighteen identified calls keep sequential results while siblings remain open', async () => {
+    const session = scope();
+    const ids = Array.from({ length: 18 }, (_, i) => `p${i}`);
+    for (const id of ids) {
+      const admitted = await call(session, id, 'read_plain', { query: id });
+      assert.equal(admitted.decision, 'allow_call');
+    }
+    for (const id of ids) {
+      const reported = await result(session, id, `ok-${id}`);
+      assert.equal(reported.decision, 'ack');
+      assert.equal(reported.approved_output, `ok-${id}`);
+      assert.ok(!/already outstanding/i.test(JSON.stringify(reported)));
+    }
+  });
+
   await t.test('same-organization participants share calls and immutable replays', async () => {
     const alice = scope('user:alice');
     const bob = { ...alice, caller_id: 'user:bob' };

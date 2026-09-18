@@ -24,7 +24,7 @@ flowchart LR
 ## Build and run
 
 Cargo fetches OpenAPPA from its public Git repository at commit
-`e2065813a7635759fef5ccfe8fbe73dfc44039c9`, pinned in this package's manifest and
+`9f9b02c1baeaa86791d2495895f928e9ef09e2c7`, pinned in this package's manifest and
 the workspace lockfile. A sibling checkout is not required. Update the revision
 and lockfile together when adopting a newer runtime. The lockfile also selects
 `rmcp` 3.4.0, matching the runtime's MCP API. Rebuild the native addon and

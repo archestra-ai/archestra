@@ -1,57 +1,200 @@
 //! Compile host-managed TOML without reading container files or executing commands.
+//!
+//! The runtime opens under the Archestra adapter: every tool name the host hands it
+//! derives to a canonical identity (`<catalog>__<tool>` → `mcp/<catalog>/<tool>`), so a
+//! battery rule written canonically reaches an installed catalog through the
+//! `server_aliases` table the host composes into the document.
 use appa_eventlog::{Backend, LogStore};
 use appa_runtime::{
     api::Runtime,
-    config::{Config, HostDefaults},
+    config::{Config, HostDefaults, HostedBattery},
 };
 use std::{sync::Arc, time::Duration};
 
+/// The consult budget every external of a hosted policy gets. Fixed for v0: the
+/// helper bridge derives its own deadline from it.
+pub(crate) const CONSULT_TIMEOUT: Duration = Duration::from_millis(5000);
+
+fn defaults() -> HostDefaults {
+    HostDefaults {
+        consult_timeout: CONSULT_TIMEOUT,
+        max_body_bytes: 65536,
+    }
+}
+
 pub(crate) fn compile(content: &str) -> Result<Config, String> {
-    Config::hosted(
-        content,
-        HostDefaults {
-            consult_timeout: Duration::from_millis(5000),
-            max_body_bytes: 65536,
-        },
-    )
-    .map_err(|error| error.to_string())
+    Config::hosted(content, defaults()).map_err(|error| error.to_string())
+}
+
+/// Open a runtime over `store` under the Archestra adapter.
+pub(crate) fn open(config: Config, store: Arc<LogStore>) -> Result<Runtime, String> {
+    Runtime::open_with_store_as(config, store, None, appa_adapter_archestra::adapter())
+        .map_err(|error| error.to_string())
 }
 
 pub(crate) fn validate(content: &str) -> Result<(), String> {
     let config = compile(content)?;
     let store = LogStore::open(Backend::Memory).map_err(|error| error.to_string())?;
-    Runtime::open_with_store(config, Arc::new(store), None).map_err(|error| error.to_string())?;
+    open(config, Arc::new(store))?;
     Ok(())
+}
+
+/// One `server_aliases` entry: the connection a battery rule names, and the
+/// catalog prefixes the deployment serves it under.
+pub(crate) struct ServerAlias {
+    pub alias: String,
+    pub targets: Vec<String>,
+}
+
+/// Where a battery's `command` helpers are served from once the host runs them:
+/// every binding becomes `url = "<url_base>/<external name>"` authenticated by
+/// `token_env`, the runtime's own variable, never the provider's.
+pub(crate) struct HelperBinding {
+    pub url_base: String,
+    pub token_env: String,
+}
+
+pub(crate) struct ComposeBattery {
+    pub name: String,
+    pub policy: String,
+    pub helpers: Option<HelperBinding>,
+}
+
+/// Compose the effective document: the root with the host's `server_aliases`, then
+/// every battery under it by the runtime's include rules. The result is the exact
+/// bytes the runtime stores and reloads through [`compile`].
+pub(crate) fn compose(
+    root: &str,
+    aliases: &[ServerAlias],
+    batteries: &[ComposeBattery],
+) -> Result<String, String> {
+    let mut document: toml::Table =
+        toml::from_str(root).map_err(|error| format!("root policy: {error}"))?;
+    if document.contains_key("server_aliases") {
+        return Err(
+            "the root policy may not declare server_aliases: the host derives them from its catalogs"
+                .to_owned(),
+        );
+    }
+    if !aliases.is_empty() {
+        let mut table = toml::Table::new();
+        for alias in aliases {
+            let targets = alias
+                .targets
+                .iter()
+                .map(|target| toml::Value::String(target.clone()))
+                .collect();
+            table.insert(alias.alias.clone(), toml::Value::Array(targets));
+        }
+        document.insert("server_aliases".to_owned(), toml::Value::Table(table));
+    }
+    let root = toml::to_string(&document).map_err(|error| error.to_string())?;
+    let policies = batteries
+        .iter()
+        .map(bind_helpers)
+        .collect::<Result<Vec<_>, _>>()?;
+    let hosted: Vec<HostedBattery<'_>> = batteries
+        .iter()
+        .zip(&policies)
+        .map(|(battery, policy)| HostedBattery {
+            name: &battery.name,
+            policy,
+        })
+        .collect();
+    let config =
+        Config::hosted_composed(&root, &hosted, defaults()).map_err(|error| error.to_string())?;
+    String::from_utf8(config.policy_file().bytes().to_vec()).map_err(|error| error.to_string())
+}
+
+/// Rewrite a battery's `command` externals onto the host's helper endpoint. A
+/// battery composed without a binding keeps its commands, which the hosted
+/// composition then refuses: an unbound helper never silently drops out.
+fn bind_helpers(battery: &ComposeBattery) -> Result<String, String> {
+    let Some(binding) = &battery.helpers else {
+        return Ok(battery.policy.clone());
+    };
+    let mut document: toml::Table = toml::from_str(&battery.policy)
+        .map_err(|error| format!("battery {}: {error}", battery.name))?;
+    if let Some(toml::Value::Table(externals)) = document.get_mut("externals") {
+        for (_, section) in externals.iter_mut() {
+            let Some(section) = section.as_table_mut() else {
+                continue;
+            };
+            for (name, entry) in section.iter_mut() {
+                let Some(entry) = entry.as_table_mut() else {
+                    continue;
+                };
+                if entry.remove("command").is_none() {
+                    continue;
+                }
+                if !is_url_segment(name) {
+                    return Err(format!(
+                        "battery {}: external {name:?} cannot be addressed over the helper bridge",
+                        battery.name
+                    ));
+                }
+                entry.insert(
+                    "url".to_owned(),
+                    toml::Value::String(format!("{}/{name}", binding.url_base)),
+                );
+                entry.insert(
+                    "token_env".to_owned(),
+                    toml::Value::String(binding.token_env.clone()),
+                );
+            }
+        }
+    }
+    toml::to_string(&document).map_err(|error| error.to_string())
+}
+
+fn is_url_segment(name: &str) -> bool {
+    !name.is_empty()
+        && name.chars().all(|character| {
+            character.is_ascii_alphanumeric() || matches!(character, '.' | '_' | '-')
+        })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use appa_runtime::hooks;
+    use appa_runtime_api::{Actor, HookDecision, HookEvent, ProposedCall, TrajectoryId};
 
-    #[tokio::test]
-    async fn embedded_remedy_accepts_symbolic_audience_without_sources() {
-        use appa_runtime::hooks;
-        use appa_runtime_api::{Actor, HookDecision, HookEvent, ProposedCall, TrajectoryId};
+    const BRIDGE_TOKEN_ENV: &str = "APPA_OPENAPPA_RS_TEST_BRIDGE_TOKEN";
 
-        let config = compile(
-            r#"[policy]
-version = 2
-[[policy.tool]]
-name = "read_internal"
-delta = { audience = ["internal"] }
-requires = { audience = { within = ["internal"] } }
-"#,
-        )
-        .unwrap();
-        let store = Arc::new(LogStore::open(Backend::Memory).unwrap());
-        let runtime = Runtime::open_with_store(config, store, None).unwrap();
-        let actor = Actor {
-            root: TrajectoryId("symbolic-approval".into()),
+    /// Every call carries its own id: an unidentified call stays outstanding until
+    /// its result, and the host proposes one such call at a time.
+    fn call(actor: &Actor, tool: &str) -> HookEvent {
+        static CALLS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let call_id = CALLS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        HookEvent::ToolCall {
+            call_id: Some(format!("call:{call_id}")),
+            actor: actor.clone(),
+            call: ProposedCall {
+                tool: (appa_adapter_archestra::adapter().derive)(tool)
+                    .expect("test tool names are well formed")
+                    .canonical
+                    .as_str()
+                    .to_owned(),
+                arguments: serde_json::value::RawValue::from_string("{}".into()).unwrap(),
+            },
+            spawn: false,
+            ruling: None,
+        }
+    }
+
+    fn actor(root: &str) -> Actor {
+        Actor {
+            root: TrajectoryId(root.into()),
             child: None,
-        };
+        }
+    }
+
+    async fn started(runtime: &Runtime, root: &str) -> Actor {
+        let actor = actor(root);
         assert_eq!(
             hooks::handle(
-                &runtime,
+                runtime,
                 HookEvent::SessionStart {
                     root: actor.root.clone()
                 }
@@ -59,17 +202,29 @@ requires = { audience = { within = ["internal"] } }
             .await,
             HookDecision::Ack
         );
-        let call = || HookEvent::ToolCall {
-            call_id: None,
-            actor: actor.clone(),
-            call: ProposedCall {
-                tool: "read_internal".into(),
-                arguments: serde_json::value::RawValue::from_string("{}".into()).unwrap(),
-            },
-            spawn: false,
-            ruling: None,
-        };
-        let HookDecision::DenyCall { offers, .. } = hooks::handle(&runtime, call()).await else {
+        actor
+    }
+
+    fn memory_runtime(content: &str) -> Runtime {
+        let store = Arc::new(LogStore::open(Backend::Memory).unwrap());
+        open(compile(content).unwrap(), store).unwrap()
+    }
+
+    #[tokio::test]
+    async fn embedded_remedy_accepts_symbolic_audience_without_sources() {
+        let runtime = memory_runtime(
+            r#"[policy]
+version = 2
+[[policy.tool]]
+name = "read_internal"
+delta = { audience = ["internal"] }
+requires = { audience = { within = ["internal"] } }
+"#,
+        );
+        let actor = started(&runtime, "symbolic-approval").await;
+        let HookDecision::DenyCall { offers, .. } =
+            hooks::handle(&runtime, call(&actor, "read_internal")).await
+        else {
             panic!("the read must require acceptance before executing");
         };
         let args = serde_json::json!({ "offer_id": offers[0].id });
@@ -99,9 +254,164 @@ requires = { audience = { within = ["internal"] } }
             "{result:?}"
         );
         assert!(matches!(
-            hooks::handle(&runtime, call()).await,
+            hooks::handle(&runtime, call(&actor, "read_internal")).await,
             HookDecision::AllowCall { .. }
         ));
+    }
+
+    /// A rule authored in the host's own spelling keeps matching the call it names,
+    /// and a canonical battery rule reaches the catalog its alias binds — and only that
+    /// catalog.
+    #[tokio::test]
+    async fn host_spelled_rules_and_aliased_battery_rules_judge_the_calls_they_name() {
+        let content = compose(
+            "[policy]\nversion = 2\n[[policy.tool]]\nname = \"github_prod__get_me\"\ndelta = {}\n[[policy.tool]]\nname = \"read\"\ndelta = {}\n",
+            &[ServerAlias {
+                alias: "github".into(),
+                targets: vec!["github_prod".into()],
+            }],
+            &[ComposeBattery {
+                name: "github".into(),
+                policy: "[policy]\nversion = 2\n[[policy.tool]]\nname = \"mcp/github/get_file_contents\"\ndelta = {}\n".into(),
+                helpers: None,
+            }],
+        )
+        .unwrap();
+        let runtime = memory_runtime(&content);
+        let actor = started(&runtime, "aliases").await;
+        for admitted in [
+            "github_prod__get_me",
+            "read",
+            "github_prod__get_file_contents",
+        ] {
+            let decision = hooks::handle(&runtime, call(&actor, admitted)).await;
+            assert!(
+                matches!(decision, HookDecision::AllowCall { .. }),
+                "{admitted} is named by a rule: {decision:?}"
+            );
+        }
+        for refused in ["github_dev__get_file_contents", "github__get_file_contents"] {
+            assert!(
+                matches!(
+                    hooks::handle(&runtime, call(&actor, refused)).await,
+                    HookDecision::Refuse { .. }
+                ),
+                "{refused} is outside every rule"
+            );
+        }
+    }
+
+    /// The document a trajectory opened under keeps judging it after the serving
+    /// policy changes: a recompile never rewrites an open conversation's rules.
+    #[tokio::test]
+    async fn an_open_trajectory_is_judged_by_the_document_it_opened_under() {
+        let battery = || {
+            ComposeBattery {
+            name: "github".into(),
+            policy: "[policy]\nversion = 2\n[[policy.tool]]\nname = \"mcp/github/get_file_contents\"\ndelta = {}\n".into(),
+            helpers: None,
+        }
+        };
+        let root = "[policy]\nversion = 2\n";
+        let aliased = compose(
+            root,
+            &[ServerAlias {
+                alias: "github".into(),
+                targets: vec!["github_prod".into()],
+            }],
+            &[battery()],
+        )
+        .unwrap();
+        let unaliased = compose(root, &[], &[battery()]).unwrap();
+        let runtime = memory_runtime(&aliased);
+        let old = started(&runtime, "opened-under-aliases").await;
+        assert!(matches!(
+            hooks::handle(&runtime, call(&old, "github_prod__get_file_contents")).await,
+            HookDecision::AllowCall { .. }
+        ));
+        runtime.reload(compile(&unaliased).unwrap()).unwrap();
+        let pinned = hooks::handle(&runtime, call(&old, "github_prod__get_file_contents")).await;
+        assert!(
+            matches!(pinned, HookDecision::AllowCall { .. }),
+            "the open trajectory keeps its document: {pinned:?}"
+        );
+        let fresh = started(&runtime, "opened-after-reload").await;
+        assert!(matches!(
+            hooks::handle(&runtime, call(&fresh, "github_prod__get_file_contents")).await,
+            HookDecision::Refuse { .. }
+        ));
+    }
+
+    #[test]
+    fn composition_binds_helpers_to_the_bridge_and_is_deterministic() {
+        // SAFETY: tests in this module that read the variable all set the same value,
+        // and nothing else in the process reads it.
+        unsafe { std::env::set_var(BRIDGE_TOKEN_ENV, "bridge-token") };
+        let battery = || ComposeBattery {
+            name: "github".into(),
+            policy: r#"[policy]
+version = 2
+[[policy.annotator]]
+name = "github.repository-visibility"
+ranks = ["suspicious"]
+audiences = ["public"]
+marks = []
+[[policy.tool]]
+name = "mcp/github/get_file_contents"
+annotator = "github.repository-visibility"
+[externals.annotators."github.repository-visibility"]
+command = ["python3", "repository-visibility.py"]
+token_env = "APPA_PROVIDER_GITHUB_TOKEN"
+"#
+            .into(),
+            helpers: Some(HelperBinding {
+                url_base: "http://127.0.0.1:9000/api/openappa/helpers/install-1".into(),
+                token_env: BRIDGE_TOKEN_ENV.into(),
+            }),
+        };
+        let aliases = [ServerAlias {
+            alias: "github".into(),
+            targets: vec!["github_prod".into()],
+        }];
+        let root = "[policy]\nversion = 2\n";
+        let composed = compose(root, &aliases, &[battery()]).unwrap();
+        assert_eq!(composed, compose(root, &aliases, &[battery()]).unwrap());
+        let document: toml::Table = toml::from_str(&composed).unwrap();
+        let binding = &document["externals"]["annotators"]["github.repository-visibility"];
+        assert_eq!(
+            binding["url"].as_str(),
+            Some(
+                "http://127.0.0.1:9000/api/openappa/helpers/install-1/github.repository-visibility"
+            )
+        );
+        assert_eq!(binding["token_env"].as_str(), Some(BRIDGE_TOKEN_ENV));
+        assert!(binding.get("command").is_none());
+        assert_eq!(
+            document["server_aliases"]["github"]
+                .as_array()
+                .map(Vec::len),
+            Some(1)
+        );
+        // The composed bytes are a hosted document: they reload as they are.
+        assert_eq!(
+            String::from_utf8(compile(&composed).unwrap().policy_file().bytes().to_vec()).unwrap(),
+            composed
+        );
+        // An unbound helper keeps its command, which a hosted document refuses.
+        let unbound = ComposeBattery {
+            helpers: None,
+            ..battery()
+        };
+        assert!(compose(root, &aliases, &[unbound]).is_err());
+        // The root does not own the alias table.
+        assert!(
+            compose(
+                "[server_aliases]\ngithub = [\"x\"]\n[policy]\nversion = 2\n",
+                &[],
+                &[]
+            )
+            .is_err()
+        );
     }
 
     #[test]

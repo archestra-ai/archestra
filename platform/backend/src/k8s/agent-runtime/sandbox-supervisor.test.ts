@@ -127,14 +127,52 @@ echo VERIFIED
       expect(result.stdout).toContain("VERIFIED");
     }, 30_000);
 
-    it("fails an interrupted request without replaying its side effects", () => {
+    it.each([
+      true,
+      false,
+    ])("fails an interrupted request without replaying its side effects (failure file writable: %s)", (writable) => {
       const result = runInContainer(`
 mkdir -p /var/run/archestra/turns
 touch /var/run/archestra/turns/1.started
+${writable ? "" : 'mkdir "/var/run/archestra/turns/1.failure.tmp.$supervisor"'}
 printf 'touch /var/run/archestra/replayed\n' > /var/run/archestra/turns/1.request
 wait_for /var/run/archestra/turns/1.exit
 test "$(cat /var/run/archestra/turns/1.exit)" = 75
+${
+  writable
+    ? `python3 - <<'PY'
+import json
+failure = json.load(open('/var/run/archestra/turns/1.failure'))
+assert failure['version'] == 1
+assert failure['code'] == 'runtime.interrupted'
+assert 'not replayed' in failure['message']
+PY`
+    : "test ! -f /var/run/archestra/turns/1.failure"
+}
 test ! -f /var/run/archestra/replayed
+kill -0 "$supervisor"
+echo VERIFIED
+`);
+      expect(result.status, result.stderr).toBe(0);
+      expect(result.stdout).toContain("VERIFIED");
+    }, 30_000);
+
+    it("explains a crashed pane without replaying the turn", () => {
+      const result = runInContainer(`
+mkdir -p /var/run/archestra/turns
+printf 'touch /var/run/archestra/ready; sleep 60\\n' > /var/run/archestra/turns/1.request
+wait_for /var/run/archestra/ready
+pane_pid="$(tmux display-message -p -t agent '#{pane_pid}')"
+kill -KILL "$pane_pid"
+wait_for /var/run/archestra/turns/1.exit
+test "$(cat /var/run/archestra/turns/1.exit)" = 75
+python3 - <<'PY'
+import json
+failure = json.load(open('/var/run/archestra/turns/1.failure'))
+assert failure['version'] == 1
+assert failure['code'] == 'runtime.pane_exited'
+assert 'unexpectedly' in failure['message']
+PY
 echo VERIFIED
 `);
       expect(result.status, result.stderr).toBe(0);

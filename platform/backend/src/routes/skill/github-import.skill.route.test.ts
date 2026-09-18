@@ -1,3 +1,4 @@
+import { generateKeyPairSync } from "node:crypto";
 import { ADMIN_ROLE_NAME, EDITOR_ROLE_NAME } from "@archestra/shared";
 import { vi } from "vitest";
 import {
@@ -344,6 +345,58 @@ describe("POST /api/skills/github/{discover,preview,import}", () => {
         },
       });
       expect(response.statusCode).toBe(404);
+    });
+
+    test.for([
+      "discover",
+      "preview",
+      "import",
+    ] as const)("%s reports a rejected App installation as a configuration error", async (action, {
+      makeMember,
+    }) => {
+      await makeMember(ctx.user.id, ctx.organizationId, {
+        role: EDITOR_ROLE_NAME,
+      });
+      const { privateKey } = generateKeyPairSync("rsa", {
+        modulusLength: 2048,
+        privateKeyEncoding: { type: "pkcs8", format: "pem" },
+        publicKeyEncoding: { type: "spki", format: "pem" },
+      });
+      const secret = await secretManager().createSecret(
+        { apiToken: privateKey },
+        "synthetic-app",
+      );
+      const appConfig = await GithubAppConfigModel.create({
+        organizationId: ctx.organizationId,
+        name: "Synthetic App",
+        githubUrl: "https://api.github.com",
+        appId: "12345",
+        installationId: "67890",
+        secretId: secret.id,
+      });
+      const fetchMock = vi.fn(
+        async () =>
+          new Response(JSON.stringify({ message: "Not Found" }), {
+            status: 404,
+          }),
+      );
+      vi.stubGlobal("fetch", fetchMock);
+      const response = await ctx.app.inject({
+        method: "POST",
+        url: `/api/skills/github/${action}`,
+        payload: {
+          repoUrl: "example/skills",
+          githubAppConfigId: appConfig.id,
+          ...(action === "preview" ? { skillPath: "sample" } : {}),
+          ...(action === "import" ? { skillPaths: ["sample"] } : {}),
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.message).toContain(
+        "Check the app ID, installation ID",
+      );
+      expect(fetchMock).toHaveBeenCalledTimes(1);
     });
   });
 });

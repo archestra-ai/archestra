@@ -76,6 +76,12 @@ export async function resolveInstallationCredential(
 
   if (!response.ok) {
     const responseMessage = await readGithubErrorResponse(response);
+    if (response.status === 404) {
+      throw new ApiError(
+        400,
+        "GitHub App or installation was not found. Check the app ID, installation ID, and private key in Settings → Credentials.",
+      );
+    }
     throw new Error(
       [
         `Failed to create GitHub App installation token: ${response.status} ${response.statusText}`,

@@ -207,6 +207,48 @@ describe("resolveInstallationToken", () => {
     ).rejects.toThrow("Bad credentials");
   });
 
+  test("reports a missing installation as a configuration error and allows retry", async () => {
+    const credentials = makeCredentials("missing-installation");
+    await expect(
+      resolveInstallationToken(
+        credentials,
+        async () =>
+          new Response(JSON.stringify({ message: "Not Found" }), {
+            status: 404,
+          }),
+      ),
+    ).rejects.toMatchObject({
+      statusCode: 400,
+      message: expect.stringContaining("Check the app ID, installation ID"),
+    });
+
+    await expect(
+      resolveInstallationToken(
+        credentials,
+        async () =>
+          new Response(
+            JSON.stringify({
+              token: "retry-token",
+              expires_at: new Date(Date.now() + 3_600_000).toISOString(),
+            }),
+          ),
+      ),
+    ).resolves.toBe("retry-token");
+  });
+
+  test("does not classify an upstream outage as invalid configuration", async () => {
+    await expect(
+      resolveInstallationToken(
+        makeCredentials("upstream-outage"),
+        async () =>
+          new Response(JSON.stringify({ message: "Service unavailable" }), {
+            status: 503,
+            statusText: "Service Unavailable",
+          }),
+      ),
+    ).rejects.toThrow("503 Service Unavailable: Service unavailable");
+  });
+
   test("rejects when required credentials are missing", async () => {
     const fetchImpl = (async () => {
       throw new Error("should not be called");

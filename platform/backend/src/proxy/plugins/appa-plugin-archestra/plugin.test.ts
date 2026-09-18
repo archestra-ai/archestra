@@ -1,6 +1,7 @@
 import * as appaService from "@/openappa/service";
 import type { LlmProxyRequestContext } from "@/proxy/plugins/registry";
 import { describe, expect, test, vi } from "@/test";
+import { ApiError } from "@/types";
 import { AppaChatAdapter } from "./adapters/chat";
 import { AppaClaudeCodeAdapter } from "./adapters/claude-code";
 import { AppaCodexAdapter } from "./adapters/codex";
@@ -78,6 +79,135 @@ describe("APPA client adapters", () => {
 });
 
 describe("AppaPluginArchestra", () => {
+  test("rebinds a child request onto the adapter-minted trajectory", async () => {
+    const evaluateToolCalls = vi
+      .spyOn(appaService, "evaluateToolCalls")
+      .mockResolvedValue([{ kind: "allow" }]);
+    const plugin = new AppaPluginArchestra([new AppaClaudeCodeAdapter()]);
+    const context = requestContext({
+      sessionId: "user:user|s1",
+      canonicalizeToolName: (name) => name,
+    });
+    context.headers = {
+      "user-agent": "claude-code/1",
+      "x-claude-code-session-id": "s1",
+      "x-claude-code-agent-id": "a1",
+    };
+    try {
+      await plugin.onSessionInit(context);
+      await plugin.onToolCalls({
+        ...context,
+        toolCalls: [{ id: "1", name: "Bash", arguments: {} }],
+      });
+      expect(evaluateToolCalls.mock.calls[0]?.[0]).toMatchObject({
+        session_id: "user:user|s1:a1",
+        parent_id: "user:user|s1",
+      });
+    } finally {
+      evaluateToolCalls.mockRestore();
+    }
+  });
+
+  test("does not rescope a child id that already carries the caller prefix", async () => {
+    const evaluateToolCalls = vi
+      .spyOn(appaService, "evaluateToolCalls")
+      .mockResolvedValue([{ kind: "allow" }]);
+    const plugin = new AppaPluginArchestra([
+      {
+        id: "test-adapter",
+        trajectoryPrefix: "test",
+        matches: () => true,
+        classifyToolName: () => "local",
+        normalizeLocalToolName: (name) => name,
+        isSpawnTool: () => false,
+        namesChildren: () => [],
+        bindChildTrajectory: () => ({
+          sessionId: "user:user|s1:a1",
+          parentId: "user:user|s1",
+        }),
+      },
+    ]);
+    const context = requestContext({
+      sessionId: "user:user|s1",
+      canonicalizeToolName: (name) => name,
+    });
+    try {
+      await plugin.onSessionInit(context);
+      await plugin.onToolCalls({
+        ...context,
+        toolCalls: [{ id: "1", name: "Bash", arguments: {} }],
+      });
+      expect(evaluateToolCalls.mock.calls[0]?.[0]).toMatchObject({
+        session_id: "user:user|s1:a1",
+        parent_id: "user:user|s1",
+      });
+    } finally {
+      evaluateToolCalls.mockRestore();
+    }
+  });
+
+  test("leaves minted child ids unscoped when the session has no caller", async () => {
+    const evaluateToolCalls = vi
+      .spyOn(appaService, "evaluateToolCalls")
+      .mockResolvedValue([{ kind: "allow" }]);
+    const plugin = new AppaPluginArchestra([new AppaClaudeCodeAdapter()]);
+    const context = requestContext({
+      sessionId: "s1",
+      canonicalizeToolName: (name) => name,
+      callerId: null,
+    });
+    context.headers = {
+      "user-agent": "claude-code/1",
+      "x-claude-code-session-id": "s1",
+      "x-claude-code-agent-id": "a1",
+    };
+    try {
+      await plugin.onSessionInit(context);
+      await plugin.onToolCalls({
+        ...context,
+        toolCalls: [{ id: "1", name: "Bash", arguments: {} }],
+      });
+      expect(evaluateToolCalls.mock.calls[0]?.[0]).toMatchObject({
+        session_id: "s1:a1",
+        parent_id: "s1",
+      });
+    } finally {
+      evaluateToolCalls.mockRestore();
+    }
+  });
+
+  test("refuses a tool call that names a child outside this parent", async () => {
+    const evaluateToolCalls = vi.spyOn(appaService, "evaluateToolCalls");
+    const plugin = new AppaPluginArchestra([
+      {
+        id: "test-adapter",
+        trajectoryPrefix: "test",
+        matches: () => true,
+        classifyToolName: () => "local",
+        normalizeLocalToolName: (name) => name,
+        isSpawnTool: () => false,
+        namesChildren: () => ["foreign:child"],
+        bindChildTrajectory: () => undefined,
+      },
+    ]);
+    const context = requestContext({
+      sessionId: "s1",
+      canonicalizeToolName: (name) => name,
+    });
+    try {
+      await plugin.onSessionInit(context);
+      await expect(
+        plugin.onToolCalls({
+          ...context,
+          toolCalls: [{ id: "1", name: "Read", arguments: {} }],
+        }),
+      ).rejects.toBeInstanceOf(ApiError);
+      expect(evaluateToolCalls).not.toHaveBeenCalled();
+    } finally {
+      evaluateToolCalls.mockRestore();
+    }
+  });
+
   test("keeps bindings private to each request and deletes them at cleanup", async () => {
     const canonicalizedNames: string[] = [];
     const evaluateToolCalls = vi
@@ -89,9 +219,13 @@ describe("AppaPluginArchestra", () => {
     const plugin = new AppaPluginArchestra([
       {
         id: "test-adapter",
+        trajectoryPrefix: "test",
         matches: () => true,
         classifyToolName: () => "local",
         normalizeLocalToolName: (name) => `local:${name}`,
+        isSpawnTool: () => false,
+        namesChildren: () => [],
+        bindChildTrajectory: () => undefined,
       },
     ]);
     const first = requestContext({
@@ -446,6 +580,7 @@ describe("rendering runtime text for this client", () => {
 function requestContext(params: {
   sessionId: string;
   canonicalizeToolName: (name: string) => string;
+  callerId?: string | null;
 }): LlmProxyRequestContext {
   return {
     requestId: params.sessionId,
@@ -463,7 +598,9 @@ function requestContext(params: {
         {
           session: {
             organization_id: "organization",
-            caller_id: "user:user",
+            ...(params.callerId === null
+              ? {}
+              : { caller_id: params.callerId ?? "user:user" }),
             session_id: params.sessionId,
           },
           profileId: "profile",

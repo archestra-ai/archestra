@@ -112,6 +112,63 @@ describe("chat tool execution", () => {
     });
   });
 
+  test("ask_user rejects duplicate option labels", async () => {
+    mockContext = {
+      ...mockContext,
+      elicitation: {
+        elicit: async () => ({
+          status: "answered" as const,
+          result: { action: "accept" as const, content: { choice: "A" } },
+        }),
+      },
+    };
+
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}ask_user`,
+      {
+        question: "Pick one",
+        options: [{ label: "A" }, { label: "A" }],
+      },
+      mockContext,
+    );
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain("unique");
+  });
+
+  test("ask_user maps multi-choice option_N keys to labels", async () => {
+    mockContext = {
+      ...mockContext,
+      elicitation: {
+        elicit: async () => ({
+          status: "answered" as const,
+          result: {
+            action: "accept" as const,
+            content: { option_0: true, option_1: false, option_2: true },
+          },
+        }),
+      },
+    };
+
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}ask_user`,
+      {
+        question: "Pick any",
+        allowMultiple: true,
+        options: [
+          { label: "Accept for this session" },
+          { label: "Do not accept" },
+          { label: "Ask later" },
+        ],
+      },
+      mockContext,
+    );
+    expect(result.isError).toBe(false);
+    expect(result.structuredContent).toEqual({
+      action: "accept",
+      selected: ["Accept for this session", "Ask later"],
+    });
+  });
+
   test("ask_user returns decline without selected options", async () => {
     mockContext = {
       ...mockContext,

@@ -4,6 +4,7 @@ import {
 } from "@archestra/shared";
 import { z } from "zod";
 import logger from "@/logging";
+import { archestraMcpBranding } from "./branding";
 import {
   catchError,
   defineArchestraTool,
@@ -95,8 +96,7 @@ const registry = defineArchestraTools([
   defineArchestraTool({
     shortName: TOOL_ASK_USER_SHORT_NAME,
     title: "Ask User",
-    description:
-      "Ask the user to pick from a short list of options. Prefer the client's native question or elicitation tool when one exists (Claude Code AskUserQuestion, Codex, OpenCode). If that tool is not available, you MUST call this tool — Archestra Chat shows a checkbox form, and MCP clients use elicitation/create. Never ask a multiple-choice question in plain text (yes/no, which remedy to accept, which approach to take). Do not use this for open-ended questions.",
+    description: `Ask the user to pick from a short list of options. Prefer the client's native question or elicitation tool when one exists (Claude Code AskUserQuestion, Codex, OpenCode). If that tool is not available, you MUST call this tool — ${archestraMcpBranding.appName} chat shows a checkbox form, and MCP clients use elicitation/create. Never ask a multiple-choice question in plain text (yes/no, which remedy to accept, which approach to take). Do not use this for open-ended questions.`,
     schema: z
       .object({
         question: z
@@ -181,6 +181,7 @@ export const tools = registry.tools;
 function buildSingleChoiceSchema(
   options: Array<{ label: string; description?: string }>,
 ) {
+  const enumDescriptions = options.map((option) => option.description);
   return {
     type: "object" as const,
     properties: {
@@ -188,11 +189,17 @@ function buildSingleChoiceSchema(
         type: "string" as const,
         title: "Choice",
         enum: options.map((option) => option.label),
-        enumDescriptions: options.map((option) => option.description ?? ""),
+        ...(enumDescriptions.some((description) => description)
+          ? { enumDescriptions }
+          : {}),
       },
     },
     required: ["choice"],
   };
+}
+
+function optionKey(index: number) {
+  return `option_${index}`;
 }
 
 function buildMultiChoiceSchema(
@@ -201,8 +208,8 @@ function buildMultiChoiceSchema(
   return {
     type: "object" as const,
     properties: Object.fromEntries(
-      options.map((option) => [
-        option.label,
+      options.map((option, index) => [
+        optionKey(index),
         {
           type: "boolean" as const,
           title: option.label,
@@ -231,7 +238,9 @@ function selectedLabels(params: {
     return typeof choice === "string" && allowed.has(choice) ? [choice] : [];
   }
 
-  return options
-    .map((option) => option.label)
-    .filter((label) => record[label] === true);
+  return options.flatMap((option, index) =>
+    record[optionKey(index)] === true && allowed.has(option.label)
+      ? [option.label]
+      : [],
+  );
 }

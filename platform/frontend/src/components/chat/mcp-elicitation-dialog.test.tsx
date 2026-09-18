@@ -82,7 +82,6 @@ describe("McpElicitationDialog", () => {
       screen.getByRole("textbox", { name: /recipient name/i }),
       "Avery Test",
     );
-    await user.click(screen.getByRole("checkbox", { name: "morning" }));
     await user.type(screen.getByRole("spinbutton", { name: /quantity/i }), "3");
     await user.click(screen.getByRole("button", { name: /continue/i }));
 
@@ -169,8 +168,9 @@ describe("McpElicitationDialog", () => {
     expect(
       screen.getByText("Accept this change for the rest of this session?"),
     ).toBeInTheDocument();
+    expect(screen.getByRole("radiogroup")).toBeInTheDocument();
     await user.click(
-      screen.getByRole("checkbox", { name: "Accept for this session" }),
+      screen.getByRole("radio", { name: "Accept for this session" }),
     );
     await user.click(screen.getByRole("button", { name: /continue/i }));
 

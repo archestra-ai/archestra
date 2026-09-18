@@ -576,26 +576,26 @@ pub async fn load_offer_review(
         .ok_or_else(|| error("OpenAPPA is not initialized"))?;
     let pg = postgres_store(&state.store)?;
     let session_id_for_output = session_id.clone();
+    // The SQL closure needs its own offer id copy because it must be 'static.
     let target_offer_id = offer_id.clone();
     let review_text = pg
         .with_client(move |client| {
-            let rows = client.query(
-                "SELECT decision FROM openappa_operations WHERE organization_id=$1 AND session_id=$2 AND status='complete' AND decision->'review' IS NOT NULL ORDER BY created_at DESC",
-                &[&organization_id, &session_id],
+            // session_id is the leading PK column of openappa_operations, and
+            // organization_id is an additional tenancy guard. The JSONB match
+            // is pushed into SQL so only the matching entry's text crosses the
+            // boundary instead of every reviewed decision.
+            let row = client.query_opt(
+                "SELECT entry->>'text' AS text \
+                 FROM openappa_operations o \
+                 CROSS JOIN LATERAL jsonb_array_elements(o.decision->'review') AS entry \
+                 WHERE o.organization_id=$1 AND o.session_id=$2 AND o.status='complete' \
+                 AND o.decision->'review' IS NOT NULL \
+                 AND entry->>'offer_id' = $3 \
+                 ORDER BY o.created_at DESC \
+                 LIMIT 1",
+                &[&organization_id, &session_id, &target_offer_id],
             )?;
-            for row in rows {
-                let decision: Value = row.get("decision");
-                if let Some(review_entries) = decision.get("review").and_then(|r| r.as_array()) {
-                    for entry in review_entries {
-                        if entry.get("offer_id").and_then(|o| o.as_str()) == Some(&target_offer_id) {
-                            if let Some(text) = entry.get("text").and_then(|t| t.as_str()) {
-                                return Ok(Some(text.to_owned()));
-                            }
-                        }
-                    }
-                }
-            }
-            Ok(None)
+            Ok(row.map(|row| row.get::<_, String>("text")))
         })
         .map_err(error)?;
 

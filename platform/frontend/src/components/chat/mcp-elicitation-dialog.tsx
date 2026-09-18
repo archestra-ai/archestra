@@ -75,9 +75,10 @@ export function McpElicitationDialog({
     return null;
   }
 
-  const isRemedyApproval =
-    request.toolName.includes("execute_remedy_plan") ||
-    request.message.startsWith("[appa]");
+  // The only interactive human review is the OpenAPPA remedy plan control
+  // tool; match on the explicit tool name, not message text, so other policy
+  // notices can never render approval controls.
+  const isRemedyApproval = request.toolName.includes("execute_remedy_plan");
 
   const submit = async () => {
     const validationErrors = validateValues(fields, values);

@@ -16,7 +16,6 @@ use appa_runtime::{
         EmbeddedPresentationOptions, ExecuteRemedyPlanArgs, RemedyOutcome, RemedyPresentation,
         RemedyRefusal, Runtime,
     },
-    config::Config,
     hooks,
 };
 use appa_runtime_api::{
@@ -45,7 +44,6 @@ static STATE: OnceLock<Mutex<Option<State>>> = OnceLock::new();
 
 struct State {
     runtime: Arc<Runtime>,
-    config: Config,
     store: Arc<LogStore>,
     policy_content: String,
     reporting: Option<ReportingOptions>,
@@ -282,11 +280,9 @@ pub async fn initialize_openappa(
         config.reporting.agent_yell = reporting.is_some();
         let store =
             Arc::new(LogStore::open(Backend::Postgres { url: database_url }).map_err(error)?);
-        let runtime =
-            Runtime::open_with_store(config.clone(), store.clone(), None).map_err(error)?;
+        let runtime = Runtime::open_with_store(config, store.clone(), None).map_err(error)?;
         Ok(State {
             runtime: Arc::new(runtime),
-            config,
             store,
             policy_content,
             reporting,
@@ -400,8 +396,7 @@ async fn run(input: Input, policy_content: Option<String>) -> napi::Result<Strin
         {
             let mut config = policy::compile(&content).map_err(error)?;
             config.reporting.agent_yell = state.reporting.is_some();
-            state.runtime.reload(config.clone()).map_err(error)?;
-            state.config = config;
+            state.runtime.reload(config).map_err(error)?;
             state.policy_content = content;
         }
         state.dispatch(input).await
@@ -410,17 +405,8 @@ async fn run(input: Input, policy_content: Option<String>) -> napi::Result<Strin
     .await;
     match result {
         Ok(Ok(value)) => Ok(value.to_string()),
-        failure => {
-            // A rollback must also discard tentative in-memory vouches and
-            // turn markers. Durable pending receipts remain fail-closed.
-            let rebuilt = Runtime::open_with_store(state.config.clone(), state.store.clone(), None)
-                .map_err(error)?;
-            state.runtime = Arc::new(rebuilt);
-            match failure {
-                Ok(Err(error)) => Err(error),
-                _ => Err(error("OpenAPPA panicked; operation was not released")),
-            }
-        }
+        Ok(Err(error)) => Err(error),
+        Err(_) => Err(error("OpenAPPA panicked; operation was not released")),
     }
 }
 

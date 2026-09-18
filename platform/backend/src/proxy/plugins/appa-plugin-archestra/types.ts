@@ -39,8 +39,9 @@ export type AppaClientAdapter = {
   /** True when this local tool starts a delegated child run. */
   isSpawnTool(name: string): boolean;
   /**
-   * Family children a call's arguments name, in the same namespace as
-   * `bindChildTrajectory` mints, so `names_children` matches opened children.
+   * Identifies child trajectories named in a call's arguments, in the same
+   * namespace `bindChildTrajectory` mints, so names_children matches opened
+   * children.
    */
   namesChildren(params: { rootId: string; arguments: unknown }): string[];
   /**

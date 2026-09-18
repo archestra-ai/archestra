@@ -45,17 +45,11 @@ export class AppaOpenCodeAdapter implements AppaClientAdapter {
   }
 
   namesChildren(params: { rootId: string; arguments: unknown }): string[] {
-    const prefix = `${params.rootId}:`;
     return namesChildrenFromArguments({
       rootId: params.rootId,
       arguments: params.arguments,
       pathPatterns: [],
       idKeys: CHILD_ID_KEYS,
-    }).filter((child) => {
-      const native = child.startsWith(prefix)
-        ? child.slice(prefix.length)
-        : child;
-      return native !== params.rootId;
     });
   }
 

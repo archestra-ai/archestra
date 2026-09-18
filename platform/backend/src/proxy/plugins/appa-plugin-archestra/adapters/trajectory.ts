@@ -28,8 +28,10 @@ export function namesChildrenFromArguments(params: {
     params.pathPatterns,
     params.idKeys,
   );
-  agents.sort();
-  const unique = [...new Set(agents)];
+  const unique = [...new Set(agents)].filter(
+    (agent) => agent !== params.rootId,
+  );
+  unique.sort();
   return unique.map((agent) =>
     mintChildTrajectoryId({ parentId: params.rootId, childNativeId: agent }),
   );
@@ -186,13 +188,13 @@ function agentFileIds(text: string, prefix: string, suffix: string): string[] {
     }
     const rest = text.slice(at + prefix.length);
     let length = 0;
-    while (length < rest.length && isIdChar(rest[length] ?? "")) length += 1;
+    while (length < rest.length && isIdChar(rest.charAt(length))) length += 1;
     const id = rest.slice(0, length);
     const tail = rest.slice(length);
     if (
       id.length > 0 &&
       tail.startsWith(suffix) &&
-      !isNameChar(tail[suffix.length] ?? "")
+      !isNameChar(tail.charAt(suffix.length))
     ) {
       ids.push(id);
     }

@@ -106,6 +106,12 @@ describe("APPA child trajectory adapters", () => {
       }),
     ).toEqual(["thread-parent:thread-child"]);
     expect(
+      codex.namesChildren({
+        rootId: "thread-parent",
+        arguments: { agent_id: "thread-parent", thread_id: "thread-child" },
+      }),
+    ).toEqual(["thread-parent:thread-child"]);
+    expect(
       openCode.namesChildren({
         rootId: "sess-parent",
         arguments: { task_id: "sess-child" },
@@ -203,6 +209,30 @@ describe("APPA child trajectory adapters", () => {
     expect(() =>
       claudeCode.bindChildTrajectory({
         headers: { "x-appa-parent-id": "s1" },
+        requestBody: {},
+      }),
+    ).toThrow(ApiError);
+
+    expect(() =>
+      codex.bindChildTrajectory({
+        headers: {
+          "x-codex-turn-metadata": JSON.stringify({
+            parent_thread_id: "thread-parent",
+            agent_id: "thread-child",
+          }),
+          "x-appa-parent-id": "other-root",
+        },
+        requestBody: {},
+      }),
+    ).toThrow(ApiError);
+
+    expect(() =>
+      openCode.bindChildTrajectory({
+        headers: {
+          "x-opencode-session": "sess-child",
+          "x-session-id": "sess-parent",
+          "x-appa-parent-id": "other-root",
+        },
         requestBody: {},
       }),
     ).toThrow(ApiError);

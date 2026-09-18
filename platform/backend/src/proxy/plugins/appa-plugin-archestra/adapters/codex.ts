@@ -57,7 +57,7 @@ export class AppaCodexAdapter implements AppaClientAdapter {
       arguments: params.arguments,
       pathPatterns: [],
       idKeys: CHILD_ID_KEYS,
-    }).filter((child) => childNativeId(params.rootId, child) !== params.rootId);
+    });
   }
 
   bindChildTrajectory(context: AppaMatchContext) {
@@ -69,11 +69,6 @@ export class AppaCodexAdapter implements AppaClientAdapter {
       childNativeId,
     });
   }
-}
-
-function childNativeId(rootId: string, childId: string): string {
-  const prefix = `${rootId}:`;
-  return childId.startsWith(prefix) ? childId.slice(prefix.length) : childId;
 }
 
 function parentThreadId(context: AppaMatchContext): string | undefined {

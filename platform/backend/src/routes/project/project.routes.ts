@@ -10,6 +10,7 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { userHasPermission } from "@/auth";
 import { ProjectLabelModel, ProjectModel } from "@/models";
+import { agentRunReconciler } from "@/services/agent-runtime/reconciler";
 import { projectService } from "@/services/project";
 import { transferResourceOwnership } from "@/services/resource-ownership";
 import {
@@ -727,11 +728,16 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, organizationId, user }) =>
-      projectService.listExecutions({
-        id,
-        organizationId,
-        userId: user.id,
-      }),
+      (
+        await projectService.listExecutions({
+          id,
+          organizationId,
+          userId: user.id,
+        })
+      ).map((run) => ({
+        ...run,
+        terminalRetained: agentRunReconciler.hasRetainedTerminal(run.taskId),
+      })),
   );
 
   fastify.put(

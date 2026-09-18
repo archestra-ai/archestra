@@ -26,7 +26,6 @@ import {
   TeamModel,
   UserModel,
 } from "@/models";
-import { agentRunReconciler } from "@/services/agent-runtime/reconciler";
 import { fileStore } from "@/skills-sandbox/file-store";
 import { validateProjectName } from "@/skills-sandbox/project-name";
 import type {
@@ -1065,7 +1064,7 @@ class ProjectService {
     id: string;
     organizationId: string;
     userId: string;
-  }): Promise<GetAgentRunResponse[]> {
+  }): Promise<Omit<GetAgentRunResponse, "terminalRetained">[]> {
     const project = await this.requireReadable(params);
     const canReadAll = await this.callerCanReadAllProjectSessions(params);
     const rows = await AgentRunModel.listForProject({
@@ -1075,7 +1074,6 @@ class ProjectService {
     });
     return rows.map((row) => ({
       ...row,
-      terminalRetained: agentRunReconciler.hasRetainedTerminal(row.taskId),
       viewerRole: row.actorUserId === params.userId ? "owner" : "shared",
     }));
   }

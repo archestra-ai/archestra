@@ -215,6 +215,7 @@ export interface ArchestraPromptInputProps
   onRestoreExternalMcpSkillAttachment?: (
     skill: ChatExternalMcpSkillMetadata,
   ) => void;
+  placeholderPreview?: string | null;
   /** Render the new-chat composer as a dedicated runtime launcher. */
   runtimeMode?: boolean;
   runtimeAgentName?: string;
@@ -281,6 +282,7 @@ const PromptInputContent = ({
   externalMcpSkillAttachment,
   onRemoveExternalMcpSkillAttachment,
   onRestoreExternalMcpSkillAttachment,
+  placeholderPreview,
   runtimeMode = false,
   runtimeAgentName,
 }: Omit<ArchestraPromptInputProps, "onSubmit"> & {
@@ -352,6 +354,16 @@ const PromptInputContent = ({
     animate: orgData?.animateChatPlaceholders ?? true,
     placeholders: orgData?.chatPlaceholders,
   });
+
+  const defaultPlaceholder = runtimeMode
+    ? "Describe the task to run..."
+    : conversationId
+      ? "Ask a follow-up..."
+      : (chatPlaceholder ?? "What would you like to get done?");
+  const placeholder =
+    placeholderPreview && controller.textInput.value.length === 0
+      ? placeholderPreview
+      : defaultPlaceholder;
 
   // Skills exposed as slash commands whenever the org's skill tools are on —
   // the same flag that gates the backend's activation injection.
@@ -1058,13 +1070,7 @@ const PromptInputContent = ({
         </PromptInputAttachments>
         <PromptInputBody>
           <PromptInputTextarea
-            placeholder={
-              runtimeMode
-                ? "Describe the task to run..."
-                : conversationId
-                  ? "Ask a follow-up..."
-                  : (chatPlaceholder ?? "What would you like to get done?")
-            }
+            placeholder={placeholder}
             ref={textareaRef}
             className="px-4"
             autoFocus
@@ -1228,6 +1234,7 @@ const ArchestraPromptInput = ({
   externalMcpSkillAttachment,
   onRemoveExternalMcpSkillAttachment,
   onRestoreExternalMcpSkillAttachment,
+  placeholderPreview,
   runtimeMode,
   runtimeAgentName,
 }: ArchestraPromptInputProps) => {
@@ -1339,6 +1346,7 @@ const ArchestraPromptInput = ({
           sandboxAvailable={sandboxAvailable}
           lockedChat={lockedChat}
           onLockedChatChange={onLockedChatChange}
+          placeholderPreview={placeholderPreview}
           runtimeMode={runtimeMode}
           runtimeAgentName={runtimeAgentName}
           prefillText={prefillText}

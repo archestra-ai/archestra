@@ -195,6 +195,51 @@ describe("openappa remedy plan HITL execution", () => {
     );
   });
 
+  test("chat client: accept without a valid content action fails closed to undefined ruling", async () => {
+    vi.spyOn(openappaService, "loadOfferReview").mockResolvedValue({
+      offer_id: "offer-hitl",
+      text: "Approve this email?",
+      session_id: "session-1",
+    });
+    const executeSpy = vi
+      .spyOn(openappaService, "executeRemedyByOffer")
+      .mockResolvedValue({
+        result: {
+          content: [{ type: "text", text: "email-operator gave no answer" }],
+        },
+        known: true,
+      });
+
+    // Malformed answer: accepted the elicitation but no explicit approve/deny.
+    const elicitSpy = vi.fn().mockResolvedValue({
+      status: "answered",
+      result: { action: "accept" },
+    });
+
+    const chatContext: ArchestraContext = {
+      ...mockContext,
+      elicitation: {
+        elicit: elicitSpy,
+      } as any,
+    };
+
+    await executeArchestraTool(
+      toolFullName,
+      {
+        ...signedRemedyArgs(orgId, "offer-hitl"),
+        plan: "Human review",
+      },
+      chatContext,
+    );
+
+    expect(executeSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        args: { offer_id: "offer-hitl" },
+        ruling: undefined,
+      }),
+    );
+  });
+
   test("chat client: user cancels passes undefined ruling (yields NoAnswer)", async () => {
     vi.spyOn(openappaService, "loadOfferReview").mockResolvedValue({
       offer_id: "offer-hitl",

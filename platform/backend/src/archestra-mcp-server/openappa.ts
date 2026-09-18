@@ -233,17 +233,9 @@ const registry = defineArchestraTools([
               required: ["action"],
             },
           });
-          // Unified elicitation protocol: Chat and MRTR clients both resolve to
-          // an { action, content } envelope where action="accept" with content.action="approve"
-          // yields approve, action="decline" yields deny, and action="cancel" yields undefined (NoAnswer).
-          if (outcome.status === "answered") {
-            if (outcome.result.action === "accept") {
-              const contentAction = outcome.result.content?.action;
-              ruling = contentAction === "deny" ? "deny" : "approve";
-            } else if (outcome.result.action === "decline") {
-              ruling = "deny";
-            }
-          }
+          ruling = parseHitlRuling(
+            outcome.status === "answered" ? outcome.result : undefined,
+          );
         } else if (context.mrtr) {
           // MCP Gateway client (Claude Code, etc.)
           const supportsElicit = clientSupportsInputRequest({
@@ -251,17 +243,11 @@ const registry = defineArchestraTools([
             request: { method: "elicitation/create" },
           });
           if (supportsElicit) {
-            const supplied = context.mrtr.inputResponses?.[
-              GATEWAY_INPUT_REQUEST_KEY
-            ] as { action?: string; content?: { action?: string } } | undefined;
+            const supplied =
+              context.mrtr.inputResponses?.[GATEWAY_INPUT_REQUEST_KEY];
             if (supplied !== undefined) {
-              // Retry round: consume verified user answer from requestState using the same envelope shape.
-              if (supplied.action === "accept") {
-                ruling =
-                  supplied.content?.action === "deny" ? "deny" : "approve";
-              } else if (supplied.action === "decline") {
-                ruling = "deny";
-              }
+              // Retry round: consume the verified user answer from requestState.
+              ruling = parseHitlRuling(supplied);
             } else {
               // Initial round: ask the human via native MCP elicitation
               throw new InputRequiredSignal({
@@ -331,6 +317,31 @@ function unknownOfferResult() {
       },
     ],
   };
+}
+
+/**
+ * Parses the unified elicitation envelope shared by the chat bridge and MRTR
+ * requestState into a remedy ruling. `accept` must carry an explicit
+ * `approve`/`deny` content action: a malformed or missing content action is
+ * NOT treated as approval — it yields no ruling, so the upstream runtime
+ * resolves the review as `NoAnswer` (fail closed). `decline` maps to deny;
+ * `cancel`, absence, or any unrecognized shape also yields no ruling.
+ */
+function parseHitlRuling(envelope: unknown): "approve" | "deny" | undefined {
+  if (typeof envelope !== "object" || envelope === null) return undefined;
+  const { action, content } = envelope as {
+    action?: unknown;
+    content?: unknown;
+  };
+  if (action === "decline") return "deny";
+  if (action !== "accept") return undefined;
+  const contentAction =
+    typeof content === "object" && content !== null
+      ? (content as { action?: unknown }).action
+      : undefined;
+  if (contentAction === "approve") return "approve";
+  if (contentAction === "deny") return "deny";
+  return undefined;
 }
 
 export function isOpenappaTool(shortName: string | null | undefined): boolean {

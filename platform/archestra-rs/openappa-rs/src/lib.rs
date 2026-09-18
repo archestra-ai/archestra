@@ -583,7 +583,10 @@ pub async fn load_offer_review(
             // session_id is the leading PK column of openappa_operations, and
             // organization_id is an additional tenancy guard. The JSONB match
             // is pushed into SQL so only the matching entry's text crosses the
-            // boundary instead of every reviewed decision.
+            // boundary instead of every reviewed decision. The lateral join
+            // scans each reviewed decision's entries linearly, which is
+            // bounded by the handful of review entries a policy's DenyCall
+            // carries; it is not sized for unbounded per-decision reviews.
             let row = client.query_opt(
                 "SELECT entry->>'text' AS text \
                  FROM openappa_operations o \

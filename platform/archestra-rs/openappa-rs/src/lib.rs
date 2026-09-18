@@ -16,7 +16,6 @@ use appa_runtime::{
         EmbeddedPresentationOptions, ExecuteRemedyPlanArgs, RemedyOutcome, RemedyPresentation,
         RemedyRefusal, Runtime,
     },
-    config::Config,
     hooks,
 };
 use appa_runtime_api::{
@@ -42,8 +41,8 @@ pub struct ReportingOptions {
     pub hostname: Option<String>,
 }
 
-/// Process-wide runtime slot. The mutex covers initialize, policy reload, and
-/// panic rebuild only. Dispatch runs concurrently: same-trajectory exclusion
+/// Process-wide runtime slot. The mutex covers initialize and policy reload
+/// only. Dispatch runs concurrently: same-trajectory exclusion
 /// is the in-process root lock plus the ledger's advisory session lock, and
 /// every ledger write is a short self-committing transaction, so no outer
 /// transaction ever spans hook I/O.
@@ -52,7 +51,6 @@ static STATE: OnceLock<Mutex<Option<State>>> = OnceLock::new();
 #[derive(Clone)]
 struct State {
     runtime: Arc<Runtime>,
-    config: Config,
     store: Arc<LogStore>,
     policy_content: String,
     reporting: Option<ReportingOptions>,
@@ -305,11 +303,9 @@ pub async fn initialize_openappa(
         config.reporting.agent_yell = reporting.is_some();
         let store =
             Arc::new(LogStore::open(Backend::Postgres { url: database_url }).map_err(error)?);
-        let runtime =
-            Runtime::open_with_store(config.clone(), store.clone(), None).map_err(error)?;
+        let runtime = Runtime::open_with_store(config, store.clone(), None).map_err(error)?;
         Ok(State {
             runtime: Arc::new(runtime),
-            config,
             store,
             policy_content,
             reporting,
@@ -427,12 +423,10 @@ async fn run(input: Input, policy_content: Option<String>) -> napi::Result<Strin
                 // to acquire the mutex wins and the first reload is replaced.
                 // Each dispatch runs one hook event, and a session attaches
                 // one deployment snapshot per event, so an in-flight dispatch
-                // below keeps a coherent policy view either way; this clone's
-                // `config` is only read by the rebuild path under the mutex.
+                // below keeps a coherent policy view either way.
                 let mut config = policy::compile(&content).map_err(error)?;
                 config.reporting.agent_yell = state.reporting.is_some();
-                state.runtime.reload(config.clone()).map_err(error)?;
-                state.config = config;
+                state.runtime.reload(config).map_err(error)?;
                 state.policy_content = content;
             }
             state.clone()
@@ -443,26 +437,8 @@ async fn run(input: Input, policy_content: Option<String>) -> napi::Result<Strin
     .await;
     match result {
         Ok(Ok(value)) => Ok(value.to_string()),
-        failure => {
-            // A rollback must also discard tentative in-memory vouches and
-            // turn markers. Durable pending receipts remain fail-closed.
-            // Dispatches already in flight keep their cloned `Arc<Runtime>`:
-            // that is safe because each hook event rebuilds its engine view
-            // from the durable log, the discarded tentative state is exactly
-            // what a failure must drop, and their receipts fence the same
-            // trajectory against the rebuilt runtime until they settle.
-            let mut slot = state_mutex().lock().await;
-            if let Some(state) = slot.as_mut() {
-                let rebuilt =
-                    Runtime::open_with_store(state.config.clone(), state.store.clone(), None)
-                        .map_err(error)?;
-                state.runtime = Arc::new(rebuilt);
-            }
-            match failure {
-                Ok(Err(error)) => Err(error),
-                _ => Err(error("OpenAPPA panicked; operation was not released")),
-            }
-        }
+        Ok(Err(error)) => Err(error),
+        Err(_) => Err(error("OpenAPPA panicked; operation was not released")),
     }
 }
 

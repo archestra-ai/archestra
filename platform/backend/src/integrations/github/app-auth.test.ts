@@ -1,4 +1,9 @@
-import { generateKeyPairSync } from "node:crypto";
+import {
+  createPrivateKey,
+  createPublicKey,
+  generateKeyPairSync,
+} from "node:crypto";
+import { jwtVerify } from "jose";
 import { describe, expect, test } from "vitest";
 import { resolveInstallationToken } from "./app-auth";
 
@@ -19,6 +24,100 @@ function makeCredentials(installationId: string) {
 }
 
 describe("resolveInstallationToken", () => {
+  test.each([
+    "pkcs1",
+    "pkcs8",
+    "escaped",
+  ] as const)("signs a verifiable JWT with a %s private key", async (format) => {
+    const pem =
+      format === "pkcs1"
+        ? createPrivateKey(privateKey)
+            .export({ type: "pkcs1", format: "pem" })
+            .toString()
+        : format === "escaped"
+          ? privateKey.replace(/\n/g, "\\n")
+          : privateKey;
+    const token = await resolveInstallationToken(
+      { ...makeCredentials(`key-format-${format}`), privateKey: pem },
+      async (_url, init) => {
+        const jwt = new Headers(init?.headers)
+          .get("Authorization")
+          ?.replace(/^Bearer /, "");
+        expect(jwt).toBeDefined();
+        const { payload } = await jwtVerify(
+          jwt as string,
+          createPublicKey(privateKey),
+          { algorithms: ["RS256"], issuer: "12345" },
+        );
+        expect(payload.exp).toBeGreaterThan(Date.now() / 1000);
+        return new Response(
+          JSON.stringify({
+            token: "valid-key-token",
+            expires_at: new Date(Date.now() + 3_600_000).toISOString(),
+          }),
+        );
+      },
+    );
+    expect(token).toBe("valid-key-token");
+  });
+
+  test("rejects an encrypted private key as a configuration error without exposing it", async () => {
+    const encryptedKey = createPrivateKey(privateKey)
+      .export({
+        type: "pkcs8",
+        format: "pem",
+        cipher: "aes-256-cbc",
+        passphrase: "synthetic-passphrase",
+      })
+      .toString();
+    let networkCalls = 0;
+    await expect(
+      resolveInstallationToken(
+        { ...makeCredentials("encrypted-key"), privateKey: encryptedKey },
+        async () => {
+          networkCalls++;
+          throw new Error("Unexpected network request");
+        },
+      ),
+    ).rejects.toMatchObject({
+      statusCode: 400,
+      type: "api_validation_error",
+      message:
+        "GitHub App private key is invalid. Reconnect with the complete, unencrypted RSA private key PEM from GitHub.",
+    });
+    expect(networkCalls).toBe(0);
+  });
+
+  test("rejects readable keys that cannot sign RS256 before contacting GitHub", async () => {
+    const unsupportedKeys = [
+      generateKeyPairSync("ec", { namedCurve: "P-256" }).privateKey,
+      generateKeyPairSync("ed25519").privateKey,
+      generateKeyPairSync("rsa-pss", { modulusLength: 2048 }).privateKey,
+      generateKeyPairSync("rsa", { modulusLength: 1024 }).privateKey,
+    ];
+    let networkCalls = 0;
+    for (const key of unsupportedKeys) {
+      await expect(
+        resolveInstallationToken(
+          {
+            ...makeCredentials("unsupported-signing-key"),
+            privateKey: key.export({ type: "pkcs8", format: "pem" }).toString(),
+          },
+          async () => {
+            networkCalls++;
+            throw new Error("Unexpected network request");
+          },
+        ),
+      ).rejects.toMatchObject({
+        statusCode: 400,
+        type: "api_validation_error",
+        message:
+          "GitHub App private key is invalid. Reconnect with the complete, unencrypted RSA private key PEM from GitHub.",
+      });
+    }
+    expect(networkCalls).toBe(0);
+  });
+
   test("uses the signing key from an App connection that also supports user sign-in", async () => {
     const token = await resolveInstallationToken(
       {

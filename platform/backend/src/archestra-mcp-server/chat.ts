@@ -151,16 +151,22 @@ const registry = defineArchestraTools([
         return errorResult(NO_CHOICE_FORM_MESSAGE);
       }
 
-      const { result } = outcome;
+      // No answer in time reads as a dismissal: nothing was accepted.
+      const result =
+        outcome.status === "answered"
+          ? outcome.result
+          : { action: "cancel" as const };
       const liveOffers = verifiedOfferIds(args.remedy_offers, context);
       if (result.action !== "accept") {
         const action = result.action === "decline" ? "decline" : "cancel";
         return structuredSuccessResult(
           { action, selected: [] },
           [
-            action === "decline"
-              ? "The user declined to pick."
-              : "The user dismissed the question.",
+            outcome.status === "unanswered"
+              ? "The user did not answer the question in time."
+              : action === "decline"
+                ? "The user declined to pick."
+                : "The user dismissed the question.",
             liveOffers.length > 0
               ? "The user did not accept the remedy. Do not retry the blocked call and do not ask again. Tell the user the action stays blocked."
               : "Do not proceed with the question.",

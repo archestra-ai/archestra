@@ -34,11 +34,13 @@ import {
   CallToolRequestSchema,
   type ElicitRequest,
   ElicitResultSchema,
+  ErrorCode,
   ListPromptsRequestSchema,
   ListResourcesRequestSchema,
   ListResourceTemplatesRequestSchema,
   ListToolsRequestSchema,
   type ListToolsResult,
+  McpError,
   ReadResourceRequestSchema,
   type Tool,
 } from "@modelcontextprotocol/sdk/types.js";
@@ -58,7 +60,10 @@ import {
 import { structuredToolErrorResult } from "@/archestra-mcp-server/helpers";
 import { userHasPermission } from "@/auth/utils";
 import { LRUCacheManager } from "@/cache-manager";
-import type { ArchestraElicitationOutcome } from "@/clients/chat-mcp-elicitation";
+import {
+  type ArchestraElicitationOutcome,
+  ELICITATION_ANSWER_TIMEOUT_MS,
+} from "@/clients/chat-mcp-elicitation";
 import mcpClient, { type TokenAuthContext } from "@/clients/mcp-client";
 import { isToolRejectedForMcpHeaders } from "@/clients/mcp-param-headers";
 import config from "@/config";
@@ -2406,6 +2411,7 @@ function createGatewayUserElicit(params: {
     sendRequest: (
       request: ElicitRequest,
       resultSchema: typeof ElicitResultSchema,
+      options?: { timeout?: number },
     ) => Promise<unknown>;
     _meta?: Record<string, unknown>;
   };
@@ -2462,10 +2468,19 @@ function createGatewayUserElicit(params: {
         return {
           status: "answered",
           result: ElicitResultSchema.parse(
-            await extra.sendRequest(request, ElicitResultSchema),
+            await extra.sendRequest(request, ElicitResultSchema, {
+              timeout: ELICITATION_ANSWER_TIMEOUT_MS,
+            }),
           ),
         };
       } catch (error) {
+        // The client showed the form; the person just never answered it.
+        if (
+          error instanceof McpError &&
+          error.code === ErrorCode.RequestTimeout
+        ) {
+          return { status: "unanswered" };
+        }
         logger.warn(
           {
             agentId,

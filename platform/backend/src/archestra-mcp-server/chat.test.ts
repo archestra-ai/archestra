@@ -292,6 +292,46 @@ describe("chat tool execution", () => {
     );
   });
 
+  test("ask_user treats a question nobody answered in time as not accepted", async () => {
+    const envelope = signOfferClaims(
+      unsignedOfferClaims({
+        organizationId: mockContext.organizationId as string,
+        sessionId: `ask-unanswered-${testAgent.id}`,
+        offerId: "offer-unanswered",
+      }),
+      config.openappa.offerSigningSecret,
+    );
+    mockContext = {
+      ...mockContext,
+      elicitation: {
+        elicit: async () => ({ status: "unanswered" as const }),
+      },
+    };
+
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}ask_user`,
+      {
+        question: "Accept this change for the rest of this session?",
+        options: [
+          { label: "Accept for this session" },
+          { label: "Do not accept" },
+        ],
+        remedy_offers: [envelope],
+      },
+      mockContext,
+    );
+    expect(result.isError).toBe(false);
+    expect(result.structuredContent).toEqual({
+      action: "cancel",
+      selected: [],
+    });
+    const text = (result.content[0] as any).text;
+    expect(text).toContain("The user did not answer the question in time.");
+    expect(text).toContain(
+      "The user did not accept the remedy. Do not retry the blocked call and do not ask again.",
+    );
+  });
+
   test("ask_user returns decline without selected options", async () => {
     mockContext = {
       ...mockContext,

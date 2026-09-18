@@ -23,7 +23,11 @@ import {
   TOOL_UPLOAD_FILE_FULL_NAME,
   TOOL_WHOAMI_FULL_NAME,
 } from "@archestra/shared";
-import type { ListToolsResult } from "@modelcontextprotocol/sdk/types.js";
+import {
+  ErrorCode,
+  type ListToolsResult,
+  McpError,
+} from "@modelcontextprotocol/sdk/types.js";
 import { onTestFinished, vi } from "vitest";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
 import mcpClient from "@/clients/mcp-client";
@@ -3353,12 +3357,68 @@ describe("createAgentServer tools/list", () => {
         },
       },
       expect.any(Object),
+      // A person answers a form in minutes, not the SDK's default 60 seconds.
+      { timeout: 10 * 60 * 1000 },
     );
     expect(result.isError).not.toBe(true);
     expect(result.structuredContent).toEqual({
       action: "accept",
       selected: ["Accept for this session"],
     });
+  });
+
+  test("ask_user reports a question nobody answered in time, not a client without forms", async ({
+    makeAgent,
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id });
+    const { server } = await createAgentServer({ agentId: agent.id });
+    const callToolHandler = (
+      server.server as unknown as {
+        _requestHandlers: Map<string, TestCallToolHandler>;
+      }
+    )._requestHandlers.get("tools/call");
+    if (!callToolHandler) {
+      throw new Error("Expected tools/call handler to be registered");
+    }
+
+    const result = await callToolHandler(
+      {
+        method: "tools/call",
+        params: {
+          name: TOOL_ASK_USER_FULL_NAME,
+          arguments: {
+            question: "Accept this change for the rest of this session?",
+            options: [
+              { label: "Accept for this session" },
+              { label: "Do not accept" },
+            ],
+          },
+          _meta: {
+            "io.modelcontextprotocol/clientCapabilities": {
+              elicitation: {},
+            },
+          },
+        },
+      },
+      {
+        sendRequest: vi
+          .fn()
+          .mockRejectedValue(
+            new McpError(ErrorCode.RequestTimeout, "Request timed out"),
+          ),
+      },
+    );
+
+    expect(result.isError).not.toBe(true);
+    expect(result.structuredContent).toEqual({
+      action: "cancel",
+      selected: [],
+    });
+    expect(JSON.stringify(result.content)).toContain(
+      "did not answer the question in time",
+    );
   });
 
   test("ask_user does not hang elicitation/create when the client never declared elicitation", async ({

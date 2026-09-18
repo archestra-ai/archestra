@@ -1,3 +1,5 @@
+import { getGithubWebOrigin } from "@archestra/shared";
+
 /** Display public repository shorthand and Enterprise URLs without public avatar lookups for Enterprise owners. */
 export function getRepositoryDisplay(
   repository: string,
@@ -5,12 +7,7 @@ export function getRepositoryDisplay(
 ) {
   const input = repository.trim();
   try {
-    const origin = new URL(githubApiUrl ?? "https://api.github.com");
-    if (origin.hostname === "api.github.com") {
-      origin.hostname = "github.com";
-    } else if (/^api\..+\.ghe\.com$/.test(origin.hostname)) {
-      origin.hostname = origin.hostname.slice(4);
-    }
+    const origin = new URL(getGithubWebOrigin(githubApiUrl ?? undefined));
     const firstSegment = input.split("/")[0];
     const hasHost =
       firstSegment.includes(".") ||

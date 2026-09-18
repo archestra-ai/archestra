@@ -17,6 +17,7 @@ import {
   APPA_SESSION_HEADER,
   type SupportedProviderDiscriminator,
 } from "@archestra/shared";
+import config from "@/config";
 import { parseClaudeMetadataSessionId } from "@/routes/proxy/utils/headers/session-id";
 import {
   type NoticeOriginalCall,
@@ -807,15 +808,14 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
 }
 
 const MAX_CANONICAL_JSON_DEPTH = 64;
-const MAX_CANONICAL_JSON_BYTES = 2 * 1024 * 1024; // 2 MB
 
-/** JSON's canonical form for semantic retry fingerprints, bounded by depth and size. */
+/** JSON's canonical form for semantic retry fingerprints, bounded by depth and proxy body limit. */
 export function canonicalJson(
   value: unknown,
   options?: { maxDepth?: number; maxBytes?: number },
 ): string {
   const maxDepth = options?.maxDepth ?? MAX_CANONICAL_JSON_DEPTH;
-  const maxBytes = options?.maxBytes ?? MAX_CANONICAL_JSON_BYTES;
+  const maxBytes = options?.maxBytes ?? config.api.bodyLimit;
   let byteCount = 0;
 
   function serialize(val: unknown, depth: number): string {

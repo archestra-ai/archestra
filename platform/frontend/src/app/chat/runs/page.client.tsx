@@ -96,6 +96,17 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
     run?.workspace &&
     ["idle", "suspended"].includes(run.workspace.state) &&
     new Date(run.workspace.expiresAt).getTime() > now;
+  const workspaceNotice = !run?.workspace
+    ? null
+    : run.workspace.state === "suspended"
+      ? "Workspace suspended; saved files are retained."
+      : run.workspace.state === "idle"
+        ? canReattach
+          ? null
+          : "Session ended; resume the saved conversation."
+        : run.workspace.state === "deleted"
+          ? "Workspace removed. Run history remains available."
+          : "Workspace is in use or changing state.";
 
   return (
     <main className="flex h-full min-h-0 flex-col bg-background">
@@ -119,10 +130,13 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
                   <h1 className="truncate text-sm font-medium">{run.title}</h1>
                   <AgentRunState
                     state={run.state}
+                    attentionState={run.attentionState}
                     statusReason={run.statusReason}
                     lastModelActivityAt={run.lastModelActivityAt}
                     startedAt={run.startedAt}
                     endedAt={run.endedAt}
+                    hardDeadlineAt={run.hardDeadlineAt}
+                    workspace={run.workspace}
                     compact
                   />
                 </div>
@@ -227,20 +241,19 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
         {run && live && <AgentRunLiveness run={run} />}
         {isOwner && !live && run?.workspace && (
           <output className="flex shrink-0 flex-col gap-2 rounded-md border bg-muted/20 px-3 py-2.5 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex min-w-0 items-start gap-2 sm:items-center">
-              <Info aria-hidden className="mt-0.5 size-3.5 shrink-0 sm:mt-0" />
-              <span className="font-medium text-foreground">
-                {run.workspace.state === "suspended"
-                  ? "Workspace suspended; saved files are retained."
-                  : run.workspace.state === "idle"
-                    ? canReattach
-                      ? "Session running; Continue reopens its terminal."
-                      : "Session ended; resume the saved conversation."
-                    : run.workspace.state === "deleted"
-                      ? "Workspace removed. Run history remains available."
-                      : "Workspace is in use or changing state."}
-              </span>
-            </div>
+            {/* An open session is already named by the header pill; the
+                banner then only carries the retention deadline. */}
+            {workspaceNotice && (
+              <div className="flex min-w-0 items-start gap-2 sm:items-center">
+                <Info
+                  aria-hidden
+                  className="mt-0.5 size-3.5 shrink-0 sm:mt-0"
+                />
+                <span className="font-medium text-foreground">
+                  {workspaceNotice}
+                </span>
+              </div>
+            )}
             {run.workspace.state !== "deleted" && (
               <WorkspaceRetention expiresAt={run.workspace.expiresAt} />
             )}

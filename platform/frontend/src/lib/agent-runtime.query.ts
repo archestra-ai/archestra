@@ -83,11 +83,30 @@ export function useMyAgentRuns(enabled = true) {
 }
 
 export function useMyAgentRun(taskId: string, enabled = true) {
+  const queryClient = useQueryClient();
   return useQuery({
     queryKey: ["agent-runs", taskId],
     queryFn: async () => {
       const { data, error } = await getMyAgentRun({ path: { taskId } });
       throwOnApiError(error, { toastOnError: false });
+      // The sidebar list only polls while it sees a live run, so a turn started
+      // from the run page (Resume) can land after the list's last refetch.
+      // Refresh the list whenever this session's current turn or its state moves.
+      const previous = queryClient.getQueryData<typeof data>([
+        "agent-runs",
+        taskId,
+      ]);
+      if (
+        data &&
+        (!previous ||
+          previous.taskId !== data.taskId ||
+          previous.state !== data.state ||
+          previous.endedAt !== data.endedAt)
+      ) {
+        void queryClient.invalidateQueries({
+          queryKey: ["agent-runs", "mine"],
+        });
+      }
       return data;
     },
     enabled: enabled && !!taskId,

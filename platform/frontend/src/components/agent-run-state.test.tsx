@@ -10,7 +10,7 @@ describe("AgentRunState", () => {
     vi.useRealTimers();
   });
 
-  it("opens copyable failure details from the compact status", async () => {
+  it("opens copyable failure details from the failure chip", async () => {
     const user = userEvent.setup();
     render(
       <AgentRunState
@@ -36,9 +36,10 @@ describe("AgentRunState", () => {
     expect(screen.getByRole("button", { name: /^copy$/i })).toBeEnabled();
   });
 
-  it("renders a non-interactive status when no details were recorded", () => {
+  it("renders a non-interactive failure chip when no details were recorded", () => {
     render(<AgentRunState state="TASK_STATE_FAILED" compact />);
 
+    expect(screen.getByText("Ended")).toBeInTheDocument();
     expect(screen.getByText("Failed")).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: /view failed details/i }),
@@ -47,14 +48,22 @@ describe("AgentRunState", () => {
 
   it("keeps an icon-only history status accessible", () => {
     render(
-      <AgentRunState state="TASK_STATE_INPUT_REQUIRED" compact iconOnly />,
+      <AgentRunState
+        state="TASK_STATE_WORKING"
+        attentionState="input_required"
+        endedAt={null}
+        compact
+        iconOnly
+      />,
     );
 
-    expect(screen.getByRole("img", { name: "Needs input" })).toBeVisible();
-    expect(screen.queryByText("Needs input")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("img", { name: "Running · Needs your input" }),
+    ).toBeVisible();
+    expect(screen.queryByText("Needs your input")).not.toBeInTheDocument();
   });
 
-  it("reports a completed turn as running while its retained session still calls the model", () => {
+  it("reports a completed turn as an active session while it still calls the model", () => {
     vi.useFakeTimers();
     vi.setSystemTime("2026-09-03T12:00:00.000Z");
 
@@ -67,7 +76,8 @@ describe("AgentRunState", () => {
         compact
       />,
     );
-    expect(screen.getByText("Running")).toBeInTheDocument();
+    expect(screen.getByText("Session active")).toBeInTheDocument();
+    expect(screen.getByText("· turn completed")).toBeInTheDocument();
 
     rerender(
       <AgentRunState
@@ -81,7 +91,7 @@ describe("AgentRunState", () => {
     expect(screen.getByText("Completed")).toBeInTheDocument();
   });
 
-  it("calls out an active run with no recent model activity", () => {
+  it("keeps a quiet run green and moves the wait into words", () => {
     vi.useFakeTimers();
     vi.setSystemTime("2026-09-03T12:00:00.000Z");
 
@@ -95,6 +105,7 @@ describe("AgentRunState", () => {
       />,
     );
 
-    expect(screen.getByText("No recent activity")).toBeInTheDocument();
+    expect(screen.getByText("Running")).toBeInTheDocument();
+    expect(screen.getByText("· quiet for 30m")).toBeInTheDocument();
   });
 });

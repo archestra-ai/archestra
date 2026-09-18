@@ -58,6 +58,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { TypingText } from "@/components/ui/typing-text";
+import { ATTENTION_DOT_CLASS } from "@/lib/agent-run-status-marks";
 import {
   useCancelAgentRun,
   useDeleteAgentRun,
@@ -559,7 +560,10 @@ export function ChatSidebarSection({
                   role="img"
                   aria-label="New messages"
                   data-testid={getChatItemUnreadIndicatorTestId(conv.id)}
-                  className="ml-1 h-2 w-2 shrink-0 rounded-full bg-primary"
+                  className={cn(
+                    "ml-1 h-2 w-2 shrink-0 rounded-full",
+                    ATTENTION_DOT_CLASS.attention,
+                  )}
                 />
               ) : null}
             </SidebarMenuButton>

@@ -24,7 +24,11 @@ export class AppaCodexAdapter implements AppaClientAdapter {
   }
 
   classifyToolName(name: string): "gateway" | "local" {
-    return name.startsWith("mcp:") ? "gateway" : "local";
+    // `mcp__<server>__<tool>` is a namespace member joined with its
+    // `mcp__<server>` namespace: an MCP server's tool, not a Codex built-in.
+    return name.startsWith("mcp:") || name.startsWith("mcp__")
+      ? "gateway"
+      : "local";
   }
 
   normalizeLocalToolName(name: string): string {

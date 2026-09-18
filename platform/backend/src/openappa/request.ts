@@ -206,6 +206,9 @@ export function prepareAppaRequest(params: {
     }
   }
 
+  // Read before the strip: a notice goes back to the client under the
+  // namespace the client declared it in, or the client cannot dispatch it.
+  const namespaces = declaredToolNamespaces(params.body);
   // Strip notice tool from provider request so the model cannot invoke it directly.
   stripAppaTools({ body: params.body, names: new Set([noticeToolName]) });
   return {
@@ -213,10 +216,31 @@ export function prepareAppaRequest(params: {
     session,
     spellings,
     customTools,
-    namespaces: declaredToolNamespaces(params.body),
+    namespaces,
     ...(family ? appaTurnBoundaries({ family, body: params.body }) : {}),
     ...(offerClaims ? { offerClaims } : {}),
   };
+}
+
+/**
+ * A platform tool as OpenCode spells it: its gateway label joined to the
+ * branded name by one `_` (`my_gateway_archestra__run_tool`). Resolved only
+ * when the label anchors on one of this organization's gateways, through the
+ * same `mcp__<label>__<name>` check Claude Code's names pass; under any other
+ * label the name stays foreign.
+ */
+export function underscoreLabeledPlatformToolName(
+  name: string,
+  canonicalize: (name: string) => string,
+): string | null {
+  for (let at = name.indexOf("_"); at > 0; at = name.indexOf("_", at + 1)) {
+    const rest = name.slice(at + 1);
+    if (rest.startsWith("_") || !archestraMcpBranding.isToolName(rest))
+      continue;
+    const canonical = canonicalize(`mcp__${name.slice(0, at)}__${rest}`);
+    if (archestraMcpBranding.isToolName(canonical)) return canonical;
+  }
+  return null;
 }
 
 // === Internal helpers ===
@@ -235,21 +259,12 @@ function anchoredLabelShort(
   name: string,
   canonicalize: (name: string) => string,
 ): ArchestraToolShortName | null {
-  for (const short of [
-    TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
-    TOOL_GET_REMEDY_PLANS_SHORT_NAME,
-  ] as const) {
-    const branded = archestraMcpBranding.getToolName(short);
-    if (!name.endsWith(`_${branded}`) || name.endsWith(`__${branded}`))
-      continue;
-    const label = name.slice(0, name.length - branded.length - 1);
-    if (
-      label.length > 0 &&
-      shortToolName(canonicalize(`mcp__${label}__${branded}`)) === short
-    )
-      return short;
-  }
-  return null;
+  const resolved = underscoreLabeledPlatformToolName(name, canonicalize);
+  const short = resolved ? shortToolName(resolved) : null;
+  return short === TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME ||
+    short === TOOL_GET_REMEDY_PLANS_SHORT_NAME
+    ? short
+    : null;
 }
 
 /** Refuses sessions where tools are deferred to a provider tool search. */
@@ -289,7 +304,17 @@ function appendDeclaredTool(
 ): void {
   const holder = asToolDeclaration(body);
   if (!holder || !Array.isArray(holder.tools)) return;
-  if (family === "openai:chatCompletions" || family === "openai:responses") {
+  if (family === "openai:responses") {
+    // Responses declares function tools flat; the nested Chat Completions
+    // shape is rejected by the provider for a missing `name`.
+    holder.tools.push({
+      type: "function",
+      name,
+      parameters: { type: "object", properties: {} },
+    });
+    return;
+  }
+  if (family === "openai:chatCompletions") {
     holder.tools.push({
       type: "function",
       function: {

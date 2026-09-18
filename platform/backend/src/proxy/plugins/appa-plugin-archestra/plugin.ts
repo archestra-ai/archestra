@@ -1,3 +1,4 @@
+import { MCP_SERVER_TOOL_NAME_SEPARATOR } from "@archestra/shared";
 import config from "@/config";
 import { buildNoticeArguments, type RemedyExecution } from "@/openappa/notice";
 import type { OfferJws } from "@/openappa/offer-claims";
@@ -6,6 +7,7 @@ import {
   signOfferClaims,
   unsignedOfferClaims,
 } from "@/openappa/offer-claims";
+import { underscoreLabeledPlatformToolName } from "@/openappa/request";
 import {
   cancelCalls,
   endTurn,
@@ -164,6 +166,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       notices: held.map(({ call, feedback }) => ({
         id: call.id,
         name: tools.noticeToolName,
+        ...noticeNamespace(binding.request),
         arguments: JSON.stringify(
           buildNoticeArguments({
             id: call.id,
@@ -187,12 +190,25 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     const binding = this.bindings.get(context.resources);
     if (!binding) return;
     const calls = [...context.toolCalls];
-    const decisions = await evaluateToolCalls(binding.session, calls, {
-      canonicalize: (name) => this.canonicalize(binding, name),
-      ...(binding.request.tools
-        ? { controlToolName: binding.request.tools.controlToolName }
-        : {}),
-    });
+    const control = binding.request.tools?.controlToolName;
+    const decisions = await evaluateToolCalls(
+      binding.session,
+      calls.map((call) => ({
+        ...call,
+        name: namespacedToolName(call.name, call.namespace),
+      })),
+      {
+        canonicalize: (name) => this.canonicalize(binding, name),
+        ...(control
+          ? {
+              controlToolName: namespacedToolName(
+                control,
+                binding.request.namespaces.get(control),
+              ),
+            }
+          : {}),
+      },
+    );
 
     const notice = binding.request.tools?.noticeToolName;
     const blocked: { id: string; name: string; reason: string }[] = [];
@@ -237,6 +253,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       released.push({
         id: call.id,
         name: notice,
+        ...noticeNamespace(binding.request),
         arguments: JSON.stringify(
           buildNoticeArguments({
             id: call.id,
@@ -279,6 +296,11 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
   // === Internal helpers ===
 
   private canonicalize(binding: AppaPluginBinding, name: string): string {
+    const platformTool = underscoreLabeledPlatformToolName(
+      name,
+      binding.canonicalizeToolName,
+    );
+    if (platformTool) return platformTool;
     return binding.adapter?.classifyToolName(name) === "local"
       ? binding.canonicalizeToolName(
           binding.adapter.normalizeLocalToolName(name),
@@ -303,7 +325,12 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     namespace?: string;
   } {
     const [normalized] = normalizeToolCallsForPolicy(
-      [{ name: call.name, arguments: call.arguments }],
+      [
+        {
+          name: namespacedToolName(call.name, call.namespace),
+          arguments: call.arguments,
+        },
+      ],
       (name) => this.canonicalize(binding, name),
     );
     if (normalized.isRunToolDispatchTarget) {
@@ -449,6 +476,32 @@ function toolInputOf(
     // Not JSON: reported as the text it is.
   }
   return { arguments: args };
+}
+
+/**
+ * Codex declares an MCP server's tools as members of an `mcp__<server>`
+ * namespace and calls a member by its bare name. Joined with the namespace the
+ * call itself names, they spell what Claude Code sends for the same tool, so
+ * the gateway canonicalizer anchors it on the organization's real gateway
+ * label and a same-named member of any other server keeps a foreign name.
+ */
+function namespacedToolName(
+  name: string,
+  namespace: string | undefined,
+): string {
+  return namespace?.startsWith(`mcp${MCP_SERVER_TOOL_NAME_SEPARATOR}`)
+    ? `${namespace}${MCP_SERVER_TOOL_NAME_SEPARATOR}${name}`
+    : name;
+}
+
+/** The namespace the client declared its notice tool in, which Codex needs to dispatch the notice. */
+function noticeNamespace(request: {
+  tools?: { noticeToolName: string };
+  namespaces: ReadonlyMap<string, string>;
+}): { namespace?: string } {
+  const notice = request.tools?.noticeToolName;
+  const namespace = notice ? request.namespaces.get(notice) : undefined;
+  return namespace ? { namespace } : {};
 }
 
 function clientSessionId(scopedSessionId: string): string {

@@ -1,6 +1,5 @@
 /** Native decisions at the existing buffered proxy seam. The real native +
  * PostgreSQL engine is exercised separately by openappa-rs/smoke.test.cjs. */
-import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import Fastify, { type FastifyInstance } from "fastify";
 import {
@@ -1194,6 +1193,46 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     ]);
   });
 
+  test.for([
+    ["my_gateway_archestra__whoami", "archestra__whoami"],
+    ["lookalike_archestra__whoami", "builtin:lookalike_archestra__whoami"],
+  ] as const)("rules OpenCode's %s by whether its label is one of our gateways", async ([
+    called,
+    expectedTool,
+  ], { makeAgent }) => {
+    await makeAgent({
+      name: "My Gateway",
+      agentType: "mcp_gateway",
+      organizationId: agent.organizationId,
+    });
+    const body = payload(false);
+    // OpenCode joins an MCP server's label to each tool name with one `_`.
+    for (const name of [
+      "my_gateway_archestra__whoami",
+      "lookalike_archestra__whoami",
+    ])
+      body.tools.push({
+        name,
+        description: name,
+        input_schema: { type: "object", properties: {} },
+      } as (typeof body.tools)[number]);
+    options = {
+      includeToolUse: true,
+      streamStopReason: "tool_use",
+      nonStreamingToolUse: { name: called, input: {} },
+    };
+
+    const response = await post(body, {
+      "user-agent": "opencode/1.18.31",
+      "x-session-id": "ses_opencode_labels",
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(events.filter((event) => event.event === "tool_call")).toEqual([
+      expect.objectContaining({ tool: expectedTool }),
+    ]);
+  });
+
   test.each([
     "chat:tool_call_repair",
     "chat:compaction",
@@ -2022,6 +2061,201 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
     authorization: "Bearer test-key",
     "x-archestra-user-id": userId,
     "user-agent": "opencode/1.18.29",
+  });
+
+  test("injects a missing APPA pair in the flat Responses tool shape", async () => {
+    const payload = codexPayload({
+      session_id: CODEX_SESSION,
+      thread_id: CODEX_THREAD,
+    });
+    payload.tools = payload.tools.filter(
+      (declared) => !declared.name.startsWith("archestra__"),
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/responses`,
+      remoteAddress: "127.0.0.1",
+      headers: codexHeaders(),
+      payload: payload as Record<string, unknown>,
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    // The notice tool never reaches the model; the injected control tool must
+    // use the declaration shape the Responses API accepts.
+    const sent = providerBodies.at(-1) as { tools: Record<string, unknown>[] };
+    expect(sent.tools.map((tool) => tool.name)).toEqual([
+      "get_weather",
+      "archestra__execute_remedy_plan",
+    ]);
+    expect(sent.tools[1]).toEqual({
+      type: "function",
+      name: "archestra__execute_remedy_plan",
+      parameters: { type: "object", properties: {} },
+    });
+  });
+
+  test("delivers a Codex denial notice under the namespace Codex declared it in", async () => {
+    native.dispatchHook.mockImplementation(async (raw: string) => {
+      const event = JSON.parse(raw);
+      events.push(event);
+      if (event.event === "tool_call")
+        return JSON.stringify({
+          decision: "deny_call",
+          feedback: "[appa] NATIVE REFUSAL",
+        });
+      return JSON.stringify({ decision: "ack" });
+    });
+    vi.spyOn(openAiResponsesAdapterFactory, "createClient").mockImplementation(
+      () =>
+        ({
+          responses: {
+            create: async () => ({
+              id: "resp_denied",
+              object: "response",
+              created_at: 1,
+              status: "completed",
+              model: "gpt-5.5",
+              output: [
+                {
+                  type: "function_call",
+                  id: "fc_shell",
+                  call_id: "call_shell",
+                  name: "exec_command",
+                  arguments: '{"cmd":"echo hi"}',
+                  status: "completed",
+                },
+              ],
+              usage: { input_tokens: 3, output_tokens: 2, total_tokens: 5 },
+            }),
+          },
+        }) as never,
+    );
+    // Codex declares an MCP server's tools as members of one namespace.
+    const payload = {
+      ...codexPayload({ session_id: CODEX_SESSION, thread_id: CODEX_THREAD }),
+      stream: false,
+      tools: [
+        {
+          type: "function",
+          name: "exec_command",
+          parameters: { type: "object", properties: {} },
+        },
+        {
+          type: "namespace",
+          name: "mcp__my_gateway",
+          tools: [
+            {
+              type: "function",
+              name: "archestra__execute_remedy_plan",
+              parameters: { type: "object", properties: {} },
+            },
+            {
+              type: "function",
+              name: "archestra__get_remedy_plans",
+              parameters: { type: "object", properties: {} },
+            },
+          ],
+        },
+      ],
+    };
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/responses`,
+      remoteAddress: "127.0.0.1",
+      headers: codexHeaders(),
+      payload: payload as Record<string, unknown>,
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json().output).toEqual([
+      expect.objectContaining({
+        type: "function_call",
+        call_id: "call_shell",
+        name: "archestra__get_remedy_plans",
+        namespace: "mcp__my_gateway",
+      }),
+    ]);
+  });
+
+  test("rules a Codex call by the namespace it names: the gateway's is ours, a lookalike's stays foreign", async ({
+    makeAgent,
+  }) => {
+    await makeAgent({
+      name: "My Gateway",
+      agentType: "mcp_gateway",
+      organizationId: agent.organizationId,
+    });
+    const whoami = (namespace: string, callId: string) => ({
+      type: "function_call",
+      id: `fc_${callId}`,
+      call_id: callId,
+      name: "archestra__whoami",
+      namespace,
+      arguments: "{}",
+      status: "completed",
+    });
+    vi.spyOn(openAiResponsesAdapterFactory, "createClient").mockImplementation(
+      () =>
+        ({
+          responses: {
+            create: async () => ({
+              id: "resp_ns",
+              object: "response",
+              created_at: 1,
+              status: "completed",
+              model: "gpt-5.5",
+              output: [
+                whoami("mcp__my_gateway", "call_gateway"),
+                whoami("mcp__lookalike", "call_lookalike"),
+              ],
+              usage: { input_tokens: 3, output_tokens: 2, total_tokens: 5 },
+            }),
+          },
+        }) as never,
+    );
+    const member = (name: string) => ({
+      type: "function",
+      name,
+      parameters: { type: "object", properties: {} },
+    });
+    const payload = {
+      ...codexPayload({ session_id: CODEX_SESSION, thread_id: CODEX_THREAD }),
+      stream: false,
+      tools: [
+        member("exec_command"),
+        {
+          type: "namespace",
+          name: "mcp__my_gateway",
+          tools: [
+            member("archestra__execute_remedy_plan"),
+            member("archestra__get_remedy_plans"),
+            member("archestra__whoami"),
+          ],
+        },
+        {
+          type: "namespace",
+          name: "mcp__lookalike",
+          tools: [member("archestra__whoami")],
+        },
+      ],
+    };
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/responses`,
+      remoteAddress: "127.0.0.1",
+      headers: codexHeaders(),
+      payload: payload as Record<string, unknown>,
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(
+      events
+        .filter((event) => event.event === "tool_call")
+        .map((event) => event.tool),
+    ).toEqual(["archestra__whoami", "mcp__lookalike__archestra__whoami"]);
   });
 
   test("a Codex resume reopens the thread's root; a fork opens a fresh one", async () => {

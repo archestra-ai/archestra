@@ -2834,7 +2834,12 @@ class ToolModel {
         catalogId: schema.toolsTable.catalogId,
       })
       .from(schema.toolsTable)
-      .where(inArray(schema.toolsTable.catalogId, catalogIds));
+      .where(
+        and(
+          inArray(schema.toolsTable.catalogId, catalogIds),
+          isNull(schema.toolsTable.deletedAt),
+        ),
+      );
 
     // Filter out any nulls (catalogId is nullable in schema)
     return tools.filter(

@@ -17,8 +17,11 @@ not change it.
 ## Read and explain
 
 Call \`archestra__get_guardrails_policy\` with no arguments. Read the returned
-\`content\` and \`revision\`. If the user only asked to inspect or explain,
-summarize what can run, what data becomes restricted, and what is blocked.
+\`content\` and \`revision\`. This is the organization's own policy text; the
+batteries installed for MCP servers compose into what is enforced on top of it,
+and they are managed in Studio, not through this tool. If the user only asked to
+inspect or explain, summarize what this text lets run, what data it restricts,
+and what it blocks, and say that installed batteries add their own rules.
 Do not save or propose unrelated changes.
 
 ## Inspect installed MCP servers

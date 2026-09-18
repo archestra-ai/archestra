@@ -26,7 +26,9 @@ const DeletedSchema = z.object({ success: z.literal(true) });
 
 const routes: FastifyPluginAsyncZod = async (app) => {
   // Installing a battery changes organization policy, so writes require
-  // organization management as well as the endpoint permission.
+  // organization management as well as the endpoint permission. The one
+  // other way in is auto-attach on an MCP server whose URL host or image
+  // identifies the provider; a name alone attaches a battery disabled.
   app.addHook("preHandler", async (request) => {
     if (!openappaEnabled())
       throw new ApiError(404, "Guardrails v2 is disabled");

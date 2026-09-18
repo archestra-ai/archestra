@@ -67,7 +67,7 @@ const registry = defineArchestraTools([
     shortName: "get_guardrails_policy",
     title: "Read guardrails policy",
     description:
-      "Read organization.appa.toml and its revision before changing guardrails. This is the policy used for new conversations. Preserve unrelated rules and comments when editing.",
+      "Read organization.appa.toml and its revision before changing guardrails. This is the organization's own policy text, used for new conversations; batteries installed for MCP servers compose into enforcement on top of it. Preserve unrelated rules and comments when editing.",
     schema: z.strictObject({}),
     async handler({ context }) {
       if (!context.organizationId)

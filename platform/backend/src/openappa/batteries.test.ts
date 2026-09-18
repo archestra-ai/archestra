@@ -1,6 +1,7 @@
 import config from "@/config";
 import OpenAppaBatteryInstallModel from "@/models/openappa-battery-install";
 import OpenAppaEffectivePolicyModel from "@/models/openappa-effective-policy";
+import ToolModel from "@/models/tool";
 import { beforeEach, describe, expect, test } from "@/test";
 import { openappaBatteriesService } from "./batteries";
 
@@ -54,6 +55,24 @@ describe("battery attachment after a tool sync", () => {
     expect(
       await OpenAppaEffectivePolicyModel.find(organizationId),
     ).toMatchObject({ rootRevision: 0, lastError: null });
+    // A deleted catalog leaves the composition: its tools no longer target
+    // the battery namespace, so the stored composition changes with it. The
+    // notion battery has no helpers, so its install is active at once.
+    const docs = await makeInternalMcpCatalog({
+      organizationId,
+      name: "Docs",
+      serverUrl: "https://mcp.notion.com/mcp",
+    });
+    await makeTool({
+      catalogId: docs.id,
+      name: "notion__search",
+      rawName: "search",
+    });
+    await openappaBatteriesService.onCatalogToolsChanged(docs.id);
+    const before = await openappaBatteriesService.recompile(organizationId);
+    await ToolModel.softDeleteByCatalog(docs.id, new Date());
+    const after = await openappaBatteriesService.recompile(organizationId);
+    expect(after.installFingerprint).not.toBe(before.installFingerprint);
     await expect(
       OpenAppaBatteryInstallModel.organizationIdsForCatalog(catalog.id),
     ).resolves.toEqual([organizationId]);

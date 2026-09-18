@@ -39,6 +39,10 @@ empty changes and requirements, leaving trust and audience unchanged. Explicit
 tool rules take precedence over the catch-all. The local backend serves this
 fixed answer without calling a model or accessing user data.
 
+Tool names match exactly, or as the `*` catch-all; partial globs do not exist,
+so a rule named `grain__*` matches nothing. Globs live in argument selectors
+(`shell(command:*publish*)`).
+
 | Boundary | APPA inactive | Flag and global switch on |
 | --- | --- | --- |
 | Incoming tool results | Existing result policies | Existing result policies, then APPA admission and saved output |
@@ -106,6 +110,8 @@ sequenceDiagram
 ```
 
 The proxy replaces a denied call with `archestra__get_remedy_plans`. The notice keeps the original call position and provider call ID. Notice arguments contain the blocked tool name, proposed arguments, and the policy ruling in plain text. The ruling is unencoded so client classifiers (such as Claude Code auto-mode) inspect plain text. The client executes the notice through its normal tool loop. The model reads the ruling and selects an offered remedy plan in the same turn.
+
+A `run_tool` dispatch is ruled on as the tool it targets. The runtime receives the target's name and its own `tool_args`, so named rules, annotator bindings, and the wildcard catch-all apply to the tool that executes, not the wrapper. A denial presents the same identity: the notice names the target and carries its arguments, and history restores the target call with the ruling. A released call stays the wrapper the client declared.
 
 On later requests, the proxy restores notice calls back to original tool calls and injects the ruling as their result. Restoration is a stateless pure function of the request body. It requires no database lookup, surviving restarts and replica changes. The runtime withholds results for call IDs it never released.
 

@@ -175,15 +175,68 @@ describe("McpElicitationDialog", () => {
     expect(
       screen.queryByRole("button", { name: /decline/i }),
     ).not.toBeInTheDocument();
+
+    // Send stays disabled until the user picks an option.
+    const send = screen.getByRole("button", { name: /send/i });
+    expect(send).toBeDisabled();
     await user.click(
       screen.getByRole("radio", { name: "Accept for this session" }),
     );
-    await user.click(screen.getByRole("button", { name: /send/i }));
+    expect(send).toBeEnabled();
+    await user.click(send);
 
     expect(onRespond).toHaveBeenCalledWith({
       id: request.id,
       action: "accept",
       content: { choice: "Accept for this session" },
+    });
+  });
+
+  it("keeps Send disabled on a multi-choice card until one option is checked", async () => {
+    const user = userEvent.setup();
+    const onRespond = vi.fn().mockResolvedValue(undefined);
+    const multiRequest = {
+      id: request.id,
+      conversationId: request.conversationId,
+      toolName: "archestra__ask_user",
+      message: "Which options should run?",
+      mode: "form" as const,
+      requestedSchema: {
+        type: "object",
+        properties: {
+          option_0: {
+            type: "boolean",
+            title: "Run tests",
+            default: false,
+          },
+          option_1: {
+            type: "boolean",
+            title: "Deploy",
+            default: false,
+          },
+        },
+      },
+    };
+
+    render(
+      <McpElicitationDialog
+        variant="inline"
+        request={multiRequest}
+        isSubmitting={false}
+        onRespond={onRespond}
+      />,
+    );
+
+    const send = screen.getByRole("button", { name: /send/i });
+    expect(send).toBeDisabled();
+    await user.click(screen.getByRole("checkbox", { name: "Deploy" }));
+    expect(send).toBeEnabled();
+    await user.click(send);
+
+    expect(onRespond).toHaveBeenCalledWith({
+      id: request.id,
+      action: "accept",
+      content: { option_0: false, option_1: true },
     });
   });
 });

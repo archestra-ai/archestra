@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckIcon, ListChecksIcon, XIcon } from "lucide-react";
+import { CheckIcon, ListChecksIcon, Loader2, XIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
@@ -17,6 +17,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
 
 export type ChatMcpElicitationRequest = {
   id: string;
@@ -109,6 +110,15 @@ export function McpElicitationDialog({
 
   const choiceForm = isChoiceForm(fields);
   const hideFieldLabels = choiceForm && fields.length === 1;
+  // Send stays disabled until the user actually picks something. Single
+  // choice needs one selected option; multi choice needs at least one.
+  const hasSelection =
+    !choiceForm ||
+    fields.some((field) =>
+      field.schema.type === "boolean"
+        ? values[field.name] === true
+        : String(values[field.name] ?? "") !== "",
+    );
   const fieldsBody = (
     <div className="flex flex-col gap-4">
       {request.mode === "url" && isHttpUrl(request.url) ? (
@@ -173,12 +183,21 @@ export function McpElicitationDialog({
           size="sm"
           disabled={isSubmitting}
           onClick={() => void respondWithoutContent("cancel")}
+          className="text-muted-foreground hover:text-foreground"
         >
-          Dismiss
+          <span>Dismiss</span>
         </Button>
-        <Button type="submit" size="sm" disabled={isSubmitting}>
-          <CheckIcon />
-          Send
+        <Button
+          type="submit"
+          size="sm"
+          disabled={isSubmitting || !hasSelection}
+        >
+          {isSubmitting ? (
+            <Loader2 className="animate-spin" aria-hidden />
+          ) : (
+            <CheckIcon aria-hidden />
+          )}
+          <span>Send</span>
         </Button>
       </>
     ) : (
@@ -255,6 +274,37 @@ export function McpElicitationDialog({
   );
 }
 
+/**
+ * One pickable option. The whole row is the control's label, so a click
+ * anywhere on the row picks it. Selected and hover states share the muted
+ * background; the border only shows once the row is picked.
+ */
+function OptionRow({
+  htmlFor,
+  selected,
+  error,
+  children,
+}: {
+  htmlFor: string;
+  selected: boolean;
+  error?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <label
+      htmlFor={htmlFor}
+      className={cn(
+        "-mx-1 flex cursor-pointer items-start gap-2.5 rounded-md border px-3 py-2 transition-colors",
+        "hover:bg-muted/60 has-[:focus-visible]:bg-muted/60 has-[:focus-visible]:ring-1 has-[:focus-visible]:ring-ring/50",
+        selected ? "border-border bg-muted" : "border-transparent",
+        error && !selected ? "border-destructive/40" : null,
+      )}
+    >
+      {children}
+    </label>
+  );
+}
+
 function ElicitationFieldInput({
   field,
   choiceStyle,
@@ -278,6 +328,30 @@ function ElicitationFieldInput({
   const enumDescriptions = field.schema.enumDescriptions;
 
   if (field.schema.type === "boolean") {
+    if (choiceStyle) {
+      return (
+        <OptionRow
+          htmlFor={id}
+          selected={value === true}
+          error={Boolean(error)}
+        >
+          <Checkbox
+            id={id}
+            checked={Boolean(value)}
+            aria-invalid={Boolean(error)}
+            aria-describedby={error ? errorId : undefined}
+            onCheckedChange={(checked) => onChange(checked === true)}
+            className="mt-0.5"
+          />
+          <div className="flex min-w-0 flex-col">
+            <span className="text-sm leading-5">{field.label}</span>
+            {field.schema.description ? (
+              <FieldDescription>{field.schema.description}</FieldDescription>
+            ) : null}
+          </div>
+        </OptionRow>
+      );
+    }
     return (
       <div className="flex items-center gap-2">
         <Checkbox
@@ -299,7 +373,7 @@ function ElicitationFieldInput({
 
   if (enumValues?.length && choiceStyle) {
     return (
-      <div className="flex flex-col gap-2">
+      <div className="flex flex-col gap-1.5">
         {hideLabel ? null : (
           <p className="text-sm font-medium">
             {field.label}
@@ -314,7 +388,7 @@ function ElicitationFieldInput({
           aria-label={hideLabel ? field.label : undefined}
           aria-invalid={Boolean(error)}
           aria-describedby={error ? errorId : undefined}
-          className="flex flex-col gap-2"
+          className="flex flex-col gap-1.5"
         >
           {enumValues.map((option, index) => {
             const optionId = `${id}-${index}`;
@@ -324,15 +398,24 @@ function ElicitationFieldInput({
                 ? enumDescriptions[index]
                 : undefined;
             return (
-              <div key={option} className="flex items-start gap-2">
-                <RadioGroupItem id={optionId} value={option} />
+              <OptionRow
+                key={option}
+                htmlFor={optionId}
+                selected={value === option}
+                error={Boolean(error)}
+              >
+                <RadioGroupItem
+                  id={optionId}
+                  value={option}
+                  className="mt-0.5"
+                />
                 <div className="flex min-w-0 flex-col">
-                  <Label htmlFor={optionId}>{option}</Label>
+                  <span className="text-sm leading-5">{option}</span>
                   {description ? (
                     <FieldDescription>{description}</FieldDescription>
                   ) : null}
                 </div>
-              </div>
+              </OptionRow>
             );
           })}
         </RadioGroup>

@@ -3399,7 +3399,7 @@ describe("createAgentServer tools/list", () => {
     expect(sendRequest).not.toHaveBeenCalled();
     expect(result.isError).toBe(true);
     expect((result.content?.[0] as { text?: string })?.text).toContain(
-      "did not complete a choice form",
+      "did not answer the choice form",
     );
   });
 

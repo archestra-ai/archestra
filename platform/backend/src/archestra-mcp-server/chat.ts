@@ -59,7 +59,7 @@ const AskUserOutputSchema = z.object({
 });
 
 const NO_CHOICE_FORM_MESSAGE =
-  "This client did not complete a choice form. If it has a native question or elicitation tool (AskUserQuestion, Codex, OpenCode), use that instead. Do not ask this as a free-form chat question.";
+  "This client did not answer the choice form. If it has its own question tool (AskUserQuestion, Codex, OpenCode), use that instead. Do not ask this as a plain-text chat question.";
 
 const registry = defineArchestraTools([
   defineArchestraTool({
@@ -96,7 +96,7 @@ const registry = defineArchestraTools([
   defineArchestraTool({
     shortName: TOOL_ASK_USER_SHORT_NAME,
     title: "Ask User",
-    description: `Ask the user to pick from a short list of options. Prefer the client's native question or elicitation tool when one exists (Claude Code AskUserQuestion, Codex, OpenCode). If that tool is not available, you MUST call this tool — ${archestraMcpBranding.appName} chat shows a checkbox form, and MCP clients use elicitation/create. Never ask a multiple-choice question in plain text (yes/no, which remedy to accept, which approach to take). Do not use this for open-ended questions.`,
+    description: `Ask the user to pick from a short list of options. Use the client's own question tool when it has one (Claude Code AskUserQuestion, Codex, OpenCode). If it has none, you must call this tool: ${archestraMcpBranding.appName} chat shows the options as a form, and MCP clients get them with elicitation/create. Never ask a multiple-choice question in plain text, including yes or no. Do not use this for open questions.`,
     schema: z
       .object({
         question: z
@@ -121,7 +121,7 @@ const registry = defineArchestraTools([
     async handler({ args, context, toolName }) {
       const labels = args.options.map((option) => option.label);
       if (new Set(labels).size !== labels.length) {
-        return errorResult("Each option label must be unique.");
+        return errorResult("Give each option a different label.");
       }
 
       const elicitation = context.elicitation;
@@ -147,8 +147,8 @@ const registry = defineArchestraTools([
         return structuredSuccessResult(
           { action, selected: [] },
           action === "decline"
-            ? "The user declined to choose."
-            : "The user cancelled the choice.",
+            ? "The user declined to pick."
+            : "The user dismissed the question.",
         );
       }
 
@@ -158,10 +158,10 @@ const registry = defineArchestraTools([
         allowMultiple: args.allowMultiple === true,
       });
       if (selected.length === 0) {
-        return errorResult("The user submitted without selecting an option.");
+        return errorResult("The user sent the form with no option selected.");
       }
       if (!args.allowMultiple && selected.length !== 1) {
-        return errorResult("Select exactly one option.");
+        return errorResult("The user selected more than one option.");
       }
 
       return structuredSuccessResult(

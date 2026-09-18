@@ -178,7 +178,7 @@ describe("McpElicitationDialog", () => {
     await user.click(
       screen.getByRole("radio", { name: "Accept for this session" }),
     );
-    await user.click(screen.getByRole("button", { name: /continue/i }));
+    await user.click(screen.getByRole("button", { name: /send/i }));
 
     expect(onRespond).toHaveBeenCalledWith({
       id: request.id,

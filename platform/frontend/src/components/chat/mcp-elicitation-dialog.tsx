@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckIcon, XIcon } from "lucide-react";
+import { CheckIcon, ListChecksIcon, XIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
@@ -164,9 +164,25 @@ export function McpElicitationDialog({
       )}
     </div>
   );
-  const footer = (
-    <>
-      {variant === "dialog" ? (
+  const footer =
+    variant === "inline" ? (
+      <>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          disabled={isSubmitting}
+          onClick={() => void respondWithoutContent("cancel")}
+        >
+          Dismiss
+        </Button>
+        <Button type="submit" size="sm" disabled={isSubmitting}>
+          <CheckIcon />
+          Send
+        </Button>
+      </>
+    ) : (
+      <>
         <Button
           type="button"
           variant="ghost"
@@ -176,21 +192,20 @@ export function McpElicitationDialog({
           <XIcon />
           Decline
         </Button>
-      ) : null}
-      <Button
-        type="button"
-        variant="outline"
-        disabled={isSubmitting}
-        onClick={() => void respondWithoutContent("cancel")}
-      >
-        Cancel
-      </Button>
-      <Button type="submit" disabled={isSubmitting}>
-        <CheckIcon />
-        Continue
-      </Button>
-    </>
-  );
+        <Button
+          type="button"
+          variant="outline"
+          disabled={isSubmitting}
+          onClick={() => void respondWithoutContent("cancel")}
+        >
+          Cancel
+        </Button>
+        <Button type="submit" disabled={isSubmitting}>
+          <CheckIcon />
+          Continue
+        </Button>
+      </>
+    );
 
   if (variant === "inline") {
     return (
@@ -202,11 +217,20 @@ export function McpElicitationDialog({
           void submit();
         }}
       >
-        <div className="border-b border-border/60 px-4 py-3 text-sm font-medium">
-          {request.message}
+        <div className="flex items-center justify-between gap-3 border-b border-border/60 bg-muted/40 px-3 py-2">
+          <div className="flex min-w-0 flex-1 items-start gap-2">
+            <ListChecksIcon className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
+            <p className="text-xs font-medium leading-5 text-foreground">
+              {request.message}
+            </p>
+          </div>
+          <div className="flex shrink-0 items-center gap-1.5 text-[10px] font-medium text-muted-foreground">
+            <span className="size-1.5 rounded-full bg-amber-500" />
+            Answer requested
+          </div>
         </div>
-        <div className="px-4 py-3">{fieldsBody}</div>
-        <div className="flex flex-wrap items-center justify-end gap-2 border-t border-border/60 px-4 py-3">
+        <div className="px-3 py-3">{fieldsBody}</div>
+        <div className="flex items-center justify-end gap-1 border-t border-border/60 px-3 py-2">
           {footer}
         </div>
       </form>

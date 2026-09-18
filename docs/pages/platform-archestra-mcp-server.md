@@ -39,7 +39,7 @@ Some tools enforce an **additional access requirement** in their handler beyond 
 |------|-------------|--------------------------|
 | `whoami` | Returns the name and ID of the current agent. | None (no additional RBAC permission required) |
 | `yell` | Report confusing OpenAPPA blocks or remedies to the OpenAPPA developers. | None (no additional RBAC permission required) |
-| `get_remedy_plans` | Read why the guardrails policy blocked a tool call and which remedy plans are offered. | None (no additional RBAC permission required) |
+| `get_remedy_plans` | Read why the guardrails policy blocked a tool call and which remedy plans it offers. | None (no additional RBAC permission required) |
 | `execute_remedy_plan` | Execute a remedy plan offered by the guardrails policy for a blocked call. | None (no additional RBAC permission required) |
 
 #### whoami

@@ -314,7 +314,7 @@ describe("MCP Gateway - in-band elicitation round trip", () => {
     };
     expect(body.result.isError).toBe(true);
     expect(body.result.content?.[0]?.text).toContain(
-      "did not complete a choice form",
+      "did not answer the choice form",
     );
   });
 });

@@ -73,10 +73,10 @@ describe("chat tool execution", () => {
     );
     expect(result.isError).toBe(true);
     expect((result.content[0] as any).text).toContain(
-      "This client did not complete a choice form",
+      "This client did not answer the choice form",
     );
     expect((result.content[0] as any).text).toContain(
-      "Do not ask this as a free-form chat question",
+      "Do not ask this as a plain-text chat question",
     );
   });
 
@@ -132,7 +132,9 @@ describe("chat tool execution", () => {
       mockContext,
     );
     expect(result.isError).toBe(true);
-    expect((result.content[0] as any).text).toContain("unique");
+    expect((result.content[0] as any).text).toContain(
+      "Give each option a different label",
+    );
   });
 
   test("ask_user maps multi-choice option_N keys to labels", async () => {

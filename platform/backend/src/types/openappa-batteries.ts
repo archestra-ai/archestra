@@ -38,6 +38,11 @@ export const BatteryPackageSchema = createSelectSchema(
   updatedAt: z.coerce.date(),
 });
 export type BatteryPackage = z.infer<typeof BatteryPackageSchema>;
+/** A stored package's identity: enough to find its inspected form or fetch its files. */
+export type BatteryPackageSummary = Pick<
+  BatteryPackage,
+  "organizationId" | "name" | "contentHash"
+>;
 
 export const EffectivePolicySchema = createSelectSchema(
   openappaEffectivePoliciesTable,

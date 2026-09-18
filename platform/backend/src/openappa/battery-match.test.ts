@@ -14,7 +14,7 @@ describe("matchBatteries", () => {
         },
         available,
       ),
-    ).toEqual(["github"]);
+    ).toEqual([{ battery: "github", evidence: "host" }]);
     expect(
       matchBatteries(
         {
@@ -26,7 +26,7 @@ describe("matchBatteries", () => {
         },
         available,
       ),
-    ).toEqual(["github"]);
+    ).toEqual([{ battery: "github", evidence: "image" }]);
   });
 
   test("a subdomain of a known host matches, an unrelated host with a familiar name falls back to the name", () => {
@@ -39,7 +39,7 @@ describe("matchBatteries", () => {
         },
         available,
       ),
-    ).toEqual(["notion"]);
+    ).toEqual([{ battery: "notion", evidence: "host" }]);
     expect(
       matchBatteries(
         {
@@ -49,7 +49,7 @@ describe("matchBatteries", () => {
         },
         available,
       ),
-    ).toEqual(["linear"]);
+    ).toEqual([{ battery: "linear", evidence: "name" }]);
   });
 
   test("only available batteries and no false positives", () => {
@@ -81,7 +81,7 @@ describe("matchBatteries", () => {
         { name: "github-mcp (prod)", serverUrl: null, localConfig: null },
         available,
       ),
-    ).toEqual(["github"]);
+    ).toEqual([{ battery: "github", evidence: "name" }]);
     expect(
       matchBatteries(
         { name: "Notional planning", serverUrl: null, localConfig: null },

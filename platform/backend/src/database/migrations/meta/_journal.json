@@ -3368,6 +3368,13 @@
       "when": 1789742989422,
       "tag": "0480_previous_gideon",
       "breakpoints": true
+    },
+    {
+      "idx": 481,
+      "version": "7",
+      "when": 1789756759975,
+      "tag": "0481_great_magus",
+      "breakpoints": true
     }
   ]
 }

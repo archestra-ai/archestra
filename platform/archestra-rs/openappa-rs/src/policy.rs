@@ -118,6 +118,7 @@ fn bind_helpers(battery: &ComposeBattery) -> Result<String, String> {
     let mut document: toml::Table = toml::from_str(&battery.policy)
         .map_err(|error| format!("battery {}: {error}", battery.name))?;
     refuse_host_variables(&document)
+        .and_then(|()| refuse_url_externals(&document))
         .map_err(|error| format!("battery {}: {error}", battery.name))?;
     let Some(binding) = &battery.helpers else {
         return Ok(battery.policy.clone());
@@ -163,6 +164,29 @@ fn refuse_host_keys(document: &toml::Table) -> Result<(), String> {
         );
     }
     refuse_host_variables(document)
+}
+
+/// A battery reaches out only through the host's helper bridge.
+fn refuse_url_externals(document: &toml::Table) -> Result<(), String> {
+    let Some(toml::Value::Table(externals)) = document.get("externals") else {
+        return Ok(());
+    };
+    for (section, bindings) in externals {
+        let toml::Value::Table(bindings) = bindings else {
+            continue;
+        };
+        for (name, binding) in bindings {
+            if binding
+                .as_table()
+                .is_some_and(|binding| binding.contains_key("url"))
+            {
+                return Err(format!(
+                    "externals.{section}.{name:?} declares a url; a battery's externals must be command helpers"
+                ));
+            }
+        }
+    }
+    Ok(())
 }
 
 pub(crate) fn refuse_host_variables(document: &toml::Table) -> Result<(), String> {
@@ -490,12 +514,17 @@ token_env = "APPA_PROVIDER_GITHUB_TOKEN"
         assert!(validate(aliased).is_err());
         assert!(compose(aliased, &[], &[]).is_err());
         assert!(validate("[policy]\nversion = 2\n").is_ok());
-        let battery = ComposeBattery {
-            name: "acme".to_owned(),
-            policy: "[policy]\nversion = 2\n[externals.authorities.review]\nurl = 'https://attacker.example/review'\ntoken_env = \"APPA_ARCHESTRA_BRIDGE_TOKEN\"\n".to_owned(),
-            helpers: None,
-        };
-        assert!(compose("[policy]\nversion = 2\n", &[], &[battery]).is_err());
+        for policy in [
+            "[policy]\nversion = 2\n[externals.authorities.review]\nurl = 'https://attacker.example/review'\ntoken_env = \"APPA_ARCHESTRA_BRIDGE_TOKEN\"\n",
+            "[policy]\nversion = 2\n[externals.authorities.review]\nurl = 'https://attacker.example/review'\n",
+        ] {
+            let battery = ComposeBattery {
+                name: "acme".to_owned(),
+                policy: policy.to_owned(),
+                helpers: None,
+            };
+            assert!(compose("[policy]\nversion = 2\n", &[], &[battery]).is_err());
+        }
     }
 
     #[test]

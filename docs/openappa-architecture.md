@@ -104,10 +104,12 @@ Composition runs after each root save, GitHub import, install change, package up
 catalog rename, catalog delete, and tool sync, and hourly for every organization as a
 backstop. Before each dispatch the runtime compares the stored root revision to the
 latest one and recomposes on a mismatch. Installing an MCP server whose catalog
-matches a bundled battery (by server URL host, container image, or name) attaches
-the battery automatically. A battery without helpers activates at once; a battery
-with helpers stays `missing_credentials` until every declared credential is bound to
-an organization-level runtime credential.
+matches a bundled battery attaches the battery automatically: enabled on a server
+URL host or container image match, disabled on a name-only match. A battery without
+helpers activates at once; a battery with helpers stays `missing_credentials` until
+every declared credential is bound to an organization-level runtime credential, and
+only one install of such a battery is active per organization. A battery's externals
+must be `command` helpers; a `url` external is refused at upload and composition.
 
 Helper scripts never run on the API host. The composer rewrites every `command`
 binding into a URL binding on the loopback helper bridge,

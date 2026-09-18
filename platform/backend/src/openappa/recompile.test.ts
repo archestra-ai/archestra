@@ -68,7 +68,7 @@ describe("recompile coalescing", () => {
 
     const stale = openappaBatteriesService.recompile(organizationId);
     await vi.waitFor(() => expect(native.composed).toHaveLength(1));
-    await OpenAppaBatteryInstallModel.create({
+    await attach({
       organizationId,
       batteryName: "acme",
       catalogId: catalog.id,
@@ -102,7 +102,7 @@ describe("recompile coalescing", () => {
       organizationId,
       name: "Acme",
     });
-    await OpenAppaBatteryInstallModel.create({
+    await attach({
       organizationId,
       batteryName: "acme",
       catalogId: catalog.id,
@@ -122,3 +122,12 @@ describe("recompile coalescing", () => {
     expect(served.installFingerprint).not.toBe(stored.installFingerprint);
   });
 });
+
+/** An install the test relies on; the unique index cannot refuse a fresh catalog. */
+async function attach(
+  params: Parameters<typeof OpenAppaBatteryInstallModel.createIfAbsent>[0],
+) {
+  const install = await OpenAppaBatteryInstallModel.createIfAbsent(params);
+  if (!install) throw new Error("the battery install already existed");
+  return install;
+}

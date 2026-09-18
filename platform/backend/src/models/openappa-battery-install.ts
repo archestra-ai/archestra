@@ -63,17 +63,6 @@ class OpenAppaBatteryInstallModel {
     return row !== undefined;
   }
 
-  static async create(params: {
-    organizationId: string;
-    batteryName: string;
-    catalogId: string;
-    enabled: boolean;
-    credentialBindings: BatteryCredentialBindings;
-  }): Promise<BatteryInstall> {
-    const [row] = await db.insert(table).values(params).returning();
-    return row;
-  }
-
   /** Insert unless the (organization, catalog, battery) install already exists. */
   static async createIfAbsent(params: {
     organizationId: string;

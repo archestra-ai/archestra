@@ -1,0 +1,1 @@
+CREATE INDEX "openappa_battery_installs_catalog_idx" ON "openappa_battery_installs" USING btree ("catalog_id");

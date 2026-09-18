@@ -185,20 +185,39 @@ describe("guardrails batteries", () => {
     ]);
   });
 
-  test("a helper-bearing battery is enabled for one catalog entry at a time", async ({
+  test("a helper-bearing battery is active for one catalog entry at a time", async ({
     makeInternalMcpCatalog,
   }) => {
     const first = await makeInternalMcpCatalog({ organizationId });
     const second = await makeInternalMcpCatalog({ organizationId });
-    const install = (catalogId: string) =>
+    const third = await makeInternalMcpCatalog({ organizationId });
+    const credentialBindings = await bindGithubToken();
+    const install = (catalogId: string, bindings = {}) =>
       app.inject({
         method: "POST",
         url: "/api/openappa/battery-installs",
-        payload: { batteryName: "github", catalogId },
+        payload: {
+          batteryName: "github",
+          catalogId,
+          credentialBindings: bindings,
+        },
       });
-    expect((await install(first.id)).statusCode).toBe(200);
+    // An install without credentials holds no helpers and blocks nothing.
+    const waiting = await install(first.id);
+    expect(waiting.json()).toMatchObject({ status: "missing_credentials" });
     expect((await install(first.id)).statusCode).toBe(409);
-    expect((await install(second.id)).statusCode).toBe(409);
+    const owner = await install(second.id, credentialBindings);
+    expect(owner.json()).toMatchObject({ status: "active" });
+    expect((await install(third.id, credentialBindings)).statusCode).toBe(409);
+    expect(
+      (
+        await app.inject({
+          method: "PATCH",
+          url: `/api/openappa/battery-installs/${waiting.json().id}`,
+          payload: { credentialBindings },
+        })
+      ).statusCode,
+    ).toBe(409);
   });
 
   test("a catalog whose tool namespace holds a double underscore is refused", async ({

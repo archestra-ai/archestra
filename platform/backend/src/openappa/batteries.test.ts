@@ -38,6 +38,19 @@ describe("battery attachment after a tool sync", () => {
       catalogId: catalog.id,
       enabled: true,
     });
+
+    // A name alone attaches the battery disabled, for an operator to confirm.
+    const byName = await makeInternalMcpCatalog({
+      organizationId,
+      name: "Slack bridge test",
+      serverUrl: "https://mcp.example.com/chat",
+    });
+    await openappaBatteriesService.onCatalogToolsChanged(byName.id);
+    expect(
+      (await OpenAppaBatteryInstallModel.list(organizationId)).find(
+        (install) => install.catalogId === byName.id,
+      ),
+    ).toMatchObject({ batteryName: "slack", enabled: false });
     expect(
       await OpenAppaEffectivePolicyModel.find(organizationId),
     ).toMatchObject({ rootRevision: 0, lastError: null });

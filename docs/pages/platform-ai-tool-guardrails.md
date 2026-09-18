@@ -30,7 +30,7 @@ The assistant can read, validate, and update the same policy through its policy 
 
 ### Batteries
 
-A battery is a ready-made policy package for one provider, such as GitHub. Batteries bundled with OpenAPPA attach to a matching MCP server when you install it. The battery's rules then apply to that server's tools alongside your organization policy.
+A battery is a ready-made policy package for one provider, such as GitHub. Batteries bundled with OpenAPPA attach to a matching MCP server when you install it: a match on the server's URL or image is enabled at once, a match on its name alone is attached disabled for you to confirm. The battery's rules then apply to that server's tools alongside your organization policy.
 
 A battery that consults the provider needs a credential. Bind each credential the battery names to an organization-level runtime credential; until then the battery stays inactive. Binding needs permission to read credentials as well as to manage the organization, because the helper receives the credential's value. Helper scripts run in the code execution sandbox, so the sandbox runtime must be enabled.
 

@@ -26,8 +26,8 @@ import type {
   BatteryInstall,
   BatteryInstallStatus,
   BatteryInstallView,
-  BatteryPackage,
   BatteryPackageFile,
+  BatteryPackageSummary,
   BatterySummary,
   CreateBatteryInstall,
   EffectivePolicy,
@@ -233,7 +233,10 @@ class OpenAppaBatteriesService {
         battery,
         bindings: changes.credentialBindings,
       });
-    if (changes.enabled === true && !existing.enabled)
+    const claimsHelpers =
+      (changes.enabled ?? existing.enabled) &&
+      (changes.enabled === true || changes.credentialBindings !== undefined);
+    if (claimsHelpers)
       await this.requireSoleHelperOwner({ organizationId, battery, id });
     await OpenAppaBatteryInstallModel.update({
       id,
@@ -330,7 +333,7 @@ class OpenAppaBatteriesService {
     organizationId: string,
     name: string,
   ): Promise<NativeBatteryPackage | null> {
-    const uploaded = await OpenAppaBatteryPackageModel.find({
+    const uploaded = await OpenAppaBatteryPackageModel.findSummary({
       organizationId,
       name,
     });
@@ -354,13 +357,14 @@ class OpenAppaBatteriesService {
       (await this.availableBatteries(organizationId)).keys(),
     );
     let created = false;
-    for (const batteryName of matchBatteries(catalog, available)) {
+    for (const { battery, evidence } of matchBatteries(catalog, available)) {
       // Concurrent syncs of one catalog race here; the unique index decides.
+      // A name alone is a suggestion: the install waits disabled for review.
       const attached = await OpenAppaBatteryInstallModel.createIfAbsent({
         organizationId,
-        batteryName,
+        batteryName: battery,
         catalogId: catalog.id,
-        enabled: true,
+        enabled: evidence !== "name",
         credentialBindings: {},
       });
       if (!attached) continue;
@@ -369,8 +373,10 @@ class OpenAppaBatteriesService {
         {
           organizationId,
           catalogId: catalog.id,
-          batteryName,
+          batteryName: battery,
+          evidence,
           installId: attached.id,
+          enabled: attached.enabled,
         },
         "OpenAPPA battery attached to a matching MCP catalog entry",
       );
@@ -567,7 +573,7 @@ class OpenAppaBatteriesService {
     const batteries: AvailableBatteries = new Map();
     for (const bundled of await this.bundledBatteries())
       batteries.set(bundled.name, { source: "bundled", package: bundled });
-    for (const uploaded of await OpenAppaBatteryPackageModel.list(
+    for (const uploaded of await OpenAppaBatteryPackageModel.listSummaries(
       organizationId,
     )) {
       const inspected = await this.inspect(uploaded);
@@ -589,16 +595,21 @@ class OpenAppaBatteriesService {
     return this.bundled;
   }
 
-  /** A stored package that no longer validates is logged and treated as absent. */
+  /**
+   * The inspected form of a stored package, from the cache or from its files.
+   * A package that no longer validates is logged and treated as absent.
+   */
   private async inspect(
-    uploaded: BatteryPackage,
+    uploaded: BatteryPackageSummary,
   ): Promise<NativeBatteryPackage | null> {
     const cached = this.inspected.get(uploaded.contentHash);
     if (cached) return cached;
+    const stored = await OpenAppaBatteryPackageModel.find(uploaded);
+    if (!stored) return null;
     const native = await import("@archestra/openappa-rs");
     try {
-      const inspected = await native.inspectOpenappaBattery(uploaded.files);
-      this.inspected.set(uploaded.contentHash, inspected);
+      const inspected = await native.inspectOpenappaBattery(stored.files);
+      this.inspected.set(stored.contentHash, inspected);
       return inspected;
     } catch (error) {
       logger.warn(
@@ -622,25 +633,29 @@ class OpenAppaBatteriesService {
     return battery;
   }
 
-  /** Only a battery with helper scripts is bound to one enabled install, the consult target. */
+  /**
+   * A battery with helper scripts consults one install, so a second one may not
+   * become active while another is. An install that is enabled but not active
+   * (auto-attached, credentials unbound) holds nothing and blocks nothing.
+   */
   private async requireSoleHelperOwner(params: {
     organizationId: string;
     battery: NativeBatteryPackage;
-    /** The install being enabled, exempt from the check. */
+    /** The install being changed, exempt from the check. */
     id: string | null;
   }): Promise<void> {
     const { organizationId, battery, id } = params;
     if (battery.externals.length === 0) return;
-    const others = (
-      await OpenAppaBatteryInstallModel.list(organizationId)
-    ).filter(
+    const active = (await this.plan(organizationId)).installs.some(
       (other) =>
-        other.batteryName === battery.name && other.enabled && other.id !== id,
+        other.batteryName === battery.name &&
+        other.status === "active" &&
+        other.id !== id,
     );
-    if (others.length > 0)
+    if (active)
       throw new ApiError(
         409,
-        "A battery with helper scripts can be enabled for one catalog entry at a time",
+        "A battery with helper scripts can be active for one catalog entry at a time",
       );
   }
 

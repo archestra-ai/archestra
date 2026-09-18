@@ -5,6 +5,12 @@ type BatteryMatchCatalog = Pick<
   "name" | "serverUrl" | "localConfig"
 >;
 
+type BatteryMatch = {
+  battery: string;
+  /** What the catalog entry was matched on; a name alone is a weak signal. */
+  evidence: "host" | "image" | "name";
+};
+
 /**
  * The batteries a catalog entry stands for, strongest evidence first: a known
  * server URL host or container image outweighs a name, and a name match only
@@ -13,25 +19,28 @@ type BatteryMatchCatalog = Pick<
 export function matchBatteries(
   catalog: BatteryMatchCatalog,
   available: ReadonlySet<string>,
-): string[] {
+): BatteryMatch[] {
   const host = urlHost(catalog.serverUrl);
   const image = imageRepository(catalog.localConfig?.dockerImage);
   const name = ` ${normalizeName(catalog.name)} `;
-  const strong: string[] = [];
-  const weak: string[] = [];
+  const strong: BatteryMatch[] = [];
+  const weak: BatteryMatch[] = [];
   for (const rule of BATTERY_MATCH_RULES) {
     if (!available.has(rule.battery)) continue;
-    const byHost =
+    if (
       host !== null &&
-      rule.hosts.some((known) => host === known || host.endsWith(`.${known}`));
-    const byImage =
+      rule.hosts.some((known) => host === known || host.endsWith(`.${known}`))
+    )
+      strong.push({ battery: rule.battery, evidence: "host" });
+    else if (
       image !== null &&
       rule.images.some(
         (known) => image === known || image.startsWith(`${known}/`),
-      );
-    if (byHost || byImage) strong.push(rule.battery);
+      )
+    )
+      strong.push({ battery: rule.battery, evidence: "image" });
     else if (rule.names.some((alias) => name.includes(` ${alias} `)))
-      weak.push(rule.battery);
+      weak.push({ battery: rule.battery, evidence: "name" });
   }
   return strong.length > 0 ? strong : weak;
 }

@@ -1,5 +1,6 @@
 import {
   boolean,
+  index,
   integer,
   jsonb,
   pgTable,
@@ -72,6 +73,8 @@ export const openappaBatteryInstallsTable = pgTable(
       table.catalogId,
       table.batteryName,
     ),
+    // Tool syncs and catalog deletes look installs up by catalog alone.
+    index("openappa_battery_installs_catalog_idx").on(table.catalogId),
   ],
 );
 

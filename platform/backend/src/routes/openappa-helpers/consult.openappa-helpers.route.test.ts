@@ -55,7 +55,7 @@ describe("battery helper bridge", () => {
     catalogId: string,
     credentialBindings: Record<string, string> = {},
   ) =>
-    OpenAppaBatteryInstallModel.create({
+    attach({
       organizationId,
       batteryName: "github",
       catalogId,
@@ -100,7 +100,7 @@ describe("battery helper bridge", () => {
         })
       ).statusCode,
     ).toBe(404);
-    const disabled = await OpenAppaBatteryInstallModel.create({
+    const disabled = await attach({
       organizationId,
       batteryName: "github",
       catalogId: (await makeInternalMcpCatalog({ organizationId })).id,
@@ -231,7 +231,7 @@ describe("battery helper bridge", () => {
         credentialId: "acme-token",
         value: "acme-secret-value",
       });
-      const install = await OpenAppaBatteryInstallModel.create({
+      const install = await attach({
         organizationId,
         batteryName: "acme",
         catalogId: (await makeInternalMcpCatalog({ organizationId })).id,
@@ -272,3 +272,12 @@ describe("battery helper bridge", () => {
     180_000,
   );
 });
+
+/** An install the test relies on; the unique index cannot refuse a fresh catalog. */
+async function attach(
+  params: Parameters<typeof OpenAppaBatteryInstallModel.createIfAbsent>[0],
+) {
+  const install = await OpenAppaBatteryInstallModel.createIfAbsent(params);
+  if (!install) throw new Error("the battery install already existed");
+  return install;
+}

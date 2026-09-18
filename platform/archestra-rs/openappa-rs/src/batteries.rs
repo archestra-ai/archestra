@@ -140,6 +140,13 @@ fn helper_externals(policy: &str) -> Result<Vec<HelperExternal>, String> {
             continue;
         };
         for (name, entry) in section {
+            // A battery's externals run through the host's helper bridge; a url
+            // external would reach out from the host with none of its guards.
+            if entry.get("url").is_some() {
+                return Err(format!(
+                    "external {name:?} declares a url; a battery's externals must be command helpers"
+                ));
+            }
             let Some(command) = entry.get("command").and_then(toml::Value::as_array) else {
                 continue;
             };
@@ -239,7 +246,10 @@ mod tests {
         same_name[1].text = "[policy]\nversion = 2\n[externals.annotators.foo]\ncommand = [\"python3\", \"a.py\"]\n[externals.authorities.foo]\ncommand = [\"python3\", \"b.py\"]\n".to_owned();
         assert!(inspect(&same_name).is_err());
         let mut host_variable = files("\"archestra\"");
-        host_variable[1].text = "[policy]\nversion = 2\n[externals.authorities.review]\nurl = \"https://attacker.example/review\"\ntoken_env = \"APPA_ARCHESTRA_BRIDGE_TOKEN\"\n".to_owned();
+        host_variable[1].text = "[policy]\nversion = 2\n[externals.authorities.review]\ncommand = [\"python3\", \"review.py\"]\ntoken_env = \"APPA_ARCHESTRA_BRIDGE_TOKEN\"\n".to_owned();
         assert!(inspect(&host_variable).is_err());
+        let mut remote = files("\"archestra\"");
+        remote[1].text = "[policy]\nversion = 2\n[externals.authorities.review]\nurl = \"https://attacker.example/review\"\n".to_owned();
+        assert!(inspect(&remote).is_err());
     }
 }

@@ -1,16 +1,38 @@
 import { and, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
-import type { BatteryPackageFile } from "@/types/openappa-batteries";
+import type {
+  BatteryPackageFile,
+  BatteryPackageSummary,
+} from "@/types/openappa-batteries";
 
 const table = schema.openappaBatteryPackagesTable;
 
 class OpenAppaBatteryPackageModel {
-  static async list(organizationId: string) {
+  /** Every package of the organization without its files. */
+  static async listSummaries(
+    organizationId: string,
+  ): Promise<BatteryPackageSummary[]> {
     return db
-      .select()
+      .select(summary)
       .from(table)
       .where(eq(table.organizationId, organizationId))
       .orderBy(table.name);
+  }
+
+  static async findSummary(params: {
+    organizationId: string;
+    name: string;
+  }): Promise<BatteryPackageSummary | null> {
+    const [row] = await db
+      .select(summary)
+      .from(table)
+      .where(
+        and(
+          eq(table.organizationId, params.organizationId),
+          eq(table.name, params.name),
+        ),
+      );
+    return row ?? null;
   }
 
   static async find(params: { organizationId: string; name: string }) {
@@ -79,3 +101,10 @@ class OpenAppaBatteryPackageModel {
 }
 
 export default OpenAppaBatteryPackageModel;
+
+/** The columns a summary carries: identity and content hash, never the files. */
+const summary = {
+  organizationId: table.organizationId,
+  name: table.name,
+  contentHash: table.contentHash,
+};

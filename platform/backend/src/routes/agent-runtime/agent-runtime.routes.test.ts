@@ -20,6 +20,7 @@ import {
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { claudeCodeAccountManager } from "@/services/agent-runtime/claude-code-account";
+import { agentRunReconciler } from "@/services/agent-runtime/reconciler";
 import { createRuntimeCredentialDefinition } from "@/services/agent-runtime/runtime-credentials";
 import {
   cancelDetachedAgentTask,
@@ -1652,57 +1653,44 @@ describe("Agent Runtime routes", () => {
     expect(fileAccess).toHaveBeenCalledTimes(1);
   });
 
-  test("reports a retained terminal until its CLI exits or the workspace leaves idle", async () => {
-    const workspaceFor = async (
-      taskId: string,
-      state: "idle" | "suspended",
-    ) => {
-      const run = await createRun({ taskId, actorUserId: user.id });
-      await AgentRunModel.close({ id: run.id, terminalRetained: true });
-      await AgentWorkspaceModel.create({
-        organizationId,
-        agentId: agent.id,
-        actorKind: "user",
-        actorId: user.id,
-        backend: "kubernetes",
-        runtimeScope: run.runtimeScope,
-        workloadName: run.workloadName,
-        state,
-        lastTaskId: taskId,
-        expiresAt: new Date(Date.now() + 3600_000),
-      });
-    };
-    const detail = async (taskId: string) =>
-      (
-        await app.inject({ method: "GET", url: `/api/agent-runs/${taskId}` })
-      ).json().terminalRetained as boolean;
-    const listed = async (taskId: string) =>
-      (await app.inject({ method: "GET", url: "/api/agent-runs" }))
-        .json()
-        .data.find((run: { taskId: string }) => run.taskId === taskId)
-        .terminalRetained as boolean;
+  test("reports a retained terminal from the reconciler's probe until the CLI exits", async () => {
+    const task = await createTask(agent.id);
+    const run = await createRun({ taskId: task.id, actorUserId: user.id });
+    await AgentRunModel.close({ id: run.id });
+    await AgentWorkspaceModel.create({
+      organizationId,
+      agentId: agent.id,
+      actorKind: "user",
+      actorId: user.id,
+      backend: "kubernetes",
+      runtimeScope: run.runtimeScope,
+      workloadName: run.workloadName,
+      state: "idle",
+      lastTaskId: task.id,
+      expiresAt: new Date(Date.now() + 3600_000),
+    });
     const retained = vi
       .spyOn(agentRuntimeManager, "hasRetainedTerminal")
       .mockResolvedValue(true);
+    vi.spyOn(agentRuntimeManager, "refreshCredentials").mockResolvedValue();
+    const listed = async () =>
+      (await app.inject({ method: "GET", url: "/api/agent-runs" }))
+        .json()
+        .data.find((row: { taskId: string }) => row.taskId === task.id)
+        .terminalRetained as boolean;
+    const detail = async () =>
+      (
+        await app.inject({ method: "GET", url: `/api/agent-runs/${task.id}` })
+      ).json().terminalRetained as boolean;
 
-    const live = await createTask(agent.id);
-    await workspaceFor(live.id, "idle");
-    expect(await detail(live.id)).toBe(true);
-    expect(await listed(live.id)).toBe(true);
+    expect(await listed()).toBe(false);
+    await agentRunReconciler.reconcile();
+    expect(await listed()).toBe(true);
+    expect(await detail()).toBe(true);
 
     retained.mockResolvedValue(false);
-    expect(await detail(live.id)).toBe(false);
-    expect(await listed(live.id)).toBe(false);
-    expect((await AgentRunModel.findByTaskId(live.id))?.terminalRetained).toBe(
-      false,
-    );
-
-    retained.mockResolvedValue(true).mockClear();
-    const suspended = await createTask(agent.id);
-    await workspaceFor(suspended.id, "suspended");
-    expect(await detail(suspended.id)).toBe(false);
-    expect(await listed(suspended.id)).toBe(false);
-    expect(retained).not.toHaveBeenCalled();
+    expect(await detail()).toBe(false);
+    expect(await listed()).toBe(false);
   });
 
   test("workspace deletion is owner-only, retries failures, preserves transcripts, and audits the state change", async ({
@@ -1727,7 +1715,7 @@ describe("Agent Runtime routes", () => {
       .spyOn(agentRuntimeManager, "deleteWorkspace")
       .mockRejectedValueOnce(new Error("temporary cluster failure"))
       .mockResolvedValue(undefined);
-    vi.spyOn(agentRuntimeManager, "releaseRun").mockResolvedValue(false);
+    vi.spyOn(agentRuntimeManager, "releaseRun").mockResolvedValue(undefined);
     const owner = user;
     user = await makeAdmin();
     const url = `/api/agent-runs/${task.id}/workspace`;

@@ -99,14 +99,11 @@ export interface AgentRuntimeBackendDriver {
   refreshCredentials?(session: AgentRunRecord): Promise<void>;
   /** Stop only this turn, keeping the workspace available for continuation. */
   stopRun(session: AgentRunRecord): Promise<"suspended" | undefined>;
-  /**
-   * Revoke turn-scoped access; a successful live CLI may retain it until
-   * workspace cleanup. Resolves true when it did.
-   */
+  /** Revoke turn-scoped access; a successful live CLI may retain it until workspace cleanup. */
   releaseRun(
     session: AgentRunRecord,
     options?: { retainInteractiveSession?: boolean },
-  ): Promise<boolean>;
+  ): Promise<void>;
   /** True only for the original, still-running interactive CLI. */
   hasRetainedTerminal(
     session: Pick<AgentRunRecord, "taskId" | "runtimeScope" | "workloadName">,

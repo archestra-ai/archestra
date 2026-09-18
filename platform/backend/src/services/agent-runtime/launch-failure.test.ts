@@ -126,7 +126,7 @@ test.for([
     new Error("publication connection lost"),
   );
   vi.spyOn(backend, "teardown").mockResolvedValue();
-  const release = vi.spyOn(backend, "releaseRun").mockResolvedValue(false);
+  const release = vi.spyOn(backend, "releaseRun").mockResolvedValue();
   const stop = vi.spyOn(backend, "stopRun").mockImplementation(async (run) => {
     expect(
       (await AgentWorkspaceModel.findByWorkloadName(run.workloadName))

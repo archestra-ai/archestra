@@ -75873,9 +75873,6 @@
                           }
                         ]
                       },
-                      "terminalRetained": {
-                        "type": "boolean"
-                      },
                       "virtualApiKeyId": {
                         "nullable": true,
                         "type": "string",
@@ -75978,7 +75975,6 @@
                       "backend",
                       "runtimeScope",
                       "attentionState",
-                      "terminalRetained",
                       "virtualApiKeyId",
                       "startedAt",
                       "endedAt",
@@ -76732,9 +76728,6 @@
                               }
                             ]
                           },
-                          "terminalRetained": {
-                            "type": "boolean"
-                          },
                           "virtualApiKeyId": {
                             "nullable": true,
                             "type": "string",
@@ -76820,6 +76813,9 @@
                           "projectIcon": {
                             "nullable": true,
                             "type": "string"
+                          },
+                          "terminalRetained": {
+                            "type": "boolean"
                           }
                         },
                         "required": [
@@ -76837,7 +76833,6 @@
                           "backend",
                           "runtimeScope",
                           "attentionState",
-                          "terminalRetained",
                           "virtualApiKeyId",
                           "startedAt",
                           "endedAt",
@@ -76850,7 +76845,8 @@
                           "prompt",
                           "agent",
                           "projectName",
-                          "projectIcon"
+                          "projectIcon",
+                          "terminalRetained"
                         ],
                         "additionalProperties": false
                       }
@@ -77247,9 +77243,6 @@
                         }
                       ]
                     },
-                    "terminalRetained": {
-                      "type": "boolean"
-                    },
                     "virtualApiKeyId": {
                       "nullable": true,
                       "type": "string",
@@ -77335,6 +77328,9 @@
                     "projectIcon": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "terminalRetained": {
+                      "type": "boolean"
                     },
                     "workspace": {
                       "nullable": true,
@@ -77444,7 +77440,6 @@
                     "backend",
                     "runtimeScope",
                     "attentionState",
-                    "terminalRetained",
                     "virtualApiKeyId",
                     "startedAt",
                     "endedAt",
@@ -77458,6 +77453,7 @@
                     "agent",
                     "projectName",
                     "projectIcon",
+                    "terminalRetained",
                     "viewerRole"
                   ],
                   "additionalProperties": false
@@ -77834,9 +77830,6 @@
                         }
                       ]
                     },
-                    "terminalRetained": {
-                      "type": "boolean"
-                    },
                     "virtualApiKeyId": {
                       "nullable": true,
                       "type": "string",
@@ -77939,7 +77932,6 @@
                     "backend",
                     "runtimeScope",
                     "attentionState",
-                    "terminalRetained",
                     "virtualApiKeyId",
                     "startedAt",
                     "endedAt",
@@ -364141,9 +364133,6 @@
                           }
                         ]
                       },
-                      "terminalRetained": {
-                        "type": "boolean"
-                      },
                       "virtualApiKeyId": {
                         "nullable": true,
                         "type": "string",
@@ -364229,6 +364218,9 @@
                       "projectIcon": {
                         "nullable": true,
                         "type": "string"
+                      },
+                      "terminalRetained": {
+                        "type": "boolean"
                       },
                       "workspace": {
                         "nullable": true,
@@ -364338,7 +364330,6 @@
                       "backend",
                       "runtimeScope",
                       "attentionState",
-                      "terminalRetained",
                       "virtualApiKeyId",
                       "startedAt",
                       "endedAt",
@@ -364352,6 +364343,7 @@
                       "agent",
                       "projectName",
                       "projectIcon",
+                      "terminalRetained",
                       "viewerRole"
                     ],
                     "additionalProperties": false

@@ -44,7 +44,6 @@ test("keeps a long run owner and sharing scope inside the phone viewport", async
     hardDeadlineAt: "2026-09-01T13:00:00.000Z",
     lastModelActivityAt: null,
     attentionState: null,
-    terminalRetained: false,
     state: "TASK_STATE_COMPLETED",
     statusReason: null,
     stateChangedAt: "2026-09-01T12:01:00.000Z",

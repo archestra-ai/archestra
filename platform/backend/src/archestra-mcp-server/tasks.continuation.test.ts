@@ -129,7 +129,7 @@ test("a continuation reuses the account after an image change and reports a late
     new Error("Runtime transport unavailable"),
   );
   vi.spyOn(backend, "stopRun").mockResolvedValue(undefined);
-  vi.spyOn(backend, "releaseRun").mockResolvedValue(false);
+  vi.spyOn(backend, "releaseRun").mockResolvedValue();
   const result = await executeArchestraTool(
     TOOL_STEER_RUN_FULL_NAME,
     { task_id: previous.taskId, message: "Revise the UI and demo it" },
@@ -384,7 +384,7 @@ test("start_run persists handoff files before launching the runtime", async () =
     throw new Error("Test launch stopped after checking inputs");
   });
   vi.spyOn(backend, "stopRun").mockResolvedValue(undefined);
-  vi.spyOn(backend, "releaseRun").mockResolvedValue(false);
+  vi.spyOn(backend, "releaseRun").mockResolvedValue();
   vi.spyOn(backend, "deleteWorkspace").mockResolvedValue();
   const result = await executeArchestraTool(
     TOOL_START_RUN_FULL_NAME,

@@ -21483,7 +21483,6 @@ export type GetAgentRunsResponses = {
         backend: 'kubernetes';
         runtimeScope: string;
         attentionState: 'input_required' | 'auth_required' | null;
-        terminalRetained: boolean;
         virtualApiKeyId: string | null;
         startedAt: string;
         endedAt: string | null;
@@ -21702,7 +21701,6 @@ export type GetMyAgentRunsResponses = {
             backend: 'kubernetes';
             runtimeScope: string;
             attentionState: 'input_required' | 'auth_required' | null;
-            terminalRetained: boolean;
             virtualApiKeyId: string | null;
             startedAt: string;
             endedAt: string | null;
@@ -21720,6 +21718,7 @@ export type GetMyAgentRunsResponses = {
             };
             projectName: string | null;
             projectIcon: string | null;
+            terminalRetained: boolean;
         }>;
         pagination: {
             currentPage: number;
@@ -21912,7 +21911,6 @@ export type GetMyAgentRunResponses = {
         backend: 'kubernetes';
         runtimeScope: string;
         attentionState: 'input_required' | 'auth_required' | null;
-        terminalRetained: boolean;
         virtualApiKeyId: string | null;
         startedAt: string;
         endedAt: string | null;
@@ -21930,6 +21928,7 @@ export type GetMyAgentRunResponses = {
         };
         projectName: string | null;
         projectIcon: string | null;
+        terminalRetained: boolean;
         workspace?: {
             state: 'active' | 'idle' | 'suspending' | 'suspended' | 'resuming' | 'deleting' | 'deleted';
             expiresAt: string;
@@ -22048,7 +22047,6 @@ export type UpdateAgentRunResponses = {
         backend: 'kubernetes';
         runtimeScope: string;
         attentionState: 'input_required' | 'auth_required' | null;
-        terminalRetained: boolean;
         virtualApiKeyId: string | null;
         startedAt: string;
         endedAt: string | null;
@@ -94166,7 +94164,6 @@ export type GetProjectRunsResponses = {
         backend: 'kubernetes';
         runtimeScope: string;
         attentionState: 'input_required' | 'auth_required' | null;
-        terminalRetained: boolean;
         virtualApiKeyId: string | null;
         startedAt: string;
         endedAt: string | null;
@@ -94184,6 +94181,7 @@ export type GetProjectRunsResponses = {
         };
         projectName: string | null;
         projectIcon: string | null;
+        terminalRetained: boolean;
         workspace?: {
             state: 'active' | 'idle' | 'suspending' | 'suspended' | 'resuming' | 'deleting' | 'deleted';
             expiresAt: string;

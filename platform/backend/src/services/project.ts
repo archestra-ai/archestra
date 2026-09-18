@@ -26,6 +26,7 @@ import {
   TeamModel,
   UserModel,
 } from "@/models";
+import { agentRunReconciler } from "@/services/agent-runtime/reconciler";
 import { fileStore } from "@/skills-sandbox/file-store";
 import { validateProjectName } from "@/skills-sandbox/project-name";
 import type {
@@ -1074,6 +1075,7 @@ class ProjectService {
     });
     return rows.map((row) => ({
       ...row,
+      terminalRetained: agentRunReconciler.hasRetainedTerminal(row.taskId),
       viewerRole: row.actorUserId === params.userId ? "owner" : "shared",
     }));
   }

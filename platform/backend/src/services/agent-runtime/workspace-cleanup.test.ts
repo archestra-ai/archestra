@@ -66,7 +66,7 @@ test("development input delays idle suspension but never extends the hard deadli
     .spyOn(backend, "getLastWorkspaceActivity")
     .mockResolvedValue(now);
   const suspend = vi.spyOn(backend, "suspendWorkspace").mockResolvedValue();
-  vi.spyOn(backend, "releaseRun").mockResolvedValue(false);
+  vi.spyOn(backend, "releaseRun").mockResolvedValue();
   const deletion = vi.spyOn(backend, "deleteWorkspace").mockResolvedValue();
   await agentRunReconciler.reconcile();
   expect(suspend).not.toHaveBeenCalled();
@@ -150,7 +150,7 @@ test("expiry retains the workspace until final transcript capture succeeds", asy
     expiresAt: new Date(Date.now() - 1000),
   });
   vi.spyOn(backend, "stopRun").mockResolvedValue(undefined);
-  vi.spyOn(backend, "releaseRun").mockResolvedValue(false);
+  vi.spyOn(backend, "releaseRun").mockResolvedValue();
   vi.spyOn(backend, "streamOutput").mockImplementation(
     async ({ destination }) => {
       destination.end();
@@ -264,7 +264,7 @@ test.for([
     stopped = true;
     return suspended ? "suspended" : undefined;
   });
-  const release = vi.spyOn(backend, "releaseRun").mockResolvedValue(false);
+  const release = vi.spyOn(backend, "releaseRun").mockResolvedValue();
   await cleanupAgentRun(run);
   expect(teardown).not.toHaveBeenCalled();
   expect(stop).toHaveBeenCalledTimes(state === "TASK_STATE_COMPLETED" ? 0 : 1);

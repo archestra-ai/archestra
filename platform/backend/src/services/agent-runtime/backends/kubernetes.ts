@@ -61,8 +61,8 @@ class KubernetesAgentRuntimeBackendDriver implements AgentRuntimeBackendDriver {
   async releaseRun(
     session: AgentRunRecord,
     options?: { retainInteractiveSession?: boolean },
-  ): Promise<boolean> {
-    return agentRuntimeManager.releaseRun(session, options);
+  ): Promise<void> {
+    await agentRuntimeManager.releaseRun(session, options);
   }
 
   async recoverRun(session: AgentRunRecord): Promise<void> {

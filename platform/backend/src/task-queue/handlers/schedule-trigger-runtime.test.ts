@@ -48,7 +48,7 @@ test.for([
       destination.end("Dependency review complete.\n");
     },
   );
-  vi.spyOn(backend, "releaseRun").mockResolvedValue(false);
+  vi.spyOn(backend, "releaseRun").mockResolvedValue();
   vi.spyOn(backend, "stopRun").mockResolvedValue(undefined);
   let finish!: (result: AgentRunCompletion) => void;
   const completion = new Promise<AgentRunCompletion>((resolve) => {

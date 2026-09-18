@@ -1,1 +1,0 @@
-ALTER TABLE "agent_runs" ADD COLUMN "terminal_retained" boolean DEFAULT false NOT NULL;

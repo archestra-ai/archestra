@@ -555,6 +555,7 @@ class InternalMcpCatalogModel {
    */
   static async getByIds(
     ids: string[],
+    options?: { expandSecrets?: boolean },
   ): Promise<Map<string, ListInternalMcpCatalog>> {
     if (ids.length === 0) {
       return new Map();
@@ -572,6 +573,10 @@ class InternalMcpCatalogModel {
 
     const catalogItems =
       await InternalMcpCatalogModel.attachListMetadata(dbItems);
+
+    if (options?.expandSecrets) {
+      await InternalMcpCatalogModel.expandSecrets(catalogItems);
+    }
 
     const result = new Map<string, ListInternalMcpCatalog>();
     for (const item of catalogItems) {

@@ -1070,9 +1070,11 @@ fn attach_trace(traceparent: Option<&str>) {
 /// register `var` as a session secret and expose it to the container as an
 /// environment variable. the id is resolved eagerly so the SDK's lazy
 /// `with_secret_variable` argument never hits its internal unwrap: a failure to
-/// register surfaces as a typed error here instead of a panic. the secret's
-/// engine-side name carries a per-process sequence so concurrent runs that
-/// reuse a variable name can never observe each other's value.
+/// register is an engine failure like any other (classified, so the session
+/// layer invalidates a dead session and retries stale attachables) but with a
+/// message that never quotes the query. the secret's engine-side name carries
+/// a per-process sequence so concurrent runs that reuse a variable name can
+/// never observe each other's value.
 async fn with_secret_env(
     client: &DaggerConn,
     container: Container,
@@ -1085,12 +1087,13 @@ async fn with_secret_env(
         .set_secret(registered, var.value.as_str())
         .id()
         .await
-        .map_err(|err| {
-            SandboxError::internal(format!(
+        .map_err(|err| SandboxError::EngineUnreachable {
+            fault: classify_engine_fault(&err),
+            message: format!(
                 "failed to register secret environment variable {}: {}",
                 var.name,
                 describe_without_payload(&err)
-            ))
+            ),
         })?;
     Ok(container.with_secret_variable(var.name.as_str(), id))
 }

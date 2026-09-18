@@ -570,12 +570,17 @@ pub async fn load_offer_review(
     session_id: String,
     offer_id: String,
 ) -> napi::Result<Option<OfferReviewOutput>> {
-    let slot = STATE.get_or_init(|| Mutex::new(None)).lock().await;
-    let state = slot
-        .as_ref()
-        .ok_or_else(|| error("OpenAPPA is not initialized"))?;
-    let pg = postgres_store(&state.store)?;
     let session_id_for_output = session_id.clone();
+    // Mirror execute_remedy_by_offer: clone the store handle and release the
+    // state lock before any SQL runs, so review loads never contend with
+    // dispatches on the runtime state mutex.
+    let pg = {
+        let slot = STATE.get_or_init(|| Mutex::new(None)).lock().await;
+        let state = slot
+            .as_ref()
+            .ok_or_else(|| error("OpenAPPA is not initialized"))?;
+        postgres_store(&state.store)?.clone()
+    };
     // The SQL closure needs its own offer id copy because it must be 'static.
     let target_offer_id = offer_id.clone();
     let review_text = pg

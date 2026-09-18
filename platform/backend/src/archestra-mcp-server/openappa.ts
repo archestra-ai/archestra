@@ -38,6 +38,20 @@ const RemedyPlanArgumentsSchema = z.object({
   return_schema: z.record(z.string(), z.unknown()).optional(),
 });
 
+// Shared by the chat elicitation bridge and the MRTR input-required signal so
+// both channels request the identical approve/deny ruling form.
+const HITL_RULING_SCHEMA = {
+  type: "object",
+  properties: {
+    action: {
+      type: "string",
+      enum: ["approve", "deny"],
+      description: "Approve or deny this remedy plan",
+    },
+  },
+  required: ["action"],
+} as const;
+
 const registry = defineArchestraTools([
   defineArchestraTool({
     shortName: "yell",
@@ -221,17 +235,7 @@ const registry = defineArchestraTools([
           const outcome = await context.elicitation.elicit({
             toolName: TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
             message: review.text,
-            requestedSchema: {
-              type: "object",
-              properties: {
-                action: {
-                  type: "string",
-                  enum: ["approve", "deny"],
-                  description: "Approve or deny this remedy plan",
-                },
-              },
-              required: ["action"],
-            },
+            requestedSchema: HITL_RULING_SCHEMA,
           });
           ruling = parseHitlRuling(
             outcome.status === "answered" ? outcome.result : undefined,
@@ -256,17 +260,7 @@ const registry = defineArchestraTools([
                   method: "elicitation/create",
                   params: {
                     message: review.text,
-                    requestedSchema: {
-                      type: "object",
-                      properties: {
-                        action: {
-                          type: "string",
-                          enum: ["approve", "deny"],
-                          description: "Approve or deny this remedy plan",
-                        },
-                      },
-                      required: ["action"],
-                    },
+                    requestedSchema: HITL_RULING_SCHEMA,
                   },
                 },
               });

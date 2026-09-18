@@ -961,6 +961,10 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "native hook idempotency ledger",
   },
+  openappaHostKeysTable: {
+    audited: false,
+    reason: "native host-event lookup index",
+  },
   openappaProcessedResultsTable: {
     audited: false,
     reason: "approved tool outputs and processing receipts",

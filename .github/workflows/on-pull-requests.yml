@@ -143,6 +143,16 @@ jobs:
 
       - name: Check new Cargo dependency release ages
         uses: archestra-ai/.github/actions/cargo-release-age@f9b82a1ae0c8d73088513454aa46cf5a4021df82
+        # The action fetches the base SHA, which needs authentication in private
+        # mirrors. Keep checkout credentials unpersisted and scope the read-only
+        # job token to this pinned action via Git's runtime configuration.
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GIT_CONFIG_COUNT: "2"
+          GIT_CONFIG_KEY_0: credential.helper
+          GIT_CONFIG_VALUE_0: ""
+          GIT_CONFIG_KEY_1: credential.https://github.com.helper
+          GIT_CONFIG_VALUE_1: '!f() { echo username=x-access-token; echo "password=$GH_TOKEN"; }; f'
         with:
           base-sha: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
           lockfiles: ai-labs/Cargo.lock
@@ -595,6 +605,92 @@ jobs:
       - name: Rust dependency policy
         working-directory: ./platform/archestra-rs
         run: cargo deny --config deny.toml check advisories bans licenses sources
+
+  # The only job that exercises the REAL OpenAPPA runtime: the NAPI bridge, its
+  # decisions, and the PostgreSQL ledger they are recorded in. Every suite above
+  # this one mocks `@archestra/openappa-rs`, so without this job nothing in CI
+  # would ever execute the native code path — which is precisely what happened
+  # until now: `openappa-rs`'s own tests ran on every PR and skipped every
+  # assertion, because they gate on a database URL nothing set.
+  #
+  # `test-database.cjs` now throws instead of skipping when CI is set, so if
+  # this service ever stops being reachable the suite goes red rather than
+  # quietly passing again.
+  openappa-native-tests:
+    name: OpenAPPA Native Tests
+    # bot-pr-guard (see comment above platform-lint-and-unit-tests)
+    if: github.event_name != 'pull_request' || ((github.event.pull_request.user.login != 'archestra-ci[bot]' || startsWith(github.event.pull_request.head.ref, 'backport/')) && github.event.pull_request.user.login != 'archestra-contributor-pr-bot[bot]')
+    runs-on: blacksmith-8vcpu-ubuntu-2404
+    # The napi build dominates: ~3 min cold, an incremental no-op against the
+    # warm cargo cache the backend shards maintain.
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: ./platform
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
+    services:
+      # The ledger tables belong to Archestra's Drizzle migrations, so this is a
+      # plain server that the migration step below populates — not a fixture.
+      postgres:
+        # pgvector, not plain postgres: Archestra's migrations create the
+        # vector extension, and a stock image fails the migration step. Same
+        # image family the benchmark job uses, digest-pinned because the zizmor
+        # audit rejects a floating container tag.
+        image: pgvector/pgvector:pg18@sha256:2ba9ca5f2e7daa0f0e7723cba1ee9167bab54efd3640516a44ac1a928dd67e7a
+        env:
+          POSTGRES_USER: archestra
+          POSTGRES_PASSWORD: archestra_ci_password
+          POSTGRES_DB: archestra_openappa_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U archestra -d archestra_openappa_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Setup environment
+        uses: ./.github/actions/setup-env
+        with:
+          working-directory: ./platform
+
+      # Read-only restore of the entry the backend shards maintain: same
+      # workspace, same shared-key, so the crate build is an incremental no-op
+      # without this job racing the shards to save.
+      - name: Cache cargo registry and target
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: platform/archestra-rs
+          shared-key: backend-unit-tests
+          save-if: "false"
+
+      - name: Apply Archestra migrations to the test database
+        env:
+          ARCHESTRA_DATABASE_URL: postgresql://archestra:archestra_ci_password@localhost:5432/archestra_openappa_test
+        run: pnpm --dir backend db:migrate
+
+      - name: Build the native addon
+        run: pnpm exec turbo build --filter=@archestra/openappa-rs
+
+      # Invoked directly rather than through `turbo check:ci`: that task is
+      # cacheable, and a cache hit would replay its logs and run nothing.
+      #
+      # The URL carries no query string — the runtime's PostgreSQL driver
+      # rejects the `?schema=public` that ARCHESTRA_DATABASE_URL uses.
+      - name: Native runtime and PostgreSQL ledger tests
+        env:
+          ARCHESTRA_OPENAPPA_TEST_DATABASE_URL: postgresql://archestra:archestra_ci_password@localhost:5432/archestra_openappa_test
+        run: pnpm --filter @archestra/openappa-rs test
 
   ai-labs-rust-checks:
     name: AI Labs Rust Checks

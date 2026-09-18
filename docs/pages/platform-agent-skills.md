@@ -3,7 +3,7 @@ title: Skills
 category: Agents
 order: 3
 description: Reusable SKILL.md instruction sets that agents load on demand
-lastUpdated: 2026-09-15
+lastUpdated: 2026-09-18
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -87,6 +87,8 @@ A skill created from chat is **personal** to its author — sharing it with a te
 ![The Add a new skill screen, importing from a GitHub repo, with the skill index searched for ML skills](/docs/automated_screenshots/platform-agent-skills_import-from-github.webp)
 
 Paste a repository URL. Any of these work: `owner/repo`, a full https URL, or a `tree/<branch>/<path>` deep link. For private repos, use a saved token or GitHub App from **Settings → Credentials**, or paste a token — it is saved there on import.
+
+Enterprise repositories require a GitHub App configured for that host in **Settings → Credentials**. For GitHub Enterprise Server, use its API URL, such as `https://git.example.com/api/v3`. Paste the repository's full URL and select that App when importing. Imports and scheduled syncs use the configured Enterprise API. Saved tokens and anonymous imports support github.com.
 
 For anything bigger than a small repo, narrow the scan with the `path` field and supply a GitHub token. Archestra walks the whole tree by default, and anonymous GitHub calls share a 60-requests/hour limit — discovery on a large monorepo is slow without a path and will rate-limit without a token.
 

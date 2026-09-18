@@ -2,7 +2,10 @@
 /* eslint-disable */
 export declare function dispatchHook(input: string, policyContent?: string | undefined | null): Promise<string>
 
-export declare function initializeOpenappa(databaseUrl: string, policyContent: string, reporting?: ReportingOptions | undefined | null): Promise<void>
+/** Executes a remedy plan by offer ID, resolving the owner session from PostgreSQL. */
+export declare function executeRemedyByOffer(input: string, policyContent?: string | undefined | null): Promise<string>
+
+export declare function initializeOpenappa(databaseUrl: string, postgresMaxConnections: number, policyContent: string, reporting?: ReportingOptions | undefined | null): Promise<void>
 
 export interface ReportingOptions {
   endpoint: string

@@ -207,6 +207,44 @@ describe("InternalMcpCatalogModel", () => {
   });
 
   describe("getByIds", () => {
+    test("expands runtime secrets only when requested without changing stored config", async ({
+      makeSecret,
+    }) => {
+      const secret = await makeSecret({
+        name: "synthetic-oauth-secret",
+        secret: { client_secret: "synthetic-client-secret" },
+      });
+      const ids: string[] = [];
+      for (const name of ["batch-one", "batch-two"]) {
+        const catalog = await InternalMcpCatalogModel.create({
+          name,
+          serverType: "remote",
+          clientSecretId: secret.id,
+          oauthConfig: {
+            name: "Synthetic OAuth",
+            server_url: "https://listing.example/mcp",
+            client_id: "synthetic-client",
+            redirect_uris: ["http://localhost:3000/oauth/callback"],
+            scopes: ["read"],
+            default_scopes: ["read"],
+            supports_resource_metadata: false,
+          },
+        });
+        ids.push(catalog.id);
+      }
+
+      const expanded = await InternalMcpCatalogModel.getByIds(ids, {
+        expandSecrets: true,
+      });
+      const unexpanded = await InternalMcpCatalogModel.getByIds(ids);
+      for (const id of ids) {
+        expect(expanded.get(id)?.oauthConfig?.client_secret).toBe(
+          "synthetic-client-secret",
+        );
+        expect(unexpanded.get(id)?.oauthConfig?.client_secret).toBeUndefined();
+      }
+    });
+
     test("returns Map of catalog items by ID", async ({
       makeInternalMcpCatalog,
     }) => {

@@ -124,6 +124,36 @@ describe("run_tool", () => {
     expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
   });
 
+  test("recognizes a decorated remedy control only from the platform catalog", async ({
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const decorated = "mcp__gateway__archestra__execute_remedy_plan";
+    const fake = await executeArchestraTool(
+      TOOL_RUN_TOOL_FULL_NAME,
+      { tool_name: decorated, tool_args: { offer_id: "offer-1" } },
+      mockContext,
+    );
+    expect(JSON.stringify(fake.content)).not.toContain(
+      "Call archestra__execute_remedy_plan directly",
+    );
+
+    await makeInternalMcpCatalog({ id: ARCHESTRA_MCP_CATALOG_ID });
+    await makeTool({
+      name: decorated,
+      catalogId: ARCHESTRA_MCP_CATALOG_ID,
+    });
+    const control = await executeArchestraTool(
+      TOOL_RUN_TOOL_FULL_NAME,
+      { tool_name: decorated, tool_args: { offer_id: "offer-1" } },
+      mockContext,
+    );
+    expect(JSON.stringify(control.content)).toContain(
+      "Call archestra__execute_remedy_plan directly",
+    );
+    expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
+  });
+
   test("dispatches built-in tools by short name", async ({
     seedAndAssignArchestraTools,
   }) => {

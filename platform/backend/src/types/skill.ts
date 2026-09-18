@@ -106,6 +106,7 @@ export const UpdateSkillSchema = createUpdateSchema(schema.skillsTable, {
   githubSyncRef: true,
   githubAppConfigId: true,
   githubPatId: true,
+  sourceOrigin: true,
   lastSyncedAt: true,
   lastSyncError: true,
   createdAt: true,

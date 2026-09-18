@@ -28,6 +28,10 @@ export const CacheKey = {
   OAuthState: "oauth-state",
   /** MCP Gateway session state */
   McpSession: "mcp-session",
+  /** Legacy HTTP+SSE stream records for the MCP Gateway */
+  LegacySseSession: "legacy-sse-session",
+  /** Short-lived replies waiting for a legacy SSE stream on another replica */
+  LegacySseMessages: "legacy-sse-messages",
   /** IdP groups cache during login flow */
   IdpGroups: "idp-groups",
   /** Chat stream stop signal for cross-pod abort */
@@ -315,6 +319,66 @@ class CacheManager {
       );
       return undefined;
     }
+  }
+
+  /** Append atomically so concurrent writers cannot overwrite each other's items. */
+  async appendToList<T>(params: {
+    key: AllowedCacheKey;
+    value: T;
+    ttl: number;
+  }): Promise<void> {
+    if (!this.keyv) throw new Error("CacheManager: Not started");
+    const now = Date.now();
+    const payload = await this.keyv.serializeData({
+      value: [params.value],
+      expires: now + params.ttl,
+    });
+    await db.execute(sql`
+      INSERT INTO keyv_cache (key, value)
+      VALUES (${`keyv:${params.key}`}, ${payload})
+      ON CONFLICT (key) DO UPDATE SET value = jsonb_set(
+        EXCLUDED.value::jsonb, '{value}',
+        CASE WHEN (keyv_cache.value::jsonb->>'expires')::bigint > ${now}
+          THEN keyv_cache.value::jsonb->'value' ELSE '[]'::jsonb END
+        || (EXCLUDED.value::jsonb->'value')
+      )::text
+    `);
+  }
+
+  /** Consume a batch by exact keys, using the existing cache primary key index. */
+  async getAndDeleteMany<T>(
+    keys: AllowedCacheKey[],
+  ): Promise<Array<{ key: AllowedCacheKey; value: T }>> {
+    if (!this.keyv) throw new Error("CacheManager: Not started");
+    if (keys.length === 0) return [];
+    const prefixed = keys.map((key) => sql`${`keyv:${key}`}`);
+    const result = await db.execute<{ key: string; value: string }>(sql`
+      DELETE FROM keyv_cache WHERE key IN (${sql.join(prefixed, sql`, `)})
+      RETURNING key, value
+    `);
+    const entries: Array<{ key: AllowedCacheKey; value: T }> = [];
+    for (const row of result.rows) {
+      const data = await this.keyv.deserializeData<T>(row.value);
+      if (
+        data?.value !== undefined &&
+        (!data.expires || data.expires > Date.now())
+      ) {
+        entries.push({
+          key: row.key.slice("keyv:".length) as AllowedCacheKey,
+          value: data.value,
+        });
+      }
+    }
+    return entries;
+  }
+
+  /** Keyv expires entries on reads; sweep abandoned entries in this namespace too. */
+  async deleteExpiredByPrefix(prefix: CacheKeyPrefix): Promise<void> {
+    const pattern = `keyv:${prefix.replace(/[\\%_]/g, "\\$&")}-%`;
+    await db.execute(sql`
+      DELETE FROM keyv_cache WHERE key LIKE ${pattern}
+      AND (value::jsonb->>'expires')::bigint <= ${Date.now()}
+    `);
   }
 
   /**

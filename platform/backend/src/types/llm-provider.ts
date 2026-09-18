@@ -52,6 +52,18 @@ import type {
 } from "./common-llm-format";
 
 /**
+ * A call the provider ran inside the inference call. It is never the client's
+ * to execute, so it stays out of {@link LLMResponseAdapter.getToolCalls}.
+ */
+export type HostedToolCall = {
+  id: string;
+  name: string;
+  arguments: Record<string, unknown>;
+  /** What the run brought into the turn, as the wire carries it. */
+  output: string;
+};
+
+/**
  * Options for creating an LLM provider client
  */
 export interface CreateClientOptions {
@@ -240,6 +252,21 @@ export interface LLMResponseAdapter<TResponse> {
     toolCalls: Array<{ id: string; name: string; arguments: string }>,
   ): TResponse;
 
+  /**
+   * Calls the provider ran inside the inference call, each with what it
+   * produced. Optional: a wire that does not surface them has none to rule on.
+   */
+  getHostedToolCalls?(): HostedToolCall[];
+
+  /**
+   * Return this response with its provider-run part withheld and `notices`
+   * standing in its place, for a client that must not see what those calls
+   * brought in.
+   */
+  withHeldHostedToolCalls?(
+    notices: Array<{ id: string; name: string; arguments: string }>,
+  ): TResponse;
+
   /** Get finish reasons array for OTEL tracing (e.g., ["stop"], ["tool_calls"]) */
   getFinishReasons(): string[];
 
@@ -382,6 +409,25 @@ export interface LLMStreamAdapter<TChunk, TResponse> {
    */
   formatToolCallsSSE?(
     toolCalls: StreamAccumulatorState["toolCalls"],
+  ): (string | Uint8Array)[];
+
+  /**
+   * Asks the adapter to withhold every chunk from the first hosted call on, so
+   * the verdict is in before any of that reaches the client. Called before the
+   * first chunk, and only when something will rule on those calls: withholding
+   * costs the turn its token streaming.
+   */
+  withholdHostedToolCalls?(): void;
+
+  /** Streaming counterpart of {@link LLMResponseAdapter.getHostedToolCalls}. */
+  getHostedToolCalls?(): HostedToolCall[];
+
+  /**
+   * Discards the withheld chunks and emits `notices` in their place, ending
+   * with the terminal frame the client keeps.
+   */
+  formatHeldHostedToolCallsSSE?(
+    notices: StreamAccumulatorState["toolCalls"],
   ): (string | Uint8Array)[];
 
   /** Format the stream end marker */

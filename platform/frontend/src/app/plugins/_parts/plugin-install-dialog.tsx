@@ -3,6 +3,7 @@
 import { RotateCcw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { StandardDialog } from "@/components/standard-dialog";
+import { TerminalCard } from "@/components/terminal-surface";
 import {
   Select,
   SelectContent,
@@ -270,7 +271,7 @@ export function PluginInstallDialog({
                     ? "Setup command ready"
                     : "Generating setup command"}
               </output>
-              <div className="overflow-hidden rounded-xl border border-[#1f2937] bg-[#0d1117] shadow-lg">
+              <TerminalCard>
                 <SetupCommandLine
                   command={result?.command ?? null}
                   pending={
@@ -281,7 +282,7 @@ export function PluginInstallDialog({
                   failed={failed}
                   onRetry={generate}
                 />
-              </div>
+              </TerminalCard>
               <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 text-xs text-muted-foreground">
                 <span className="max-w-2xl">
                   The command downloads a one-time setup script (expires in 15

@@ -1,3 +1,4 @@
+import type { AppaPreparedRequest } from "@/openappa/request";
 import type { AppaChatSource, OpenAppaSession } from "@/openappa/service";
 
 export const APPA_PLUGIN_TRUSTED_CONTEXT: unique symbol = Symbol(
@@ -9,6 +10,8 @@ export type AppaTrustedContext = {
   session: OpenAppaSession;
   profileId: string;
   canonicalizeToolName: (name: string) => string;
+  /** What the proxy prepared for this request before any adapter saw it. */
+  request: AppaPreparedRequest;
   /** Present only for the proxy's loopback Chat call path. */
   chatSource?: AppaChatSource;
 };

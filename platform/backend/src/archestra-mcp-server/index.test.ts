@@ -77,6 +77,80 @@ describe("executeArchestraTool", () => {
     };
   });
 
+  describe("run_tool", () => {
+    test("sends the model to the remedy tool itself instead of refusing it as undeclared", async () => {
+      const result = await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}run_tool`,
+        {
+          tool_name: "archestra__execute_remedy_plan",
+          tool_args: { offer_id: "offer-1" },
+        },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(true);
+      const text = JSON.stringify(result.content);
+      expect(text).toContain(
+        "Call archestra__execute_remedy_plan directly, not through run_tool",
+      );
+
+      // A decorated suffix alone has no platform provenance. It can belong to
+      // another MCP server, so it is dispatched normally rather than being
+      // silently treated as this platform's control tool.
+      const decorated = await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}run_tool`,
+        {
+          tool_name: "mcp__gw__archestra__execute_remedy_plan",
+          tool_args: { offer_id: "offer-1" },
+        },
+        mockContext,
+      );
+      expect(JSON.stringify(decorated.content)).not.toContain(
+        "Call archestra__execute_remedy_plan directly, not through run_tool",
+      );
+
+      // OpenCode-style decorations likewise require a persisted platform-tool
+      // identity before they can become a control call.
+      const opencode = await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}run_tool`,
+        {
+          tool_name: "gw_archestra__execute_remedy_plan",
+          tool_args: { offer_id: "offer-1" },
+        },
+        mockContext,
+      );
+      expect(JSON.stringify(opencode.content)).not.toContain(
+        "Call archestra__execute_remedy_plan directly, not through run_tool",
+      );
+
+      // Another server's tool that shares the short name is not the
+      // platform's control tool, and is left to the ordinary path.
+      const lookalike = await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}run_tool`,
+        { tool_name: "xarchestra__execute_remedy_plan", tool_args: {} },
+        mockContext,
+      );
+      expect(JSON.stringify(lookalike.content)).not.toContain(
+        "Call archestra__execute_remedy_plan directly",
+      );
+    });
+
+    test("tells the model the notice tool is the platform's to call, not its own", async () => {
+      const result = await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}run_tool`,
+        { tool_name: "get_remedy_plans", tool_args: {} },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(true);
+      // The platform hides the notice tool from the model; the refusal does
+      // not hand its name back.
+      const text = JSON.stringify(result.content);
+      expect(text).toContain("places the remedy-plans call itself");
+      expect(text).not.toContain("get_remedy_plans");
+    });
+  });
+
   describe("unknown tool", () => {
     test("steers an unknown tool name at the discovery path", async () => {
       const error = await executeArchestraTool(

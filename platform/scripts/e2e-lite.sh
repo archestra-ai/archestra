@@ -23,6 +23,13 @@
 #   MCP_SERVER_BASE_IMAGE  orchestrator base image for MCP server pods
 #                          (default: the published :latest — the embedded Kind
 #                          cluster pulls it straight from the registry).
+#   ARCHESTRA_OPENAPPA_ENABLED
+#                          turn the OpenAPPA runtime on in the platform
+#                          container (default: false). Opt-in only: with it on,
+#                          the proxy refuses any request that declares tools
+#                          without both APPA tools, so the default lite suite
+#                          must run with it off. The dedicated `openappa`
+#                          Playwright project is the one that sets it.
 
 set -euo pipefail
 
@@ -153,6 +160,8 @@ cmd_up() {
     -p 127.0.0.1:9191:9191 \
     --env-file "${SCRIPT_DIR}/e2e-lite-platform.env" \
     -e "ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE=${MCP_SERVER_BASE_IMAGE}" \
+    -e "ARCHESTRA_OPENAPPA_ENABLED=${ARCHESTRA_OPENAPPA_ENABLED:-false}" \
+    -e "ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET=${ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET:-e2e-openappa-offer-signing-secret}" \
     -v /var/run/docker.sock:/var/run/docker.sock \
     -v "${PLATFORM_DIR}/e2e-tests/fixtures/a2a-test-agent:/opt/archestra-e2e/a2a-test-agent:ro" \
     "${image}" > /dev/null

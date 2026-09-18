@@ -2,6 +2,10 @@ import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { FileUIPart } from "ai";
 import { toast } from "sonner";
+import {
+  hasRecentlyEnded,
+  hasRetainedSessionActivity,
+} from "@/lib/agent-run-activity";
 import { reportApiError, throwOnApiError } from "@/lib/utils";
 
 const {
@@ -64,8 +68,17 @@ export function useMyAgentRuns(enabled = true) {
     queryKey: ["agent-runs", "mine"],
     queryFn: loadMyAgentRuns,
     enabled,
-    refetchInterval: (query) =>
-      enabled && query.state.data?.some((run) => !run.endedAt) ? 3_000 : false,
+    refetchInterval: (query) => {
+      if (!enabled) return false;
+      const runs = query.state.data ?? [];
+      const now = Date.now();
+      if (
+        runs.some((run) => !run.endedAt || hasRetainedSessionActivity(run, now))
+      ) {
+        return 3_000;
+      }
+      return runs.some((run) => hasRecentlyEnded(run, now)) ? 10_000 : false;
+    },
   });
 }
 
@@ -78,18 +91,16 @@ export function useMyAgentRun(taskId: string, enabled = true) {
       return data;
     },
     enabled: enabled && !!taskId,
-    refetchInterval: (query) =>
-      query.state.status === "error" ||
-      (query.state.data?.endedAt &&
-        (!query.state.data.workspace ||
-          query.state.data.workspace.state === "deleted"))
-        ? false
-        : query.state.data?.endedAt &&
-            ["idle", "suspended"].includes(
-              query.state.data.workspace?.state ?? "",
-            )
-          ? 30_000
-          : 2_000,
+    refetchInterval: (query) => {
+      const run = query.state.data;
+      if (query.state.status === "error") return false;
+      if (!run?.endedAt || hasRetainedSessionActivity(run)) return 2_000;
+      if (!run.workspace || run.workspace.state === "deleted") return false;
+      if (["idle", "suspended"].includes(run.workspace.state)) {
+        return hasRecentlyEnded(run) ? 10_000 : 30_000;
+      }
+      return 2_000;
+    },
     retry: (failureCount) => failureCount < 8,
     retryDelay: 500,
   });

@@ -9,7 +9,7 @@ async function checkNativeBoundary() {
   const session = { organization_id: "org", caller_id: "user:alice", session_id: "session" };
   await assert.rejects(dispatchHook(JSON.stringify({ ...session, event: "remedy", operation_id: "remedy:1", arguments: { offer_id: "offer" }, ruling: "approve" })), /unknown field.*ruling/);
   for (const event of ["remedy_review", "resume_tool_call"]) {
-    await assert.rejects(dispatchHook(JSON.stringify({ ...session, event })), /unsupported OpenAPPA event/);
+    await assert.rejects(dispatchHook(JSON.stringify({ ...session, event })), /unknown variant/);
   }
 }
 checkNativeBoundary().catch((error) => {

@@ -317,4 +317,133 @@ describe("MCP Gateway - in-band elicitation round trip", () => {
       "did not answer the choice form",
     );
   });
+
+  test("only the caller that was asked can answer, under an id no other question shares", async ({
+    makeAgent,
+    makeOrganization,
+  }) => {
+    const agent = await makeAgent();
+    const ownerToken = await TeamTokenModel.create({
+      organizationId: (await makeOrganization()).id,
+      name: "Owner Token",
+      teamId: null,
+      isOrganizationToken: true,
+    });
+    const otherToken = await TeamTokenModel.create({
+      organizationId: (await makeOrganization()).id,
+      name: "Other Token",
+      teamId: null,
+      isOrganizationToken: true,
+    });
+    await app.listen({ port: 0, host: "127.0.0.1" });
+    const { port } = app.server.address() as AddressInfo;
+    const url = `http://127.0.0.1:${port}/v1/mcp/${agent.id}`;
+    const post = (token: { value: string }, body: unknown) =>
+      fetch(url, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          accept: "application/json, text/event-stream",
+          authorization: `Bearer ${token.value}`,
+        },
+        body: JSON.stringify(body),
+      });
+    const ask = async (id: number) =>
+      readEvents(
+        await post(ownerToken, {
+          jsonrpc: "2.0",
+          method: "tools/call",
+          params: {
+            name: "archestra__ask_user",
+            arguments: {
+              question: "Accept this change for the rest of this session?",
+              options: [
+                { label: "Accept for this session" },
+                { label: "Do not accept" },
+              ],
+            },
+            _meta: {
+              [MCP_CLIENT_CAPABILITIES_META_KEY]: { elicitation: {} },
+            },
+          },
+          id,
+        }),
+      );
+    const answer = (id: unknown, choice: string) => ({
+      jsonrpc: "2.0",
+      id,
+      result: { action: "accept", content: { choice } },
+    });
+
+    // The other caller is a client this gateway serves in its own right.
+    const probe = await post(otherToken, {
+      jsonrpc: "2.0",
+      method: "tools/list",
+      id: 1,
+    });
+    expect(probe.status).toBe(200);
+
+    const first = await ask(2);
+    const second = await ask(3);
+    const firstQuestion = await first.next();
+    const secondQuestion = await second.next();
+    expect(firstQuestion.method).toBe("elicitation/create");
+    expect(secondQuestion.method).toBe("elicitation/create");
+    expect(firstQuestion.id).not.toBe(secondQuestion.id);
+
+    // Another caller answers the owner's question. Any bare response is
+    // acknowledged, so the proof is below: had this answer been routed, the
+    // first question would resolve with "Do not accept".
+    await post(otherToken, answer(firstQuestion.id, "Do not accept"));
+
+    // The owner still answers both questions, each with its own pick.
+    expect(
+      (await post(ownerToken, answer(secondQuestion.id, "Do not accept")))
+        .status,
+    ).toBe(202);
+    expect(
+      (
+        await post(
+          ownerToken,
+          answer(firstQuestion.id, "Accept for this session"),
+        )
+      ).status,
+    ).toBe(202);
+    expect(await first.next()).toMatchObject({
+      id: 2,
+      result: { structuredContent: { selected: ["Accept for this session"] } },
+    });
+    expect(await second.next()).toMatchObject({
+      id: 3,
+      result: { structuredContent: { selected: ["Do not accept"] } },
+    });
+  });
 });
+
+/** Reads the SSE frames of a gateway response one JSON-RPC message at a time. */
+function readEvents(response: Response) {
+  const reader = response.body?.getReader();
+  if (!reader) throw new Error("no response body");
+  const decoder = new TextDecoder();
+  let buffer = "";
+  return {
+    async next(): Promise<Record<string, unknown>> {
+      for (;;) {
+        const boundary = buffer.indexOf("\n\n");
+        if (boundary !== -1) {
+          const frame = buffer.slice(0, boundary);
+          buffer = buffer.slice(boundary + 2);
+          const data = frame
+            .split("\n")
+            .find((line) => line.startsWith("data: "));
+          if (data) {
+            return JSON.parse(data.slice("data: ".length));
+          }
+        }
+        const { value, done } = await reader.read();
+        if (done) throw new Error("stream ended early");
+        buffer += decoder.decode(value, { stream: true });
+      }
+    },
+  };
+}

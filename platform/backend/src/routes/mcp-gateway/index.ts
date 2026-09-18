@@ -202,18 +202,32 @@ async function handleMcpPostRequest(
 ): Promise<unknown> {
   const { revision } = resolution;
   const body = request.body as Record<string, unknown>;
+  // This caller on this gateway: the key for its initialize-time capabilities
+  // and for the server-initiated requests only it may answer.
+  const capabilityKey = clientCapabilityKey({
+    profileId,
+    tokenId: tokenAuthContext?.tokenId,
+    userId: tokenAuthContext?.userId,
+  });
 
   // A bare JSON-RPC response/error (no method) answers a server-initiated
   // request (elicitation/create, sampling, ...) sent mid-call on an earlier
   // POST. Each POST builds a fresh Server, so the answer must be routed back
   // to the transport that still holds the pending request rather than a new
-  // one. Unknown ids fall through to ordinary handling, which ignores them.
+  // one, under the id that Server issued. Unknown ids, and answers from any
+  // caller but the one asked, fall through to ordinary handling, which
+  // ignores them.
   if (body.method === undefined && body.id !== undefined && body.id !== null) {
     const pending = pendingInboundRequests.consume({
-      id: body.id as string | number,
+      wireId: body.id as string | number,
+      agentId: profileId,
+      caller: capabilityKey,
     });
     if (pending) {
-      pending.transport.onmessage?.(body as unknown as JSONRPCMessage);
+      pending.transport.onmessage?.({
+        ...body,
+        id: pending.id,
+      } as unknown as JSONRPCMessage);
       reply.status(202);
       return;
     }
@@ -239,11 +253,6 @@ async function handleMcpPostRequest(
   const isInitialize =
     typeof body?.method === "string" && body.method === "initialize";
 
-  const capabilityKey = clientCapabilityKey({
-    profileId,
-    tokenId: tokenAuthContext?.tokenId,
-    userId: tokenAuthContext?.userId,
-  });
   if (isInitialize) {
     // A legacy client declares its capabilities once, here, and the next
     // POST builds a fresh Server that no longer knows them. Remember them so
@@ -356,15 +365,36 @@ async function handleMcpPostRequest(
 
     // Register every server-initiated request the call sends so the client's
     // answer POST (a separate request in stateless mode) can be routed back
-    // to this Server instead of a fresh one.
+    // to this Server instead of a fresh one. The request goes out under the
+    // wire id the registry issues, and so does a cancellation of it.
     const originalSend = transport.send.bind(transport);
     transport.send = async (message, options) => {
       if (isServerInitiatedRequestMessage(message)) {
-        pendingInboundRequests.register({
+        const wireId = pendingInboundRequests.register({
           id: message.id,
           transport,
           agentId: profileId,
+          caller: capabilityKey,
         });
+        return originalSend({ ...message, id: wireId }, options);
+      }
+      const cancelled = cancelledRequestId(message);
+      const wireId =
+        cancelled === undefined
+          ? undefined
+          : pendingInboundRequests.wireIdOf({ transport, id: cancelled });
+      if (wireId !== undefined) {
+        pendingInboundRequests.forget({ wireId });
+        return originalSend(
+          {
+            ...message,
+            params: {
+              ...(message as { params: Record<string, unknown> }).params,
+              requestId: wireId,
+            },
+          } as JSONRPCMessage,
+          options,
+        );
       }
       return originalSend(message, options);
     };
@@ -1040,6 +1070,24 @@ function isServerInitiatedRequestMessage(
     "id" in message &&
     message.id !== undefined
   );
+}
+
+/** The request a `notifications/cancelled` message cancels, if it is one. */
+function cancelledRequestId(
+  message: JSONRPCMessage,
+): string | number | undefined {
+  if (
+    !("method" in message) ||
+    message.method !== "notifications/cancelled" ||
+    "id" in message
+  ) {
+    return undefined;
+  }
+  const requestId = (message.params as { requestId?: unknown } | undefined)
+    ?.requestId;
+  return typeof requestId === "string" || typeof requestId === "number"
+    ? requestId
+    : undefined;
 }
 
 function runtimeTokenMatchesRun(params: {

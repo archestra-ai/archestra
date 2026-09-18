@@ -13,6 +13,10 @@ import {
 import { resolveAgentRuntimeBackendDriver } from "./backends";
 import { authorizeAgentWorkspaceAccess } from "./workspace-files";
 
+/** Long enough for a person to notice a failure and retry, short enough that a
+ * leaked ticket is not durable authority. */
+export const WORKSPACE_TRANSFER_TICKET_TTL_MS = 15 * 60 * 1000;
+
 export type WorkspaceTransferTicket = {
   id: string;
   direction: WorkspaceTransferDirection;
@@ -35,7 +39,7 @@ export type WorkspaceTransferTicket = {
 class WorkspaceTransferTickets {
   private readonly tickets = new LRUCacheManager<StoredTicket>({
     maxSize: 1000,
-    defaultTtl: TICKET_TTL_MS,
+    defaultTtl: WORKSPACE_TRANSFER_TICKET_TTL_MS,
   });
 
   async mintDownload(params: {
@@ -240,9 +244,6 @@ function camelize(value: unknown): unknown {
   );
 }
 
-/** Long enough for a person to notice a failure and retry, short enough that a
- * leaked ticket is not durable authority. */
-const TICKET_TTL_MS = 15 * 60 * 1000;
 const CONTROL_TIMEOUT_MS = 60 * 1000;
 /** Bytes, not the control plane: sized for a slow link rather than a fast one. */
 const TRANSFER_TIMEOUT_MS = 30 * 60 * 1000;

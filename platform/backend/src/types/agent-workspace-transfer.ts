@@ -40,6 +40,38 @@ export const WorkspaceSnapshotSchema = WorkspaceFileIdentitySchema.extend({
 
 export type WorkspaceSnapshot = z.infer<typeof WorkspaceSnapshotSchema>;
 
+/** A workspace-relative path. The in-Pod helper is the authority on traversal
+ * and symlinks; this only rejects the obviously malformed before a round trip. */
+const TransferPathSchema = z
+  .string()
+  .min(1)
+  .max(1024)
+  .refine((value) => !value.includes("\0"), "Path must not contain NUL");
+
+export const StartWorkspaceTransferSchema = z.discriminatedUnion("direction", [
+  z.object({
+    direction: z.literal("download"),
+    path: TransferPathSchema,
+  }),
+  z.object({
+    direction: z.literal("upload"),
+    path: TransferPathSchema,
+    size: z.number().int().nonnegative(),
+    sha256: z.string().regex(/^[0-9a-f]{64}$/, "Expected a hex sha256 digest"),
+  }),
+]);
+
+export const StartedWorkspaceTransferSchema = z.object({
+  transferId: z.string(),
+  /** Returned once. Only a hash of it is retained. */
+  token: z.string(),
+  contentUrl: z.string(),
+  path: z.string(),
+  size: z.number().int().nonnegative(),
+  sha256: z.string(),
+  expiresInSeconds: z.number().int().positive(),
+});
+
 export const WorkspaceUploadReceiptSchema = z.object({
   uploadId: z.string(),
   size: z.number().int().nonnegative(),

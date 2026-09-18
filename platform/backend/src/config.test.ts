@@ -3580,4 +3580,50 @@ describe("OpenAPPA feature configuration", () => {
       "ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET must be at least 32 characters",
     );
   });
+
+  test("derives the offer signing secret from the auth secret when unset", () => {
+    const derived = parseOpenAppaConfig(
+      "true",
+      "true",
+      undefined,
+      "auth-secret-for-derivation",
+    ).offerSigningSecret;
+    expect(derived.length).toBeGreaterThanOrEqual(32);
+    expect(derived).not.toContain("auth-secret-for-derivation");
+    // Deterministic: every replica with the same auth secret signs alike.
+    expect(
+      parseOpenAppaConfig(
+        "true",
+        "true",
+        undefined,
+        "auth-secret-for-derivation",
+      ).offerSigningSecret,
+    ).toBe(derived);
+    // Domain-separated: a different auth secret gives a different key.
+    expect(
+      parseOpenAppaConfig("true", "true", undefined, "other-auth-secret")
+        .offerSigningSecret,
+    ).not.toBe(derived);
+  });
+
+  test("prefers the dedicated offer signing secret over the derivation", () => {
+    expect(
+      parseOpenAppaConfig(
+        "true",
+        "true",
+        "offer-signing-secret-at-least-32ch",
+        "auth-secret-for-derivation",
+      ).offerSigningSecret,
+    ).toBe("offer-signing-secret-at-least-32ch");
+    expect(() =>
+      parseOpenAppaConfig(
+        "true",
+        "true",
+        "short",
+        "auth-secret-for-derivation",
+      ),
+    ).toThrow(
+      "ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET must be at least 32 characters",
+    );
+  });
 });

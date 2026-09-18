@@ -3361,6 +3361,13 @@
       "when": 1789685763304,
       "tag": "0479_perpetual_malcolm_colcord",
       "breakpoints": true
+    },
+    {
+      "idx": 480,
+      "version": "7",
+      "when": 1789734303412,
+      "tag": "0480_far_sasquatch",
+      "breakpoints": true
     }
   ]
 }

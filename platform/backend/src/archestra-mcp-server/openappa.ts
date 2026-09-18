@@ -112,7 +112,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_GET_REMEDY_PLANS_SHORT_NAME,
     title: "Read a blocked call's ruling and remedy plans",
     description:
-      "Read why the guardrails policy blocked a tool call and which remedy plans are offered. The platform delivers this call in place of a blocked call. It runs nothing and changes nothing. The ruling argument explains why the call was blocked. The plans are addressed to you. When the ruling offers a plan, choose it, call execute_remedy_plan with the offer_id and plan shown in the ruling, then retry the original call. If no plan is offered, or if a choice requires user judgment, explain the options to the user.",
+      "Read why the guardrails policy blocked a tool call and which remedy plans are offered. The platform delivers this call in place of a blocked call. It runs nothing and changes nothing. The ruling argument explains why the call was blocked. When the ruling offers a plan, ask the user to pick one with ask_user (never as a free-form chat question), then call execute_remedy_plan with the chosen offer_id and plan, then retry the original call. If no plan is offered, explain the block to the user.",
     schema: NoticeArguments,
     async handler({ args }) {
       // The ruling the runtime already made, carried by the call itself. This

@@ -152,7 +152,18 @@ export async function runAgentStream(params: {
   // the config the loop retries from; trim replaces its messages so a later
   // empty-response retry reuses the trimmed payload instead of resending the
   // original (too-large) one.
-  let currentConfig: StreamTextConfig = { ...config, onError };
+  //
+  // Default maxRetries to 0: the AI SDK otherwise retries 429s twice (3
+  // attempts) against the same per-minute cap the agentic loop already
+  // consumed. Providers such as Kimi advertise "max RPM: 3" / "try again
+  // after 1 seconds"; extra immediate retries exhaust the window and surface
+  // "Failed after 3 attempts" even though a later user retry would succeed.
+  // Callers that want SDK retries pass maxRetries explicitly.
+  let currentConfig: StreamTextConfig = {
+    ...config,
+    onError,
+    maxRetries: config.maxRetries ?? 0,
+  };
   if (promptCache && Array.isArray(currentConfig.messages)) {
     currentConfig = {
       ...currentConfig,

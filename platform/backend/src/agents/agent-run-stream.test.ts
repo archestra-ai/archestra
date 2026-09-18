@@ -1,4 +1,4 @@
-import { type ModelMessage, simulateReadableStream } from "ai";
+import { APICallError, type ModelMessage, simulateReadableStream } from "ai";
 import { MockLanguageModelV3 } from "ai/test";
 import { describe, expect, test, vi } from "vitest";
 import { EmptyModelResponseError } from "@/routes/chat/errors";
@@ -346,6 +346,31 @@ function modelFor(...calls: ModelStreamPart[][]): MockLanguageModelV3 {
 }
 
 describe("runAgentStream", () => {
+  test("does not SDK-retry a 429 rate limit", async () => {
+    const rateLimit = new APICallError({
+      message:
+        "Your account request reached organization max RPM: 3, please try again after 1 seconds",
+      url: "http://127.0.0.1:9000/v1/kimi/x/chat/completions",
+      requestBodyValues: {},
+      statusCode: 429,
+      isRetryable: true,
+    });
+    let calls = 0;
+    const model = new MockLanguageModelV3({
+      doStream: async () => {
+        calls += 1;
+        throw rateLimit;
+      },
+    });
+
+    const { result } = await runAgentStream({
+      config: { model, prompt: "hello" },
+    });
+    await drain(result);
+
+    expect(calls).toBe(1);
+  });
+
   test("returns immediately on a renderable first event, without retrying", async () => {
     const model = modelFor(renderableChunks());
 

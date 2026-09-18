@@ -172,6 +172,9 @@ describe("McpElicitationDialog", () => {
       screen.getByText("Accept this change for the rest of this session?"),
     ).toBeInTheDocument();
     expect(screen.getByRole("radiogroup")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /decline/i }),
+    ).not.toBeInTheDocument();
     await user.click(
       screen.getByRole("radio", { name: "Accept for this session" }),
     );

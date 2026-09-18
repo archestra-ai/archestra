@@ -166,15 +166,17 @@ export function McpElicitationDialog({
   );
   const footer = (
     <>
-      <Button
-        type="button"
-        variant="ghost"
-        disabled={isSubmitting}
-        onClick={() => void respondWithoutContent("decline")}
-      >
-        <XIcon />
-        Decline
-      </Button>
+      {variant === "dialog" ? (
+        <Button
+          type="button"
+          variant="ghost"
+          disabled={isSubmitting}
+          onClick={() => void respondWithoutContent("decline")}
+        >
+          <XIcon />
+          Decline
+        </Button>
+      ) : null}
       <Button
         type="button"
         variant="outline"

@@ -19,8 +19,12 @@ serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["raw_value"] }
 sha2 = "0.10"
 toml = "1.1"
-tokio = { version = "1", features = ["sync"] }
+tokio = { version = "1", features = ["sync", "time"] }
 futures-util = "0.3"
+
+[dev-dependencies]
+# A paused clock: the connection-wait test does not spend its thirty seconds.
+tokio = { version = "1", features = ["rt", "test-util"] }
 
 [target.'cfg(target_env = "musl")'.dependencies]
 # Cross-builds need OpenSSL compiled for musl. The Docker builder uses its

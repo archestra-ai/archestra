@@ -32,6 +32,7 @@ use std::{
     num::NonZeroUsize,
     panic::AssertUnwindSafe,
     sync::{Arc, OnceLock},
+    time::Duration,
 };
 use tokio::sync::{Mutex, OwnedMutexGuard, OwnedSemaphorePermit, Semaphore};
 
@@ -56,7 +57,7 @@ struct State {
     /// One permit per pooled connection, so a dispatch waits for a connection
     /// here, asynchronously, and never inside the store.
     connections: Arc<Semaphore>,
-    policy_content: String,
+    policy_content: Arc<str>,
     reporting: Option<ReportingOptions>,
 }
 
@@ -64,6 +65,21 @@ struct State {
 struct Leased {
     state: State,
     _permit: OwnedSemaphorePermit,
+}
+
+/// A dispatch holds its connection across its consults, so slow authorities
+/// can keep every connection busy. Waiting dispatches then fail closed rather
+/// than hang; the bound matches the ledger's own `lock_timeout`.
+const CONNECTION_WAIT: Duration = Duration::from_secs(30);
+
+async fn connection_permit(
+    connections: &Arc<Semaphore>,
+    wait: Duration,
+) -> napi::Result<OwnedSemaphorePermit> {
+    tokio::time::timeout(wait, connections.clone().acquire_owned())
+        .await
+        .map_err(|_| error("OpenAPPA had no free PostgreSQL connection in time; retry later"))?
+        .map_err(error)
 }
 
 fn state_mutex() -> &'static Mutex<Option<State>> {
@@ -317,7 +333,7 @@ pub async fn initialize_openappa(
             runtime: Arc::new(runtime),
             store,
             connections: Arc::new(Semaphore::new(max_connections.get())),
-            policy_content,
+            policy_content: policy_content.into(),
             reporting,
         })
     })
@@ -426,7 +442,7 @@ async fn run(input: Input, policy_content: Option<String>) -> napi::Result<Strin
                 .as_mut()
                 .ok_or_else(|| error("OpenAPPA is not initialized"))?;
             if let Some(content) = policy_content
-                && content != state.policy_content
+                && *content != *state.policy_content
             {
                 // Reloads are serialized by the mutex; when two concurrent
                 // dispatches carry different policy contents, the second one
@@ -437,7 +453,7 @@ async fn run(input: Input, policy_content: Option<String>) -> napi::Result<Strin
                 let mut config = policy::compile(&content).map_err(error)?;
                 config.reporting.agent_yell = state.reporting.is_some();
                 state.runtime.reload(config).map_err(error)?;
-                state.policy_content = content;
+                state.policy_content = content.into();
             }
             state.clone()
         };
@@ -630,12 +646,7 @@ impl State {
     /// This state over one pooled connection: the store is a lease of it and
     /// the runtime records through that lease.
     async fn lease(&self) -> napi::Result<Leased> {
-        let permit = self
-            .connections
-            .clone()
-            .acquire_owned()
-            .await
-            .map_err(error)?;
+        let permit = connection_permit(&self.connections, CONNECTION_WAIT).await?;
         let store = Arc::new(self.store.lease().map_err(error)?);
         Ok(Leased {
             state: State {
@@ -1675,6 +1686,32 @@ fn finish_operation(
 struct YellArguments {
     message: String,
     with_trajectory: bool,
+}
+
+#[cfg(test)]
+mod connection_permit_tests {
+    use super::connection_permit;
+    use std::{sync::Arc, time::Duration};
+    use tokio::sync::Semaphore;
+
+    #[test]
+    fn a_busy_pool_refuses_within_its_wait_and_serves_once_freed() {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_time()
+            .start_paused(true)
+            .build()
+            .expect("a test runtime builds");
+        runtime.block_on(async {
+            let connections = Arc::new(Semaphore::new(1));
+            let wait = Duration::from_secs(30);
+            let held = connection_permit(&connections, wait)
+                .await
+                .expect("a free connection is granted");
+            assert!(connection_permit(&connections, wait).await.is_err());
+            drop(held);
+            assert!(connection_permit(&connections, wait).await.is_ok());
+        });
+    }
 }
 
 #[cfg(test)]

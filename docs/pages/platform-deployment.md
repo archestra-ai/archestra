@@ -2107,7 +2107,7 @@ To learn more about enterprise licensing, see the [pricing model](/docs/platform
 
 - `ARCHESTRA_OPENAPPA_ENABLED`: defaults to `false`. Explicit `true` enables OpenAPPA and its policy editor.
 - `ARCHESTRA_OPENAPPA_YELL_ENABLED`: defaults to `true`. Set `false` to disable reporting. With OpenAPPA and Guardrails v2 enabled, exposes agent feedback reporting. Reports go to Archestra’s shared HTTPS receiver, private GCS storage, and internal Slack channel. No GCP credentials are required in your deployment.
-- `ARCHESTRA_OPENAPPA_POSTGRES_MAX_CONNECTIONS`: defaults to `4`. Each backend process opens up to this many PostgreSQL connections for OpenAPPA. One guardrail check uses one connection. Checks beyond the limit wait for a free one.
+- `ARCHESTRA_OPENAPPA_POSTGRES_MAX_CONNECTIONS`: defaults to `4`. Each backend process opens up to this many PostgreSQL connections for OpenAPPA. A guardrail check holds one connection until it finishes, including its calls to external authorities. Checks beyond the limit wait up to 30 seconds, then fail. Raise the value if your policies consult slow authorities.
 - `ARCHESTRA_LLM_PROXY_PLUGINS`: comma-separated plugin list, empty by default. Enabling OpenAPPA automatically registers its plugin. The list alone does not enable APPA.
 
 Policies are stored in PostgreSQL and edited in OpenAPPA. Container policy paths are no longer used. Save your existing policy in the editor when upgrading. Saved revisions apply to new conversations. Existing conversations keep their original policy.

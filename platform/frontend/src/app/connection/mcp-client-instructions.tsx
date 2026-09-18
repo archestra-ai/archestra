@@ -15,6 +15,11 @@ import {
   SecretCopyButton,
 } from "@/components/secret-copy-button";
 import {
+  TerminalCard,
+  terminalActionClass,
+  terminalCodeClass,
+} from "@/components/terminal-surface";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -508,14 +513,14 @@ export function GenericAuthRow({
 
   return (
     <DropdownMenu>
-      <div className="relative overflow-hidden rounded-xl border border-[#1f2937] bg-[#0d1117] shadow-lg">
+      <TerminalCard className="relative">
         <div className="absolute right-2 top-2 flex items-center gap-1">
           <button
             type="button"
             onClick={handleToggleExpose}
             disabled={isLoading}
             aria-label={exposedValue ? "Hide token" : "Reveal token"}
-            className="flex size-7 items-center justify-center rounded border border-[#1f2937] bg-[#0d1117] text-[#9ca3af] transition-colors hover:text-white disabled:opacity-50"
+            className={cn(terminalActionClass, "size-7")}
           >
             {isLoading && !isCopying ? (
               <Loader2 className="size-3.5 animate-spin" strokeWidth={2} />
@@ -539,17 +544,19 @@ export function GenericAuthRow({
               type="button"
               disabled={isLoading || isCopying}
               aria-label="Switch token"
-              className="flex h-7 items-center gap-1 rounded border border-[#1f2937] bg-[#0d1117] px-2 text-[11px] text-[#9ca3af] transition-colors hover:text-white disabled:opacity-50"
+              className={cn(terminalActionClass, "h-7 gap-1 px-2 text-[11px]")}
             >
               {selectedLabel}
               <ChevronDown className="size-3" strokeWidth={2} />
             </button>
           </DropdownMenuTrigger>
         </div>
-        <pre className="m-0 overflow-auto px-5 py-4 pr-36 font-mono text-[13px] leading-[1.65] text-[#e5e7eb]">
+        <pre
+          className={cn("m-0 overflow-auto px-5 py-4 pr-36", terminalCodeClass)}
+        >
           {headerValue}
         </pre>
-      </div>
+      </TerminalCard>
       <DropdownMenuContent align="end" className="w-[280px]">
         {userToken && (
           <TokenOption

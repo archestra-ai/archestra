@@ -2,7 +2,7 @@
 title: Tool Guardrails
 category: LLM Proxy
 order: 5
-lastUpdated: 2026-09-16
+lastUpdated: 2026-09-18
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -22,9 +22,13 @@ Set `ARCHESTRA_OPENAPPA_ENABLED=true` to enable the OpenAPPA sidebar entry in St
 
 The built-in APPA Guide skill helps agents inspect, explain, and edit this policy. It uses the same read, validate, and update tools as the editor. The skill is available only while APPA is enabled.
 
-APPA checks every call in a batch before releasing it. Allowed calls can run in parallel, and their results can arrive in any order. If any call is denied, none of the calls in that response run.
+APPA evaluates each tool call before releasing it. Allowed calls run in parallel, and their results can return in any order. When a call is denied, the proxy returns a remedy notice. Other allowed calls in the same response still run.
+
+An agent that calls a tool through `run_tool` is evaluated on the tool that runs. A rule for `send_email` applies to a `run_tool` dispatch with `tool_name = "send_email"` exactly as it applies to a direct call. The remedy notice for a denied dispatch names that tool, not `run_tool`.
 
 The default policy has no rules for specific tools. A catch-all annotator adds no restrictions or label changes. Explicit tool rules take precedence over this fallback.
+
+Tool rules name tools exactly, or cover every unnamed tool with `*`. Partial patterns such as `grain__*` match nothing.
 
 The assistant can read, validate, and update the same policy through its policy tools. Both editing paths enforce permissions and reject conflicting revisions. Invalid policies leave the saved revision unchanged.
 

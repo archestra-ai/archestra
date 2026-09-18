@@ -30,4 +30,21 @@ describe("AgentSetupBanner", () => {
     rerender(<AgentSetupBanner items={[]} resetKey="agent-2" />);
     expect(screen.queryByRole("alert")).toBeNull();
   });
+
+  it("dismisses the settled banner but not work the agent still needs", async () => {
+    const { rerender } = render(<AgentSetupBanner items={[]} showReady />);
+    await userEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+    expect(screen.queryByRole("alert")).toBeNull();
+
+    rerender(
+      <AgentSetupBanner
+        items={[
+          { id: "key", label: "Connect your Claude account", status: "now" },
+        ]}
+        showReady
+      />,
+    );
+    expect(screen.getByText("Before this agent can run")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Dismiss" })).toBeNull();
+  });
 });

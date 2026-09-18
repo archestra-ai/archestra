@@ -1,3 +1,4 @@
+import { parseRepoFromSourceRef } from "@/lib/skills/skill-source";
 import type { SkillDetail } from "./github-sync-panel";
 
 export const SKILL_DESCRIPTION_FALLBACK =
@@ -56,10 +57,10 @@ export function resolveSkillDetailSection(
   );
 }
 
-/** `owner/repo` of a GitHub skill; `sourceRef` is `owner/repo@ref`. */
+/** Repository identity of a GitHub skill, including its Enterprise origin. */
 export function skillGithubSourceRepo(skill: SkillDetail): string | null {
   return skill.sourceType === "github"
-    ? (skill.sourceRef?.split("@")[0] ?? null)
+    ? parseRepoFromSourceRef(skill.sourceRef, skill.sourceOrigin)
     : null;
 }
 

@@ -325,6 +325,7 @@ function VersionHistory({
               activeFilePath={activeFilePath}
               onSelectFile={setActiveFilePath}
               sourceRef={skill?.sourceRef ?? null}
+              sourceOrigin={skill?.sourceOrigin ?? null}
             />
           )}
         </section>
@@ -398,6 +399,7 @@ function VersionPreview({
   activeFilePath,
   onSelectFile,
   sourceRef,
+  sourceOrigin,
 }: {
   version: number;
   isHead: boolean;
@@ -417,6 +419,7 @@ function VersionPreview({
   onSelectFile: (path: string | null) => void;
   /** The skill's provenance string, paired with a version's commit to link out. */
   sourceRef: string | null;
+  sourceOrigin: string | null;
 }) {
   const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(
     new Set(),
@@ -514,6 +517,7 @@ function VersionPreview({
     : SKILL_MANIFEST_LANGUAGE;
   const sourceUrl = githubSourceUrlAtCommit({
     sourceRef,
+    sourceOrigin,
     commit: detail.sourceCommit,
   });
 

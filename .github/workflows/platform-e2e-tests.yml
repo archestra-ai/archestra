@@ -839,6 +839,19 @@ jobs:
           # Three shards preserve all selected tests. PR #7574's API-driven
           # gateway cleanup removed the list-UI failure that blocked this width
           # in its earlier experiment.
+          # The OpenAPPA root tool flow, on a stack booted with the feature on.
+          # It is its own leg because the flag is not additive: with OpenAPPA
+          # enabled the proxy rejects any tool-declaring request that omits the
+          # two APPA tools, which other lite specs rely on. Every leg boots its
+          # own stack anyway, so
+          # this costs one runner, not a second harness. The `openappa`
+          # Playwright project runs here and nowhere else.
+          - name: openappa
+            projects_default: openappa
+            projects_nightly: openappa
+            shard: ""
+            workers_arg: ""
+            openappa_enabled: "true"
           - name: chromium-1of3
             projects_default: chromium
             projects_nightly: chromium
@@ -901,6 +914,9 @@ jobs:
       - name: Start lite e2e stack
         env:
           PLATFORM_IMAGE: ${{ steps.load-platform-image.outputs.image-tag }}
+          # Off for every leg but the openappa one, so the other legs' stacks
+          # are byte-identical to what they were before this existed.
+          ARCHESTRA_OPENAPPA_ENABLED: ${{ matrix.openappa_enabled || 'false' }}
           # The embedded Kind cluster pulls the MCP server base image straight
           # from the (anonymous-pull) registry, so trusted runs can use the
           # image this workflow just built. Untrusted PRs don't push to the

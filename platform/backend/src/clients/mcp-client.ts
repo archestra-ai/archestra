@@ -4849,11 +4849,17 @@ class McpClient {
       }
     }
 
+    // Listing fans out over catalogs. Hydrate their metadata and runtime
+    // secrets together instead of repeating the singular lookup for each one.
+    const catalogItems = await InternalMcpCatalogModel.getByIds(
+      Array.from(toolsByCatalogId.keys()),
+      { expandSecrets: true },
+    );
     const clients: PassiveMcpClient[] = [];
 
     for (const [catalogId, tool] of toolsByCatalogId) {
       try {
-        const catalogItem = await InternalMcpCatalogModel.findById(catalogId);
+        const catalogItem = catalogItems.get(catalogId);
         if (!catalogItem) continue;
 
         const targetResult =

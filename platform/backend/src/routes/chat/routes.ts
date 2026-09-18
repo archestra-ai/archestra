@@ -51,7 +51,6 @@ import {
   createChatMcpElicitationBridge,
   resolveChatMcpElicitation,
 } from "@/clients/chat-mcp-elicitation";
-import { withOpenAppaChat } from "@/clients/chat-openappa";
 import {
   applyMcpTasksToMessages,
   chatTaskPrincipal,
@@ -1337,19 +1336,10 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 // "retrying may help".
                 let lastFinishReason: string | null = null;
 
-                const chatAppa = withOpenAppaChat({
-                  model,
-                  tools: mcpTools,
-                  session: {
-                    organization_id: organizationId,
-                    caller_id: `user:${user.id}`,
-                    session_id: conversationId,
-                  },
-                });
                 const streamTextConfig: ChatStreamTextConfig = {
-                  model: chatAppa.model,
+                  model,
                   messages: modelMessages,
-                  ...(supportsToolCalling && { tools: chatAppa.tools }),
+                  ...(supportsToolCalling && { tools: mcpTools }),
                   stopWhen: buildChatStopConditions(repeatTracker),
                   abortSignal: chatAbortController.signal,
                   experimental_repairToolCall: createToolCallRepair({

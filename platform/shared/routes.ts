@@ -146,6 +146,7 @@ export const RouteId = {
   // MCP Gateway Routes
   McpGatewayGet: "mcpGatewayGet",
   McpGatewayPost: "mcpGatewayPost",
+  McpGatewaySseMessage: "mcpGatewaySseMessage", // Legacy HTTP+SSE message endpoint
   McpProxyPost: "mcpProxyPost", // Frontend session-based proxy to MCP Gateway
   McpServerProxyPost: "mcpServerProxyPost", // Session-based proxy to one installed server's MCP App runtime
 
@@ -522,6 +523,9 @@ export const RouteId = {
   DeleteAgentWorkspace: "deleteAgentWorkspace",
   ReadAgentWorkspaceFile: "readAgentWorkspaceFile",
   WriteAgentWorkspaceFile: "writeAgentWorkspaceFile",
+  StartAgentWorkspaceTransfer: "startAgentWorkspaceTransfer",
+  DownloadAgentWorkspaceTransfer: "downloadAgentWorkspaceTransfer",
+  UploadAgentWorkspaceTransfer: "uploadAgentWorkspaceTransfer",
   DeleteAgentRun: "deleteAgentRun",
   GetAgentRunShare: "getAgentRunShare",
   ShareAgentRun: "shareAgentRun",

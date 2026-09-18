@@ -13,6 +13,7 @@ import {
   OAUTH_TOKEN_ID_PREFIX,
   parseFullToolName,
   platformExecutedAs,
+  TOOL_ASK_USER_SHORT_NAME,
   TOOL_CANCEL_RUN_SHORT_NAME,
   TOOL_COPY_FILE_SHORT_NAME,
   TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
@@ -31,6 +32,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import {
   CallToolRequestSchema,
+  type ElicitRequest,
   ElicitResultSchema,
   ListPromptsRequestSchema,
   ListResourcesRequestSchema,
@@ -56,6 +58,7 @@ import {
 import { structuredToolErrorResult } from "@/archestra-mcp-server/helpers";
 import { userHasPermission } from "@/auth/utils";
 import { LRUCacheManager } from "@/cache-manager";
+import type { ArchestraElicitationOutcome } from "@/clients/chat-mcp-elicitation";
 import mcpClient, { type TokenAuthContext } from "@/clients/mcp-client";
 import { isToolRejectedForMcpHeaders } from "@/clients/mcp-param-headers";
 import config from "@/config";
@@ -451,6 +454,7 @@ export async function createAgentServer(params: {
           ),
         )
       : [];
+    const implicitAskUserTools = getImplicitAskUserTools();
     const candidateTools = dedupeToolsByName(
       [
         ...mcpTools.filter(
@@ -459,6 +463,7 @@ export async function createAgentServer(params: {
         ...implicitMetaTools,
         ...implicitTaskControlTools,
         ...implicitOpenAppaTools,
+        ...implicitAskUserTools,
         ...[...delegationTools, ...skillDelegationTools].map((tool) => ({
           name: tool.name,
           description: tool.description,
@@ -971,6 +976,15 @@ export async function createAgentServer(params: {
                 organizationId: tokenAuth?.organizationId,
                 tokenAuth,
                 contextIsTrusted,
+                elicitation: {
+                  elicit: createGatewayUserElicit({
+                    extra,
+                    mrtr,
+                    mrtrEnabled,
+                    agentId,
+                    toolName: name,
+                  }),
+                },
               });
               span.setAttribute(
                 ATTR_MCP_IS_ERROR_RESULT,
@@ -2367,6 +2381,83 @@ function getImplicitArchestraMetaTools() {
 
 function getImplicitTaskControlTools() {
   return getArchestraMcpTools().filter((tool) => isTaskControlTool(tool.name));
+}
+
+function getImplicitAskUserTools() {
+  return getArchestraMcpTools().filter(
+    (tool) =>
+      archestraMcpBranding.getToolShortName(tool.name) ===
+      TOOL_ASK_USER_SHORT_NAME,
+  );
+}
+
+function createGatewayUserElicit(params: {
+  extra: {
+    sendRequest: (
+      request: ElicitRequest,
+      resultSchema: typeof ElicitResultSchema,
+    ) => Promise<unknown>;
+  };
+  mrtr?: {
+    inputResponses?: InputResponses;
+  };
+  mrtrEnabled: boolean;
+  agentId: string;
+  toolName: string;
+}): (args: {
+  toolName: string;
+  message: string;
+  requestedSchema?: unknown;
+}) => Promise<ArchestraElicitationOutcome> {
+  const { extra, mrtr, mrtrEnabled, agentId, toolName } = params;
+
+  return async ({ message, requestedSchema }) => {
+    const supplied = mrtr?.inputResponses?.[GATEWAY_INPUT_REQUEST_KEY];
+    if (supplied !== undefined) {
+      return {
+        status: "answered",
+        result: ElicitResultSchema.parse(supplied),
+      };
+    }
+
+    const request = {
+      method: "elicitation/create",
+      params: {
+        mode: "form",
+        message,
+        requestedSchema,
+      },
+    } as ElicitRequest;
+
+    if (mrtrEnabled) {
+      throw new InputRequiredSignal({
+        key: GATEWAY_INPUT_REQUEST_KEY,
+        request: {
+          method: "elicitation/create",
+          params: request.params as Record<string, unknown>,
+        },
+      });
+    }
+
+    try {
+      return {
+        status: "answered",
+        result: ElicitResultSchema.parse(
+          await extra.sendRequest(request, ElicitResultSchema),
+        ),
+      };
+    } catch (error) {
+      logger.warn(
+        {
+          agentId,
+          toolName,
+          error: error instanceof Error ? error.message : String(error),
+        },
+        "MCP elicitation request was not completed by caller",
+      );
+      return { status: "no_viewer" };
+    }
+  };
 }
 
 // First occurrence wins: callers (getMcpToolsByAgent) order candidates with

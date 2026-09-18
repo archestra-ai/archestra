@@ -58,4 +58,86 @@ describe("chat tool execution", () => {
       "Successfully wrote 2 todo item(s)",
     );
   });
+
+  test("ask_user returns no-form error when elicitation is unavailable", async () => {
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}ask_user`,
+      {
+        question: "Accept this change for the rest of this session?",
+        options: [
+          { label: "Accept for this session" },
+          { label: "Do not accept" },
+        ],
+      },
+      mockContext,
+    );
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain(
+      "This client did not complete a choice form",
+    );
+    expect((result.content[0] as any).text).toContain(
+      "Do not ask this as a free-form chat question",
+    );
+  });
+
+  test("ask_user returns the selected option after elicitation", async () => {
+    mockContext = {
+      ...mockContext,
+      elicitation: {
+        elicit: async () => ({
+          status: "answered" as const,
+          result: {
+            action: "accept" as const,
+            content: { choice: "Accept for this session" },
+          },
+        }),
+      },
+    };
+
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}ask_user`,
+      {
+        question: "Accept this change for the rest of this session?",
+        options: [
+          { label: "Accept for this session" },
+          { label: "Do not accept" },
+        ],
+      },
+      mockContext,
+    );
+    expect(result.isError).toBe(false);
+    expect(result.structuredContent).toEqual({
+      action: "accept",
+      selected: ["Accept for this session"],
+    });
+  });
+
+  test("ask_user returns decline without selected options", async () => {
+    mockContext = {
+      ...mockContext,
+      elicitation: {
+        elicit: async () => ({
+          status: "answered" as const,
+          result: { action: "decline" as const },
+        }),
+      },
+    };
+
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}ask_user`,
+      {
+        question: "Accept this change for the rest of this session?",
+        options: [
+          { label: "Accept for this session" },
+          { label: "Do not accept" },
+        ],
+      },
+      mockContext,
+    );
+    expect(result.isError).toBe(false);
+    expect(result.structuredContent).toEqual({
+      action: "decline",
+      selected: [],
+    });
+  });
 });

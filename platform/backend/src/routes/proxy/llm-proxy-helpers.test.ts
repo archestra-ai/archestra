@@ -317,6 +317,7 @@ describe("planDispatchModeToolCallRewrites", () => {
   // top-level in every exposure mode are genuinely directly callable, so
   // wrapping them would add a pointless dispatch hop.
   test.each([
+    "archestra__ask_user",
     "archestra__read_file",
     "archestra__run_command",
     "archestra__load_skill",

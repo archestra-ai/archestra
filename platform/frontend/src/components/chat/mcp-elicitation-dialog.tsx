@@ -8,13 +8,6 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { FieldDescription } from "@/components/ui/field-description";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 
 export type ChatMcpElicitationRequest = {
@@ -36,6 +29,7 @@ type FieldSchema = {
   description?: string;
   type?: string;
   enum?: unknown[];
+  enumDescriptions?: unknown[];
   default?: unknown;
 };
 
@@ -100,8 +94,8 @@ export function McpElicitationDialog({
       onOpenChange={(open) => {
         if (!open && !isSubmitting) void respondWithoutContent("cancel");
       }}
-      title="Additional Information"
-      description={request.message}
+      title={isChoiceForm(fields) ? request.message : "Additional Information"}
+      description={isChoiceForm(fields) ? undefined : request.message}
       size="small"
       preventCloseOnInteractOutside
       onSubmit={submit}
@@ -202,6 +196,7 @@ function ElicitationFieldInput({
   const enumValues = field.schema.enum?.filter(
     (item): item is string => typeof item === "string",
   );
+  const enumDescriptions = field.schema.enumDescriptions;
 
   if (field.schema.type === "boolean") {
     return (
@@ -223,31 +218,58 @@ function ElicitationFieldInput({
     );
   }
 
+  if (enumValues?.length) {
+    return (
+      <fieldset className="flex flex-col gap-2">
+        <legend className="text-sm font-medium">
+          {field.label}
+          {field.required ? <span className="text-destructive">*</span> : null}
+        </legend>
+        {enumValues.map((option, index) => {
+          const optionId = `${id}-${index}`;
+          const description =
+            typeof enumDescriptions?.[index] === "string"
+              ? enumDescriptions[index]
+              : undefined;
+          return (
+            <div key={option} className="flex items-start gap-2">
+              <Checkbox
+                id={optionId}
+                checked={value === option}
+                aria-invalid={Boolean(error)}
+                aria-describedby={error ? errorId : undefined}
+                onCheckedChange={(checked) =>
+                  onChange(checked === true ? option : "")
+                }
+              />
+              <div className="flex min-w-0 flex-col">
+                <Label htmlFor={optionId}>{option}</Label>
+                {description ? (
+                  <FieldDescription>{description}</FieldDescription>
+                ) : null}
+              </div>
+            </div>
+          );
+        })}
+        {error ? (
+          <p id={errorId} className="text-xs text-destructive">
+            {error}
+          </p>
+        ) : null}
+        {field.schema.description ? (
+          <FieldDescription>{field.schema.description}</FieldDescription>
+        ) : null}
+      </fieldset>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-2">
       <Label htmlFor={id}>
         {field.label}
         {field.required ? <span className="text-destructive">*</span> : null}
       </Label>
-      {enumValues?.length ? (
-        <Select value={String(value ?? "")} onValueChange={onChange}>
-          <SelectTrigger
-            id={id}
-            className="w-full"
-            aria-invalid={Boolean(error)}
-            aria-describedby={error ? errorId : undefined}
-          >
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {enumValues.map((option) => (
-              <SelectItem key={option} value={option}>
-                {option}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      ) : field.schema.type === "string" && String(value ?? "").length > 120 ? (
+      {field.schema.type === "string" && String(value ?? "").length > 120 ? (
         <Textarea
           id={id}
           value={String(value ?? "")}
@@ -347,11 +369,18 @@ function getDefaultValues(fields: ElicitationField[]) {
       if (field.schema.type === "boolean") {
         return [field.name, false];
       }
-      const firstEnumValue = field.schema.enum?.find(
-        (item) => typeof item === "string",
-      );
-      return [field.name, firstEnumValue ?? ""];
+      return [field.name, ""];
     }),
+  );
+}
+
+function isChoiceForm(fields: ElicitationField[]) {
+  return (
+    fields.length > 0 &&
+    fields.every(
+      (field) =>
+        field.schema.type === "boolean" || (field.schema.enum?.length ?? 0) > 0,
+    )
   );
 }
 

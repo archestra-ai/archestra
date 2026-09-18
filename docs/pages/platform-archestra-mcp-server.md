@@ -1975,6 +1975,7 @@ Required RBAC permission: `knowledgeSource:update`
 | Tool | Description | Required RBAC Permission |
 |------|-------------|--------------------------|
 | `todo_write` | Write todos to the current conversation. | None (no additional RBAC permission required) |
+| `ask_user` | Ask the user to pick from a short list of options. | None (no additional RBAC permission required) |
 
 #### todo_write
 
@@ -1995,6 +1996,27 @@ Required RBAC permission: None (no additional RBAC permission required)
 |-------|------|----------|-------------|
 | `success` | `true` | Yes | Whether the write succeeded. |
 | `todoCount` | `integer` | Yes | How many todo items were written. |
+
+#### ask_user
+
+Required RBAC permission: None (no additional RBAC permission required)
+
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `question` | `string` | Yes | The question shown above the options. |
+| `options` | `object[]` | Yes | The options the user can pick. Labels must be unique. |
+| `options[].label` | `string` | Yes | The option shown to the user. |
+| `options[].description` | `string` | No | Optional extra detail shown next to the option. |
+| `allowMultiple` | `boolean` | No | When true, the user may select more than one option. Defaults to false (exactly one). |
+
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `action` | `"accept" \| "decline" \| "cancel"` | Yes | Whether the user submitted, declined, or cancelled. |
+| `selected` | `string[]` | Yes | The labels the user selected. Empty when they declined or cancelled. |
 
 ### Projects
 

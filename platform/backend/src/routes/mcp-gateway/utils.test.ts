@@ -3,6 +3,7 @@ import {
   ARCHESTRA_TOKEN_PREFIX,
   LEGACY_ARCHESTRA_TOKEN_PREFIXES,
   OAUTH_TOKEN_ID_PREFIX,
+  TOOL_ASK_USER_FULL_NAME,
   TOOL_CANCEL_RUN_FULL_NAME,
   TOOL_COPY_FILE_SHORT_NAME,
   TOOL_CREATE_SKILL_FULL_NAME,
@@ -1402,7 +1403,11 @@ describe("createAgentServer tools/list", () => {
     });
 
     expect(response.tools.map((tool) => tool.name).sort()).toEqual(
-      [TOOL_RUN_TOOL_FULL_NAME, TOOL_SEARCH_TOOLS_FULL_NAME].sort(),
+      [
+        TOOL_ASK_USER_FULL_NAME,
+        TOOL_RUN_TOOL_FULL_NAME,
+        TOOL_SEARCH_TOOLS_FULL_NAME,
+      ].sort(),
     );
     expect(
       response.tools.every((tool) => tool.inputSchema?.type === "object"),
@@ -1525,6 +1530,7 @@ describe("createAgentServer tools/list", () => {
 
     expect(names).toEqual(
       new Set([
+        TOOL_ASK_USER_FULL_NAME,
         TOOL_RUN_TOOL_FULL_NAME,
         TOOL_SEARCH_TOOLS_FULL_NAME,
         TOOL_GET_RUN_FULL_NAME,
@@ -1586,6 +1592,7 @@ describe("createAgentServer tools/list", () => {
 
       // meta tools and the skill/sandbox runtime path stay top-level
       for (const exposed of [
+        TOOL_ASK_USER_FULL_NAME,
         TOOL_SEARCH_TOOLS_FULL_NAME,
         TOOL_RUN_TOOL_FULL_NAME,
         TOOL_LIST_SKILLS_FULL_NAME,
@@ -2027,6 +2034,7 @@ describe("createAgentServer tools/list", () => {
     // Exactly the discovery/dispatch pair — asserted as the whole list, so any
     // extra tool of any class fails regardless of which path contributed it.
     expect(response.tools.map((tool) => tool.name).sort()).toEqual([
+      "archestra__ask_user",
       "archestra__run_tool",
       "archestra__search_tools",
     ]);
@@ -3287,6 +3295,65 @@ describe("createAgentServer tools/list", () => {
     } finally {
       executeToolCallForOwnerSpy.mockRestore();
     }
+  });
+
+  test("ask_user elicits a choice form through the MCP caller", async ({
+    makeAgent,
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id });
+    const { server } = await createAgentServer({ agentId: agent.id });
+    const callToolHandler = (
+      server.server as unknown as {
+        _requestHandlers: Map<string, TestCallToolHandler>;
+      }
+    )._requestHandlers.get("tools/call");
+    expect(callToolHandler).toBeDefined();
+    if (!callToolHandler) {
+      throw new Error("Expected tools/call handler to be registered");
+    }
+
+    const sendRequest = vi.fn().mockResolvedValue({
+      action: "accept",
+      content: { choice: "Accept for this session" },
+    });
+    const result = await callToolHandler(
+      {
+        method: "tools/call",
+        params: {
+          name: TOOL_ASK_USER_FULL_NAME,
+          arguments: {
+            question: "Accept this change for the rest of this session?",
+            options: [
+              { label: "Accept for this session" },
+              { label: "Do not accept" },
+            ],
+          },
+        },
+      },
+      { sendRequest },
+    );
+
+    expect(sendRequest).toHaveBeenCalledWith(
+      {
+        method: "elicitation/create",
+        params: {
+          mode: "form",
+          message: "Accept this change for the rest of this session?",
+          requestedSchema: expect.objectContaining({
+            type: "object",
+            required: ["choice"],
+          }),
+        },
+      },
+      expect.any(Object),
+    );
+    expect(result.isError).not.toBe(true);
+    expect(result.structuredContent).toEqual({
+      action: "accept",
+      selected: ["Accept for this session"],
+    });
   });
 
   test("advertises the healthy-connection tool when two assigned tools share a name across different catalog items", async ({

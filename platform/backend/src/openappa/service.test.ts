@@ -664,7 +664,7 @@ describe("APPA feature boundary", () => {
         userId: "alice",
         sessionId: "conversation",
         currentToolCallId: "remedy-call-2",
-        elicitation: { elicit, setWriter: vi.fn(), createHandler: vi.fn() },
+        elicitation: { elicit },
       },
     );
     expect(result).toMatchObject(appaResult);

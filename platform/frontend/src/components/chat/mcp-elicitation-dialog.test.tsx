@@ -82,6 +82,7 @@ describe("McpElicitationDialog", () => {
       screen.getByRole("textbox", { name: /recipient name/i }),
       "Avery Test",
     );
+    await user.click(screen.getByRole("checkbox", { name: "morning" }));
     await user.type(screen.getByRole("spinbutton", { name: /quantity/i }), "3");
     await user.click(screen.getByRole("button", { name: /continue/i }));
 
@@ -133,5 +134,50 @@ describe("McpElicitationDialog", () => {
     expect(
       screen.queryByRole("link", { name: "Open request" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("renders a checkbox choice form for ask_user elicitation", async () => {
+    const user = userEvent.setup();
+    const onRespond = vi.fn().mockResolvedValue(undefined);
+    const choiceRequest = {
+      id: request.id,
+      conversationId: request.conversationId,
+      toolName: "archestra__ask_user",
+      message: "Accept this change for the rest of this session?",
+      mode: "form" as const,
+      requestedSchema: {
+        type: "object",
+        properties: {
+          choice: {
+            type: "string",
+            title: "Choice",
+            enum: ["Accept for this session", "Do not accept"],
+          },
+        },
+        required: ["choice"],
+      },
+    };
+
+    render(
+      <McpElicitationDialog
+        request={choiceRequest}
+        isSubmitting={false}
+        onRespond={onRespond}
+      />,
+    );
+
+    expect(
+      screen.getByText("Accept this change for the rest of this session?"),
+    ).toBeInTheDocument();
+    await user.click(
+      screen.getByRole("checkbox", { name: "Accept for this session" }),
+    );
+    await user.click(screen.getByRole("button", { name: /continue/i }));
+
+    expect(onRespond).toHaveBeenCalledWith({
+      id: request.id,
+      action: "accept",
+      content: { choice: "Accept for this session" },
+    });
   });
 });

@@ -198,6 +198,8 @@ Header passthrough applies to remote MCP servers and local MCP servers using str
 
 MCP servers behind a gateway can use MCP elicitation to ask the connected client for more information during a tool call. Archestra passes these requests through only when the caller supports elicitation, so non-interactive clients are not asked to complete forms.
 
+The built-in [`ask_user`](/docs/platform-archestra-mcp-server#ask_user) tool uses the same path. Claude Code, Codex, and OpenCode should use native elicitation when the client has it, and fall back to `ask_user` (a choice form) when it does not. Never fall back to a free-form chat question.
+
 ## Version History
 
 Every configuration change to a gateway is kept as a version. Open **Version history** from the gateway's row to browse them. Read what changed, and restore an earlier one. Restoring creates a new version — the history is never rewritten. See [Version History](/docs/platform-agents#version-history).

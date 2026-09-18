@@ -5,6 +5,7 @@ import {
   getArchestraToolShortName,
   isAgentTool,
   isSkillTool,
+  TOOL_ASK_USER_SHORT_NAME,
   TOOL_CANCEL_RUN_SHORT_NAME,
   TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
   TOOL_GET_REMEDY_PLANS_SHORT_NAME,
@@ -475,6 +476,7 @@ function brandTools(tools: ReturnType<typeof getAllTools>) {
 // that the caller can observe and control the returned run. Access to the run
 // itself remains actor-scoped inside each handler.
 const ASSIGNMENT_EXEMPT_SHORT_NAMES = new Set<ArchestraToolShortName>([
+  TOOL_ASK_USER_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
   TOOL_GET_RUN_SHORT_NAME,

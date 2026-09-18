@@ -183,6 +183,7 @@ describe("rendering runtime text for this client", () => {
           kind: "deny" as const,
           feedback:
             "[appa] Refused: tool builtin:exec is not declared in this policy",
+          offers: [],
         },
       ]);
     try {
@@ -232,7 +233,11 @@ describe("rendering runtime text for this client", () => {
       .spyOn(appaService, "evaluateToolCalls")
       .mockImplementation(async () => [
         { kind: "allow" as const },
-        { kind: "deny" as const, feedback: "[appa] Refused: no plan." },
+        {
+          kind: "deny" as const,
+          feedback: "[appa] Refused: no plan.",
+          offers: [],
+        },
         { kind: "control" as const },
       ]);
     const cancelCalls = vi
@@ -568,6 +573,7 @@ describe("rendering runtime text for this client", () => {
         calls.map(() => ({
           kind: "deny" as const,
           feedback: "[appa] Refused: no plan.",
+          offers: [],
         })),
       );
     try {
@@ -715,6 +721,48 @@ describe("rendering runtime text for this client", () => {
     } finally {
       evaluateToolCalls.mockRestore();
     }
+  });
+
+  test("strips a client-echoed JWS before stamping", async () => {
+    const plugin = new AppaPluginArchestra([]);
+    const context = requestContext({
+      sessionId: "control-envelope-stale-jws",
+      canonicalizeToolName: (name) => name,
+    });
+    const trusted = context.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as Record<string, unknown>;
+    trusted.request = {
+      tools: {
+        controlToolName: "archestra__execute_remedy_plan",
+        noticeToolName: "archestra__get_remedy_plans",
+      },
+      spellings: new Map(),
+      customTools: new Set(),
+      namespaces: new Map(),
+    };
+    await plugin.onSessionInit(context);
+    const outcome = await plugin.onPrepareToolCalls({
+      ...context,
+      toolCalls: [
+        {
+          id: "provider-call-1",
+          name: "archestra__execute_remedy_plan",
+          arguments: JSON.stringify({
+            offer_id: "offer-1",
+            protected: "stale",
+            payload: "stale",
+            signature: "stale",
+          }),
+        },
+      ],
+    });
+    if (outcome?.decision !== "allow") throw new Error("expected allow");
+    const argumentsValue = JSON.parse(outcome.toolCalls[0].arguments as string);
+    expect(argumentsValue.protected).toBeUndefined();
+    expect(argumentsValue.payload).toBeUndefined();
+    expect(argumentsValue.signature).toBeUndefined();
+    expect(argumentsValue.execution.call_id).toBe("provider-call-1");
   });
 });
 

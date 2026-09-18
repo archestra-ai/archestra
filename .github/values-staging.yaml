@@ -78,6 +78,8 @@ archestra:
     # Enable OpenAPPA policy editing and GitHub sync on staging.
     # Enforcement requires the deployment-wide switch on /openappa (off by default).
     ARCHESTRA_OPENAPPA_ENABLED: "true"
+    # HMAC secret for signed offer routing. Set via the staging secret overlay
+    # (ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET); replicas must share it.
     # Keep agent feedback reporting enabled via the shared OpenAPPA receiver.
     ARCHESTRA_OPENAPPA_YELL_ENABLED: "true"
     ARCHESTRA_LLM_PROXY_PLUGINS: ""

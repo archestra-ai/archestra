@@ -2008,6 +2008,8 @@ export function parseLlmProxyPlugins(
   return plugins as LlmProxyPluginName[];
 }
 
+const MIN_OPENAPPA_OFFER_SIGNING_SECRET_LENGTH = 32;
+
 /**
  * Validates APPA settings only when its feature flag is explicitly enabled.
  * @public — exported for testability
@@ -2015,10 +2017,27 @@ export function parseLlmProxyPlugins(
 export function parseOpenAppaConfig(
   enabled: string | undefined,
   yellEnabled?: string,
+  offerSigningSecret?: string,
 ) {
+  const secret = offerSigningSecret ?? "";
+  const isEnabled = enabled === "true";
+  if (
+    secret.length > 0 &&
+    secret.length < MIN_OPENAPPA_OFFER_SIGNING_SECRET_LENGTH
+  ) {
+    throw new Error(
+      `ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET must be at least ${MIN_OPENAPPA_OFFER_SIGNING_SECRET_LENGTH} characters`,
+    );
+  }
+  if (isEnabled && secret.length === 0) {
+    logger.warn(
+      "OpenAPPA is enabled without ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET: denials that carry remedy offers will fail closed (503) until the secret is set on every replica",
+    );
+  }
   return {
-    enabled: enabled === "true",
-    yellEnabled: enabled === "true" && (yellEnabled ?? "true") === "true",
+    enabled: isEnabled,
+    yellEnabled: isEnabled && (yellEnabled ?? "true") === "true",
+    offerSigningSecret: secret,
   };
 }
 
@@ -2212,6 +2231,7 @@ const fileStorageS3Config = parseFileStorageS3Config({
 const openappa = parseOpenAppaConfig(
   process.env.ARCHESTRA_OPENAPPA_ENABLED,
   process.env.ARCHESTRA_OPENAPPA_YELL_ENABLED,
+  process.env.ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET,
 );
 const llmProxyPlugins = parseLlmProxyPlugins(
   process.env.ARCHESTRA_LLM_PROXY_PLUGINS,

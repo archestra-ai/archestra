@@ -65,38 +65,6 @@ export const openappaSessionsTable = pgTable(
   (table) => [index("openappa_sessions_root_idx").on(table.root)],
 );
 
-// Routing and client presentation only. OpenAPPA's event log remains the
-// authority for whether an offer can execute.
-export const openappaOfferOwnersTable = pgTable(
-  "openappa_offer_owners",
-  {
-    ...scope(),
-    binding: text("binding").notNull(),
-    offerId: text("offer_id").notNull(),
-    root: text().notNull(),
-    parentId: text("parent_id"),
-    arguments: text(),
-    tool: text(),
-    spelling: text(),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-  },
-  (table) => [
-    primaryKey({
-      name: "openappa_offer_owners_pk",
-      columns: [table.organizationId, table.offerId],
-    }),
-    index("openappa_offer_owners_session_idx").on(
-      table.organizationId,
-      table.sessionId,
-      table.callerId,
-    ),
-    index("openappa_offer_owners_root_idx").on(table.root),
-    index("openappa_offer_owners_created_at_idx").on(table.createdAt),
-  ],
-);
-
 export const openappaOperationsTable = pgTable(
   "openappa_operations",
   {

@@ -21,10 +21,13 @@ import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import {
   type AnthropicStubOptions,
   createAnthropicTestClient,
+  createOpenAiTestClient,
 } from "@/test/llm-provider-stubs";
 import { type Agent, ApiError } from "@/types";
-import { anthropicAdapterFactory } from "./adapters";
+import { anthropicAdapterFactory, openaiAdapterFactory } from "./adapters";
+import { openAiResponsesAdapterFactory } from "./adapters/openai-responses";
 import anthropicProxyRoutes from "./routes/anthropic";
+import openAiProxyRoutes from "./routes/openai";
 
 const native = vi.hoisted(() => ({
   initializeOpenappa: vi.fn(),
@@ -1754,5 +1757,359 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     expect(JSON.stringify(providerRequests)).not.toContain("RAW SECRET");
     expect(response.body).toContain("this session contains sensitive data");
     expect(response.body).not.toContain('"type":"tool_use"');
+  });
+});
+
+/** Client-native trajectory binding: the adapter-read ids reach the runtime. */
+describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
+  const CODEX_SESSION = "d12f967d-6fe1-4f92-a62f-0f6a2092fd2f";
+  const CODEX_RESUMED_SESSION = "f5be22fa-3d3a-44ce-8d37-d0073acd5174";
+  const CODEX_THREAD = "01a0859b-3029-78f3-a730-0edef60872cb";
+  const CODEX_FORK_THREAD = "01a085a0-ca43-7671-9450-8508eddef38d";
+  const OPENCODE_SESSION = "ses_01J8ZQ3V0R1Y8M0P4K0W3M7P9A";
+  const OPENCODE_FORK_SESSION = "ses_01J8ZQ7K2M4N6P8R0T2W4Y6A8C";
+
+  let app: FastifyInstance;
+  let agent: Agent;
+  let userId: string;
+  let events: Array<Record<string, unknown>>;
+  let providerCalls: number;
+  let unregisterAppaPlugin: () => void;
+
+  beforeEach(async ({ makeAgent, makeMember, makeUser }) => {
+    config.openappa = parseOpenAppaConfig("true");
+    await GuardrailsDeploymentModel.setEnabled(true);
+    config.llmProxy.plugins = parseLlmProxyPlugins(
+      undefined,
+      config.openappa.enabled,
+    );
+    unregisterAppaPlugin = registerLlmProxyPlugin(createAppaLlmProxyPlugin());
+    vi.spyOn(database, "getDatabaseConnectionString").mockReturnValue(
+      "postgresql://test:test@localhost/test?schema=public",
+    );
+    app = Fastify().withTypeProvider<ZodTypeProvider>();
+    app.setValidatorCompiler(validatorCompiler);
+    app.setSerializerCompiler(serializerCompiler);
+    app.setErrorHandler((error, _request, reply) =>
+      reply.status(error instanceof ApiError ? error.statusCode : 500).send({
+        error: {
+          message: error instanceof Error ? error.message : String(error),
+          type:
+            error instanceof ApiError
+              ? error.type
+              : "api_internal_server_error",
+        },
+      }),
+    );
+    await app.register(openAiProxyRoutes);
+    agent = await makeAgent({ name: "Native proxy OpenAI test" });
+    userId = (await makeUser()).id;
+    await makeMember(userId, agent.organizationId);
+    events = [];
+    providerCalls = 0;
+    native.initializeOpenappa.mockResolvedValue(undefined);
+    native.dispatchHook.mockImplementation(async (raw: string) => {
+      const event = JSON.parse(raw);
+      events.push(event);
+      if (event.event === "tool_call")
+        return JSON.stringify({ decision: "allow_call" });
+      if (event.event === "tool_result")
+        return JSON.stringify({
+          decision: "replace_output",
+          approved_output: "APPROVED REPLACEMENT",
+          output_source: "tool",
+        });
+      return JSON.stringify({ decision: "ack" });
+    });
+    vi.spyOn(openAiResponsesAdapterFactory, "createClient").mockImplementation(
+      () =>
+        ({
+          responses: {
+            create: async () => {
+              providerCalls += 1;
+              return {
+                async *[Symbol.asyncIterator]() {
+                  yield {
+                    type: "response.completed",
+                    sequence_number: 1,
+                    response: {
+                      id: "resp_1",
+                      object: "response",
+                      status: "completed",
+                      output: [],
+                      usage: {
+                        input_tokens: 3,
+                        output_tokens: 2,
+                        total_tokens: 5,
+                      },
+                    },
+                  };
+                },
+              };
+            },
+          },
+        }) as never,
+    );
+    vi.spyOn(openaiAdapterFactory, "createClient").mockImplementation(
+      () => createOpenAiTestClient() as never,
+    );
+    for (const modelId of ["gpt-5.5", "gpt-4.1"]) {
+      await ModelModel.upsert({
+        externalId: `openai/${modelId}`,
+        provider: "openai",
+        modelId,
+        inputModalities: null,
+        outputModalities: null,
+        lastSyncedAt: new Date(),
+      });
+    }
+  });
+
+  afterEach(async () => {
+    unregisterAppaPlugin();
+    vi.restoreAllMocks();
+    vi.unstubAllEnvs();
+    await app.close();
+  });
+
+  const codexPayload = (clientMetadata: Record<string, unknown>) => ({
+    model: "gpt-5.5",
+    stream: true,
+    input: [{ role: "user", content: "Check the weather" }],
+    client_metadata: clientMetadata,
+    tools: [
+      {
+        type: "function",
+        name: "get_weather",
+        description: "Weather",
+        parameters: {
+          type: "object",
+          properties: { location: { type: "string" } },
+        },
+      },
+      {
+        type: "function",
+        name: "archestra__execute_remedy_plan",
+        description: "Execute a remedy",
+        parameters: { type: "object", properties: {} },
+      },
+      {
+        type: "function",
+        name: "archestra__get_remedy_plans",
+        description: "Read a ruling",
+        parameters: { type: "object", properties: {} },
+      },
+    ],
+  });
+
+  const codexHeaders = () => ({
+    authorization: "Bearer test-key",
+    "x-archestra-user-id": userId,
+    "user-agent": "codex_cli_rs/0.153.0 (Linux 6.6; x86_64)",
+    originator: "codex_cli_rs",
+  });
+
+  const openCodePayload = () => ({
+    model: "gpt-4.1",
+    messages: [{ role: "user", content: "Check the weather" }],
+    tools: [
+      {
+        type: "function",
+        function: {
+          name: "get_weather",
+          description: "Weather",
+          parameters: {
+            type: "object",
+            properties: { location: { type: "string" } },
+          },
+        },
+      },
+      {
+        type: "function",
+        function: {
+          name: "archestra__execute_remedy_plan",
+          description: "Execute a remedy",
+          parameters: { type: "object", properties: {} },
+        },
+      },
+      {
+        type: "function",
+        function: {
+          name: "archestra__get_remedy_plans",
+          description: "Read a ruling",
+          parameters: { type: "object", properties: {} },
+        },
+      },
+    ],
+  });
+
+  const openCodeHeaders = () => ({
+    authorization: "Bearer test-key",
+    "x-archestra-user-id": userId,
+    "user-agent": "opencode/1.18.29",
+  });
+
+  test("a Codex resume reopens the thread's root; a fork opens a fresh one", async () => {
+    const first = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/responses`,
+      remoteAddress: "127.0.0.1",
+      headers: codexHeaders(),
+      payload: codexPayload({
+        session_id: CODEX_SESSION,
+        thread_id: CODEX_THREAD,
+      }) as Record<string, unknown>,
+    });
+    expect(first.statusCode, first.body).toBe(200);
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        session_id: `user:${userId}|${CODEX_THREAD}`,
+      }),
+    );
+
+    // A resume replays the durable thread under a fresh per-run session id.
+    events.length = 0;
+    const resumed = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/responses`,
+      remoteAddress: "127.0.0.1",
+      headers: codexHeaders(),
+      payload: codexPayload({
+        session_id: CODEX_RESUMED_SESSION,
+        thread_id: CODEX_THREAD,
+      }) as Record<string, unknown>,
+    });
+    expect(resumed.statusCode, resumed.body).toBe(200);
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        session_id: `user:${userId}|${CODEX_THREAD}`,
+      }),
+    );
+
+    // A fork mints a new thread id and therefore binds a fresh root.
+    events.length = 0;
+    const forked = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/responses`,
+      remoteAddress: "127.0.0.1",
+      headers: codexHeaders(),
+      payload: codexPayload({
+        session_id: CODEX_RESUMED_SESSION,
+        thread_id: CODEX_FORK_THREAD,
+        forked_from_thread_id: CODEX_THREAD,
+      }) as Record<string, unknown>,
+    });
+    expect(forked.statusCode, forked.body).toBe(200);
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        session_id: `user:${userId}|${CODEX_FORK_THREAD}`,
+      }),
+    );
+    expect(events).not.toContainEqual(
+      expect.objectContaining({
+        session_id: `user:${userId}|${CODEX_THREAD}`,
+      }),
+    );
+  });
+
+  test("a Codex compaction turn stays on the thread's root", async () => {
+    const compaction = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/responses`,
+      remoteAddress: "127.0.0.1",
+      headers: { ...codexHeaders(), "x-openai-subagent": "compact" },
+      payload: codexPayload({
+        session_id: CODEX_SESSION,
+        thread_id: CODEX_THREAD,
+        request_kind: "compaction",
+      }) as Record<string, unknown>,
+    });
+
+    expect(compaction.statusCode, compaction.body).toBe(200);
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        session_id: `user:${userId}|${CODEX_THREAD}`,
+      }),
+    );
+  });
+
+  test("contradictory Codex trajectory metadata is refused before the provider", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/responses`,
+      remoteAddress: "127.0.0.1",
+      headers: {
+        ...codexHeaders(),
+        "x-codex-turn-metadata": JSON.stringify({
+          session_id: CODEX_SESSION,
+          thread_id: CODEX_FORK_THREAD,
+        }),
+      },
+      payload: codexPayload({
+        session_id: CODEX_SESSION,
+        thread_id: CODEX_THREAD,
+      }) as Record<string, unknown>,
+    });
+
+    expect(response.statusCode, response.body).toBe(400);
+    expect(response.body).toContain("contradictory Codex trajectory metadata");
+    expect(events).toHaveLength(0);
+    expect(providerCalls).toBe(0);
+  });
+
+  test("an OpenCode resume reopens the session's root; a fork opens a fresh one", async () => {
+    const first = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/chat/completions`,
+      remoteAddress: "127.0.0.1",
+      headers: {
+        ...openCodeHeaders(),
+        "x-session-id": OPENCODE_SESSION,
+        "x-session-affinity": OPENCODE_SESSION,
+      },
+      payload: openCodePayload() as Record<string, unknown>,
+    });
+    expect(first.statusCode, first.body).toBe(200);
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        session_id: `user:${userId}|${OPENCODE_SESSION}`,
+      }),
+    );
+
+    events.length = 0;
+    const forked = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/chat/completions`,
+      remoteAddress: "127.0.0.1",
+      headers: {
+        ...openCodeHeaders(),
+        "x-session-id": OPENCODE_FORK_SESSION,
+      },
+      payload: openCodePayload() as Record<string, unknown>,
+    });
+    expect(forked.statusCode, forked.body).toBe(200);
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        session_id: `user:${userId}|${OPENCODE_FORK_SESSION}`,
+      }),
+    );
+  });
+
+  test("contradictory OpenCode session headers are refused before the provider", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/chat/completions`,
+      remoteAddress: "127.0.0.1",
+      headers: {
+        ...openCodeHeaders(),
+        "x-session-id": OPENCODE_SESSION,
+        "x-session-affinity": OPENCODE_FORK_SESSION,
+      },
+      payload: openCodePayload() as Record<string, unknown>,
+    });
+
+    expect(response.statusCode, response.body).toBe(400);
+    expect(response.body).toContain("contradictory OpenCode session headers");
+    expect(events).toHaveLength(0);
   });
 });

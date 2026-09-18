@@ -39,6 +39,9 @@ export type AppaSessionIdentity = {
     | "appa-header"
     | "claude-code-header"
     | "claude-metadata"
+    | "codex-turn-metadata"
+    | "opencode-session-header"
+    | "opencode-hosted-header"
     | "prompt-cache-key"
     | "metadata-session-id"
     | "conversation"
@@ -288,26 +291,26 @@ export function isResultGovernedHostedTool(params: {
 }
 
 /**
- * The client session this request belongs to, as the client itself reports it.
+ * The client session this request belongs to, as the client itself reports it
+ * through generic wire fields.
  *
  * A session id cannot come from static client configuration: it changes every
  * time a person starts a new session, and no external client has logic to mint
- * one for us. What each client does have is its own notion of a session, which
- * it already puts on the wire — so the adapter reads it from there, and a
- * client needs no OpenAPPA-specific setup at all.
+ * one for us. Client-specific signals — Claude Code's session header, Codex's
+ * turn metadata, OpenCode's session headers — are extracted by the client
+ * adapters (`appa-plugin-archestra/adapters`), which run before these generic
+ * fallbacks. An explicit `X-Appa-Session-ID` still wins where it is sent
+ * (Chat, the qualification harness, any caller that manages roots
+ * deliberately).
  *
- * An explicit `X-Appa-Session-ID` still wins where it is sent (Chat, the
- * qualification harness, any caller that manages roots deliberately).
- *
- * What each family offers, and why:
- *  - anthropic:messages — Claude Code sends `x-claude-code-session-id`, and
- *    repeats the same uuid inside `metadata.user_id` (a JSON blob of
- *    device/account/session). Either is per-session and survives a restart of
- *    the same session.
- *  - openai:responses / chatCompletions — Codex and OpenCode carry no session
- *    header, so fall back to the request fields that are stable across a
- *    conversation: `prompt_cache_key` (OpenAI's own per-conversation cache
- *    partition), then an explicit `metadata.session_id`, then `conversation`.
+ * What each family offers generically, and why:
+ *  - anthropic:messages — Claude clients repeat the session uuid inside
+ *    `metadata.user_id` (a JSON blob of device/account/session), which is
+ *    per-session and survives a restart of the same session.
+ *  - openai:responses / chatCompletions — fall back to the request fields
+ *    that are stable across a conversation: `prompt_cache_key` (OpenAI's own
+ *    per-conversation cache partition), then an explicit `metadata.session_id`,
+ *    then `conversation`.
  */
 export function appaSessionIdentity(params: {
   family: AppaWireFamily;
@@ -332,20 +335,12 @@ export function appaSessionIdentity(params: {
     typeof value === "string" && value.length > 0 ? value : undefined;
 
   if (params.family === "anthropic:messages") {
-    const claudeCode = header("x-claude-code-session-id");
     const userId = field(asRecord(body?.metadata)?.user_id);
     const metadataSession = userId
       ? (parseClaudeMetadataSessionId(userId) ?? userId)
       : undefined;
-    if (claudeCode) {
-      return {
-        sessionId: claudeCode,
-        parentId,
-        provenance: "claude-code-header",
-      };
-    }
     if (metadataSession) {
-      // Claude Code session ID from user_id metadata.
+      // Claude session ID from user_id metadata.
       return {
         sessionId: metadataSession,
         parentId,

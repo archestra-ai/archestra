@@ -89,7 +89,8 @@ import {
   openappaEnabled,
   sessionFromHeaders,
 } from "@/openappa/service";
-import { appaSessionIdentity, appaWireFamily } from "@/openappa/wire";
+import { appaWireFamily } from "@/openappa/wire";
+import { extractAppaSessionIdentity } from "@/proxy/plugins/appa-plugin-archestra/session-identity";
 import {
   APPA_PLUGIN_TRUSTED_CONTEXT,
   type AppaTrustedContext,
@@ -1186,11 +1187,14 @@ export async function handleLLMProxy<
               ? `virtual-key:${virtualKeyId}`
               : undefined;
         // Convert client-native session metadata into universal X-Appa-* headers.
+        // The matched client adapter reads the client's own trajectory id
+        // (resume reopens the root; a fork opens a fresh one) before the
+        // generic wire fallbacks.
         const incomingAppaSessionHeader =
           headersForExtraction[APPA_SESSION_HEADER.toLowerCase()];
         const appaFamily = appaWireFamily(provider.interactionType);
         appaIdentity = appaFamily
-          ? appaSessionIdentity({
+          ? extractAppaSessionIdentity({
               family: appaFamily,
               body,
               headers: headersForExtraction,

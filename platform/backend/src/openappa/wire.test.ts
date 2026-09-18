@@ -782,6 +782,133 @@ describe("denial notice restoration", () => {
     ]);
   });
 
+  test("re-inflates a cleared notice result with the ruling, and keeps a cleared ordinary result cleared", () => {
+    // OpenCode truncates old tool results to `[Old tool result content
+    // cleared]` inside the same session. The provider is owed the denial, so
+    // the notice's cleared result gets the ruling back; an ordinary call's
+    // cleared result is the client's own compression and stays cleared.
+    const body = {
+      tools: [
+        { type: "function", function: { name: NOTICE } },
+        { type: "function", function: { name: CONTROL } },
+        { type: "function", function: { name: "read_file" } },
+      ],
+      messages: [
+        { role: "user", content: "clean the build dir" },
+        {
+          role: "assistant",
+          tool_calls: [
+            {
+              id: "call_1",
+              type: "function",
+              function: {
+                name: NOTICE,
+                arguments: JSON.stringify(
+                  notice("shell", { command: "rm -rf build" }, "call_1"),
+                ),
+              },
+            },
+            {
+              id: "call_2",
+              type: "function",
+              function: { name: "read_file", arguments: '{"path":"a.txt"}' },
+            },
+          ],
+        },
+        {
+          role: "tool",
+          tool_call_id: "call_1",
+          content: "[Old tool result content cleared]",
+        },
+        {
+          role: "tool",
+          tool_call_id: "call_2",
+          content: "[Old tool result content cleared]",
+        },
+        { role: "user", content: "continue" },
+      ],
+    };
+
+    prepareAppaRequest({
+      body,
+      interactionType: "openai:chatCompletions",
+      canonicalizeToolName: canonicalize,
+    });
+
+    const assistant = body.messages[1] as {
+      tool_calls: Array<{ function: { name: string; arguments: string } }>;
+    };
+    expect(assistant.tool_calls[0].function).toEqual({
+      name: "shell",
+      arguments: JSON.stringify({ command: "rm -rf build" }),
+    });
+    expect(body.messages[2]).toEqual({
+      role: "tool",
+      tool_call_id: "call_1",
+      content: "[appa] Blocked: this call cannot run yet.",
+    });
+    expect(body.messages[3]).toEqual({
+      role: "tool",
+      tool_call_id: "call_2",
+      content: "[Old tool result content cleared]",
+    });
+  });
+
+  test("a Codex compaction turn restores the notices its summary is built from", () => {
+    // Codex compaction is a turn of the same thread carrying the history the
+    // summarizer compresses. The summarizer sees the calls the model actually
+    // made and the rulings that answered them, never the notice envelope.
+    const body = {
+      tools: [
+        { type: "function", name: NOTICE },
+        { type: "function", name: CONTROL },
+      ],
+      client_metadata: {
+        session_id: "d12f967d-6fe1-4f92-a62f-0f6a2092fd2f",
+        thread_id: "01a0859b-3029-78f3-a730-0edef60872cb",
+        request_kind: "compaction",
+      },
+      input: [
+        { role: "user", content: "clean the build dir" },
+        {
+          type: "function_call",
+          id: "fc_1",
+          call_id: "call_1",
+          name: NOTICE,
+          status: "completed",
+          arguments: JSON.stringify(
+            notice("shell", { command: "rm -rf build" }, "call_1"),
+          ),
+        },
+        {
+          type: "function_call_output",
+          call_id: "call_1",
+          output: "client text",
+        },
+      ],
+    };
+
+    prepareAppaRequest({
+      body,
+      interactionType: "openai:responses",
+      canonicalizeToolName: canonicalize,
+    });
+
+    expect(body.input[1]).toEqual({
+      type: "function_call",
+      id: "fc_1",
+      call_id: "call_1",
+      name: "shell",
+      status: "completed",
+      arguments: JSON.stringify({ command: "rm -rf build" }),
+    });
+    expect(body.input[2]).toEqual({
+      type: "function_call_output",
+      call_id: "call_1",
+      output: "[appa] Blocked: this call cannot run yet.",
+    });
+  });
+
   test("leaves a client's own custom tool alone, even carrying notice-shaped arguments", () => {
     // A review argued a user-defined custom tool could be mistaken for a notice
     // and have its call rewritten — the denied call would then be executed by
@@ -1885,7 +2012,10 @@ describe("client session identity", () => {
     }),
   };
 
-  test("reads Claude Code's session from its header", () => {
+  test("leaves Claude Code's session header to the client adapter", () => {
+    // The wire module reads only generic fields; the Claude Code adapter owns
+    // the client-specific header (session-identity.test.ts proves the pair
+    // binds the same session).
     expect(
       appaSessionIdentity({
         family: "anthropic:messages",
@@ -1895,7 +2025,7 @@ describe("client session identity", () => {
     ).toMatchObject({
       sessionId: CLAUDE_SESSION,
       parentId: undefined,
-      provenance: "claude-code-header",
+      provenance: "claude-metadata",
     });
   });
 
@@ -1987,7 +2117,7 @@ describe("client session identity", () => {
     });
   });
 
-  test("keeps Claude's session header over opaque metadata", () => {
+  test("keeps opaque metadata over an unread client header", () => {
     expect(
       appaSessionIdentity({
         family: "anthropic:messages",
@@ -1995,8 +2125,8 @@ describe("client session identity", () => {
         headers: { "x-claude-code-session-id": "claude-session" },
       }),
     ).toMatchObject({
-      sessionId: "claude-session",
-      provenance: "claude-code-header",
+      sessionId: "opaque-account-field",
+      provenance: "claude-metadata",
     });
   });
 

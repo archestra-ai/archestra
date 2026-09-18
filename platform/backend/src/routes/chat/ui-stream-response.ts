@@ -4,6 +4,7 @@ import type { FastifyReply } from "fastify";
 import type { LockedChatAuditContext } from "@/content-encryption/locked-chat";
 import logger from "@/logging";
 import { activeChatRunService } from "@/services/active-chat-run";
+import { withChatHeartbeats } from "./heartbeat-stream";
 
 /**
  * Send a UI-message stream as the chat response while draining a copy into the
@@ -29,7 +30,11 @@ export async function sendGatedUiMessageStreamResponse(params: {
   const { reply, runId, conversationId, abortController, getTerminalStatus } =
     params;
 
-  const [responseStream, persistenceStream] = params.stream.tee();
+  // Model usage can resolve before the UI stream finishes persisting messages.
+  // Keep heartbeats alive through that work, and persist them for reconnects.
+  const [responseStream, persistenceStream] = withChatHeartbeats(
+    params.stream,
+  ).tee();
   const { terminalReady } = activeChatRunService.drainStreamToEvents({
     runId,
     conversationId,

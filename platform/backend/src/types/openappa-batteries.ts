@@ -93,6 +93,13 @@ export const UpdateBatteryInstallSchema = z.strictObject({
 export type UpdateBatteryInstall = z.infer<typeof UpdateBatteryInstallSchema>;
 
 export const UploadBatteryPackageSchema = z.strictObject({
-  files: z.array(BatteryPackageFileSchema).min(1).max(64),
+  files: z
+    .array(BatteryPackageFileSchema)
+    .min(1)
+    .max(64)
+    .refine(
+      (files) => new Set(files.map((file) => file.path)).size === files.length,
+      "Each file path may appear once",
+    ),
 });
 export type UploadBatteryPackage = z.infer<typeof UploadBatteryPackageSchema>;

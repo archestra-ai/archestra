@@ -60,6 +60,8 @@ const routes: FastifyPluginAsyncZod = async (app) => {
           throw new ApiError(502, `Battery helper failed: ${outcome.reason}`);
         case "timed_out":
           throw new ApiError(504, "Battery helper timed out");
+        case "busy":
+          throw new ApiError(503, "Too many battery helper consults in flight");
       }
     },
   );

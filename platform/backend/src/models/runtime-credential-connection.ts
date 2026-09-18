@@ -83,6 +83,27 @@ export default class RuntimeCredentialConnectionModel {
     return true;
   }
 
+  /** Credential ids holding an organization-level value. */
+  static async listOrganizationCredentialIds(
+    organizationId: string,
+  ): Promise<string[]> {
+    const rows = await db
+      .select({
+        credentialId: schema.runtimeCredentialConnectionsTable.credentialId,
+      })
+      .from(schema.runtimeCredentialConnectionsTable)
+      .where(
+        and(
+          eq(
+            schema.runtimeCredentialConnectionsTable.organizationId,
+            organizationId,
+          ),
+          eq(schema.runtimeCredentialConnectionsTable.scope, "organization"),
+        ),
+      );
+    return rows.map((row) => row.credentialId);
+  }
+
   static async listConfigured(params: {
     organizationId: string;
     userId: string;

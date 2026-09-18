@@ -8,7 +8,11 @@ import RuntimeCredentialConnectionModel from "@/models/runtime-credential-connec
 import RuntimeCredentialDefinitionModel from "@/models/runtime-credential-definition";
 import { openappaBatteriesService } from "@/openappa/batteries";
 import { createFastifyInstance, type FastifyInstanceWithZod } from "@/server";
-import { deleteRuntimeCredentialDefinition } from "@/services/agent-runtime/runtime-credentials";
+import {
+  deleteRuntimeCredentialConnection,
+  deleteRuntimeCredentialDefinition,
+  setRuntimeCredentialConnection,
+} from "@/services/agent-runtime/runtime-credentials";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import routes from "./openappa-batteries.routes";
@@ -123,6 +127,28 @@ describe("guardrails batteries", () => {
         .then((policy) => policy.content),
     ).resolves.toBe(active?.content);
 
+    // The install follows the credential's organization value.
+    await deleteRuntimeCredentialConnection({
+      organizationId,
+      userId: adminId,
+      credentialId: "github-token",
+      scope: "organization",
+    });
+    expect(
+      (await OpenAppaEffectivePolicyModel.find(organizationId))
+        ?.installFingerprint,
+    ).toBe(inactive?.installFingerprint);
+    await setRuntimeCredentialConnection({
+      organizationId,
+      userId: adminId,
+      credentialId: "github-token",
+      scope: "organization",
+      value: "ghp_rotated",
+    });
+    expect(
+      (await OpenAppaEffectivePolicyModel.find(organizationId))
+        ?.installFingerprint,
+    ).toBe(active?.installFingerprint);
     // Deleting the definition strands the binding and deactivates the install.
     await deleteRuntimeCredentialDefinition({
       organizationId,
@@ -359,6 +385,26 @@ describe("guardrails batteries", () => {
         payload: { credentialBindings },
       });
       expect(boundByAdmin.json()).toMatchObject({ status: "active" });
+      // Helper code would run with whatever gets bound to it later.
+      const planted = await managerApp.inject({
+        method: "PUT",
+        url: "/api/openappa/battery-packages/acme",
+        payload: {
+          files: [
+            {
+              path: "appa-package.toml",
+              text: 'schema = 1\nname = "acme"\ndescription = "Echo helper"\n[battery]\npolicy = "appa.toml"\nhosts = ["archestra"]\nnamespaces = ["acme"]\nhelpers = ["echo.py"]\n',
+            },
+            {
+              path: "appa.toml",
+              text: '[policy]\nversion = 2\n[[policy.annotator]]\nname = "acme.echo"\nranks = ["suspicious"]\naudiences = ["self"]\nmarks = []\n[externals.annotators."acme.echo"]\ncommand = ["python3", "echo.py"]\ntoken_env = "APPA_PROVIDER_ACME_TOKEN"\n[[policy.tool]]\nname = "mcp/acme/list"\ndelta = {}\n',
+            },
+            { path: "echo.py", text: "print('{}')\n" },
+          ],
+        },
+      });
+      expect(planted.statusCode).toBe(403);
+      // A policy-only package is policy management, nothing more.
       const replaced = await managerApp.inject({
         method: "PUT",
         url: "/api/openappa/battery-packages/github",
@@ -372,7 +418,7 @@ describe("guardrails batteries", () => {
           ],
         },
       });
-      expect(replaced.statusCode).toBe(403);
+      expect(replaced.statusCode).toBe(200);
     } finally {
       await managerApp.close();
     }

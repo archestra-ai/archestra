@@ -16,6 +16,7 @@ import OpenAppaEffectivePolicyModel, {
   type EffectivePolicyValues,
 } from "@/models/openappa-effective-policy";
 import OrganizationModel from "@/models/organization";
+import RuntimeCredentialConnectionModel from "@/models/runtime-credential-connection";
 import RuntimeCredentialDefinitionModel from "@/models/runtime-credential-definition";
 import ToolModel from "@/models/tool";
 import { OPENAPPA_HELPERS_PREFIX } from "@/routes/route-paths";
@@ -265,28 +266,6 @@ class OpenAppaBatteriesService {
     name: string;
     files: BatteryPackageFile[];
   }): Promise<BatterySummary> {
-    // New code for an installed battery inherits its credential bindings, so
-    // the uploader must be allowed what binding them requires.
-    const bound = (
-      await OpenAppaBatteryInstallModel.list(params.organizationId)
-    ).some(
-      (install) =>
-        install.batteryName === params.name &&
-        Object.keys(install.credentialBindings).length > 0,
-    );
-    if (
-      bound &&
-      !(await userHasPermission(
-        params.userId,
-        params.organizationId,
-        "credential",
-        "read",
-      ))
-    )
-      throw new ApiError(
-        403,
-        "Credential read permission is required to replace a battery with bound credentials",
-      );
     const native = await import("@archestra/openappa-rs");
     const contentHash = hash(JSON.stringify(params.files));
     let inspected: NativeBatteryPackage;
@@ -303,6 +282,21 @@ class OpenAppaBatteriesService {
       throw new ApiError(
         400,
         `The package manifest names the battery ${inspected.name}, not ${params.name}`,
+      );
+    // Helper code runs with whatever credentials get bound to it later, so
+    // supplying it takes the permission binding a credential takes.
+    if (
+      (inspected.credentials.length > 0 || inspected.externals.length > 0) &&
+      !(await userHasPermission(
+        params.userId,
+        params.organizationId,
+        "credential",
+        "read",
+      ))
+    )
+      throw new ApiError(
+        403,
+        "Credential read permission is required to upload a battery with helper scripts",
       );
     await OpenAppaBatteryPackageModel.upsert({
       organizationId: params.organizationId,
@@ -376,47 +370,52 @@ class OpenAppaBatteriesService {
   private async recomposeNow(organizationId: string): Promise<Recomposition> {
     for (let attempt = 0; attempt < RECOMPILE_ATTEMPTS; attempt++) {
       const expected = await OpenAppaEffectivePolicyModel.find(organizationId);
-      const { values, installs } = await this.compose(organizationId);
+      const root = await guardrailsPolicyService.get(organizationId);
+      const plan = await this.plan(organizationId);
+      const installFingerprint = hash(
+        JSON.stringify({
+          serverAliases: plan.serverAliases,
+          batteries: plan.composed,
+        }),
+      );
+      // Same inputs give the same bytes, so the stored row already is the answer.
+      if (
+        expected &&
+        expected.rootRevision === root.revision &&
+        expected.installFingerprint === installFingerprint
+      )
+        return { policy: expected, installs: plan.installs };
       const policy = await OpenAppaEffectivePolicyModel.save({
         organizationId,
-        values,
+        values: await this.compose({ root, plan, installFingerprint }),
         expected,
       });
-      if (policy) return { policy, installs };
+      if (policy) return { policy, installs: plan.installs };
     }
     throw new Error(
       "the effective policy kept changing while it was being recomposed",
     );
   }
 
-  private async compose(organizationId: string): Promise<{
-    values: EffectivePolicyValues;
-    installs: BatteryInstallView[];
-  }> {
-    const root = await guardrailsPolicyService.get(organizationId);
-    const plan = await this.plan(organizationId);
+  private async compose(params: {
+    root: { content: string; revision: number };
+    plan: CompositionPlan;
+    installFingerprint: string;
+  }): Promise<EffectivePolicyValues> {
+    const { root, plan, installFingerprint } = params;
     const native = await import("@archestra/openappa-rs");
-    const input = {
+    const composed = await native.composeOpenappaPolicy({
       root: root.content,
       serverAliases: plan.serverAliases,
       batteries: plan.composed,
-    };
-    const composed = await native.composeOpenappaPolicy(input);
+    });
     const content = composed.content ?? root.content;
     return {
-      values: {
-        content,
-        contentHash: hash(content),
-        rootRevision: root.revision,
-        installFingerprint: hash(
-          JSON.stringify({
-            serverAliases: plan.serverAliases,
-            batteries: plan.composed,
-          }),
-        ),
-        error: composed.content === null ? composed.errors.join("\n") : null,
-      },
-      installs: plan.installs,
+      content,
+      contentHash: hash(content),
+      rootRevision: root.revision,
+      installFingerprint,
+      error: composed.content === null ? composed.errors.join("\n") : null,
     };
   }
 
@@ -444,9 +443,17 @@ class OpenAppaBatteriesService {
       prefixes.add(serverName);
       prefixesByCatalog.set(tool.catalogId, prefixes);
     }
+    const connected = new Set(
+      await RuntimeCredentialConnectionModel.listOrganizationCredentialIds(
+        organizationId,
+      ),
+    );
     const bindable = new Set(
       (await RuntimeCredentialDefinitionModel.list(organizationId))
-        .filter((definition) => definition.allowOrganization)
+        .filter(
+          (definition) =>
+            definition.allowOrganization && connected.has(definition.key),
+        )
         .map((definition) => definition.key),
     );
     const helperOwners = new Set<string>();
@@ -661,7 +668,7 @@ function installStatus(params: {
   install: BatteryInstall;
   battery: NativeBatteryPackage | null;
   conflicting: boolean;
-  /** Keys of the organization's credential definitions with an organization-level value. */
+  /** Keys of the organization's credential definitions holding an organization-level value. */
   bindable: ReadonlySet<string>;
   helperOwners: Set<string>;
 }): BatteryInstallStatus {

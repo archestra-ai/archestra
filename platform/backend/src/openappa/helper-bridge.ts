@@ -9,18 +9,12 @@ import { skillRootPath } from "@/skills-sandbox/runtime-image";
 import { shellQuote } from "@/utils/shell-quote";
 import { openappaBatteriesService } from "./batteries";
 
-/**
- * Wall-clock budget for one helper consult, container materialization
- * included. It sits under the runtime's own consult timeout so a slow helper
- * surfaces here as a timeout instead of as a silent NoAnswer upstream.
- */
-const HELPER_DEADLINE_MS = 4_500;
-
 type HelperConsultOutcome =
   | { kind: "answered"; answer: Record<string, unknown> }
   | { kind: "not_found" }
   | { kind: "failed"; reason: string }
-  | { kind: "timed_out" };
+  | { kind: "timed_out" }
+  | { kind: "busy" };
 
 /**
  * Runs a battery's helper script for one consult: the install named in the
@@ -30,6 +24,9 @@ type HelperConsultOutcome =
  * back as the answer. Nothing about the run is persisted.
  */
 class OpenAppaHelperBridge {
+  /** Consults in flight, a raced-out run included until it settles. */
+  private inFlight = 0;
+
   presentsBridgeToken(authorization: string | undefined): boolean {
     const expected = Buffer.from(
       `Bearer ${openappaBatteriesService.bridgeToken}`,
@@ -51,29 +48,39 @@ class OpenAppaHelperBridge {
       installId: params.installId,
       externalName: params.externalName,
     };
-    const work = this.run(params);
     let outcome: HelperConsultOutcome;
-    try {
-      outcome = await withDeadline(
-        work,
-        HELPER_DEADLINE_MS,
-        () => new HelperDeadlineError(),
-      );
-    } catch (error) {
-      if (!(error instanceof HelperDeadlineError)) throw error;
-      work.then(
-        (late) =>
-          logger.info(
-            { ...context, outcome: late.kind },
-            "OpenAPPA battery helper settled after its deadline",
-          ),
-        (late) =>
-          logger.warn(
-            { ...context, error: late },
-            "OpenAPPA battery helper failed after its deadline",
-          ),
-      );
-      outcome = { kind: "timed_out" };
+    // Helpers share the sandbox pool with every other consumer; they may take
+    // at most half of it, and a raced-out run holds its share until it settles.
+    if (this.inFlight >= helperConsultCap()) outcome = { kind: "busy" };
+    else {
+      this.inFlight++;
+      const work = this.run(params);
+      const release = () => {
+        this.inFlight--;
+      };
+      work.then(release, release);
+      try {
+        outcome = await withDeadline(
+          work,
+          HELPER_DEADLINE_MS,
+          () => new HelperDeadlineError(),
+        );
+      } catch (error) {
+        if (!(error instanceof HelperDeadlineError)) throw error;
+        work.then(
+          (late) =>
+            logger.info(
+              { ...context, outcome: late.kind },
+              "OpenAPPA battery helper settled after its deadline",
+            ),
+          (late) =>
+            logger.warn(
+              { ...context, error: late },
+              "OpenAPPA battery helper failed after its deadline",
+            ),
+        );
+        outcome = { kind: "timed_out" };
+      }
     }
     logger.info(
       { ...context, outcome: outcome.kind, durationMs: Date.now() - startedAt },
@@ -184,6 +191,17 @@ export const openappaHelperBridge = new OpenAppaHelperBridge();
 const CONSUMER_ID = "openappa-helper-bridge";
 /** The helper's own execution budget inside the container. */
 const HELPER_EXEC_TIMEOUT_SECONDS = 4;
+/**
+ * Wall-clock budget for one helper consult, container materialization
+ * included: the execution budget plus a margin, kept under the runtime's own
+ * consult timeout so a slow helper surfaces here as a timeout instead of as a
+ * silent NoAnswer upstream.
+ */
+const HELPER_DEADLINE_MS = HELPER_EXEC_TIMEOUT_SECONDS * 1000 + 500;
+
+function helperConsultCap(): number {
+  return Math.max(1, Math.floor(config.daggerRuntime.maxConcurrent / 2));
+}
 
 class HelperDeadlineError extends Error {}
 

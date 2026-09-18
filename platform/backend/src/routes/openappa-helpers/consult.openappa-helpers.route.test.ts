@@ -4,6 +4,7 @@ import OpenAppaBatteryInstallModel from "@/models/openappa-battery-install";
 import RuntimeCredentialConnectionModel from "@/models/runtime-credential-connection";
 import RuntimeCredentialDefinitionModel from "@/models/runtime-credential-definition";
 import { openappaBatteriesService } from "@/openappa/batteries";
+import { openappaHelperBridge } from "@/openappa/helper-bridge";
 import { OPENAPPA_HELPERS_PREFIX } from "@/routes/route-paths";
 import { sandboxRuntimeService } from "@/sandbox-runtime/sandbox-runtime-service";
 import { createFastifyInstance, type FastifyInstanceWithZod } from "@/server";
@@ -156,6 +157,35 @@ describe("battery helper bridge", () => {
       (await consult({ installId: bound.id, authorization: bridgeBearer() }))
         .statusCode,
     ).toBe(502);
+  });
+
+  test("consults beyond half the sandbox pool are refused as busy", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const unbound = await installGithub(
+      (await makeInternalMcpCatalog({ organizationId })).id,
+    );
+    const params = {
+      installId: unbound.id,
+      externalName: "github.repository-visibility",
+      request: JSON.stringify(envelope),
+    };
+    const pool = config.daggerRuntime.maxConcurrent;
+    config.daggerRuntime.maxConcurrent = 1;
+    let outcomes: string[];
+    try {
+      outcomes = (
+        await Promise.all([
+          openappaHelperBridge.consult(params),
+          openappaHelperBridge.consult(params),
+        ])
+      ).map((outcome) => outcome.kind);
+    } finally {
+      config.daggerRuntime.maxConcurrent = pool;
+    }
+    expect(outcomes.sort()).toEqual(["busy", "failed"]);
+    // The share is released once the first consult settled.
+    expect((await openappaHelperBridge.consult(params)).kind).toBe("failed");
   });
 
   test.skipIf(!config.daggerRuntime.enabled)(

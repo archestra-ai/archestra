@@ -225,7 +225,10 @@ import {
   externalMcpSkillCommandValue,
   resolveUrlSkillAction,
 } from "./skill-commands";
-import { SuggestedPromptPills } from "./suggested-prompt-pills";
+import {
+  resolveSuggestionPreview,
+  SuggestedPromptPills,
+} from "./suggested-prompt-pills";
 
 const RIGHT_PANEL_TABS: readonly RightPanelTab[] = [
   "runs",
@@ -969,6 +972,10 @@ export function ChatPageContent({
   const activeSelectionAgent = conversationId
     ? conversationAgent
     : initialAgent;
+  const suggestionPreview = resolveSuggestionPreview(
+    initialAgent?.suggestedPrompts,
+    hoveredSuggestionPrompt,
+  );
   const {
     data: activeAgentCredentials = [],
     isPending: isActiveAgentCredentialPending,
@@ -3641,16 +3648,10 @@ export function ChatPageContent({
                       </div>
                       {(() => {
                         if (isInitialRuntimeMode) return null;
-                        const currentAgent = internalAgents.find(
-                          (a) => a.id === initialAgentId,
-                        );
-                        const prompts = currentAgent?.suggestedPrompts;
+                        const prompts = initialAgent?.suggestedPrompts;
                         if (!prompts || prompts.length === 0) return null;
                         return (
                           <SuggestedPromptPills
-                            key={prompts
-                              .map(({ prompt }) => prompt)
-                              .join("\u0000")}
                             prompts={prompts}
                             disabled={
                               isAgentSubscriptionMetadataPending ||
@@ -3699,7 +3700,7 @@ export function ChatPageContent({
                                 )}
                                 <ArchestraPromptInput
                                   onSubmit={handleInitialSubmit}
-                                  placeholderPreview={hoveredSuggestionPrompt}
+                                  placeholderPreview={suggestionPreview}
                                   toolsUnavailable={initialToolsUnavailable}
                                   notRecommendedForAgents={
                                     initialNotRecommended

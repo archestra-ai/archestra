@@ -1,7 +1,10 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { SuggestedPromptPills } from "./suggested-prompt-pills";
+import {
+  resolveSuggestionPreview,
+  SuggestedPromptPills,
+} from "./suggested-prompt-pills";
 
 const PROMPTS = [
   {
@@ -37,37 +40,6 @@ describe("SuggestedPromptPills", () => {
     expect(onPreviewChange).toHaveBeenLastCalledWith(null);
   });
 
-  it("drops the preview when another agent's suggestions replace the pills", async () => {
-    const user = userEvent.setup();
-    const onPreviewChange = vi.fn();
-
-    const { rerender } = render(
-      <SuggestedPromptPills
-        key="agent-a"
-        prompts={PROMPTS}
-        onSelect={vi.fn()}
-        onPreviewChange={onPreviewChange}
-      />,
-    );
-
-    await user.hover(screen.getByRole("button", { name: "Draw something" }));
-
-    expect(onPreviewChange).toHaveBeenLastCalledWith(PROMPTS[0].prompt);
-
-    rerender(
-      <SuggestedPromptPills
-        key="agent-b"
-        prompts={[
-          { summaryTitle: "Plan a sprint", prompt: "Plan our sprint." },
-        ]}
-        onSelect={vi.fn()}
-        onPreviewChange={onPreviewChange}
-      />,
-    );
-
-    expect(onPreviewChange).toHaveBeenLastCalledWith(null);
-  });
-
   it("sends the full prompt on click and clears the preview with it", async () => {
     const user = userEvent.setup();
     const onSelect = vi.fn();
@@ -85,5 +57,23 @@ describe("SuggestedPromptPills", () => {
 
     expect(onSelect).toHaveBeenCalledWith(PROMPTS[0]);
     expect(onPreviewChange).toHaveBeenLastCalledWith(null);
+  });
+});
+
+describe("resolveSuggestionPreview", () => {
+  it("keeps a hovered prompt that the agent still offers", () => {
+    expect(resolveSuggestionPreview(PROMPTS, PROMPTS[1].prompt)).toBe(
+      PROMPTS[1].prompt,
+    );
+  });
+
+  it("drops a hovered prompt once the suggestions no longer offer it", () => {
+    expect(
+      resolveSuggestionPreview(
+        [{ summaryTitle: "Plan a sprint", prompt: "Plan our sprint." }],
+        PROMPTS[0].prompt,
+      ),
+    ).toBeNull();
+    expect(resolveSuggestionPreview(undefined, PROMPTS[0].prompt)).toBeNull();
   });
 });

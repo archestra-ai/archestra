@@ -1,4 +1,5 @@
 import {
+  CLAUDE_CODE_HEADER_SESSION_SOURCE,
   CLAUDE_METADATA_SESSION_SOURCE,
   CODEX_CLIENT_ID,
   SESSION_ID_HEADER,
@@ -34,6 +35,29 @@ describe("extractSessionInfo", () => {
     expect(result).toEqual({
       sessionId: "af85aa87-3b22-4015-ba65-30012b27204c",
       sessionSource: "openwebui_chat",
+    });
+  });
+
+  test("prefers x-claude-code-session-id over metadata.user_id so a fork is a new log session", () => {
+    const result = extractSessionInfo({
+      headers: {
+        "x-claude-code-session-id": "forked-session-id",
+      },
+      body: {
+        metadata: {
+          user_id: JSON.stringify({
+            device_id: "abc",
+            account_uuid: "",
+            session_id: "parent-session-id",
+          }),
+        },
+      },
+      externalAgentId: undefined,
+    });
+
+    expect(result).toEqual({
+      sessionId: "forked-session-id",
+      sessionSource: CLAUDE_CODE_HEADER_SESSION_SOURCE,
     });
   });
 

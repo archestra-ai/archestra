@@ -3,6 +3,8 @@
 import {
   clientForExternalAgentIds,
   DynamicInteraction,
+  INTERACTION_SOURCE_DISPLAY,
+  type InteractionSource,
 } from "@archestra/shared";
 import {
   ArrowLeft,
@@ -18,7 +20,11 @@ import { useRouter } from "next/navigation";
 import { use } from "react";
 import { BilledCost } from "@/components/billed-cost";
 import { ClientSourceBadge } from "@/components/client-source-badge";
-import { type DetailFact, DetailFacts } from "@/components/detail-facts";
+import {
+  type DetailFact,
+  DetailFacts,
+  presentFacts,
+} from "@/components/detail-facts";
 import MessageThread from "@/components/message-thread";
 import { PageBackLink } from "@/components/page-back-link";
 import { PageLayout } from "@/components/page-layout";
@@ -45,6 +51,7 @@ import { TablePagination } from "@/components/ui/table-pagination";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { UnattributedUserBadge } from "@/components/unattributed-user-badge";
 import { VirtualKeyBadge } from "@/components/virtual-key-badge";
+import { useFeature } from "@/lib/config/config.query";
 import { typeRole } from "@/lib/design/type-scale";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
@@ -65,6 +72,7 @@ export default function SessionDetailPage({
   const sessionId = decodeURIComponent(rawParams.sessionId);
   const router = useRouter();
   const appName = useAppName();
+  const openappaEnabled = useFeature("openappaEnabled") === true;
   const { pageIndex, pageSize, offset, setPagination } =
     useDataTableQueryParams();
 
@@ -212,7 +220,47 @@ export default function SessionDetailPage({
   // The session's own numbers, as one wrapping row under the header. Labels
   // drop the "Total" every one of them used to carry: the page is a single
   // session, so there is nothing partial for a total to be distinguished from.
-  const facts: DetailFact[] = [
+  // When OpenAPPA is on, the same row also states the trajectory identity
+  // the proxy bound: session id, how it was sourced, and every origin that
+  // wrote into it (chat vs compaction vs title generation).
+  const sessionOrigins = sessionData?.sources?.length
+    ? sessionData.sources
+    : sessionData?.source
+      ? [sessionData.source]
+      : [];
+  const facts: DetailFact[] = presentFacts([
+    openappaEnabled && sessionData?.sessionId
+      ? {
+          label: "Session",
+          value: (
+            <span className="font-mono text-xs break-all">
+              {sessionData.sessionId}
+            </span>
+          ),
+        }
+      : null,
+    openappaEnabled && sessionData?.sessionSource
+      ? {
+          label: "Session source",
+          value: (
+            <span className="font-mono text-xs">
+              {sessionData.sessionSource}
+            </span>
+          ),
+        }
+      : null,
+    openappaEnabled && sessionOrigins.length > 0
+      ? {
+          label: sessionOrigins.length === 1 ? "Origin" : "Origins",
+          value: (
+            <div className="flex flex-wrap gap-1">
+              {sessionOrigins.map((origin) => (
+                <SourceBadge key={origin} source={origin} />
+              ))}
+            </div>
+          ),
+        }
+      : null,
     {
       label: "Requests",
       value: (
@@ -297,7 +345,7 @@ export default function SessionDetailPage({
           },
         ]
       : []),
-  ];
+  ]);
 
   return (
     <PageLayout
@@ -395,12 +443,16 @@ export default function SessionDetailPage({
                   </TableRow>
                 ) : (
                   interactions.map((interaction) => {
-                    const externalAgentIdLabel =
-                      interaction.externalAgentIdLabel ?? undefined;
-                    const typeLabel =
-                      externalAgentIdLabel ||
-                      interaction.externalAgentId ||
-                      "Main";
+                    const source = interactionSource(interaction);
+                    const typeLabel = sessionInteractionAgentLabel({
+                      source,
+                      externalAgentIdLabel: interaction.externalAgentIdLabel,
+                      externalAgentId: interaction.externalAgentId,
+                      profileName,
+                    });
+                    const showBot =
+                      Boolean(interaction.externalAgentIdLabel) ||
+                      isAuxiliaryInteractionSource(source);
 
                     return (
                       <TableRow
@@ -418,7 +470,7 @@ export default function SessionDetailPage({
                             variant="outline"
                             className="text-xs max-w-full inline-flex truncate"
                           >
-                            {externalAgentIdLabel && (
+                            {showBot && (
                               <Bot className="h-3 w-3 mr-1 shrink-0" />
                             )}
                             <span className="truncate">{typeLabel}</span>
@@ -483,5 +535,35 @@ export default function SessionDetailPage({
         )}
       </div>
     </PageLayout>
+  );
+}
+
+function interactionSource(interaction: {
+  source?: string | null;
+}): string | null {
+  return typeof interaction.source === "string" ? interaction.source : null;
+}
+
+function isAuxiliaryInteractionSource(source: string | null): boolean {
+  return Boolean(source?.includes(":"));
+}
+
+function sessionInteractionAgentLabel(params: {
+  source: string | null;
+  externalAgentIdLabel?: string | null;
+  externalAgentId?: string | null;
+  profileName?: string | null;
+}): string {
+  if (isAuxiliaryInteractionSource(params.source) && params.source) {
+    return (
+      INTERACTION_SOURCE_DISPLAY[params.source as InteractionSource]?.label ??
+      "Sub-agent"
+    );
+  }
+  return (
+    params.externalAgentIdLabel ||
+    params.externalAgentId ||
+    params.profileName ||
+    "Main"
   );
 }

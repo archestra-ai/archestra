@@ -1,4 +1,5 @@
 import {
+  ARCHESTRA_MCP_CATALOG_ID,
   isAlwaysExposedArchestraToolShortName,
   parseFullToolName,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
@@ -15,6 +16,7 @@ import {
   InternalMcpCatalogModel,
   McpServerModel,
 } from "@/models";
+import { openappaEnabled, openappaYellEnabled } from "@/openappa/service";
 import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
 import {
   appLaunchToolDescription,
@@ -33,6 +35,7 @@ import {
   errorResult,
   structuredSuccessResult,
 } from "./helpers";
+import { isOpenappaTool, tools as openappaMcpTools } from "./openappa";
 import { filterToolNamesByPermission } from "./rbac";
 import { getSkillDelegationTools } from "./skill-delegation";
 
@@ -319,6 +322,31 @@ export const __test = {
 
 // === Internal helpers ===
 
+function openappaSearchTools(): Array<{
+  name: string;
+  description: string | null;
+  catalogId: string | null;
+  parameters: Record<string, unknown>;
+}> {
+  if (!openappaEnabled()) return [];
+  return openappaMcpTools.flatMap((tool) => {
+    const shortName = archestraMcpBranding.getToolShortName(tool.name);
+    if (!isOpenappaTool(shortName)) return [];
+    if (shortName === "yell" && !openappaYellEnabled()) return [];
+    const name = shortName
+      ? archestraMcpBranding.getToolName(shortName)
+      : tool.name;
+    return [
+      {
+        name,
+        description: tool.description ?? null,
+        catalogId: ARCHESTRA_MCP_CATALOG_ID,
+        parameters: (tool.inputSchema ?? {}) as Record<string, unknown>,
+      },
+    ];
+  });
+}
+
 async function getSearchableTools(params: {
   agentId: string;
   organizationId?: string;
@@ -345,7 +373,13 @@ async function getSearchableTools(params: {
     organizationId,
     exclusionSets,
   });
-  const searchSpace = [...assignedTools, ...discoverableTools];
+  // OpenAPPA tools are reachable on every agent when the feature is on —
+  // assignment and Auto-mode extras must not hide them from search_tools.
+  const searchSpace = [
+    ...openappaSearchTools(),
+    ...assignedTools,
+    ...discoverableTools,
+  ];
   const permittedNames = await filterToolNamesByPermission(
     searchSpace.map((tool) => tool.name),
     userId,

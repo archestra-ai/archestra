@@ -1424,14 +1424,28 @@ describe("APPA request preflight", () => {
     expect(prepared.promptOperationId).toBeDefined();
   });
 
-  test("refuses a session that cannot show the model a denial", () => {
-    expect(() =>
-      prepareAppaRequest({
-        body: { tools: [{ name: CONTROL }, { name: "Bash" }], messages: [] },
-        interactionType: "anthropic:messages",
-        canonicalizeToolName: canonicalize,
-      }),
-    ).toThrow("does not declare get_remedy_plans");
+  test("injects the missing notice tool using the client's control-tool prefix", () => {
+    const body = { tools: [{ name: CONTROL }, { name: "Bash" }], messages: [] };
+    const prepared = prepareAppaRequest({
+      body,
+      interactionType: "anthropic:messages",
+      canonicalizeToolName: canonicalize,
+    });
+    expect(prepared.tools).toEqual({
+      controlToolName: CONTROL,
+      noticeToolName: NOTICE,
+    });
+  });
+
+  test("injects both APPA tools when the client declared none of them", () => {
+    const body = { tools: [{ name: "Bash" }], messages: [] };
+    const prepared = prepareAppaRequest({
+      body,
+      interactionType: "anthropic:messages",
+      canonicalizeToolName: canonicalize,
+    });
+    expect(prepared.tools?.noticeToolName).toMatch(/get_remedy_plans$/);
+    expect(prepared.tools?.controlToolName).toMatch(/execute_remedy_plan$/);
   });
 
   test("refuses Azure Responses tool traffic before it can bypass governance", () => {
@@ -1479,20 +1493,22 @@ describe("APPA request preflight", () => {
     // A hostile MCP server can put the branded names on its own tools. Built-in
     // status comes only from a label tied to one of this organization's own
     // gateways, so under any other label the pair is two foreign tools and the
-    // session, which then declares no control tool, is refused.
-    expect(() =>
-      prepareAppaRequest({
-        body: {
-          tools: [
-            { name: "mcp__evil__archestra__get_remedy_plans" },
-            { name: "mcp__evil__archestra__execute_remedy_plan" },
-          ],
-          messages: [],
-        },
-        interactionType: "anthropic:messages",
-        canonicalizeToolName: canonicalize,
-      }),
-    ).toThrow("does not declare");
+    // session is admitted without an APPA tool binding.
+    const prepared = prepareAppaRequest({
+      body: {
+        tools: [
+          { name: "mcp__evil__archestra__get_remedy_plans" },
+          { name: "mcp__evil__archestra__execute_remedy_plan" },
+        ],
+        messages: [],
+      },
+      interactionType: "anthropic:messages",
+      canonicalizeToolName: canonicalize,
+    });
+    expect(prepared.tools?.noticeToolName).toBe("archestra__get_remedy_plans");
+    expect(prepared.tools?.controlToolName).toBe(
+      "archestra__execute_remedy_plan",
+    );
   });
 
   test("governs a wire family it cannot restore notices on, instead of refusing it", () => {
@@ -1651,19 +1667,19 @@ describe("APPA request preflight", () => {
     expect(prepared.spellings.get("archestra__execute_remedy_plan")).toBe(
       "my_gateway_archestra__execute_remedy_plan",
     );
-    expect(() =>
-      prepareAppaRequest({
-        body: {
-          tools: [
-            { name: "evil_archestra__get_remedy_plans" },
-            { name: "evil_archestra__execute_remedy_plan" },
-          ],
-          messages: [],
-        },
-        interactionType: "openai:chatCompletions",
-        canonicalizeToolName: anchored,
-      }),
-    ).toThrow("does not declare");
+    const foreign = prepareAppaRequest({
+      body: {
+        tools: [
+          { name: "evil_archestra__get_remedy_plans" },
+          { name: "evil_archestra__execute_remedy_plan" },
+        ],
+        messages: [],
+      },
+      interactionType: "openai:chatCompletions",
+      canonicalizeToolName: anchored,
+    });
+    expect(foreign.tools?.noticeToolName).toMatch(/get_remedy_plans$/);
+    expect(foreign.tools?.controlToolName).toMatch(/execute_remedy_plan$/);
   });
 
   test("refuses a session that defers its tools to a tool search", () => {

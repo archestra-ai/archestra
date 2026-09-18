@@ -14,6 +14,7 @@ import {
   TOOL_UPDATE_SKILL_FULL_NAME,
   TOOL_UPLOAD_FILE_FULL_NAME,
 } from "@archestra/shared";
+import config from "@/config";
 import { ConversationEnabledToolModel, ToolModel } from "@/models";
 import { describe, expect, test } from "@/test";
 import type { ArchestraContext } from ".";
@@ -153,6 +154,48 @@ describe("search_tools", () => {
     );
     expect(returnedToolNames).not.toContain(TOOL_SEARCH_TOOLS_FULL_NAME);
     expect(returnedToolNames).not.toContain(TOOL_RUN_TOOL_FULL_NAME);
+  });
+
+  test("finds OpenAPPA tools on an agent that was never assigned them", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const previous = config.openappa.enabled;
+    config.openappa.enabled = true;
+    try {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org.id, { role: "admin" });
+      const agent = await makeAgent({
+        name: "Unassigned OpenAPPA Agent",
+        organizationId: org.id,
+      });
+      const context: ArchestraContext = {
+        agent: { id: agent.id, name: agent.name },
+        agentId: agent.id,
+        organizationId: org.id,
+        userId: user.id,
+      };
+      const result = await executeArchestraTool(
+        TOOL_SEARCH_TOOLS_FULL_NAME,
+        { query: "get_remedy_plans blocked call ruling", limit: 10 },
+        context,
+      );
+      expect(result.isError).toBe(false);
+      const names = (
+        result.structuredContent as SearchToolsStructuredContent
+      ).tools.map((tool) => tool.toolName);
+      expect(names.some((name) => name.endsWith("get_remedy_plans"))).toBe(
+        true,
+      );
+      expect(names.some((name) => name.endsWith("execute_remedy_plan"))).toBe(
+        true,
+      );
+    } finally {
+      config.openappa.enabled = previous;
+    }
   });
 
   test("derives an app launch tool's description from the catalog name, not the raw stored value", async ({

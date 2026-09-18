@@ -348,6 +348,8 @@ export const InteractionSummarySchema = BaseSelectInteractionSchema.pick({
 }).extend({
   type: SupportedProvidersDiscriminatorSchema,
   externalAgentIdLabel: z.string().nullable(),
+  /** Origin of the call (`chat`, `chat:compaction`, …). Used to badge sub-agent rows. */
+  source: InteractionSourceSchema.nullable().optional(),
 });
 
 /**

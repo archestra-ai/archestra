@@ -55,7 +55,7 @@ const registry = defineArchestraTools([
       "The value is stored personally for you: it applies to every run YOU start on that Agent, not only the current one, and never to anyone else's runs. " +
       "Organization-wide credentials are set in Settings and are refused here. " +
       "The Agent must have `allowAgentSuppliedCredentialValues` enabled; without it this tool does nothing. " +
-      "EXPOSURE: the value passes through your context and is written into this client's transcript, and some clients show tool arguments in their approval prompt. It is redacted from Archestra's tool-call log, not from anything before it. Prefer Settings for a credential that should never enter a model's context. " +
+      "EXPOSURE: the value passes through your context and is written into this client's transcript, and some clients show tool arguments in their approval prompt. It is redacted from this platform's tool-call log, not from anything before it. Prefer Settings for a credential that should never enter a model's context. " +
       "The value reaches the workspace on the Agent's NEXT turn, not one already running.",
     schema: z.object({
       agent_id: z.string().describe("The Agent to give the credential to."),

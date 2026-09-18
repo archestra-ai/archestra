@@ -289,21 +289,17 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
   // === Internal helpers ===
 
   private canonicalize(binding: AppaPluginBinding, name: string): string {
-    const canonical = binding.canonicalizeToolName(name);
-    // A gateway tool whatever the client's local naming says: a name the
-    // canonicalizer rewrote is a client's decoration of one (OpenCode's
-    // `<label>_<tool>`), and Codex declares an MCP server's tools inside the
-    // server's namespace under their bare names.
-    const gateway =
-      canonical !== name ||
-      binding.request.namespaces
-        .get(name)
-        ?.startsWith(CODEX_MCP_NAMESPACE_PREFIX);
-    return !gateway && binding.adapter?.classifyToolName(name) === "local"
+    // Codex declares an MCP server's tools inside that server's namespace,
+    // under their bare names: they are the gateway's tools, not local ones.
+    const inMcpNamespace = binding.request.namespaces
+      .get(name)
+      ?.startsWith(CODEX_MCP_NAMESPACE_PREFIX);
+    return binding.adapter?.classifyToolName(name) === "local" &&
+      !inMcpNamespace
       ? binding.canonicalizeToolName(
           binding.adapter.normalizeLocalToolName(name),
         )
-      : canonical;
+      : binding.canonicalizeToolName(name);
   }
 
   /**

@@ -1,4 +1,4 @@
-import { eq, sql } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { EffectivePolicy } from "@/types/openappa-batteries";
 
@@ -19,41 +19,46 @@ class OpenAppaEffectivePolicyModel {
   }
 
   /**
-   * Compose and store the organization's effective policy under the same advisory
-   * lock root-policy edits and GitHub imports take, so one composition at a time
-   * observes a settled root and install set.
+   * Store a composition computed against `expected`, the row as it was read
+   * before composing (null when there was none). Returns null when another
+   * composition landed in between, so the caller recomposes from fresh inputs
+   * instead of overwriting a newer document with a stale one.
    */
-  static async recompile(
-    organizationId: string,
-    compose: () => Promise<EffectivePolicyValues>,
-  ): Promise<EffectivePolicy> {
-    return db.transaction(async (tx) => {
-      await tx.execute(
-        sql`select pg_advisory_xact_lock(hashtextextended(${`guardrails-policy:${organizationId}`}, 0))`,
-      );
-      const { error, ...values } = await compose();
-      const now = new Date();
-      const [row] = await tx
+  static async save(params: {
+    organizationId: string;
+    values: EffectivePolicyValues;
+    expected: EffectivePolicy | null;
+  }): Promise<EffectivePolicy | null> {
+    const { organizationId, values, expected } = params;
+    const { error, ...composed } = values;
+    const now = new Date();
+    const row = {
+      ...composed,
+      compiledAt: now,
+      lastError: error,
+      lastErrorAt: error === null ? null : now,
+    };
+    if (expected === null) {
+      const [inserted] = await db
         .insert(table)
-        .values({
-          organizationId,
-          ...values,
-          compiledAt: now,
-          lastError: error,
-          lastErrorAt: error === null ? null : now,
-        })
-        .onConflictDoUpdate({
-          target: table.organizationId,
-          set: {
-            ...values,
-            compiledAt: now,
-            lastError: error,
-            lastErrorAt: error === null ? null : now,
-          },
-        })
+        .values({ organizationId, ...row })
+        .onConflictDoNothing()
         .returning();
-      return row;
-    });
+      return inserted ?? null;
+    }
+    const [updated] = await db
+      .update(table)
+      .set(row)
+      .where(
+        and(
+          eq(table.organizationId, organizationId),
+          eq(table.compiledAt, expected.compiledAt),
+          eq(table.rootRevision, expected.rootRevision),
+          eq(table.installFingerprint, expected.installFingerprint),
+        ),
+      )
+      .returning();
+    return updated ?? null;
   }
 }
 

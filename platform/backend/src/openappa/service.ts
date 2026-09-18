@@ -14,9 +14,9 @@ import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import config from "@/config";
 import { getDatabaseConnectionString } from "@/database";
 import logger from "@/logging";
+import { openappaBatteriesService } from "@/openappa/batteries";
 import { normalizeToolCallsForPolicy } from "@/routes/proxy/llm-proxy-helpers";
 import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
-import { guardrailsPolicyService } from "@/services/guardrails-policy";
 import { ApiError, type CommonToolResult } from "@/types";
 
 export { APPA_PARENT_HEADER, APPA_SESSION_HEADER };
@@ -226,9 +226,10 @@ async function withRuntime(
   try {
     if (!(await isGuardrailsV2Active()))
       throw new Error("Guardrails v2 is disabled");
-    const policy = await guardrailsPolicyService.get(organizationId);
-    const module = await binding(policy.content);
-    const rawResult = await call(module, policy.content);
+    const policy =
+      await openappaBatteriesService.effectivePolicyContent(organizationId);
+    const module = await binding(policy);
+    const rawResult = await call(module, policy);
     return NativeDecisionSchema.parse(JSON.parse(rawResult));
   } catch (error) {
     // Do not forward internal diagnostics or credentials to clients.

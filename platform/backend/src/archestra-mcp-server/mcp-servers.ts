@@ -34,6 +34,7 @@ import {
   TeamModel,
   ToolModel,
 } from "@/models";
+import { openappaBatteriesService } from "@/openappa/batteries";
 import { isPredefinedAdmin } from "@/services/agent-tool-assignment";
 import {
   assertCanAssignEnvironment,
@@ -1679,6 +1680,7 @@ async function discoverLocalMcpServerTools(params: {
       owner: agentOwner(params.ownerAgentId),
       tokenAuth: params.tokenAuth,
     });
+    await openappaBatteriesService.onCatalogToolsChanged(catalogItem.id);
     broadcastMcpInstallationStatus(mcpServer.id, "success", null);
   } catch (err) {
     logger.error(
@@ -1730,6 +1732,7 @@ async function discoverRemoteMcpServerTools(params: {
       owner: agentOwner(params.ownerAgentId),
       tokenAuth: params.tokenAuth,
     });
+    await openappaBatteriesService.onCatalogToolsChanged(catalogItem.id);
   } catch (err) {
     logger.error(
       { err, mcpServerId: mcpServer.id },

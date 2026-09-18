@@ -1,3 +1,4 @@
+import { openappaBatteriesService } from "@/openappa/batteries";
 import {
   checkDueAppaGithubSyncs,
   syncAppaGithubPolicy,
@@ -70,6 +71,9 @@ export function registerTaskHandlers(taskQueueService: TaskQueueService): void {
       throw new Error("Missing organizationId");
     await syncAppaGithubPolicy(payload.organizationId);
   });
+  taskQueueService.registerHandler("openappa_effective_policy_recompile", () =>
+    openappaBatteriesService.recompileAll(),
+  );
   taskQueueService.registerHandler("skill_github_sync", handleSkillGithubSync);
   taskQueueService.registerHandler(
     "check_due_plugin_github_syncs",

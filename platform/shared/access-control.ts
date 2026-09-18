@@ -1934,6 +1934,16 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetAppaGithubSync]: { toolPolicy: ["read"] },
   [RouteId.ConfigureAppaGithubSync]: { organization: ["update"] },
   [RouteId.UpdateAppaGithubSync]: { organization: ["update"] },
+  [RouteId.GetOpenappaBatteries]: { toolPolicy: ["read"] },
+  [RouteId.GetOpenappaEffectivePolicy]: { toolPolicy: ["read"] },
+  [RouteId.CreateOpenappaBatteryInstall]: { toolPolicy: ["update"] },
+  [RouteId.UpdateOpenappaBatteryInstall]: { toolPolicy: ["update"] },
+  [RouteId.DeleteOpenappaBatteryInstall]: { toolPolicy: ["update"] },
+  [RouteId.UploadOpenappaBatteryPackage]: { toolPolicy: ["update"] },
+  [RouteId.DeleteOpenappaBatteryPackage]: { toolPolicy: ["update"] },
+  // Loopback-only helper bridge for the APPA runtime; authenticated by the
+  // per-process bridge bearer inside the route, not by a session.
+  [RouteId.ConsultOpenappaBatteryHelper]: {},
   [RouteId.UpdateSkillGithubSync]: { skill: ["update"] },
   [RouteId.GetPlugins]: { plugin: ["read"] },
   [RouteId.GetPluginLabelKeys]: { plugin: ["read"] },

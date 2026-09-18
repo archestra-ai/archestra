@@ -85,8 +85,10 @@ scan or save policy rules; follow these steps when handling the user's request.
 - Explicit rules still apply. Keep the catch-all unless the user wants unknown
   tools blocked. Do not quietly weaken a rule to make a blocked call succeed.
 - The supported editor format is \`[policy]\` plus \`[externals]\`.
-  Local commands and file includes are rejected. Do not copy Claude Code's
-  subprocess annotators, battery includes, CLI reload steps, or local hooks.
+  Local commands and file includes are rejected. Batteries are installed per
+  MCP server outside the policy text and compose into it automatically. Do not
+  copy Claude Code's subprocess annotators, battery includes, CLI reload steps,
+  or local hooks.
 - Keep secrets out of policy text. Existing remote bindings may refer to a
   backend environment variable with \`token_env\`; never invent a credential.
 - APPA is available only when \`ARCHESTRA_OPENAPPA_ENABLED=true\`.
@@ -191,7 +193,7 @@ review channel. Do not invent one or replace a denied operation with noop.
 When APPA provides a remedy offer, use only the exact offer_id from that
 response with the available remedy tool and the user's authorization.
 
-This guide does not configure subprocesses, battery file includes, or deployment
+This guide does not configure subprocesses, battery installs, or deployment
 changes. If the existing bindings cannot express the requested behavior,
 explain what support is missing rather than silently allowing it.
 `,

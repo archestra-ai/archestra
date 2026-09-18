@@ -961,7 +961,8 @@ export const AUDIT_DECISIONS = {
   },
   openappaEffectivePoliciesTable: {
     audited: false,
-    reason: "derived from the audited root policy and battery installs; recomposed, never edited",
+    reason:
+      "derived from the audited root policy and battery installs; recomposed, never edited",
   },
   openappaEventsTable: {
     audited: false,

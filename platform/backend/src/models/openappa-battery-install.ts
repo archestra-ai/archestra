@@ -32,6 +32,12 @@ class OpenAppaBatteryInstallModel {
     return row ?? null;
   }
 
+  /** Lookup by the unguessable id a composed policy's helper URL carries. */
+  static async findById(id: string): Promise<BatteryInstall | null> {
+    const [row] = await db.select().from(table).where(eq(table.id, id));
+    return row ?? null;
+  }
+
   static async findByCatalog(params: {
     organizationId: string;
     catalogId: string;

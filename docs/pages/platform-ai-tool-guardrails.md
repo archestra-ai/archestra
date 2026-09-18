@@ -28,6 +28,14 @@ The default policy has no rules for specific tools. A catch-all annotator adds n
 
 The assistant can read, validate, and update the same policy through its policy tools. Both editing paths enforce permissions and reject conflicting revisions. Invalid policies leave the saved revision unchanged.
 
+### Batteries
+
+A battery is a ready-made policy package for one provider, such as GitHub. Batteries bundled with OpenAPPA attach to a matching MCP server when you install it. The battery's rules then apply to that server's tools alongside your organization policy.
+
+A battery that consults the provider needs a credential. Bind each credential the battery names to an organization-level runtime credential; until then the battery stays inactive. Helper scripts run in the code execution sandbox, so the sandbox runtime must be enabled.
+
+You can upload your own battery package to replace a bundled one under the same name.
+
 ## The Lethal Trifecta
 
 The "lethal trifecta" is a prompt-injection risk that appears when an agent has all three of these at once (a pattern named by security researcher Simon Willison):

@@ -29,6 +29,7 @@ import {
   MFILES_VAF_ADD_ON_PACKAGE_PATH,
   MFILES_VAF_ADD_ON_SCRIPT_PATH,
   OAUTH_CALLBACK_PATH,
+  OPENAPPA_HELPERS_PREFIX,
   ORGANIZATION_APPEARANCE_SETTINGS_PATH,
   PUBLIC_CONFIG_PATH,
   READY_PATH,
@@ -220,6 +221,9 @@ export class Authnz {
       // The APPA runtime has no browser session. This exact endpoint only
       // returns a constant empty annotation; it reads and writes no user data.
       (method === "POST" && url === GUARDRAILS_NOOP_ANNOTATOR_PATH) ||
+      // Battery helper bridge: the runtime presents the per-process bridge
+      // bearer over loopback; the route checks both before doing anything.
+      (method === "POST" && url.startsWith(`${OPENAPPA_HELPERS_PREFIX}/`)) ||
       // Allow fetching public config for login and invitation UI
       (method === "GET" && url === PUBLIC_CONFIG_PATH) ||
       // Explicit even though the /api/auth prefix check below already covers

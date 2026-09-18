@@ -50,6 +50,22 @@ export type EffectivePolicy = z.infer<typeof EffectivePolicySchema>;
 export const BatterySourceSchema = z.enum(["bundled", "organization"]);
 export type BatterySource = z.infer<typeof BatterySourceSchema>;
 
+/** Why an install does or does not take part in the composed policy. */
+export const BatteryInstallStatusSchema = z.enum([
+  "active",
+  "disabled",
+  "missing_credentials",
+  "naming_conflict",
+  "superseded",
+  "unavailable",
+]);
+export type BatteryInstallStatus = z.infer<typeof BatteryInstallStatusSchema>;
+
+export const BatteryInstallViewSchema = BatteryInstallSchema.extend({
+  status: BatteryInstallStatusSchema,
+});
+export type BatteryInstallView = z.infer<typeof BatteryInstallViewSchema>;
+
 export const BatterySummarySchema = z.object({
   name: z.string(),
   description: z.string(),
@@ -58,7 +74,7 @@ export const BatterySummarySchema = z.object({
   helpers: z.array(z.string()),
   credentials: z.array(z.string()),
   setup: z.string().nullable(),
-  installs: z.array(BatteryInstallSchema),
+  installs: z.array(BatteryInstallViewSchema),
 });
 export type BatterySummary = z.infer<typeof BatterySummarySchema>;
 

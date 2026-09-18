@@ -1,6 +1,7 @@
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import logger from "@/logging";
 import { InternalMcpCatalogModel, McpServerModel, ToolModel } from "@/models";
+import { openappaBatteriesService } from "@/openappa/batteries";
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -518,6 +519,7 @@ async function syncToolsForServer(
     catalogId: catalogItem.id,
     mcpServerId: server.id,
   });
+  await openappaBatteriesService.onCatalogToolsChanged(catalogItem.id);
 
   logger.info(
     {

@@ -99005,6 +99005,7 @@ export type GetSkillsResponses = {
             };
             sourceType: 'manual' | 'github' | 'built_in';
             sourceRef: string | null;
+            sourceOrigin: string | null;
             sourceCommit: string | null;
             githubSyncInterval: '15m' | '1h' | '1d' | null;
             githubSyncRef: string | null;
@@ -99192,6 +99193,7 @@ export type CreateSkillResponses = {
         };
         sourceType: 'manual' | 'github' | 'built_in';
         sourceRef: string | null;
+        sourceOrigin: string | null;
         sourceCommit: string | null;
         githubSyncInterval: '15m' | '1h' | '1d' | null;
         githubSyncRef: string | null;
@@ -99428,6 +99430,7 @@ export type GetSkillResponses = {
         };
         sourceType: 'manual' | 'github' | 'built_in';
         sourceRef: string | null;
+        sourceOrigin: string | null;
         sourceCommit: string | null;
         githubSyncInterval: '15m' | '1h' | '1d' | null;
         githubSyncRef: string | null;
@@ -99619,6 +99622,7 @@ export type UpdateSkillResponses = {
         };
         sourceType: 'manual' | 'github' | 'built_in';
         sourceRef: string | null;
+        sourceOrigin: string | null;
         sourceCommit: string | null;
         githubSyncInterval: '15m' | '1h' | '1d' | null;
         githubSyncRef: string | null;
@@ -100354,6 +100358,7 @@ export type RestoreSkillResponses = {
         };
         sourceType: 'manual' | 'github' | 'built_in';
         sourceRef: string | null;
+        sourceOrigin: string | null;
         sourceCommit: string | null;
         githubSyncInterval: '15m' | '1h' | '1d' | null;
         githubSyncRef: string | null;
@@ -100590,6 +100595,7 @@ export type ResetSkillResponses = {
         };
         sourceType: 'manual' | 'github' | 'built_in';
         sourceRef: string | null;
+        sourceOrigin: string | null;
         sourceCommit: string | null;
         githubSyncInterval: '15m' | '1h' | '1d' | null;
         githubSyncRef: string | null;
@@ -100754,6 +100760,7 @@ export type UpdateSkillGithubSyncResponses = {
         };
         sourceType: 'manual' | 'github' | 'built_in';
         sourceRef: string | null;
+        sourceOrigin: string | null;
         sourceCommit: string | null;
         githubSyncInterval: '15m' | '1h' | '1d' | null;
         githubSyncRef: string | null;
@@ -101310,6 +101317,7 @@ export type ImportGithubSkillsResponses = {
             };
             sourceType: 'manual' | 'github' | 'built_in';
             sourceRef: string | null;
+            sourceOrigin: string | null;
             sourceCommit: string | null;
             githubSyncInterval: '15m' | '1h' | '1d' | null;
             githubSyncRef: string | null;

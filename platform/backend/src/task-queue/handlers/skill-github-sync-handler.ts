@@ -1,10 +1,11 @@
 import logger from "@/logging";
 import { SkillModel } from "@/models";
 import {
-  resolveGithubAppInstallationToken,
   resolveGithubPatToken,
+  resolveGithubSkillAppCredentials,
 } from "@/skills/github-app-token";
 import { importSkills } from "@/skills/github-import";
+import type { GithubSkillSource } from "@/skills/github-source";
 import { isSkillNameConflict, toSkillInsertFields } from "@/skills/validation";
 import { ApiError, type Skill } from "@/types";
 
@@ -55,29 +56,43 @@ async function syncSkill(skill: Skill): Promise<void> {
     );
   }
 
-  // a synced skill authenticates with its stored credential: a saved PAT or
-  // a GitHub App config; neither means an unauthenticated (public) pull.
-  const githubToken = skill.githubPatId
-    ? await resolveGithubPatToken({
-        githubPatId: skill.githubPatId,
+  const credentials: {
+    githubToken?: string;
+    githubSource?: GithubSkillSource;
+  } = skill.githubAppConfigId
+    ? await resolveGithubSkillAppCredentials({
+        githubAppConfigId: skill.githubAppConfigId,
         organizationId: skill.organizationId,
       })
-    : skill.githubAppConfigId
-      ? await resolveGithubAppInstallationToken({
-          githubAppConfigId: skill.githubAppConfigId,
-          organizationId: skill.organizationId,
-        })
-      : undefined;
+    : {
+        githubToken: skill.githubPatId
+          ? await resolveGithubPatToken({
+              githubPatId: skill.githubPatId,
+              organizationId: skill.organizationId,
+            })
+          : undefined,
+      };
+  const sourceOrigin = skill.sourceOrigin ?? "https://github.com";
+  if (
+    (credentials.githubSource?.webOrigin ?? "https://github.com") !==
+    sourceOrigin
+  ) {
+    throw new Error(
+      "GitHub App host does not match the skill's original repository host",
+    );
+  }
 
   // convey the tracking ref through the URL form parseRepoUrl understands;
   // no ref tracks the repo's default branch (HEAD) on every pull.
   const repoUrl =
-    `https://github.com/${source.owner}/${source.repo}` +
-    (skill.githubSyncRef ? `/tree/${skill.githubSyncRef}` : "");
+    `${sourceOrigin}/${source.owner}/${source.repo}` +
+    (skill.githubSyncRef
+      ? `/tree/${encodeURIComponent(skill.githubSyncRef)}`
+      : "");
 
   const [imported] = await importSkills({
     repoUrl,
-    githubToken,
+    ...credentials,
     skillPaths: [source.skillPath],
   });
   if (!imported) {

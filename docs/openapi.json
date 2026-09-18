@@ -381391,6 +381391,10 @@
                             "nullable": true,
                             "type": "string"
                           },
+                          "sourceOrigin": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "sourceCommit": {
                             "nullable": true,
                             "type": "string"
@@ -381619,6 +381623,7 @@
                           "metadata",
                           "sourceType",
                           "sourceRef",
+                          "sourceOrigin",
                           "sourceCommit",
                           "githubSyncInterval",
                           "githubSyncRef",
@@ -382137,6 +382142,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "sourceOrigin": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "sourceCommit": {
                       "nullable": true,
                       "type": "string"
@@ -382413,6 +382422,7 @@
                     "metadata",
                     "sourceType",
                     "sourceRef",
+                    "sourceOrigin",
                     "sourceCommit",
                     "githubSyncInterval",
                     "githubSyncRef",
@@ -382777,6 +382787,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "sourceOrigin": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "sourceCommit": {
                       "nullable": true,
                       "type": "string"
@@ -383053,6 +383067,7 @@
                     "metadata",
                     "sourceType",
                     "sourceRef",
+                    "sourceOrigin",
                     "sourceCommit",
                     "githubSyncInterval",
                     "githubSyncRef",
@@ -383539,6 +383554,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "sourceOrigin": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "sourceCommit": {
                       "nullable": true,
                       "type": "string"
@@ -383815,6 +383834,7 @@
                     "metadata",
                     "sourceType",
                     "sourceRef",
+                    "sourceOrigin",
                     "sourceCommit",
                     "githubSyncInterval",
                     "githubSyncRef",
@@ -386494,6 +386514,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "sourceOrigin": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "sourceCommit": {
                       "nullable": true,
                       "type": "string"
@@ -386770,6 +386794,7 @@
                     "metadata",
                     "sourceType",
                     "sourceRef",
+                    "sourceOrigin",
                     "sourceCommit",
                     "githubSyncInterval",
                     "githubSyncRef",
@@ -387409,6 +387434,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "sourceOrigin": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "sourceCommit": {
                       "nullable": true,
                       "type": "string"
@@ -387685,6 +387714,7 @@
                     "metadata",
                     "sourceType",
                     "sourceRef",
+                    "sourceOrigin",
                     "sourceCommit",
                     "githubSyncInterval",
                     "githubSyncRef",
@@ -388084,6 +388114,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "sourceOrigin": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "sourceCommit": {
                       "nullable": true,
                       "type": "string"
@@ -388360,6 +388394,7 @@
                     "metadata",
                     "sourceType",
                     "sourceRef",
+                    "sourceOrigin",
                     "sourceCommit",
                     "githubSyncInterval",
                     "githubSyncRef",
@@ -390138,6 +390173,10 @@
                             "nullable": true,
                             "type": "string"
                           },
+                          "sourceOrigin": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "sourceCommit": {
                             "nullable": true,
                             "type": "string"
@@ -390234,6 +390273,7 @@
                           "metadata",
                           "sourceType",
                           "sourceRef",
+                          "sourceOrigin",
                           "sourceCommit",
                           "githubSyncInterval",
                           "githubSyncRef",

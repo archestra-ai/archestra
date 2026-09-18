@@ -4,7 +4,8 @@ import {
   ARCHESTRA_MCP_SERVER_NAME,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
 } from "@archestra/shared";
-import { pendingRulings } from "@/openappa/pending-rulings";
+import config from "@/config";
+import { signOfferClaims, unsignedOfferClaims } from "@/openappa/offer-claims";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { Agent } from "@/types";
 import { type ArchestraContext, executeArchestraTool } from ".";
@@ -172,20 +173,19 @@ describe("chat tool execution", () => {
     });
   });
 
-  test("ask_user accept repeats the pending remedy ruling as the next step", async () => {
-    const sessionId = `ask-ruling-${testAgent.id}`;
-    pendingRulings.remember({
-      organizationId: mockContext.organizationId as string,
-      sessionId,
-      ruling:
-        '[appa] Blocked: this call cannot run yet.\n\nContinue:\n  - Accept this change for the rest of this session:\n    archestra__execute_remedy_plan(offer_id: "abc123", plan: "Accept")',
-    });
+  test("ask_user accept repeats verified live offers as the next step", async () => {
+    const envelope = signOfferClaims(
+      unsignedOfferClaims({
+        organizationId: mockContext.organizationId as string,
+        sessionId: `ask-ruling-${testAgent.id}`,
+        offerId: "offer-abc123",
+        tool: "archestra__list_skills",
+        spelling: "list_skills",
+      }),
+      config.openappa.offerSigningSecret,
+    );
     mockContext = {
       ...mockContext,
-      openappaSession: {
-        organization_id: mockContext.organizationId as string,
-        session_id: sessionId,
-      },
       elicitation: {
         elicit: async () => ({
           status: "answered" as const,
@@ -205,39 +205,67 @@ describe("chat tool execution", () => {
           { label: "Accept for this session" },
           { label: "Do not accept" },
         ],
+        remedy_offers: [envelope],
       },
       mockContext,
     );
     expect(result.isError).toBe(false);
     const text = (result.content[0] as any).text as string;
     expect(text).toContain("The user picked: Accept for this session.");
-    expect(text).toContain("continue now exactly as the ruling says");
-    expect(text).toContain('offer_id: "abc123"');
-    // Consume-once: the ruling must not answer a later question.
-    const second = await executeArchestraTool(
+    expect(text).toContain("Live remedy offers: offer-abc123");
+    expect(text).toContain("archestra__execute_remedy_plan");
+    expect(text).toContain("Do not ask the user again");
+  });
+
+  test("ask_user drops offers signed with the wrong secret", async () => {
+    const forged = signOfferClaims(
+      unsignedOfferClaims({
+        organizationId: mockContext.organizationId as string,
+        sessionId: `ask-forged-${testAgent.id}`,
+        offerId: "offer-forged",
+      }),
+      "not-the-configured-offer-secret-32-chars-min!",
+    );
+    mockContext = {
+      ...mockContext,
+      elicitation: {
+        elicit: async () => ({
+          status: "answered" as const,
+          result: {
+            action: "accept" as const,
+            content: { choice: "Accept for this session" },
+          },
+        }),
+      },
+    };
+
+    const result = await executeArchestraTool(
       `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}ask_user`,
       {
-        question: "Unrelated question?",
-        options: [{ label: "One" }, { label: "Two" }],
+        question: "Accept this change for the rest of this session?",
+        options: [
+          { label: "Accept for this session" },
+          { label: "Do not accept" },
+        ],
+        remedy_offers: [forged],
       },
       mockContext,
     );
-    expect((second.content[0] as any).text).not.toContain("offer_id");
+    const text = (result.content[0] as any).text as string;
+    expect(text).not.toContain("Live remedy offers");
   });
 
-  test("ask_user decline with a pending ruling tells the model to stop", async () => {
-    const sessionId = `ask-decline-${testAgent.id}`;
-    pendingRulings.remember({
-      organizationId: mockContext.organizationId as string,
-      sessionId,
-      ruling: "[appa] Blocked: this call cannot run yet.",
-    });
+  test("ask_user decline with live offers tells the model to stop", async () => {
+    const envelope = signOfferClaims(
+      unsignedOfferClaims({
+        organizationId: mockContext.organizationId as string,
+        sessionId: `ask-decline-${testAgent.id}`,
+        offerId: "offer-decline",
+      }),
+      config.openappa.offerSigningSecret,
+    );
     mockContext = {
       ...mockContext,
-      openappaSession: {
-        organization_id: mockContext.organizationId as string,
-        session_id: sessionId,
-      },
       elicitation: {
         elicit: async () => ({
           status: "answered" as const,
@@ -254,6 +282,7 @@ describe("chat tool execution", () => {
           { label: "Accept for this session" },
           { label: "Do not accept" },
         ],
+        remedy_offers: [envelope],
       },
       mockContext,
     );

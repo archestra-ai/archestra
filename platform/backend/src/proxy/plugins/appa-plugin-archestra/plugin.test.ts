@@ -1,3 +1,5 @@
+import config from "@/config";
+import { signOfferClaims, unsignedOfferClaims } from "@/openappa/offer-claims";
 import * as appaService from "@/openappa/service";
 import type { LlmProxyRequestContext } from "@/proxy/plugins/registry";
 import { describe, expect, test, vi } from "@/test";
@@ -721,6 +723,53 @@ describe("rendering runtime text for this client", () => {
     } finally {
       evaluateToolCalls.mockRestore();
     }
+  });
+
+  test("attaches live offers to ask_user calls and strips client-echoed ones", async () => {
+    const plugin = new AppaPluginArchestra([]);
+    const context = requestContext({
+      sessionId: "ask-user-offers",
+      canonicalizeToolName: (name) => name,
+    });
+    const envelope = signOfferClaims(
+      unsignedOfferClaims({
+        organizationId: "organization",
+        sessionId: "ask-user-offers",
+        offerId: "offer-1",
+      }),
+      config.openappa.offerSigningSecret,
+    );
+    const trusted = context.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as Record<string, unknown>;
+    trusted.request = {
+      tools: {
+        controlToolName: "archestra__execute_remedy_plan",
+        noticeToolName: "archestra__get_remedy_plans",
+      },
+      spellings: new Map(),
+      customTools: new Set(),
+      namespaces: new Map(),
+      offerClaims: [envelope],
+    };
+    await plugin.onSessionInit(context);
+    const outcome = await plugin.onPrepareToolCalls({
+      ...context,
+      toolCalls: [
+        {
+          id: "provider-call-1",
+          name: "archestra__ask_user",
+          arguments: JSON.stringify({
+            question: "Accept?",
+            options: [{ label: "Yes" }, { label: "No" }],
+            remedy_offers: [{ protected: "x", payload: "x", signature: "x" }],
+          }),
+        },
+      ],
+    });
+    if (outcome?.decision !== "allow") throw new Error("expected allow");
+    const argumentsValue = JSON.parse(outcome.toolCalls[0].arguments as string);
+    expect(argumentsValue.remedy_offers).toEqual([envelope]);
   });
 
   test("strips a client-echoed JWS before stamping", async () => {

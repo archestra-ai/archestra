@@ -1,10 +1,12 @@
 import {
   TOOL_ASK_USER_SHORT_NAME,
+  TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
   TOOL_TODO_WRITE_SHORT_NAME,
 } from "@archestra/shared";
 import { z } from "zod";
+import config from "@/config";
 import logger from "@/logging";
-import { pendingRulings } from "@/openappa/pending-rulings";
+import { OfferJwsSchema, verifyOfferClaims } from "@/openappa/offer-claims";
 import { archestraMcpBranding } from "./branding";
 import {
   catchError,
@@ -117,6 +119,12 @@ const registry = defineArchestraTools([
           .describe(
             "When true, the user may select more than one option. Defaults to false (exactly one).",
           ),
+        remedy_offers: z
+          .array(OfferJwsSchema)
+          .optional()
+          .describe(
+            "Added by the proxy: the live remedy offers this question may decide. Do not set this yourself.",
+          ),
       })
       .strict(),
     outputSchema: AskUserOutputSchema,
@@ -144,7 +152,7 @@ const registry = defineArchestraTools([
       }
 
       const { result } = outcome;
-      const pendingRuling = consumePendingRuling(context);
+      const liveOffers = verifiedOfferIds(args.remedy_offers, context);
       if (result.action !== "accept") {
         const action = result.action === "decline" ? "decline" : "cancel";
         return structuredSuccessResult(
@@ -153,7 +161,7 @@ const registry = defineArchestraTools([
             action === "decline"
               ? "The user declined to pick."
               : "The user dismissed the question.",
-            pendingRuling
+            liveOffers.length > 0
               ? "The user did not accept the remedy. Do not retry the blocked call and do not ask again. Tell the user the action stays blocked."
               : "Do not proceed with the question.",
           ].join(" "),
@@ -176,10 +184,10 @@ const registry = defineArchestraTools([
         { action: "accept", selected },
         [
           `The user picked: ${selected.join(", ")}. Act on this choice.`,
-          pendingRuling
-            ? `A remedy ruling is still pending. If the pick accepts it, continue now exactly as the ruling says — call ${archestraMcpBranding.getToolName(
-                "execute_remedy_plan",
-              )} with the offer_id and plan from the ruling, then retry the blocked call. If the pick rejects it, stop. Do not ask the user again.\n\n${pendingRuling}`
+          liveOffers.length > 0
+            ? `Live remedy offers: ${liveOffers.join(", ")}. If the pick accepts a remedy, continue now exactly as the ruling says — call ${archestraMcpBranding.getToolName(
+                TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
+              )} with the offer_id and the plan from the ruling, then retry the blocked call. Do not ask the user again.`
             : "",
         ]
           .filter((part) => part.length > 0)
@@ -223,15 +231,28 @@ function optionKey(index: number) {
  * Take the remedy ruling pending for this session, if any. Consume-once: the
  * user has now answered, so the ruling must not leak into a later question.
  */
-function consumePendingRuling(context: ArchestraContext): string | undefined {
-  const session = context.openappaSession;
-  if (!session) {
-    return undefined;
+/**
+ * Verified offer ids from the envelopes the proxy stamped onto this call.
+ * Anything unsigned, signed for another organization, or minted with a
+ * different secret is dropped — the tool only ever repeats offers the
+ * platform itself signed for this session.
+ */
+function verifiedOfferIds(
+  envelopes: unknown,
+  context: ArchestraContext,
+): string[] {
+  if (!Array.isArray(envelopes) || !context.organizationId) {
+    return [];
   }
-  return pendingRulings.consume({
-    organizationId: session.organization_id,
-    sessionId: session.session_id,
-  });
+  const secret = config.openappa.offerSigningSecret;
+  const ids = new Set<string>();
+  for (const envelope of envelopes) {
+    const claims = verifyOfferClaims(envelope, secret);
+    if (claims && claims.organization_id === context.organizationId) {
+      ids.add(claims.offer_id);
+    }
+  }
+  return [...ids];
 }
 
 function buildMultiChoiceSchema(

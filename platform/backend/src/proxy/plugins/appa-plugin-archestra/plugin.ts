@@ -1,3 +1,5 @@
+import { TOOL_ASK_USER_SHORT_NAME } from "@archestra/shared";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import config from "@/config";
 import { buildNoticeArguments, type RemedyExecution } from "@/openappa/notice";
 import type { OfferJws } from "@/openappa/offer-claims";
@@ -119,18 +121,26 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
   async onPrepareToolCalls(
     context: LlmProxyToolCallsContext,
   ): Promise<LlmProxyToolCallsOutcome | undefined> {
-    const control = this.bindings.get(context.resources)?.request.tools
-      ?.controlToolName;
+    const binding = this.bindings.get(context.resources);
+    const control = binding?.request.tools?.controlToolName;
     if (!control) return;
+    const askUser = archestraMcpBranding.getToolName(TOOL_ASK_USER_SHORT_NAME);
     let changed = false;
     const toolCalls = context.toolCalls.map((call) => {
-      if (call.name !== control) return call;
-      const stamped = stampControlExecution(
-        call,
-        this.bindings.get(context.resources)?.request.offerClaims,
-      );
-      changed ||= stamped !== call;
-      return stamped;
+      if (call.name === control) {
+        const stamped = stampControlExecution(
+          call,
+          binding?.request.offerClaims,
+        );
+        changed ||= stamped !== call;
+        return stamped;
+      }
+      if (call.name === askUser) {
+        const stamped = stampAskUserOffers(call, binding?.request.offerClaims);
+        changed ||= stamped !== call;
+        return stamped;
+      }
+      return call;
     });
     if (changed) return { decision: "allow", toolCalls };
   }
@@ -431,6 +441,44 @@ function stampControlExecution(
       // The matched offer's flattened JWS routing fields (protected,
       // payload, signature) land as top-level keys beside the remedy args.
       ...(owner ?? {}),
+    }),
+  };
+}
+
+/**
+ * Attaches the session's live offer envelopes to an ask_user call, so the
+ * tool can carry a verified remedy continuation in its result — the same
+ * stateless signed-payload pattern the remedy control call uses. The proxy is
+ * the sole writer of this key; a client-echoed copy is stripped first.
+ */
+function stampAskUserOffers(
+  call: LlmProxyToolCallsContext["toolCalls"][number],
+  offerClaims: readonly OfferJws[] | undefined,
+): LlmProxyToolCallsContext["toolCalls"][number] {
+  if (!offerClaims || offerClaims.length === 0) return call;
+  const originalArguments =
+    typeof call.arguments === "string"
+      ? call.arguments
+      : JSON.stringify(call.arguments);
+  let argumentsValue: unknown;
+  try {
+    argumentsValue = JSON.parse(originalArguments);
+  } catch {
+    return call;
+  }
+  if (
+    !argumentsValue ||
+    typeof argumentsValue !== "object" ||
+    Array.isArray(argumentsValue)
+  )
+    return call;
+  const { remedy_offers: _clientOffers, ...clientArguments } =
+    argumentsValue as Record<string, unknown>;
+  return {
+    ...call,
+    arguments: JSON.stringify({
+      ...clientArguments,
+      remedy_offers: offerClaims,
     }),
   };
 }

@@ -153,7 +153,8 @@ lock serializes each trajectory family across backend processes. Before an
 operation that might consult an external authority, the binding commits a
 `pending` receipt. It then opens one transaction for all hook event writes and
 the completed receipt/approved output. Success commits both; errors roll back
-both and discard tentative in-memory runtime state. A durable pending receipt
+both. The runtime keeps no trajectory state in memory between events, so a
+failed dispatch leaves nothing else to discard. A durable pending receipt
 blocks further work in that family after an interruption.
 
 Completed result keys are session ID + tool call ID. Operation keys are session ID + operation ID. Remedy-execution receipts bind the authenticated spender. Submitting different result bytes under a completed result key returns the saved approved output without re-evaluating hooks. Submitting changed arguments under an existing logical call ID is refused.

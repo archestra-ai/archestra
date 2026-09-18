@@ -163,10 +163,11 @@ describe("buildAgentSystemPrompt", () => {
       const instruction = buildAppaRemedyInstruction();
       expect(instruction).toContain("comes back with a ruling as its result");
       expect(instruction).not.toContain('starts with "[appa]"');
-      expect(instruction).toContain("ask_user");
+      expect(instruction).toContain("Name the plans to the user");
+      expect(instruction).toContain("choose one yourself");
       expect(instruction).toContain("call archestra__execute_remedy_plan with");
+      expect(instruction).toContain("ask_user");
       expect(instruction).not.toContain("get_remedy_plans");
-      expect(instruction).not.toContain("name the plans");
     } finally {
       config.openappa = openappa;
     }

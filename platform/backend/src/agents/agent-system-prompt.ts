@@ -60,7 +60,7 @@ export function buildAppaRemedyInstruction(): string {
     TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
   );
   const askUser = archestraMcpBranding.getToolName(TOOL_ASK_USER_SHORT_NAME);
-  return `A blocked tool call comes back with a ruling as its result. The ruling explains the block and can offer remedy plans, each with an offer id. When plans are offered, ask the user to pick one with ${askUser} — never as a free-form chat question. After they pick, call ${executeRemedyPlan} with that plan's exact offer id and plan text, and do what its result says. The instruction above about unapproved tools does not apply to these rulings. If the ruling offers no plan, explain the block to the user.`;
+  return `A blocked tool call comes back with a ruling as its result. The ruling explains the block and can offer remedy plans, each with an offer id. Name the plans to the user, then choose one yourself, call ${executeRemedyPlan} with its exact offer id and plan, and do what its result says. The instruction above about unapproved tools does not apply to these rulings. Use ${askUser} only when you need the user's decision or approval — never as a free-form chat question. If the ruling offers no plan, explain the block to the user.`;
 }
 
 /** @public — canonical preamble for a project's instructions, asserted by the

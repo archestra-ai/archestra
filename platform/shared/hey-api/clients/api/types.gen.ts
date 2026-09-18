@@ -14194,6 +14194,7 @@ export type GetAgentCatalogResponses = {
                         description?: string;
                         required: boolean;
                     }> | null;
+                    allowAgentSuppliedCredentialValues?: boolean;
                     claudeCode?: {
                         authentication: 'provider' | 'subscription';
                         model?: string;
@@ -14543,6 +14544,7 @@ export type GetAgentsResponses = {
                     description?: string;
                     required: boolean;
                 }> | null;
+                allowAgentSuppliedCredentialValues?: boolean;
                 claudeCode?: {
                     authentication: 'provider' | 'subscription';
                     model?: string;
@@ -14689,6 +14691,7 @@ export type CreateAgentData = {
                 description?: string;
                 required: boolean;
             }> | null;
+            allowAgentSuppliedCredentialValues?: boolean;
             claudeCode?: {
                 authentication: 'provider' | 'subscription';
                 model?: string;
@@ -14938,6 +14941,7 @@ export type CreateAgentResponses = {
                 description?: string;
                 required: boolean;
             }> | null;
+            allowAgentSuppliedCredentialValues?: boolean;
             claudeCode?: {
                 authentication: 'provider' | 'subscription';
                 model?: string;
@@ -15360,6 +15364,7 @@ export type GetAllAgentsResponses = {
                 description?: string;
                 required: boolean;
             }> | null;
+            allowAgentSuppliedCredentialValues?: boolean;
             claudeCode?: {
                 authentication: 'provider' | 'subscription';
                 model?: string;
@@ -15663,6 +15668,7 @@ export type GetDefaultMcpGatewayResponses = {
                 description?: string;
                 required: boolean;
             }> | null;
+            allowAgentSuppliedCredentialValues?: boolean;
             claudeCode?: {
                 authentication: 'provider' | 'subscription';
                 model?: string;
@@ -15958,6 +15964,7 @@ export type ImportAgentResponses = {
                     description?: string;
                     required: boolean;
                 }> | null;
+                allowAgentSuppliedCredentialValues?: boolean;
                 claudeCode?: {
                     authentication: 'provider' | 'subscription';
                     model?: string;
@@ -16266,6 +16273,7 @@ export type GetAgentResponses = {
                 description?: string;
                 required: boolean;
             }> | null;
+            allowAgentSuppliedCredentialValues?: boolean;
             claudeCode?: {
                 authentication: 'provider' | 'subscription';
                 model?: string;
@@ -16402,6 +16410,7 @@ export type UpdateAgentData = {
                 description?: string;
                 required: boolean;
             }> | null;
+            allowAgentSuppliedCredentialValues?: boolean;
             claudeCode?: {
                 authentication: 'provider' | 'subscription';
                 model?: string;
@@ -16572,6 +16581,7 @@ export type UpdateAgentResponses = {
                 description?: string;
                 required: boolean;
             }> | null;
+            allowAgentSuppliedCredentialValues?: boolean;
             claudeCode?: {
                 authentication: 'provider' | 'subscription';
                 model?: string;
@@ -17055,6 +17065,7 @@ export type RestoreAgentVersionResponses = {
                 description?: string;
                 required: boolean;
             }> | null;
+            allowAgentSuppliedCredentialValues?: boolean;
             claudeCode?: {
                 authentication: 'provider' | 'subscription';
                 model?: string;
@@ -17281,6 +17292,7 @@ export type CloneAgentResponses = {
                 description?: string;
                 required: boolean;
             }> | null;
+            allowAgentSuppliedCredentialValues?: boolean;
             claudeCode?: {
                 authentication: 'provider' | 'subscription';
                 model?: string;
@@ -19718,6 +19730,7 @@ export type RestoreAgentResponses = {
                 description?: string;
                 required: boolean;
             }> | null;
+            allowAgentSuppliedCredentialValues?: boolean;
             claudeCode?: {
                 authentication: 'provider' | 'subscription';
                 model?: string;

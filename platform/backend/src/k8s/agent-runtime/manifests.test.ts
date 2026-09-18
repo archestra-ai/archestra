@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { describe, expect, it, vi } from "vitest";
 import config, { parseLabelSelector } from "@/config";
+import { runInContainer, sandboxImage } from "@/test/agent-runtime/docker";
 import {
   buildAgentRuntimePlatformEgressPolicy,
   buildAgentRuntimeSandbox,
@@ -295,13 +296,48 @@ describe("buildAgentRuntimeSandbox", () => {
 });
 
 describe("the container bootstrap", () => {
-  const script = () =>
-    buildAgentRuntimeSandbox(SPEC).spec?.podTemplate.spec?.containers[0]
-      ?.command?.[2] ?? "";
+  const script = () => {
+    const command =
+      buildAgentRuntimeSandbox(SPEC).spec?.podTemplate.spec?.containers[0]
+        ?.command?.[2] ?? "";
+    // Container.command expands $$ and $(NAME) before invoking /bin/sh.
+    return command.replace(/\$\$|\$\(([^)]*)\)/g, (token, name) =>
+      token === "$$" ? "$" : name === "PATH" ? "/usr/bin:/bin" : token,
+    );
+  };
+
+  it.skipIf(!sandboxImage)(
+    "publishes unchanged shell assets after Kubernetes command expansion",
+    () => {
+      const result = runInContainer(`
+cat > /tmp/bootstrap <<'BOOTSTRAP'
+${script()}
+BOOTSTRAP
+export ARCHESTRA_AGENT_RUNTIME_WARM=1 ARCHESTRA_AGENT_RUNTIME_INPUT_FILE_COUNT=0
+/bin/sh /tmp/bootstrap & supervisor=$!
+trap 'kill "$supervisor" 2>/dev/null || true' EXIT
+wait_for /var/run/archestra/runtime
+attempt=0
+until /var/run/archestra/runtime ready; do
+  attempt=$((attempt + 1)); [ "$attempt" -lt 100 ] || exit 99
+  sleep 0.1
+done
+set -- /var/run/archestra/runtime-bundle.*
+test "$#" -eq 1
+bundle="$1"
+for source in runtime.sh select-driver.sh drivers/tmux.sh legacy-tmux-state.sh; do
+  { cat "/tmp/runtime-source/$source"; printf '\\n'; } > /tmp/expected-source
+  cmp /tmp/expected-source "$bundle/\${source##*/}"
+done
+kill "$supervisor"
+wait "$supervisor"
+`);
+      expect(result.status, result.stderr || result.stdout).toBe(0);
+    },
+  );
 
   it("fails with a distinct code when the image cannot host a session", () => {
-    // Distinct from any exit code the agent itself produces, so "this image
-    // has no tmux" never reads as "your agent failed".
+    // Installation failures must remain distinct from the agent command exit.
     expect(script()).toContain("command -v tmux");
     expect(script()).toContain("exit 78");
   });
@@ -331,33 +367,11 @@ describe("the container bootstrap", () => {
     );
   });
 
-  it("gives detached TUIs a browser-sized canvas before anyone attaches", () => {
-    expect(script()).toContain("tmux new-session -d -x 120 -y 40 -s agent");
-  });
-
-  it("lets terminal wheel events scroll tmux history", () => {
-    expect(script()).toContain("tmux set-option -t agent mouse on");
-    expect(script().indexOf("mouse on")).toBeLessThan(
-      script().indexOf("tmux respawn-pane"),
-    );
-  });
-
-  it("shows runtime-reported attention states in every attached terminal", () => {
-    expect(script()).toContain("@archestra_attention 0");
-    expect(script()).toContain("@archestra_attention_label");
-    expect(script()).toContain("status-left");
-    expect(script().indexOf("status-left")).toBeLessThan(
-      script().indexOf("tmux respawn-pane"),
-    );
-  });
-
   it("installs a portable attach command for exec clients", () => {
     expect(script()).toContain("> /var/run/archestra/attach");
     expect(script()).toContain("chmod 755 /var/run/archestra/attach");
     expect(script()).toContain("exec /var/run/archestra/attach");
-    expect(script().indexOf("/var/run/archestra/attach")).toBeLessThan(
-      script().indexOf("tmux new-session"),
-    );
+    expect(script()).toContain("exec /var/run/archestra/runtime attach");
   });
 });
 

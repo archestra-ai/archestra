@@ -32,6 +32,7 @@ import McpDeploymentLeaseModel, {
 import { reportAgentRuntimeSteer } from "@/observability/metrics/agent-runtime";
 import type { AgentRunLaunchSpec } from "@/services/agent-runtime/backends";
 import { agentRuntimeFailureReason } from "@/services/agent-runtime/failure-reason";
+import { imageRuntimeCommand } from "@/services/agent-runtime/image-runtime/control";
 import {
   AGENT_RUNTIME_ATTACH_SCRIPT,
   AGENT_RUNTIME_ATTACHMENTS_MANIFEST,
@@ -58,7 +59,6 @@ import {
 } from "./exec";
 import {
   AGENT_RUNTIME_CONTAINER_NAME,
-  AGENT_RUNTIME_TMUX_SESSION,
   AGENT_SANDBOX_API,
   type AgentSandbox,
   buildAgentRuntimePlatformEgressPolicy,
@@ -87,7 +87,6 @@ import {
   describeAgentRuntimeStartupProgress,
   isSameAgentRuntimeStartupProgress,
 } from "./startup-phase";
-import { buildTmuxSteerCommand } from "./steering";
 import { withTranscriptRecoveryPod } from "./transcript-recovery";
 import {
   agentWarmPoolManager,
@@ -596,16 +595,9 @@ class AgentRuntimeManager {
       namespace: session.runtimeScope,
       podName: pod.metadata.name,
       container: AGENT_RUNTIME_CONTAINER_NAME,
-      command: [
-        "tmux",
-        "display-message",
-        "-p",
-        "-t",
-        "agent",
-        "#{pane_dead}:#{@archestra_retained_task}",
-      ],
+      command: imageRuntimeCommand("retained"),
     }).catch(() => "");
-    return output.trim() === `0:${session.taskId}`;
+    return output.trim() === session.taskId;
   }
 
   async releaseRun(
@@ -675,19 +667,7 @@ class AgentRuntimeManager {
     await this.execInPod({
       session,
       podName: pod.metadata.name,
-      command: [
-        "/bin/sh",
-        "-c",
-        [
-          'set -eu; base="/var/run/archestra/turns/$1"',
-          '[ ! -f "$base.exit" ] || exit 0',
-          'touch "$base.cancel"',
-          'if [ ! -f "$base.request" ] && [ ! -f "$base.started" ]; then printf "130\\n" > "$base.exit.tmp"; mv "$base.exit.tmp" "$base.exit"; fi',
-          'attempt=0; while [ ! -f "$base.exit" ]; do attempt=$((attempt + 1)); [ "$attempt" -lt 15 ] || exit 1; sleep 1; done',
-        ].join("\n"),
-        "stop-turn",
-        session.taskId,
-      ],
+      command: imageRuntimeCommand("cancel", session.taskId),
     });
   }
 
@@ -718,11 +698,7 @@ class AgentRuntimeManager {
     const output = await this.execInPod({
       session,
       podName,
-      command: [
-        "/bin/sh",
-        "-c",
-        "{ cat /var/run/archestra/development-activity 2>/dev/null; tmux list-clients -F '#{client_activity}' 2>/dev/null; } | sort -nr | head -1",
-      ],
+      command: imageRuntimeCommand("activity"),
     });
     if (!/^\d+$/.test(output.trim())) return null;
     const timestamp = Number(output.trim()) * 1000;
@@ -832,8 +808,8 @@ class AgentRuntimeManager {
    *
    * `pipe` writes to the FIFO the runtime-agent reads, so the message lands at a
    * turn boundary and can never interleave with a tool call in flight.
-   * `tmux_keys` types into the session, the only option for a CLI that owns its
-   * own input loop.
+   * The legacy `tmux_keys` setting submits literal terminal input for a CLI
+   * that owns its own input loop; the image chooses the terminal driver.
    */
   async steer(params: {
     session: AgentRunRecord;
@@ -854,32 +830,16 @@ class AgentRuntimeManager {
 
     const command =
       params.steerMode === "tmux_keys"
-        ? [
-            "/bin/sh",
-            "-c",
-            // `--` stops tmux reading a message beginning with a dash as its
-            // own options; Enter is sent separately as the submit.
-            buildTmuxSteerCommand({
-              session: AGENT_RUNTIME_TMUX_SESSION,
-              message,
-            }),
-          ]
-        : [
-            "/bin/sh",
-            "-c",
-            `printf '%s\\n' ${shellQuote(message)} > "$ARCHESTRA_AGENT_RUNTIME_STEER_FIFO"`,
-          ];
+        ? imageRuntimeCommand("submit", message)
+        : imageRuntimeCommand("submit-fifo", message);
 
     await this.execInPod({ session: params.session, podName, command });
     reportAgentRuntimeSteer(params.steerMode);
   }
 
   /**
-   * Attach a caller's streams to the live tmux session.
-   *
-   * `tmux attach` rather than a fresh shell: the point is to land in the pane
-   * the agent is already working in. Detaching leaves it running, so closing a
-   * browser tab never ends a session mid-task.
+   * Attach to the terminal already hosting the agent. Detaching leaves the
+   * agent running, so closing a browser tab never ends a session mid-task.
    */
   async attach(params: {
     session: AgentRunRecord;
@@ -922,7 +882,7 @@ class AgentRuntimeManager {
     if (!podName) {
       throw new Error("This session has no running pod to attach to");
     }
-    await this.waitForTmuxSession({
+    await this.waitForTerminalSession({
       session: params.session,
       podName,
       onProgress: params.onProgress,
@@ -1104,13 +1064,7 @@ class AgentRuntimeManager {
           const result = await this.execInPod({
             session: params.session,
             podName: pod.metadata.name,
-            command: [
-              "/bin/sh",
-              "-c",
-              'file="/var/run/archestra/turns/$1"; if [ -f "$file.exit" ]; then status="$(cat "$file.exit")"; printf "%s\\n" "$status"; if [ -f "$file.failure" ]; then head -c 4097 "$file.failure" 2>/dev/null || true; fi; fi',
-              "read-turn-result",
-              params.session.taskId,
-            ],
+            command: imageRuntimeCommand("read-result", params.session.taskId),
           });
           if (params.abortSignal?.aborted) break;
           if (result.trim()) {
@@ -1638,10 +1592,10 @@ done`
 
   /**
    * Pod Running only means the container process was accepted by Kubernetes;
-   * its bootstrap may still be creating tmux. Wait for the actual attachable
+   * its bootstrap may still be creating a terminal. Wait for the actual attachable
    * session so the first browser connection is as reliable as a refresh.
    */
-  private async waitForTmuxSession(params: {
+  private async waitForTerminalSession(params: {
     session: AgentRunRecord;
     podName: string;
     onProgress?: AgentRuntimeStartupProgressReporter;
@@ -1657,11 +1611,7 @@ done`
       const ready = await this.execInPod({
         session: params.session,
         podName: params.podName,
-        command: [
-          "/bin/sh",
-          "-c",
-          `tmux has-session -t ${AGENT_RUNTIME_TMUX_SESSION} 2>/dev/null`,
-        ],
+        command: imageRuntimeCommand("ready"),
       })
         .then(() => true)
         .catch(() => false);

@@ -317,6 +317,7 @@ export default defineConfig((options: UserConfig) => {
     noExternal: [/^@archestra\/shared/],
     loader: {
       ".py": "text" as const,
+      ".sh": "text" as const,
     },
     tsconfig: "./tsconfig.json",
 

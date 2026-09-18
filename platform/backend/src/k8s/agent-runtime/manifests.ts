@@ -1,6 +1,8 @@
 import { isIP } from "node:net";
 import type * as k8s from "@kubernetes/client-node";
 import type { AgentRunLaunchSpec } from "@/services/agent-runtime/backends";
+import { buildImageRuntimeInstallScript } from "@/services/agent-runtime/image-runtime/bootstrap";
+import { AGENT_IMAGE_RUNTIME } from "@/services/agent-runtime/image-runtime/contract";
 import {
   AGENT_RUNTIME_ATTACH_SCRIPT,
   AGENT_RUNTIME_ATTACHMENTS_DIR,
@@ -26,9 +28,6 @@ const DNS_PORTS = [
   { protocol: "UDP" as const, port: 53 },
   { protocol: "TCP" as const, port: 53 },
 ];
-
-/** Session `tmux attach` lands in — the pane the agent itself is using. */
-export const AGENT_RUNTIME_TMUX_SESSION = "agent";
 
 /** Container name in the Job spec; exec and log reads both address it. */
 export const AGENT_RUNTIME_CONTAINER_NAME = "agent-runtime";
@@ -89,7 +88,7 @@ export function buildAgentRuntimeTurnScript(
   };
   return [
     "set -eu",
-    // A retained tmux server inherits the initial Pod environment. Remove its
+    // A retained terminal inherits the initial Pod environment. Remove its
     // managed variables before applying this turn, including removed credentials.
     ...inheritedVariableNames.map((name) => {
       if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name))
@@ -115,19 +114,14 @@ export function buildAgentRuntimeTurnScript(
  */
 export function buildAgentRuntimeTerminalIntegrationScript(): string {
   return [
-    `printf '%s\\n' '#!/bin/sh' 'tmux set-option -t ${AGENT_RUNTIME_TMUX_SESSION} mouse on' 'exec tmux attach -t ${AGENT_RUNTIME_TMUX_SESSION}' > ${AGENT_RUNTIME_ATTACH_SCRIPT}`,
+    "set -e",
+    buildImageRuntimeInstallScript(),
+    `printf '%s\\n' '#!/bin/sh' 'exec ${AGENT_IMAGE_RUNTIME} attach' > ${AGENT_RUNTIME_ATTACH_SCRIPT}`,
     `chmod 755 ${AGENT_RUNTIME_ATTACH_SCRIPT}`,
-    `printf '%s\\n' 'if [ -t 0 ] && [ -t 1 ]; then date +%s > /var/run/archestra/development-activity; fi' 'if [ "\${ARCHESTRA_AGENT_RUNTIME_AUTO_ATTACH:-1}" = "1" ] && [ -t 0 ] && [ -t 1 ] && [ -z "\${TMUX:-}" ] && tmux has-session -t ${AGENT_RUNTIME_TMUX_SESSION} 2>/dev/null; then exec ${AGENT_RUNTIME_ATTACH_SCRIPT}; fi' > ${AGENT_RUNTIME_SHELL_INIT_SCRIPT}`,
+    `printf '%s\\n' 'if [ -t 0 ] && [ -t 1 ]; then date +%s > /var/run/archestra/development-activity; fi' 'if [ "\${ARCHESTRA_AGENT_RUNTIME_AUTO_ATTACH:-1}" = "1" ] && [ -t 0 ] && [ -t 1 ] && ! ${AGENT_IMAGE_RUNTIME} inside && ${AGENT_IMAGE_RUNTIME} ready 2>/dev/null; then exec ${AGENT_RUNTIME_ATTACH_SCRIPT}; fi' > ${AGENT_RUNTIME_SHELL_INIT_SCRIPT}`,
     `chmod 644 ${AGENT_RUNTIME_SHELL_INIT_SCRIPT}`,
   ].join("\n");
 }
-
-/**
- * Exit code the bootstrap uses when the image cannot host an Agent Runtime run. Distinct
- * from any exit code the agent itself produces, so "your image is missing
- * tmux" never reads as "your agent failed".
- */
-const AGENT_RUNTIME_UNUSABLE_IMAGE_EXIT_CODE = 78;
 
 /**
  * Everything the runtime needs to launch one Agent Runtime run, already resolved: no
@@ -147,12 +141,8 @@ export type KubernetesAgentRunLaunchSpec = Omit<
 /**
  * PID 1 for every Agent Runtime run, whatever the image.
  *
- * tmux is what makes a session attachable and steerable: a human can attach
- * from the browser and type into the same session the agent is using, and a
- * steer can be delivered without a terminal attached at all. The FIFO is the
- * turn-boundary channel the Archestra runtime-agent reads; bring-your-own-image
- * CLIs that own their own input loop are steered with `tmux send-keys`
- * instead, which needs no cooperation from the process.
+ * The image runtime owns terminal creation, attachment and literal input. The
+ * FIFO remains the turn-boundary channel for cooperating harnesses.
  *
  * The workspace supervisor owns PID 1; agent command completion is independent
  * of Pod completion. Durable request markers prevent replay after replacement.
@@ -172,10 +162,6 @@ function buildAgentRuntimeBootstrapScript(): string {
     "  done",
     "fi",
     `[ -p "${AGENT_RUNTIME_STEER_FIFO}" ] || mkfifo -m 600 "${AGENT_RUNTIME_STEER_FIFO}"`,
-    "if ! command -v tmux >/dev/null 2>&1; then",
-    '  echo "agent-runtime: this image has no tmux, which Agent Runtime runs require for attach and steering" >&2',
-    `  exit ${AGENT_RUNTIME_UNUSABLE_IMAGE_EXIT_CODE}`,
-    "fi",
     // biome-ignore lint/suspicious/noTemplateCurlyInString: POSIX shell parameter expansion.
     'if [ "${ARCHESTRA_AGENT_RUNTIME_WARM:-0}" != 1 ]; then',
     'case "$ARCHESTRA_AGENT_RUNTIME_TASK_ID" in ""|*[!a-zA-Z0-9-]*) echo "Invalid runtime task ID" >&2; exit 78;; esac',
@@ -306,10 +292,16 @@ export function buildAgentRuntimeSandbox(
             {
               name: AGENT_RUNTIME_CONTAINER_NAME,
               image: spec.image,
-              command: ["/bin/sh", "-c", buildAgentRuntimeBootstrapScript()],
+              command: [
+                "/bin/sh",
+                "-c",
+                // Kubelet expands command arguments before the shell sees them,
+                // including reducing $$ to $. Preserve the embedded source bytes.
+                buildAgentRuntimeBootstrapScript().replaceAll("$", () => "$$"),
+              ],
               env: [
                 ...Object.entries({
-                  // tmux decides whether a client supports Unicode from its
+                  // The terminal determines Unicode support from its
                   // locale. Kubernetes does not provide one by default, which
                   // made Claude Code replace bullets, emoji, and line art with
                   // underscores in both kubectl and the browser terminal.
@@ -317,7 +309,7 @@ export function buildAgentRuntimeSandbox(
                   LC_ALL: "C.UTF-8",
                   TERM: "xterm-256color",
                   // k9s opens `bash` or `sh` directly. These standard shell
-                  // hooks join the already-running tmux pane on first prompt.
+                  // hooks join the existing agent terminal on first prompt.
                   ENV: AGENT_RUNTIME_SHELL_INIT_SCRIPT,
                   PROMPT_COMMAND: `. ${AGENT_RUNTIME_SHELL_INIT_SCRIPT}`,
                   ARCHESTRA_AGENT_RUNTIME_AUTO_ATTACH: "1",

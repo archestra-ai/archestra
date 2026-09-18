@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { AGENT_IMAGE_RUNTIME } from "@/services/agent-runtime/image-runtime/contract";
 import {
   buildAgentRuntimeSandbox,
   type KubernetesAgentRunLaunchSpec,
@@ -35,7 +36,7 @@ export function warmPoolTemplate(spec: KubernetesAgentRunLaunchSpec) {
     (mount) => mount.name !== "renewable-credentials",
   );
   container.readinessProbe = {
-    exec: { command: ["tmux", "has-session", "-t", "agent"] },
+    exec: { command: [AGENT_IMAGE_RUNTIME, "ready"] },
     periodSeconds: 1,
     initialDelaySeconds: 1,
   };

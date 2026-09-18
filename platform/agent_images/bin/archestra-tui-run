@@ -50,26 +50,26 @@ watch_for_completion() {
   # persistent TUI process.
   while kill -0 "${child_pid}" 2>/dev/null; do
     if [[ -f "${done_marker}" ]]; then
-      # Keep the completed frame visible long enough for tmux's pipe-pane to
+      # Keep the completed frame visible long enough for the recorder to
       # capture it before closing the client. Save the visible pane as well:
       # full-screen clients restore the shell screen during shutdown, but the
       # retained transcript should finish on the native interface the user saw.
       sleep 2
-      if [[ -n "${TMUX_PANE:-}" ]] && command -v tmux >/dev/null 2>&1; then
-        # Some clients probe terminal capabilities during teardown. tmux can
+      if archestra-terminal-client capture > "${completed_frame}.tmp" 2>/dev/null; then
+        # Some clients probe terminal capabilities during teardown and
         # briefly paint the terminal's device-attribute reply as text; it is not
         # part of the interface and should not survive in the completed frame.
-        geometry="$(tmux display-message -p -t "${TMUX_PANE}" '#{pane_width}x#{pane_height}' 2>/dev/null || true)"
+        geometry="$(archestra-terminal-client geometry 2>/dev/null || true)"
         if [[ "${geometry}" =~ ^[0-9]+x[0-9]+$ ]]; then
           printf '\033]777;archestra-terminal-size=%s\007' "${geometry}" \
             > "${completed_frame}"
         else
           : > "${completed_frame}"
         fi
-        tmux capture-pane -p -e -t "${TMUX_PANE}" \
-          | sed '/?1;2c/d' \
+        sed '/?1;2c/d' "${completed_frame}.tmp" \
           >> "${completed_frame}" || true
       fi
+      rm -f "${completed_frame}.tmp"
       stop_child
       return
     fi
@@ -78,7 +78,7 @@ watch_for_completion() {
 }
 
 if [[ -t 0 ]]; then
-  # Give the client the actual tmux pty so it receives browser resizes and
+  # Give the client the actual terminal PTY so it receives browser resizes and
   # input. The supervisor keeps it in the foreground while independently
   # watching for completion.
   script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

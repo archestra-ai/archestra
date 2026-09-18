@@ -82,7 +82,7 @@ def publish_completed_turn(turn_prefix: str, frame_file: Path) -> None:
         if frame_file.exists():
             log.write(b"\x1b[2J\x1b[H" + frame_file.read_bytes())
     subprocess.run(
-        ["tmux", "set-option", "-t", "agent", "@archestra_retained_task", prefix.name],
+        ["archestra-terminal-client", "retained", prefix.name],
         check=True,
     )
     if not Path(turn_prefix + ".exit").exists():
@@ -92,25 +92,15 @@ def publish_completed_turn(turn_prefix: str, frame_file: Path) -> None:
 
 
 def capture_frame(frame_file: Path) -> None:
-    pane = os.environ.get("TMUX_PANE")
-    if not pane:
-        return
     result = subprocess.run(
-        ["tmux", "capture-pane", "-p", "-e", "-t", pane],
+        ["archestra-terminal-client", "capture"],
         check=False,
         stdout=subprocess.PIPE,
     )
     if result.returncode != 0:
         return
     size_result = subprocess.run(
-        [
-            "tmux",
-            "display-message",
-            "-p",
-            "-t",
-            pane,
-            "#{pane_width}x#{pane_height}",
-        ],
+        ["archestra-terminal-client", "geometry"],
         check=False,
         stdout=subprocess.PIPE,
     )

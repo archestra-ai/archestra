@@ -1,0 +1,41 @@
+#!/bin/sh
+set -eu
+
+runtime="${ARCHESTRA_AGENT_RUNTIME_DIR:-/var/run/archestra}/runtime"
+if [ -x "$runtime" ]; then
+  exec "$runtime" "$@"
+fi
+
+# Older backends and standalone harnesses do not install the runtime facade.
+# Keep their terminal compatibility here, outside native harness semantics.
+action="${1:-}"
+[ "$#" -eq 0 ] || shift
+target="${TMUX_PANE:-=agent:}"
+case "$action" in
+  capture)
+    [ -n "${TMUX_PANE:-}" ] || exit 1
+    exec tmux capture-pane -p -e -t "$target"
+    ;;
+  geometry)
+    [ -n "${TMUX_PANE:-}" ] || exit 1
+    exec tmux display-message -p -t "$target" '#{pane_width}x#{pane_height}'
+    ;;
+  retained)
+    [ "$#" -eq 1 ] || exit 64
+    exec tmux set-option -t "$target" @archestra_retained_task "$1"
+    ;;
+  attention)
+    if [ "$#" -eq 0 ]; then
+      state="$(tmux show-option -t "$target" -qv @archestra_attention)"
+      printf '%s\n' "${state:-0}"
+      exec tmux show-option -t "$target" -qv @archestra_attention_label
+    fi
+    case "$1" in 0|1) ;; *) exit 64;; esac
+    tmux set-option -t "$target" @archestra_attention "$1"
+    exec tmux set-option -t "$target" @archestra_attention_label "${2:-}"
+    ;;
+  *)
+    echo 'usage: archestra-terminal-client {capture|geometry|retained TASK|attention [0|1 [LABEL]]}' >&2
+    exit 64
+    ;;
+esac

@@ -3,7 +3,6 @@ set -euo pipefail
 
 action="${1:-}"
 label="${2:-}"
-target="${TMUX_PANE:-agent}"
 
 report_attention() {
   local attention_state="${1:-}"
@@ -29,8 +28,9 @@ report_attention() {
     "${ARCHESTRA_MCP_GATEWAY_URL:?}/runtime-status" >/dev/null 2>&1 || true
 }
 
-current="$(tmux show-option -t "${target}" -qv @archestra_attention 2>/dev/null || true)"
-current_label="$(tmux show-option -t "${target}" -qv @archestra_attention_label 2>/dev/null || true)"
+current_status="$(archestra-terminal-client attention 2>/dev/null || true)"
+current="${current_status%%$'\n'*}"
+current_label="${current_status#*$'\n'}"
 
 case "${action}" in
   set)
@@ -38,15 +38,13 @@ case "${action}" in
       echo "usage: archestra-agent-attention set <label>" >&2
       exit 64
     fi
-    tmux set-option -t "${target}" @archestra_attention 1 >/dev/null 2>&1 || true
-    tmux set-option -t "${target}" @archestra_attention_label "${label}" >/dev/null 2>&1 || true
+    archestra-terminal-client attention 1 "${label}" >/dev/null 2>&1 || true
     if [[ "${current}" != "1" || "${current_label}" != "${label}" ]]; then
       report_attention "input_required"
     fi
     ;;
   clear)
-    tmux set-option -t "${target}" @archestra_attention 0 >/dev/null 2>&1 || true
-    tmux set-option -t "${target}" @archestra_attention_label "" >/dev/null 2>&1 || true
+    archestra-terminal-client attention 0 "" >/dev/null 2>&1 || true
     if [[ "${current}" == "1" ]]; then
       report_attention ""
     fi

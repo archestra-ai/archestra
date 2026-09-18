@@ -16,7 +16,7 @@ import type { ExecSessionProgress } from "@/components/exec/exec-terminal-progre
 import { useMyAgentRun } from "@/lib/agent-runtime.query";
 import websocketService from "@/lib/websocket/websocket";
 
-/** Shared tmux terminal for Agent detail and Chat run sessions. */
+/** Shared terminal for Agent detail and Chat run sessions. */
 export function AgentRunTerminal({
   taskId,
   active,
@@ -65,13 +65,36 @@ export function AgentRunTerminal({
 }
 
 export function createAgentRunTransport(taskId: string): ExecSessionTransport {
+  let currentSession: { ready: boolean; subscribed: boolean } | null = null;
   return {
     open: (handlers) => {
+      const session = { ready: false, subscribed: false };
+      currentSession = session;
+      const openSession = () => {
+        if (
+          currentSession !== session ||
+          session.subscribed ||
+          !websocketService.isReady()
+        )
+          return;
+        session.ready = false;
+        session.subscribed = websocketService.sendIfConnected({
+          type: "subscribe_agent_run_attach",
+          payload: { runId: taskId },
+        });
+      };
       const subscriptions = [
+        websocketService.subscribe("websocket_ready", openSession),
         websocketService.subscribe(
           "agent_run_attach_started",
           (message: AgentRunAttachStartedMessage) => {
-            if (message.payload.runId === taskId) {
+            if (
+              currentSession === session &&
+              session.subscribed &&
+              websocketService.isReady() &&
+              message.payload.runId === taskId
+            ) {
+              session.ready = true;
               handlers.onStarted(message.payload.command);
             }
           },
@@ -79,7 +102,11 @@ export function createAgentRunTransport(taskId: string): ExecSessionTransport {
         websocketService.subscribe(
           "agent_run_attach_progress",
           (message: AgentRunAttachProgressMessage) => {
-            if (message.payload.runId === taskId) {
+            if (
+              currentSession === session &&
+              message.payload.runId === taskId
+            ) {
+              session.ready = false;
               handlers.onProgress?.({
                 phase: message.payload.phase,
                 message: message.payload.message,
@@ -92,7 +119,10 @@ export function createAgentRunTransport(taskId: string): ExecSessionTransport {
         websocketService.subscribe(
           "agent_run_attach_output",
           (message: AgentRunAttachOutputMessage) => {
-            if (message.payload.runId === taskId) {
+            if (
+              currentSession === session &&
+              message.payload.runId === taskId
+            ) {
               handlers.onOutput(message.payload.data);
             }
           },
@@ -100,7 +130,11 @@ export function createAgentRunTransport(taskId: string): ExecSessionTransport {
         websocketService.subscribe(
           "agent_run_attach_error",
           (message: AgentRunAttachErrorMessage) => {
-            if (message.payload.runId === taskId) {
+            if (
+              currentSession === session &&
+              message.payload.runId === taskId
+            ) {
+              session.ready = false;
               handlers.onError(message.payload.error);
             }
           },
@@ -108,46 +142,63 @@ export function createAgentRunTransport(taskId: string): ExecSessionTransport {
         websocketService.subscribe(
           "agent_run_attach_closed",
           (message: AgentRunAttachClosedMessage) => {
-            if (message.payload.runId === taskId) {
+            if (
+              currentSession === session &&
+              message.payload.runId === taskId
+            ) {
+              session.ready = false;
               handlers.onClosed(message.payload.reason ?? null);
             }
           },
         ),
       ];
-      const openSession = () =>
-        websocketService.send({
-          type: "subscribe_agent_run_attach",
-          payload: { runId: taskId },
-        });
       const unsubscribeConnection = websocketService.onConnectionChange(
         (connected) => {
-          if (connected) openSession();
+          if (currentSession !== session) return;
+          session.ready = false;
+          session.subscribed = false;
+          if (!connected) {
+            handlers.onProgress?.({
+              phase: "attaching",
+              message: "Reconnecting to terminal",
+              detail: null,
+              resourceName: null,
+            });
+          }
         },
       );
-      if (websocketService.isConnected()) {
+      if (websocketService.isReady()) {
         openSession();
       } else {
         void websocketService.connect();
       }
       return () => {
+        session.ready = false;
         unsubscribeConnection();
         for (const unsubscribe of subscriptions) unsubscribe();
-        websocketService.send({
-          type: "unsubscribe_agent_run_attach",
-          payload: { runId: taskId },
-        });
+        if (currentSession === session) {
+          currentSession = null;
+          websocketService.sendIfConnected({
+            type: "unsubscribe_agent_run_attach",
+            payload: { runId: taskId },
+          });
+        }
       };
     },
-    sendInput: (data) =>
-      websocketService.send({
+    sendInput: (data) => {
+      if (!currentSession?.ready || !websocketService.isConnected()) return;
+      websocketService.sendIfConnected({
         type: "agent_run_attach_input",
         payload: { runId: taskId, data },
-      }),
-    sendResize: (cols, rows) =>
-      websocketService.send({
+      });
+    },
+    sendResize: (cols, rows) => {
+      if (!currentSession?.ready || !websocketService.isConnected()) return;
+      websocketService.sendIfConnected({
         type: "agent_run_attach_resize",
         payload: { runId: taskId, cols, rows },
-      }),
+      });
+    },
   };
 }
 

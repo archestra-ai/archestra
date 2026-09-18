@@ -327,6 +327,8 @@ COPY --from=deps /app/shared/node_modules ./shared/node_modules
 COPY turbo.json ./
 COPY patches ./patches
 COPY backend ./backend
+# The backend embeds these image-side runtime sources into workspace bootstrap scripts.
+COPY agent_images/runtime ./agent_images/runtime
 COPY frontend ./frontend
 COPY shared ./shared
 

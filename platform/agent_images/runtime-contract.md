@@ -7,8 +7,8 @@ This reference is for custom image authors. For maintained image targets and bui
 | Requirement | Contract |
 | --- | --- |
 | Shell | `/bin/sh` must exist. Archestra uses it for the bootstrap and configured command. |
-| Live terminal | `tmux` must be on `PATH`. The process runs in one tmux session so the run can accept terminal input and a user can attach from the Runs tab. |
-| Input attention | Set the tmux user option `@archestra_attention` to `1` when the client needs input. Set `@archestra_attention_label` to a short reason, such as `Permission needed`. Clear both options when work resumes. |
+| Live terminal | Provide `tmux` on `PATH`, or implement the versioned terminal driver below. Archestra installs a runtime facade that controls the selected driver. |
+| Input attention | The maintained `archestra-agent-attention set 'Permission needed'` helper reports required input. Call `archestra-agent-attention clear` when work resumes. Terminal presentation goes through the facade. |
 | Command | Set **Command** and **Arguments** to the executable and arguments for the Agent client. If Command is blank, `archestra-runtime-agent` must be on `PATH`. |
 | Initialization | An optional `archestra-agent-init` executable is called immediately before the Agent command. Use it for runtime-only setup such as Git credential configuration. |
 | Output | Write progress and the final result to stdout or stderr. Archestra streams and retains that output as the run log. Do not print credentials. |
@@ -16,6 +16,16 @@ This reference is for custom image authors. For maintained image targets and bui
 | Storage | `/home/node` and `/var/run/archestra` are persisted on a workspace PVC. Privileged runtimes also persist `/var/lib/docker` there. Other container paths are ephemeral. Export final deliverables before the workspace's retention deadline. |
 
 The initial task is supplied in `ARCHESTRA_AGENT_RUNTIME_TASK`. The Agent system prompt is supplied in `ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT`. A custom client decides how to combine them. It should read `ARCHESTRA_AGENT_RUNTIME_MODE`: `interactive` means expose its input loop and remain available for follow-ups, while `one_shot` means finish the supplied task and exit. Images that support only unattended work can ignore interactive mode, but they will not provide a useful Chat terminal.
+
+## Runtime Facade And Terminal Driver
+
+The control plane installs `/var/run/archestra/runtime`. Its `describe` command returns `archestra-image-runtime-v1`. The supervisor and execution provider use this common command interface; Kubernetes framing stays inside the provider. The runtime is a command dispatcher, while the supervisor owns managed turn ordering and completion.
+
+To add or select a terminal implementation, use the [terminal driver contract](runtime/README.md). An image selects its executable with `/etc/archestra/terminal-driver`. The executable implements terminal process and viewer operations; task IDs, retained metadata and idle/reset policy remain in the common runtime. The bundled tmux adapter preserves existing images.
+
+Native harness helpers call `archestra-terminal-client` for capture, geometry, retention and attention. An isolated compatibility bridge supports older image helpers that still write tmux options. New drivers do not need to reproduce those options.
+
+The facade preserves `initialize`, `reset`, `launch SCRIPT`, `retained [TASK]`, `attention [FLAG LABEL]`, `submit-fifo MESSAGE`, `cancel TASK` and `read-result TASK`, alongside the terminal operations. A completed task and a retained interactive process have separate lifetimes. The supervisor publishes final transcript data before the result becomes visible; terminal idleness, detachment and attention never establish task success.
 
 ## Failure Reasons
 
@@ -112,7 +122,7 @@ Files attached to initial runs or API/A2A follow-ups are staged before the Agent
 
 The files are task inputs, not shell keystrokes and not model-provider attachments. The Agent reads them from disk with its normal file or shell tools. Kubernetes holds the Agent entrypoint until every file and the manifest have been written. If the control plane restarts during staging, reconciliation finishes the same durable inputs before releasing the command.
 
-For **Turn boundary** steering, read newline-delimited messages from the FIFO at `ARCHESTRA_AGENT_RUNTIME_STEER_FIFO` and consume them only between model turns. For **Terminal input**, Archestra sends keystrokes to the tmux session; the process must expose an interactive input loop. A custom client that supports neither mode can still run one-shot tasks, but cannot accept useful follow-up instructions.
+For **Turn boundary** steering, read newline-delimited messages from the FIFO at `ARCHESTRA_AGENT_RUNTIME_STEER_FIFO` and consume them only between model turns. For **Terminal input**, Archestra submits literal input through the selected terminal driver; the process must expose an interactive input loop. The saved `tmux_keys` setting remains compatible with this delivery mode. A custom client that supports neither mode can still run one-shot tasks, but cannot accept useful follow-up instructions.
 
 ## Runtime Environment
 

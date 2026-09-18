@@ -17,12 +17,14 @@ class WebSocketService {
     new Map();
   private connectionHandlers: Set<ConnectionHandler> = new Set();
   private reconnectTimeout: NodeJS.Timeout | null = null;
+  private connectionTimeout: NodeJS.Timeout | null = null;
   private reconnectAttempts = 0;
   private maxReconnectAttempts = Infinity;
   private reconnectDelay = 1000; // Start with 1 second
   private maxReconnectDelay = 30000; // Max 30 seconds
   private isManuallyDisconnected = false;
   private isConnecting = false;
+  private serverReady = false;
   private pendingMessages: ClientWebSocketMessage[] = [];
 
   async connect(): Promise<void> {
@@ -36,11 +38,15 @@ class WebSocketService {
 
     this.isManuallyDisconnected = false;
     this.isConnecting = true;
+    this.serverReady = false;
 
     try {
-      this.ws = new WebSocket(config.websocket.url);
+      const socket = new WebSocket(config.websocket.url);
+      this.ws = socket;
 
-      this.ws.addEventListener("open", () => {
+      socket.addEventListener("open", () => {
+        if (this.ws !== socket) return;
+        this.clearConnectionTimeout();
         this.isConnecting = false;
         this.reconnectAttempts = 0;
         this.reconnectDelay = 1000;
@@ -48,33 +54,51 @@ class WebSocketService {
         this.notifyConnectionHandlers(true);
       });
 
-      // this.ws.addEventListener("error", (_error) => {});
-
-      this.ws.addEventListener("message", (event) => {
+      socket.addEventListener("message", (event) => {
+        if (this.ws !== socket) return;
         try {
           const message: WebSocketMessage = JSON.parse(event.data);
+          if (message.type === "websocket_ready") this.serverReady = true;
           this.handleMessage(message);
         } catch (error) {
           console.error("[WebSocket] Failed to parse message:", error);
         }
       });
 
-      this.ws.addEventListener("close", () => {
-        this.ws = null;
-        this.isConnecting = false;
-        this.notifyConnectionHandlers(false);
+      socket.addEventListener("close", () => this.connectionClosed(socket));
 
-        // Attempt to reconnect unless manually disconnected
-        if (!this.isManuallyDisconnected) {
-          this.scheduleReconnect();
+      this.connectionTimeout = setTimeout(() => {
+        if (this.ws !== socket || socket.readyState !== WebSocket.CONNECTING) {
+          return;
         }
-      });
+        // A proxy can leave a handshake pending without ever emitting close.
+        // Retire it first so retries do not depend on that event arriving.
+        this.connectionClosed(socket);
+        socket.close();
+      }, 10_000);
     } catch (error) {
       this.isConnecting = false;
       console.error("[WebSocket] Connection failed:", error);
       this.notifyConnectionHandlers(false);
       this.scheduleReconnect();
     }
+  }
+
+  private clearConnectionTimeout(): void {
+    if (this.connectionTimeout) {
+      clearTimeout(this.connectionTimeout);
+      this.connectionTimeout = null;
+    }
+  }
+
+  private connectionClosed(socket: WebSocket): void {
+    if (this.ws !== socket) return;
+    this.clearConnectionTimeout();
+    this.ws = null;
+    this.isConnecting = false;
+    this.serverReady = false;
+    this.notifyConnectionHandlers(false);
+    if (!this.isManuallyDisconnected) this.scheduleReconnect();
   }
 
   private scheduleReconnect(): void {
@@ -101,15 +125,20 @@ class WebSocketService {
   disconnect(): void {
     this.isManuallyDisconnected = true;
     this.pendingMessages = [];
+    this.clearConnectionTimeout();
 
     if (this.reconnectTimeout) {
       clearTimeout(this.reconnectTimeout);
       this.reconnectTimeout = null;
     }
 
-    if (this.ws) {
-      this.ws.close();
-      this.ws = null;
+    const socket = this.ws;
+    this.ws = null;
+    this.isConnecting = false;
+    this.serverReady = false;
+    if (socket) {
+      this.notifyConnectionHandlers(false);
+      socket.close();
     }
   }
 
@@ -168,6 +197,23 @@ class WebSocketService {
 
   isConnected(): boolean {
     return this.ws?.readyState === WebSocket.OPEN;
+  }
+
+  /** The backend has authenticated this connection and can accept subscriptions. */
+  isReady(): boolean {
+    return this.isConnected() && this.serverReady;
+  }
+
+  /** Send only on the current socket, without queueing or replaying on reconnect. */
+  sendIfConnected(message: ClientWebSocketMessage): boolean {
+    const socket = this.ws;
+    if (socket?.readyState !== WebSocket.OPEN) return false;
+    try {
+      socket.send(JSON.stringify(message));
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   private sendNow(message: ClientWebSocketMessage): void {

@@ -1,4 +1,5 @@
 import { EventEmitter } from "node:events";
+import type { PassThrough } from "node:stream";
 import type { ClientWebSocketMessage } from "@archestra/shared";
 import { vi } from "vitest";
 import { WebSocket as WS } from "ws";
@@ -27,7 +28,7 @@ function deferredAttachment(params: AttachParams) {
     reject = rej;
   });
   const socket = Object.assign(new EventEmitter(), {
-    readyState: WS.OPEN,
+    readyState: WS.OPEN as number,
     close: vi.fn(),
     send: vi.fn(),
   });
@@ -151,6 +152,20 @@ describe("websocket Agent run attach ownership", () => {
     );
     expect(old.input).toEqual([]);
     expect(current.input).toEqual(["hello"]);
+    await service.handleMessage(
+      {
+        type: "agent_run_attach_resize",
+        payload: { runId, cols: 132, rows: 43 },
+      },
+      ws,
+    );
+    expect(old.socket.send).not.toHaveBeenCalled();
+    const [frame] = current.socket.send.mock.calls[0];
+    expect(frame[0]).toBe(4);
+    expect(JSON.parse(frame.subarray(1).toString())).toEqual({
+      Width: 132,
+      Height: 43,
+    });
     current.params.stdout.write("hello");
     expect(messages().at(-1)).toEqual({
       type: "agent_run_attach_output",
@@ -206,8 +221,110 @@ describe("websocket Agent run attach ownership", () => {
     });
     old.params.onStatus?.({ status: "Failure", message: "old failure" });
     old.params.stdout.emit("data", Buffer.from("old output"));
+    old.socket.emit("error", new Error("old connection failure"));
     old.socket.emit("close");
     expect(send).not.toHaveBeenCalled();
     expect(current.socket.close).not.toHaveBeenCalled();
+  });
+
+  test("reports a live channel error and detaches only that viewer", async () => {
+    const attachment = await startAttach();
+    attachment.resolve();
+    await attachment.done;
+    send.mockClear();
+
+    attachment.socket.emit("error", new Error("connection interrupted"));
+    attachment.socket.emit("close");
+    expect(messages()).toEqual([
+      {
+        type: "agent_run_attach_error",
+        payload: { runId, error: "connection interrupted" },
+      },
+    ]);
+    expect(attachment.socket.close).toHaveBeenCalledOnce();
+    expect(attachment.params.stdin.destroyed).toBe(true);
+    expect(attachment.params.stdout.destroyed).toBe(true);
+    expect(attachment.params.stderr.destroyed).toBe(true);
+  });
+
+  test("reports closure when the transport has already closed as attach resolves", async () => {
+    const attachment = await startAttach();
+    attachment.params.stdout.write("last output");
+    attachment.socket.readyState = WS.CLOSED;
+    attachment.resolve();
+    await attachment.done;
+    await Promise.resolve();
+
+    expect(messages().map(({ type }) => type)).toEqual([
+      "agent_run_attach_started",
+      "agent_run_attach_output",
+      "agent_run_attach_closed",
+    ]);
+    expect(messages()[1].payload.data).toBe("last output");
+    expect(attachment.params.stdin.destroyed).toBe(true);
+    expect(attachment.socket.close).not.toHaveBeenCalled();
+  });
+
+  test("preserves split UTF-8 per output stream and flushes incomplete bytes before closure", async () => {
+    const attachment = await startAttach();
+    attachment.resolve();
+    await attachment.done;
+    send.mockClear();
+    const stdout = Buffer.from("🌍");
+    const stderr = Buffer.from("é");
+    attachment.params.stdout.write(stdout.subarray(0, 2));
+    attachment.params.stderr.write(stderr.subarray(0, 1));
+    expect(send).not.toHaveBeenCalled();
+    attachment.params.stdout.write(stdout.subarray(2));
+    attachment.params.stderr.write(stderr.subarray(1));
+    attachment.params.stdout.write(Buffer.from([0xe2]));
+    attachment.socket.emit("close");
+    expect(messages()).toEqual([
+      { type: "agent_run_attach_output", payload: { runId, data: "🌍" } },
+      { type: "agent_run_attach_output", payload: { runId, data: "é" } },
+      { type: "agent_run_attach_output", payload: { runId, data: "�" } },
+      { type: "agent_run_attach_closed", payload: { runId } },
+    ]);
+  });
+
+  test("releases backpressure on detach without a late drain resuming its replacement", async () => {
+    const pause = vi.fn();
+    const resume = vi.fn();
+    Object.assign(ws, { _socket: { pause, resume } });
+    const old = await startAttach();
+    old.resolve();
+    await old.done;
+    vi.spyOn(old.params.stdin as PassThrough, "write").mockReturnValue(false);
+    await service.handleMessage(
+      {
+        type: "agent_run_attach_input",
+        payload: { runId, data: "first input" },
+      },
+      ws,
+    );
+    expect(pause).toHaveBeenCalledOnce();
+    expect(resume).not.toHaveBeenCalled();
+
+    const current = await startAttach();
+    expect(resume).toHaveBeenCalledOnce();
+    expect(old.params.stdin.listenerCount("drain")).toBe(0);
+    current.resolve();
+    await current.done;
+    expect(current.input).toEqual([]);
+    vi.spyOn(current.params.stdin as PassThrough, "write").mockReturnValue(
+      false,
+    );
+    await service.handleMessage(
+      {
+        type: "agent_run_attach_input",
+        payload: { runId, data: "second input" },
+      },
+      ws,
+    );
+    expect(pause).toHaveBeenCalledTimes(2);
+    old.params.stdin.emit("drain");
+    expect(resume).toHaveBeenCalledOnce();
+    current.params.stdin.emit("drain");
+    expect(resume).toHaveBeenCalledTimes(2);
   });
 });

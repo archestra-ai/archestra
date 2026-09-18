@@ -1,15 +1,12 @@
-import { spawnSync } from "node:child_process";
-import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { runInContainer, sandboxImage } from "@/test/agent-runtime/docker";
 import { buildSandboxSupervisorScript } from "./sandbox-supervisor";
 
 // This exercises real tmux, process exit and Pod replacement semantics. Enable
 // explicitly where Docker and a maintained runtime image are available.
-describe.skipIf(!process.env.ARCHESTRA_TEST_SANDBOX_IMAGE)(
-  "sandbox supervisor",
-  () => {
-    it("keeps the same CLI and tmux contents interactive after completing a turn", () => {
-      const result = runInContainer(`
+describe.skipIf(!sandboxImage)("sandbox supervisor", () => {
+  it("keeps the same CLI and terminal contents interactive after completing a turn", () => {
+    const result = runWithSupervisor(`
 mkdir -p /var/run/archestra/turns
 cat > /tmp/interactive.py <<'PYTHON'
 import os
@@ -26,66 +23,37 @@ PYTHON
 printf 'archestra-tui-run /tmp/done /tmp/answer python3 /tmp/interactive.py\\n' > /var/run/archestra/turns/1.request
 wait_for /var/run/archestra/turns/1.exit
 test "$(cat /var/run/archestra/turns/1.exit)" = 0
-test "$(tmux display-message -p -t agent '#{pane_dead}:#{@archestra_retained_task}')" = '0:1'
-tmux capture-pane -p -t agent | grep -q 'First answer'
-tmux send-keys -t agent 'hello again' Enter
+test "$(/var/run/archestra/runtime retained)" = '1'
+/var/run/archestra/runtime capture | grep -q 'First answer'
+/var/run/archestra/runtime submit 'hello again'
 wait_for /tmp/followup-pid
 test "$(cat /tmp/original-pid)" = "$(cat /tmp/followup-pid)"
-tmux capture-pane -p -t agent | grep -q 'Follow-up: hello again'
+/var/run/archestra/runtime capture | grep -q 'Follow-up: hello again'
 printf 'echo next-turn\\n' > /var/run/archestra/turns/2.request
 wait_for /var/run/archestra/turns/2.exit
-! kill -0 "$(cat /tmp/original-pid)" 2>/dev/null
-test "$(tmux show-option -v -t agent @archestra_retained_task)" = ''
+assert_fails 1 kill -0 "$(cat /tmp/original-pid)" 2>/dev/null
+test "$(/var/run/archestra/runtime retained)" = ''
 echo VERIFIED
 `);
-      expect(result.status, result.stderr).toBe(0);
-      expect(result.stdout).toContain("VERIFIED");
-    }, 30_000);
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain("VERIFIED");
+  }, 30_000);
 
-    it("records terminal input and detachment without treating daemon output as activity", () => {
-      const result = runInContainer(`
-python3 - <<'PY'
-import os, pty, subprocess, time
-pid, terminal = pty.fork()
-if pid == 0:
-    os.environ["TERM"] = "xterm-256color"
-    os.execvp("tmux", ["tmux", "attach", "-t", "agent"])
-def activity():
-    try:
-        return int(open("/var/run/archestra/development-activity").read())
-    except (FileNotFoundError, ValueError):
-        return 0
-def until(check):
-    for _ in range(50):
-        if check(): return
-        time.sleep(.1)
-    raise AssertionError("development activity was not recorded")
-until(lambda: activity() > 0)
-initial = activity()
-subprocess.run(["tmux", "respawn-pane", "-k", "-t", "agent", "while :; do echo daemon-output; sleep 1; done"], check=True)
-time.sleep(2)
-assert activity() == initial, "daemon output refreshed idle retention"
-os.write(terminal, b"hello")
-until(lambda: activity() > initial)
-typed = activity()
-time.sleep(1.1)
-os.write(terminal, bytes([2]) + b"d")
-until(lambda: activity() > typed)
-os.waitpid(pid, 0)
-os.close(terminal)
-PY
+  it("records terminal input and detachment without treating daemon output as activity", () => {
+    const result = runWithSupervisor(`
+python3 /tmp/runtime-fixtures/supervisor-activity.py
 echo VERIFIED
 `);
-      expect(result.status, result.stderr).toBe(0);
-      expect(result.stdout).toContain("VERIFIED");
-    }, 30_000);
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain("VERIFIED");
+  }, 30_000);
 
-    it("stops a turn without removing saved work and accepts a follow-up", () => {
-      const result = runInContainer(`
+  it("stops a turn without removing saved work and accepts a follow-up", () => {
+    const result = runWithSupervisor(`
 mkdir -p /var/run/archestra/turns
 printf 'printf first > /var/run/archestra/result; touch /var/run/archestra/ready; sleep 60; touch /var/run/archestra/unwanted\\n' > /var/run/archestra/turns/1.request
 wait_for /var/run/archestra/ready
-touch /var/run/archestra/turns/1.cancel
+/var/run/archestra/runtime cancel 1
 wait_for /var/run/archestra/turns/1.exit
 test "$(cat /var/run/archestra/turns/1.exit)" = 130
 test "$(cat /var/run/archestra/result)" = first
@@ -101,12 +69,12 @@ test ! -f /var/run/archestra/unwanted
 kill -0 "$supervisor"
 echo VERIFIED
 `);
-      expect(result.status, result.stderr).toBe(0);
-      expect(result.stdout).toContain("VERIFIED");
-    }, 30_000);
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain("VERIFIED");
+  }, 30_000);
 
-    it("retains the workspace after completion and accepts a second turn", () => {
-      const result = runInContainer(`
+  it("retains the workspace after completion and accepts a second turn", () => {
+    const result = runWithSupervisor(`
 mkdir -p /var/run/archestra/turns
 printf 'printf first > /var/run/archestra/result; echo first-output\n' > /var/run/archestra/turns/1.request
 wait_for /var/run/archestra/turns/1.exit
@@ -118,17 +86,17 @@ wait_for /var/run/archestra/turns/2.exit
 test "$(cat /var/run/archestra/result)" = firstsecond
 grep -q first-output /var/run/archestra/turns/1.log
 grep -q second-output /var/run/archestra/turns/2.log
-! grep -q first-output /var/run/archestra/turns/2.log
-! grep -q second-output /var/run/archestra/turns/1.log
+assert_fails 1 grep -q first-output /var/run/archestra/turns/2.log
+assert_fails 1 grep -q second-output /var/run/archestra/turns/1.log
 kill -0 "$supervisor"
 echo VERIFIED
 `);
-      expect(result.status, result.stderr).toBe(0);
-      expect(result.stdout).toContain("VERIFIED");
-    }, 30_000);
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain("VERIFIED");
+  }, 30_000);
 
-    it("fails an interrupted request without replaying its side effects", () => {
-      const result = runInContainer(`
+  it("fails an interrupted request without replaying its side effects", () => {
+    const result = runWithSupervisor(`
 mkdir -p /var/run/archestra/turns
 touch /var/run/archestra/turns/1.started
 printf 'touch /var/run/archestra/replayed\n' > /var/run/archestra/turns/1.request
@@ -137,55 +105,24 @@ test "$(cat /var/run/archestra/turns/1.exit)" = 75
 test ! -f /var/run/archestra/replayed
 echo VERIFIED
 `);
-      expect(result.status, result.stderr).toBe(0);
-      expect(result.stdout).toContain("VERIFIED");
-    }, 30_000);
-  },
-);
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain("VERIFIED");
+  }, 30_000);
+});
 
-function runInContainer(assertions: string) {
-  return spawnSync(
-    "docker",
-    [
-      "run",
-      "--rm",
-      "-i",
-      "--network=none",
-      "-v",
-      `${path.resolve("../agent_images/bin")}:/usr/local/bin:ro`,
-      "--entrypoint=/bin/sh",
-      process.env.ARCHESTRA_TEST_SANDBOX_IMAGE ?? "",
-      "-s",
-    ],
-    {
-      encoding: "utf8",
-      timeout: 25_000,
-      input: `set -eu
-cat > /tmp/supervisor.sh <<'SUPERVISOR'
+function runWithSupervisor(assertions: string) {
+  return runInContainer(
+    `cat > /tmp/supervisor.sh <<'SUPERVISOR'
 ${buildSandboxSupervisorScript()}
 SUPERVISOR
 /bin/sh /tmp/supervisor.sh &
 supervisor=$!
 trap 'kill "$supervisor" 2>/dev/null || true' EXIT
-wait_for() {
-  attempt=0
-  while [ ! -f "$1" ]; do
-    attempt=$((attempt + 1))
-    [ "$attempt" -lt 100 ] || exit 99
-    sleep 0.1
-  done
-}
-wait_for_absent() {
-  attempt=0
-  while [ -f "$1" ]; do
-    attempt=$((attempt + 1))
-    [ "$attempt" -lt 100 ] || exit 99
-    sleep 0.1
-  done
-}
-set -x
-${assertions}
-`,
-    },
+attempt=0
+until /var/run/archestra/runtime ready 2>/dev/null; do
+  attempt=$((attempt + 1)); [ "$attempt" -lt 100 ] || exit 99; sleep 0.1
+done
+${assertions}`,
+    { mountImageHelpers: true },
   );
 }

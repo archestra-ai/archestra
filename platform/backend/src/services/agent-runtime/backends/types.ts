@@ -1,6 +1,5 @@
 import type { Readable, Writable } from "node:stream";
 import type { AgentRunAttachPhase } from "@archestra/shared";
-import type WebSocket from "ws";
 import type {
   AgentRunInput,
   AgentRunRecord,
@@ -251,5 +250,15 @@ export interface AgentRunAttachment {
   command: string;
   /** Backend-native resource identifier, useful for diagnostics only. */
   resourceName: string;
-  socket: WebSocket;
+  channel: TerminalChannel;
+}
+
+/** Controls an attachment; terminal bytes flow through the attach streams. */
+export interface TerminalChannel {
+  resize(size: { cols: number; rows: number }): void;
+  /** Disconnect this viewer without stopping the underlying Agent. */
+  detach(): void;
+  /** Previously observed closure is delivered asynchronously. Returns an unsubscribe. */
+  onClose(listener: () => void): () => void;
+  onError(listener: (error: Error) => void): () => void;
 }

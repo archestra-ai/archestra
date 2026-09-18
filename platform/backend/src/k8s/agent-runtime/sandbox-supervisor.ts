@@ -1,3 +1,5 @@
+import { buildImageRuntimeInstallScript } from "@/services/agent-runtime/image-runtime/bootstrap";
+import { AGENT_IMAGE_RUNTIME } from "@/services/agent-runtime/image-runtime/contract";
 import {
   AGENT_RUNTIME_READABLE_TRANSCRIPT_FILE,
   AGENT_RUNTIME_READABLE_TRANSCRIPT_MAX_BYTES,
@@ -13,20 +15,15 @@ export function buildSandboxSupervisorScript(): string {
 umask 077
 root=/var/run/archestra
 mkdir -p "$root/turns"
-command -v tmux >/dev/null 2>&1 || { echo 'Agent Runtime requires tmux' >&2; exit 78; }
-trap 'tmux kill-server 2>/dev/null || true; exit 0' TERM INT
-
-tmux new-session -d -x 120 -y 40 -s agent 'while :; do sleep 1; done'
-tmux set-option -t agent mouse on
-tmux set-option -t agent remain-on-exit on
-tmux set-option -t agent @archestra_attention 0
-tmux set-option -t agent status-left '#{?#{==:#{@archestra_attention},1},#[fg=yellow,bold]#{@archestra_attention_label}#[default] ,}[#S] '
-tmux set-hook -g client-detached 'run-shell "date +%s > /var/run/archestra/development-activity"'
+${buildImageRuntimeInstallScript({ activate: true })}
+runtime=${AGENT_IMAGE_RUNTIME}
+trap '"$runtime" stop 2>/dev/null || true; exit 0' TERM INT
+"$runtime" initialize
 
 while :; do
   # Record human input, not pane output: a logging daemon must not keep an idle
   # workspace alive. Persist it so detached clients still count at reaping time.
-  activity="$(tmux list-clients -F '#{client_activity}' 2>/dev/null | sort -nr | head -1)"
+  activity="$("$runtime" activity)"
   case "$activity" in
     ''|*[!0-9]*) ;;
     *)
@@ -53,26 +50,24 @@ while :; do
     fi
     touch "$turn.started"
     touch "$turn.log"
-    tmux set-option -t agent @archestra_retained_task ""
-    tmux respawn-pane -k -t agent 'while :; do sleep 1; done'
-    tmux pipe-pane -t agent
-    tmux pipe-pane -t agent "tee -a '$turn.log' >> /proc/1/fd/1"
+    "$runtime" reset
+    "$runtime" start-recording "$turn.log"
     rm -f ${AGENT_RUNTIME_READABLE_TRANSCRIPT_FILE}
     printf '%s\n' "touch '$turn.running'; export ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX='$turn'; /bin/sh '$request'; status=\$?; sleep 2; printf '%s\\n' \"\$status\" > '$turn.result.tmp'; mv '$turn.result.tmp' '$turn.result'; exit \"\$status\"" > "$turn.session"
-    tmux respawn-pane -k -t agent "/bin/sh '$turn.session'"
+    "$runtime" launch "$turn.session"
     startup_polls=0
     dead_polls=0
     while [ ! -f "$turn.result" ]; do
       if [ -f "$turn.cancel" ]; then
-        tmux respawn-pane -k -t agent 'while :; do sleep 1; done'
+        "$runtime" reset
         printf '130\n' > "$turn.result.tmp"
         mv "$turn.result.tmp" "$turn.result"
         break
       fi
       # A crashed pane must fail the turn rather than leave it working forever.
-      # tmux may still report the previous dead process just after respawn.
+      # A driver may still report the previous process just after launch.
       startup_polls=$((startup_polls + 1))
-      if { [ -f "$turn.running" ] || [ "$startup_polls" -ge 30 ]; } && [ "$(tmux display-message -p -t agent '#{pane_dead}' 2>/dev/null || echo 1)" = 1 ]; then
+      if { [ -f "$turn.running" ] || [ "$startup_polls" -ge 30 ]; } && ! "$runtime" alive; then
         dead_polls=$((dead_polls + 1))
         if [ "$dead_polls" -ge 3 ] && [ ! -f "$turn.result" ]; then
           printf '75\n' > "$turn.result.tmp"

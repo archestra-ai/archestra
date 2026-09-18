@@ -80,7 +80,7 @@ function partitionTestFiles(): { mocked: string[]; clean: string[] } {
 const testFiles = partitionTestFiles();
 
 export default defineConfig({
-  plugins: [rawPythonPlugin()],
+  plugins: [rawRuntimeAssetPlugin()],
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
@@ -197,12 +197,12 @@ export default defineConfig({
   },
 });
 
-function rawPythonPlugin() {
+function rawRuntimeAssetPlugin() {
   return {
-    name: "raw-python",
+    name: "raw-runtime-asset",
     enforce: "pre" as const,
     async load(id: string) {
-      if (!id.endsWith(".py")) return null;
+      if (!id.endsWith(".py") && !id.endsWith(".sh")) return null;
       const source = await readFile(id, "utf-8");
       return `export default ${JSON.stringify(source)};`;
     },

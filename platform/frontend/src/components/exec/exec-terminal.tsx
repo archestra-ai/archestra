@@ -125,11 +125,11 @@ export function ExecTerminal({
   const fitAddonRef = useRef<import("@xterm/addon-fit").FitAddon | null>(null);
   const [status, setStatus] = useState<ConnectionStatus>("idle");
   const [progress, setProgress] = useState<ExecSessionProgress | null>(null);
-  /**
-   * When the current attach began. Reset per attempt so a reconnect's elapsed
-   * counter starts from that attempt, not from when the page was opened.
-   */
+  /** Initial attach time when no persisted startup timestamp is available. */
   const [connectingSince, setConnectingSince] = useState(() => Date.now());
+  const [reconnectingSince, setReconnectingSince] = useState<number | null>(
+    null,
+  );
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [closedReason, setClosedReason] = useState<string | null>(null);
   const [command, setCommand] = useState<string | null>(null);
@@ -188,7 +188,7 @@ export function ExecTerminal({
 
       // FitAddon can resize xterm for reasons other than an element resize
       // (font metrics settling is the common one). Drive the remote PTY from
-      // xterm's authoritative dimensions so tmux can never remain at a stale
+      // xterm's authoritative dimensions so the remote PTY cannot keep a stale
       // width while the browser terminal has already expanded.
       terminal.onResize(({ cols, rows }) => {
         if (!disposed && isUsableTerminalDimensions({ cols, rows })) {
@@ -202,6 +202,7 @@ export function ExecTerminal({
 
       let closeSession: (() => void) | undefined;
       let layoutReady = false;
+      let connected = false;
 
       const fitAndOpenSession = () => {
         if (disposed || closeSession) return;
@@ -217,19 +218,26 @@ export function ExecTerminal({
         hasTransportProgressRef.current = false;
         setProgress(initialProgressRef.current);
         setConnectingSince(Date.now());
+        setReconnectingSince(null);
         setErrorMessage(null);
 
         // Do not subscribe until the terminal has a real grid. Otherwise the
-        // first tmux frame can arrive at a transient 1-column tab width and
+        // first frame can arrive at a transient 1-column tab width and
         // remain scrambled in scrollback after the panel finishes laying out.
         closeSession = transportRef.current.open({
           onProgress: (sessionProgress) => {
             if (disposed) return;
+            if (connected) {
+              connected = false;
+              setReconnectingSince(Date.now());
+            }
+            setStatus("connecting");
             hasTransportProgressRef.current = true;
             setProgress(sessionProgress);
           },
           onStarted: (startedCommand) => {
             if (disposed) return;
+            connected = true;
             setStatus("connected");
             setProgress(null);
             setCommand(startedCommand);
@@ -244,8 +252,7 @@ export function ExecTerminal({
           },
           onOutput: (data) => {
             if (disposed) return;
-            const output = withoutTmuxExitNotice(data);
-            if (output) terminal.write(output);
+            terminal.write(data);
           },
           onError: (message) => {
             if (disposed) return;
@@ -340,7 +347,9 @@ export function ExecTerminal({
             (progress ? (
               <ExecTerminalProgress
                 progress={progress}
-                startedAt={progressStartedAt ?? connectingSince}
+                startedAt={
+                  reconnectingSince ?? progressStartedAt ?? connectingSince
+                }
               />
             ) : (
               <ExecTerminalStatus
@@ -416,11 +425,10 @@ export function ExecTerminal({
   );
 }
 
-// A TUI can ask the outer terminal for all mouse motion (DECSET 1003). tmux
-// forwards those SGR reports to the pane, but some Claude Code render states
-// stop consuming no-button hover events and insert them into the prompt as
-// visible `^[[<35;...M` text. Hover has no useful terminal action, so drop only
-// motion reports whose low button bits mean "no button". Clicks, button drags,
+// A TUI can ask the outer terminal for all mouse motion (DECSET 1003). Some
+// Claude Code render states stop consuming no-button hover events and insert
+// them into the prompt as visible `^[[<35;...M` text. Drop only motion reports
+// whose low button bits mean "no button". Clicks, button drags,
 // wheel events, and ordinary keyboard input continue to the remote PTY.
 function normalizeTerminalInput(data: string): string {
   return data.replace(SGR_MOUSE_REPORT_PATTERN, (report, encodedButton) => {
@@ -429,39 +437,15 @@ function normalizeTerminalInput(data: string): string {
     const hasNoButton = (button & 3) === 3;
     if (isMotion && hasNoButton) return "";
 
-    // tmux owns scrolling while a TUI has mouse reporting enabled. One report
-    // per browser wheel tick makes its copy-mode history feel much slower than
-    // the rest of the app, so give wheel reports a modest boost. Clicks,
-    // drags, and keyboard input remain byte-for-byte unchanged.
+    // With remote mouse reporting enabled, one report per browser wheel tick
+    // makes scrolling feel much slower than the rest of the app. Give wheel
+    // reports a modest boost; clicks, drags, and keyboard input stay unchanged.
     const isWheel = (button & 64) !== 0;
     return isWheel ? report.repeat(REMOTE_WHEEL_SCROLL_MULTIPLIER) : report;
   });
 }
 
-function withoutTmuxExitNotice(data: string): string {
-  const exitNoticeIndex = data.indexOf(TMUX_EXIT_NOTICE);
-  if (exitNoticeIndex === -1) return data;
-
-  // tmux can put the alternate-screen teardown and its own `[exited]` notice
-  // in the same final chunk. Replaying the teardown replaces the useful TUI
-  // frame with the empty shell screen just before the socket closes. Keep any
-  // output before that teardown and let the execution header convey the end.
-  const alternateScreenExitIndex = data.lastIndexOf(
-    ALTERNATE_SCREEN_EXIT_SEQUENCE,
-    exitNoticeIndex,
-  );
-  const visibleOutput = data.slice(
-    0,
-    alternateScreenExitIndex === -1
-      ? exitNoticeIndex
-      : alternateScreenExitIndex,
-  );
-  return visibleOutput.replace(/\r?\n$/, "");
-}
-
 // biome-ignore lint/suspicious/noControlCharactersInRegex: ESC begins every SGR mouse report.
 const SGR_MOUSE_REPORT_PATTERN = /\x1b\[<(\d+);\d+;\d+[Mm]/g;
-const TMUX_EXIT_NOTICE = "[exited]";
-const ALTERNATE_SCREEN_EXIT_SEQUENCE = "\u001b[?1049l";
 const REMOTE_WHEEL_SCROLL_MULTIPLIER = 3;
 const TERMINAL_SCROLL_SENSITIVITY = 3;

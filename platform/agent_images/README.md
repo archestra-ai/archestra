@@ -1,7 +1,7 @@
 # Curated Agent images
 
 These are the maintained container images behind the Agent catalog. Every
-image satisfies the same runtime contract: a POSIX shell and `tmux`, a
+image satisfies the same runtime contract: a POSIX shell and a terminal driver (`tmux` by default), a
 non-root working directory and the invoking user's Agent-scoped MCP gateway endpoint. Provider-backed runs also receive an Archestra LLM proxy virtual key.
 
 | Target | Agent command | Inference API |
@@ -12,6 +12,8 @@ non-root working directory and the invoking user's Agent-scoped MCP gateway endp
 | `agent-opencode` | `archestra-opencode` | OpenAI Responses |
 | `agent-hermes` | `archestra-hermes` | OpenAI Chat Completions |
 | `agent-openclaw` | `archestra-openclaw` | OpenAI Chat Completions or OpenAI Responses |
+
+To add or select a terminal implementation, start with the [terminal driver contract](runtime/README.md).
 
 Build a target from `platform/`:
 

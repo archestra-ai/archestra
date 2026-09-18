@@ -349,7 +349,7 @@ test.for([
   const timeout = AbortSignal.timeout.bind(AbortSignal);
   vi.spyOn(AbortSignal, "timeout").mockImplementation(() => timeout(100));
   const lifecycle = new A2AManager({ taskMode: "full" });
-  const commands: string[] = [];
+  const commands: string[][] = [];
   let observations = 0;
   let recovering = true;
   server.use(
@@ -383,7 +383,7 @@ test.for([
         expect(
           (await AgentRunModel.findByTaskId(run.taskId))?.endedAt,
         ).toBeNull();
-        expect(commands.some((command) => command.includes(".cancel"))).toBe(
+        expect(commands.some((command) => command.includes("cancel"))).toBe(
           false,
         );
         if (outcome === "cancel") {
@@ -403,11 +403,11 @@ test.for([
     }),
   );
   vi.spyOn(Exec.prototype, "exec").mockImplementation(async (...args) => {
-    const command = (args[3] as string[]).join(" ");
+    const command = args[3] as string[];
     commands.push(command);
-    if (command.includes("read-turn-result"))
+    if (command.includes("read-result"))
       args[4]?.write(outcome === "worker-failure" ? "7" : "0");
-    else if (command.includes(".log"))
+    else if (command.some((argument) => argument.includes(".log")))
       args[4]?.write("===ARCHESTRA-FINAL-ANSWER===\nRecovered answer");
     args[8]?.({ status: "Success" });
     return socket();
@@ -434,9 +434,9 @@ test.for([
         parts: [{ text: "Recovered answer" }],
       }),
     ]);
-    expect(commands.some((command) => command.includes(".cancel"))).toBe(false);
+    expect(commands.some((command) => command.includes("cancel"))).toBe(false);
   } else {
-    expect(commands.some((command) => command.includes(".cancel"))).toBe(true);
+    expect(commands.some((command) => command.includes("cancel"))).toBe(true);
   }
   expect(
     (await AgentRunModel.findByTaskId(run.taskId))?.endedAt,

@@ -1,5 +1,4 @@
 import type { Readable, Writable } from "node:stream";
-import type WebSocket from "ws";
 import config from "@/config";
 import { agentRuntimeManager } from "@/k8s/agent-runtime";
 import type {
@@ -10,6 +9,7 @@ import type {
 } from "@/types";
 import { ApiError } from "@/types";
 import type { AgentWorkspaceFileRequest } from "@/types/agent-workspace-file";
+import { KubernetesTerminalChannel } from "./kubernetes-terminal-channel";
 import type {
   AgentRunAttachment,
   AgentRunAttachProgress,
@@ -206,7 +206,7 @@ class KubernetesAgentRuntimeBackendDriver implements AgentRuntimeBackendDriver {
     return {
       command: attachment.command,
       resourceName: attachment.podName,
-      socket: attachment.socket as WebSocket,
+      channel: new KubernetesTerminalChannel(attachment.socket),
     };
   }
 

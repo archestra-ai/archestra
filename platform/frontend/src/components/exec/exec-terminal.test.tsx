@@ -389,6 +389,81 @@ describe("ExecTerminal", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("shows reconnect progress after a live connection is interrupted", async () => {
+    const session: { handlers: ExecSessionHandlers | null } = {
+      handlers: null,
+    };
+    const onClosed = vi.fn();
+    const transport: ExecSessionTransport = {
+      open: (handlers) => {
+        session.handlers = handlers;
+        handlers.onStarted(null);
+        return vi.fn();
+      },
+      sendInput: vi.fn(),
+      sendResize: vi.fn(),
+    };
+    render(
+      <ExecTerminal
+        sessionKey="reconnect"
+        transport={transport}
+        isActive
+        onClosed={onClosed}
+        progressStartedAt={Date.now() - 122_000}
+      />,
+    );
+    await screen.findByText("Connected");
+
+    vi.useFakeTimers();
+    try {
+      act(() =>
+        session.handlers?.onProgress?.({
+          phase: "attaching",
+          message: "Reconnecting to terminal",
+          detail: null,
+          resourceName: null,
+        }),
+      );
+
+      expect(screen.getByRole("status")).toHaveTextContent(
+        "Reconnecting to terminal",
+      );
+      expect(screen.queryByText("Connected")).not.toBeInTheDocument();
+      expect(onClosed).not.toHaveBeenCalled();
+      expect(screen.getByRole("timer")).toHaveTextContent("0:00");
+
+      act(() => vi.advanceTimersByTime(4_000));
+      act(() =>
+        session.handlers?.onProgress?.({
+          phase: "attaching",
+          message: "Reconnecting to terminal",
+          detail: "Retrying the connection",
+          resourceName: null,
+        }),
+      );
+      expect(screen.getByRole("timer")).toHaveTextContent("0:04");
+
+      act(() => session.handlers?.onStarted(null));
+      expect(screen.getByText("Connected")).toBeInTheDocument();
+      expect(
+        screen.queryByText("Reconnecting to terminal"),
+      ).not.toBeInTheDocument();
+
+      act(() => vi.advanceTimersByTime(20_000));
+      act(() =>
+        session.handlers?.onProgress?.({
+          phase: "attaching",
+          message: "Reconnecting to terminal",
+          detail: null,
+          resourceName: null,
+        }),
+      );
+      expect(screen.getByRole("timer")).toHaveTextContent("0:00");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("drops no-button mouse motion without swallowing terminal input", async () => {
     const transport: ExecSessionTransport = {
       open: (handlers) => {
@@ -438,54 +513,6 @@ describe("ExecTerminal", () => {
       "\x1b[<64;5;18M".repeat(3),
     );
     expect(transport.sendInput).toHaveBeenNthCalledWith(2, "j");
-  });
-
-  it("does not render tmux's exit notice into the completed frame", async () => {
-    const session: { handlers: ExecSessionHandlers | null } = {
-      handlers: null,
-    };
-    const transport: ExecSessionTransport = {
-      open: (handlers) => {
-        session.handlers = handlers;
-        handlers.onStarted(null);
-        return vi.fn();
-      },
-      sendInput: vi.fn(),
-      sendResize: vi.fn(),
-    };
-
-    render(
-      <ExecTerminal sessionKey="task-exit" transport={transport} isActive />,
-    );
-    await screen.findByText("Connected");
-
-    act(() => session.handlers?.onOutput("done\r\n[exited]\r\n"));
-
-    expect(terminalHarness.write).toHaveBeenCalledWith("done");
-  });
-
-  it("keeps the last TUI frame when tmux exits its alternate screen", async () => {
-    const session: { handlers: ExecSessionHandlers | null } = {
-      handlers: null,
-    };
-    const transport: ExecSessionTransport = {
-      open: (handlers) => {
-        session.handlers = handlers;
-        handlers.onStarted(null);
-        return vi.fn();
-      },
-      sendInput: vi.fn(),
-      sendResize: vi.fn(),
-    };
-
-    render(
-      <ExecTerminal sessionKey="task-exit" transport={transport} isActive />,
-    );
-    await screen.findByText("Connected");
-
-    act(() => session.handlers?.onOutput("\u001b[?1049l\r\n[exited]\r\n"));
-
-    expect(terminalHarness.write).not.toHaveBeenCalled();
   });
 
   it("can retain the terminal frame without adding a disconnected banner", async () => {

@@ -29,6 +29,7 @@ import {
 } from "@/models";
 import { reportMcpDeploymentStatuses } from "@/observability/metrics/mcp";
 import { resolveAgentRuntimeBackendDriver } from "@/services/agent-runtime/backends";
+import type { TerminalChannel } from "@/services/agent-runtime/backends/types";
 import {
   AgentRuntimeOutputCapture,
   RETAINED_LOG_BYTES,
@@ -49,11 +50,9 @@ interface AgentRunAttachSubscription {
   stdout: PassThrough;
   stderr: PassThrough;
   inputPaused: boolean;
-  socket: {
-    readyState: number;
-    close: () => void;
-    send: (data: Buffer) => void;
-  } | null;
+  resumeInput: (() => void) | null;
+  channel: TerminalChannel | null;
+  channelUnsubscribers: (() => void)[];
 }
 
 type PausableWebSocket = WebSocket & {
@@ -219,36 +218,38 @@ class WebSocketService {
     agent_run_attach_input: (ws, message) => {
       if (message.type !== "agent_run_attach_input") return;
       const subscription = this.agentRunAttachSubscriptions.get(ws);
-      if (subscription?.runId !== message.payload.runId || !subscription.socket)
+      if (
+        subscription?.runId !== message.payload.runId ||
+        !subscription.channel
+      )
         return;
       const accepted = subscription.stdin.write(message.payload.data);
       if (!accepted && !subscription.inputPaused) {
         subscription.inputPaused = true;
         const transport = (ws as PausableWebSocket)._socket;
         transport?.pause();
-        subscription.stdin.once("drain", () => {
+        const resumeInput = () => {
           subscription.inputPaused = false;
+          subscription.resumeInput = null;
+          subscription.stdin.off("drain", resumeInput);
           transport?.resume();
-        });
+        };
+        subscription.resumeInput = resumeInput;
+        subscription.stdin.once("drain", resumeInput);
       }
     },
     agent_run_attach_resize: (ws, message) => {
       if (message.type !== "agent_run_attach_resize") return;
       const subscription = this.agentRunAttachSubscriptions.get(ws);
-      if (subscription?.runId !== message.payload.runId || !subscription.socket)
+      if (
+        subscription?.runId !== message.payload.runId ||
+        !subscription.channel
+      )
         return;
-      // SPDY channel 4 carries terminal dimensions; without it tmux keeps the
-      // default 80x24 and redraws the pane to a size nobody is looking at.
-      const resize = JSON.stringify({
-        Width: message.payload.cols,
-        Height: message.payload.rows,
+      subscription.channel.resize({
+        cols: message.payload.cols,
+        rows: message.payload.rows,
       });
-      const frame = Buffer.alloc(resize.length + 1);
-      frame[0] = 4;
-      frame.write(resize, 1);
-      if (subscription.socket.readyState <= 1) {
-        subscription.socket.send(frame);
-      }
     },
     subscribe_agent_run_logs: (ws, message, clientContext) => {
       if (message.type !== "subscribe_agent_run_logs") return;
@@ -560,7 +561,9 @@ class WebSocketService {
       stdout: new PassThrough(),
       stderr: new PassThrough(),
       inputPaused: false,
-      socket: null,
+      resumeInput: null,
+      channel: null,
+      channelUnsubscribers: [],
     };
     // Claim ownership before awaiting lookup or attachment so unsubscribe and
     // a newer subscribe also invalidate work that is still connecting.
@@ -593,7 +596,7 @@ class WebSocketService {
       }
 
       const { stdin, stdout, stderr } = subscription;
-      const { resourceName, command, socket } =
+      const { resourceName, command, channel } =
         await resolveAgentRuntimeBackendDriver(session.backend).attach({
           session,
           stdin,
@@ -628,30 +631,51 @@ class WebSocketService {
         });
 
       if (!isCurrent()) {
-        if (socket.readyState <= 1) socket.close();
+        channel.detach();
         return;
       }
-      subscription.socket =
-        socket as unknown as AgentRunAttachSubscription["socket"];
+      subscription.channel = channel;
 
+      const flushOutput: (() => void)[] = [];
       for (const stream of [stdout, stderr]) {
-        stream.on("data", (chunk: Buffer) => {
-          if (!isCurrent()) return;
+        const decoder = new StringDecoder("utf8");
+        const sendOutput = (data: string) => {
+          if (!isCurrent() || !data) return;
           this.sendToClient(ws, {
             type: "agent_run_attach_output",
-            payload: { runId, data: chunk.toString() },
+            payload: { runId, data },
           });
-        });
+        };
+        stream.on("data", (chunk: Buffer) => sendOutput(decoder.write(chunk)));
+        const flush = () => {
+          // Attach can resolve after closure with unread output still buffered.
+          stream.read();
+          sendOutput(decoder.end());
+        };
+        stream.on("end", flush);
+        flushOutput.push(flush);
       }
 
-      socket.on("close", () => {
-        if (!isCurrent()) return;
-        this.sendToClient(ws, {
-          type: "agent_run_attach_closed",
-          payload: { runId },
-        });
-        this.unsubscribeAgentRunAttach(ws);
-      });
+      subscription.channelUnsubscribers.push(
+        channel.onClose(() => {
+          if (!isCurrent()) return;
+          for (const flush of flushOutput) flush();
+          this.sendToClient(ws, {
+            type: "agent_run_attach_closed",
+            payload: { runId },
+          });
+          this.unsubscribeAgentRunAttach(ws);
+        }),
+        channel.onError((error) => {
+          if (!isCurrent()) return;
+          for (const flush of flushOutput) flush();
+          this.sendToClient(ws, {
+            type: "agent_run_attach_error",
+            payload: { runId, error: error.message },
+          });
+          this.unsubscribeAgentRunAttach(ws);
+        }),
+      );
 
       this.sendToClient(ws, {
         type: "agent_run_attach_started",
@@ -674,13 +698,13 @@ class WebSocketService {
     const subscription = this.agentRunAttachSubscriptions.get(ws);
     if (!subscription) return;
     this.agentRunAttachSubscriptions.delete(ws);
+    for (const unsubscribe of subscription.channelUnsubscribers) unsubscribe();
+    subscription.channelUnsubscribers = [];
+    subscription.resumeInput?.();
     subscription.stdin.destroy();
     subscription.stdout.destroy();
     subscription.stderr.destroy();
-    // Close the exec transport without stopping the underlying tmux session.
-    if (subscription.socket && subscription.socket.readyState <= 1) {
-      subscription.socket.close();
-    }
+    subscription.channel?.detach();
   }
 
   private async handleSubscribeAgentRunLogs(

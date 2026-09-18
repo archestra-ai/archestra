@@ -25,6 +25,7 @@ import {
   AgentWorkspaceModel,
 } from "@/models";
 import AgentModel from "@/models/agent";
+import type { TerminalChannel } from "@/services/agent-runtime/backends/types";
 import { agentRunTranscriptStore } from "@/services/agent-runtime/transcript-store";
 import { projectService } from "@/services/project";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -61,11 +62,9 @@ interface AgentRunAttachSubscription {
   stdout: PassThrough;
   stderr: PassThrough;
   inputPaused: boolean;
-  socket: {
-    readyState: number;
-    close: () => void;
-    send: (data: Buffer) => void;
-  };
+  resumeInput: (() => void) | null;
+  channel: TerminalChannel;
+  channelUnsubscribers: (() => void)[];
 }
 
 interface AgentRunLogsSubscription {
@@ -1098,7 +1097,7 @@ describe("websocket Agent run authorization and cleanup", () => {
     expect(service.agentRunAttachSubscriptions.has(viewerWs)).toBe(false);
   });
 
-  test("destroys Agent run streams and detaches the exec socket on disconnect", () => {
+  test("destroys Agent run streams and detaches the terminal channel on disconnect", () => {
     const ws = {} as WS;
     const attach = {
       runId: crypto.randomUUID(),
@@ -1106,7 +1105,14 @@ describe("websocket Agent run authorization and cleanup", () => {
       stdout: new PassThrough(),
       stderr: new PassThrough(),
       inputPaused: false,
-      socket: { readyState: WS.OPEN, close: vi.fn(), send: vi.fn() },
+      resumeInput: null,
+      channel: {
+        detach: vi.fn(),
+        resize: vi.fn(),
+        onClose: vi.fn(),
+        onError: vi.fn(),
+      },
+      channelUnsubscribers: [vi.fn(), vi.fn()],
     };
     const logs = {
       runId: attach.runId,
@@ -1116,12 +1122,16 @@ describe("websocket Agent run authorization and cleanup", () => {
     service.agentRunAttachSubscriptions.set(ws, attach);
     service.agentRunLogsSubscriptions.set(ws, logs);
 
+    const unsubscribers = [...attach.channelUnsubscribers];
     service.cleanupAgentRunSubscriptions(ws);
 
     expect(attach.stdin.destroyed).toBe(true);
     expect(attach.stdout.destroyed).toBe(true);
     expect(attach.stderr.destroyed).toBe(true);
-    expect(attach.socket.close).toHaveBeenCalledOnce();
+    expect(attach.channel.detach).toHaveBeenCalledOnce();
+    for (const unsubscribe of unsubscribers) {
+      expect(unsubscribe).toHaveBeenCalledOnce();
+    }
     expect(logs.abortController.signal.aborted).toBe(true);
     expect(logs.stream.destroyed).toBe(true);
     expect(service.agentRunAttachSubscriptions.has(ws)).toBe(false);
@@ -1151,7 +1161,14 @@ describe("websocket Agent run authorization and cleanup", () => {
       stdout: new PassThrough(),
       stderr: new PassThrough(),
       inputPaused: false,
-      socket: { readyState: WS.OPEN, close: vi.fn(), send: vi.fn() },
+      resumeInput: null,
+      channel: {
+        detach: vi.fn(),
+        resize: vi.fn(),
+        onClose: vi.fn(),
+        onError: vi.fn(),
+      },
+      channelUnsubscribers: [],
     };
     service.agentRunAttachSubscriptions.set(ws, subscription);
 

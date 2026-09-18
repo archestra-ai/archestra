@@ -99,7 +99,7 @@ The [maintained images](https://github.com/archestra-ai/archestra/blob/main/plat
 
 | Requirement | What To Provide |
 | --- | --- |
-| Shell and terminal | `/bin/sh` and `tmux` on `PATH`. |
+| Shell and terminal | `/bin/sh` and either `tmux` or a driver implementing the [image contract](https://github.com/archestra-ai/archestra/blob/main/platform/agent_images/runtime-contract.md#runtime-facade-and-terminal-driver). |
 | Command | Your client executable, or `archestra-runtime-agent` when Command is blank. |
 | Initialization | Optional `archestra-agent-init` for setup before the client starts. |
 | Output | Progress and results on stdout or stderr. Never print credentials. |

@@ -20,8 +20,8 @@ use appa_runtime::{
     hooks,
 };
 use appa_runtime_api::{
-    Actor, HookDecision, HookEvent, OutcomeBody, ProposedCall, SpawnRef, ToolOutcome, TrajectoryId,
-    WireDecision,
+    Actor, HookDecision, HookEvent, OutcomeBody, ProposedCall, Ruling, SpawnRef, ToolOutcome,
+    TrajectoryId, WireDecision,
 };
 use futures_util::FutureExt;
 use napi_derive::napi;
@@ -106,6 +106,13 @@ impl Principal {
     }
 }
 
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum RulingInput {
+    Approve,
+    Deny,
+}
+
 /// Request payload to execute a remedy by offer ID.
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -132,6 +139,8 @@ struct OfferInput {
     /// Original argument JSON string before execution metadata stripping.
     original_arguments: String,
     presentation: PresentationInput,
+    #[serde(default)]
+    ruling: Option<RulingInput>,
 }
 
 #[derive(Clone, Copy, Deserialize, PartialEq, Eq)]
@@ -175,6 +184,8 @@ struct Input {
     spelling: Option<String>,
     #[serde(default)]
     presentation: Option<PresentationInput>,
+    #[serde(default)]
+    ruling: Option<RulingInput>,
 }
 
 #[derive(Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
@@ -535,11 +546,67 @@ pub async fn execute_remedy_by_offer(
         owner_root: Some(owner.root),
         spelling: owner.spelling,
         presentation: Some(input.presentation),
+        ruling: input.ruling,
     };
     validate(&input)?;
     let response: Value =
         serde_json::from_str(&run(input, policy_content).await?).map_err(error)?;
     Ok(with_offer_status(response, OfferStatusKind::Known)?.to_string())
+}
+
+#[napi(object)]
+#[derive(Serialize)]
+pub struct OfferReviewOutput {
+    pub offer_id: String,
+    pub text: String,
+    pub session_id: String,
+}
+
+/// Loads the review entry for an offer from the retained DenyCall in PostgreSQL.
+/// Session routing comes from the verified offer claims; no offer-owner lookup.
+#[napi(js_name = "loadOfferReview")]
+pub async fn load_offer_review(
+    organization_id: String,
+    session_id: String,
+    offer_id: String,
+) -> napi::Result<Option<OfferReviewOutput>> {
+    let slot = STATE.get_or_init(|| Mutex::new(None)).lock().await;
+    let state = slot
+        .as_ref()
+        .ok_or_else(|| error("OpenAPPA is not initialized"))?;
+    let pg = postgres_store(&state.store)?;
+    let session_id_for_output = session_id.clone();
+    let target_offer_id = offer_id.clone();
+    let review_text = pg
+        .with_client(move |client| {
+            let rows = client.query(
+                "SELECT decision FROM openappa_operations WHERE organization_id=$1 AND session_id=$2 AND status='complete' AND decision->'review' IS NOT NULL ORDER BY created_at DESC",
+                &[&organization_id, &session_id],
+            )?;
+            for row in rows {
+                let decision: Value = row.get("decision");
+                if let Some(review_entries) = decision.get("review").and_then(|r| r.as_array()) {
+                    for entry in review_entries {
+                        if entry.get("offer_id").and_then(|o| o.as_str()) == Some(&target_offer_id) {
+                            if let Some(text) = entry.get("text").and_then(|t| t.as_str()) {
+                                return Ok(Some(text.to_owned()));
+                            }
+                        }
+                    }
+                }
+            }
+            Ok(None)
+        })
+        .map_err(error)?;
+
+    match review_text {
+        Some(text) => Ok(Some(OfferReviewOutput {
+            offer_id,
+            text,
+            session_id: session_id_for_output,
+        })),
+        None => Ok(None),
+    }
 }
 
 struct SessionLock {
@@ -759,6 +826,10 @@ impl State {
                     .clone()
                     .ok_or_else(|| error("missing remedy arguments"))?,
             };
+            let ruling = input.ruling.as_ref().map(|r| match r {
+                RulingInput::Approve => Ruling::Approve,
+                RulingInput::Deny => Ruling::Deny,
+            });
             let gate = hooks::handle(
                 &self.runtime,
                 HookEvent::ToolCall {
@@ -766,7 +837,7 @@ impl State {
                     call,
                     call_id: None,
                     spawn: false,
-                    ruling: None,
+                    ruling,
                 },
             )
             .await;

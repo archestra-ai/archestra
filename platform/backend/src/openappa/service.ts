@@ -57,6 +57,14 @@ const NativeDecisionSchema = z
       decision: z.literal("deny_call"),
       feedback: z.string(),
       offers: z.array(NativeOfferSchema).optional(),
+      review: z
+        .array(
+          z.object({
+            offer_id: z.string(),
+            text: z.string(),
+          }),
+        )
+        .optional(),
       ...ResultDecisionFields,
     }),
     z.object({
@@ -444,7 +452,12 @@ export async function processProxyResults(params: {
 type AppaCallDecision =
   | { kind: "allow" }
   | { kind: "control" }
-  | { kind: "deny"; feedback: string; offers?: string[] };
+  | {
+      kind: "deny";
+      feedback: string;
+      offers?: string[];
+      review?: Array<{ offer_id: string; text: string }>;
+    };
 
 export async function evaluateToolCalls(
   session: OpenAppaSession,
@@ -518,6 +531,12 @@ export async function evaluateToolCalls(
                 .map((offer) => offer.offer_id)
                 .filter((id) => id.length > 0)
             : [],
+        review:
+          decision.decision === "deny_call"
+            ? "review" in decision
+              ? decision.review
+              : undefined
+            : undefined,
       };
     }),
   );
@@ -711,6 +730,7 @@ export async function executeRemedyByOffer(params: {
   /** Exact validated client arguments, retained for durable receipt fingerprinting. */
   originalArguments: string;
   args: unknown;
+  ruling?: "approve" | "deny";
 }): Promise<{
   result: CallToolResult;
   /** Authorized owner lookup, not proof that the offer remains spendable. */
@@ -733,6 +753,7 @@ export async function executeRemedyByOffer(params: {
         original_arguments: params.originalArguments,
         arguments: params.args,
         presentation: nativePresentation(params.controlToolName),
+        ...(params.ruling ? { ruling: params.ruling } : {}),
       }),
       policy,
     ),
@@ -744,6 +765,43 @@ export async function executeRemedyByOffer(params: {
     result: runtimeToolResult(decision),
     known: decision.offer.status === "known",
   };
+}
+
+/**
+ * Loads the review entry for an offer from the retained DenyCall in PostgreSQL.
+ * Session routing comes from the verified offer claims.
+ */
+export async function loadOfferReview(params: {
+  organizationId: string;
+  sessionId: string;
+  offerId: string;
+}): Promise<{
+  offer_id: string;
+  text: string;
+  session_id: string;
+} | null> {
+  try {
+    if (!(await isGuardrailsV2Active())) return null;
+    const policy = await guardrailsPolicyService.get(params.organizationId);
+    const module = await binding(policy.content);
+    const result = await module.loadOfferReview(
+      params.organizationId,
+      params.sessionId,
+      params.offerId,
+    );
+    if (!result) return null;
+    return {
+      offer_id: result.offerId,
+      text: result.text,
+      session_id: result.sessionId,
+    };
+  } catch (error) {
+    logger.warn(
+      { err: error, offerId: params.offerId },
+      "Failed to load OpenAPPA offer review",
+    );
+    return null;
+  }
 }
 
 function nativePresentation(controlToolName?: string): {

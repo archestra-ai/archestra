@@ -92,6 +92,8 @@ describe("AppaPluginArchestra", () => {
         matches: () => true,
         classifyToolName: () => "local",
         normalizeLocalToolName: (name) => `local:${name}`,
+        reviewChannel: "host",
+        supportsHitl: true,
       },
     ]);
     const first = requestContext({

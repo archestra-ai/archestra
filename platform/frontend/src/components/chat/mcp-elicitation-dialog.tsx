@@ -75,6 +75,10 @@ export function McpElicitationDialog({
     return null;
   }
 
+  const isRemedyApproval =
+    request.toolName.includes("execute_remedy_plan") ||
+    request.message.startsWith("[appa]");
+
   const submit = async () => {
     const validationErrors = validateValues(fields, values);
     setErrors(validationErrors);
@@ -100,7 +104,7 @@ export function McpElicitationDialog({
       onOpenChange={(open) => {
         if (!open && !isSubmitting) void respondWithoutContent("cancel");
       }}
-      title="Additional Information"
+      title={isRemedyApproval ? "Approval Required" : "Additional Information"}
       description={request.message}
       size="small"
       preventCloseOnInteractOutside
@@ -126,7 +130,7 @@ export function McpElicitationDialog({
           </Button>
           <Button type="submit" disabled={isSubmitting}>
             <CheckIcon />
-            Continue
+            {isRemedyApproval ? "Approve" : "Continue"}
           </Button>
         </>
       }

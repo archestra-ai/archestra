@@ -4,6 +4,8 @@ import { readHeader } from "../utils";
 /** Identifies Claude Code Messages requests and normalizes local tool names. */
 export class AppaClaudeCodeAdapter implements AppaClientAdapter {
   readonly id = "claude-code" as const;
+  readonly reviewChannel = "host" as const;
+  readonly supportsHitl = true;
 
   matches(context: Parameters<AppaClientAdapter["matches"]>[0]): boolean {
     const userAgent = (

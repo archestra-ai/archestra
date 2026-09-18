@@ -26,4 +26,6 @@ export type AppaClientAdapter = {
   }): boolean;
   classifyToolName(name: string): "gateway" | "local";
   normalizeLocalToolName(name: string): string;
+  readonly reviewChannel: "host";
+  readonly supportsHitl: boolean;
 };

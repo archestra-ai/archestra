@@ -971,6 +971,7 @@ export async function createAgentServer(params: {
                 organizationId: tokenAuth?.organizationId,
                 tokenAuth,
                 contextIsTrusted,
+                mrtr,
               });
               span.setAttribute(
                 ATTR_MCP_IS_ERROR_RESULT,

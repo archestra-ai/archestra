@@ -11,7 +11,13 @@ import {
   chatOpenAppaSession,
   executeRemedyByOffer,
   executeYell,
+  loadOfferReview,
 } from "@/openappa/service";
+import {
+  clientSupportsInputRequest,
+  GATEWAY_INPUT_REQUEST_KEY,
+  InputRequiredSignal,
+} from "@/routes/mcp-gateway/mrtr";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
 import { ApiError } from "@/types";
 import {
@@ -197,6 +203,91 @@ const registry = defineArchestraTools([
       ) {
         return unknownOfferResult();
       }
+
+      // Check if this offer requires human review before executing or taking locks.
+      // Session routing comes from the verified claims, so the review lookup
+      // needs no offer-owner table.
+      const review = await loadOfferReview({
+        organizationId: context.organizationId,
+        sessionId: claims.session_id,
+        offerId: remedy.offer_id,
+      });
+
+      let ruling: "approve" | "deny" | undefined;
+      if (review) {
+        // Collect the person's answer through the plugin-owned client channel.
+        if (context.elicitation) {
+          // Chat client: interactive elicitation / inline approval card
+          const outcome = await context.elicitation.elicit({
+            toolName: TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
+            message: review.text,
+            requestedSchema: {
+              type: "object",
+              properties: {
+                action: {
+                  type: "string",
+                  enum: ["approve", "deny"],
+                  description: "Approve or deny this remedy plan",
+                },
+              },
+              required: ["action"],
+            },
+          });
+          if (outcome.status === "answered") {
+            if (outcome.result.action === "accept") {
+              const contentAction = outcome.result.content?.action;
+              ruling = contentAction === "deny" ? "deny" : "approve";
+            } else if (outcome.result.action === "decline") {
+              ruling = "deny";
+            }
+          }
+        } else if (context.mrtr) {
+          // MCP Gateway client (Claude Code, etc.)
+          const supportsElicit = clientSupportsInputRequest({
+            clientCapabilities: context.mrtr.clientCapabilities,
+            request: { method: "elicitation/create" },
+          });
+          if (supportsElicit) {
+            const supplied = context.mrtr.inputResponses?.[
+              GATEWAY_INPUT_REQUEST_KEY
+            ] as { action?: string; content?: { action?: string } } | undefined;
+            if (supplied !== undefined) {
+              // Retry round: consume verified user answer from requestState
+              if (supplied.action === "accept") {
+                ruling =
+                  supplied.content?.action === "deny" ? "deny" : "approve";
+              } else if (supplied.action === "decline") {
+                ruling = "deny";
+              }
+            } else {
+              // Initial round: ask the human via native MCP elicitation
+              throw new InputRequiredSignal({
+                key: GATEWAY_INPUT_REQUEST_KEY,
+                request: {
+                  method: "elicitation/create",
+                  params: {
+                    message: review.text,
+                    requestedSchema: {
+                      type: "object",
+                      properties: {
+                        action: {
+                          type: "string",
+                          enum: ["approve", "deny"],
+                          description: "Approve or deny this remedy plan",
+                        },
+                      },
+                      required: ["action"],
+                    },
+                  },
+                },
+              });
+            }
+          }
+          // If client does not support elicitation (Codex, OpenCode), per P7-R03 / P7-T20
+          // HITL is kept disabled, ruling remains undefined -> upstream returns NoAnswer.
+        }
+      }
+
       const byOffer = await executeRemedyByOffer({
         organizationId: context.organizationId,
         ...(context.userId ? { callerId: `user:${context.userId}` } : {}),
@@ -210,6 +301,7 @@ const registry = defineArchestraTools([
         originalArguments:
           originalArguments ?? JSON.stringify(submittedSemantic),
         args: remedy,
+        ruling,
       });
       return byOffer.result;
     },

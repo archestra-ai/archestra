@@ -4,6 +4,8 @@ import { readHeader } from "../utils";
 /** Identifies Codex Responses requests and normalizes local tool names. */
 export class AppaCodexAdapter implements AppaClientAdapter {
   readonly id = "codex" as const;
+  readonly reviewChannel = "host" as const;
+  readonly supportsHitl = false;
 
   matches(context: Parameters<AppaClientAdapter["matches"]>[0]): boolean {
     const userAgent = (

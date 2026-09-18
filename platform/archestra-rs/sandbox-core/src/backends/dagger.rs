@@ -6,6 +6,7 @@ use std::env;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use base64::Engine;
@@ -35,7 +36,7 @@ use crate::validation::{
 };
 use crate::{
     ArtifactBytes, CommandExecution, EngineFault, ReplayInputFile, ReplayStep, Result,
-    RuntimeTarget, SandboxError, SnapshotFile,
+    RuntimeTarget, SandboxError, SecretEnvVar, SnapshotFile,
 };
 
 /// debian + python + uv + node + npm + common cli, warmed once per process.
@@ -148,10 +149,15 @@ impl SandboxBackend for DaggerBackend {
         let warm = self.ensure_warm().await?;
         let materialized = materialize(&self.client, warm, &req).await?;
 
+        // secrets and stdin attach to the live exec only: they are part of the
+        // exec definition, never a filesystem layer, so re-materializing the
+        // history later neither needs nor sees them.
+        let mut container = materialized.with_workdir(&req.cwd);
+        for var in &req.secret_env {
+            container = with_secret_env(&self.client, container, var).await?;
+        }
         let argv = supervised_argv(&req.command, req.timeout_seconds, &req.limits);
-        let executed = materialized
-            .with_workdir(&req.cwd)
-            .with_exec_opts(argv, any_exit_opts());
+        let executed = container.with_exec_opts(argv, exec_opts(req.stdin.as_deref()));
 
         // the supervisor caps output at the source and reports timeout / exit
         // code / per-stream truncation / command-only duration in one json
@@ -194,6 +200,8 @@ impl SandboxBackend for DaggerBackend {
             command: String::new(),
             cwd: req.default_cwd,
             timeout_seconds: 0,
+            secret_env: Vec::new(),
+            stdin: None,
             traceparent: None,
         };
         let materialized = materialize(&self.client, warm, &run).await?;
@@ -207,7 +215,7 @@ impl SandboxBackend for DaggerBackend {
         );
         let encoder = materialized.with_exec_opts(
             vec!["bash".to_string(), "-c".to_string(), command],
-            any_exit_opts(),
+            exec_opts(None),
         );
 
         let base64_stdout = encoder.stdout().await.map_err(from_sdk)?;
@@ -858,7 +866,7 @@ async fn materialize(client: &DaggerConn, warm: Container, req: &RunRequest) -> 
                 let argv = supervised_argv(&entry.command, entry.timeout_seconds, &req.limits);
                 container = container
                     .with_workdir(cwd)
-                    .with_exec_opts(argv, any_exit_opts());
+                    .with_exec_opts(argv, exec_opts(None));
                 if budget.charge(COMMAND_CHAIN_LINKS) {
                     container = checkpoint(client, container).await?;
                 }
@@ -1059,7 +1067,49 @@ fn attach_trace(traceparent: Option<&str>) {
     crate::tracing_ctx::attach_parent(&span, traceparent);
 }
 
-fn any_exit_opts<'a>() -> ContainerWithExecOpts<'a> {
+/// register `var` as a session secret and expose it to the container as an
+/// environment variable. the id is resolved eagerly so the SDK's lazy
+/// `with_secret_variable` argument never hits its internal unwrap: a failure to
+/// register surfaces as a typed error here instead of a panic. the secret's
+/// engine-side name carries a per-process sequence so concurrent runs that
+/// reuse a variable name can never observe each other's value.
+async fn with_secret_env(
+    client: &DaggerConn,
+    container: Container,
+    var: &SecretEnvVar,
+) -> Result<Container> {
+    static SEQUENCE: AtomicU64 = AtomicU64::new(0);
+    let sequence = SEQUENCE.fetch_add(1, Ordering::Relaxed);
+    let registered = format!("archestra-{}-{sequence}-{}", std::process::id(), var.name);
+    let id = client
+        .set_secret(registered, var.value.as_str())
+        .id()
+        .await
+        .map_err(|err| {
+            SandboxError::internal(format!(
+                "failed to register secret environment variable {}: {}",
+                var.name,
+                describe_without_payload(&err)
+            ))
+        })?;
+    Ok(container.with_secret_variable(var.name.as_str(), id))
+}
+
+/// an SDK error from a `setSecret` query may quote the query — and with it the
+/// plaintext — so only its variant is reported, never its message.
+fn describe_without_payload(err: &DaggerError) -> &'static str {
+    match err {
+        DaggerError::Build(_) => "query build failed",
+        DaggerError::Serialize(_) => "input serialization failed",
+        DaggerError::Query(_) => "engine query failed",
+        DaggerError::Unpack(_) => "response unpack failed",
+        DaggerError::DownloadClient(_) => "client download failed",
+    }
+}
+
+/// exec options for every sandbox command: any exit code is a result, not an
+/// SDK error, and `stdin` (live command only) rides in the exec definition.
+fn exec_opts(stdin: Option<&str>) -> ContainerWithExecOpts<'_> {
     ContainerWithExecOpts {
         expect: Some(ReturnType::Any),
         expand: None,
@@ -1069,7 +1119,7 @@ fn any_exit_opts<'a>() -> ContainerWithExecOpts<'a> {
         redirect_stderr: None,
         redirect_stdin: None,
         redirect_stdout: None,
-        stdin: None,
+        stdin,
         use_entrypoint: None,
     }
 }

@@ -164,7 +164,16 @@ mod imp {
     /// to `info`. kept separate from the span layer so it can be tuned without
     /// disabling traces.
     fn log_filter() -> EnvFilter {
-        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"))
+        // the Dagger SDK logs every GraphQL query verbatim at TRACE, and a
+        // `setSecret` query carries the secret plaintext; cap that target at
+        // `info` so no `RUST_LOG` value can leak a secret into the log stream.
+        EnvFilter::try_from_default_env()
+            .unwrap_or_else(|_| EnvFilter::new("info"))
+            .add_directive(
+                "dagger_sdk=info"
+                    .parse()
+                    .expect("a literal tracing directive parses"),
+            )
     }
 
     pub(super) fn flush() {

@@ -12,7 +12,8 @@ mod validation;
 
 use crate::validation::{
     skill_root_path, validate_artifact_path, validate_cwd, validate_file_encoding,
-    validate_host_file_path, validate_snapshot_file_path, validate_upload_path,
+    validate_host_file_path, validate_secret_env, validate_snapshot_file_path,
+    validate_upload_path,
 };
 
 pub use backends::dagger::{DEFAULT_APT_PACKAGES, DEFAULT_BASE_IMAGE};
@@ -354,6 +355,28 @@ pub struct CheckSessionInput {
     pub environment: Option<EnvironmentTarget>,
 }
 
+/// an environment variable whose value is handed to the live command as a
+/// Dagger secret: it never lands in a filesystem layer and the engine scrubs it
+/// from captured output. the value is redacted from `Debug` and `Serialize` so
+/// a logged request can never leak it.
+#[derive(Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "napi", napi_derive::napi(object))]
+#[serde(rename_all = "camelCase")]
+pub struct SecretEnvVar {
+    pub name: String,
+    #[serde(skip_serializing)]
+    pub value: String,
+}
+
+impl fmt::Debug for SecretEnvVar {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("SecretEnvVar")
+            .field("name", &self.name)
+            .field("value", &"<redacted>")
+            .finish()
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "napi", napi_derive::napi(object))]
 #[serde(rename_all = "camelCase")]
@@ -374,6 +397,15 @@ pub struct RunSandboxInput {
     #[cfg_attr(feature = "napi", napi(js_name = "spoolRoot"))]
     #[serde(default)]
     pub spool_root: Option<String>,
+    /// Secret environment variables visible only to the live command, never to
+    /// replayed history. Names are validated at the boundary.
+    #[cfg_attr(feature = "napi", napi(js_name = "secretEnv"))]
+    #[serde(default)]
+    pub secret_env: Option<Vec<SecretEnvVar>>,
+    /// Bytes written to the live command's standard input. Part of the exec
+    /// definition (not a filesystem layer), so it never persists in the sandbox.
+    #[serde(default)]
+    pub stdin: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -451,6 +483,8 @@ pub async fn run_sandbox(input: RunSandboxInput) -> Result<CommandExecution> {
     // nests under it; fall back to the caller traceparent when otel is inactive.
     let traceparent = tracing_ctx::current_traceparent(&span).or_else(|| input.traceparent.clone());
     validate_cwd(&input.cwd)?;
+    let secret_env = input.secret_env.unwrap_or_default();
+    validate_secret_env(&secret_env)?;
     let target = runtime_target_from(input.environment)?;
     let replay_steps = replay_entries_to_steps(input.replay_entries, input.spool_root.as_deref())?;
     let req = backend::RunRequest {
@@ -459,6 +493,8 @@ pub async fn run_sandbox(input: RunSandboxInput) -> Result<CommandExecution> {
         command: input.command,
         cwd: input.cwd,
         timeout_seconds: input.timeout_seconds,
+        secret_env,
+        stdin: input.stdin,
         traceparent,
     };
     session::submit(target, move |reply| session::SessionMsg::Run {
@@ -539,6 +575,57 @@ mod tests {
                 "expected reject for id {bad:?}"
             );
         }
+    }
+
+    #[test]
+    fn secret_env_value_never_reaches_debug_or_serialized_output() {
+        let input = RunSandboxInput {
+            traceparent: None,
+            replay_entries: Vec::new(),
+            limits: Limits {
+                output_bytes_limit: 1,
+                file_size_limit_bytes: 1,
+                cpu_seconds: 1,
+                memory_bytes: 1,
+            },
+            command: "true".into(),
+            cwd: "/home/sandbox".into(),
+            timeout_seconds: 1,
+            environment: None,
+            spool_root: None,
+            secret_env: Some(vec![SecretEnvVar {
+                name: "TOK".into(),
+                value: "hunter2-plaintext".into(),
+            }]),
+            stdin: None,
+        };
+        let debug = format!("{input:?}");
+        let json = serde_json::to_string(&input).unwrap();
+        for rendered in [&debug, &json] {
+            assert!(rendered.contains("TOK"), "{rendered}");
+            assert!(!rendered.contains("hunter2-plaintext"), "{rendered}");
+        }
+    }
+
+    #[test]
+    fn secret_env_deserializes_its_value_and_defaults_when_absent() {
+        let with: RunSandboxInput = serde_json::from_str(
+            r#"{"replayEntries":[],"limits":{"outputBytesLimit":1,"fileSizeLimitBytes":1,"cpuSeconds":1,"memoryBytes":1},"command":"true","cwd":"/home/sandbox","timeoutSeconds":1,"secretEnv":[{"name":"TOK","value":"v"}],"stdin":"in"}"#,
+        )
+        .unwrap();
+        let vars = with.secret_env.unwrap();
+        assert_eq!(
+            (vars[0].name.as_str(), vars[0].value.as_str()),
+            ("TOK", "v")
+        );
+        assert_eq!(with.stdin.as_deref(), Some("in"));
+
+        let without: RunSandboxInput = serde_json::from_str(
+            r#"{"replayEntries":[],"limits":{"outputBytesLimit":1,"fileSizeLimitBytes":1,"cpuSeconds":1,"memoryBytes":1},"command":"true","cwd":"/home/sandbox","timeoutSeconds":1}"#,
+        )
+        .unwrap();
+        assert!(without.secret_env.is_none());
+        assert!(without.stdin.is_none());
     }
 
     #[test]

@@ -4,6 +4,7 @@ import { canonicalJson } from "@/openappa/wire";
 import type {
   CommonToolResult,
   DualLlmAnalysis,
+  HostedToolCall,
   UnsafeContextBoundary,
 } from "@/types";
 import { ApiError } from "@/types";
@@ -77,6 +78,22 @@ export type LlmProxyToolCallsOutcome =
     }
   | { decision: "refuse"; refusal: LlmProxyToolCallRefusal };
 
+export type LlmProxyHostedToolCallsContext = LlmProxyRequestContext & {
+  hostedToolCalls: readonly HostedToolCall[];
+};
+
+/**
+ * What to do with the part of a turn the provider ran tools for: hand it to
+ * the client as it is, or withhold it and send `notices` in its place.
+ */
+export type LlmProxyHostedToolCallsOutcome =
+  | { decision: "release" }
+  | {
+      decision: "hold";
+      notices: readonly LlmProxyToolCall[];
+      blocked: readonly { id: string; name: string; reason: string }[];
+    };
+
 export type LlmProxyToolResult = CommonToolResult;
 
 export type LlmProxyToolResultsContext = LlmProxyRequestContext & {
@@ -128,6 +145,12 @@ export interface LlmProxyPlugin {
   onToolResults?(
     context: LlmProxyToolResultsContext,
   ): Promise<LlmProxyToolResultsOutcome | undefined>;
+  /** True when this plugin will rule on this request's provider-run calls. */
+  governsHostedToolCalls?(context: LlmProxyRequestContext): boolean;
+  /** Runs before `onToolCalls`: what a hosted call brought in comes first. */
+  onHostedToolCalls?(
+    context: LlmProxyHostedToolCallsContext,
+  ): Promise<LlmProxyHostedToolCallsOutcome | undefined>;
   /**
    * Runs before a non-streaming response is released. Streaming responses are
    * observable only after their already-forwarded chunks are assembled; returned
@@ -344,6 +367,23 @@ export class LlmProxyPluginRegistry {
     };
   }
 
+  governsHostedToolCalls(context: LlmProxyRequestContext): boolean {
+    return this.getSessionPlugins(context).some(
+      (plugin) => plugin.governsHostedToolCalls?.(context) === true,
+    );
+  }
+
+  /** The first plugin to withhold the provider-run part of the turn decides. */
+  async onHostedToolCalls(
+    context: LlmProxyHostedToolCallsContext,
+  ): Promise<LlmProxyHostedToolCallsOutcome> {
+    for (const plugin of this.getSessionPlugins(context)) {
+      const result = await this.invoke(plugin, "onHostedToolCalls", context);
+      if (result?.decision === "hold") return result;
+    }
+    return { decision: "release" };
+  }
+
   async onModelResponse(
     context: LlmProxyModelResponseContext,
   ): Promise<unknown> {
@@ -440,6 +480,11 @@ export class LlmProxyPluginRegistry {
     phase: "onToolResults",
     context: LlmProxyToolResultsContext,
   ): Promise<LlmProxyToolResultsOutcome | undefined>;
+  private async invoke(
+    plugin: LlmProxyPlugin,
+    phase: "onHostedToolCalls",
+    context: LlmProxyHostedToolCallsContext,
+  ): Promise<LlmProxyHostedToolCallsOutcome | undefined>;
   private async invoke(
     plugin: LlmProxyPlugin,
     phase: "onModelResponse",

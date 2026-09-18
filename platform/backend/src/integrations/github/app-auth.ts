@@ -1,7 +1,13 @@
-import { createHash, createPrivateKey, createPublicKey } from "node:crypto";
+import {
+  createHash,
+  createPrivateKey,
+  createPublicKey,
+  type KeyObject,
+} from "node:crypto";
 import { TimeInMs } from "@archestra/shared";
 import { SignJWT } from "jose";
 import { LRUCacheManager } from "@/cache-manager";
+import { ApiError } from "@/types";
 import { parseGitHubAppSecrets } from "./app-secrets";
 
 // credentials needed to mint a short-lived installation token for a GitHub App
@@ -37,12 +43,13 @@ export async function resolveInstallationCredential(
     );
   }
   const { privateKey } = parseGitHubAppSecrets(credentials.privateKey);
+  const signingKey = parseSigningKey(privateKey);
 
   const cacheKey = buildInstallationTokenCacheKey({
     githubUrl,
     appId,
     installationId,
-    privateKey,
+    signingKey,
   });
   const cachedToken = installationTokenCache.get(cacheKey);
   if (
@@ -53,7 +60,7 @@ export async function resolveInstallationCredential(
     return cachedToken;
   }
 
-  const jwt = await signAppJwt({ appId, privateKey });
+  const jwt = await signAppJwt({ appId, signingKey });
   const response = await fetchImpl(
     `${githubUrl.replace(/\/+$/, "")}/app/installations/${installationId}/access_tokens`,
     {
@@ -69,6 +76,12 @@ export async function resolveInstallationCredential(
 
   if (!response.ok) {
     const responseMessage = await readGithubErrorResponse(response);
+    if (response.status === 404) {
+      throw new ApiError(
+        400,
+        "GitHub App or installation was not found. Check the app ID, installation ID, and private key in Settings → Credentials.",
+      );
+    }
     throw new Error(
       [
         `Failed to create GitHub App installation token: ${response.status} ${response.statusText}`,
@@ -117,23 +130,22 @@ const installationTokenCache = new LRUCacheManager<{
 
 async function signAppJwt(params: {
   appId: string;
-  privateKey: string;
+  signingKey: KeyObject;
 }): Promise<string> {
   const now = Math.floor(Date.now() / 1000);
-  const key = createPrivateKey(normalizePrivateKey(params.privateKey));
   return new SignJWT({})
     .setProtectedHeader({ alg: "RS256" })
     .setIssuedAt(now - 60)
     .setExpirationTime(now + 9 * 60)
     .setIssuer(params.appId)
-    .sign(key);
+    .sign(params.signingKey);
 }
 
 function buildInstallationTokenCacheKey(params: {
   githubUrl: string;
   appId: string;
   installationId: string;
-  privateKey: string;
+  signingKey: KeyObject;
 }): string {
   return [
     params.githubUrl.replace(/\/+$/, ""),
@@ -142,7 +154,7 @@ function buildInstallationTokenCacheKey(params: {
     // The public-key fingerprint invalidates cached tokens when the App key rotates.
     createHash("sha256")
       .update(
-        createPublicKey(normalizePrivateKey(params.privateKey)).export({
+        createPublicKey(params.signingKey).export({
           type: "spki",
           format: "der",
         }),
@@ -151,8 +163,22 @@ function buildInstallationTokenCacheKey(params: {
   ].join(":");
 }
 
-function normalizePrivateKey(privateKey: string): string {
-  return privateKey.replace(/\\n/g, "\n");
+function parseSigningKey(privateKey: string): KeyObject {
+  try {
+    const key = createPrivateKey(privateKey.replace(/\\n/g, "\n"));
+    if (
+      key.asymmetricKeyType === "rsa" &&
+      (key.asymmetricKeyDetails?.modulusLength ?? 0) >= 2048
+    ) {
+      return key;
+    }
+  } catch {
+    // Unreadable and unsupported keys use the same recovery instructions.
+  }
+  throw new ApiError(
+    400,
+    "GitHub App private key is invalid. Reconnect with the complete, unencrypted RSA private key PEM from GitHub.",
+  );
 }
 
 async function readGithubErrorResponse(response: Response): Promise<string> {

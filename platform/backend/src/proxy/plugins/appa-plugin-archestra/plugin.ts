@@ -1,7 +1,15 @@
+import config from "@/config";
 import { buildNoticeArguments, type RemedyExecution } from "@/openappa/notice";
+import type { OfferJws } from "@/openappa/offer-claims";
+import {
+  offerIdFromJws,
+  signOfferClaims,
+  unsignedOfferClaims,
+} from "@/openappa/offer-claims";
 import {
   cancelCalls,
   endTurn,
+  evaluateHostedToolCalls,
   evaluateToolCalls,
   notePrompt,
   type OpenAppaSession,
@@ -10,6 +18,8 @@ import {
 import type {
   LlmProxyBeforeModelContext,
   LlmProxyContextTrust,
+  LlmProxyHostedToolCallsContext,
+  LlmProxyHostedToolCallsOutcome,
   LlmProxyModelResponseContext,
   LlmProxyPlugin,
   LlmProxyRequestContext,
@@ -19,6 +29,7 @@ import type {
   LlmProxyToolResultsOutcome,
 } from "@/proxy/plugins/registry";
 import { normalizeToolCallsForPolicy } from "@/routes/proxy/llm-proxy-helpers";
+import { ApiError } from "@/types";
 import {
   APPA_PLUGIN_TRUSTED_CONTEXT,
   type AppaClientAdapter,
@@ -114,11 +125,60 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     let changed = false;
     const toolCalls = context.toolCalls.map((call) => {
       if (call.name !== control) return call;
-      const stamped = stampControlExecution(call);
+      const stamped = stampControlExecution(
+        call,
+        this.bindings.get(context.resources)?.request.offerClaims,
+      );
       changed ||= stamped !== call;
       return stamped;
     });
     if (changed) return { decision: "allow", toolCalls };
+  }
+
+  governsHostedToolCalls(context: LlmProxyRequestContext): boolean {
+    return this.bindings.get(context.resources)?.request.tools !== undefined;
+  }
+
+  async onHostedToolCalls(
+    context: LlmProxyHostedToolCallsContext,
+  ): Promise<LlmProxyHostedToolCallsOutcome | undefined> {
+    const binding = this.bindings.get(context.resources);
+    const tools = binding?.request.tools;
+    if (!binding || !tools) return;
+    const calls = [...context.hostedToolCalls];
+    const decisions = await evaluateHostedToolCalls(binding.session, calls, {
+      canonicalize: (name) => this.canonicalize(binding, name),
+      controlToolName: tools.controlToolName,
+    });
+    const held = calls.flatMap((call, index) => {
+      const decision = decisions[index];
+      return decision.kind === "hold"
+        ? [{ call, feedback: decision.feedback }]
+        : [];
+    });
+    if (held.length === 0) return { decision: "release" };
+    // The client must run the notices, so the turn stays open.
+    binding.turnOpen = true;
+    return {
+      decision: "hold",
+      notices: held.map(({ call, feedback }) => ({
+        id: call.id,
+        name: tools.noticeToolName,
+        arguments: JSON.stringify(
+          buildNoticeArguments({
+            id: call.id,
+            tool: call.name,
+            arguments: call.arguments,
+            result: feedback,
+          }),
+        ),
+      })),
+      blocked: held.map(({ call, feedback }) => ({
+        id: call.id,
+        name: call.name,
+        reason: feedback,
+      })),
+    };
   }
 
   async onToolCalls(
@@ -185,6 +245,11 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
             result: decision.feedback,
             custom: identity.custom,
             namespace: identity.namespace,
+            offers: signedOffersForDenial(binding.session, {
+              offerIds: decision.offers ?? [],
+              tool: identity.name,
+              spelling: identity.name,
+            }),
           }),
         ),
       });
@@ -280,9 +345,45 @@ function cloneTrustedContext(context: AppaTrustedContext): AppaTrustedContext {
   };
 }
 
+function signedOffersForDenial(
+  session: OpenAppaSession,
+  params: { offerIds: string[]; tool: string; spelling: string },
+): OfferJws[] {
+  const secret = config.openappa.offerSigningSecret;
+  if (params.offerIds.length === 0) return [];
+  if (secret.length === 0) {
+    throw new ApiError(
+      503,
+      "OpenAPPA offer signing is not configured (ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET)",
+    );
+  }
+  return params.offerIds.map((offerId) =>
+    signOfferClaims(
+      unsignedOfferClaims({
+        organizationId: session.organization_id,
+        sessionId: session.session_id,
+        parentId: session.parent_id,
+        callerId: session.caller_id,
+        offerId,
+        tool: params.tool,
+        spelling: params.spelling,
+      }),
+      secret,
+    ),
+  );
+}
+
+function claimsForOffer(
+  offerId: string,
+  envelopes: readonly OfferJws[] | undefined,
+): OfferJws | undefined {
+  return envelopes?.find((envelope) => offerIdFromJws(envelope) === offerId);
+}
+
 /** Attaches execution metadata frame to remedy calls for receipt validation. */
 function stampControlExecution(
   call: LlmProxyToolCallsContext["toolCalls"][number],
+  offerClaims: readonly OfferJws[] | undefined,
 ): LlmProxyToolCallsContext["toolCalls"][number] {
   const originalArguments =
     typeof call.arguments === "string"
@@ -300,6 +401,16 @@ function stampControlExecution(
     Array.isArray(argumentsValue)
   )
     return call;
+  const argumentRecord = argumentsValue as Record<string, unknown>;
+  // The proxy is the sole writer of the JWS members. A model echoing a
+  // previous remedy call would otherwise resend a stale, still-valid
+  // signature the proxy never minted for this turn.
+  const {
+    protected: _clientProtected,
+    payload: _clientPayload,
+    signature: _clientSignature,
+    ...clientArguments
+  } = argumentRecord;
   const execution = {
     v: 1,
     kind: "appa_remedy",
@@ -307,11 +418,19 @@ function stampControlExecution(
     tool_name: call.name,
     original_arguments: originalArguments,
   } satisfies RemedyExecution;
+  const offerId =
+    typeof argumentRecord.offer_id === "string"
+      ? argumentRecord.offer_id
+      : undefined;
+  const owner = offerId ? claimsForOffer(offerId, offerClaims) : undefined;
   return {
     ...call,
     arguments: JSON.stringify({
-      ...argumentsValue,
+      ...clientArguments,
       execution,
+      // The matched offer's flattened JWS routing fields (protected,
+      // payload, signature) land as top-level keys beside the remedy args.
+      ...(owner ?? {}),
     }),
   };
 }

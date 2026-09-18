@@ -1,11 +1,14 @@
+import { generateKeyPairSync } from "node:crypto";
 import { ADMIN_ROLE_NAME, EDITOR_ROLE_NAME } from "@archestra/shared";
 import { vi } from "vitest";
 import {
+  GithubAppConfigModel,
   OrganizationModel,
   SkillFileModel,
   SkillModel,
   SkillVersionModel,
 } from "@/models";
+import { secretManager } from "@/secrets-manager";
 import { createGithubPat } from "@/services/github-pat";
 import {
   afterEach,
@@ -236,6 +239,53 @@ describe("POST /api/skills/github/{discover,preview,import}", () => {
   });
 
   describe("GitHub App auth for imports", () => {
+    test.for([
+      "discover",
+      "preview",
+      "import",
+    ] as const)("%s returns an actionable error for an unreadable stored App key before contacting GitHub", async (action, {
+      makeMember,
+    }) => {
+      await makeMember(ctx.user.id, ctx.organizationId, {
+        role: EDITOR_ROLE_NAME,
+      });
+      const secret = await secretManager().createSecret(
+        {
+          apiToken:
+            "-----BEGIN PRIVATE KEY-----\ninvalid-synthetic-key\n-----END PRIVATE KEY-----",
+        },
+        "unreadable-app-key",
+      );
+      const appConfig = await GithubAppConfigModel.create({
+        organizationId: ctx.organizationId,
+        name: "Unreadable App key",
+        githubUrl: "https://api.github.com",
+        appId: "12345",
+        installationId: "67890",
+        secretId: secret.id,
+      });
+      const fetchMock = vi.fn();
+      vi.stubGlobal("fetch", fetchMock);
+
+      const response = await ctx.app.inject({
+        method: "POST",
+        url: `/api/skills/github/${action}`,
+        payload: {
+          repoUrl: "example/skills",
+          githubAppConfigId: appConfig.id,
+          ...(action === "preview" ? { skillPath: "sample" } : {}),
+          ...(action === "import" ? { skillPaths: ["sample"] } : {}),
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.message).toBe(
+        "GitHub App private key is invalid. Reconnect with the complete, unencrypted RSA private key PEM from GitHub.",
+      );
+      expect(response.body).not.toContain("invalid-synthetic-key");
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
     test("rejects supplying both githubToken and githubAppConfigId", async () => {
       const response = await ctx.app.inject({
         method: "POST",
@@ -295,6 +345,58 @@ describe("POST /api/skills/github/{discover,preview,import}", () => {
         },
       });
       expect(response.statusCode).toBe(404);
+    });
+
+    test.for([
+      "discover",
+      "preview",
+      "import",
+    ] as const)("%s reports a rejected App installation as a configuration error", async (action, {
+      makeMember,
+    }) => {
+      await makeMember(ctx.user.id, ctx.organizationId, {
+        role: EDITOR_ROLE_NAME,
+      });
+      const { privateKey } = generateKeyPairSync("rsa", {
+        modulusLength: 2048,
+        privateKeyEncoding: { type: "pkcs8", format: "pem" },
+        publicKeyEncoding: { type: "spki", format: "pem" },
+      });
+      const secret = await secretManager().createSecret(
+        { apiToken: privateKey },
+        "synthetic-app",
+      );
+      const appConfig = await GithubAppConfigModel.create({
+        organizationId: ctx.organizationId,
+        name: "Synthetic App",
+        githubUrl: "https://api.github.com",
+        appId: "12345",
+        installationId: "67890",
+        secretId: secret.id,
+      });
+      const fetchMock = vi.fn(
+        async () =>
+          new Response(JSON.stringify({ message: "Not Found" }), {
+            status: 404,
+          }),
+      );
+      vi.stubGlobal("fetch", fetchMock);
+      const response = await ctx.app.inject({
+        method: "POST",
+        url: `/api/skills/github/${action}`,
+        payload: {
+          repoUrl: "example/skills",
+          githubAppConfigId: appConfig.id,
+          ...(action === "preview" ? { skillPath: "sample" } : {}),
+          ...(action === "import" ? { skillPaths: ["sample"] } : {}),
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.message).toContain(
+        "Check the app ID, installation ID",
+      );
+      expect(fetchMock).toHaveBeenCalledTimes(1);
     });
   });
 });

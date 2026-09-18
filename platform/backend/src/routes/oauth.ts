@@ -1586,11 +1586,13 @@ type OAuthClientAuthMethod =
 function selectDynamicClientAuthMethod(
   supportedMethods: string[],
 ): OAuthClientAuthMethod {
-  if (supportedMethods.includes("client_secret_basic")) {
-    return "client_secret_basic";
-  }
+  // Some servers advertise Basic but only accept form-body credentials.
+  // Prefer POST when supported, retaining Basic for Basic-only servers.
   if (supportedMethods.includes("client_secret_post")) {
     return "client_secret_post";
+  }
+  if (supportedMethods.includes("client_secret_basic")) {
+    return "client_secret_basic";
   }
   if (supportedMethods.includes("none")) {
     return "none";

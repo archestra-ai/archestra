@@ -6,9 +6,9 @@ mod policy;
 use appa_eventlog::{
     Backend, LogStore,
     postgres::{
-        OfferOwnerKey, OfferOwnerRecord, OperationClaim, OperationKey, OperationRequest,
-        PostgresError, PostgresStore, ProcessedResultClaim, ProcessedResultKey,
-        ProcessedResultRequest, ReceiptBinding, ReceiptScope,
+        OperationClaim, OperationKey, OperationRequest, PostgresError, PostgresStore,
+        ProcessedResultClaim, ProcessedResultKey, ProcessedResultRequest, ReceiptBinding,
+        ReceiptScope,
     },
 };
 use appa_runtime::{
@@ -16,7 +16,6 @@ use appa_runtime::{
         EmbeddedPresentationOptions, ExecuteRemedyPlanArgs, RemedyOutcome, RemedyPresentation,
         RemedyRefusal, Runtime,
     },
-    config::Config,
     hooks,
 };
 use appa_runtime_api::{
@@ -29,10 +28,13 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json, value::RawValue};
 use sha2::{Digest, Sha256};
 use std::{
+    collections::HashMap,
+    num::NonZeroUsize,
     panic::AssertUnwindSafe,
     sync::{Arc, OnceLock},
+    time::Duration,
 };
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, OwnedMutexGuard, OwnedSemaphorePermit, Semaphore};
 
 #[napi(object)]
 #[derive(Clone)]
@@ -41,14 +43,47 @@ pub struct ReportingOptions {
     pub hostname: Option<String>,
 }
 
+/// Process-wide runtime slot. The mutex covers initialize, policy reload, and
+/// the start hook that opens a trajectory only. Dispatch otherwise runs
+/// concurrently: same-trajectory exclusion is the in-process root lock plus
+/// the ledger's advisory session lock, and every ledger write is a short
+/// self-committing transaction, so no outer transaction ever spans hook I/O.
 static STATE: OnceLock<Mutex<Option<State>>> = OnceLock::new();
 
+#[derive(Clone)]
 struct State {
     runtime: Arc<Runtime>,
-    config: Config,
     store: Arc<LogStore>,
-    policy_content: String,
+    /// One permit per pooled connection, so a dispatch waits for a connection
+    /// here, asynchronously, and never inside the store.
+    connections: Arc<Semaphore>,
+    policy_content: Arc<str>,
     reporting: Option<ReportingOptions>,
+}
+
+/// Field order is drop order: the connection goes back before its permit does.
+struct Leased {
+    state: State,
+    _permit: OwnedSemaphorePermit,
+}
+
+/// A dispatch holds its connection across its consults, so slow authorities
+/// can keep every connection busy. Waiting dispatches then fail closed rather
+/// than hang; the bound matches the ledger's own `lock_timeout`.
+const CONNECTION_WAIT: Duration = Duration::from_secs(30);
+
+async fn connection_permit(
+    connections: &Arc<Semaphore>,
+    wait: Duration,
+) -> napi::Result<OwnedSemaphorePermit> {
+    tokio::time::timeout(wait, connections.clone().acquire_owned())
+        .await
+        .map_err(|_| error("OpenAPPA had no free PostgreSQL connection in time; retry later"))?
+        .map_err(error)
+}
+
+fn state_mutex() -> &'static Mutex<Option<State>> {
+    STATE.get_or_init(|| Mutex::new(None))
 }
 
 /// Identity context associated with a denial offer for cross-replica routing.
@@ -103,6 +138,16 @@ struct OfferInput {
     /// Authenticated caller identity.
     #[serde(default)]
     caller_id: Option<String>,
+    session_id: String,
+    #[serde(default)]
+    parent_id: Option<String>,
+    /// Principal that minted the offer, from verified host claims.
+    #[serde(default)]
+    owner_caller_id: Option<String>,
+    #[serde(default)]
+    tool: Option<String>,
+    #[serde(default)]
+    spelling: Option<String>,
     /// Client tool call ID for binding durable remedy receipts.
     #[serde(default)]
     tool_call_id: Option<String>,
@@ -259,20 +304,27 @@ fn postgres_store(store: &LogStore) -> napi::Result<&PostgresStore> {
         .postgres()
         .ok_or_else(|| error("OpenAPPA requires PostgreSQL storage"))
 }
+
 fn identity(input: &Input) -> String {
-    format!(
-        "archestra:{:x}",
-        Sha256::digest(input.session_id.as_bytes())
-    )
+    session_actor(&input.session_id)
+}
+
+fn session_actor(session_id: &str) -> String {
+    format!("archestra:{:x}", Sha256::digest(session_id.as_bytes()))
 }
 
 #[napi(js_name = "initializeOpenappa")]
 pub async fn initialize_openappa(
     database_url: String,
+    postgres_max_connections: u32,
     policy_content: String,
     reporting: Option<ReportingOptions>,
 ) -> napi::Result<()> {
-    let mut slot = STATE.get_or_init(|| Mutex::new(None)).lock().await;
+    let max_connections = usize::try_from(postgres_max_connections)
+        .ok()
+        .and_then(NonZeroUsize::new)
+        .ok_or_else(|| error("OpenAPPA needs at least one PostgreSQL connection"))?;
+    let mut slot = state_mutex().lock().await;
     if slot.is_some() {
         return Ok(());
     }
@@ -280,15 +332,19 @@ pub async fn initialize_openappa(
         appa_runtime::tls::install_crypto_provider();
         let mut config = policy::compile(&policy_content).map_err(error)?;
         config.reporting.agent_yell = reporting.is_some();
-        let store =
-            Arc::new(LogStore::open(Backend::Postgres { url: database_url }).map_err(error)?);
-        let runtime =
-            Runtime::open_with_store(config.clone(), store.clone(), None).map_err(error)?;
+        let store = Arc::new(
+            LogStore::open(Backend::Postgres {
+                url: database_url,
+                max_connections,
+            })
+            .map_err(error)?,
+        );
+        let runtime = Runtime::open_with_store(config, store.clone(), None).map_err(error)?;
         Ok(State {
             runtime: Arc::new(runtime),
-            config,
             store,
-            policy_content,
+            connections: Arc::new(Semaphore::new(max_connections.get())),
+            policy_content: policy_content.into(),
             reporting,
         })
     })
@@ -390,38 +446,58 @@ fn validate(input: &Input) -> napi::Result<()> {
 
 /// Runs one validated event against the shared runtime.
 async fn run(input: Input, policy_content: Option<String>) -> napi::Result<String> {
-    let mut slot = STATE.get_or_init(|| Mutex::new(None)).lock().await;
-    let state = slot
-        .as_mut()
-        .ok_or_else(|| error("OpenAPPA is not initialized"))?;
     let result = AssertUnwindSafe(async {
-        if let Some(content) = policy_content
-            && content != state.policy_content
-        {
-            let mut config = policy::compile(&content).map_err(error)?;
-            config.reporting.agent_yell = state.reporting.is_some();
-            state.runtime.reload(config.clone()).map_err(error)?;
-            state.config = config;
-            state.policy_content = content;
-        }
-        state.dispatch(input).await
+        let state = {
+            let mut slot = state_mutex().lock().await;
+            let state = slot
+                .as_mut()
+                .ok_or_else(|| error("OpenAPPA is not initialized"))?;
+            // Reloads are serialized by the mutex; when concurrent dispatches
+            // carry different policy contents, the last one to take the mutex
+            // serves until the next reload. That can land before this
+            // dispatch's start, so the start serves its own content again
+            // (see `start_under`).
+            if let Some(content) = policy_content.as_deref() {
+                state.serve(content)?;
+            }
+            state.clone()
+        };
+        state.dispatch(input, policy_content.as_deref()).await
     })
     .catch_unwind()
     .await;
     match result {
         Ok(Ok(value)) => Ok(value.to_string()),
-        failure => {
-            // A rollback must also discard tentative in-memory vouches and
-            // turn markers. Durable pending receipts remain fail-closed.
-            let rebuilt = Runtime::open_with_store(state.config.clone(), state.store.clone(), None)
-                .map_err(error)?;
-            state.runtime = Arc::new(rebuilt);
-            match failure {
-                Ok(Err(error)) => Err(error),
-                _ => Err(error("OpenAPPA panicked; operation was not released")),
-            }
-        }
+        Ok(Err(error)) => Err(error),
+        Err(_) => Err(error("OpenAPPA panicked; operation was not released")),
     }
+}
+
+/// Runs a start hook under the policy content its dispatch carried, on the
+/// runtime this dispatch already leased. A start opens a new root under
+/// whatever deployment serves at that moment, and the root keeps that policy
+/// for its whole life. A sibling dispatch carrying other content can reload
+/// after this dispatch's reload in `run`, so the start serves its own
+/// content again and opens under the same hold of the mutex.
+///
+/// The connection is leased before `dispatch` takes this mutex, so the hold
+/// covers only an in-memory recompile-and-reload plus the start's own ledger
+/// write on the connection this dispatch already holds — never a wait for a
+/// free one. `Runtime::on` views share one `Shared` with the runtime `serve`
+/// reloads (see its own doc), so `runtime` reflects that reload immediately.
+async fn start_under(
+    policy_content: Option<&str>,
+    runtime: &Runtime,
+    start: HookEvent,
+) -> napi::Result<HookDecision> {
+    let mut slot = state_mutex().lock().await;
+    let state = slot
+        .as_mut()
+        .ok_or_else(|| error("OpenAPPA is not initialized"))?;
+    if let Some(content) = policy_content {
+        state.serve(content)?;
+    }
+    Ok(hooks::handle(runtime, start).await)
 }
 
 /// Executes a remedy plan by offer ID, resolving the owner session from PostgreSQL.
@@ -437,6 +513,12 @@ pub async fn execute_remedy_by_offer(
     {
         return Err(error("invalid organization identity"));
     }
+    if input.session_id.is_empty()
+        || input.session_id.len() > 1024
+        || input.session_id.chars().any(char::is_control)
+    {
+        return Err(error("invalid session identity"));
+    }
     match (input.execution_mode, &input.tool_call_id) {
         (ExecutionMode::Tracked, Some(tool_call_id))
             if !tool_call_id.is_empty()
@@ -450,23 +532,23 @@ pub async fn execute_remedy_by_offer(
     }
     let visible_arguments = object_raw(&input.arguments, "remedy arguments")?;
     let original_arguments = original_arguments_raw(&input.original_arguments)?;
-    let quoted: ExecuteRemedyPlanArgs =
-        serde_json::from_str(visible_arguments.get()).map_err(error)?;
-    let offer_id = OfferId(quoted.offer_id.clone());
+    let _: ExecuteRemedyPlanArgs = serde_json::from_str(visible_arguments.get()).map_err(error)?;
     let caller = input
         .caller_id
         .as_deref()
         .map(Principal::parse)
         .transpose()?;
+    let state = {
+        let slot = state_mutex().lock().await;
+        slot.as_ref()
+            .ok_or_else(|| error("OpenAPPA is not initialized"))?
+            .clone()
+    };
     let owner = {
-        let slot = STATE.get_or_init(|| Mutex::new(None)).lock().await;
-        let state = slot
-            .as_ref()
-            .ok_or_else(|| error("OpenAPPA is not initialized"))?;
-        lookup_offer_owner(
-            postgres_store(&state.store)?,
-            &input.organization_id,
-            &offer_id,
+        let leased = state.lease().await?;
+        routing_owner(
+            postgres_store(&leased.state.store)?,
+            &input,
             caller.as_ref(),
         )?
     };
@@ -531,43 +613,68 @@ impl Drop for SessionLock {
     }
 }
 
+/// In-process per-trajectory exclusion. The advisory session lock only
+/// excludes other connections: on this process's one ledger connection it is
+/// reentrant, so it cannot order this process's own dispatches. Unrelated
+/// roots overlap freely; dispatches for one root queue here. One root is one
+/// chat session, so the registry grows with the distinct sessions this
+/// process has served, a few hundred bytes each — the same lifetime the
+/// sandbox handle slots keep. Removing an entry is not safe while a later
+/// dispatch could already be queued on it, so entries stay for the process's
+/// life; revisit only if distinct-root counts grow unbounded in production.
+static ROOT_LOCKS: OnceLock<Mutex<HashMap<String, Arc<Mutex<()>>>>> = OnceLock::new();
+
+struct RootLock {
+    _guard: OwnedMutexGuard<()>,
+}
+
+impl RootLock {
+    async fn acquire(root: String) -> Self {
+        let lock = {
+            let mut registry = root_locks().lock().await;
+            registry.entry(root).or_default().clone()
+        };
+        let _guard = lock.lock_owned().await;
+        Self { _guard }
+    }
+}
+
+fn root_locks() -> &'static Mutex<HashMap<String, Arc<Mutex<()>>>> {
+    ROOT_LOCKS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
 impl State {
-    /// Records only the offer ids exposed by the runtime's typed call denial.
-    /// Rendered notices and arbitrary tool output never create executable
-    /// offer ownership.
-    fn record_offers(
-        &self,
-        pg: &PostgresStore,
-        input: &Input,
-        root: &str,
-        presentation: Option<&RemedyPresentation>,
-    ) -> napi::Result<()> {
-        let offered = presentation_offer_ids(presentation);
-        if offered.is_empty() {
+    /// Makes `content` the serving policy unless it already is. A refused
+    /// candidate leaves the serving deployment in place. `Runtime::on` views
+    /// share one `Shared` with the runtime reloaded here (see its own doc),
+    /// so this is visible through every dispatch's leased view immediately.
+    fn serve(&mut self, content: &str) -> napi::Result<()> {
+        if *self.policy_content == *content {
             return Ok(());
         }
-        let owner = OfferOwner {
-            organization_id: input.organization_id.clone(),
-            caller_id: input.caller_id.clone(),
-            session_id: input.session_id.clone(),
-            parent_id: input.parent_id.clone(),
-            root: root.to_owned(),
-            arguments: input
-                .original_arguments
-                .as_ref()
-                .or(input.arguments.as_ref())
-                .map(|arguments| arguments.get().to_owned()),
-            tool: input.tool.clone(),
-            spelling: input.spelling.clone(),
-        };
-        for offer_id in offered {
-            insert_offer_owner(pg, &offer_id, &owner)?;
-        }
+        let mut config = policy::compile(content).map_err(error)?;
+        config.reporting.agent_yell = self.reporting.is_some();
+        self.runtime.reload(config).map_err(error)?;
+        self.policy_content = content.into();
         Ok(())
     }
 
-    async fn dispatch(&self, input: Input) -> napi::Result<Value> {
-        let pg = postgres_store(&self.store)?;
+    /// This state over one pooled connection: the store is a lease of it and
+    /// the runtime records through that lease.
+    async fn lease(&self) -> napi::Result<Leased> {
+        let permit = connection_permit(&self.connections, CONNECTION_WAIT).await?;
+        let store = Arc::new(self.store.lease().map_err(error)?);
+        Ok(Leased {
+            state: State {
+                runtime: Arc::new(self.runtime.on(store.clone())),
+                store,
+                ..self.clone()
+            },
+            _permit: permit,
+        })
+    }
+
+    async fn dispatch(&self, input: Input, policy_content: Option<&str>) -> napi::Result<Value> {
         let actor_id = identity(&input);
         let parent = input.parent_id.clone().map(|id| Input {
             session_id: id,
@@ -578,22 +685,42 @@ impl State {
         } else if let Some(parent) = parent {
             let parent_key = identity(&parent);
             let organization_id = input.organization_id.clone();
-            pg.with_client(move |client| {
-                client
-                    .query_opt(
-                        "SELECT root, organization_id FROM openappa_sessions WHERE actor = $1",
-                        &[&parent_key],
-                    )?
-                    .and_then(|row| {
-                        (row.get::<_, String>(1) == organization_id)
-                            .then(|| row.get::<_, String>(0))
-                    })
-                    .ok_or_else(|| PostgresError("parent session has not started".into()))
-            })
-            .map_err(error)?
+            let leased = self.lease().await?;
+            postgres_store(&leased.state.store)?
+                .with_client(move |client| {
+                    client
+                        .query_opt(
+                            "SELECT root, organization_id FROM openappa_sessions WHERE actor = $1",
+                            &[&parent_key],
+                        )?
+                        .and_then(|row| {
+                            (row.get::<_, String>(1) == organization_id)
+                                .then(|| row.get::<_, String>(0))
+                        })
+                        .ok_or_else(|| PostgresError("parent session has not started".into()))
+                })
+                .map_err(error)?
         } else {
             actor_id.clone()
         };
+        let _root = RootLock::acquire(root.clone()).await;
+        let leased = self.lease().await?;
+        leased
+            .state
+            .dispatch_on_lease(input, root, actor_id, policy_content)
+            .await
+    }
+
+    /// The session lock and the runtime's appends lock the same key, which
+    /// only one connection can hold twice, so both run on this state's lease.
+    async fn dispatch_on_lease(
+        &self,
+        input: Input,
+        root: String,
+        actor_id: String,
+        policy_content: Option<&str>,
+    ) -> napi::Result<Value> {
+        let pg = postgres_store(&self.store)?;
         let _lock = SessionLock::acquire(pg, root.clone())?;
         // Check every member of the family: continuing a parent while a child's
         // result is interrupted could otherwise bypass inherited restrictions.
@@ -634,7 +761,6 @@ impl State {
                 return Err(error("session identity changed"));
             }
         } else {
-            let tx = pg.begin().map_err(error)?;
             let start = if let Some(child) = &actor.child {
                 HookEvent::ChildStart {
                     root: actor.root.clone(),
@@ -646,7 +772,7 @@ impl State {
                     root: actor.root.clone(),
                 }
             };
-            let decision = hooks::handle(&self.runtime, start).await;
+            let decision = start_under(policy_content, &self.runtime, start).await?;
             if !matches!(decision, HookDecision::Ack | HookDecision::Context { .. }) {
                 return Err(error(wire(&decision)?));
             }
@@ -659,7 +785,6 @@ impl State {
                     &[&id, &root, &input.organization_id, &input.caller_id, &input.session_id, &input.parent_id, &start_decision])?;
                 Ok(())
             }).map_err(error)?;
-            tx.commit().map_err(error)?;
         }
 
         if input.event == HookEventKind::SessionStart {
@@ -713,7 +838,6 @@ impl State {
                     ProcessedResultClaim::Complete { decision, .. } => return Ok(decision),
                 }
             }
-            let tx = pg.begin().map_err(error)?;
             let args: ExecuteRemedyPlanArgs =
                 serde_json::from_str(required_arguments(&input)?).map_err(error)?;
             let call = ProposedCall {
@@ -758,25 +882,29 @@ impl State {
                     pg.complete_processed_result(result_key, approved, response.clone())
                         .map_err(error)?;
                 }
-                tx.commit().map_err(error)?;
                 return Ok(response);
             }
-            let quoted_offer = OfferId(args.offer_id.clone());
             let outcome = self
                 .runtime
                 .execute_embedded_remedy_with_options(&actor, args, presentation_options(&input))
                 .await;
-            let presentation = remedy_presentation(&outcome);
-            self.record_offers(pg, &input, &root, presentation)?;
-            let owner = lookup_offer_owner_record(pg, &input.organization_id, &quoted_offer)?;
-            let response = render_remedy_outcome(outcome, owner.as_ref())?;
+            let owner = OfferOwner {
+                organization_id: input.organization_id.clone(),
+                caller_id: input.caller_id.clone(),
+                session_id: input.session_id.clone(),
+                parent_id: input.parent_id.clone(),
+                root: root.clone(),
+                arguments: None,
+                tool: input.tool.clone(),
+                spelling: input.spelling.clone(),
+            };
+            let response = render_remedy_outcome(outcome, Some(&owner))?;
             finish_operation(pg, &input, &operation, &response, ReceiptBinding::Caller)?;
             if let Some(result_key) = result_key {
                 let approved = decision_text(&response)?;
                 pg.complete_processed_result(result_key, approved, response.clone())
                     .map_err(error)?;
             }
-            tx.commit().map_err(error)?;
             return Ok(response);
         }
 
@@ -817,7 +945,6 @@ impl State {
         )? {
             return Ok(decision);
         }
-        let tx = pg.begin().map_err(error)?;
         let decision = if input.event == HookEventKind::Yell {
             let reporting = self
                 .reporting
@@ -877,13 +1004,9 @@ impl State {
                 presentation_options(&input),
             )
             .await;
-            if input.event == HookEventKind::ToolCall {
-                self.record_offers(pg, &input, &root, outcome.presentation.as_ref())?;
-            }
             wire(&outcome.decision)?
         };
         finish_operation(pg, &input, &operation, &decision, ReceiptBinding::Session)?;
-        tx.commit().map_err(error)?;
         Ok(decision)
     }
 
@@ -952,7 +1075,6 @@ impl State {
             },
             (false, Some(ExecutionOutcome::Unknown) | None) => ToolOutcome::Indeterminate,
         };
-        let tx = pg.begin().map_err(error)?;
         let event = if call.spawn {
             // No child return is guessed from an opaque tool result. The child
             // must have reported ChildEnd through its adapter first.
@@ -979,7 +1101,6 @@ impl State {
         )
         .await;
         let decision = outcome.decision;
-        self.record_offers(pg, input, &actor.root.0, outcome.presentation.as_ref())?;
         if cancelled && !matches!(decision, HookDecision::Ack) {
             return Err(error("OpenAPPA could not settle a withheld tool call"));
         }
@@ -1009,7 +1130,7 @@ impl State {
             let refusal = json!({ "decision": "deny_call", "feedback": approved });
             refusal
         } else {
-            wire(&decision)?
+            with_presentation_offers(wire(&decision)?, outcome.presentation.as_ref())?
         };
         let output_source = if cancelled {
             OutputSource::Runtime
@@ -1045,7 +1166,6 @@ impl State {
         let approved = decision_text(&response)?;
         pg.complete_processed_result(key, approved, response.clone())
             .map_err(error)?;
-        tx.commit().map_err(error)?;
         Ok(response)
     }
 }
@@ -1157,6 +1277,29 @@ fn with_offer_status(response: Value, status: OfferStatusKind) -> napi::Result<V
     .map_err(error)
 }
 
+fn with_presentation_offers(
+    mut response: Value,
+    presentation: Option<&RemedyPresentation>,
+) -> napi::Result<Value> {
+    let offers = presentation_offer_ids(presentation);
+    if offers.is_empty() {
+        return Ok(response);
+    }
+    let object = response
+        .as_object_mut()
+        .ok_or_else(|| error("decision is not an object"))?;
+    object.insert(
+        "offers".to_owned(),
+        json!(
+            offers
+                .into_iter()
+                .map(|id| json!({ "offer_id": id.0 }))
+                .collect::<Vec<_>>()
+        ),
+    );
+    Ok(response)
+}
+
 fn presentation_offer_ids(presentation: Option<&RemedyPresentation>) -> Vec<OfferId> {
     presentation
         .map(|presentation| {
@@ -1250,17 +1393,6 @@ fn json_arguments_match(original: &str, proposed: &str) -> bool {
     ) {
         (Ok(original), Ok(proposed)) => original == proposed,
         _ => false,
-    }
-}
-
-fn remedy_presentation(outcome: &RemedyOutcome) -> Option<&RemedyPresentation> {
-    match outcome {
-        RemedyOutcome::Declined { presentation } => Some(presentation),
-        RemedyOutcome::Authorized { .. }
-        | RemedyOutcome::Substituted { .. }
-        | RemedyOutcome::Returned { .. }
-        | RemedyOutcome::NoAnswer { .. }
-        | RemedyOutcome::Refused { .. } => None,
     }
 }
 
@@ -1461,47 +1593,36 @@ fn proposed(input: &Input) -> napi::Result<ProposedCall> {
     })
 }
 
-fn lookup_offer_owner(
+fn routing_owner(
     pg: &PostgresStore,
-    organization_id: &str,
-    offer_id: &OfferId,
-    caller: Option<&Principal>,
+    input: &OfferInput,
+    spender: Option<&Principal>,
 ) -> napi::Result<Option<OfferOwner>> {
-    let record = pg
-        .offer_owner(OfferOwnerKey {
-            organization_id: organization_id.to_owned(),
-            offer_id: offer_id.0.clone(),
+    if !owner_can_be_spent_by(input.owner_caller_id.as_deref(), spender) {
+        return Ok(None);
+    }
+    let actor = session_actor(&input.session_id);
+    let organization_id = input.organization_id.clone();
+    let root = pg
+        .with_client(move |client| {
+            Ok(client
+                .query_opt(
+                    "SELECT root FROM openappa_sessions WHERE actor = $1 AND organization_id = $2",
+                    &[&actor, &organization_id],
+                )?
+                .map(|row| row.get::<_, String>(0)))
         })
         .map_err(error)?;
-    Ok(record
-        .filter(|record| owner_can_be_spent_by(record.scope.caller_id.as_deref(), caller))
-        .map(offer_owner_from_record))
-}
-
-fn lookup_offer_owner_record(
-    pg: &PostgresStore,
-    organization_id: &str,
-    offer_id: &OfferId,
-) -> napi::Result<Option<OfferOwner>> {
-    pg.offer_owner(OfferOwnerKey {
-        organization_id: organization_id.to_owned(),
-        offer_id: offer_id.0.clone(),
-    })
-    .map_err(error)
-    .map(|record| record.map(offer_owner_from_record))
-}
-
-fn offer_owner_from_record(record: OfferOwnerRecord) -> OfferOwner {
-    OfferOwner {
-        organization_id: record.scope.organization_id,
-        caller_id: record.scope.caller_id,
-        session_id: record.scope.session_id,
-        parent_id: record.parent_id,
-        root: record.root,
-        arguments: record.arguments,
-        tool: record.tool,
-        spelling: record.spelling,
-    }
+    Ok(root.map(|root| OfferOwner {
+        organization_id: input.organization_id.clone(),
+        caller_id: input.owner_caller_id.clone(),
+        session_id: input.session_id.clone(),
+        parent_id: input.parent_id.clone(),
+        root,
+        arguments: None,
+        tool: input.tool.clone(),
+        spelling: input.spelling.clone(),
+    }))
 }
 
 fn owner_can_be_spent_by(owner: Option<&str>, spender: Option<&Principal>) -> bool {
@@ -1517,28 +1638,6 @@ fn owner_can_be_spent_by(owner: Option<&str>, spender: Option<&Principal>) -> bo
         Ok(Some(Principal::App(_) | Principal::VirtualKey(_) | Principal::Opaque(_))) => true,
         Ok(None) | Err(_) => false,
     }
-}
-
-fn insert_offer_owner(
-    pg: &PostgresStore,
-    offer_id: &OfferId,
-    owner: &OfferOwner,
-) -> napi::Result<()> {
-    pg.store_offer_owner(OfferOwnerRecord {
-        scope: ReceiptScope {
-            organization_id: owner.organization_id.clone(),
-            caller_id: owner.caller_id.clone(),
-            session_id: owner.session_id.clone(),
-            binding: ReceiptBinding::Caller,
-        },
-        offer_id: offer_id.0.clone(),
-        root: owner.root.clone(),
-        parent_id: owner.parent_id.clone(),
-        arguments: owner.arguments.clone(),
-        tool: owner.tool.clone(),
-        spelling: owner.spelling.clone(),
-    })
-    .map_err(error)
 }
 
 fn claim_operation(
@@ -1588,6 +1687,67 @@ fn finish_operation(
 struct YellArguments {
     message: String,
     with_trajectory: bool,
+}
+
+#[cfg(test)]
+mod connection_permit_tests {
+    use super::connection_permit;
+    use std::{sync::Arc, time::Duration};
+    use tokio::sync::Semaphore;
+
+    #[test]
+    fn a_busy_pool_refuses_within_its_wait_and_serves_once_freed() {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_time()
+            .start_paused(true)
+            .build()
+            .expect("a test runtime builds");
+        runtime.block_on(async {
+            let connections = Arc::new(Semaphore::new(1));
+            let wait = Duration::from_secs(30);
+            let held = connection_permit(&connections, wait)
+                .await
+                .expect("a free connection is granted");
+            assert!(connection_permit(&connections, wait).await.is_err());
+            drop(held);
+            assert!(connection_permit(&connections, wait).await.is_ok());
+        });
+    }
+}
+
+#[cfg(test)]
+mod root_lock_tests {
+    use super::RootLock;
+    use futures_util::FutureExt;
+
+    // One test function: the registry is process-global, so parallel test
+    // bodies would contend for it and a single `now_or_never` poll could
+    // observe a momentarily held registry instead of the root under test.
+    #[test]
+    fn same_roots_serialize_while_other_roots_overlap() {
+        // An uncontended acquire settles without an executor; a contended one
+        // stays pending, so `now_or_never` observes exclusion directly.
+        let held = RootLock::acquire("held-root".to_owned())
+            .now_or_never()
+            .expect("an uncontended root acquires immediately");
+        assert!(
+            RootLock::acquire("held-root".to_owned())
+                .now_or_never()
+                .is_none(),
+            "a second dispatch for the same root must wait"
+        );
+        let other = RootLock::acquire("other-root".to_owned())
+            .now_or_never()
+            .expect("a different root acquires while another is held");
+        drop(other);
+        drop(held);
+        assert!(
+            RootLock::acquire("held-root".to_owned())
+                .now_or_never()
+                .is_some(),
+            "a released root can be acquired again"
+        );
+    }
 }
 
 #[cfg(test)]

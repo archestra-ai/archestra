@@ -1,5 +1,5 @@
 {
-  "id": "68bf46c1-1192-457f-9087-d5d05321d0aa",
+  "id": "43032aa1-78b6-447d-9e1c-7287494b2b86",
   "prevId": "46a53de1-cc5a-4918-868f-7d6588003594",
   "version": "7",
   "dialect": "postgresql",
@@ -18182,19 +18182,6 @@
           "notNull": true,
           "default": true
         },
-        "connection_runtime_handoff_enabled": {
-          "name": "connection_runtime_handoff_enabled",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": true
-        },
-        "connection_runtime_handoff_instructions": {
-          "name": "connection_runtime_handoff_instructions",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "model_provider_overrides": {
           "name": "model_provider_overrides",
           "type": "jsonb",
@@ -26421,152 +26408,6 @@
           "columns": [
             "key",
             "root"
-          ]
-        }
-      },
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.openappa_offer_owners": {
-      "name": "openappa_offer_owners",
-      "schema": "",
-      "columns": {
-        "organization_id": {
-          "name": "organization_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "caller_id": {
-          "name": "caller_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "session_id": {
-          "name": "session_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "binding": {
-          "name": "binding",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "offer_id": {
-          "name": "offer_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "root": {
-          "name": "root",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "parent_id": {
-          "name": "parent_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "arguments": {
-          "name": "arguments",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "tool": {
-          "name": "tool",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "spelling": {
-          "name": "spelling",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "openappa_offer_owners_session_idx": {
-          "name": "openappa_offer_owners_session_idx",
-          "columns": [
-            {
-              "expression": "organization_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "session_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "caller_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "openappa_offer_owners_root_idx": {
-          "name": "openappa_offer_owners_root_idx",
-          "columns": [
-            {
-              "expression": "root",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "openappa_offer_owners_created_at_idx": {
-          "name": "openappa_offer_owners_created_at_idx",
-          "columns": [
-            {
-              "expression": "created_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {},
-      "compositePrimaryKeys": {
-        "openappa_offer_owners_pk": {
-          "name": "openappa_offer_owners_pk",
-          "columns": [
-            "organization_id",
-            "offer_id"
           ]
         }
       },

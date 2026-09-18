@@ -9,18 +9,24 @@ publish = false
 crate-type = ["cdylib"]
 
 [dependencies]
-# The embedded reporting helper currently requires upstream's daemon feature.
-appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "1af98955dfe20e460ab6e3f67c26bb22288f1118" }
-appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "1af98955dfe20e460ab6e3f67c26bb22288f1118" }
-appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "1af98955dfe20e460ab6e3f67c26bb22288f1118", features = ["postgres"] }
+# Pinned to the first commit after OpenAPPA v0.23.1, which adds the PostgreSQL
+# connection pool. The embedded reporting helper currently requires upstream's
+# daemon feature.
+appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "a2720de2cbdfada272ad9fd2d252b6937a454d16" }
+appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "a2720de2cbdfada272ad9fd2d252b6937a454d16" }
+appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "a2720de2cbdfada272ad9fd2d252b6937a454d16", features = ["postgres"] }
 napi = { version = "3", features = ["tokio_rt"] }
 napi-derive = "3"
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["raw_value"] }
 sha2 = "0.10"
 toml = "1.1"
-tokio = { version = "1", features = ["sync"] }
+tokio = { version = "1", features = ["sync", "time"] }
 futures-util = "0.3"
+
+[dev-dependencies]
+# A paused clock: the connection-wait test does not spend its thirty seconds.
+tokio = { version = "1", features = ["rt", "test-util"] }
 
 [target.'cfg(target_env = "musl")'.dependencies]
 # Cross-builds need OpenSSL compiled for musl. The Docker builder uses its

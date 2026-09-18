@@ -13,12 +13,23 @@ const { databaseUrl } = require('./test-database.cjs');
 test('native typed remedies are durable, scoped, and replayed by logical call id', { skip: !databaseUrl, timeout: 60000 }, async (t) => {
   const dir = mkdtempSync(path.join(tmpdir(), 'openappa-native-smoke-'));
   let sanitizations = 0;
+  let sanitizerBarrier = null;
   const sanitizer = createServer((request, response) => {
     request.resume();
     request.on('end', () => {
       sanitizations += 1;
-      response.writeHead(200, { 'content-type': 'application/json' });
-      response.end(JSON.stringify({ version: 1, answer: { body: 'approved scrubbed output' } }));
+      const reply = () => {
+        response.writeHead(200, { 'content-type': 'application/json' });
+        response.end(JSON.stringify({ version: 1, answer: { body: 'approved scrubbed output' } }));
+      };
+      if (sanitizerBarrier) {
+        sanitizerBarrier.pending.push(reply);
+        if (sanitizerBarrier.pending.length >= sanitizerBarrier.needed) {
+          for (const flush of sanitizerBarrier.pending.splice(0)) flush();
+        }
+        return;
+      }
+      reply();
     });
   });
   await new Promise((resolve) => sanitizer.listen(0, '127.0.0.1', resolve));
@@ -161,6 +172,33 @@ builtin = "hitl"
     })));
     assert.equal(attempts.filter((response) => response.result.isError !== true).length, 1, JSON.stringify(attempts));
     assert.equal(attempts.filter((response) => response.result.isError === true).length, 1);
+  });
+
+  await t.test('unrelated sessions overlap consult I/O instead of sharing a process lock', { timeout: 15000 }, async () => {
+    const presentation = { control_tool: 'gateway.custom_remedy', supports_delegation: false };
+    const prepare = async () => {
+      const session = scope();
+      const denied = await hook(session, {
+        event: 'tool_call', operation_id: 'call:held', tool: 'leak_partial', arguments: {}, presentation,
+      });
+      await byOffer(session, { tool_call_id: 'install-scrub', arguments: { offer_id: denied.offers.at(-1).offer_id } });
+      assert.equal((await hook(session, {
+        event: 'tool_call', operation_id: 'call:read', tool: 'leak_partial', arguments: {}, presentation,
+      })).decision, 'allow_call');
+      return session;
+    };
+    const [first, second] = [await prepare(), await prepare()];
+    sanitizerBarrier = { needed: 2, pending: [] };
+    t.after(() => { sanitizerBarrier = null; });
+    const replies = await Promise.all([
+      result(first, 'read', 'raw sensitive payload'),
+      result(second, 'read', 'raw sensitive payload'),
+    ]);
+    sanitizerBarrier = null;
+    for (const blocked of replies) {
+      assert.equal(blocked.output_source, 'runtime', JSON.stringify(blocked));
+      assert.ok(!blocked.approved_output.includes('raw sensitive payload'));
+    }
   });
 
   await t.test('a result-time offer preserves original presentation and redeems its staged value on another replica', async () => {

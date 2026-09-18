@@ -41,12 +41,13 @@ pub struct ReportingOptions {
     pub hostname: Option<String>,
 }
 
-/// Process-wide runtime slot. PostgresStore is one connection whose outer
-/// transaction spans hook I/O, so this mutex serializes initialize, policy
-/// reload, dispatch, and panic rebuild. Session advisory locks only exclude
-/// other connections (replicas), not in-process tasks on this store.
+/// Process-wide runtime slot. The mutex covers initialize, policy reload, and
+/// panic rebuild. Dispatch clones `State` and drops the lock before any await;
+/// PostgreSQL session locks serialize one trajectory, and `Runtime` is internally
+/// synchronized.
 static STATE: OnceLock<Mutex<Option<State>>> = OnceLock::new();
 
+#[derive(Clone)]
 struct State {
     runtime: Arc<Runtime>,
     config: Config,
@@ -398,20 +399,23 @@ fn validate(input: &Input) -> napi::Result<()> {
 
 /// Runs one validated event against the shared runtime.
 async fn run(input: Input, policy_content: Option<String>) -> napi::Result<String> {
-    let mut slot = state_mutex().lock().await;
-    let state = slot
-        .as_mut()
-        .ok_or_else(|| error("OpenAPPA is not initialized"))?;
     let result = AssertUnwindSafe(async {
-        if let Some(content) = policy_content
-            && content != state.policy_content
-        {
-            let mut config = policy::compile(&content).map_err(error)?;
-            config.reporting.agent_yell = state.reporting.is_some();
-            state.runtime.reload(config.clone()).map_err(error)?;
-            state.config = config;
-            state.policy_content = content;
-        }
+        let state = {
+            let mut slot = state_mutex().lock().await;
+            let state = slot
+                .as_mut()
+                .ok_or_else(|| error("OpenAPPA is not initialized"))?;
+            if let Some(content) = policy_content
+                && content != state.policy_content
+            {
+                let mut config = policy::compile(&content).map_err(error)?;
+                config.reporting.agent_yell = state.reporting.is_some();
+                state.runtime.reload(config.clone()).map_err(error)?;
+                state.config = config;
+                state.policy_content = content;
+            }
+            state.clone()
+        };
         state.dispatch(input).await
     })
     .catch_unwind()
@@ -421,9 +425,13 @@ async fn run(input: Input, policy_content: Option<String>) -> napi::Result<Strin
         failure => {
             // A rollback must also discard tentative in-memory vouches and
             // turn markers. Durable pending receipts remain fail-closed.
-            let rebuilt = Runtime::open_with_store(state.config.clone(), state.store.clone(), None)
-                .map_err(error)?;
-            state.runtime = Arc::new(rebuilt);
+            let mut slot = state_mutex().lock().await;
+            if let Some(state) = slot.as_mut() {
+                let rebuilt =
+                    Runtime::open_with_store(state.config.clone(), state.store.clone(), None)
+                        .map_err(error)?;
+                state.runtime = Arc::new(rebuilt);
+            }
             match failure {
                 Ok(Err(error)) => Err(error),
                 _ => Err(error("OpenAPPA panicked; operation was not released")),
@@ -466,18 +474,19 @@ pub async fn execute_remedy_by_offer(
         .as_deref()
         .map(Principal::parse)
         .transpose()?;
-    let owner = {
+    let store = {
         let slot = state_mutex().lock().await;
-        let state = slot
-            .as_ref()
-            .ok_or_else(|| error("OpenAPPA is not initialized"))?;
-        lookup_offer_owner(
-            postgres_store(&state.store)?,
-            &input.organization_id,
-            &offer_id,
-            caller.as_ref(),
-        )?
+        slot.as_ref()
+            .ok_or_else(|| error("OpenAPPA is not initialized"))?
+            .store
+            .clone()
     };
+    let owner = lookup_offer_owner(
+        postgres_store(&store)?,
+        &input.organization_id,
+        &offer_id,
+        caller.as_ref(),
+    )?;
     let Some(owner) = owner else {
         return Ok(
             with_offer_status(render_unknown_offer()?, OfferStatusKind::Unknown)?.to_string(),

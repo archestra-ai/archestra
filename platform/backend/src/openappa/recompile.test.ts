@@ -7,15 +7,19 @@ import { openappaBatteriesService } from "./batteries";
 
 const native = vi.hoisted(() => {
   let release: (() => void) | null = null;
-  const gate = new Promise<void>((resolve) => {
-    release = resolve;
-  });
+  const stall = { next: null as Promise<void> | null };
   const composed: string[][] = [];
   const failures = { next: false };
   return {
     composed,
     failures,
-    releaseFirst: () => release?.(),
+    /** The next composition reads its inputs, then waits until released. */
+    stallNext: () => {
+      stall.next = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+    },
+    release: () => release?.(),
     listBundledOpenappaBatteries: vi.fn(async () => [
       {
         name: "acme",
@@ -35,9 +39,9 @@ const native = vi.hoisted(() => {
           failures.next = false;
           throw new Error("the runtime crashed while composing");
         }
-        // The first composition has read its inputs and now stalls, so a
-        // write can land while it is in flight.
-        if (composed.length === 1) await gate;
+        const wait = stall.next;
+        stall.next = null;
+        if (wait) await wait;
         return { content: input.root, errors: [] };
       },
     ),
@@ -48,6 +52,7 @@ vi.mock("@archestra/openappa-rs", () => native);
 describe("recompile coalescing", () => {
   beforeEach(() => {
     config.openappa.enabled = true;
+    native.composed.length = 0;
   });
 
   test("a caller never joins a composition that started before its write", async ({
@@ -66,6 +71,9 @@ describe("recompile coalescing", () => {
       rawName: "ping",
     });
 
+    // The stale composition reads its inputs, then stalls so a write can
+    // land while it is in flight.
+    native.stallNext();
     const stale = openappaBatteriesService.recompile(organizationId);
     await vi.waitFor(() => expect(native.composed).toHaveLength(1));
     await attach({
@@ -77,7 +85,7 @@ describe("recompile coalescing", () => {
     });
     const afterWrite = openappaBatteriesService.recompile(organizationId);
     const alsoAfterWrite = openappaBatteriesService.recompile(organizationId);
-    native.releaseFirst();
+    native.release();
 
     const [first, second, third] = await Promise.all([
       stale,

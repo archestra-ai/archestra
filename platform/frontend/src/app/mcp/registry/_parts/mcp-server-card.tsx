@@ -78,7 +78,7 @@ import { resolveCatalogEnvironmentLabel } from "./catalog-environment-label";
 import { shouldShowMcpCardChatButton } from "./chat-button-visibility";
 import {
   computeDeploymentStatusSummary,
-  DeploymentStatusIconRing,
+  DeploymentStatusIconDot,
   STATE_PRIORITY,
 } from "./deployment-status";
 import { CatalogEditNoAccess } from "./edit-catalog-dialog";
@@ -520,7 +520,7 @@ export function McpServerCard({
     effectiveDeploymentStatuses,
   );
   const deploymentStatusIndicator = deploymentSummary ? (
-    <DeploymentStatusIconRing summary={deploymentSummary} />
+    <DeploymentStatusIconDot summary={deploymentSummary} />
   ) : null;
   // Worst live issue first, since issues are kind-ordered; an item whose only
   // trouble the viewer muted still shows it, muted.

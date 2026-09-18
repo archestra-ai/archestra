@@ -374,7 +374,7 @@ export async function cleanupAgentRun(
     output,
     required: options?.requireTranscript || workspace?.state === "deleting",
   });
-  await backend.releaseRun(session, {
+  const terminalRetained = await backend.releaseRun(session, {
     retainInteractiveSession:
       !options?.requireTranscript &&
       task?.state === "TASK_STATE_COMPLETED" &&
@@ -388,6 +388,7 @@ export async function cleanupAgentRun(
   await AgentRunModel.close({
     id: session.id,
     logs: output.retainedLogs || undefined,
+    terminalRetained,
   });
 }
 
@@ -486,6 +487,7 @@ async function followAgentRun(params: {
     );
     let cleanupSucceeded = true;
     let suspended = false;
+    let terminalRetained = false;
     await (async () => {
       if (outcome !== "succeeded" || params.abortSignal?.aborted) {
         suspended = (await backend.stopRun(session)) === "suspended";
@@ -493,7 +495,7 @@ async function followAgentRun(params: {
           AbortSignal.timeout(OUTPUT_SNAPSHOT_TIMEOUT_MS),
         );
       }
-      await backend.releaseRun(session, {
+      terminalRetained = await backend.releaseRun(session, {
         retainInteractiveSession: outcome === "succeeded",
       });
     })().catch((error) => {
@@ -515,6 +517,7 @@ async function followAgentRun(params: {
       await AgentRunModel.close({
         id: session.id,
         logs: output.retainedLogs,
+        terminalRetained,
       }).catch((error) => {
         logger.warn(
           { error, sessionId: session.id, taskId: session.taskId },

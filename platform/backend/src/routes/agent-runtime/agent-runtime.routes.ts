@@ -678,21 +678,22 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const workspace = await AgentWorkspaceModel.findByWorkloadName(
           owned.workloadName,
         );
+        const terminalRetained =
+          owned.terminalRetained &&
+          (await resolveAgentRuntimeBackendDriver(
+            owned.backend,
+          ).hasRetainedTerminal(owned));
+        if (owned.terminalRetained && !terminalRetained) {
+          await AgentRunModel.releaseTerminal(owned.taskId);
+        }
         return reply.send({
           ...owned,
+          terminalRetained,
           workspace: workspace
             ? {
                 state: workspace.state,
                 expiresAt: workspace.expiresAt,
                 idleAt: workspace.idleAt,
-                terminalAvailable:
-                  workspace.state === "idle" &&
-                  workspace.lastTaskId === owned.taskId &&
-                  workspace.expiresAt.getTime() > Date.now()
-                    ? await resolveAgentRuntimeBackendDriver(
-                        owned.backend,
-                      ).hasRetainedTerminal(owned)
-                    : false,
                 connection: ["active", "idle"].includes(workspace.state)
                   ? await resolveAgentRuntimeBackendDriver(
                       owned.backend,

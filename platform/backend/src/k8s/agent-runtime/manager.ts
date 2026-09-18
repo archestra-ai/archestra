@@ -611,7 +611,7 @@ class AgentRuntimeManager {
   async releaseRun(
     session: AgentRunRecord,
     options?: { retainInteractiveSession?: boolean },
-  ): Promise<void> {
+  ): Promise<boolean> {
     const retainCredentials = Boolean(
       options?.retainInteractiveSession &&
         (await this.hasRetainedTerminal(session)),
@@ -663,6 +663,7 @@ class AgentRuntimeManager {
       .catch((error) => {
         if (!isK8sNotFoundError(error)) throw error;
       });
+    return retainCredentials;
   }
 
   async stopRun(session: AgentRunRecord): Promise<"suspended" | undefined> {
@@ -901,6 +902,7 @@ class AgentRuntimeManager {
         workspace.expiresAt.getTime() <= Date.now() ||
         !(await this.hasRetainedTerminal(params.session))
       ) {
+        await AgentRunModel.releaseTerminal(params.session.taskId);
         throw new ApiError(
           409,
           "The original terminal is no longer running. Resume the saved conversation instead.",

@@ -11,7 +11,6 @@ const live = {
   lastModelActivityAt: minutesAgo(1),
 };
 
-/** Pins the agreed matrix: glyph is the machine, dot is attention. */
 describe("runStatusMarks", () => {
   it.each([
     [
@@ -85,7 +84,7 @@ describe("runStatusMarks", () => {
         state: "TASK_STATE_COMPLETED",
         endedAt: minutesAgo(10),
         lastModelActivityAt: minutesAgo(30),
-        workspace: { state: "idle", terminalAvailable: true },
+        terminalRetained: true,
       },
       {
         glyph: "live",
@@ -100,7 +99,7 @@ describe("runStatusMarks", () => {
         state: "TASK_STATE_COMPLETED",
         endedAt: minutesAgo(10),
         lastModelActivityAt: minutesAgo(30),
-        workspace: { state: "idle", terminalAvailable: false },
+        terminalRetained: false,
       },
       { glyph: "off", dot: null, description: "Completed" },
     ],

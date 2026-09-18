@@ -79,7 +79,7 @@ describe("archestra tool audit records", () => {
       size: 7,
       sha256: "file-digest",
     });
-    vi.spyOn(backend, "releaseRun").mockResolvedValue(undefined);
+    vi.spyOn(backend, "releaseRun").mockResolvedValue(false);
     vi.spyOn(backend, "deleteWorkspace").mockResolvedValue(undefined);
     const context = await A2AContextModel.create({
       actorKind: "user",

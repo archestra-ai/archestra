@@ -1652,6 +1652,59 @@ describe("Agent Runtime routes", () => {
     expect(fileAccess).toHaveBeenCalledTimes(1);
   });
 
+  test("reports a retained terminal until its CLI exits or the workspace leaves idle", async () => {
+    const workspaceFor = async (
+      taskId: string,
+      state: "idle" | "suspended",
+    ) => {
+      const run = await createRun({ taskId, actorUserId: user.id });
+      await AgentRunModel.close({ id: run.id, terminalRetained: true });
+      await AgentWorkspaceModel.create({
+        organizationId,
+        agentId: agent.id,
+        actorKind: "user",
+        actorId: user.id,
+        backend: "kubernetes",
+        runtimeScope: run.runtimeScope,
+        workloadName: run.workloadName,
+        state,
+        lastTaskId: taskId,
+        expiresAt: new Date(Date.now() + 3600_000),
+      });
+    };
+    const detail = async (taskId: string) =>
+      (
+        await app.inject({ method: "GET", url: `/api/agent-runs/${taskId}` })
+      ).json().terminalRetained as boolean;
+    const listed = async (taskId: string) =>
+      (await app.inject({ method: "GET", url: "/api/agent-runs" }))
+        .json()
+        .data.find((run: { taskId: string }) => run.taskId === taskId)
+        .terminalRetained as boolean;
+    const retained = vi
+      .spyOn(agentRuntimeManager, "hasRetainedTerminal")
+      .mockResolvedValue(true);
+
+    const live = await createTask(agent.id);
+    await workspaceFor(live.id, "idle");
+    expect(await detail(live.id)).toBe(true);
+    expect(await listed(live.id)).toBe(true);
+
+    retained.mockResolvedValue(false);
+    expect(await detail(live.id)).toBe(false);
+    expect(await listed(live.id)).toBe(false);
+    expect((await AgentRunModel.findByTaskId(live.id))?.terminalRetained).toBe(
+      false,
+    );
+
+    retained.mockResolvedValue(true).mockClear();
+    const suspended = await createTask(agent.id);
+    await workspaceFor(suspended.id, "suspended");
+    expect(await detail(suspended.id)).toBe(false);
+    expect(await listed(suspended.id)).toBe(false);
+    expect(retained).not.toHaveBeenCalled();
+  });
+
   test("workspace deletion is owner-only, retries failures, preserves transcripts, and audits the state change", async ({
     makeAdmin,
   }) => {
@@ -1674,7 +1727,7 @@ describe("Agent Runtime routes", () => {
       .spyOn(agentRuntimeManager, "deleteWorkspace")
       .mockRejectedValueOnce(new Error("temporary cluster failure"))
       .mockResolvedValue(undefined);
-    vi.spyOn(agentRuntimeManager, "releaseRun").mockResolvedValue(undefined);
+    vi.spyOn(agentRuntimeManager, "releaseRun").mockResolvedValue(false);
     const owner = user;
     user = await makeAdmin();
     const url = `/api/agent-runs/${task.id}/workspace`;

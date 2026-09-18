@@ -186,6 +186,13 @@ class AgentRunModel {
       : null;
   }
 
+  static async releaseTerminal(taskId: string): Promise<void> {
+    await db
+      .update(schema.agentRunsTable)
+      .set({ terminalRetained: false })
+      .where(eq(schema.agentRunsTable.taskId, taskId));
+  }
+
   static async updateAttentionState(params: {
     taskId: string;
     attentionState: AgentRunRecord["attentionState"];
@@ -265,6 +272,7 @@ class AgentRunModel {
         stateChangedAt: schema.a2aTasksTable.stateChangedAt,
         hardDeadlineAt: hardDeadlineAtExpression(),
         lastModelActivityAt: lastModelActivityAtExpression(),
+        terminalRetained: retainedTerminalExpression(),
         initiatorName: schema.usersTable.name,
         shareVisibility: schema.agentRunSharesTable.visibility,
         shareTeamNames: sql<string[]>`coalesce(array(
@@ -300,6 +308,13 @@ class AgentRunModel {
       .leftJoin(
         schema.agentRunSharesTable,
         eq(schema.agentRunsTable.taskId, schema.agentRunSharesTable.taskId),
+      )
+      .leftJoin(
+        schema.agentWorkspacesTable,
+        eq(
+          schema.agentWorkspacesTable.workloadName,
+          schema.agentRunsTable.workloadName,
+        ),
       )
       .where(
         and(
@@ -529,10 +544,19 @@ class AgentRunModel {
    * Mark a session finished. Returns false when it was already closed, so a
    * caller racing the reconciler can tell whether it owns the teardown.
    */
-  static async close(params: { id: string; logs?: string }): Promise<boolean> {
+  static async close(params: {
+    id: string;
+    logs?: string;
+    terminalRetained?: boolean;
+  }): Promise<boolean> {
     const closed = await db
       .update(schema.agentRunsTable)
-      .set({ endedAt: new Date(), logs: params.logs, attentionState: null })
+      .set({
+        endedAt: new Date(),
+        logs: params.logs,
+        attentionState: null,
+        terminalRetained: params.terminalRetained ?? false,
+      })
       .where(
         and(
           eq(schema.agentRunsTable.id, params.id),
@@ -641,6 +665,7 @@ class AgentRunModel {
         stateChangedAt: schema.a2aTasksTable.stateChangedAt,
         hardDeadlineAt: hardDeadlineAtExpression(),
         lastModelActivityAt: lastModelActivityAtExpression(),
+        terminalRetained: retainedTerminalExpression(),
         sessionId: sql<string>`COALESCE(${schema.agentWorkspacesTable.id}, ${schema.agentRunsTable.taskId})`,
         agent: {
           id: schema.agentsTable.id,
@@ -709,6 +734,16 @@ function extractPrompt(parts: unknown[]): string {
     )
     .join("")
     .trim();
+}
+
+function retainedTerminalExpression(): SQL<boolean> {
+  return sql<boolean>`COALESCE(
+    ${schema.agentRunsTable.terminalRetained}
+    AND ${schema.agentWorkspacesTable.state} = 'idle'
+    AND ${schema.agentWorkspacesTable.lastTaskId} = ${schema.agentRunsTable.taskId}
+    AND ${schema.agentWorkspacesTable.expiresAt} > now(),
+    false
+  )`;
 }
 
 function hardDeadlineAtExpression(): SQL<Date> {

@@ -6,16 +6,12 @@ import {
 } from "@/components/ui/tooltip";
 import {
   ATTENTION_DOT_CLASS,
-  RUN_GLYPH_CLASS,
+  GLYPH_CLASS,
   type RunStatusInput,
   runStatusMarks,
 } from "@/lib/agent-run-status-marks";
 import { cn } from "@/lib/utils";
 
-/**
- * The compact run-status mark: the glyph is the machine, the corner dot is the
- * agent's attention state. See `runStatusMarks` for the rule.
- */
 export function RunStateIcon({
   className,
   ...run
@@ -32,7 +28,7 @@ export function RunStateIcon({
         >
           <TerminalSquare
             aria-hidden
-            className={cn("size-full", RUN_GLYPH_CLASS[marks.glyph])}
+            className={cn("size-full", GLYPH_CLASS[marks.glyph].text)}
           />
           {marks.dot && (
             <span

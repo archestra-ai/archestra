@@ -81,9 +81,9 @@ describe("AgentRunChatSession", () => {
     queryState.value.data = run({
       endedAt: new Date().toISOString(),
       state: "TASK_STATE_COMPLETED",
+      terminalRetained: true,
       workspace: {
         state: "idle",
-        terminalAvailable: true,
         expiresAt: new Date(Date.now() + 3600000).toISOString(),
         idleAt: null,
         connection: null,
@@ -97,9 +97,9 @@ describe("AgentRunChatSession", () => {
     expect(screen.getByText("Retained run output")).toBeInTheDocument();
     queryState.value.data = {
       ...queryState.value.data,
+      terminalRetained: false,
       workspace: {
         state: "suspended",
-        terminalAvailable: false,
         expiresAt: new Date(Date.now() + 3600000).toISOString(),
         idleAt: null,
         connection: null,

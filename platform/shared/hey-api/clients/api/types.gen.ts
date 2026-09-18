@@ -21483,6 +21483,7 @@ export type GetAgentRunsResponses = {
         backend: 'kubernetes';
         runtimeScope: string;
         attentionState: 'input_required' | 'auth_required' | null;
+        terminalRetained: boolean;
         virtualApiKeyId: string | null;
         startedAt: string;
         endedAt: string | null;
@@ -21701,6 +21702,7 @@ export type GetMyAgentRunsResponses = {
             backend: 'kubernetes';
             runtimeScope: string;
             attentionState: 'input_required' | 'auth_required' | null;
+            terminalRetained: boolean;
             virtualApiKeyId: string | null;
             startedAt: string;
             endedAt: string | null;
@@ -21910,6 +21912,7 @@ export type GetMyAgentRunResponses = {
         backend: 'kubernetes';
         runtimeScope: string;
         attentionState: 'input_required' | 'auth_required' | null;
+        terminalRetained: boolean;
         virtualApiKeyId: string | null;
         startedAt: string;
         endedAt: string | null;
@@ -21931,7 +21934,6 @@ export type GetMyAgentRunResponses = {
             state: 'active' | 'idle' | 'suspending' | 'suspended' | 'resuming' | 'deleting' | 'deleted';
             expiresAt: string;
             idleAt: string | null;
-            terminalAvailable?: boolean;
             connection: {
                 hostname: string;
                 shellCommand: string;
@@ -22046,6 +22048,7 @@ export type UpdateAgentRunResponses = {
         backend: 'kubernetes';
         runtimeScope: string;
         attentionState: 'input_required' | 'auth_required' | null;
+        terminalRetained: boolean;
         virtualApiKeyId: string | null;
         startedAt: string;
         endedAt: string | null;
@@ -94163,6 +94166,7 @@ export type GetProjectRunsResponses = {
         backend: 'kubernetes';
         runtimeScope: string;
         attentionState: 'input_required' | 'auth_required' | null;
+        terminalRetained: boolean;
         virtualApiKeyId: string | null;
         startedAt: string;
         endedAt: string | null;
@@ -94184,7 +94188,6 @@ export type GetProjectRunsResponses = {
             state: 'active' | 'idle' | 'suspending' | 'suspended' | 'resuming' | 'deleting' | 'deleted';
             expiresAt: string;
             idleAt: string | null;
-            terminalAvailable?: boolean;
             connection: {
                 hostname: string;
                 shellCommand: string;

@@ -292,6 +292,7 @@ function createRun(endedAt: string | null): AgentRunListItem {
     hardDeadlineAt: "2026-09-06T20:00:00.000Z",
     lastModelActivityAt: "2026-09-03T20:00:04.000Z",
     attentionState: null,
+    terminalRetained: false,
     endedAt,
     state: endedAt ? "TASK_STATE_COMPLETED" : "TASK_STATE_WORKING",
     statusReason: null,

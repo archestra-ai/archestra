@@ -10,7 +10,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
 
 export type DeploymentState =
   | "running"
@@ -151,12 +150,8 @@ export function DeploymentStatusDot({ state }: { state: DeploymentState }) {
   );
 }
 
-/**
- * Runtime health as a ring around the server icon, shared by MCP cards and
- * table name cells. Corner dots are reserved for attention (see
- * `ATTENTION_DOT_CLASS`), so MCP status lives on the icon's edge instead.
- */
-export function DeploymentStatusIconRing({
+/** Presence-style runtime indicator shared by MCP cards and table name cells. */
+export function DeploymentStatusIconDot({
   summary,
 }: {
   summary: DeploymentStatusSummary;
@@ -171,15 +166,12 @@ export function DeploymentStatusIconRing({
       <Tooltip>
         <TooltipTrigger asChild>
           <span
-            className={cn(
-              "absolute inset-0 rounded-[inherit] ring-2 ring-inset",
-              DEPLOYMENT_RING_CLASS[state],
-              getDeploymentDotConfig(state).pulse &&
-                "animate-pulse motion-reduce:animate-none",
-            )}
+            className="absolute -right-0.5 -bottom-0.5 rounded-full border-2 border-card"
             role="img"
             aria-label={`Runtime status: ${getDeploymentLabel(state)}`}
-          />
+          >
+            <DeploymentStatusDot state={state} />
+          </span>
         </TooltipTrigger>
         <TooltipContent>
           <p>
@@ -205,19 +197,6 @@ export function DeploymentStatusIconRing({
     </TooltipProvider>
   );
 }
-
-const DEPLOYMENT_RING_CLASS: Record<DeploymentState, string> = {
-  running: "ring-green-500",
-  pending: "ring-yellow-500",
-  failed: "ring-red-500",
-  degraded: "ring-orange-500",
-  // SPDX-SnippetBegin
-  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-  hibernated: "ring-muted-foreground",
-  waking: "ring-muted-foreground",
-  // SPDX-SnippetEnd
-};
 
 function getDeploymentStatusIconTooltipLabel(
   summary: DeploymentStatusSummary,

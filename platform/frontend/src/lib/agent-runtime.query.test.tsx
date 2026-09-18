@@ -79,10 +79,8 @@ describe("useMyAgentRun", () => {
 
     await act(() => vi.advanceTimersByTimeAsync(0));
     expect(invalidate).toHaveBeenCalledTimes(1);
-    // Unchanged polls leave the list alone.
     await act(() => vi.advanceTimersByTimeAsync(4_000));
     expect(invalidate).toHaveBeenCalledTimes(1);
-    // A second turn under the same session (Resume) refreshes it.
     sdk.getMyAgentRun.mockResolvedValue(
       response({ ...working, taskId: "task-2" }),
     );

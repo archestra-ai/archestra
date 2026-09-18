@@ -75873,6 +75873,9 @@
                           }
                         ]
                       },
+                      "terminalRetained": {
+                        "type": "boolean"
+                      },
                       "virtualApiKeyId": {
                         "nullable": true,
                         "type": "string",
@@ -75975,6 +75978,7 @@
                       "backend",
                       "runtimeScope",
                       "attentionState",
+                      "terminalRetained",
                       "virtualApiKeyId",
                       "startedAt",
                       "endedAt",
@@ -76728,6 +76732,9 @@
                               }
                             ]
                           },
+                          "terminalRetained": {
+                            "type": "boolean"
+                          },
                           "virtualApiKeyId": {
                             "nullable": true,
                             "type": "string",
@@ -76830,6 +76837,7 @@
                           "backend",
                           "runtimeScope",
                           "attentionState",
+                          "terminalRetained",
                           "virtualApiKeyId",
                           "startedAt",
                           "endedAt",
@@ -77239,6 +77247,9 @@
                         }
                       ]
                     },
+                    "terminalRetained": {
+                      "type": "boolean"
+                    },
                     "virtualApiKeyId": {
                       "nullable": true,
                       "type": "string",
@@ -77350,9 +77361,6 @@
                           "type": "string",
                           "format": "date-time"
                         },
-                        "terminalAvailable": {
-                          "type": "boolean"
-                        },
                         "connection": {
                           "nullable": true,
                           "type": "object",
@@ -77436,6 +77444,7 @@
                     "backend",
                     "runtimeScope",
                     "attentionState",
+                    "terminalRetained",
                     "virtualApiKeyId",
                     "startedAt",
                     "endedAt",
@@ -77825,6 +77834,9 @@
                         }
                       ]
                     },
+                    "terminalRetained": {
+                      "type": "boolean"
+                    },
                     "virtualApiKeyId": {
                       "nullable": true,
                       "type": "string",
@@ -77927,6 +77939,7 @@
                     "backend",
                     "runtimeScope",
                     "attentionState",
+                    "terminalRetained",
                     "virtualApiKeyId",
                     "startedAt",
                     "endedAt",
@@ -364128,6 +364141,9 @@
                           }
                         ]
                       },
+                      "terminalRetained": {
+                        "type": "boolean"
+                      },
                       "virtualApiKeyId": {
                         "nullable": true,
                         "type": "string",
@@ -364239,9 +364255,6 @@
                             "type": "string",
                             "format": "date-time"
                           },
-                          "terminalAvailable": {
-                            "type": "boolean"
-                          },
                           "connection": {
                             "nullable": true,
                             "type": "object",
@@ -364325,6 +364338,7 @@
                       "backend",
                       "runtimeScope",
                       "attentionState",
+                      "terminalRetained",
                       "virtualApiKeyId",
                       "startedAt",
                       "endedAt",

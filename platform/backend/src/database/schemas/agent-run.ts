@@ -1,4 +1,5 @@
 import {
+  boolean,
   index,
   integer,
   jsonb,
@@ -23,9 +24,9 @@ import virtualApiKeysTable from "./virtual-api-key";
 /**
  * The isolated runtime carrying one A2A task.
  *
- * Deliberately holds no state of its own: the task's own state machine is the
- * record of how the work is going, and a second one would only be a source of
- * disagreement. This row freezes which runtime backend owns the task and
+ * Deliberately holds no task state of its own: the task's own state machine is
+ * the record of how the work is going, and a second one would only be a source
+ * of disagreement. This row freezes which runtime backend owns the task and
  * whose credentials it uses, so reconciliation never depends on mutable Agent
  * configuration.
  */
@@ -66,6 +67,7 @@ const agentRunsTable = pgTable(
     activeDeadlineSeconds: integer("active_deadline_seconds"),
     /** Native-client signal that the live process needs a person's attention. */
     attentionState: text("attention_state").$type<AgentRunAttentionState>(),
+    terminalRetained: boolean("terminal_retained").notNull().default(false),
     /** Revoked when the session ends; a live key outliving its runtime keeps billing. */
     virtualApiKeyId: uuid("virtual_api_key_id").references(
       () => virtualApiKeysTable.id,

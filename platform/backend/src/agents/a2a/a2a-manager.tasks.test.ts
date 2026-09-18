@@ -178,6 +178,7 @@ describe("A2AManager full task mode", () => {
       organizationId: agent.organizationId,
       taskId: task.id,
       agentId: agent.id,
+      terminalRetained: false,
       actorKind: actor.kind,
       actorId: actor.id,
       actorUserId: actor.id,

@@ -5,19 +5,14 @@ import { useState } from "react";
 import { RunStateIcon } from "@/components/chat/run-state-icon";
 import { LogConsole } from "@/components/log-console";
 import { StandardDialog } from "@/components/standard-dialog";
-import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
-  ATTENTION_CHIP_CLASS,
-  RUN_GLYPH_DOT_CLASS,
+  GLYPH_CLASS,
   type RunStatusInput,
   runStatusMarks,
 } from "@/lib/agent-run-status-marks";
 import { cn } from "@/lib/utils";
 
-/**
- * The run header pill: the same two facts as the sidebar glyph, in words. The
- * inline dot follows the machine; attention renders as a chip with its reason.
- */
 export function AgentRunState({
   compact = false,
   iconOnly = false,
@@ -41,10 +36,7 @@ export function AgentRunState({
       )}
     >
       <span
-        className={cn(
-          "size-1.5 rounded-full",
-          RUN_GLYPH_DOT_CLASS[marks.glyph],
-        )}
+        className={cn("size-1.5 rounded-full", GLYPH_CLASS[marks.glyph].dot)}
       />
       <span>{marks.label}</span>
       {marks.suffix && (
@@ -58,8 +50,8 @@ export function AgentRunState({
   if (!marks.chip) return pill;
 
   const chipClassName = cn(
-    "inline-flex h-5 shrink-0 items-center gap-1 rounded-md border px-1.5 text-[10px] font-medium",
-    ATTENTION_CHIP_CLASS[marks.chip.tone],
+    "h-5 rounded-md px-1.5 text-[10px]",
+    CHIP_CLASS[marks.chip.tone],
   );
   const chipLabel = marks.chip.label;
 
@@ -67,7 +59,9 @@ export function AgentRunState({
     return (
       <span className="inline-flex shrink-0 items-center gap-1.5">
         {pill}
-        <span className={chipClassName}>{chipLabel}</span>
+        <Badge variant="outline" className={chipClassName}>
+          {chipLabel}
+        </Badge>
       </span>
     );
   }
@@ -75,24 +69,27 @@ export function AgentRunState({
   return (
     <span className="inline-flex shrink-0 items-center gap-1.5">
       {pill}
-      <Button
-        type="button"
+      <Badge
+        asChild
         variant="outline"
-        size="sm"
         className={cn(
           chipClassName,
-          "hover:border-destructive/30 hover:bg-destructive/10",
+          "cursor-pointer hover:border-destructive/30 hover:bg-destructive/10",
         )}
-        aria-label={`View ${chipLabel.toLowerCase()} details`}
-        onClick={() => setDetailsOpen(true)}
       >
-        <span>{chipLabel}</span>
-        <span aria-hidden className="h-2.5 w-px bg-border" />
-        <span className="text-[9px] font-normal text-muted-foreground">
-          Details
-        </span>
-        <ChevronRight className="size-2.5 text-muted-foreground/70" />
-      </Button>
+        <button
+          type="button"
+          aria-label={`View ${chipLabel.toLowerCase()} details`}
+          onClick={() => setDetailsOpen(true)}
+        >
+          <span>{chipLabel}</span>
+          <span aria-hidden className="h-2.5 w-px bg-border" />
+          <span className="text-[9px] font-normal text-muted-foreground">
+            Details
+          </span>
+          <ChevronRight className="size-2.5 text-muted-foreground/70" />
+        </button>
+      </Badge>
       <StandardDialog
         open={detailsOpen}
         onOpenChange={setDetailsOpen}
@@ -110,6 +107,12 @@ export function AgentRunState({
     </span>
   );
 }
+
+const CHIP_CLASS = {
+  attention:
+    "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+  failed: "border-destructive/20 bg-destructive/5 text-destructive",
+};
 
 function formatRunStatusReason(reason: string): string {
   const bodyMarker = "Body: ";

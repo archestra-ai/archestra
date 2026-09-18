@@ -55,7 +55,7 @@ import { useCanModifyCatalogItem } from "./catalog-edit-access";
 import { shouldShowMcpCardChatButton } from "./chat-button-visibility";
 import {
   computeDeploymentStatusSummary,
-  DeploymentStatusIconRing,
+  DeploymentStatusIconDot,
   type DeploymentStatusSummary,
 } from "./deployment-status";
 import type { DismissAlertTarget } from "./dismiss-alert-dialog";
@@ -751,10 +751,10 @@ function McpServerNameCell({
   return (
     <div className="min-w-0">
       <div className="flex min-w-0 items-center gap-2">
-        <span className="relative flex size-6 shrink-0 items-center justify-center rounded-md">
+        <span className="relative shrink-0">
           <McpCatalogIcon icon={item.icon} catalogId={item.id} size={16} />
           {deploymentSummary && (
-            <DeploymentStatusIconRing summary={deploymentSummary} />
+            <DeploymentStatusIconDot summary={deploymentSummary} />
           )}
         </span>
         <span className="truncate font-medium">{item.name}</span>

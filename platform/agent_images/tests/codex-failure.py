@@ -46,10 +46,16 @@ class FailureWatchTest(unittest.TestCase):
                 self.assertTrue((runtime / "turn-complete.failed").exists())
 
     def test_extracts_message_without_private_response_fields(self):
-        self.assertEqual(
-            watcher.public_message('unexpected status 401: {"error":{"message":"Reconnect your account.","internal":"private response"}}, url: https://example.test'),
-            "unexpected status 401: Reconnect your account.",
-        )
+        for message in (
+            "Authentication failed. Reconnect your account.",
+            "Provider API key is not registered. Select a valid provider key.",
+        ):
+            with self.subTest(message=message):
+                body = json.dumps({"error": {"message": message, "internal": "private response"}})
+                self.assertEqual(
+                    watcher.public_message(f"unexpected status 401: {body}, url: https://example.test"),
+                    "unexpected status 401: " + message,
+                )
 
     def test_redacts_generic_credentials_and_normalizes_controls(self):
         with patch.dict(os.environ, {}, clear=True):
@@ -74,15 +80,9 @@ class FailureWatchTest(unittest.TestCase):
                 watch.poll()
                 self.assertFalse((runtime / "turn-complete.failed").exists())
 
-    def test_real_codex_authentication_errors_settle_delegated_tui(self):
-        for upstream_message in (
-            "Authentication failed. Reconnect your account.",
-            "Provider API key is not registered. Select a valid provider key.",
-        ):
-            with self.subTest(message=upstream_message):
-                self.run_native_failure(upstream_message)
+    def test_real_codex_authentication_error_settles_delegated_tui(self):
+        upstream_message = "Authentication failed. Reconnect your account."
 
-    def run_native_failure(self, upstream_message):
         class Provider(http.server.BaseHTTPRequestHandler):
             def do_POST(self):
                 request = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))))

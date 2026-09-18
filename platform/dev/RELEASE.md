@@ -1,10 +1,18 @@
 # Release Checklist
 
 Archestra uses two release pipelines:
-- **Beta:** Automatic releases from `main` (for example, `1.4.0-beta.2`).
+- **Release candidate (RC):** Automatic prereleases from `main` (for example, `1.4.0-rc.13`).
 - **Stable:** Tested and approved releases from `release/X.Y` (for example, `1.3.52` or `1.4.0`).
 
 [Release-please](https://github.com/googleapis/release-please-action#supporting-multiple-release-branches) manages versions and changelogs. GitHub Actions builds the artifacts. Only approved stable releases update `latest`.
+
+### Transition From Beta To RC
+
+The first RC uses temporary `release-as: 1.4.0-rc.13` with `prerelease-type: rc`.
+Changing only `prerelease-type` does not replace an existing beta suffix in Release Please.
+Keep the manifest and published beta versions unchanged until the generated RC release PR updates them.
+After `1.4.0-rc.13` publishes, remove only `release-as` so rolling releases continue at `1.4.0-rc.14`.
+The existing GitHub environment remains named `beta-release`. RCs do not update `latest` or require stable approval.
 
 ```mermaid
 gitGraph
@@ -13,27 +21,27 @@ gitGraph
    checkout main
    commit id: "fix B"
    commit id: "feat C"
-   commit id: "beta" tag: "v1.4.0-beta.1"
+   commit id: "rc" tag: "v1.4.0-rc.13"
    checkout release/1.3
    cherry-pick id: "fix B" tag: ""
    commit id: "patch" tag: "v1.3.52"
    checkout main
-   commit id: "beta again" tag: "v1.4.0-beta.2"
+   commit id: "rc again" tag: "v1.4.0-rc.14"
    branch release/1.4
    commit id: "stable cut" tag: "v1.4.0"
    checkout main
-   commit id: "Feat" tag: "v1.5.0-beta.1"
+   commit id: "Feat" tag: "v1.5.0-rc.1"
 ```
 
-## Release A Beta
+## Release A Candidate
 
-1. [ ] Open the release-please PR on `main` (for example, `1.4.0-beta.2`).
+1. [ ] Open the release-please PR on `main` (for example, `1.4.0-rc.13`).
 2. [ ] Review the changelog and confirm checks pass, including migration upgrades from the active stable line.
-3. [ ] Merge the PR and confirm the **Release Please** workflow publishes the beta release.
+3. [ ] Merge the PR and confirm the **Release Please** workflow publishes the RC release.
 
 ## Ship A Stable Fix
 
-1. [ ] Land the fix on `main` first. The fix ships automatically in the next beta.
+1. [ ] Land the fix on `main` first. The fix ships automatically in the next RC.
 2. [ ] Add the label `backport release/X.Y` for each configured target (for example, `backport release/1.3`).
    - Add the label before or after the main PR merges.
    - Pushes to `main` and backport labels added after merge trigger processing without waiting for the scheduled scan.
@@ -127,12 +135,12 @@ See [migration upgrade checks](../backend/src/database/migrations/README.md) for
 
 This is a complete cutover. Once the new stable release publishes, it becomes the only supported stable line and the previous line becomes read-only. The release operator or release agent completes all GitHub configuration and pull-request steps; contributors do not need to change their workflow.
 
-1. [ ] Choose a tested beta tag (for example, `platform-v1.4.0-beta.2`). Confirm it is a published prerelease on `main` and passed qualification. Reconcile any existing target branch, tag, draft release, release PR, queue ruleset, and candidate workflow before continuing: resume only exact, protected state for that beta commit; never recreate objects or overwrite ambiguous state.
-2. [ ] Get explicit approval for the stable cut. State the beta tag, `X.Y.0` version, new branch, previous line that will become EOL, repository-setting changes, and PRs that will be created and merged.
+1. [ ] Choose a tested RC tag (for example, `platform-v1.4.0-rc.14`). Confirm it is a published prerelease on `main` and passed qualification. Reconcile any existing target branch, tag, draft release, release PR, queue ruleset, and candidate workflow before continuing: resume only exact, protected state for that RC commit; never recreate objects or overwrite ambiguous state.
+2. [ ] Get explicit approval for the stable cut. State the RC tag, `X.Y.0` version, new branch, previous line that will become EOL, repository-setting changes, and PRs that will be created and merged.
 3. [ ] If the live `release/*` required-check rule blocks branch creation, temporarily set only `do_not_enforce_on_create: true` under the approved setting changes. Preserve the original ruleset payload and arrange restoration before changing it. If branch creation or any following verification fails, restore and read back the original ruleset before stopping.
 4. [ ] Create `release/1.4` from that tag (not from `main`), then immediately restore and verify the original core ruleset:
    ```bash
-   git checkout -b release/1.4 platform-v1.4.0-beta.2
+   git checkout -b release/1.4 platform-v1.4.0-rc.14
    git push origin release/1.4
    ```
 5. [ ] Before merging any PR, configure and verify GitHub protections:
@@ -152,9 +160,9 @@ This is a complete cutover. Once the new stable release publishes, it becomes th
    - Keep its branch, tags, releases, images, and charts for reproducibility.
 10. [ ] Verify the old line rejects updates and only `release/1.4` can use `stable-release`. Have a second maintainer approve the environment, then verify full publication.
 11. [ ] Open and merge a PR that removes `release-as` from `release/1.4`. Future patches become `1.4.1`, `1.4.2`, etc.
-12. [ ] Get separate explicit approval to cut `1.5.0-beta.1`. State the current `main` SHA and the configuration and release PRs that will be merged.
-13. [ ] On `main`, open and merge a PR setting the **Next beta** configuration below. Merge the generated `1.5.0-beta.1` release PR through the queue.
-14. [ ] Confirm the beta published without moving Docker `latest`, then open and merge a PR removing `release-as` from `main`. Confirm rolling beta PRs resume.
+12. [ ] Get separate explicit approval to cut `1.5.0-rc.1`. State the current `main` SHA and the configuration and release PRs that will be merged.
+13. [ ] On `main`, open and merge a PR setting the **Next RC** configuration below. Merge the generated `1.5.0-rc.1` release PR through the queue.
+14. [ ] Confirm the RC published without moving Docker `latest`, then open and merge a PR removing `release-as` from `main`. Confirm rolling RC PRs resume.
 
 The operator or release agent must create, queue, monitor, and verify these PRs and settings directly. Human actions are limited to the two explicit cut approvals, the independent `stable-release` approval, reviewer selection when it cannot be derived safely, and exceptional recovery decisions.
 
@@ -162,12 +170,12 @@ The operator or release agent must create, queue, monitor, and verify these PRs 
 
 Edit `packages.platform` in `.github/release-please/release-please-config.json`:
 
-| Field | Stable cut (`release/1.4`) | Next beta (`main`) |
+| Field | Stable cut (`release/1.4`) | Next RC (`main`) |
 | --- | --- | --- |
 | `versioning` | `always-bump-patch` | `prerelease` |
 | `prerelease` | `false` | `true` |
-| `prerelease-type` | Remove field | `beta` |
-| `release-as` (temporary) | `1.4.0` | `1.5.0-beta.1` |
+| `prerelease-type` | Remove field | `rc` |
+| `release-as` (temporary) | `1.4.0` | `1.5.0-rc.1` |
 | `draft` | `true` | `true` |
 
 `draft: true` creates a draft GitHub release. It does not make the pull request a draft.

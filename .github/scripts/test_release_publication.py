@@ -90,13 +90,84 @@ gh() {
             {"tag_name": "other-v2.0.0", "prerelease": False},
         ]))
 
-    def test_beta_does_not_depend_on_stable_lookup(self):
-        self.assert_allowed(self.run_guard(api_status=1, version="1.4.0-beta.1"))
+    def test_prereleases_do_not_depend_on_stable_lookup(self):
+        for version in ("1.4.0-beta.13", "1.4.0-rc.13"):
+            with self.subTest(version=version):
+                self.assert_allowed(self.run_guard(api_status=1, version=version))
 
     def test_freeze_blocks_both_channels(self):
-        for version in ("1.3.51", "1.4.0-beta.1"):
+        for version in ("1.3.51", "1.4.0-beta.13", "1.4.0-rc.13"):
             with self.subTest(version=version):
                 self.assert_blocked(self.run_guard(version=version, freeze="true"))
+
+    def test_github_publication_marks_prereleases_without_latest(self):
+        section = WORKFLOW.read_text().split(
+            "      - name: Publish GitHub release\n", 1
+        )[1].split("      - name:", 1)[0]
+        script = textwrap.dedent(section.split("        run: |\n", 1)[1])
+        stub = "gh() { if [ \"$2\" = view ]; then echo true; else printf '%s\\n' \"$*\"; fi; };\n"
+        for version, flags in (
+            ("1.4.0-beta.13", "--prerelease --latest=false"),
+            ("1.4.0-rc.13", "--prerelease --latest=false"),
+            ("1.4.0", "--prerelease=false --latest"),
+        ):
+            with self.subTest(version=version):
+                result = subprocess.run(
+                    ["bash", "--noprofile", "--norc", "-eo", "pipefail", "-c", stub + script],
+                    env={**os.environ, "VERSION": version, "TAG_NAME": f"platform-v{version}"},
+                    capture_output=True, text=True, timeout=10,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(result.stdout.splitlines(), [
+                    f"release upload platform-v{version} archestra-platform-{version}.tgz --clobber",
+                    f"release edit platform-v{version} --draft=false {flags}",
+                ])
+
+    def test_main_policy_rc_transition_and_rolling_releases(self):
+        section = WORKFLOW.read_text().split(
+            "      - name: Validate branch release policy\n", 1
+        )[1].split("      # release-please runs", 1)[0]
+        script = textwrap.dedent(section.split("        run: |\n", 1)[1])
+        for version, override, allowed, create_pr in (
+            ("1.4.0-beta.13", "1.4.0-rc.13", True, True),
+            ("1.4.0-rc.13", "1.4.0-rc.13", True, False),
+            ("1.4.0-rc.13", None, True, True),
+            ("1.4.0-rc.14", None, True, True),
+            ("1.4.0-beta.14", None, False, None),
+            ("1.4.0", None, False, None),
+            ("1.4.0-rc.0", None, False, None),
+            ("1.4.1-rc.1", None, False, None),
+        ):
+            with self.subTest(version=version, override=override), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                config_dir = root / ".github/release-please"
+                config_dir.mkdir(parents=True)
+                config = {"draft": True, "prerelease": True,
+                          "versioning": "prerelease", "prerelease-type": "rc"}
+                if override:
+                    config["release-as"] = override
+                (config_dir / "release-please-config.json").write_text(
+                    json.dumps({"packages": {"platform": config}})
+                )
+                (config_dir / ".release-please-manifest.json").write_text(
+                    json.dumps({"platform": version})
+                )
+                output = root / "output"
+                result = subprocess.run(
+                    ["bash", "--noprofile", "--norc", "-eo", "pipefail", "-c", script],
+                    cwd=root,
+                    env={**os.environ, "BRANCH": "main", "RELEASE_FREEZE": "false",
+                         "GITHUB_OUTPUT": str(output)},
+                    capture_output=True, text=True, timeout=10,
+                )
+                if allowed:
+                    self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                    self.assertEqual(output.read_text().splitlines(), [
+                        f"requested={version}", f"create_pr={str(create_pr).lower()}",
+                    ])
+                else:
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertFalse(output.exists())
 
     def test_chart_destination_is_independent_and_requires_mcp_reference(self):
         section = WORKFLOW.read_text().split(

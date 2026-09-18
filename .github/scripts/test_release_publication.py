@@ -91,12 +91,12 @@ gh() {
         ]))
 
     def test_prereleases_do_not_depend_on_stable_lookup(self):
-        for version in ("1.4.0-beta.13", "1.4.0-rc.13"):
+        for version in ("1.4.0-beta.13", "1.4.0-rc.14"):
             with self.subTest(version=version):
                 self.assert_allowed(self.run_guard(api_status=1, version=version))
 
     def test_freeze_blocks_both_channels(self):
-        for version in ("1.3.51", "1.4.0-beta.13", "1.4.0-rc.13"):
+        for version in ("1.3.51", "1.4.0-beta.13", "1.4.0-rc.14"):
             with self.subTest(version=version):
                 self.assert_blocked(self.run_guard(version=version, freeze="true"))
 
@@ -108,7 +108,7 @@ gh() {
         stub = "gh() { if [ \"$2\" = view ]; then echo true; else printf '%s\\n' \"$*\"; fi; };\n"
         for version, flags in (
             ("1.4.0-beta.13", "--prerelease --latest=false"),
-            ("1.4.0-rc.13", "--prerelease --latest=false"),
+            ("1.4.0-rc.14", "--prerelease --latest=false"),
             ("1.4.0", "--prerelease=false --latest"),
         ):
             with self.subTest(version=version):
@@ -129,10 +129,10 @@ gh() {
         )[1].split("      # release-please runs", 1)[0]
         script = textwrap.dedent(section.split("        run: |\n", 1)[1])
         for version, override, allowed, create_pr in (
-            ("1.4.0-beta.13", "1.4.0-rc.13", True, True),
-            ("1.4.0-rc.13", "1.4.0-rc.13", True, False),
-            ("1.4.0-rc.13", None, True, True),
+            ("1.4.0-beta.13", "1.4.0-rc.14", True, True),
+            ("1.4.0-rc.14", "1.4.0-rc.14", True, False),
             ("1.4.0-rc.14", None, True, True),
+            ("1.4.0-rc.15", None, True, True),
             ("1.4.0-beta.14", None, False, None),
             ("1.4.0", None, False, None),
             ("1.4.0-rc.0", None, False, None),

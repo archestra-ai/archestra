@@ -1,17 +1,17 @@
 # Release Checklist
 
 Archestra uses two release pipelines:
-- **Release candidate (RC):** Automatic prereleases from `main` (for example, `1.4.0-rc.13`).
+- **Release candidate (RC):** Automatic prereleases from `main` (for example, `1.4.0-rc.14`).
 - **Stable:** Tested and approved releases from `release/X.Y` (for example, `1.3.52` or `1.4.0`).
 
 [Release-please](https://github.com/googleapis/release-please-action#supporting-multiple-release-branches) manages versions and changelogs. GitHub Actions builds the artifacts. Only approved stable releases update `latest`.
 
 ### Transition From Beta To RC
 
-The first RC uses temporary `release-as: 1.4.0-rc.13` with `prerelease-type: rc`.
+The next release after `1.4.0-beta.13` uses temporary `release-as: 1.4.0-rc.14` with `prerelease-type: rc`.
 Changing only `prerelease-type` does not replace an existing beta suffix in Release Please.
 Keep the manifest and published beta versions unchanged until the generated RC release PR updates them.
-After `1.4.0-rc.13` publishes, remove only `release-as` so rolling releases continue at `1.4.0-rc.14`.
+After `1.4.0-rc.14` publishes, remove only `release-as` so rolling releases continue at `1.4.0-rc.15`.
 The existing GitHub environment remains named `beta-release`. RCs do not update `latest` or require stable approval.
 
 ```mermaid
@@ -21,12 +21,12 @@ gitGraph
    checkout main
    commit id: "fix B"
    commit id: "feat C"
-   commit id: "rc" tag: "v1.4.0-rc.13"
+   commit id: "rc" tag: "v1.4.0-rc.14"
    checkout release/1.3
    cherry-pick id: "fix B" tag: ""
    commit id: "patch" tag: "v1.3.52"
    checkout main
-   commit id: "rc again" tag: "v1.4.0-rc.14"
+   commit id: "rc again" tag: "v1.4.0-rc.15"
    branch release/1.4
    commit id: "stable cut" tag: "v1.4.0"
    checkout main
@@ -35,7 +35,7 @@ gitGraph
 
 ## Release A Candidate
 
-1. [ ] Open the release-please PR on `main` (for example, `1.4.0-rc.13`).
+1. [ ] Open the release-please PR on `main` (for example, `1.4.0-rc.14`).
 2. [ ] Review the changelog and confirm checks pass, including migration upgrades from the active stable line.
 3. [ ] Merge the PR and confirm the **Release Please** workflow publishes the RC release.
 

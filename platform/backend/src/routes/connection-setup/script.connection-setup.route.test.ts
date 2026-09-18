@@ -119,8 +119,20 @@ describe("GET /api/connection-setups/script/:token", () => {
     {
       clientId: "codex",
       enabled: true,
-      instructions: "Claude only instructions.",
-      expected: null,
+      instructions: "Offer Codex handoff.",
+      expected: "Offer Codex handoff.",
+    },
+    {
+      clientId: "copilot-cli",
+      enabled: true,
+      instructions: "Offer Copilot handoff.",
+      expected: "Offer Copilot handoff.",
+    },
+    {
+      clientId: "cursor",
+      enabled: true,
+      instructions: "Offer Cursor handoff.",
+      expected: "Offer Cursor handoff.",
     },
   ]) {
     test(`renders current handoff settings for ${clientId} (enabled=${enabled}, instructions=${instructions})`, async ({
@@ -144,7 +156,15 @@ describe("GET /api/connection-setups/script/:token", () => {
       expect(response.statusCode, response.body).toBe(200);
       if (expected) {
         expect(response.body).toContain(expected);
-        expect(response.body).toContain("set -- --append-system-prompt-file");
+        expect(response.body).toContain(
+          clientId === "codex"
+            ? "developer_instructions="
+            : clientId === "copilot-cli"
+              ? "COPILOT_CUSTOM_INSTRUCTIONS_DIRS"
+              : clientId === "cursor"
+                ? "Customize > Rules > User Rules"
+                : "set -- --append-system-prompt-file",
+        );
       } else {
         expect(response.body).not.toContain(instructions);
         expect(response.body).not.toContain("--append-system-prompt-file");

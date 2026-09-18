@@ -1127,9 +1127,7 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
       mcp,
       proxy,
       runtimeHandoffInstructions:
-        setup.clientId === "claude-code" &&
-        mcp &&
-        organization.connectionRuntimeHandoffEnabled
+        mcp && organization.connectionRuntimeHandoffEnabled
           ? (organization.connectionRuntimeHandoffInstructions ??
             DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS)
           : null,

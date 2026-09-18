@@ -235,11 +235,15 @@ Which model providers the page offers is not set here. That is one deployment-wi
 
 ### Runtime Handoff Instructions
 
-**Suggest runtime handoff** adds configurable instructions to Claude Code's system prompt. It is off by default. Setup must include an MCP gateway with access to Agent Runtime tools. The default instructions ask Claude to offer suitable remote work and wait for your consent.
+**Suggest runtime handoff** adds configurable instructions to connected clients. It is off by default. Setup must include an MCP gateway with access to Agent Runtime tools. The default instructions ask the agent to offer suitable remote work and wait for your consent.
 
-The existing shell wrapper passes a local file through `--append-system-prompt-file`. Claude's built-in prompt stays intact. Explicit system-prompt flags take precedence. Other clients are unchanged.
+- **Claude Code:** the existing shell wrapper passes a local file through `--append-system-prompt-file`. Explicit system-prompt flags take precedence.
+- **Codex:** the wrapper reads effective settings through Codex's local configuration API. It combines existing developer instructions with the handoff text through `-c developer_instructions`. It does not edit `AGENTS.md` or replace the built-in prompt. Profile, directory, remote, and config overrides skip this addition, except model, provider, and reasoning-effort selections. If configuration cannot be read within three seconds, Codex launches unchanged with a warning. This requires Node.js and a Codex version supporting `config/read`.
+- **Copilot CLI:** the wrapper adds a local instruction directory through `COPILOT_CUSTOM_INSTRUCTIONS_DIRS`. Existing instruction directories stay included.
+- **Claude Desktop:** setup adds `organizationInstructions` to its managed profile. This requires Desktop 1.37937.0 or newer. Instructions longer than 3,000 characters fail setup without changing the profile.
+- **Cursor:** setup prints the instruction text. Paste it into **Customize → Rules → User Rules**, keeping your existing rules. Updates and removal remain manual.
 
-After saving edits or disabling the feature, rerun Connect setup and reload your shell. Start a new Claude conversation; resumed conversations can retain their previous prompt. Disabling removes the local instruction file during setup. Instructions guide the model; they do not guarantee an offer or start remote work automatically.
+After saving edits or disabling the feature, rerun Connect setup. Reload your shell for CLI clients and start a new conversation. Resumed conversations can retain their previous prompt. Disabling removes managed instructions during setup; remove Cursor's rule manually. Instructions guide the model; they do not guarantee an offer or start remote work automatically.
 
 ## Use Case
 

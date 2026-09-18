@@ -504,7 +504,7 @@ export function ConnectionSettingsForm() {
 
               <SettingRow
                 title="Suggest runtime handoff"
-                description="Add instructions to the Claude Code system prompt through its shell wrapper. Requires an MCP gateway. Rerun setup to apply changes, including disabling."
+                description="Add handoff instructions to Claude Code, Codex, Copilot CLI, and Claude Desktop. Cursor requires a manual User Rules step. Requires an MCP gateway. Rerun setup after changes, including disabling."
               >
                 <Switch
                   checked={runtimeHandoffEnabled}
@@ -516,7 +516,7 @@ export function ConnectionSettingsForm() {
               {runtimeHandoffEnabled && (
                 <SettingSection
                   title="Runtime handoff instructions"
-                  description="Rerun Connect setup and reload your shell to apply edits or disable this feature. Start a new Claude session to use the updated prompt. Explicit system-prompt flags take precedence."
+                  description="Rerun Connect setup and start a new client session after edits or disabling. Reload your shell for CLI clients. Desktop supports up to 3,000 characters. Update or remove Cursor User Rules manually. Explicit CLI configuration takes precedence."
                 >
                   <div className="space-y-3">
                     <Textarea

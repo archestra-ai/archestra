@@ -246,6 +246,13 @@ To revoke this machine's access later in ${ctx.appName}: ${revocation.join("; ")
 
 function nextStepsFor(ctx: SetupScriptContext): string[] {
   const steps: string[] = [];
+  if (ctx.clientId === "cursor") {
+    steps.push(
+      ctx.mcp && ctx.runtimeHandoffInstructions
+        ? "Runtime handoff needs a manual step: paste the printed handoff instructions into Cursor Customize > Rules > User Rules. Keep your existing rules."
+        : "If you previously added runtime handoff instructions to Cursor User Rules, remove that text to disable them.",
+    );
+  }
   switch (ctx.clientId) {
     case "claude-code":
       if (ctx.mcp) {
@@ -1078,6 +1085,11 @@ ${psCopilotModelApply({
 
 function cursorSections(ctx: SetupScriptContext): string[] {
   const sections: string[] = [];
+
+  if (ctx.mcp && ctx.runtimeHandoffInstructions) {
+    sections.push(`Say ${psq("Runtime handoff instructions — copy into Cursor User Rules")}
+Write-Host ([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${Buffer.from(ctx.runtimeHandoffInstructions).toString("base64")}')))`);
+  }
 
   if (ctx.mcp) {
     sections.push(`Say ${psq(`Adding MCP gateway "${ctx.mcp.serverName}" to ~/.cursor/mcp.json (OAuth)`)}

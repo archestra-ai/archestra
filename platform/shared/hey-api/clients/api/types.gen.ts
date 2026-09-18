@@ -22508,6 +22508,208 @@ export type ShareAgentRunResponses = {
 
 export type ShareAgentRunResponse = ShareAgentRunResponses[keyof ShareAgentRunResponses];
 
+export type StartAgentWorkspaceTransferData = {
+    body: {
+        direction: 'download';
+        path: string;
+    } | {
+        direction: 'upload';
+        path: string;
+        size: number;
+        sha256: string;
+    };
+    path: {
+        taskId: string;
+    };
+    query?: never;
+    url: '/api/agent-runs/{taskId}/workspace/transfers';
+};
+
+export type StartAgentWorkspaceTransferErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type StartAgentWorkspaceTransferError = StartAgentWorkspaceTransferErrors[keyof StartAgentWorkspaceTransferErrors];
+
+export type StartAgentWorkspaceTransferResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        transferId: string;
+        token: string;
+        contentUrl: string;
+        path: string;
+        size: number;
+        sha256: string;
+        expiresInSeconds: number;
+    };
+};
+
+export type StartAgentWorkspaceTransferResponse = StartAgentWorkspaceTransferResponses[keyof StartAgentWorkspaceTransferResponses];
+
+export type DownloadAgentWorkspaceTransferData = {
+    body?: never;
+    path: {
+        transferId: string;
+    };
+    query?: never;
+    url: '/api/agent-workspace-transfers/{transferId}/content';
+};
+
+export type DownloadAgentWorkspaceTransferResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type UploadAgentWorkspaceTransferData = {
+    body?: never;
+    path: {
+        transferId: string;
+    };
+    query?: never;
+    url: '/api/agent-workspace-transfers/{transferId}/content';
+};
+
+export type UploadAgentWorkspaceTransferErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UploadAgentWorkspaceTransferError = UploadAgentWorkspaceTransferErrors[keyof UploadAgentWorkspaceTransferErrors];
+
+export type UploadAgentWorkspaceTransferResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        path: string;
+        size: number;
+        sha256: string;
+    };
+};
+
+export type UploadAgentWorkspaceTransferResponse = UploadAgentWorkspaceTransferResponses[keyof UploadAgentWorkspaceTransferResponses];
+
 export type GetAllAgentToolsData = {
     body?: never;
     path?: never;

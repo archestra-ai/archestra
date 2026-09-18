@@ -10,6 +10,7 @@ import {
   appaSessionIdentity,
   appaTurnBoundaries,
   appaWireFamily,
+  canonicalJson,
   declaredToolName,
 } from "./wire";
 
@@ -1942,5 +1943,58 @@ describe("client session identity", () => {
         canonicalizeToolName: canonicalize,
       }),
     ).not.toThrow();
+  });
+});
+
+describe("canonicalJson", () => {
+  test("deterministically sorts keys and formats arrays", () => {
+    expect(canonicalJson({ b: 2, a: 1, c: [3, 2, 1] })).toBe(
+      '{"a":1,"b":2,"c":[3,2,1]}',
+    );
+  });
+
+  test("omits undefined, symbol, and function properties in objects and replaces them with null in arrays", () => {
+    expect(
+      canonicalJson({
+        a: 1,
+        b: undefined,
+        c: () => {},
+        d: Symbol("test"),
+        arr: [1, undefined, () => {}, Symbol("test"), 2],
+      }),
+    ).toBe('{"a":1,"arr":[1,null,null,null,2]}');
+  });
+
+  test("bounds recursion depth and emits depth-exceeded placeholder", () => {
+    const deeplyNested = {
+      level1: {
+        level2: {
+          level3: {
+            level4: "deep",
+          },
+        },
+      },
+    };
+    expect(canonicalJson(deeplyNested, { maxDepth: 2 })).toBe(
+      '{"level1":{"level2":"[depth-exceeded]"}}',
+    );
+  });
+
+  test("bounds serialized size and emits size-exceeded placeholder", () => {
+    const largeObject = {
+      key1: "first long value here",
+      key2: "second long value here",
+      key3: "third long value here",
+    };
+    const result = canonicalJson(largeObject, { maxBytes: 30 });
+    expect(result).toContain("[size-exceeded]");
+  });
+
+  test("handles circular references gracefully without throwing RangeError", () => {
+    const circular: Record<string, unknown> = { a: 1 };
+    circular.self = circular;
+    expect(() => canonicalJson(circular)).not.toThrow();
+    const result = canonicalJson(circular);
+    expect(result).toContain("[depth-exceeded]");
   });
 });

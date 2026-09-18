@@ -806,34 +806,78 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
     : undefined;
 }
 
-/** JSON's canonical form for semantic retry fingerprints. */
-export function canonicalJson(value: unknown): string {
-  if (Array.isArray(value)) {
-    return `[${value
-      .map((item) =>
-        item === undefined ||
-        typeof item === "function" ||
-        typeof item === "symbol"
-          ? "null"
-          : canonicalJson(item),
-      )
-      .join(",")}]`;
+const MAX_CANONICAL_JSON_DEPTH = 64;
+const MAX_CANONICAL_JSON_BYTES = 2 * 1024 * 1024; // 2 MB
+
+/** JSON's canonical form for semantic retry fingerprints, bounded by depth and size. */
+export function canonicalJson(
+  value: unknown,
+  options?: { maxDepth?: number; maxBytes?: number },
+): string {
+  const maxDepth = options?.maxDepth ?? MAX_CANONICAL_JSON_DEPTH;
+  const maxBytes = options?.maxBytes ?? MAX_CANONICAL_JSON_BYTES;
+  let byteCount = 0;
+
+  function serialize(val: unknown, depth: number): string {
+    if (depth >= maxDepth) {
+      return '"[depth-exceeded]"';
+    }
+    if (byteCount >= maxBytes) {
+      return '"[size-exceeded]"';
+    }
+
+    if (Array.isArray(val)) {
+      const items = val.map((item) => {
+        if (
+          item === undefined ||
+          typeof item === "function" ||
+          typeof item === "symbol"
+        ) {
+          byteCount += 4;
+          return "null";
+        }
+        return serialize(item, depth + 1);
+      });
+      const result = `[${items.join(",")}]`;
+      byteCount += result.length;
+      return result;
+    }
+
+    const record = asRecord(val);
+    if (record) {
+      const entries = Object.keys(record)
+        .sort()
+        .flatMap((key) => {
+          const entry = record[key];
+          if (
+            entry === undefined ||
+            typeof entry === "function" ||
+            typeof entry === "symbol"
+          ) {
+            return [];
+          }
+          const serializedKey = JSON.stringify(key);
+          const serializedValue = serialize(entry, depth + 1);
+          return [`${serializedKey}:${serializedValue}`];
+        });
+      const result = `{${entries.join(",")}}`;
+      byteCount += result.length;
+      return result;
+    }
+
+    const primitive = JSON.stringify(val) ?? "null";
+    byteCount += primitive.length;
+    return primitive;
   }
-  const record = asRecord(value);
-  if (record) {
-    return `{${Object.keys(record)
-      .sort()
-      .flatMap((key) => {
-        const entry = record[key];
-        return entry === undefined ||
-          typeof entry === "function" ||
-          typeof entry === "symbol"
-          ? []
-          : [`${JSON.stringify(key)}:${canonicalJson(entry)}`];
-      })
-      .join(",")}}`;
+
+  try {
+    return serialize(value, 0);
+  } catch (err) {
+    if (err instanceof RangeError) {
+      return '"[stack-overflow]"';
+    }
+    throw err;
   }
-  return JSON.stringify(value) ?? "null";
 }
 
 function asArray(value: unknown): unknown[] | undefined {

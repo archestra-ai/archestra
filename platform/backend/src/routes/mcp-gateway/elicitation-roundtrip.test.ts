@@ -318,6 +318,81 @@ describe("MCP Gateway - in-band elicitation round trip", () => {
     );
   });
 
+  test("a client without elicitation on the same token does not take another client's forms away", async ({
+    makeAgent,
+    makeOrganization,
+  }) => {
+    const agent = await makeAgent();
+    const token = await TeamTokenModel.create({
+      organizationId: (await makeOrganization()).id,
+      name: "Shared Token",
+      teamId: null,
+      isOrganizationToken: true,
+    });
+    await app.listen({ port: 0, host: "127.0.0.1" });
+    const { port } = app.server.address() as AddressInfo;
+    const url = `http://127.0.0.1:${port}/v1/mcp/${agent.id}`;
+    const post = (userAgent: string, body: unknown) =>
+      fetch(url, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          accept: "application/json, text/event-stream",
+          authorization: `Bearer ${token.value}`,
+          "user-agent": userAgent,
+        },
+        body: JSON.stringify(body),
+      });
+    const initialize = (userAgent: string, capabilities: unknown) =>
+      post(userAgent, {
+        jsonrpc: "2.0",
+        method: "initialize",
+        params: {
+          protocolVersion: "2025-06-18",
+          capabilities,
+          clientInfo: { name: userAgent, version: "1" },
+        },
+        id: 1,
+      });
+
+    // Two clients share one personal token; the one without forms connects
+    // last.
+    expect((await initialize("forms-client/1", { elicitation: {} })).ok).toBe(
+      true,
+    );
+    expect((await initialize("plain-client/1", { roots: {} })).ok).toBe(true);
+
+    const call = await post("forms-client/1", {
+      jsonrpc: "2.0",
+      method: "tools/call",
+      params: {
+        name: "archestra__ask_user",
+        arguments: {
+          question: "Accept this change for the rest of this session?",
+          options: [
+            { label: "Accept for this session" },
+            { label: "Do not accept" },
+          ],
+        },
+      },
+      id: 2,
+    });
+    expect(call.headers.get("content-type")).toContain("text/event-stream");
+    const events = readEvents(call);
+    const question = await events.next();
+    expect(question.method).toBe("elicitation/create");
+
+    await post("forms-client/1", {
+      jsonrpc: "2.0",
+      id: question.id,
+      result: { action: "accept", content: { choice: "Do not accept" } },
+    });
+    expect(await events.next()).toMatchObject({
+      id: 2,
+      result: { structuredContent: { selected: ["Do not accept"] } },
+    });
+  });
+
   test("only the caller that was asked can answer, under an id no other question shares", async ({
     makeAgent,
     makeOrganization,

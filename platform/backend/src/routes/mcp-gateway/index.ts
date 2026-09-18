@@ -202,12 +202,14 @@ async function handleMcpPostRequest(
 ): Promise<unknown> {
   const { revision } = resolution;
   const body = request.body as Record<string, unknown>;
-  // This caller on this gateway: the key for its initialize-time capabilities
-  // and for the server-initiated requests only it may answer.
+  // This client of this caller on this gateway: the key for its
+  // initialize-time capabilities and for the server-initiated requests only
+  // it may answer.
   const capabilityKey = clientCapabilityKey({
     profileId,
     tokenId: tokenAuthContext?.tokenId,
     userId: tokenAuthContext?.userId,
+    userAgent: readHeader(request, "user-agent"),
   });
 
   // A bare JSON-RPC response/error (no method) answers a server-initiated

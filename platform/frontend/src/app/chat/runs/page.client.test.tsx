@@ -250,6 +250,8 @@ describe("AgentRunChatSession", () => {
   it("restores retained output after the run has ended", () => {
     queryState.value.data = run({
       state: "TASK_STATE_COMPLETED",
+      // Idle since it ended: no model activity after the turn settled.
+      lastModelActivityAt: "2026-08-28T17:30:00.000Z",
       endedAt: "2026-08-28T18:00:00.000Z",
     });
 
@@ -272,6 +274,8 @@ describe("AgentRunChatSession", () => {
 
     queryState.value.data = run({
       state: "TASK_STATE_COMPLETED",
+      // Idle since it ended: no model activity after the turn settled.
+      lastModelActivityAt: "2026-08-28T17:30:00.000Z",
       endedAt: "2026-08-28T18:00:00.000Z",
     });
     rerender(<AgentRunChatSession taskId="task-1" />);
@@ -314,6 +318,8 @@ describe("AgentRunChatSession", () => {
   it("shows a shared viewer retained output for an ended run without owner controls", () => {
     queryState.value.data = run({
       state: "TASK_STATE_COMPLETED",
+      // Idle since it ended: no model activity after the turn settled.
+      lastModelActivityAt: "2026-08-28T17:30:00.000Z",
       endedAt: "2026-08-28T18:00:00.000Z",
       viewerRole: "shared",
     });

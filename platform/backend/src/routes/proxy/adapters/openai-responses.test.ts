@@ -1,7 +1,46 @@
 import { describe, expect, test } from "vitest";
-import type { OpenAi } from "@/types";
+import { CommonToolCallSchema, type OpenAi } from "@/types";
 import { openAiResponsesAdapterFactory } from "./openai-responses";
 import { responsesToOpenaiChat } from "./openai-responses-translator";
+
+describe("CommonToolCallSchema", () => {
+  test("requires a string input for discriminated custom calls", () => {
+    const base = { id: "call_1", name: "apply_patch" };
+
+    expect(
+      CommonToolCallSchema.safeParse({
+        ...base,
+        kind: "custom",
+        arguments: { input: "*** Begin Patch" },
+      }).success,
+    ).toBe(true);
+    expect(
+      CommonToolCallSchema.safeParse({
+        ...base,
+        kind: "custom",
+        arguments: { input: 42 },
+      }).success,
+    ).toBe(false);
+    expect(
+      CommonToolCallSchema.safeParse({
+        ...base,
+        kind: "custom",
+        arguments: {},
+      }).success,
+    ).toBe(false);
+    expect(
+      CommonToolCallSchema.safeParse({
+        ...base,
+        kind: "custom",
+        arguments: { input: "*** Begin Patch", arbitrary: true },
+      }).success,
+    ).toBe(false);
+    // Existing adapters that predate the explicit variant remain function calls.
+    expect(
+      CommonToolCallSchema.safeParse({ ...base, arguments: {} }).success,
+    ).toBe(true);
+  });
+});
 
 describe("responsesToOpenaiChat", () => {
   test("translates AI SDK easy-input messages for the model router", () => {
@@ -105,6 +144,56 @@ describe("OpenAiResponsesRequestAdapter.getMessages", () => {
     ]);
   });
 
+  // A custom tool is called with free-form text rather than JSON arguments
+  // (Codex's apply_patch is one). Its output is a tool result the same way a
+  // function's is, so a proxy that read only function_call_output would hand
+  // the custom tool's output back to the model ungoverned.
+  test("pairs a custom_tool_call_output with the custom_tool_call behind it", () => {
+    const request = {
+      model: "gpt-5.3-codex",
+      input: [
+        { role: "user", content: [{ type: "input_text", text: "patch it" }] },
+        {
+          type: "custom_tool_call",
+          id: "ctc_1",
+          call_id: "call_patch",
+          name: "apply_patch",
+          input: "*** Begin Patch",
+        },
+        {
+          type: "custom_tool_call_output",
+          call_id: "call_patch",
+          output: "raw patch result",
+        },
+      ],
+    } as unknown as OpenAi.Types.ResponsesRequest;
+
+    const adapter = openAiResponsesAdapterFactory.createRequestAdapter(request);
+
+    expect(adapter.getToolResults()).toEqual([
+      {
+        id: "call_patch",
+        name: "apply_patch",
+        arguments: { input: "*** Begin Patch" },
+        content: "raw patch result",
+        isError: false,
+      },
+    ]);
+    expect(adapter.getMessages()).toContainEqual({
+      role: "tool",
+      content: "raw patch result",
+      toolCalls: [
+        {
+          id: "call_patch",
+          name: "apply_patch",
+          arguments: { input: "*** Begin Patch" },
+          content: "raw patch result",
+          isError: false,
+        },
+      ],
+    });
+  });
+
   test("keeps an orphaned function_call_output visible under the unknown name", () => {
     const request = {
       model: "gpt-5.6-sol",
@@ -175,6 +264,121 @@ describe("OpenAiResponsesRequestAdapter.toProviderRequest", () => {
       }),
     ]);
   });
+
+  // A sanitizer that reduces sensitive output to nothing HAS replaced it.
+  // Treating the empty string as "no replacement" forwards the original,
+  // handing the model exactly what was withheld.
+  test("an approved replacement of the empty string still replaces the output", () => {
+    const request = {
+      model: "gpt-5.6-sol",
+      input: [
+        {
+          type: "function_call",
+          call_id: "call_1",
+          name: "duckduckgo__search",
+          arguments: "{}",
+        },
+        {
+          type: "function_call_output",
+          call_id: "call_1",
+          output: "SECRET",
+        },
+      ],
+    } as unknown as OpenAi.Types.ResponsesRequest;
+
+    const adapter = openAiResponsesAdapterFactory.createRequestAdapter(request);
+    adapter.applyToolResultUpdates({ call_1: "" });
+
+    const forwarded = adapter.toProviderRequest();
+
+    expect(JSON.stringify(forwarded)).not.toContain("SECRET");
+    expect(
+      (forwarded.input as Array<{ type?: string; output?: unknown }>).find(
+        (item) => item.type === "function_call_output",
+      ),
+    ).toMatchObject({ call_id: "call_1", output: "" });
+  });
+
+  test("a custom_tool_call_output is replaced too", () => {
+    const request = {
+      model: "gpt-5.3-codex",
+      input: [
+        {
+          type: "custom_tool_call",
+          call_id: "call_patch",
+          name: "apply_patch",
+          input: "*** Begin Patch",
+        },
+        {
+          type: "custom_tool_call_output",
+          call_id: "call_patch",
+          output: "SECRET",
+        },
+      ],
+    } as unknown as OpenAi.Types.ResponsesRequest;
+
+    const adapter = openAiResponsesAdapterFactory.createRequestAdapter(request);
+    adapter.applyToolResultUpdates({ call_patch: "sanitized patch result" });
+
+    const forwarded = adapter.toProviderRequest();
+
+    expect(JSON.stringify(forwarded)).not.toContain("SECRET");
+    expect(
+      (forwarded.input as Array<{ type?: string; output?: unknown }>).find(
+        (item) => item.type === "custom_tool_call_output",
+      ),
+    ).toMatchObject({ output: "sanitized patch result" });
+  });
+});
+
+describe("OpenAiResponsesResponseAdapter.getToolCalls", () => {
+  // A custom tool call is still a call this proxy releases or refuses. Reading
+  // only function_call items would let one past policy entirely.
+  test("extracts a custom_tool_call, carrying its free-form input as the one argument", () => {
+    const adapter = openAiResponsesAdapterFactory.createResponseAdapter({
+      id: "resp_1",
+      object: "response",
+      created_at: 0,
+      model: "gpt-5.3-codex",
+      status: "completed",
+      output: [
+        {
+          id: "ctc_1",
+          call_id: "call_patch",
+          type: "custom_tool_call",
+          name: "apply_patch",
+          input: "*** Begin Patch",
+          status: "completed",
+        },
+        {
+          id: "fc_1",
+          call_id: "call_read",
+          type: "function_call",
+          name: "read_file",
+          arguments: '{"path":"/tmp/x"}',
+          status: "completed",
+          // Codex declares some tools in namespaces; the call names its own.
+          namespace: "functions",
+        },
+      ],
+    } as never);
+
+    expect(adapter.getToolCalls()).toEqual([
+      {
+        id: "call_patch",
+        name: "apply_patch",
+        arguments: { input: "*** Begin Patch" },
+        kind: "custom",
+      },
+      {
+        id: "call_read",
+        name: "read_file",
+        arguments: { path: "/tmp/x" },
+        kind: "function",
+        namespace: "functions",
+      },
+    ]);
+  });
 });
 
 describe("OpenAiResponsesStreamAdapter.toProviderResponse", () => {
@@ -206,6 +410,34 @@ describe("OpenAiResponsesStreamAdapter.toProviderResponse", () => {
     expect(
       firstBlock && "text" in firstBlock ? firstBlock.text : undefined,
     ).toBe("let me checkblocked message");
+  });
+
+  test("keeps the namespace a streamed call names, for the plugins that record it", () => {
+    const adapter = openAiResponsesAdapterFactory.createStreamAdapter();
+
+    adapter.processChunk({
+      type: "response.output_item.added",
+      output_index: 0,
+      sequence_number: 1,
+      item: {
+        id: "fc_1",
+        call_id: "call_spawn",
+        type: "function_call",
+        name: "spawn_agent",
+        arguments: "",
+        status: "in_progress",
+        namespace: "multi_agent_v1",
+      },
+    } as unknown as Parameters<typeof adapter.processChunk>[0]);
+
+    expect(adapter.state.toolCalls).toEqual([
+      {
+        id: "call_spawn",
+        name: "spawn_agent",
+        arguments: "",
+        namespace: "multi_agent_v1",
+      },
+    ]);
   });
 
   test("restores accumulated output when the completed envelope is empty", () => {

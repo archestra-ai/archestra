@@ -19,6 +19,8 @@ import {
 } from "@/services/openai-codex-credentials";
 import type {
   ChunkProcessingResult,
+  CommonCustomToolCall,
+  CommonFunctionToolCall,
   CommonMcpToolDefinition,
   CommonMessage,
   CommonToolCall,
@@ -40,7 +42,9 @@ import {
 import { createOpenAiCodexResponsesClient } from "./openai-codex-responses-client";
 import { formatResponsesStreamErrorFrame } from "./responses-stream-error-frame";
 import {
+  customToolInput,
   formatResponsesFunctionCallFrames,
+  namespaceOf,
   rewriteResponsesOutput,
   toSse,
 } from "./responses-tool-call-rewrite";
@@ -321,8 +325,11 @@ class OpenAiResponsesRequestAdapter
           return item;
         }
 
+        // Presence, not truthiness: a sanitizer that reduces sensitive output
+        // to nothing has replaced it, and forwarding the original instead would
+        // hand the model exactly what was withheld.
         const updatedOutput = this.toolResultUpdates[item.call_id];
-        if (!updatedOutput) {
+        if (updatedOutput === undefined) {
           return item;
         }
 
@@ -376,18 +383,32 @@ class OpenAiResponsesResponseAdapter
   }
 
   getToolCalls(): CommonToolCall[] {
-    return this.response.output.flatMap((item) => {
+    return this.response.output.flatMap<CommonToolCall>((item) => {
+      // A custom tool is called with free-form text rather than JSON arguments
+      // — Codex's `apply_patch` is one. It is still a call this proxy releases
+      // or refuses, so it is carried as the one argument it has.
+      if (isResponseCustomToolCall(item)) {
+        const call: CommonCustomToolCall = {
+          id: item.call_id,
+          name: item.name,
+          arguments: { input: item.input },
+          kind: "custom",
+          ...namespaceOf(item),
+        };
+        return [call];
+      }
       if (!isResponseFunctionCall(item)) {
         return [];
       }
 
-      return [
-        {
-          id: item.call_id,
-          name: item.name,
-          arguments: tryParseJsonObject(item.arguments),
-        },
-      ];
+      const call: CommonFunctionToolCall = {
+        id: item.call_id,
+        name: item.name,
+        arguments: tryParseJsonObject(item.arguments),
+        kind: "function",
+        ...namespaceOf(item),
+      };
+      return [call];
     });
   }
 
@@ -461,13 +482,19 @@ class OpenAiResponsesStreamAdapter
   readonly provider = "openai" as const;
   readonly state = createStreamAccumulatorState();
   private completedResponse: OpenAiResponsesResponse | null = null;
+  /**
+   * Calls the model made as custom tool calls, by call id. The completed
+   * envelope names them too, but upstream can end without one, or with an
+   * empty output, and a custom call must not turn into a function call then.
+   */
+  private customCallIds = new Set<string>();
   // Set to the refusal text when the streamed response was replaced by a policy
   // refusal, so toProviderResponse persists the refusal — not the captured
   // upstream completion or the blocked tool calls.
   private replacedText: string | null = null;
   private toolCallsByItemId = new Map<
     string,
-    { id: string; name: string; arguments: string }
+    { id: string; name: string; arguments: string; namespace?: string }
   >();
 
   processChunk(chunk: OpenAiResponsesStreamChunk): ChunkProcessingResult {
@@ -683,14 +710,50 @@ class OpenAiResponsesStreamAdapter
     // what the client reconstructs.
     const base = this.completedResponse ?? this.toProviderResponse();
     const upstreamOutput = Array.isArray(base.output) ? base.output : [];
-    const firstOutputIndex = upstreamOutput.filter(
-      (item) => item.type !== "function_call",
-    ).length;
+    const callItems = upstreamOutput.filter(
+      (item) =>
+        item.type === "function_call" || item.type === "custom_tool_call",
+    );
+    // Both kinds are calls: counting only function calls would place the
+    // rewritten frames at indexes the completed envelope disagrees with.
+    const firstOutputIndex = upstreamOutput.length - callItems.length;
+    const itemIdByCallId = new Map(
+      callItems.flatMap((item) => {
+        const callId = (item as { call_id?: unknown }).call_id;
+        const itemId = (item as { id?: unknown }).id;
+        return typeof callId === "string" && typeof itemId === "string"
+          ? [[callId, itemId] as const]
+          : [];
+      }),
+    );
+    const customCallIds = new Set(
+      callItems.flatMap((item) => {
+        const callId = (item as { call_id?: unknown }).call_id;
+        const rewritten = toolCalls.find((call) => call.id === callId);
+        // Only a call this rewrite left alone: one replaced by the denial
+        // notice is a function call now, because the notice tool is one.
+        return item.type === "custom_tool_call" &&
+          typeof callId === "string" &&
+          rewritten?.name === (item as { name?: string }).name
+          ? [callId]
+          : [];
+      }),
+    );
+    // A call the envelope did not carry is still known by what was streamed.
+    for (const call of toolCalls) {
+      const streamed = this.state.toolCalls.find(
+        (candidate) => candidate.id === call.id,
+      );
+      if (this.customCallIds.has(call.id) && streamed?.name === call.name)
+        customCallIds.add(call.id);
+    }
     let sequence = Date.now();
     const frames = formatResponsesFunctionCallFrames({
       toolCalls,
       firstOutputIndex,
       nextSequenceNumber: () => sequence++,
+      itemIdByCallId,
+      customCallIds,
     });
     const rewritten = {
       ...base,
@@ -746,14 +809,25 @@ class OpenAiResponsesStreamAdapter
 
     if (this.replacedText === null) {
       outputItems.push(
-        ...this.state.toolCalls.map((toolCall) => ({
-          id: toolCall.id,
-          call_id: toolCall.id,
-          type: "function_call" as const,
-          name: toolCall.name,
-          arguments: toolCall.arguments,
-          status: "completed" as const,
-        })),
+        ...this.state.toolCalls.map((toolCall) =>
+          this.customCallIds.has(toolCall.id)
+            ? ({
+                id: toolCall.id,
+                call_id: toolCall.id,
+                type: "custom_tool_call" as const,
+                name: toolCall.name,
+                input: customToolInput(toolCall.arguments) ?? "",
+                status: "completed" as const,
+              } as OpenAiResponsesResponse["output"][number])
+            : {
+                id: toolCall.id,
+                call_id: toolCall.id,
+                type: "function_call" as const,
+                name: toolCall.name,
+                arguments: toolCall.arguments,
+                status: "completed" as const,
+              },
+        ),
       );
     }
 
@@ -789,6 +863,17 @@ class OpenAiResponsesStreamAdapter
   private captureToolCallChunk(chunk: OpenAiResponsesStreamChunk): void {
     if (chunk.type === "response.output_item.added") {
       const item = chunk.item;
+      if (isResponseCustomToolCall(item)) {
+        this.toolCallsByItemId.set(item.id ?? item.call_id, {
+          id: item.call_id,
+          name: item.name,
+          arguments: JSON.stringify({ input: item.input ?? "" }),
+          ...namespaceOf(item),
+        });
+        this.customCallIds.add(item.call_id);
+        this.state.toolCalls = Array.from(this.toolCallsByItemId.values());
+        return;
+      }
       if (!isResponseFunctionCall(item)) {
         return;
       }
@@ -797,7 +882,25 @@ class OpenAiResponsesStreamAdapter
         id: item.call_id,
         name: item.name,
         arguments: item.arguments,
+        ...namespaceOf(item),
       });
+      this.state.toolCalls = Array.from(this.toolCallsByItemId.values());
+      return;
+    }
+
+    // A custom tool's input streams as text, not as JSON argument fragments.
+    if (
+      chunk.type === "response.custom_tool_call_input.delta" ||
+      chunk.type === "response.custom_tool_call_input.done"
+    ) {
+      const toolCall = this.toolCallsByItemId.get(chunk.item_id);
+      if (!toolCall) return;
+      const input =
+        chunk.type === "response.custom_tool_call_input.done"
+          ? chunk.input
+          : (customToolInput(toolCall.arguments) ?? "") + chunk.delta;
+      toolCall.arguments = JSON.stringify({ input });
+      this.toolCallsByItemId.set(chunk.item_id, toolCall);
       this.state.toolCalls = Array.from(this.toolCallsByItemId.values());
       return;
     }
@@ -861,7 +964,10 @@ function toCommonMessages(
     ];
   }
 
-  if (item.type === "function_call_output") {
+  if (
+    item.type === "function_call_output" ||
+    item.type === "custom_tool_call_output"
+  ) {
     const toolCall = toolCallsByCallId.get(item.call_id);
     const content =
       typeof item.output === "string"
@@ -929,14 +1035,23 @@ function isFunctionToolDefinition(
   );
 }
 
+/**
+ * A tool result item, of either kind: a custom tool's output is a result the
+ * same way a function's is, and a proxy that read only one of them would hand
+ * the other back to the model ungoverned.
+ */
 function isFunctionCallOutputItem(
   item: unknown,
-): item is Extract<ResponseInputItem, { type: "function_call_output" }> {
+): item is Extract<
+  ResponseInputItem,
+  { type: "function_call_output" | "custom_tool_call_output" }
+> {
   return (
     !!item &&
     typeof item === "object" &&
     "type" in item &&
-    item.type === "function_call_output"
+    (item.type === "function_call_output" ||
+      item.type === "custom_tool_call_output")
   );
 }
 
@@ -950,6 +1065,18 @@ function isResponseFunctionCall(
   item: ResponseOutputItem | { type?: string },
 ): item is Extract<ResponseOutputItem, { type: "function_call" }> {
   return item.type === "function_call";
+}
+
+function isResponseCustomToolCall(
+  item: ResponseOutputItem | { type?: string },
+): item is Extract<ResponseOutputItem, { type: "custom_tool_call" }> {
+  return item.type === "custom_tool_call";
+}
+
+function isResponseInputCustomToolCall(
+  item: ResponseInputItem,
+): item is Extract<ResponseInputItem, { type: "custom_tool_call" }> {
+  return item.type === "custom_tool_call";
 }
 
 function isResponseInputFunctionCall(
@@ -970,14 +1097,27 @@ function isResponsesToolCallChunk(
   | Extract<ResponseStreamEvent, { type: "response.output_item.added" }>
   | Extract<ResponseStreamEvent, { type: "response.output_item.done" }>
   | ResponseFunctionCallArgumentsDeltaEvent
-  | ResponseFunctionCallArgumentsDoneEvent {
+  | ResponseFunctionCallArgumentsDoneEvent
+  | Extract<
+      ResponseStreamEvent,
+      { type: "response.custom_tool_call_input.delta" }
+    >
+  | Extract<
+      ResponseStreamEvent,
+      { type: "response.custom_tool_call_input.done" }
+    > {
+  const item =
+    chunk.type === "response.output_item.added" ||
+    chunk.type === "response.output_item.done"
+      ? chunk.item
+      : undefined;
   return (
-    (chunk.type === "response.output_item.added" &&
-      isResponseFunctionCall(chunk.item)) ||
-    (chunk.type === "response.output_item.done" &&
-      isResponseFunctionCall(chunk.item)) ||
+    (item !== undefined &&
+      (isResponseFunctionCall(item) || isResponseCustomToolCall(item))) ||
     chunk.type === "response.function_call_arguments.delta" ||
-    chunk.type === "response.function_call_arguments.done"
+    chunk.type === "response.function_call_arguments.done" ||
+    chunk.type === "response.custom_tool_call_input.delta" ||
+    chunk.type === "response.custom_tool_call_input.done"
   );
 }
 
@@ -986,6 +1126,11 @@ function getToolCallsByCallId(
 ): Map<string, { name: string; arguments?: Record<string, unknown> }> {
   return new Map(
     input.flatMap((item) => {
+      if (isResponseInputCustomToolCall(item)) {
+        return [
+          [item.call_id, { name: item.name, arguments: { input: item.input } }],
+        ] as const;
+      }
       if (!isResponseInputFunctionCall(item)) {
         return [];
       }

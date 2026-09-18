@@ -1,10 +1,12 @@
 import config from "@/config";
 import logger from "@/logging";
+import { canonicalJson } from "@/openappa/wire";
 import type {
   CommonToolResult,
   DualLlmAnalysis,
   UnsafeContextBoundary,
 } from "@/types";
+import { ApiError } from "@/types";
 
 /**
  * Public extension contract for cross-cutting LLM proxy behavior.
@@ -43,6 +45,8 @@ type LlmProxyToolCall = {
   id: string;
   name: string;
   arguments: string | Record<string, unknown>;
+  /** The namespace the model called the tool in, on a wire that has them. */
+  namespace?: string;
 };
 
 export type LlmProxyToolCallsContext = LlmProxyRequestContext & {
@@ -60,8 +64,17 @@ export type LlmProxyToolCallRefusal = {
   allToolCallNames: string[];
 };
 
+/**
+ * `blocked` names calls a plugin replaced rather than released — APPA renders a
+ * denied call as a call to its notice tool, so the client still sees a call
+ * where the model made one. The proxy keeps recording those as blocked.
+ */
 export type LlmProxyToolCallsOutcome =
-  | { decision: "allow"; toolCalls: readonly LlmProxyToolCall[] }
+  | {
+      decision: "allow";
+      toolCalls: readonly LlmProxyToolCall[];
+      blocked?: readonly { id: string; name: string; reason: string }[];
+    }
   | { decision: "refuse"; refusal: LlmProxyToolCallRefusal };
 
 export type LlmProxyToolResult = CommonToolResult;
@@ -105,6 +118,10 @@ export interface LlmProxyPlugin {
   onSessionInit?(context: LlmProxyRequestContext): Promise<void>;
   onPrompt?(context: LlmProxyPromptContext): Promise<void>;
   onBeforeModel?(context: LlmProxyBeforeModelContext): Promise<void>;
+  /** Transport annotations run before host policy checks and reservations. */
+  onPrepareToolCalls?(
+    context: LlmProxyToolCallsContext,
+  ): Promise<LlmProxyToolCallsOutcome | undefined>;
   onToolCalls?(
     context: LlmProxyToolCallsContext,
   ): Promise<LlmProxyToolCallsOutcome | undefined>;
@@ -221,23 +238,84 @@ export class LlmProxyPluginRegistry {
       if (result.decision === "refuse") return result;
       toolCalls = result.toolCalls;
     }
-    const refusal = await validate?.(toolCalls);
-    if (refusal) return { decision: "refuse", refusal };
-    for (const plugin of plugins.filter(
-      (plugin) => plugin.finalizesToolCalls,
-    )) {
-      const result = await this.invoke(plugin, "onToolCalls", {
+    for (const plugin of plugins) {
+      const prepared = await this.invoke(plugin, "onPrepareToolCalls", {
         ...context,
         toolCalls,
       });
-      if (result?.decision === "refuse") return result;
-      if (result && result.toolCalls !== toolCalls) {
-        throw new Error(
-          "A tool-call finalizer cannot rewrite already validated calls",
-        );
-      }
+      if (!prepared) continue;
+      if (prepared.decision === "refuse") return prepared;
+      toolCalls = prepared.toolCalls;
     }
-    return { decision: "allow", toolCalls };
+    const refusal = await validate?.(toolCalls);
+    if (refusal) return { decision: "refuse", refusal };
+    let blocked: readonly { id: string; name: string; reason: string }[] = [];
+    for (const plugin of plugins.filter(
+      (plugin) => plugin.finalizesToolCalls,
+    )) {
+      // Capture values before the callback: retaining object references would
+      // let an in-place mutation evade the post-validation rewrite check.
+      const given = new Map(
+        toolCalls.map((call) => [
+          call.id,
+          {
+            name: call.name,
+            namespace: call.namespace,
+            arguments: canonicalJson(call.arguments),
+          },
+        ]),
+      );
+      const result = (await this.invoke(plugin, "onToolCalls", {
+        ...context,
+        toolCalls,
+      })) ?? { decision: "allow" as const, toolCalls };
+      if (result.decision === "refuse") return result;
+      // A finalizer may substitute a call it denied with the notice tool that
+      // carries the denial to the model. That is not a validated call slipping
+      // past the ordinary policies: the denied call never runs, and the tool
+      // put in its place is the platform's own, governed by the finalizer
+      // itself. What a finalizer still cannot do is let a call through that
+      // the policies above never saw, so that is checked rather than trusted:
+      // every call it returns is one of the calls it was given, either
+      // untouched or reported as blocked.
+      for (const entry of result.blocked ?? []) {
+        // Validate that reported blocked calls were part of the input batch.
+        if (given.get(entry.id)?.name !== entry.name) {
+          throw new Error(
+            `Finalizer ${plugin.id} reported a block on a call the policies never saw: ${entry.id}`,
+          );
+        }
+      }
+      const blockedIds = new Set(
+        (result.blocked ?? []).map((entry) => entry.id),
+      );
+      const returned = new Set<string>();
+      for (const call of result.toolCalls) {
+        const original = given.get(call.id);
+        if (!original || returned.has(call.id)) {
+          throw new Error(
+            `Finalizer ${plugin.id} returned a call the policies never saw: ${call.id}`,
+          );
+        }
+        returned.add(call.id);
+        const untouched =
+          original.name === call.name &&
+          original.namespace === call.namespace &&
+          original.arguments === canonicalJson(call.arguments);
+        if (!untouched && !blockedIds.has(call.id)) {
+          throw new Error(
+            `Finalizer ${plugin.id} rewrote a call it did not report as blocked: ${call.id}`,
+          );
+        }
+      }
+      toolCalls = result.toolCalls;
+      if (result.blocked?.length) blocked = [...blocked, ...result.blocked];
+    }
+    // Only carried when a finalizer actually substituted something, so the
+    // ordinary outcome stays the shape every other caller already matches.
+    return blocked.length
+      ? { decision: "allow", toolCalls, blocked }
+      : { decision: "allow", toolCalls };
   }
 
   async onToolResults(
@@ -354,7 +432,7 @@ export class LlmProxyPluginRegistry {
 
   private async invoke(
     plugin: LlmProxyPlugin,
-    phase: "onToolCalls",
+    phase: "onToolCalls" | "onPrepareToolCalls",
     context: LlmProxyToolCallsContext,
   ): Promise<LlmProxyToolCallsOutcome | undefined>;
   private async invoke(
@@ -387,6 +465,10 @@ export class LlmProxyPluginRegistry {
         context,
       );
     } catch (cause) {
+      // An ApiError is already the answer this request should get — a fail-closed
+      // 503 from the runtime, a 400 for a request it cannot govern. Wrapping it
+      // would turn a deliberate status into an internal error.
+      if (cause instanceof ApiError) throw cause;
       throw new LlmProxyPluginError({ pluginId: plugin.id, phase, cause });
     }
   }

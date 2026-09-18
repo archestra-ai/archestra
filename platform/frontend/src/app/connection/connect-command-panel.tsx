@@ -26,6 +26,7 @@ import { GithubCopilotSignIn } from "@/components/github-copilot-sign-in";
 import { PROVIDER_CONFIG } from "@/components/llm-provider-api-key-form";
 import { LlmProviderSelectItems } from "@/components/llm-provider-select-items";
 import { ProviderIcon } from "@/components/provider-icon";
+import { TerminalCard } from "@/components/terminal-surface";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -1146,11 +1147,11 @@ export function ConnectCommandPanel({
               "overflow-hidden rounded-xl border",
               connectRequest || client.id === "claude-desktop"
                 ? "bg-card"
-                : "border-[#1f2937] bg-[#0d1117] shadow-lg",
+                : "border-terminal-edge bg-terminal shadow-lg",
             )}
           >
             {!hasRunnableAnything ? (
-              <div className="px-5 py-4 text-sm text-[#9ca3af]">
+              <div className="px-5 py-4 text-sm text-muted-foreground">
                 No selected resource can be configured for this client and
                 operating system. Choose another platform or add a connection
                 resource.
@@ -1210,12 +1211,14 @@ export function ConnectCommandPanel({
                     The terminal option requires Python 3.9+ and Claude Code for
                     subscription sign-in.
                   </p>
-                  <SetupCommandLine
-                    command={result.command}
-                    pending={false}
-                    failed={false}
-                    onRetry={() => runGeneration(inputsKey)}
-                  />
+                  <TerminalCard className="mt-2">
+                    <SetupCommandLine
+                      command={result.command}
+                      pending={false}
+                      failed={false}
+                      onRetry={() => runGeneration(inputsKey)}
+                    />
+                  </TerminalCard>
                 </details>
               </div>
             ) : (
@@ -1330,7 +1333,7 @@ function PerUserConnectGate({
 }) {
   return (
     <div className="flex flex-col gap-3 px-5 py-4">
-      <p className="text-[13px] text-[#e5e7eb]">
+      <p className="text-[13px] text-foreground">
         Connect your {providerLabel} account to generate the command — it runs
         through your own personal virtual key, so your token never leaves the
         server.
@@ -1365,7 +1368,7 @@ function ProviderKeyGate({
 }) {
   return (
     <div className="flex flex-col gap-3 px-5 py-4">
-      <p className="text-[13px] text-[#e5e7eb]">
+      <p className="text-[13px] text-foreground">
         <span>{reason} </span>
         {canAddKey ? (
           <span>{`Add ${addKeyPhrase} to mint one from, or switch to your provider key in the review above.`}</span>

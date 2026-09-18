@@ -324,6 +324,9 @@ describe("ConnectCommandPanel", () => {
     expect(screen.getByText(COMMAND)).not.toBeVisible();
     await userEvent.click(screen.getByText("Advanced: terminal setup"));
     expect(screen.getByText(COMMAND)).toBeVisible();
+    // The Desktop panel sits on a card, so the command must bring its own
+    // terminal surface; without one it inherited the card and was unreadable.
+    expect(screen.getByText(COMMAND).closest(".bg-terminal")).not.toBeNull();
     expect(createKeyMock).not.toHaveBeenCalled();
   });
 

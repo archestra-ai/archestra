@@ -2,6 +2,7 @@ const assert = require('node:assert/strict');
 const { randomUUID } = require('node:crypto');
 const { test } = require('node:test');
 const native = require('./index.cjs');
+const { databaseUrl } = require('./test-database.cjs');
 const allow = '[policy]\nversion = 2\n[[policy.tool]]\nname = "read"\ndelta = {}\n';
 const deny = '[policy]\nversion = 2\n[[policy.tool]]\nname = "different"\ndelta = {}\n';
 
@@ -12,8 +13,8 @@ test('validates policy semantics and refuses container access', async () => {
   }
 });
 
-test('saved text changes enforcement for new sessions and preserves existing sessions', { skip: !process.env.OPENAPPA_TEST_DATABASE_URL }, async () => {
-  await native.initializeOpenappa(process.env.OPENAPPA_TEST_DATABASE_URL, allow);
+test('saved text changes enforcement for new sessions and preserves existing sessions', { skip: !databaseUrl }, async () => {
+  await native.initializeOpenappa(databaseUrl, allow);
   const scope = () => ({ organization_id: 'policy-test', caller_id: 'user:test', session_id: randomUUID() });
   const hook = async (session, event, policy) => JSON.parse(await native.dispatchHook(JSON.stringify({ ...session, ...event }), policy));
   const old = scope();
@@ -30,7 +31,7 @@ test('saved text changes enforcement for new sessions and preserves existing ses
   assert.notEqual((await hook(next, call, deny)).decision, 'allow_call');
 });
 
-test('catch-all annotations admit unknown tools without changing trust or overriding explicit rules', { skip: !process.env.OPENAPPA_TEST_DATABASE_URL }, async (t) => {
+test('catch-all annotations admit unknown tools without changing trust or overriding explicit rules', { skip: !databaseUrl }, async (t) => {
   const requests = [];
   const server = require('node:http').createServer(async (req, res) => {
     let body = '';
@@ -59,7 +60,7 @@ requires = { trust = "trusted" }
 url = "http://127.0.0.1:${server.address().port}/annotate"
 `;
   assert.deepEqual(await native.validateOpenappaPolicy(policy), []);
-  await native.initializeOpenappa(process.env.OPENAPPA_TEST_DATABASE_URL, policy);
+  await native.initializeOpenappa(databaseUrl, policy);
   const scope = { organization_id: 'catch-all-test', caller_id: 'user:test', session_id: randomUUID() };
   const hook = async event => JSON.parse(await native.dispatchHook(JSON.stringify({ ...scope, ...event }), policy));
   assert.equal((await hook({ event: 'session_start' })).decision, 'ack');

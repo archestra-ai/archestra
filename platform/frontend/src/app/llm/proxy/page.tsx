@@ -100,8 +100,8 @@ function endpointTabClass(active: boolean) {
   return cn(
     "border-b-2 px-2.5 py-2.5 font-mono text-xs transition-colors",
     active
-      ? "border-white font-semibold text-white"
-      : "border-transparent text-[#9ca3af] hover:text-white",
+      ? "border-terminal-foreground font-semibold text-terminal-foreground"
+      : "border-transparent text-terminal-muted hover:text-terminal-emphasis",
   );
 }
 
@@ -163,7 +163,7 @@ function ProxyEndpointCard({
         code={url}
         rows={rows}
         header={
-          <div className="flex flex-wrap items-center gap-1 border-b border-[#1f2937] px-3">
+          <div className="flex flex-wrap items-center gap-1 border-b border-terminal-edge px-3">
             <button
               type="button"
               onClick={onSelectRouter}
@@ -206,7 +206,7 @@ function ProxyEndpointCard({
                 })}
                 className={cn(
                   endpointTabClass(false),
-                  "h-auto w-auto min-w-0 justify-start rounded-none border-0 bg-transparent shadow-none hover:bg-transparent hover:text-white",
+                  "h-auto w-auto min-w-0 justify-start rounded-none border-0 bg-transparent shadow-none hover:bg-transparent",
                 )}
                 contentClassName="w-64"
               />

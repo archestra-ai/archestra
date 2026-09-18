@@ -37,7 +37,7 @@ export function AgentSavedSetupBanner({
   });
   const [credentialsOpen, setCredentialsOpen] = useState(false);
   if (!runtime) {
-    return <AgentSetupBanner items={[]} showReady={showReady} />;
+    return <AgentSetupBanner key={agentId} items={[]} showReady={showReady} />;
   }
   const failed = preflight.isError;
   const loading =
@@ -166,6 +166,7 @@ export function AgentSavedSetupBanner({
   return (
     <>
       <AgentSetupBanner
+        key={agentId}
         items={items}
         showReady={showReady}
         resetKey={`${agentId}:${runtime.command?.join(" ")}:${runtime.claudeCode?.authentication}:${JSON.stringify(runtime.credentials ?? [])}`}

@@ -307,6 +307,16 @@ export const STARTUP_GUARD_FORMAT_VERSION = 1;
 export const EXTERNAL_AGENT_ID_HEADER = "X-Archestra-Agent-Id";
 
 /**
+ * The client session an OpenAPPA root is bound to, and the parent root a child
+ * session hangs from. A caller that manages roots deliberately sends them; for
+ * everyone else the wire adapter derives the session from what the client
+ * already sends (see `appaSessionIdentity`). Shared because the proxy, the MCP
+ * gateway and Chat all speak them.
+ */
+export const APPA_SESSION_HEADER = "X-Appa-Session-ID";
+export const APPA_PARENT_HEADER = "X-Appa-Parent-ID";
+
+/**
  * Environment the delegating caller runs in, set by the in-process A2A
  * executor on advisor consultations so the proxy bills the spend to the
  * caller's environment (the advisor's own row is org-wide and env-less).

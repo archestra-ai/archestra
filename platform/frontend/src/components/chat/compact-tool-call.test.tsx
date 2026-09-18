@@ -1,10 +1,12 @@
 import {
+  TOOL_GET_REMEDY_PLANS_SHORT_NAME,
   TOOL_LOAD_SKILL_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
 } from "@archestra/shared";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useExternalMcpSkills } from "@/lib/skills/skill.query";
 
 const mockIsToolName = vi.fn();
@@ -60,6 +62,48 @@ describe("CompactToolGroup", () => {
     mockGetToolShortName.mockReturnValue(null);
     vi.mocked(useHasPermissions).mockReturnValue({ data: false } as never);
     vi.mocked(useExternalMcpSkills).mockReturnValue({ data: [] } as never);
+  });
+
+  it("shows a denial notice's arguments as the object they hold", async () => {
+    const noticeToolName = "archestra__get_remedy_plans";
+    mockGetToolShortName.mockImplementation((name: string) =>
+      name === noticeToolName ? TOOL_GET_REMEDY_PLANS_SHORT_NAME : null,
+    );
+    vi.mocked(useSession).mockReturnValue({ data: undefined } as never);
+
+    // The expanded card reaches for queries of its own, so it needs a client.
+    const { container } = render(
+      <QueryClientProvider client={new QueryClient()}>
+        <CompactToolGroup
+          tools={[
+            {
+              kind: "tool",
+              key: "notice-1",
+              toolName: noticeToolName,
+              part: {
+                type: `tool-${noticeToolName}`,
+                state: "output-available",
+                toolCallId: "call-notice",
+                // The blocked call's arguments arrive in their wire form: a JSON
+                // string on the OpenAI families.
+                input: {
+                  tool: "archestra__load_skill",
+                  arguments: '{"name":"appa-guide"}',
+                  ruling: "[appa] Blocked: this call cannot run yet.",
+                  notice: { v: 1, call_id: "call-notice" },
+                },
+                output: "[appa] Blocked: this call cannot run yet.",
+              } as never,
+              toolResultPart: null,
+              errorText: undefined,
+            },
+          ]}
+        />
+      </QueryClientProvider>,
+    );
+    fireEvent.click(screen.getByRole("button"));
+
+    expect(container).toHaveTextContent('"name": "appa-guide"');
   });
 
   it("renders a compact Skill marker for a load_skill activation (no path)", () => {

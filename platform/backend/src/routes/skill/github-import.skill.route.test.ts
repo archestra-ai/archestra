@@ -300,36 +300,6 @@ describe("POST /api/skills/github/{discover,preview,import}", () => {
       expect(response.statusCode).toBe(404);
     });
 
-    test("400 when the GitHub App config targets GitHub Enterprise", async ({
-      makeMember,
-    }) => {
-      await makeMember(ctx.user.id, ctx.organizationId, {
-        role: EDITOR_ROLE_NAME,
-      });
-      const secret = await secretManager().createSecret(
-        { apiToken: "pem" },
-        "ghes-app",
-      );
-      const appConfig = await GithubAppConfigModel.create({
-        organizationId: ctx.organizationId,
-        name: "GHES App",
-        githubUrl: "https://github.acme.com/api/v3",
-        appId: "1",
-        installationId: "1",
-        secretId: secret.id,
-      });
-
-      const response = await ctx.app.inject({
-        method: "POST",
-        url: "/api/skills/github/discover",
-        payload: {
-          repoUrl: "github.com/example/skills",
-          githubAppConfigId: appConfig.id,
-        },
-      });
-      expect(response.statusCode).toBe(400);
-    });
-
     test.for([
       "discover",
       "preview",

@@ -54,8 +54,14 @@ export class AppaCodexAdapter implements AppaClientAdapter {
     headers: Readonly<Record<string, string | string[] | undefined>>;
     requestBody: unknown;
   }): AppaSessionIdentity | undefined {
-    const claims: Array<{ sessionId?: string; threadId?: string } | undefined> =
-      [];
+    const claims: Array<
+      | {
+          sessionId?: string;
+          threadId?: string;
+          forkedFromThreadId?: string;
+        }
+      | undefined
+    > = [];
     const clientMetadata = asRecord(context.requestBody)?.client_metadata;
     if (clientMetadata !== undefined) {
       const flat = asRecord(clientMetadata);
@@ -72,6 +78,7 @@ export class AppaCodexAdapter implements AppaClientAdapter {
 
     let sessionId: string | undefined;
     let threadId: string | undefined;
+    let forkedFromThreadId: string | undefined;
     for (const claim of claims) {
       if (!claim) continue;
       if (
@@ -85,11 +92,17 @@ export class AppaCodexAdapter implements AppaClientAdapter {
       }
       sessionId ??= claim.sessionId;
       threadId ??= claim.threadId;
+      forkedFromThreadId ??= claim.forkedFromThreadId;
     }
     const root = threadId ?? sessionId;
-    return root
-      ? { sessionId: root, provenance: "codex-turn-metadata" }
-      : undefined;
+    if (!root) return undefined;
+    return {
+      sessionId: root,
+      provenance: "codex-turn-metadata",
+      ...(forkedFromThreadId && forkedFromThreadId !== root
+        ? { parentId: forkedFromThreadId }
+        : {}),
+    };
   }
 }
 
@@ -117,12 +130,18 @@ function turnMetadataClaims(
 function idClaims(
   record: Record<string, unknown>,
   source: string,
-): { sessionId?: string; threadId?: string } {
+): {
+  sessionId?: string;
+  threadId?: string;
+  forkedFromThreadId?: string;
+} {
   const sessionId = idField(record.session_id, source);
   const threadId = idField(record.thread_id, source);
+  const forkedFromThreadId = idField(record.forked_from_thread_id, source);
   return {
     ...(sessionId ? { sessionId } : {}),
     ...(threadId ? { threadId } : {}),
+    ...(forkedFromThreadId ? { forkedFromThreadId } : {}),
   };
 }
 

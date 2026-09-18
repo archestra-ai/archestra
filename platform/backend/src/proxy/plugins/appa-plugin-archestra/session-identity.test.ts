@@ -71,6 +71,45 @@ describe("client trajectory identity", () => {
       expect(fork.sessionId).not.toBe(resume.sessionId);
     });
 
+    test("uses the session header even when metadata.user_id names a different id", () => {
+      expect(
+        extractAppaSessionIdentity({
+          family: "anthropic:messages",
+          body: {
+            metadata: {
+              user_id: JSON.stringify({
+                device_id: "3d8b2867632db5c0",
+                account_uuid: "",
+                session_id: CLAUDE_SESSION,
+              }),
+            },
+          },
+          headers: {
+            "user-agent": "claude-code/2.1.258",
+            "x-claude-code-session-id": CLAUDE_FORK_SESSION,
+          },
+        }),
+      ).toMatchObject({
+        sessionId: CLAUDE_FORK_SESSION,
+        provenance: "claude-code-header",
+      });
+      expect(
+        extractAppaSessionIdentity({
+          family: "anthropic:messages",
+          body: {
+            metadata: {
+              user_id: JSON.stringify({
+                device_id: "3d8b2867632db5c0",
+                account_uuid: "",
+                session_id: CLAUDE_SESSION,
+              }),
+            },
+          },
+          headers: { "x-claude-code-session-id": CLAUDE_FORK_SESSION },
+        }).parentId,
+      ).toBeUndefined();
+    });
+
     test("falls back to the metadata.user_id session when the header is absent", () => {
       expect(
         extractAppaSessionIdentity({
@@ -162,6 +201,7 @@ describe("client trajectory identity", () => {
 
       expect(fork.sessionId).toBe(CODEX_FORK_THREAD);
       expect(fork.sessionId).not.toBe(parent.sessionId);
+      expect(fork.parentId).toBe(CODEX_THREAD);
     });
 
     test("a compaction turn stays on the thread's root", () => {
@@ -317,6 +357,24 @@ describe("client trajectory identity", () => {
         }),
       ).toMatchObject({
         sessionId: OPENCODE_SESSION,
+        provenance: "opencode-session-header",
+      });
+    });
+
+    test("maps x-parent-session-id to the APPA parent when it differs from the session", () => {
+      expect(
+        extractAppaSessionIdentity({
+          family: "openai:chatCompletions",
+          body: {},
+          headers: {
+            ...openCodeHeaders,
+            "x-session-id": OPENCODE_FORK_SESSION,
+            "x-parent-session-id": OPENCODE_SESSION,
+          },
+        }),
+      ).toMatchObject({
+        sessionId: OPENCODE_FORK_SESSION,
+        parentId: OPENCODE_SESSION,
         provenance: "opencode-session-header",
       });
     });

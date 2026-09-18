@@ -91,6 +91,7 @@ import {
 } from "@/openappa/service";
 import { appaWireFamily } from "@/openappa/wire";
 import { extractAppaSessionIdentity } from "@/proxy/plugins/appa-plugin-archestra/session-identity";
+import { correlateTrajectoryParent } from "@/proxy/plugins/appa-plugin-archestra/trajectory-parent";
 import {
   APPA_PLUGIN_TRUSTED_CONTEXT,
   type AppaTrustedContext,
@@ -1208,13 +1209,25 @@ export async function handleLLMProxy<
           headersForExtraction[APPA_SESSION_HEADER.toLowerCase()] =
             appaIdentity.sessionId;
         }
+        const correlatedParent =
+          appaIdentity.sessionId && callerId
+            ? correlateTrajectoryParent({
+                organizationId: resolvedAgent.organizationId,
+                callerId,
+                agentId: resolvedAgent.id,
+                sessionId: appaIdentity.sessionId,
+                body,
+                headers: headersForExtraction,
+                source,
+              })
+            : undefined;
+        const parentId = appaIdentity.parentId ?? correlatedParent;
         if (
-          appaIdentity.parentId &&
-          isWellFormedAppaId(appaIdentity.parentId) &&
+          parentId &&
+          isWellFormedAppaId(parentId) &&
           !headersForExtraction[APPA_PARENT_HEADER.toLowerCase()]
         ) {
-          headersForExtraction[APPA_PARENT_HEADER.toLowerCase()] =
-            appaIdentity.parentId;
+          headersForExtraction[APPA_PARENT_HEADER.toLowerCase()] = parentId;
         }
         openappaSession = sessionFromHeaders({
           headers: headersForExtraction,

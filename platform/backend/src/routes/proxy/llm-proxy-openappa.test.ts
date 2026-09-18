@@ -1,5 +1,6 @@
 /** Native decisions at the existing buffered proxy seam. The real native +
  * PostgreSQL engine is exercised separately by openappa-rs/smoke.test.cjs. */
+import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import Fastify, { type FastifyInstance } from "fastify";
 import {
@@ -273,7 +274,11 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     expect(notice.input.ruling).toBe(
       "[appa] NATIVE REFUSAL: execute_remedy_plan(offer_id: test-offer)",
     );
-    expect(notice.input.notice).toEqual({ v: 1, call_id: notice.id });
+    expect(notice.input.notice).toMatchObject({
+      v: 1,
+      call_id: notice.id,
+      session: expect.any(String),
+    });
     // A denial costs no second call to the provider.
     expect(providerRequests).toHaveLength(1);
     expect(events.filter((event) => event.event === "tool_call")).toHaveLength(
@@ -674,18 +679,17 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     }
   });
 
-  test("refuses a session that cannot show the model a denial, before calling the provider", async () => {
+  test("admits a session that has not yet declared the APPA pair", async () => {
     const body = payload(false);
     body.tools = body.tools.filter(
       (declared) => declared.name !== "archestra__get_remedy_plans",
     );
+    options = { includeToolUse: false, streamStopReason: "end_turn" };
 
     const response = await post(body);
 
-    expect(response.statusCode).toBe(400);
-    expect(response.body).toContain("does not declare get_remedy_plans");
-    expect(providerRequests).toHaveLength(0);
-    expect(events).toEqual([]);
+    expect(response.statusCode, response.body).toBe(200);
+    expect(providerRequests.length).toBeGreaterThan(0);
   });
 
   test("passes a tool-less request without opening a root", async () => {
@@ -1759,6 +1763,66 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     expect(response.body).toContain("this session contains sensitive data");
     expect(response.body).not.toContain('"type":"tool_use"');
   });
+
+  test("Claude Code compact then a new session stamps parent_id so the child shares the parent root", async () => {
+    const parent = "claude-label-parent";
+    const child = "claude-label-child";
+    const compactBody = payload(false);
+    compactBody.messages = [
+      { role: "user", content: "<command-name>/compact</command-name>" },
+    ];
+    expect(
+      (
+        await post(compactBody, {
+          "user-agent": "claude-code/2.1.258",
+          "x-claude-code-session-id": parent,
+          "x-appa-session-id": parent,
+          "x-archestra-source": "api",
+        })
+      ).statusCode,
+    ).toBe(200);
+    events.length = 0;
+    const response = await post(payload(false), {
+      "user-agent": "claude-code/2.1.258",
+      "x-claude-code-session-id": child,
+      "x-appa-session-id": child,
+      "x-archestra-source": "api",
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        event: "session_start",
+        session_id: expect.stringContaining(child),
+        parent_id: expect.stringContaining(parent),
+      }),
+    );
+  });
+
+  test("Chat compaction then a new conversation stamps parent_id so labels stay on the parent root", async ({
+    makeConversation,
+  }) => {
+    const compact = await post(payload(false), {
+      "x-archestra-source": "chat:compaction",
+    });
+    expect(compact.statusCode, compact.body).toBe(200);
+    events.length = 0;
+    const childConversation = await makeConversation(agent.id, {
+      userId,
+      organizationId: agent.organizationId,
+    });
+    const response = await post(payload(false), {
+      "x-appa-session-id": childConversation.id,
+      "x-archestra-source": "chat",
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        event: "session_start",
+        session_id: expect.stringContaining(childConversation.id),
+        parent_id: expect.stringContaining(sessionId),
+      }),
+    );
+  });
 });
 
 /** Client-native trajectory binding: the adapter-read ids reach the runtime. */
@@ -2176,5 +2240,80 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
     expect(response.statusCode, response.body).toBe(400);
     expect(response.body).toContain("contradictory OpenCode session headers");
     expect(events).toHaveLength(0);
+  });
+
+  test("Codex compaction then a new thread stamps parent_id so the child shares the parent root", async () => {
+    const compact = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/responses`,
+      remoteAddress: "127.0.0.1",
+      headers: { ...codexHeaders(), "x-openai-subagent": "compact" },
+      payload: codexPayload({
+        session_id: CODEX_SESSION,
+        thread_id: CODEX_THREAD,
+        request_kind: "compaction",
+      }) as Record<string, unknown>,
+    });
+    expect(compact.statusCode, compact.body).toBe(200);
+    events.length = 0;
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/responses`,
+      remoteAddress: "127.0.0.1",
+      headers: codexHeaders(),
+      payload: codexPayload({
+        session_id: CODEX_RESUMED_SESSION,
+        thread_id: CODEX_FORK_THREAD,
+      }) as Record<string, unknown>,
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        event: "session_start",
+        session_id: expect.stringContaining(CODEX_FORK_THREAD),
+        parent_id: expect.stringContaining(CODEX_THREAD),
+      }),
+    );
+  });
+
+  test("OpenCode compaction then a new session stamps parent_id so the child shares the parent root", async () => {
+    const compact = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/chat/completions`,
+      remoteAddress: "127.0.0.1",
+      headers: {
+        ...openCodeHeaders(),
+        "x-session-id": OPENCODE_SESSION,
+      },
+      payload: {
+        ...openCodePayload(),
+        messages: [
+          {
+            role: "user",
+            content: "[Old tool result content cleared]",
+          },
+        ],
+      } as Record<string, unknown>,
+    });
+    expect(compact.statusCode, compact.body).toBe(200);
+    events.length = 0;
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/chat/completions`,
+      remoteAddress: "127.0.0.1",
+      headers: {
+        ...openCodeHeaders(),
+        "x-session-id": OPENCODE_FORK_SESSION,
+      },
+      payload: openCodePayload() as Record<string, unknown>,
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        event: "session_start",
+        session_id: expect.stringContaining(OPENCODE_FORK_SESSION),
+        parent_id: expect.stringContaining(OPENCODE_SESSION),
+      }),
+    );
   });
 });

@@ -62,11 +62,16 @@ export class AppaOpenCodeAdapter implements AppaClientAdapter {
         "OpenAPPA cannot bind contradictory OpenCode session headers",
       );
     }
-    if (normal) {
-      return { sessionId: normal, provenance: "opencode-session-header" };
-    }
-    return hosted
-      ? { sessionId: hosted, provenance: "opencode-hosted-header" }
-      : undefined;
+    const parentId = readHeader(context.headers, "x-parent-session-id");
+    const identity = normal
+      ? { sessionId: normal, provenance: "opencode-session-header" as const }
+      : hosted
+        ? { sessionId: hosted, provenance: "opencode-hosted-header" as const }
+        : undefined;
+    if (!identity) return undefined;
+    return {
+      ...identity,
+      ...(parentId && parentId !== identity.sessionId ? { parentId } : {}),
+    };
   }
 }

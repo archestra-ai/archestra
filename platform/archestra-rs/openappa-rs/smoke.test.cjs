@@ -384,6 +384,54 @@ builtin = "hitl"
     assert.match(JSON.stringify(human.result.content), /unreachable|gave no answer/);
   });
 
+  await t.test('compact (same session) and fork (parent_id) keep the parent trajectory labels', async () => {
+    const parent = scope();
+    const before = await call(parent, 'write-before-taint', 'write_public');
+    assert.equal(before.decision, 'allow_call', JSON.stringify(before));
+    await result(parent, 'write-before-taint', 'ok');
+
+    const taint = await call(parent, 'taint', 'read_untrusted');
+    assert.ok(taint.offers?.length > 0, JSON.stringify(taint));
+    await byOffer(parent, {
+      tool_call_id: 'accept-taint',
+      arguments: { offer_id: taint.offers[0].offer_id },
+    });
+    assert.equal((await call(parent, 'taint-run', 'read_untrusted')).decision, 'allow_call');
+    await result(parent, 'taint-run', 'restricted contents');
+
+    const afterCompact = await call(parent, 'write-after-compact', 'write_public');
+    assert.notEqual(
+      afterCompact.decision,
+      'allow_call',
+      'same session after further turns still carries the taint',
+    );
+
+    const child = { ...parent, session_id: randomUUID(), parent_id: parent.session_id };
+    const afterFork = await call(child, 'write-after-fork', 'write_public');
+    assert.notEqual(
+      afterFork.decision,
+      'allow_call',
+      'child with parent_id shares the parent root labels',
+    );
+    const parentRoot = (await client.query(
+      'SELECT root FROM openappa_sessions WHERE session_id=$1',
+      [parent.session_id],
+    )).rows[0].root;
+    const childRoot = (await client.query(
+      'SELECT root FROM openappa_sessions WHERE session_id=$1',
+      [child.session_id],
+    )).rows[0].root;
+    assert.equal(childRoot, parentRoot);
+
+    const stranger = scope();
+    const strangerWrite = await call(stranger, 'write-stranger', 'write_public');
+    assert.equal(
+      strangerWrite.decision,
+      'allow_call',
+      'an unrelated session is not tainted',
+    );
+  });
+
   await t.test('unknown hook event tags are rejected before receipt processing', async () => {
     await assert.rejects(
       () => native.dispatchHook(JSON.stringify({

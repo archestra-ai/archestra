@@ -54,5 +54,8 @@ export function extractAppaSessionIdentity(params: {
     requestBody: params.body,
   });
   if (!native?.sessionId) return generic;
-  return { ...native, parentId: generic.parentId };
+  return {
+    ...native,
+    parentId: generic.parentId ?? native.parentId,
+  };
 }

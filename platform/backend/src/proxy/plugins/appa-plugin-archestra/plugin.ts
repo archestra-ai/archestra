@@ -250,6 +250,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
               tool: identity.name,
               spelling: identity.name,
             }),
+            session: clientSessionId(binding.session.session_id),
           }),
         ),
       });
@@ -448,4 +449,11 @@ function toolInputOf(
     // Not JSON: reported as the text it is.
   }
   return { arguments: args };
+}
+
+function clientSessionId(scopedSessionId: string): string {
+  const separator = scopedSessionId.indexOf("|");
+  return separator >= 0
+    ? scopedSessionId.slice(separator + 1)
+    : scopedSessionId;
 }

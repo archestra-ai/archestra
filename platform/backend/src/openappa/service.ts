@@ -474,16 +474,13 @@ export async function evaluateToolCalls(
     }
   }
   const normalized = normalizeToolCallsForPolicy(calls, options.canonicalize);
-  const decisions: AppaCallDecision[] = [];
   const admitted: string[] = [];
-  let settled = false;
-  try {
-    for (const [index, call] of calls.entries()) {
+  const results = await Promise.allSettled(
+    calls.map(async (call, index) => {
       const target = normalized[index];
       // Direct remedy control calls bypass evaluation and execute via gateway.
       if (options.controlToolName && call.name === options.controlToolName) {
-        decisions.push({ kind: "control" });
-        continue;
+        return { kind: "control" as const };
       }
       const tool =
         archestraMcpBranding.getToolShortName(
@@ -509,30 +506,32 @@ export async function evaluateToolCalls(
         decision.decision === "pass_control"
       ) {
         admitted.push(call.id);
-        decisions.push({ kind: "allow" });
-        continue;
+        return { kind: "allow" as const };
       }
       // Denied calls return as notices; other calls in the batch stand.
-      decisions.push({
-        kind: "deny",
+      return {
+        kind: "deny" as const,
         feedback: decisionMessage(decision),
-      });
-    }
-    settled = true;
-    return decisions;
-  } finally {
-    if (!settled) {
+      };
+    }),
+  );
+
+  const firstFailure = results.find(
+    (result): result is PromiseRejectedResult => result.status === "rejected",
+  );
+  if (firstFailure) {
+    if (admitted.length > 0) {
       // Cancel admitted calls from this batch if evaluation failed mid-batch.
-      const results = await Promise.allSettled(
+      const cancelResults = await Promise.allSettled(
         admitted.map((id) =>
           dispatch(session, { event: "cancel_call", tool_call_id: id }),
         ),
       );
-      for (const [index, result] of results.entries()) {
-        if (result.status === "rejected") {
+      for (const [index, cancelResult] of cancelResults.entries()) {
+        if (cancelResult.status === "rejected") {
           logger.warn(
             {
-              err: result.reason,
+              err: cancelResult.reason,
               toolCallId: admitted[index],
               sessionId: session.session_id,
             },
@@ -541,7 +540,12 @@ export async function evaluateToolCalls(
         }
       }
     }
+    throw firstFailure.reason;
   }
+
+  return results.map(
+    (result) => (result as PromiseFulfilledResult<AppaCallDecision>).value,
+  );
 }
 
 /** Cancels admitted tool calls when the carrier response is withheld. */

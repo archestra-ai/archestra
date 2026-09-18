@@ -273,10 +273,6 @@ export function providerHostedTool(tool: unknown): string | undefined {
  *    header, so fall back to the request fields that are stable across a
  *    conversation: `prompt_cache_key` (OpenAI's own per-conversation cache
  *    partition), then an explicit `metadata.session_id`, then `conversation`.
- *
-/**
- * Detects session identity from request headers or body.
- * Returns the session ID, optional parent ID, and provenance.
  */
 export function appaSessionIdentity(params: {
   family: AppaWireFamily;
@@ -669,6 +665,16 @@ function insertAnthropicResult(params: {
 }): void {
   const messages = asArray(asRecord(params.body)?.messages);
   if (!messages) return;
+  const alreadyHasResult = messages.some((message) =>
+    asArray(asRecord(message)?.content)?.some((block) => {
+      const record = asRecord(block);
+      return (
+        record?.type === "tool_result" && record.tool_use_id === params.callId
+      );
+    }),
+  );
+  if (alreadyHasResult) return;
+
   const index = messages.findIndex((message) =>
     asArray(asRecord(message)?.content)?.some((block) => {
       const record = asRecord(block);
@@ -710,6 +716,16 @@ function insertResponsesResult(params: {
   const body = asRecord(params.body);
   const input = asArray(body?.input);
   if (!input) return;
+  const alreadyHasResult = input.some((item) => {
+    const record = asRecord(item);
+    return (
+      (record?.type === "function_call_output" ||
+        record?.type === "custom_tool_call_output") &&
+      record.call_id === params.callId
+    );
+  });
+  if (alreadyHasResult) return;
+
   const index = input.findIndex((item) => {
     const record = asRecord(item);
     return (
@@ -734,6 +750,12 @@ function insertChatResult(params: {
 }): void {
   const messages = asArray(asRecord(params.body)?.messages);
   if (!messages) return;
+  const alreadyHasResult = messages.some((message) => {
+    const record = asRecord(message);
+    return record?.role === "tool" && record.tool_call_id === params.callId;
+  });
+  if (alreadyHasResult) return;
+
   const index = messages.findIndex((message) =>
     asArray(asRecord(message)?.tool_calls)?.some(
       (call) => asRecord(call)?.id === params.callId,
@@ -813,9 +835,8 @@ export function canonicalJson(
         }
         return serialize(item, depth + 1);
       });
-      const result = `[${items.join(",")}]`;
-      byteCount += result.length;
-      return result;
+      byteCount += 2 + (items.length > 1 ? items.length - 1 : 0);
+      return `[${items.join(",")}]`;
     }
 
     const record = asRecord(val);
@@ -832,12 +853,12 @@ export function canonicalJson(
             return [];
           }
           const serializedKey = JSON.stringify(key);
+          byteCount += serializedKey.length + 1;
           const serializedValue = serialize(entry, depth + 1);
           return [`${serializedKey}:${serializedValue}`];
         });
-      const result = `{${entries.join(",")}}`;
-      byteCount += result.length;
-      return result;
+      byteCount += 2 + (entries.length > 1 ? entries.length - 1 : 0);
+      return `{${entries.join(",")}}`;
     }
 
     const primitive = JSON.stringify(val) ?? "null";
@@ -846,7 +867,11 @@ export function canonicalJson(
   }
 
   try {
-    return serialize(value, 0);
+    const result = serialize(value, 0);
+    if (byteCount > maxBytes) {
+      return '"[size-exceeded]"';
+    }
+    return result;
   } catch (err) {
     if (err instanceof RangeError) {
       return '"[stack-overflow]"';

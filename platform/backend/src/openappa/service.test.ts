@@ -259,7 +259,13 @@ describe("APPA feature boundary", () => {
       expect([...open]).toEqual(["unrelated"]);
       expect(
         native.dispatchHook.mock.calls.map(([raw]) => JSON.parse(raw).event),
-      ).toEqual(["tool_call", "tool_call", "cancel_call"]);
+      ).toEqual([
+        "tool_call",
+        "tool_call",
+        "tool_call",
+        "cancel_call",
+        "cancel_call",
+      ]);
     } else {
       expect(await check).toEqual([
         { kind: "allow" },

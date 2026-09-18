@@ -969,6 +969,50 @@ describe("denial notice restoration", () => {
     });
   });
 
+  test("does not duplicate tool_result if already present in a subsequent message", () => {
+    const body = {
+      tools: [{ name: NOTICE }, { name: CONTROL }],
+      messages: [
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "tool_use",
+              id: "toolu_dup",
+              name: NOTICE,
+              input: notice("Bash", { command: "ls" }, "toolu_dup"),
+            },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "toolu_dup",
+              content: "already present",
+            },
+          ],
+        },
+      ],
+    };
+
+    prepareAppaRequest({
+      body,
+      interactionType: "anthropic:messages",
+      canonicalizeToolName: canonicalize,
+    });
+
+    expect(body.messages).toHaveLength(2);
+    const results = (
+      body.messages[1].content as Record<string, unknown>[]
+    ).filter((b) => b.type === "tool_result" && b.tool_use_id === "toolu_dup");
+    expect(results).toHaveLength(1);
+    expect(results[0].content).toBe(
+      "[appa] Blocked: this call cannot run yet.",
+    );
+  });
+
   test("answers a restored custom tool call with a custom tool call output", () => {
     const body = {
       // No custom declaration here on purpose: the notice's record is what says
@@ -1988,6 +2032,17 @@ describe("canonicalJson", () => {
     };
     const result = canonicalJson(largeObject, { maxBytes: 30 });
     expect(result).toContain("[size-exceeded]");
+  });
+
+  test("does not double-count bytes for nested arrays and objects", () => {
+    const data = { nested: { arr: ["a", "b"] } };
+    const serialized = '{"nested":{"arr":["a","b"]}}';
+    expect(canonicalJson(data, { maxBytes: serialized.length })).toBe(
+      serialized,
+    );
+    expect(canonicalJson(data, { maxBytes: serialized.length - 1 })).toContain(
+      "[size-exceeded]",
+    );
   });
 
   test("handles circular references gracefully without throwing RangeError", () => {

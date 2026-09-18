@@ -35,7 +35,10 @@ export const openappaHostKeysTable = pgTable(
     key: text().notNull(),
     root: text().notNull(),
   },
-  (table) => [primaryKey({ columns: [table.key, table.root] })],
+  (table) => [
+    primaryKey({ columns: [table.key, table.root] }),
+    index("openappa_host_keys_root_idx").on(table.root),
+  ],
 );
 
 export const openappaPolicyFilesTable = pgTable("openappa_policy_files", {
@@ -84,6 +87,13 @@ export const openappaOfferOwnersTable = pgTable(
       name: "openappa_offer_owners_pk",
       columns: [table.organizationId, table.offerId],
     }),
+    index("openappa_offer_owners_session_idx").on(
+      table.organizationId,
+      table.sessionId,
+      table.callerId,
+    ),
+    index("openappa_offer_owners_root_idx").on(table.root),
+    index("openappa_offer_owners_created_at_idx").on(table.createdAt),
   ],
 );
 

@@ -102,11 +102,9 @@ export function MetaAgentDialog() {
     return () => metaAgentPageTools.setNavigator(null);
   }, [router]);
 
-  const seenPageActionIdRef = useRef<string | null>(null);
   const selectConversation = useCallback((id: string | undefined) => {
     setConversationId(id);
     writeStoredConversationId(id);
-    seenPageActionIdRef.current = null;
   }, []);
 
   const metaAgent = useMetaAgent(hasOpened);
@@ -150,20 +148,18 @@ export function MetaAgentDialog() {
 
   // Acting on the page from the middle of the screen would hide the very
   // thing being changed: once the assistant starts driving the page, move it
-  // out of the way.
+  // out of the way. Only a live turn counts — a reopened chat's history
+  // must not move the dialog.
   const lastPageActionId = useMemo(
     () => findLastPageActionId(messages),
     [messages],
   );
+  const isBusyRef = useRef(false);
+  isBusyRef.current = isBusy;
   useEffect(() => {
-    if (
-      lastPageActionId &&
-      lastPageActionId !== seenPageActionIdRef.current &&
-      seenPageActionIdRef.current !== null
-    ) {
+    if (lastPageActionId && isBusyRef.current) {
       setPlacement("docked");
     }
-    seenPageActionIdRef.current = lastPageActionId ?? "";
   }, [lastPageActionId]);
 
   const send = async (text: string) => {

@@ -183,6 +183,7 @@ function snapshotPage(): PageSnapshot {
     const element = node;
     if (SKIPPED_TAGS.has(element.tagName.toUpperCase())) return;
     if (element.hasAttribute(META_AGENT_IGNORE_ATTRIBUTE)) return;
+    if (isClosingOverlay(element)) return;
     if (!isVisible(element)) return;
 
     if (element.matches(INTERACTIVE_SELECTOR)) {
@@ -328,6 +329,25 @@ function accessibleName(element: Element): string {
   }
   return "";
 }
+
+/**
+ * A dialog or menu that is animating out: Radix keeps it mounted, marked
+ * closed, until the exit animation ends. Describing it would tell the model
+ * the dialog it just closed is still open.
+ */
+function isClosingOverlay(element: Element): boolean {
+  return (
+    element.getAttribute("data-state") === "closed" &&
+    CLOSABLE_OVERLAY_ROLES.has(element.getAttribute("role") ?? "")
+  );
+}
+
+const CLOSABLE_OVERLAY_ROLES = new Set([
+  "dialog",
+  "alertdialog",
+  "menu",
+  "listbox",
+]);
 
 function isVisible(element: Element): boolean {
   if (element.getClientRects().length === 0) {

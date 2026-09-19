@@ -22,7 +22,7 @@ describe("metaAgentPageTools", () => {
     vi.restoreAllMocks();
   });
 
-  it("describes the page with a ref per control, skipping hidden and ignored parts", async () => {
+  it("describes the page with a ref per control, skipping hidden, closing, and ignored parts", async () => {
     render(
       <div>
         <h1>Teams</h1>
@@ -32,6 +32,9 @@ describe("metaAgentPageTools", () => {
         <button type="button" style={{ visibility: "hidden" }}>
           Hidden action
         </button>
+        <div role="dialog" data-state="closed">
+          Closing dialog
+        </div>
         <section {...{ [META_AGENT_IGNORE_ATTRIBUTE]: "" }}>
           <button type="button">Assistant send</button>
         </section>
@@ -50,6 +53,7 @@ describe("metaAgentPageTools", () => {
     );
     expect(snapshot.content).not.toContain("Hidden action");
     expect(snapshot.content).not.toContain("Assistant send");
+    expect(snapshot.content).not.toContain("Closing dialog");
   });
 
   it("fills a React-controlled input so the component sees the change", async () => {

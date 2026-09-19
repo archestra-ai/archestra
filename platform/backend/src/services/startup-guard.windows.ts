@@ -308,7 +308,7 @@ function Show-ArchSpinStart([string]$Label, [string]$Suffix) {
   $Script:SpinText = $text
   $Script:SpinDots = 0
   Clear-ArchLine
-  Write-Host -NoNewline ('  ' + $text)
+  Write-Host -NoNewline (ConvertTo-ArchConsole ('  ' + $text))
 }
 function Show-ArchSpinTick {
   $Script:SpinDots++
@@ -481,10 +481,10 @@ function Show-ArchMenuRow([int]$i, [int]$count, [int]$baseTop, $done) {
   Move-ArchRowStart $i $count $baseTop
   if ($done.ContainsKey($r.Kind)) {
     Write-Arch '✓' Magenta -NoNewline
-    Write-Host -NoNewline (' Disconnected ' + $r.Label)
+    Write-Host -NoNewline (ConvertTo-ArchConsole (' Disconnected ' + $r.Label))
   } else {
     Write-Arch ('[' + ($i + 1) + ']') Magenta -NoNewline
-    Write-Host -NoNewline (' ' + $r.Label)
+    Write-Host -NoNewline (ConvertTo-ArchConsole (' ' + $r.Label))
   }
   Move-ArchRowEnd $i $count $baseTop
 }
@@ -507,7 +507,7 @@ function Disconnect-ArchMenuRow([int]$i, [int]$count, [int]$baseTop) {
     return $false
   }
   Write-Arch '✓' Magenta -NoNewline
-  Write-Host -NoNewline (' Disconnected ' + $r.Label)
+  Write-Host -NoNewline (ConvertTo-ArchConsole (' Disconnected ' + $r.Label))
   Move-ArchRowEnd $i $count $baseTop
   Add-ArchDisconnected $r.Kind
   return $true

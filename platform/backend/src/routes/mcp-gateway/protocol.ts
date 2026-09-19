@@ -309,6 +309,8 @@ export type ProtocolResolution = {
 export type ProtocolError = {
   code: number;
   message: string;
+  /** What an unsupported-version error carries so a client can pick again. */
+  data?: { supported: string[]; requested: string };
 };
 
 /**
@@ -354,14 +356,18 @@ export function resolveProtocolRevision(params: {
       };
     }
 
+    const supported = [
+      ...SUPPORTED_MCP_PROTOCOL_REVISIONS,
+      ...SDK_SUPPORTED_PROTOCOL_VERSIONS.filter(
+        (version) => version !== LEGACY_MCP_PROTOCOL_REVISION,
+      ),
+    ];
     return {
       code: UNSUPPORTED_PROTOCOL_VERSION_ERROR_CODE,
-      message: `Unsupported MCP protocol version "${declared}". Supported versions: ${[
-        ...SUPPORTED_MCP_PROTOCOL_REVISIONS,
-        ...SDK_SUPPORTED_PROTOCOL_VERSIONS.filter(
-          (version) => version !== LEGACY_MCP_PROTOCOL_REVISION,
-        ),
-      ].join(", ")}.`,
+      message: `Unsupported MCP protocol version "${declared}". Supported versions: ${supported.join(", ")}.`,
+      // A client reads the versions from here, not from the message, when it
+      // decides whether to retry with another one.
+      data: { supported, requested: declared },
     };
   }
 
@@ -493,19 +499,23 @@ export function buildDiscoverResult(params: {
   revision: McpProtocolRevision;
 }) {
   const { agentId, version, revision } = params;
+  const serverInfo = { name: `archestra-agent-${agentId}`, version };
   return {
     resultType: COMPLETE_RESULT_TYPE,
-    // The revision has servers advertise every version they support, not just
-    // the one this request used, so a client can pick before committing.
+    // Every version the server supports, not just the one this request used,
+    // so a client can pick before committing. A client that validates the
+    // result (Claude Code does) treats a server without this field as
+    // legacy-only and falls back to `initialize`.
+    supportedVersions: [...SUPPORTED_MCP_PROTOCOL_REVISIONS],
+    // Earlier drafts' spellings, kept for clients written against them.
     protocolVersions: [...SUPPORTED_MCP_PROTOCOL_REVISIONS],
-    // The single negotiated version stays alongside it for clients written
-    // against the earlier draft, where discover returned only this.
     protocolVersion: revision,
-    serverInfo: {
-      name: `archestra-agent-${agentId}`,
-      version,
-    },
+    serverInfo,
     capabilities: buildGatewayServerCapabilities(revision),
+    // A discover result is cacheable like the lists, and names the server in
+    // `_meta` as every other result does.
+    ...buildPrivateListCacheHint(),
+    _meta: { [MCP_SERVER_INFO_META_KEY]: serverInfo },
   };
 }
 

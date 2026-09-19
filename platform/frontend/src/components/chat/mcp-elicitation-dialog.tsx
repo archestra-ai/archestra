@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckIcon, XIcon } from "lucide-react";
+import { CheckIcon, ListChecksIcon, Loader2, XIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { FieldDescription } from "@/components/ui/field-description";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   Select,
   SelectContent,
@@ -16,6 +17,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
 
 export type ChatMcpElicitationRequest = {
   id: string;
@@ -36,6 +38,7 @@ type FieldSchema = {
   description?: string;
   type?: string;
   enum?: unknown[];
+  enumDescriptions?: unknown[];
   default?: unknown;
 };
 
@@ -46,10 +49,20 @@ type ElicitationField = {
   schema: FieldSchema;
 };
 
+export function isChoiceElicitationRequest(
+  request: ChatMcpElicitationRequest | null,
+) {
+  if (!request) {
+    return false;
+  }
+  return isChoiceForm(getElicitationFields(request.requestedSchema));
+}
+
 export function McpElicitationDialog({
   request,
   isSubmitting,
   onRespond,
+  variant = "dialog",
 }: {
   request: ChatMcpElicitationRequest | null;
   isSubmitting: boolean;
@@ -58,6 +71,7 @@ export function McpElicitationDialog({
     action: ElicitationAction;
     content?: Record<string, ElicitationContentValue>;
   }) => Promise<void>;
+  variant?: "dialog" | "inline";
 }) {
   const fields = useMemo(
     () => getElicitationFields(request?.requestedSchema),
@@ -94,105 +108,214 @@ export function McpElicitationDialog({
     await onRespond({ id: request.id, action });
   };
 
+  const choiceForm = isChoiceForm(fields);
+  const hideFieldLabels = choiceForm && fields.length === 1;
+  // Send stays disabled until the user actually picks something. Single
+  // choice needs one selected option; multi choice needs at least one.
+  const hasSelection =
+    !choiceForm ||
+    fields.some((field) =>
+      field.schema.type === "boolean"
+        ? values[field.name] === true
+        : String(values[field.name] ?? "") !== "",
+    );
+  const fieldsBody = (
+    <div className="flex flex-col gap-4">
+      {request.mode === "url" && isHttpUrl(request.url) ? (
+        <a
+          href={request.url}
+          target="_blank"
+          rel="noreferrer"
+          className="text-sm text-primary underline underline-offset-4"
+        >
+          Open request
+        </a>
+      ) : null}
+
+      {fields.length === 0 ? (
+        <Textarea
+          value={String(values.response ?? "")}
+          onChange={(event) =>
+            setValues((current) => ({
+              ...current,
+              response: event.target.value,
+            }))
+          }
+          placeholder="Response"
+          aria-label="Response"
+          className="min-h-24"
+        />
+      ) : (
+        fields.map((field) => (
+          <ElicitationFieldInput
+            key={field.name}
+            field={field}
+            choiceStyle={choiceForm}
+            hideLabel={hideFieldLabels}
+            value={values[field.name]}
+            error={errors[field.name]}
+            onChange={(value) =>
+              setValues((current) => {
+                setErrors((currentErrors) => {
+                  if (!currentErrors[field.name]) {
+                    return currentErrors;
+                  }
+
+                  const nextErrors = { ...currentErrors };
+                  delete nextErrors[field.name];
+                  return nextErrors;
+                });
+
+                return { ...current, [field.name]: value };
+              })
+            }
+          />
+        ))
+      )}
+    </div>
+  );
+  const footer =
+    variant === "inline" ? (
+      <>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          disabled={isSubmitting}
+          onClick={() => void respondWithoutContent("cancel")}
+          className="text-muted-foreground hover:text-foreground"
+        >
+          <span>Dismiss</span>
+        </Button>
+        <Button
+          type="submit"
+          size="sm"
+          disabled={isSubmitting || !hasSelection}
+        >
+          {isSubmitting ? (
+            <Loader2 className="animate-spin" aria-hidden />
+          ) : (
+            <CheckIcon aria-hidden />
+          )}
+          <span>Send</span>
+        </Button>
+      </>
+    ) : (
+      <>
+        <Button
+          type="button"
+          variant="ghost"
+          disabled={isSubmitting}
+          onClick={() => void respondWithoutContent("decline")}
+        >
+          <XIcon />
+          Decline
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          disabled={isSubmitting}
+          onClick={() => void respondWithoutContent("cancel")}
+        >
+          Cancel
+        </Button>
+        <Button type="submit" disabled={isSubmitting}>
+          <CheckIcon />
+          Continue
+        </Button>
+      </>
+    );
+
+  if (variant === "inline") {
+    return (
+      <form
+        data-testid="mcp-elicitation-card"
+        className="not-prose mb-4 w-full overflow-hidden rounded-lg border border-border/60 bg-card shadow-sm"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void submit();
+        }}
+      >
+        <div className="flex items-center justify-between gap-3 border-b border-border/60 bg-muted/40 px-3 py-2">
+          <div className="flex min-w-0 flex-1 items-start gap-2">
+            <ListChecksIcon className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
+            <p className="text-xs font-medium leading-5 text-foreground">
+              {request.message}
+            </p>
+          </div>
+          <div className="flex shrink-0 items-center gap-1.5 text-[10px] font-medium text-muted-foreground">
+            <span className="size-1.5 rounded-full bg-amber-500" />
+            Answer requested
+          </div>
+        </div>
+        <div className="px-3 py-3">{fieldsBody}</div>
+        <div className="flex items-center justify-end gap-1 border-t border-border/60 px-3 py-2">
+          {footer}
+        </div>
+      </form>
+    );
+  }
+
   return (
     <StandardFormDialog
       open={true}
       onOpenChange={(open) => {
         if (!open && !isSubmitting) void respondWithoutContent("cancel");
       }}
-      title="Additional Information"
-      description={request.message}
+      title={isChoiceForm(fields) ? request.message : "Additional Information"}
+      description={isChoiceForm(fields) ? undefined : request.message}
       size="small"
       preventCloseOnInteractOutside
       onSubmit={submit}
-      footer={
-        <>
-          <Button
-            type="button"
-            variant="ghost"
-            disabled={isSubmitting}
-            onClick={() => void respondWithoutContent("decline")}
-          >
-            <XIcon />
-            Decline
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={isSubmitting}
-            onClick={() => void respondWithoutContent("cancel")}
-          >
-            Cancel
-          </Button>
-          <Button type="submit" disabled={isSubmitting}>
-            <CheckIcon />
-            Continue
-          </Button>
-        </>
-      }
+      footer={footer}
     >
-      <div className="flex flex-col gap-4">
-        {request.mode === "url" && isHttpUrl(request.url) ? (
-          <a
-            href={request.url}
-            target="_blank"
-            rel="noreferrer"
-            className="text-sm text-primary underline underline-offset-4"
-          >
-            Open request
-          </a>
-        ) : null}
-
-        {fields.length === 0 ? (
-          <Textarea
-            value={String(values.response ?? "")}
-            onChange={(event) =>
-              setValues((current) => ({
-                ...current,
-                response: event.target.value,
-              }))
-            }
-            placeholder="Response"
-            aria-label="Response"
-            className="min-h-24"
-          />
-        ) : (
-          fields.map((field) => (
-            <ElicitationFieldInput
-              key={field.name}
-              field={field}
-              value={values[field.name]}
-              error={errors[field.name]}
-              onChange={(value) =>
-                setValues((current) => {
-                  setErrors((currentErrors) => {
-                    if (!currentErrors[field.name]) {
-                      return currentErrors;
-                    }
-
-                    const nextErrors = { ...currentErrors };
-                    delete nextErrors[field.name];
-                    return nextErrors;
-                  });
-
-                  return { ...current, [field.name]: value };
-                })
-              }
-            />
-          ))
-        )}
-      </div>
+      {fieldsBody}
     </StandardFormDialog>
+  );
+}
+
+/**
+ * One pickable option. The whole row is the control's label, so a click
+ * anywhere on the row picks it. Selected and hover states share the muted
+ * background; the border only shows once the row is picked.
+ */
+function OptionRow({
+  htmlFor,
+  selected,
+  error,
+  children,
+}: {
+  htmlFor: string;
+  selected: boolean;
+  error?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <label
+      htmlFor={htmlFor}
+      className={cn(
+        "-mx-1 flex cursor-pointer items-start gap-2.5 rounded-md border px-3 py-2 transition-colors",
+        "hover:bg-muted/60 has-[:focus-visible]:bg-muted/60 has-[:focus-visible]:ring-1 has-[:focus-visible]:ring-ring/50",
+        selected ? "border-border bg-muted" : "border-transparent",
+        error && !selected ? "border-destructive/40" : null,
+      )}
+    >
+      {children}
+    </label>
   );
 }
 
 function ElicitationFieldInput({
   field,
+  choiceStyle,
+  hideLabel = false,
   value,
   error,
   onChange,
 }: {
   field: ElicitationField;
+  choiceStyle: boolean;
+  hideLabel?: boolean;
   value: unknown;
   error?: string;
   onChange: (value: unknown) => void;
@@ -202,8 +325,33 @@ function ElicitationFieldInput({
   const enumValues = field.schema.enum?.filter(
     (item): item is string => typeof item === "string",
   );
+  const enumDescriptions = field.schema.enumDescriptions;
 
   if (field.schema.type === "boolean") {
+    if (choiceStyle) {
+      return (
+        <OptionRow
+          htmlFor={id}
+          selected={value === true}
+          error={Boolean(error)}
+        >
+          <Checkbox
+            id={id}
+            checked={Boolean(value)}
+            aria-invalid={Boolean(error)}
+            aria-describedby={error ? errorId : undefined}
+            onCheckedChange={(checked) => onChange(checked === true)}
+            className="mt-0.5"
+          />
+          <div className="flex min-w-0 flex-col">
+            <span className="text-sm leading-5">{field.label}</span>
+            {field.schema.description ? (
+              <FieldDescription>{field.schema.description}</FieldDescription>
+            ) : null}
+          </div>
+        </OptionRow>
+      );
+    }
     return (
       <div className="flex items-center gap-2">
         <Checkbox
@@ -218,6 +366,66 @@ function ElicitationFieldInput({
           <p id={errorId} className="text-xs text-destructive">
             {error}
           </p>
+        ) : null}
+      </div>
+    );
+  }
+
+  if (enumValues?.length && choiceStyle) {
+    return (
+      <div className="flex flex-col gap-1.5">
+        {hideLabel ? null : (
+          <p className="text-sm font-medium">
+            {field.label}
+            {field.required ? (
+              <span className="text-destructive">*</span>
+            ) : null}
+          </p>
+        )}
+        <RadioGroup
+          value={String(value ?? "")}
+          onValueChange={onChange}
+          aria-label={hideLabel ? field.label : undefined}
+          aria-invalid={Boolean(error)}
+          aria-describedby={error ? errorId : undefined}
+          className="flex flex-col gap-1.5"
+        >
+          {enumValues.map((option, index) => {
+            const optionId = `${id}-${index}`;
+            const description =
+              typeof enumDescriptions?.[index] === "string" &&
+              enumDescriptions[index].length > 0
+                ? enumDescriptions[index]
+                : undefined;
+            return (
+              <OptionRow
+                key={option}
+                htmlFor={optionId}
+                selected={value === option}
+                error={Boolean(error)}
+              >
+                <RadioGroupItem
+                  id={optionId}
+                  value={option}
+                  className="mt-0.5"
+                />
+                <div className="flex min-w-0 flex-col">
+                  <span className="text-sm leading-5">{option}</span>
+                  {description ? (
+                    <FieldDescription>{description}</FieldDescription>
+                  ) : null}
+                </div>
+              </OptionRow>
+            );
+          })}
+        </RadioGroup>
+        {error ? (
+          <p id={errorId} className="text-xs text-destructive">
+            {error}
+          </p>
+        ) : null}
+        {field.schema.description ? (
+          <FieldDescription>{field.schema.description}</FieldDescription>
         ) : null}
       </div>
     );
@@ -339,6 +547,7 @@ function getDefaultValues(fields: ElicitationField[]) {
     return { response: "" };
   }
 
+  const choiceForm = isChoiceForm(fields);
   return Object.fromEntries(
     fields.map((field) => {
       if (field.schema.default !== undefined) {
@@ -347,11 +556,26 @@ function getDefaultValues(fields: ElicitationField[]) {
       if (field.schema.type === "boolean") {
         return [field.name, false];
       }
-      const firstEnumValue = field.schema.enum?.find(
-        (item) => typeof item === "string",
-      );
-      return [field.name, firstEnumValue ?? ""];
+      if (!choiceForm) {
+        const firstEnumValue = field.schema.enum?.find(
+          (item) => typeof item === "string",
+        );
+        if (firstEnumValue) {
+          return [field.name, firstEnumValue];
+        }
+      }
+      return [field.name, ""];
     }),
+  );
+}
+
+function isChoiceForm(fields: ElicitationField[]) {
+  return (
+    fields.length > 0 &&
+    fields.every(
+      (field) =>
+        field.schema.type === "boolean" || (field.schema.enum?.length ?? 0) > 0,
+    )
   );
 }
 

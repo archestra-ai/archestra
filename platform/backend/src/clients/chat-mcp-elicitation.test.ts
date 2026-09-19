@@ -212,6 +212,23 @@ describe("chat MCP elicitation", () => {
     expect(getAndDeleteSpy).not.toHaveBeenCalled();
   });
 
+  test("elicit() returns unanswered, not an error, when nobody answers in time", async () => {
+    vi.useFakeTimers();
+    const bridge = createChatMcpElicitationBridge({
+      conversationId: "00000000-0000-4000-8000-000000000001",
+    });
+    bridge.setWriter({ write: vi.fn() });
+    getAndDeleteSpy.mockResolvedValue(undefined);
+
+    const outcome = bridge.elicit({
+      toolName: "archestra__ask_user",
+      message: "Accept this change for the rest of this session?",
+    });
+    await vi.advanceTimersByTimeAsync(10 * 60 * 1000 + 5_000);
+
+    await expect(outcome).resolves.toEqual({ status: "unanswered" });
+  });
+
   test("stores user responses for the pending elicitation id", async () => {
     setSpy.mockResolvedValue(undefined);
 

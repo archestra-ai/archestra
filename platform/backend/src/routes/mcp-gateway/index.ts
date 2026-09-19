@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { RUN_ID_HEADER } from "@archestra/shared";
+import type { JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
@@ -24,6 +25,12 @@ import {
 import { trackBackgroundWork } from "@/utils/background-work";
 import { getPublicRequestOrigin } from "../request-origin";
 import {
+  clientCapabilityKey,
+  clientCapabilityStore,
+  encodeCapabilitySession,
+  readCapabilitySession,
+} from "./client-capabilities";
+import {
   dispatchLegacySseMessage,
   LEGACY_SSE_MESSAGES_SEGMENT,
   LegacySseSessionRegistry,
@@ -32,12 +39,14 @@ import {
   wantsLegacySseStream,
 } from "./legacy-sse";
 import {
+  clientSupportsInputRequest,
   deriveStatePrincipal,
   extractMrtrParams,
   readClientCapabilities,
   supportsInputRequired,
   verifyRequestState,
 } from "./mrtr";
+import { pendingInboundRequests } from "./pending-inbound-requests";
 import {
   buildDiscoverResult,
   extractTraceContext,
@@ -75,6 +84,9 @@ import {
 // =============================================================================
 // MCP Gateway request handling (stateless mode)
 // =============================================================================
+
+/** Where a legacy client echoes the session id the gateway gave it. */
+const MCP_SESSION_ID_HEADER = "mcp-session-id";
 
 /**
  * Sets the WWW-Authenticate header with the OAuth protected resource metadata URL.
@@ -195,6 +207,39 @@ async function handleMcpPostRequest(
 ): Promise<unknown> {
   const { revision } = resolution;
   const body = request.body as Record<string, unknown>;
+  // This client of this caller on this gateway: the key for its
+  // initialize-time capabilities and for the server-initiated requests only
+  // it may answer.
+  const capabilityKey = clientCapabilityKey({
+    profileId,
+    tokenId: tokenAuthContext?.tokenId,
+    userId: tokenAuthContext?.userId,
+    userAgent: readHeader(request, "user-agent"),
+  });
+
+  // A bare JSON-RPC response/error (no method) answers a server-initiated
+  // request (elicitation/create, sampling, ...) sent mid-call on an earlier
+  // POST. Each POST builds a fresh Server, so the answer must be routed back
+  // to the transport that still holds the pending request rather than a new
+  // one, under the id that Server issued. Unknown ids, and answers from any
+  // caller but the one asked, fall through to ordinary handling, which
+  // ignores them.
+  if (body.method === undefined && body.id !== undefined && body.id !== null) {
+    const pending = pendingInboundRequests.consume({
+      wireId: body.id as string | number,
+      agentId: profileId,
+      caller: capabilityKey,
+    });
+    if (pending) {
+      pending.transport.onmessage?.({
+        ...body,
+        id: pending.id,
+      } as unknown as JSONRPCMessage);
+      reply.status(202);
+      return;
+    }
+  }
+
   const runId = readHeader(request, RUN_ID_HEADER);
   const currentToolCallId = logicalToolCallId(body);
 
@@ -214,6 +259,55 @@ async function handleMcpPostRequest(
   }
   const isInitialize =
     typeof body?.method === "string" && body.method === "initialize";
+
+  const principal = deriveStatePrincipal({
+    userId: tokenAuthContext?.userId,
+    tokenId: tokenAuthContext?.tokenId,
+    organizationId: tokenAuthContext?.organizationId,
+  });
+  let capabilitySessionId: string | undefined;
+  if (isInitialize) {
+    // A legacy client declares its capabilities once, here, and the next
+    // POST builds a fresh Server that no longer knows them. Remember them so
+    // a later call can still tell whether this client answers a
+    // server-initiated request (elicitation, sampling, ...).
+    const capabilities = (
+      body?.params as { capabilities?: unknown } | undefined
+    )?.capabilities;
+    if (capabilities !== undefined) {
+      clientCapabilityStore.remember({ key: capabilityKey, capabilities });
+    }
+    // A client that can be asked something also gets them back as its
+    // session id, which it echoes on every request: that record outlives
+    // this process and reaches every replica.
+    if (
+      (["elicitation/create", "sampling/createMessage"] as const).some(
+        (method) =>
+          clientSupportsInputRequest({
+            clientCapabilities: capabilities,
+            request: { method, params: {} },
+          }),
+      )
+    ) {
+      capabilitySessionId = encodeCapabilitySession({
+        profileId,
+        principal,
+        capabilities,
+      });
+    }
+  }
+
+  // Capabilities for this call: per-request `_meta` (2026-07-28 clients)
+  // first, then the initialize-time declaration (legacy clients) from the
+  // session id the client echoes, then from this process's memory.
+  const clientCapabilities =
+    readClientCapabilities(body) ??
+    readCapabilitySession({
+      sessionId: readHeader(request, MCP_SESSION_ID_HEADER),
+      profileId,
+      principal,
+    }) ??
+    clientCapabilityStore.lookup({ key: capabilityKey });
 
   fastify.log.trace(
     {
@@ -272,14 +366,75 @@ async function handleMcpPostRequest(
         enabled: revision === STATELESS_MCP_PROTOCOL_REVISION,
         inputResponses: mrtrParams.inputResponses,
         round: mrtrRound,
-        clientCapabilities: readClientCapabilities(body),
+        clientCapabilities,
       },
     });
-    const transport = createStatelessTransport(profileId);
+    // A client that declares a server-initiated capability may be asked a
+    // question mid-call (elicitation/create, sampling, ...). That needs an
+    // SSE response stream: in JSON-response mode the transport silently drops
+    // the mid-call request and the call hangs until the SDK timeout.
+    const declaresServerInitiated = SERVER_INITIATED_METHODS.some((method) =>
+      clientSupportsInputRequest({
+        clientCapabilities,
+        request: { method, params: {} },
+      }),
+    );
+    // A call that may detach as a task keeps JSON: after detach there is no
+    // live stream to elicit on, and the task must fail instead of elicit.
+    const declaresTasks = (() => {
+      if (typeof clientCapabilities !== "object" || clientCapabilities === null)
+        return false;
+      const extensions = (clientCapabilities as Record<string, unknown>)
+        .extensions;
+      return (
+        typeof extensions === "object" &&
+        extensions !== null &&
+        "io.modelcontextprotocol/tasks" in extensions
+      );
+    })();
+    const sseResponse = declaresServerInitiated && !declaresTasks;
+
+    const transport = createStatelessTransport(profileId, { sseResponse });
 
     fastify.log.trace({ profileId }, "Connecting server to transport");
     await server.connect(transport);
     fastify.log.trace({ profileId }, "Server connected to transport");
+
+    // Register every server-initiated request the call sends so the client's
+    // answer POST (a separate request in stateless mode) can be routed back
+    // to this Server instead of a fresh one. The request goes out under the
+    // wire id the registry issues, and so does a cancellation of it.
+    const originalSend = transport.send.bind(transport);
+    transport.send = async (message, options) => {
+      if (isServerInitiatedRequestMessage(message)) {
+        const wireId = pendingInboundRequests.register({
+          id: message.id,
+          transport,
+          agentId: profileId,
+          caller: capabilityKey,
+        });
+        return originalSend({ ...message, id: wireId }, options);
+      }
+      const cancelled = cancelledRequestId(message);
+      const wireId =
+        cancelled === undefined
+          ? undefined
+          : pendingInboundRequests.wireIdOf({ transport, id: cancelled });
+      if (wireId !== undefined) {
+        pendingInboundRequests.forget({ wireId });
+        return originalSend(
+          {
+            ...message,
+            params: {
+              ...(message as { params: Record<string, unknown> }).params,
+              requestId: wireId,
+            },
+          } as JSONRPCMessage,
+          options,
+        );
+      }
+      return originalSend(message, options);
+    };
 
     fastify.log.trace({ profileId }, "Calling transport.handleRequest");
 
@@ -297,6 +452,9 @@ async function handleMcpPostRequest(
       (revision === STATELESS_MCP_PROTOCOL_REVISION ? revision : undefined);
     if (echoVersion) {
       reply.raw.setHeader(MCP_PROTOCOL_VERSION_HEADER, echoVersion);
+    }
+    if (capabilitySessionId) {
+      reply.raw.setHeader(MCP_SESSION_ID_HEADER, capabilitySessionId);
     }
 
     // The bundled SDK transport validates this header against its own supported
@@ -660,7 +818,11 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
         reply.status(400);
         return {
           jsonrpc: "2.0",
-          error: { code: resolution.code, message: resolution.message },
+          error: {
+            code: resolution.code,
+            message: resolution.message,
+            ...(resolution.data && { data: resolution.data }),
+          },
           id: null,
         };
       }
@@ -864,20 +1026,24 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // the same capability builder `initialize` uses.
       if (isDiscoverRequest(request.body)) {
         reply.header(MCP_PROTOCOL_VERSION_HEADER, resolution.revision);
-        await logHandshake({
-          fastify,
-          profileId,
-          method: SERVER_DISCOVER_METHOD,
-          revision: resolution.revision,
-          tokenAuthContext: {
-            tokenId: tokenAuth.tokenId,
-            teamId: tokenAuth.teamId,
-            isOrganizationToken: tokenAuth.isOrganizationToken,
-            organizationId: tokenAuth.organizationId,
-            ...(tokenAuth.userId && { userId: tokenAuth.userId }),
-          },
-          runId: readHeader(request, RUN_ID_HEADER),
-        });
+        // Clients probe discover on a short timeout (Claude Code allows at
+        // most five seconds), so the handshake log never delays the reply.
+        trackBackgroundWork(
+          logHandshake({
+            fastify,
+            profileId,
+            method: SERVER_DISCOVER_METHOD,
+            revision: resolution.revision,
+            tokenAuthContext: {
+              tokenId: tokenAuth.tokenId,
+              teamId: tokenAuth.teamId,
+              isOrganizationToken: tokenAuth.isOrganizationToken,
+              organizationId: tokenAuth.organizationId,
+              ...(tokenAuth.userId && { userId: tokenAuth.userId }),
+            },
+            runId: readHeader(request, RUN_ID_HEADER),
+          }),
+        );
         return {
           jsonrpc: "2.0",
           result: buildDiscoverResult({
@@ -934,6 +1100,42 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
 function readHeader(request: FastifyRequest, name: string): string | undefined {
   const value = request.headers[name.toLowerCase()];
   return Array.isArray(value) ? value[0] : value;
+}
+
+const SERVER_INITIATED_METHODS = [
+  "elicitation/create",
+  "sampling/createMessage",
+  "roots/list",
+] as const;
+
+function isServerInitiatedRequestMessage(
+  message: JSONRPCMessage,
+): message is JSONRPCMessage & { id: string | number } {
+  return (
+    typeof message === "object" &&
+    message !== null &&
+    "method" in message &&
+    "id" in message &&
+    message.id !== undefined
+  );
+}
+
+/** The request a `notifications/cancelled` message cancels, if it is one. */
+function cancelledRequestId(
+  message: JSONRPCMessage,
+): string | number | undefined {
+  if (
+    !("method" in message) ||
+    message.method !== "notifications/cancelled" ||
+    "id" in message
+  ) {
+    return undefined;
+  }
+  const requestId = (message.params as { requestId?: unknown } | undefined)
+    ?.requestId;
+  return typeof requestId === "string" || typeof requestId === "number"
+    ? requestId
+    : undefined;
 }
 
 function runtimeTokenMatchesRun(params: {

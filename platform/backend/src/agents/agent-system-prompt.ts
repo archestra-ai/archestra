@@ -5,6 +5,7 @@ import {
   buildUserSystemPromptContext,
   PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES,
   parseFullToolName,
+  TOOL_ASK_USER_SHORT_NAME,
   TOOL_COPY_FILE_SHORT_NAME,
   TOOL_DOWNLOAD_FILE_SHORT_NAME,
   TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
@@ -58,7 +59,8 @@ export function buildAppaRemedyInstruction(): string {
   const executeRemedyPlan = archestraMcpBranding.getToolName(
     TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
   );
-  return `A blocked tool call comes back with a ruling as its result. The ruling explains the block and can offer remedy plans, each with an offer id. The plans are addressed to you, not to the user. Choose one, call ${executeRemedyPlan} with its exact offer id and plan, and do what its result says. The instruction above about unapproved tools does not apply to these rulings. Involve the user only when the ruling offers no plan, or when the choice between plans needs a judgment that only they can make. In that case, name the plans and what each one would change.`;
+  const askUser = archestraMcpBranding.getToolName(TOOL_ASK_USER_SHORT_NAME);
+  return `A blocked tool call returns a ruling as its result. The ruling explains the block and can offer remedy plans, each with an offer id. Name the plans to the user. Choose one yourself, and call ${executeRemedyPlan} with its exact offer id and plan. The rule above about unapproved tools does not apply to these rulings. If you need the user's decision, use ${askUser}, never a plain-text question. The ${askUser} result is the user's final answer: when they accept a plan, call ${executeRemedyPlan} with that plan's offer id and plan; when they do not accept, stop and say so. Do not ask the same question again. If the ruling offers no plan, explain the block to the user.`;
 }
 
 /** @public — canonical preamble for a project's instructions, asserted by the

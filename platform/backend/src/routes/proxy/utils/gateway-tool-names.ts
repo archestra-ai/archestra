@@ -73,6 +73,8 @@ export async function buildGatewayToolNameCanonicalizer(params: {
         .join(MCP_SERVER_TOOL_NAME_SEPARATOR);
       return resolveRunToolTargetName(canonicalName);
     }
+    const underscoreJoined = stripUnderscoreJoinedLabel(toolName, serverNames);
+    if (underscoreJoined) return resolveRunToolTargetName(underscoreJoined);
     return stripLearnedDecoration(toolName, learnedPrefixes);
   };
 }
@@ -161,6 +163,31 @@ function stripLearnedDecoration(
     return remainder;
   }
   return toolName;
+}
+
+/**
+ * Strip a gateway label a client joined to the tool name with one underscore,
+ * as OpenCode does (`<server_name>_<tool>`).
+ *
+ * The strict anchor still applies: the label must be the client server name
+ * of one of this organization's gateways. The rest must itself be a gateway
+ * tool name (`<server>__<tool>`), which no client-local tool name is, so a
+ * local tool that merely starts with a gateway's name is left alone. Gateway
+ * names can prefix one another, so the longest matching label wins.
+ */
+function stripUnderscoreJoinedLabel(
+  toolName: string,
+  serverNames: ReadonlySet<string>,
+): string | undefined {
+  let label: string | undefined;
+  for (const serverName of serverNames) {
+    if (label !== undefined && serverName.length <= label.length) continue;
+    if (!toolName.startsWith(`${serverName}_`)) continue;
+    const rest = toolName.slice(serverName.length + 1);
+    if (!rest.startsWith("_") && rest.includes(MCP_SERVER_TOOL_NAME_SEPARATOR))
+      label = serverName;
+  }
+  return label === undefined ? undefined : toolName.slice(label.length + 1);
 }
 
 /** How deep into the segments a client's gateway label may sit (0 or 1). */

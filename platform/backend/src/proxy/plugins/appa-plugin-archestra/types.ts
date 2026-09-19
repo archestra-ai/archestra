@@ -26,4 +26,20 @@ export type AppaClientAdapter = {
   }): boolean;
   classifyToolName(name: string): "gateway" | "local";
   normalizeLocalToolName(name: string): string;
+  /**
+   * The client's own question tool, for a client that cannot show the
+   * platform's ask_user as a form: the model's ask_user call is handed to the
+   * client as a call to this tool instead, when the request declares it.
+   */
+  nativeQuestion?: {
+    toolName: string;
+    fromAskUser(args: AskUserArguments): Record<string, unknown>;
+  };
+};
+
+/** The arguments of the platform's ask_user tool. */
+export type AskUserArguments = {
+  question: string;
+  options: Array<{ label: string; description?: string }>;
+  allowMultiple?: boolean;
 };

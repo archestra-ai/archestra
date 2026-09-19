@@ -3,7 +3,7 @@ title: MCP Gateway
 category: MCP
 order: 1
 description: Unified access point for all MCP servers
-lastUpdated: 2026-09-16
+lastUpdated: 2026-09-19
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -197,6 +197,16 @@ Header passthrough applies to remote MCP servers and local MCP servers using str
 ## Elicitation
 
 MCP servers behind a gateway can use MCP elicitation to ask the connected client for more information during a tool call. Archestra passes these requests through only when the caller supports elicitation, so non-interactive clients are not asked to complete forms.
+
+The built-in [`ask_user`](/docs/platform-archestra-mcp-server#ask_user) tool asks the user to pick from a short list of options. Each client shows it as a form:
+
+- Claude Code and Codex show their own MCP form.
+- OpenCode has no MCP forms, so Archestra hands the question to OpenCode's own question tool.
+- Archestra Chat shows the options as a card in the conversation.
+
+Codex declines every form while its approval policy is `never` — use `on-request` to answer them.
+
+The model still decides whether to ask with a form. Client models sometimes ask in plain text instead — Codex, for example, asks permission questions in plain text by design.
 
 ## Version History
 

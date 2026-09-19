@@ -14,6 +14,13 @@ import { ApiError, UuidIdSchema } from "@/types";
 const INITIAL_ELICITATION_POLL_INTERVAL_MS = 250;
 const MAX_ELICITATION_POLL_INTERVAL_MS = 5_000;
 
+/**
+ * How long a question waits for a person to answer it, in Chat and over the
+ * MCP gateway alike. A person reading a form takes longer than a protocol
+ * round trip, so this is minutes, not the MCP SDK's 60-second default.
+ */
+export const ELICITATION_ANSWER_TIMEOUT_MS = 10 * TimeInMs.Minute;
+
 const ChatMcpElicitationContentValueSchema = z.union([
   z.string(),
   z.number(),
@@ -45,12 +52,14 @@ export type ChatMcpElicitationWriter = {
 };
 
 /**
- * Result of eliciting from a built-in Archestra tool: either the user answered,
- * or there is no chat stream writer to ask through (headless execution). The
+ * Result of eliciting from a built-in Archestra tool: the user answered, the
+ * question was shown but no answer came before the wait ran out, or there is
+ * no one to ask through (headless execution, a client without forms). The
  * caller branches on `status` instead of catching a thrown error.
  */
 export type ArchestraElicitationOutcome =
   | { status: "answered"; result: ElicitResult }
+  | { status: "unanswered" }
   | { status: "no_viewer" };
 
 export type ChatMcpElicitationBridge = {
@@ -154,13 +163,20 @@ export function createChatMcpElicitationBridge({
       if (!writer) {
         return { status: "no_viewer" };
       }
-      const result = await sendElicitationRequest({
-        toolName,
-        message,
-        mode: "form",
-        requestedSchema,
-      });
-      return { status: "answered", result };
+      try {
+        const result = await sendElicitationRequest({
+          toolName,
+          message,
+          mode: "form",
+          requestedSchema,
+        });
+        return { status: "answered", result };
+      } catch (error) {
+        if (error instanceof ElicitationAnswerTimeoutError) {
+          return { status: "unanswered" };
+        }
+        throw error;
+      }
     },
   };
 }
@@ -189,7 +205,7 @@ async function waitForChatMcpElicitationResponse({
   abortSignal?: AbortSignal;
 }): Promise<ElicitResult> {
   const key = getChatMcpElicitationResponseKey(id);
-  const timeoutAt = Date.now() + 10 * TimeInMs.Minute;
+  const timeoutAt = Date.now() + ELICITATION_ANSWER_TIMEOUT_MS;
   let pollIntervalMs = INITIAL_ELICITATION_POLL_INTERVAL_MS;
 
   while (Date.now() < timeoutAt) {
@@ -219,7 +235,13 @@ async function waitForChatMcpElicitationResponse({
     );
   }
 
-  throw new Error("MCP elicitation response timed out");
+  throw new ElicitationAnswerTimeoutError();
+}
+
+class ElicitationAnswerTimeoutError extends Error {
+  constructor() {
+    super("MCP elicitation response timed out");
+  }
 }
 
 function getChatMcpElicitationResponseKey(id: string) {

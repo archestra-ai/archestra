@@ -3,6 +3,7 @@ import {
   APPA_SESSION_HEADER,
   extractMcpToolError,
   isSeededAppRenderToolResult,
+  TOOL_ASK_USER_SHORT_NAME,
   TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
 } from "@archestra/shared";
 import {
@@ -405,6 +406,7 @@ function isOutputDecision(
 export async function processProxyResults(params: {
   session: OpenAppaSession;
   results: CommonToolResult[];
+  canonicalize: (name: string) => string;
   controlToolName?: string;
   trustedChat?: boolean;
 }) {
@@ -413,6 +415,8 @@ export async function processProxyResults(params: {
   for (const result of params.results) {
     if (params.trustedChat && isSeededAppRenderToolResult(result.content))
       continue;
+    // The runtime released no question call, so it would withhold the answer.
+    if (isUserQuestion(result.name, params.canonicalize)) continue;
     const error =
       extractMcpToolError(result) ?? extractMcpToolError(result.content);
     const outcome: ExecutionOutcome =
@@ -482,6 +486,9 @@ export async function evaluateToolCalls(
       // Direct remedy control calls bypass evaluation and execute via gateway.
       if (options.controlToolName && call.name === options.controlToolName) {
         return { kind: "control" as const };
+      }
+      if (isUserQuestion(call.name, options.canonicalize)) {
+        return { kind: "allow" as const };
       }
       const tool =
         archestraMcpBranding.getToolShortName(
@@ -758,3 +765,28 @@ function nativePresentation(controlToolName?: string): {
     supports_delegation: false,
   };
 }
+
+/**
+ * Asking the user is a conversation primitive, not a governed tool, whether
+ * the platform's ask_user or a client's own question tool asks: the call is
+ * never ruled on, so the runtime holds no record of it, and its result is the
+ * user's own answer.
+ */
+function isUserQuestion(
+  name: string,
+  canonicalize: (name: string) => string,
+): boolean {
+  const canonical = canonicalize(name);
+  return (
+    CLIENT_QUESTION_TOOLS.has(canonical) ||
+    archestraMcpBranding.getToolShortName(canonical) ===
+      TOOL_ASK_USER_SHORT_NAME
+  );
+}
+
+/** The clients' own question tools, as their adapters name them for policy. */
+const CLIENT_QUESTION_TOOLS = new Set([
+  "host/claude-code/AskUserQuestion",
+  "builtin:request_user_input",
+  "builtin:question",
+]);

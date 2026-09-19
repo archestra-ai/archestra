@@ -76,6 +76,7 @@ describe("archestra MCP tool names", () => {
 
   test("flags the skill, sandbox, and persistent-files path as always-exposed", () => {
     for (const shortName of [
+      "ask_user",
       "list_skills",
       "load_skill",
       "run_command",

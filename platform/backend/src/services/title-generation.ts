@@ -67,6 +67,10 @@ export async function generateConversationTitle(
       system: params.systemPrompt,
       prompt: titlePrompt,
       maxOutputTokens: TITLE_MAX_OUTPUT_TOKENS,
+      // A title is best-effort: SDK-retrying a 429 would spend two extra
+      // calls of the same per-minute budget the chat turn itself needs (the
+      // opening words already serve as the fallback title).
+      maxRetries: 0,
     });
     const outcome = toConversationTitle(result.text);
     if (outcome.title === null) {

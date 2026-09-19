@@ -45,6 +45,7 @@ const session = {
   caller_id: "user:alice",
   session_id: "conversation",
 };
+const canonicalize = (name: string) => name;
 
 beforeEach(async () => {
   config.llmProxy.plugins = ["appa"];
@@ -469,6 +470,59 @@ describe("APPA feature boundary", () => {
     expect(native.dispatchHook).not.toHaveBeenCalled();
   });
 
+  test("releases ask_user without evaluating it against the policy", async () => {
+    const decisions = await evaluateToolCalls(
+      session,
+      [
+        {
+          id: "ask-call",
+          name: "mcp__archestra__ask_user",
+          arguments: {
+            question: "Accept for this session?",
+            options: [
+              { label: "Accept for this session" },
+              { label: "Do not accept" },
+            ],
+          },
+        },
+      ],
+      { canonicalize: (name) => name.replace(/^mcp__/, "") },
+    );
+
+    expect(decisions).toEqual([{ kind: "allow" }]);
+    expect(native.dispatchHook).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    // The runtime ruled on no ask_user call, so it would withhold the answer.
+    { name: "mcp__archestra__ask_user", reported: false },
+    // Nor on a client's own question tool, which asks the same way.
+    { name: "host/claude-code/AskUserQuestion", reported: false },
+    { name: "builtin:request_user_input", reported: false },
+    { name: "builtin:question", reported: false },
+    // Another server's tool of the same name is an ordinary governed tool.
+    { name: "mcp__other__ask_user", reported: true },
+  ])("reports a $name result to the runtime: $reported", async ({
+    name,
+    reported,
+  }) => {
+    const answer = "The user picked: Accept for this session.";
+
+    const result = await processProxyResults({
+      session,
+      canonicalize: (each) => each.replace(/^mcp__/, ""),
+      results: [{ id: "ask-call", name, content: answer, isError: false }],
+    });
+
+    const events = native.dispatchHook.mock.calls
+      .map(([raw]) => JSON.parse(raw))
+      .filter((event) => event.event === "tool_result");
+    expect(events).toHaveLength(reported ? 1 : 0);
+    expect(result.toolResultUpdates["ask-call"]?.content).toBe(
+      reported ? "APPA: withheld; remedy offer-123" : undefined,
+    );
+  });
+
   test.each([
     "agent__research",
     "skill__research",
@@ -544,9 +598,9 @@ describe("APPA feature boundary", () => {
     config.openappa.enabled = false;
     // An explicit plugin entry must not override the feature flag.
     config.llmProxy.plugins = ["appa"];
-    await expect(processProxyResults({ session, results: [] })).rejects.toThrow(
-      "OpenAPPA could not safely complete",
-    );
+    await expect(
+      processProxyResults({ session, results: [], canonicalize }),
+    ).rejects.toThrow("OpenAPPA could not safely complete");
     expect(native.initializeOpenappa).not.toHaveBeenCalled();
     expect(native.dispatchHook).not.toHaveBeenCalled();
     expect(database.getDatabaseConnectionString).not.toHaveBeenCalled();
@@ -639,6 +693,26 @@ describe("APPA feature boundary", () => {
     expect(native.executeRemedyByOffer).not.toHaveBeenCalled();
   });
 
+  test("the public notice tool tells the model to pick an offered plan, not to ask in plain text", async () => {
+    const { offer_id: _offerId, ...offer } = signedRemedyArgs("offer-1");
+    const result = await executeArchestraTool(
+      "archestra__get_remedy_plans",
+      {
+        tool: "archestra__list_skills",
+        arguments: "{}",
+        ruling: "Blocked: this call cannot run yet.",
+        notice: { v: 1, call_id: "call-1" },
+        offers: [offer],
+      },
+      { agent: { id: "agent", name: "Assistant" }, organizationId: "org" },
+    );
+    const text = (result.content as Array<{ text: string }>)[0].text;
+    expect(text).toMatch(/^Blocked: this call cannot run yet\.\n\n/);
+    expect(text).toContain("call archestra__execute_remedy_plan now");
+    expect(text).toContain("call archestra__ask_user");
+    expect(text).toContain("Do not ask in plain text.");
+  });
+
   test.each([
     true,
     false,
@@ -665,7 +739,7 @@ describe("APPA feature boundary", () => {
         userId: "alice",
         sessionId: "conversation",
         currentToolCallId: "remedy-call-2",
-        elicitation: { elicit, setWriter: vi.fn(), createHandler: vi.fn() },
+        elicitation: { elicit },
       },
     );
     expect(result).toMatchObject(appaResult);
@@ -676,6 +750,7 @@ describe("APPA feature boundary", () => {
   test("admits the first client result without Chat execution reporting", async () => {
     const result = await processProxyResults({
       session,
+      canonicalize,
       controlToolName: "mcp__gateway__archestra__execute_remedy_plan",
       results: [
         {
@@ -732,6 +807,7 @@ describe("APPA feature boundary", () => {
     });
     const result = await processProxyResults({
       session,
+      canonicalize,
       results: [
         {
           id: "remedy",
@@ -775,6 +851,7 @@ describe("APPA feature boundary", () => {
     });
     const result = await processProxyResults({
       session,
+      canonicalize,
       results: [
         {
           id: "remedy",
@@ -810,6 +887,7 @@ describe("APPA feature boundary", () => {
     });
     const result = await processProxyResults({
       session,
+      canonicalize,
       results: [
         {
           id: "denied_call",
@@ -839,6 +917,7 @@ describe("APPA feature boundary", () => {
     });
     const result = await processProxyResults({
       session,
+      canonicalize,
       results: [
         {
           id: "blocked_call",
@@ -875,6 +954,7 @@ describe("APPA feature boundary", () => {
     });
     const result = await processProxyResults({
       session,
+      canonicalize,
       results: [
         {
           id: "mcp_call",
@@ -916,6 +996,7 @@ describe("APPA feature boundary", () => {
     });
     const result = await processProxyResults({
       session,
+      canonicalize,
       results: [
         {
           id: "deliver_call",
@@ -953,6 +1034,7 @@ describe("APPA feature boundary", () => {
     await expect(
       processProxyResults({
         session,
+        canonicalize,
         results: [
           {
             id: "future_call",
@@ -967,6 +1049,7 @@ describe("APPA feature boundary", () => {
   test("keeps a structured cancellation indeterminate when processing proxy results", async () => {
     await processProxyResults({
       session,
+      canonicalize,
       results: [
         {
           id: "cancelled",
@@ -1002,6 +1085,7 @@ describe("APPA feature boundary", () => {
     });
     const result = await processProxyResults({
       session,
+      canonicalize,
       trustedChat,
       results: [{ id: "seed", name: "render_app", content, isError: false }],
     });
@@ -1031,7 +1115,7 @@ test("dispatch loads the latest saved policy text from the organization database
     contentHash: "first",
     expectedRevision: 0,
   });
-  await processProxyResults({ session: scoped, results: [] });
+  await processProxyResults({ session: scoped, results: [], canonicalize });
   expect(native.dispatchHook).toHaveBeenLastCalledWith(
     expect.any(String),
     content,
@@ -1044,7 +1128,7 @@ test("dispatch loads the latest saved policy text from the organization database
     contentHash: "second",
     expectedRevision: 1,
   });
-  await processProxyResults({ session: scoped, results: [] });
+  await processProxyResults({ session: scoped, results: [], canonicalize });
   expect(native.dispatchHook).toHaveBeenLastCalledWith(
     expect.any(String),
     updated,

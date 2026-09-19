@@ -1,3 +1,4 @@
+import { createHmac } from "node:crypto";
 import { homedir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -2022,6 +2023,7 @@ export function parseLlmProxyPlugins(
 }
 
 const MIN_OPENAPPA_OFFER_SIGNING_SECRET_LENGTH = 32;
+const OFFER_SIGNING_DOMAIN = "archestra.openappa.offer-signing.v1";
 
 /**
  * Validates APPA settings only when its feature flag is explicitly enabled.
@@ -2032,20 +2034,26 @@ export function parseOpenAppaConfig(
   yellEnabled?: string,
   offerSigningSecret?: string,
   postgresMaxConnections?: string,
+  authSecret?: string,
 ) {
-  const secret = offerSigningSecret ?? "";
-  const isEnabled = enabled === "true";
+  const dedicated = offerSigningSecret ?? "";
   if (
-    secret.length > 0 &&
-    secret.length < MIN_OPENAPPA_OFFER_SIGNING_SECRET_LENGTH
+    dedicated.length > 0 &&
+    dedicated.length < MIN_OPENAPPA_OFFER_SIGNING_SECRET_LENGTH
   ) {
     throw new Error(
       `ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET must be at least ${MIN_OPENAPPA_OFFER_SIGNING_SECRET_LENGTH} characters`,
     );
   }
+  // Same pattern as MRTR request state: derive from the session-signing
+  // secret when no dedicated key is set, so an existing deployment gains
+  // offer signing without new configuration. Domain-separated, so the
+  // derived key never collides with the session or MRTR keys.
+  const secret = dedicated || deriveOfferSigningSecret(authSecret);
+  const isEnabled = enabled === "true";
   if (isEnabled && secret.length === 0) {
     logger.warn(
-      "OpenAPPA is enabled without ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET: denials that carry remedy offers will fail closed (503) until the secret is set on every replica",
+      "OpenAPPA is enabled without an offer signing key: set ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET or an auth secret, or denials that carry remedy offers will fail closed (503)",
     );
   }
   return {
@@ -2056,6 +2064,13 @@ export function parseOpenAppaConfig(
       postgresMaxConnections,
     ),
   };
+}
+
+function deriveOfferSigningSecret(authSecret: string | undefined): string {
+  if (!authSecret) return "";
+  return createHmac("sha256", authSecret)
+    .update(OFFER_SIGNING_DOMAIN)
+    .digest("base64url");
 }
 
 const DEFAULT_OPENAPPA_POSTGRES_MAX_CONNECTIONS = 4;
@@ -2257,11 +2272,16 @@ const fileStorageS3Config = parseFileStorageS3Config({
   },
 });
 
+const authSessionSecret =
+  process.env.ARCHESTRA_AUTH_SESSION_SECRET?.trim() ||
+  process.env.ARCHESTRA_AUTH_SECRET;
+
 const openappa = parseOpenAppaConfig(
   process.env.ARCHESTRA_OPENAPPA_ENABLED,
   process.env.ARCHESTRA_OPENAPPA_YELL_ENABLED,
   process.env.ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET,
   process.env.ARCHESTRA_OPENAPPA_POSTGRES_MAX_CONNECTIONS,
+  authSessionSecret,
 );
 const llmProxyPlugins = parseLlmProxyPlugins(
   process.env.ARCHESTRA_LLM_PROXY_PLUGINS,
@@ -2573,9 +2593,7 @@ const config = {
     // trimming it would change the key existing deployments already derive from
     // it and break decryption of already-stored data. (Same for the
     // encryption secrets below.)
-    secret:
-      process.env.ARCHESTRA_AUTH_SESSION_SECRET?.trim() ||
-      process.env.ARCHESTRA_AUTH_SECRET,
+    secret: authSessionSecret,
     trustedOrigins: getTrustedOrigins(),
     adminDefaultEmail:
       process.env[DEFAULT_ADMIN_EMAIL_ENV_VAR_NAME] || DEFAULT_ADMIN_EMAIL,

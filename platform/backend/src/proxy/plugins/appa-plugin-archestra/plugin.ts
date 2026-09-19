@@ -1,3 +1,5 @@
+import { TOOL_ASK_USER_SHORT_NAME } from "@archestra/shared";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import config from "@/config";
 import { buildNoticeArguments, type RemedyExecution } from "@/openappa/notice";
 import type { OfferJws } from "@/openappa/offer-claims";
@@ -34,6 +36,7 @@ import {
   APPA_PLUGIN_TRUSTED_CONTEXT,
   type AppaClientAdapter,
   type AppaTrustedContext,
+  type AskUserArguments,
 } from "./types";
 
 type AppaPluginBinding = {
@@ -88,6 +91,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     const result = await processProxyResults({
       session: binding.session,
       results: [...context.toolResults],
+      canonicalize: (name) => this.canonicalize(binding, name),
       controlToolName:
         binding.request.tools?.controlToolName ??
         binding.request.historicalControlToolName,
@@ -119,18 +123,33 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
   async onPrepareToolCalls(
     context: LlmProxyToolCallsContext,
   ): Promise<LlmProxyToolCallsOutcome | undefined> {
-    const control = this.bindings.get(context.resources)?.request.tools
-      ?.controlToolName;
+    const binding = this.bindings.get(context.resources);
+    const control = binding?.request.tools?.controlToolName;
     if (!control) return;
+    const askUser = archestraMcpBranding.getToolName(TOOL_ASK_USER_SHORT_NAME);
     let changed = false;
     const toolCalls = context.toolCalls.map((call) => {
-      if (call.name !== control) return call;
-      const stamped = stampControlExecution(
-        call,
-        this.bindings.get(context.resources)?.request.offerClaims,
-      );
-      changed ||= stamped !== call;
-      return stamped;
+      if (call.name === control) {
+        const stamped = stampControlExecution(
+          call,
+          binding?.request.offerClaims,
+        );
+        changed ||= stamped !== call;
+        return stamped;
+      }
+      // Before any policy sees it: the call the policies rule on is the one
+      // the client will run.
+      const native = binding ? this.asNativeQuestion(binding, call) : call;
+      if (native !== call) {
+        changed = true;
+        return native;
+      }
+      if (call.name === askUser) {
+        const stamped = stampAskUserOffers(call, binding?.request.offerClaims);
+        changed ||= stamped !== call;
+        return stamped;
+      }
+      return call;
     });
     if (changed) return { decision: "allow", toolCalls };
   }
@@ -277,12 +296,51 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
 
   // === Internal helpers ===
 
+  /**
+   * The model's ask_user call, handed to a client that cannot show it as a
+   * form as a call to the client's own question tool, under the same call id.
+   * Anything else, and any client without such a tool on this request, keeps
+   * the call as the model made it.
+   */
+  private asNativeQuestion(
+    binding: AppaPluginBinding,
+    call: LlmProxyToolCallsContext["toolCalls"][number],
+  ): LlmProxyToolCallsContext["toolCalls"][number] {
+    const native = binding.adapter?.nativeQuestion;
+    if (
+      !native ||
+      binding.request.spellings.get(native.toolName) !== native.toolName ||
+      archestraMcpBranding.getToolShortName(
+        this.canonicalize(binding, call.name),
+      ) !== TOOL_ASK_USER_SHORT_NAME
+    ) {
+      return call;
+    }
+    const args = parseAskUserArguments(call.arguments);
+    if (!args) return call;
+    return {
+      id: call.id,
+      name: native.toolName,
+      arguments: JSON.stringify(native.fromAskUser(args)),
+    };
+  }
+
   private canonicalize(binding: AppaPluginBinding, name: string): string {
-    return binding.adapter?.classifyToolName(name) === "local"
+    const canonical = binding.canonicalizeToolName(name);
+    // A gateway tool whatever the client's local naming says: a name the
+    // canonicalizer rewrote is a client's decoration of one (OpenCode's
+    // `<label>_<tool>`), and Codex declares an MCP server's tools inside the
+    // server's namespace under their bare names.
+    const gateway =
+      canonical !== name ||
+      binding.request.namespaces
+        .get(name)
+        ?.startsWith(CODEX_MCP_NAMESPACE_PREFIX);
+    return !gateway && binding.adapter?.classifyToolName(name) === "local"
       ? binding.canonicalizeToolName(
           binding.adapter.normalizeLocalToolName(name),
         )
-      : binding.canonicalizeToolName(name);
+      : canonical;
   }
 
   /**
@@ -323,6 +381,31 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     };
   }
 }
+
+function parseAskUserArguments(
+  raw: string | Record<string, unknown>,
+): AskUserArguments | undefined {
+  let value: unknown = raw;
+  if (typeof raw === "string") {
+    try {
+      value = JSON.parse(raw);
+    } catch {
+      return undefined;
+    }
+  }
+  const args = value as Partial<AskUserArguments> | null;
+  if (
+    typeof args?.question !== "string" ||
+    !Array.isArray(args.options) ||
+    !args.options.every((option) => typeof option?.label === "string")
+  ) {
+    return undefined;
+  }
+  return args as AskUserArguments;
+}
+
+/** Codex names the namespace of an MCP server's tools `mcp__<server>`. */
+const CODEX_MCP_NAMESPACE_PREFIX = "mcp__";
 
 function getTrustedContext(
   resources: ReadonlyMap<PropertyKey, unknown>,
@@ -431,6 +514,44 @@ function stampControlExecution(
       // The matched offer's flattened JWS routing fields (protected,
       // payload, signature) land as top-level keys beside the remedy args.
       ...(owner ?? {}),
+    }),
+  };
+}
+
+/**
+ * Attaches the session's live offer envelopes to an ask_user call, so the
+ * tool can carry a verified remedy continuation in its result — the same
+ * stateless signed-payload pattern the remedy control call uses. The proxy is
+ * the sole writer of this key; a client-echoed copy is stripped first.
+ */
+function stampAskUserOffers(
+  call: LlmProxyToolCallsContext["toolCalls"][number],
+  offerClaims: readonly OfferJws[] | undefined,
+): LlmProxyToolCallsContext["toolCalls"][number] {
+  if (!offerClaims || offerClaims.length === 0) return call;
+  const originalArguments =
+    typeof call.arguments === "string"
+      ? call.arguments
+      : JSON.stringify(call.arguments);
+  let argumentsValue: unknown;
+  try {
+    argumentsValue = JSON.parse(originalArguments);
+  } catch {
+    return call;
+  }
+  if (
+    !argumentsValue ||
+    typeof argumentsValue !== "object" ||
+    Array.isArray(argumentsValue)
+  )
+    return call;
+  const { remedy_offers: _clientOffers, ...clientArguments } =
+    argumentsValue as Record<string, unknown>;
+  return {
+    ...call,
+    arguments: JSON.stringify({
+      ...clientArguments,
+      remedy_offers: offerClaims,
     }),
   };
 }

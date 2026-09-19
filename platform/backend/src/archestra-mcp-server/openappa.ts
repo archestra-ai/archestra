@@ -1,5 +1,6 @@
 import { isDeepStrictEqual } from "node:util";
 import {
+  TOOL_ASK_USER_SHORT_NAME,
   TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
   TOOL_GET_REMEDY_PLANS_SHORT_NAME,
 } from "@archestra/shared";
@@ -18,6 +19,7 @@ import {
   UpdateGuardrailsPolicySchema,
   ValidateGuardrailsPolicySchema,
 } from "@/types/guardrails-policy";
+import { archestraMcpBranding } from "./branding";
 import { defineArchestraTool, defineArchestraTools } from "./helpers";
 
 const RemedyPlanArgumentsSchema = z.object({
@@ -112,14 +114,32 @@ const registry = defineArchestraTools([
     shortName: TOOL_GET_REMEDY_PLANS_SHORT_NAME,
     title: "Read a blocked call's ruling and remedy plans",
     description:
-      "Read why the guardrails policy blocked a tool call and which remedy plans are offered. The platform delivers this call in place of a blocked call. It runs nothing and changes nothing. The ruling argument explains why the call was blocked. The plans are addressed to you. When the ruling offers a plan, choose it, call execute_remedy_plan with the offer_id and plan shown in the ruling, then retry the original call. If no plan is offered, or if a choice requires user judgment, explain the options to the user.",
+      "Read why the guardrails policy blocked a tool call and which remedy plans it offers. The platform gives you this call in place of a blocked call. It runs nothing and changes nothing. The plans are for you. When the ruling offers a plan, name it to the user, choose it, and call execute_remedy_plan with the offer_id and plan from the ruling. Then retry the original call. If the ruling offers no plan, explain the block. If you need the user's decision, use ask_user, never a plain-text question.",
     schema: NoticeArguments,
     async handler({ args }) {
       // The ruling the runtime already made, carried by the call itself. This
       // opens no root, emits no OpenAPPA event and reads no policy: the runtime
       // refused the call when it was proposed, and this is that refusal being
       // delivered to the model's own loop.
-      return { content: [{ type: "text", text: args.ruling }] };
+      if (!args.offers?.length) {
+        return { content: [{ type: "text", text: args.ruling }] };
+      }
+      // Models follow an instruction in the latest tool result more reliably
+      // than the system prompt; without it some still ask in plain text.
+      const executeRemedyPlan = archestraMcpBranding.getToolName(
+        TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
+      );
+      const askUser = archestraMcpBranding.getToolName(
+        TOOL_ASK_USER_SHORT_NAME,
+      );
+      return {
+        content: [
+          {
+            type: "text",
+            text: `${args.ruling}\n\nChoose a plan and call ${executeRemedyPlan} now. If only the user can make this choice, call ${askUser}. Do not ask in plain text.`,
+          },
+        ],
+      };
     },
   }),
   defineArchestraTool({

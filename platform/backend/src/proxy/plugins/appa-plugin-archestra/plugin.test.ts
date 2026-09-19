@@ -1,3 +1,5 @@
+import config from "@/config";
+import { signOfferClaims, unsignedOfferClaims } from "@/openappa/offer-claims";
 import * as appaService from "@/openappa/service";
 import type { LlmProxyRequestContext } from "@/proxy/plugins/registry";
 import { describe, expect, test, vi } from "@/test";
@@ -94,13 +96,17 @@ describe("AppaPluginArchestra", () => {
         normalizeLocalToolName: (name) => `local:${name}`,
       },
     ]);
+    // Each canonicalizer marks the local names it sees, so the output shows
+    // which request's binding ruled the call.
     const first = requestContext({
       sessionId: "first-session",
-      canonicalizeToolName: (name) => `first:${name}`,
+      canonicalizeToolName: (name) =>
+        name.startsWith("local:") ? `first:${name}` : name,
     });
     const second = requestContext({
       sessionId: "second-session",
-      canonicalizeToolName: (name) => `second:${name}`,
+      canonicalizeToolName: (name) =>
+        name.startsWith("local:") ? `second:${name}` : name,
     });
 
     try {
@@ -152,6 +158,149 @@ describe("AppaPluginArchestra", () => {
       expect(evaluateToolCalls).toHaveBeenCalledTimes(2);
     } finally {
       evaluateToolCalls.mockRestore();
+    }
+  });
+
+  test.each([
+    {
+      client: "Codex",
+      // Codex declares the gateway's tools in its `mcp__<server>` namespace
+      // under their bare names.
+      adapter: new AppaCodexAdapter(),
+      headers: { originator: "codex_cli_rs" },
+      gatewayCall: "archestra__ask_user",
+      namespaces: new Map([["archestra__ask_user", "mcp__my_gateway"]]),
+      localCall: "exec_command",
+    },
+    {
+      client: "OpenCode",
+      // OpenCode decorates the gateway's tools as `<label>_<tool>`.
+      adapter: new AppaOpenCodeAdapter(),
+      headers: { "x-opencode-session": "s" },
+      gatewayCall: "my_gateway_archestra__ask_user",
+      namespaces: new Map<string, string>(),
+      localCall: "exec_command",
+    },
+  ])("rules $client's call to a gateway tool as the gateway's tool, not a builtin", async ({
+    adapter,
+    headers,
+    gatewayCall,
+    namespaces,
+    localCall,
+  }) => {
+    // Ruled as a client builtin, a gateway tool would miss both the policy's
+    // rule for it and the ask_user exemption.
+    const ruledAs: string[] = [];
+    const evaluateToolCalls = vi
+      .spyOn(appaService, "evaluateToolCalls")
+      .mockImplementation(async (_session, calls, options) => {
+        ruledAs.push(...calls.map((call) => options.canonicalize(call.name)));
+        return calls.map(() => ({ kind: "allow" }) as const);
+      });
+    const plugin = new AppaPluginArchestra([adapter]);
+    const context = requestContext({
+      sessionId: "client-naming-session",
+      canonicalizeToolName: (name) =>
+        name.replace(/^my_gateway_(?=archestra__)/, ""),
+    });
+    const trusted = context.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as Record<string, unknown>;
+    trusted.request = {
+      ...(trusted.request as Record<string, unknown>),
+      namespaces,
+    };
+    context.headers = headers;
+
+    try {
+      await plugin.onSessionInit(context);
+      await plugin.onToolCalls({
+        ...context,
+        toolCalls: [
+          { id: "ask", name: gatewayCall, arguments: {} },
+          { id: "shell", name: localCall, arguments: {} },
+        ],
+      });
+
+      expect(ruledAs).toEqual(["archestra__ask_user", `builtin:${localCall}`]);
+    } finally {
+      evaluateToolCalls.mockRestore();
+    }
+  });
+});
+
+describe("asking through the client's own question tool", () => {
+  test.each([
+    { declared: true, expected: "question" },
+    // `opencode run` declares no question tool: nothing could render it.
+    { declared: false, expected: "my_gateway_archestra__ask_user" },
+  ])("hands OpenCode the model's ask_user as its question tool (declared=$declared)", async ({
+    declared,
+    expected,
+  }) => {
+    const plugin = new AppaPluginArchestra([new AppaOpenCodeAdapter()]);
+    const context = requestContext({
+      sessionId: "opencode-question-session",
+      canonicalizeToolName: (name) =>
+        name.replace(/^my_gateway_(?=archestra__)/, ""),
+    });
+    const trusted = context.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as Record<string, unknown>;
+    trusted.request = {
+      ...(trusted.request as Record<string, unknown>),
+      tools: {
+        controlToolName: "my_gateway_archestra__execute_remedy_plan",
+        noticeToolName: "my_gateway_archestra__get_remedy_plans",
+      },
+      spellings: new Map(declared ? [["question", "question"]] : []),
+    };
+    context.headers = { "x-opencode-session": "s" };
+    const askUser = {
+      question: "Accept this change for the rest of this session?",
+      options: [
+        { label: "Accept", description: "Narrow who can read it" },
+        { label: "Do not accept" },
+      ],
+    };
+
+    try {
+      await plugin.onSessionInit(context);
+      const toolCalls = [
+        {
+          id: "call_ask",
+          name: "my_gateway_archestra__ask_user",
+          arguments: JSON.stringify(askUser),
+        },
+      ];
+      const outcome = await plugin.onPrepareToolCalls({
+        ...context,
+        toolCalls,
+      });
+
+      // No outcome means the calls go out as the model made them.
+      const released =
+        outcome?.decision === "allow" ? outcome.toolCalls : toolCalls;
+      expect(released).toHaveLength(1);
+      expect(released[0].id).toBe("call_ask");
+      expect(released[0].name).toBe(expected);
+      if (declared) {
+        expect(JSON.parse(released[0].arguments as string)).toEqual({
+          questions: [
+            {
+              question: askUser.question,
+              header: "Question",
+              options: [
+                { label: "Accept", description: "Narrow who can read it" },
+                { label: "Do not accept", description: "Do not accept" },
+              ],
+              multiple: false,
+            },
+          ],
+        });
+      }
+    } finally {
+      await plugin.onCleanup(context);
     }
   });
 });
@@ -721,6 +870,53 @@ describe("rendering runtime text for this client", () => {
     } finally {
       evaluateToolCalls.mockRestore();
     }
+  });
+
+  test("attaches live offers to ask_user calls and strips client-echoed ones", async () => {
+    const plugin = new AppaPluginArchestra([]);
+    const context = requestContext({
+      sessionId: "ask-user-offers",
+      canonicalizeToolName: (name) => name,
+    });
+    const envelope = signOfferClaims(
+      unsignedOfferClaims({
+        organizationId: "organization",
+        sessionId: "ask-user-offers",
+        offerId: "offer-1",
+      }),
+      config.openappa.offerSigningSecret,
+    );
+    const trusted = context.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as Record<string, unknown>;
+    trusted.request = {
+      tools: {
+        controlToolName: "archestra__execute_remedy_plan",
+        noticeToolName: "archestra__get_remedy_plans",
+      },
+      spellings: new Map(),
+      customTools: new Set(),
+      namespaces: new Map(),
+      offerClaims: [envelope],
+    };
+    await plugin.onSessionInit(context);
+    const outcome = await plugin.onPrepareToolCalls({
+      ...context,
+      toolCalls: [
+        {
+          id: "provider-call-1",
+          name: "archestra__ask_user",
+          arguments: JSON.stringify({
+            question: "Accept?",
+            options: [{ label: "Yes" }, { label: "No" }],
+            remedy_offers: [{ protected: "x", payload: "x", signature: "x" }],
+          }),
+        },
+      ],
+    });
+    if (outcome?.decision !== "allow") throw new Error("expected allow");
+    const argumentsValue = JSON.parse(outcome.toolCalls[0].arguments as string);
+    expect(argumentsValue.remedy_offers).toEqual([envelope]);
   });
 
   test("strips a client-echoed JWS before stamping", async () => {

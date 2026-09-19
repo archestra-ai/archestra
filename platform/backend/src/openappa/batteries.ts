@@ -26,6 +26,7 @@ import type {
   BatteryInstall,
   BatteryInstallStatus,
   BatteryInstallView,
+  BatteryMatch,
   BatteryPackageFile,
   BatteryPackageSummary,
   BatterySummary,
@@ -85,6 +86,35 @@ class OpenAppaBatteriesService {
         installs: installsByBattery.get(battery.name) ?? [],
       }))
       .sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  /** The batteries a catalog entry stands for and the installs it already has. */
+  async matchesForCatalog(params: {
+    organizationId: string;
+    catalogId: string;
+  }): Promise<BatteryMatch[]> {
+    const { organizationId, catalogId } = params;
+    const catalog = await InternalMcpCatalogModel.findById(catalogId, {
+      expandSecrets: false,
+    });
+    if (
+      !catalog ||
+      (catalog.organizationId !== null &&
+        catalog.organizationId !== organizationId)
+    )
+      throw new ApiError(404, "MCP catalog entry not found");
+    const plan = await this.plan(organizationId);
+    return matchBatteries(catalog, new Set(plan.batteries.keys())).map(
+      (match) => ({
+        ...match,
+        install:
+          plan.installs.find(
+            (install) =>
+              install.catalogId === catalogId &&
+              install.batteryName === match.battery,
+          ) ?? null,
+      }),
+    );
   }
 
   /** The policy the runtime opens for this organization, recomposed when the root moved. */

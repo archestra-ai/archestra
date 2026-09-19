@@ -1936,6 +1936,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateAppaGithubSync]: { organization: ["update"] },
   [RouteId.GetOpenappaBatteries]: { toolPolicy: ["read"] },
   [RouteId.GetOpenappaEffectivePolicy]: { toolPolicy: ["read"] },
+  [RouteId.GetOpenappaBatteryMatches]: { toolPolicy: ["read"] },
   [RouteId.CreateOpenappaBatteryInstall]: { toolPolicy: ["update"] },
   [RouteId.UpdateOpenappaBatteryInstall]: { toolPolicy: ["update"] },
   [RouteId.DeleteOpenappaBatteryInstall]: { toolPolicy: ["update"] },

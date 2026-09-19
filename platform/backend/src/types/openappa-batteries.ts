@@ -71,6 +71,18 @@ export const BatteryInstallViewSchema = BatteryInstallSchema.extend({
 });
 export type BatteryInstallView = z.infer<typeof BatteryInstallViewSchema>;
 
+/** What a catalog entry was matched on; a name alone is a weak signal. */
+export const BatteryMatchEvidenceSchema = z.enum(["host", "image", "name"]);
+export type BatteryMatchEvidence = z.infer<typeof BatteryMatchEvidenceSchema>;
+
+/** A battery a catalog entry stands for, with the install it already has. */
+export const BatteryMatchSchema = z.object({
+  battery: z.string(),
+  evidence: BatteryMatchEvidenceSchema,
+  install: BatteryInstallViewSchema.nullable(),
+});
+export type BatteryMatch = z.infer<typeof BatteryMatchSchema>;
+
 export const BatterySummarySchema = z.object({
   name: z.string(),
   description: z.string(),

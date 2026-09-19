@@ -1,12 +1,15 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useSearchParams } from "next/navigation";
+import { toast } from "sonner";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { usePublicIdentityProviders } from "@/lib/auth/identity-provider.query.ee";
 import { hasSsoSignInAttempt } from "@/lib/auth/sso-sign-in-attempt";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { usePublicEnterpriseCoreActive } from "@/lib/config/config.query";
 import { IdentityProviderSelector } from "./identity-provider-selector.ee";
+
+vi.mock("sonner");
 
 // Mock next/navigation
 vi.mock("next/navigation");
@@ -50,6 +53,22 @@ describe("IdentityProviderSelector", () => {
       isLoading: false,
     } as ReturnType<typeof usePublicIdentityProviders>);
     vi.mocked(usePublicEnterpriseCoreActive).mockReturnValue(true);
+  });
+
+  it("shows an error when SSO returns an HTTP error", async () => {
+    vi.mocked(authClient.signIn.sso).mockResolvedValueOnce({
+      data: null,
+      error: {
+        status: 400,
+        statusText: "Bad Request",
+        message: "Discovery failed",
+      },
+    });
+    render(<IdentityProviderSelector />);
+    await userEvent
+      .setup()
+      .click(screen.getByRole("button", { name: /sign in with/i }));
+    expect(toast.error).toHaveBeenCalledWith("Failed to initiate SSO sign-in");
   });
 
   describe("callbackURL handling", () => {

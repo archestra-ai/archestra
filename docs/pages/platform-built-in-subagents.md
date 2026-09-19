@@ -83,7 +83,7 @@ The app cannot choose a model. An app runs from any chat and from its own page, 
 
 The Assistant is an in-app helper you can open from any page — select **Assistant** in the sidebar or press Cmd+J (Ctrl+J on Windows and Linux). It answers questions about the platform and does the work for you, whether you're a regular user or an administrator.
 
-It holds every built-in management tool, so it can create agents, register MCP servers, or review runs directly. It can also see the page you have open and click, type, and navigate in it, so it can walk you through a screen instead of only describing it.
+It can use every built-in management tool and every tool from the MCP servers installed in your organization, so it can create agents, register MCP servers, or review runs directly. It can also see the page you have open and click, type, and navigate in it, so it can walk you through a screen instead of only describing it.
 
 Everything it does runs as you. A tool your role doesn't allow is refused, the same as in the UI.
 

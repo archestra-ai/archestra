@@ -65,7 +65,11 @@ import {
   builtInSkillVersion,
   getEnabledBuiltInSkills,
 } from "@/skills/built-in-skills";
-import type { BuiltInAgentConfig, Organization } from "@/types";
+import type {
+  BuiltInAgentConfig,
+  Organization,
+  ToolExposureMode,
+} from "@/types";
 import {
   encryptSecretValue,
   ensureEncryptionKeyAvailable,
@@ -190,6 +194,13 @@ export async function syncBuiltInAgents(): Promise<void> {
         builtInAgentConfig: {
           name: BUILT_IN_AGENT_IDS.META_AGENT,
         } as const,
+        // Auto mode: search_tools/run_tool reach every tool the caller can
+        // use — every built-in and every installed MCP server's tools. Auto
+        // mode only works with the search/run exposure.
+        toolAccess: {
+          accessAllTools: true,
+          toolExposureMode: "search_and_run_only" as const,
+        },
       },
     ];
 
@@ -347,6 +358,7 @@ async function seedArchestraCatalogAndTools(): Promise<void> {
   await ToolModel.backfillNewSkillToolsToEnabledOrgs(newlyCreatedToolNames);
   await ToolModel.backfillNewAppToolsToEnabledOrgs(newlyCreatedToolNames);
   await ToolModel.backfillNewSandboxToolsToAgents(newlyCreatedToolNames);
+  await assignArchestraToolsToMetaAgents();
   // A brand-new built-in tool must not silently reach existing Auto-mode
   // agents: pre-exclude it for them. Runs after the assignment backfills above
   // so a tool those just assigned is skipped (assignments beat the pre-fill);
@@ -369,9 +381,10 @@ async function seedArchestraCatalogAndTools(): Promise<void> {
 
 /**
  * Gives every organization's meta agent the full built-in tool set. Runs on
- * every boot (after tools are seeded) so a tool added in a release reaches the
- * assistant without a migration. Assignment is not access: each tool still
- * checks the calling user's permissions when it runs.
+ * every boot, after tools are seeded and before new built-ins are
+ * pre-excluded for Auto-mode agents, so a tool added in a release reaches the
+ * assistant instead of being excluded from it. Assignment is not access: each
+ * tool still checks the calling user's permissions when it runs.
  *
  * @public — exported for testability
  */
@@ -1050,7 +1063,6 @@ export async function seedRequiredStartingData(): Promise<void> {
     logger.warn({ err: error }, "Default plugin seeding failed");
   });
   await seedArchestraCatalogAndTools();
-  await assignArchestraToolsToMetaAgents();
   await enableSkillToolsForExistingOrgs();
   await seedPlaywrightCatalog();
   await migratePlaywrightToolsToDynamicCredential();
@@ -1088,6 +1100,15 @@ type BuiltInAgentDefinition = {
   description: string;
   systemPrompt: string;
   builtInAgentConfig: BuiltInAgentConfig;
+  /**
+   * Reconciled on every boot like name and description: the built-in agent
+   * update route does not accept these fields, so a stored value can only be
+   * what a deploy put there.
+   */
+  toolAccess?: {
+    accessAllTools: boolean;
+    toolExposureMode: ToolExposureMode;
+  };
 };
 
 /** Built per call, not at module load, so branding resolves against live config. */
@@ -1160,6 +1181,7 @@ async function syncBuiltInAgentRow(params: {
         description: builtInAgent.description,
         systemPrompt: builtInAgent.systemPrompt,
         builtInAgentConfig: builtInAgent.builtInAgentConfig,
+        ...builtInAgent.toolAccess,
       })
       .returning({ id: schema.agentsTable.id });
     // This path writes agentsTable directly rather than through
@@ -1196,6 +1218,14 @@ async function syncBuiltInAgentRow(params: {
   if (renamed || existing.description !== builtInAgent.description) {
     updates.name = builtInAgent.name;
     updates.description = builtInAgent.description;
+  }
+
+  if (
+    builtInAgent.toolAccess &&
+    (existing.accessAllTools !== builtInAgent.toolAccess.accessAllTools ||
+      existing.toolExposureMode !== builtInAgent.toolAccess.toolExposureMode)
+  ) {
+    Object.assign(updates, builtInAgent.toolAccess);
   }
 
   // Migrate configs still sitting exactly on the old shipped default;

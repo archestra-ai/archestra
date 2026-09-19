@@ -27,6 +27,7 @@ import {
   SkillModel,
 } from "@/models";
 import AgentModel from "@/models/agent";
+import AgentExcludedToolModel from "@/models/agent-excluded-tool";
 import AgentToolModel from "@/models/agent-tool";
 import AgentVersionModel from "@/models/agent-version";
 import ToolModel from "@/models/tool";
@@ -120,6 +121,22 @@ describe("syncBuiltInAgents", () => {
     // Org-scoped, so every member can open it; what it may do is then bounded
     // by each caller's own permissions, checked per tool call.
     expect(assistant?.scope).toBe("org");
+    // Auto mode, so search_tools/run_tool reach the org's other MCP tools too.
+    expect(assistant?.accessAllTools).toBe(true);
+    expect(assistant?.toolExposureMode).toBe("search_and_run_only");
+    // A release's new built-ins are pre-excluded for Auto-mode agents unless
+    // already assigned; the assistant's assignment must win.
+    await AgentExcludedToolModel.prefillNewBuiltInToolsForAllToolsAgents(
+      (
+        await db
+          .select({ id: schema.toolsTable.id })
+          .from(schema.toolsTable)
+          .where(eq(schema.toolsTable.catalogId, ARCHESTRA_MCP_CATALOG_ID))
+      ).map((tool) => tool.id),
+    );
+    expect(
+      await AgentExcludedToolModel.findToolIdsByAgent(assistant?.id ?? ""),
+    ).toEqual([]);
     const builtInTools = await db
       .select({ id: schema.toolsTable.id })
       .from(schema.toolsTable)
@@ -128,6 +145,31 @@ describe("syncBuiltInAgents", () => {
     expect(
       (await AgentToolModel.findToolIdsByAgent(assistant?.id ?? "")).sort(),
     ).toEqual(builtInTools.map((tool) => tool.id).sort());
+  });
+
+  test("restores the in-app assistant's tool access on the next boot", async ({
+    makeOrganization,
+  }) => {
+    const organization = await makeOrganization();
+    await syncBuiltInAgents();
+    const assistant = await AgentModel.getBuiltInAgent(
+      BUILT_IN_AGENT_IDS.META_AGENT,
+      organization.id,
+    );
+    // A row seeded before Auto mode was part of the definition.
+    await db
+      .update(schema.agentsTable)
+      .set({ accessAllTools: false, toolExposureMode: "full" })
+      .where(eq(schema.agentsTable.id, assistant?.id ?? ""));
+
+    await syncBuiltInAgents();
+
+    const synced = await AgentModel.getBuiltInAgent(
+      BUILT_IN_AGENT_IDS.META_AGENT,
+      organization.id,
+    );
+    expect(synced?.accessAllTools).toBe(true);
+    expect(synced?.toolExposureMode).toBe("search_and_run_only");
   });
 
   test("seeds one org-wide advisor even when environments exist", async ({

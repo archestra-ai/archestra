@@ -454,15 +454,12 @@ export async function createAgentServer(params: {
         : [];
     const candidateTools = dedupeToolsByName(
       [
-        // search_tools / run_tool first when that surface is on, then the
-        // OpenAPPA pair so a client that caps tools/list (Claude Code at 50)
-        // still sees get_remedy_plans after the dispatch tools.
-        ...implicitMetaTools,
-        ...implicitOpenAppaTools,
         ...mcpTools.filter(
           (tool) => !tool.delegateToAgentId && !tool.delegateToA2aConnectionId,
         ),
+        ...implicitMetaTools,
         ...implicitTaskControlTools,
+        ...implicitOpenAppaTools,
         ...[...delegationTools, ...skillDelegationTools].map((tool) => ({
           name: tool.name,
           description: tool.description,

@@ -132,7 +132,7 @@ describe("trajectory stamps", () => {
 
     expect(
       restoreTrajectoryStamps({
-        family: "anthropic:messages",
+        interactionType: "anthropic:messages",
         body: anthropic,
       }),
     ).toHaveLength(2);
@@ -142,7 +142,10 @@ describe("trajectory stamps", () => {
     });
 
     expect(
-      restoreTrajectoryStamps({ family: "openai:responses", body: responses }),
+      restoreTrajectoryStamps({
+        interactionType: "openai:responses",
+        body: responses,
+      }),
     ).toHaveLength(2);
     expect(responses.input.map((item) => item.call_id)).toEqual([
       "call_1",
@@ -150,9 +153,74 @@ describe("trajectory stamps", () => {
     ]);
 
     expect(
-      restoreTrajectoryStamps({ family: "openai:chatCompletions", body: chat }),
+      restoreTrajectoryStamps({
+        interactionType: "openai:chatCompletions",
+        body: chat,
+      }),
     ).toHaveLength(2);
     expect(chat.messages[0].tool_calls?.[0].id).toBe("call_1");
     expect(chat.messages[1].tool_call_id).toBe("call_1");
+  });
+
+  test("restores the provider's ids on the other wires a conversation can move to", () => {
+    // The model router picks a provider per request, and a client can switch
+    // providers mid-session: a history stamped on one wire reaches another,
+    // and a stamp is longer than some providers take.
+    const converse = (id: string) => ({
+      messages: [
+        {
+          role: "assistant",
+          content: [{ toolUse: { toolUseId: id, name: "read", input: {} } }],
+        },
+        {
+          role: "user",
+          content: [
+            { toolResult: { toolUseId: id, content: [{ text: "ok" }] } },
+          ],
+        },
+      ],
+    });
+    const gemini = (id: string) => ({
+      contents: [
+        {
+          role: "model",
+          parts: [{ functionCall: { id, name: "read", args: {} } }],
+        },
+        {
+          role: "user",
+          parts: [{ functionResponse: { id, name: "read", response: {} } }],
+        },
+      ],
+    });
+    const cohere = (id: string) => ({
+      messages: [
+        {
+          role: "assistant",
+          tool_calls: [
+            {
+              id,
+              type: "function",
+              function: { name: "read", arguments: "{}" },
+            },
+          ],
+        },
+        { role: "tool", tool_call_id: id, content: "ok" },
+      ],
+    });
+
+    for (const [interactionType, body, restored] of [
+      [
+        "bedrock:converse",
+        converse(stamp("s", "toolu_1")),
+        converse("toolu_1"),
+      ],
+      ["gemini:generateContent", gemini(stamp("s", "fc_1")), gemini("fc_1")],
+      ["cohere:chat", cohere(stamp("s", "call_1")), cohere("call_1")],
+    ] as const) {
+      expect(restoreTrajectoryStamps({ interactionType, body })).toHaveLength(
+        2,
+      );
+      expect(body).toEqual(restored);
+    }
   });
 });

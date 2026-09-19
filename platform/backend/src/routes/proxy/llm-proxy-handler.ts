@@ -428,12 +428,13 @@ export async function handleLLMProxy<
 
   // On OpenAPPA turns the proxy gives clients stamped tool-call ids (see
   // `openappa/trajectory-stamp.ts`). The provider's own ids go back before
-  // anything reads the history; the stamps say which session the context
-  // came from, which binds the OpenAPPA session below.
-  const stampFamily = appaWireFamily(provider.interactionType);
-  const trajectoryStamps = stampFamily
-    ? restoreTrajectoryStamps({ family: stampFamily, body })
-    : [];
+  // anything reads the history, on whatever wire the conversation moved to;
+  // the stamps say which session the context came from, which binds the
+  // OpenAPPA session below.
+  const trajectoryStamps = restoreTrajectoryStamps({
+    interactionType: provider.interactionType,
+    body,
+  });
   const requestAdapter = provider.createRequestAdapter(body);
   const streamAdapter = provider.createStreamAdapter(body);
   const providerMessages = requestAdapter.getProviderMessages();

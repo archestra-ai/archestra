@@ -161,33 +161,57 @@ export function restoreAppaRemedyExecutions(params: {
  * stamps it found, so the caller can tell which trajectory the context came
  * from. Runs before anything else reads the history: notices, results and the
  * provider request all see the ids the provider minted.
+ *
+ * On every chat wire, not only the ones stamps are given on: a conversation
+ * keeps its ids when it moves to another provider — the model router picks
+ * one per request, and a client can switch mid-session — and a stamp is
+ * longer than some providers take (Bedrock caps a tool-use id at 64).
  */
 export function restoreTrajectoryStamps(params: {
-  family: AppaWireFamily;
+  interactionType: string;
   body: unknown;
 }): TrajectoryStamp[] {
   const found: TrajectoryStamp[] = [];
-  const restore = (record: Record<string, unknown>, key: string) => {
-    const value = record[key];
+  const restore = (
+    record: Record<string, unknown> | undefined,
+    key: string,
+  ) => {
+    const value = record?.[key];
     const stamp =
       typeof value === "string" ? parseTrajectoryStamp(value) : undefined;
-    if (!stamp) return;
+    if (!record || !stamp) return;
     record[key] = stamp.callId;
     found.push(stamp);
   };
-  if (params.family === "anthropic:messages") {
+  const wire =
+    appaWireFamily(params.interactionType) ??
+    OTHER_STAMP_WIRES[params.interactionType as SupportedProviderDiscriminator];
+  if (wire === "anthropic:messages") {
     for (const block of anthropicBlocks(params.body)) {
       if (block.type === "tool_use") restore(block, "id");
       else if (block.type === "tool_result") restore(block, "tool_use_id");
     }
-  } else if (params.family === "openai:responses") {
+  } else if (wire === "openai:responses") {
     for (const item of responsesItems(params.body)) restore(item, "call_id");
-  } else {
+  } else if (wire === "openai:chatCompletions") {
     for (const message of chatMessages(params.body)) {
       restore(message, "tool_call_id");
       for (const call of asArray(message.tool_calls) ?? []) {
-        const record = asRecord(call);
-        if (record) restore(record, "id");
+        restore(asRecord(call), "id");
+      }
+    }
+  } else if (wire === "bedrock:converse") {
+    for (const message of chatMessages(params.body)) {
+      for (const block of asArray(message.content) ?? []) {
+        restore(asRecord(asRecord(block)?.toolUse), "toolUseId");
+        restore(asRecord(asRecord(block)?.toolResult), "toolUseId");
+      }
+    }
+  } else if (wire === "gemini:generateContent") {
+    for (const content of asArray(asRecord(params.body)?.contents) ?? []) {
+      for (const part of asArray(asRecord(content)?.parts) ?? []) {
+        restore(asRecord(asRecord(part)?.functionCall), "id");
+        restore(asRecord(asRecord(part)?.functionResponse), "id");
       }
     }
   }
@@ -536,6 +560,25 @@ const APPA_WIRE_FAMILY_BY_INTERACTION_TYPE: Partial<
   "vllm:chatCompletions": "openai:chatCompletions",
   "xai:chatCompletions": "openai:chatCompletions",
   "zhipuai:chatCompletions": "openai:chatCompletions",
+};
+
+/**
+ * Where the other chat wires carry a call's id, for putting the provider's
+ * back: in an APPA family's shape (Cohere and native Ollama name calls the
+ * way Chat Completions does; Azure Responses is the Responses wire), or in
+ * their own.
+ */
+const OTHER_STAMP_WIRES: Partial<
+  Record<
+    SupportedProviderDiscriminator,
+    AppaWireFamily | "bedrock:converse" | "gemini:generateContent"
+  >
+> = {
+  "azure:responses": "openai:responses",
+  "bedrock:converse": "bedrock:converse",
+  "cohere:chat": "openai:chatCompletions",
+  "gemini:generateContent": "gemini:generateContent",
+  "ollama-native:chat": "openai:chatCompletions",
 };
 
 /** Where the three families declare tools; Responses adds `additional_tools`. */

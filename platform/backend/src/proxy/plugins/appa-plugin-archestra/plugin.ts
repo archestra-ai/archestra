@@ -191,7 +191,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         }),
       ),
     }));
-    const stamp = trajectoryStamper(binding, context.interactionType);
+    const stamp = trajectoryStamper(binding, context);
     return {
       decision: "hold",
       notices: stamp ? notices.map(stamp) : notices,
@@ -295,7 +295,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
 
     // Keep turn open while tool calls are awaiting client execution.
     binding.turnOpen = true;
-    const stamp = trajectoryStamper(binding, context.interactionType);
+    const stamp = trajectoryStamper(binding, context);
     if (blocked.length === 0 && !stamp) return;
     return {
       decision: "allow",
@@ -553,10 +553,14 @@ function noticeNamespace(tools: AppaRequestTools | undefined): {
  * `openappa/trajectory-stamp.ts`). Only on a wire family whose history the
  * proxy restores, and only for a session scoped to its caller: Chat names its
  * conversation itself, and a stamp signed for no caller would bind nobody.
+ * Not for a model whose ids a client shortens, which would break the stamp.
  */
 function trajectoryStamper(
   binding: AppaPluginBinding,
-  interactionType: string,
+  context: Pick<
+    LlmProxyRequestContext,
+    "interactionType" | "provider" | "model"
+  >,
 ):
   | ((
       call: LlmProxyToolCallsContext["toolCalls"][number],
@@ -568,8 +572,9 @@ function trajectoryStamper(
   if (
     !callerId ||
     secret.length === 0 ||
-    !appaWireFamily(interactionType) ||
-    !tracesLineage(binding)
+    !appaWireFamily(context.interactionType) ||
+    !tracesLineage(binding) ||
+    shortensToolCallIds(context)
   )
     return undefined;
   const sessionId = clientSessionId(session.session_id);
@@ -584,6 +589,31 @@ function trajectoryStamper(
     }),
   });
 }
+
+/**
+ * Whether a client cuts this model's tool-call ids short. OpenCode rewrites
+ * every id to its first nine alphanumerics for Mistral's provider and for any
+ * model of these families, which turns every stamp into the same `appat1c2V`:
+ * nothing to restore, and the provider sees one id for every call. Their
+ * calls keep the provider's ids, which fit.
+ */
+function shortensToolCallIds(
+  context: Pick<LlmProxyRequestContext, "provider" | "model">,
+): boolean {
+  const model = context.model.toLowerCase();
+  return (
+    context.provider === "mistral" ||
+    SHORT_TOOL_CALL_ID_MODEL_FAMILIES.some((family) => model.includes(family))
+  );
+}
+
+const SHORT_TOOL_CALL_ID_MODEL_FAMILIES = [
+  "mistral",
+  "devstral",
+  "codestral",
+  "pixtral",
+  "mixtral",
+];
 
 /**
  * Whether this session's context is traced when it moves to another session:

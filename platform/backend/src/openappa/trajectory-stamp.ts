@@ -17,7 +17,8 @@ import { createHmac, timingSafeEqual } from "node:crypto";
  * Layout: `appat1`, then base64url(`<session id>\0<provider call id>`), then a
  * 22-character base64url HMAC-SHA256 tag (128 bits). Every character is one a
  * provider accepts in a call id (`[A-Za-z0-9_-]`), so a client that sanitizes
- * ids for its provider leaves a stamp intact.
+ * ids for its provider leaves a stamp intact. One that also shortens them does
+ * not, so a model whose ids a client cuts short is given no stamps at all.
  */
 export type TrajectoryStamp = {
   /** The client's own id of the session that made the call, unscoped. */

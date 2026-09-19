@@ -1,3 +1,4 @@
+import config from "@/config";
 import { signOfferClaims, unsignedOfferClaims } from "@/openappa/offer-claims";
 import * as appaService from "@/openappa/service";
 import type { LlmProxyRequestContext } from "@/proxy/plugins/registry";
@@ -831,6 +832,60 @@ describe("rendering runtime text for this client", () => {
       kind: "appa_remedy",
       call_id: "call-mcp__my_gateway",
     });
+  });
+
+  test.for([
+    ["openai", "gpt-4.1", true],
+    ["mistral", "mistral-large-latest", false],
+    ["openrouter", "mistralai/devstral-small-2505", false],
+    ["vllm", "Codestral-22B-v0.1", false],
+  ] as const)("a %s call to %s gets a trajectory stamp: %s", async ([
+    provider,
+    model,
+    stamped,
+  ]) => {
+    // OpenCode cuts every tool-call id to nine characters for Mistral's
+    // provider and its model families; a stamp would not survive that.
+    config.openappa = {
+      ...config.openappa,
+      offerSigningSecret: "test-offer-signing-secret-32chars",
+    };
+    const plugin = new AppaPluginArchestra([]);
+    const context = requestContext({
+      sessionId: "user:user|ses_opencode",
+      canonicalizeToolName: (name) => name,
+    });
+    const trusted = context.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as Record<string, unknown>;
+    trusted.request = {
+      tools: {
+        controlToolName: "archestra__execute_remedy_plan",
+        noticeToolName: "archestra__get_remedy_plans",
+      },
+      spellings: new Map(),
+      customTools: new Set(),
+      namespaces: new Map(),
+    };
+    const evaluateToolCalls = vi
+      .spyOn(appaService, "evaluateToolCalls")
+      .mockResolvedValue([{ kind: "allow" }]);
+    try {
+      await plugin.onSessionInit(context);
+      const outcome = await plugin.onToolCalls({
+        ...context,
+        interactionType: "openai:chatCompletions",
+        provider,
+        model,
+        toolCalls: [{ id: "call_1", name: "read", arguments: "{}" }],
+      });
+
+      const wireId =
+        outcome?.decision === "allow" ? outcome.toolCalls[0].wireId : undefined;
+      expect(wireId !== undefined).toBe(stamped);
+    } finally {
+      evaluateToolCalls.mockRestore();
+    }
   });
 
   test("strips a client-echoed JWS before stamping", async () => {

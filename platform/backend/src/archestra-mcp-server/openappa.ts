@@ -1,5 +1,6 @@
 import { isDeepStrictEqual } from "node:util";
 import {
+  TOOL_ASK_USER_SHORT_NAME,
   TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
   TOOL_GET_REMEDY_PLANS_SHORT_NAME,
 } from "@archestra/shared";
@@ -18,6 +19,7 @@ import {
   UpdateGuardrailsPolicySchema,
   ValidateGuardrailsPolicySchema,
 } from "@/types/guardrails-policy";
+import { archestraMcpBranding } from "./branding";
 import { defineArchestraTool, defineArchestraTools } from "./helpers";
 
 const RemedyPlanArgumentsSchema = z.object({
@@ -119,7 +121,25 @@ const registry = defineArchestraTools([
       // opens no root, emits no OpenAPPA event and reads no policy: the runtime
       // refused the call when it was proposed, and this is that refusal being
       // delivered to the model's own loop.
-      return { content: [{ type: "text", text: args.ruling }] };
+      if (!args.offers?.length) {
+        return { content: [{ type: "text", text: args.ruling }] };
+      }
+      // Models follow an instruction in the latest tool result more reliably
+      // than the system prompt; without it some still ask in plain text.
+      const executeRemedyPlan = archestraMcpBranding.getToolName(
+        TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
+      );
+      const askUser = archestraMcpBranding.getToolName(
+        TOOL_ASK_USER_SHORT_NAME,
+      );
+      return {
+        content: [
+          {
+            type: "text",
+            text: `${args.ruling}\n\nChoose a plan and call ${executeRemedyPlan} now. If only the user can make this choice, call ${askUser}. Do not ask in plain text.`,
+          },
+        ],
+      };
     },
   }),
   defineArchestraTool({

@@ -693,6 +693,26 @@ describe("APPA feature boundary", () => {
     expect(native.executeRemedyByOffer).not.toHaveBeenCalled();
   });
 
+  test("the public notice tool tells the model to pick an offered plan, not to ask in plain text", async () => {
+    const { offer_id: _offerId, ...offer } = signedRemedyArgs("offer-1");
+    const result = await executeArchestraTool(
+      "archestra__get_remedy_plans",
+      {
+        tool: "archestra__list_skills",
+        arguments: "{}",
+        ruling: "Blocked: this call cannot run yet.",
+        notice: { v: 1, call_id: "call-1" },
+        offers: [offer],
+      },
+      { agent: { id: "agent", name: "Assistant" }, organizationId: "org" },
+    );
+    const text = (result.content as Array<{ text: string }>)[0].text;
+    expect(text).toMatch(/^Blocked: this call cannot run yet\.\n\n/);
+    expect(text).toContain("call archestra__execute_remedy_plan now");
+    expect(text).toContain("call archestra__ask_user");
+    expect(text).toContain("Do not ask in plain text.");
+  });
+
   test.each([
     true,
     false,

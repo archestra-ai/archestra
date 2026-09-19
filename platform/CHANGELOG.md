@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.3.65](https://github.com/archestra-ai/archestra/compare/platform-v1.3.64...platform-v1.3.65) (2026-09-19)
+
+
+### Bug Fixes
+
+* **auth:** restore GitHub SSO and support private emails (backport release/1.3) ([#8068](https://github.com/archestra-ai/archestra/issues/8068)) ([3addc5e](https://github.com/archestra-ai/archestra/commit/3addc5ee38c8eecb801a40aa456584dad1394cc2))
+* **deps:** backport image scan CVE fixes to release/1.3 ([#8064](https://github.com/archestra-ai/archestra/issues/8064)) ([e6e301c](https://github.com/archestra-ai/archestra/commit/e6e301c05c470613ffce5d84774248f27086aa2b))
+* **mcp:** batch catalog metadata for upstream listings (backport release/1.3) ([#8035](https://github.com/archestra-ai/archestra/issues/8035)) ([06662ef](https://github.com/archestra-ai/archestra/commit/06662ef386a0ac976132a27a53766adf91bbcd4b))
+* **mcp:** keep deleted teams' connections manageable (backport release/1.3) ([#8063](https://github.com/archestra-ai/archestra/issues/8063)) ([715c241](https://github.com/archestra-ai/archestra/commit/715c24134ef7960de47f8724da876c16f01ebf7c))
+
 ## [1.3.64](https://github.com/archestra-ai/archestra/compare/platform-v1.3.63...platform-v1.3.64) (2026-09-17)
 
 

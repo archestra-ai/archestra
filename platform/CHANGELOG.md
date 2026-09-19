@@ -1,5 +1,29 @@
 # Changelog
 
+## [1.4.0-rc.15](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-rc.14...platform-v1.4.0-rc.15) (2026-09-19)
+
+
+### Features
+
+* **chatops:** mute a thread on a literal :mute:/:shushing_face: message ([#8067](https://github.com/archestra-ai/archestra/issues/8067)) ([58a7de2](https://github.com/archestra-ai/archestra/commit/58a7de250ff96df83ee131981234a62fe7a6df05))
+
+
+### Bug Fixes
+
+* **auth:** restore GitHub SSO and support private emails ([#8066](https://github.com/archestra-ai/archestra/issues/8066)) ([eb1520c](https://github.com/archestra-ai/archestra/commit/eb1520c900f781ff74a650d3268b8ef4370b70cd))
+* **mcp:** batch server resolution for upstream listings ([#8070](https://github.com/archestra-ai/archestra/issues/8070)) ([1ebfa34](https://github.com/archestra-ai/archestra/commit/1ebfa344ed543926cef6e4f91e6403a75bd92ac0))
+* simplify connection passthrough summary ([#8065](https://github.com/archestra-ai/archestra/issues/8065)) ([4ff43b2](https://github.com/archestra-ai/archestra/commit/4ff43b257110f057e6bf6b109604cdb16d8d5404))
+
+
+### Dependencies
+
+* bump sha2 from 0.10.9 to 0.11.0 in /platform/archestra-rs ([#8014](https://github.com/archestra-ai/archestra/issues/8014)) ([eb786d1](https://github.com/archestra-ai/archestra/commit/eb786d1319aa67591acff225e0edead7aa38f6c0))
+
+
+### Miscellaneous Chores
+
+* unify keyboard navigation across searchable dropdowns ([#8036](https://github.com/archestra-ai/archestra/issues/8036)) ([f97e96a](https://github.com/archestra-ai/archestra/commit/f97e96ae50a437343ccf369c78f1a2cd1a060b0a))
+
 ## [1.4.0-rc.14](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-beta.13...platform-v1.4.0-rc.14) (2026-09-19)
 
 

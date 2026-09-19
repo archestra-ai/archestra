@@ -780,7 +780,11 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
         reply.status(400);
         return {
           jsonrpc: "2.0",
-          error: { code: resolution.code, message: resolution.message },
+          error: {
+            code: resolution.code,
+            message: resolution.message,
+            ...(resolution.data && { data: resolution.data }),
+          },
           id: null,
         };
       }
@@ -984,20 +988,24 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // the same capability builder `initialize` uses.
       if (isDiscoverRequest(request.body)) {
         reply.header(MCP_PROTOCOL_VERSION_HEADER, resolution.revision);
-        await logHandshake({
-          fastify,
-          profileId,
-          method: SERVER_DISCOVER_METHOD,
-          revision: resolution.revision,
-          tokenAuthContext: {
-            tokenId: tokenAuth.tokenId,
-            teamId: tokenAuth.teamId,
-            isOrganizationToken: tokenAuth.isOrganizationToken,
-            organizationId: tokenAuth.organizationId,
-            ...(tokenAuth.userId && { userId: tokenAuth.userId }),
-          },
-          runId: readHeader(request, RUN_ID_HEADER),
-        });
+        // Clients probe discover on a short timeout (Claude Code allows at
+        // most five seconds), so the handshake log never delays the reply.
+        trackBackgroundWork(
+          logHandshake({
+            fastify,
+            profileId,
+            method: SERVER_DISCOVER_METHOD,
+            revision: resolution.revision,
+            tokenAuthContext: {
+              tokenId: tokenAuth.tokenId,
+              teamId: tokenAuth.teamId,
+              isOrganizationToken: tokenAuth.isOrganizationToken,
+              organizationId: tokenAuth.organizationId,
+              ...(tokenAuth.userId && { userId: tokenAuth.userId }),
+            },
+            runId: readHeader(request, RUN_ID_HEADER),
+          }),
+        );
         return {
           jsonrpc: "2.0",
           result: buildDiscoverResult({

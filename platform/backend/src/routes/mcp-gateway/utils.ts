@@ -1066,7 +1066,8 @@ export async function createAgentServer(params: {
             );
           }
 
-          return archestraResult;
+          // A 2026-07-28 client rejects a result without `resultType`.
+          return complete(archestraResult);
         }
 
         logger.info(
@@ -1137,7 +1138,11 @@ export async function createAgentServer(params: {
                   }
 
                   try {
-                    return await extra.sendRequest(request, ElicitResultSchema);
+                    return await extra.sendRequest(
+                      request,
+                      ElicitResultSchema,
+                      { timeout: ELICITATION_ANSWER_TIMEOUT_MS },
+                    );
                   } catch (error) {
                     logger.warn(
                       {
@@ -2459,10 +2464,22 @@ function createGatewayUserElicit(params: {
         params: request.params as Record<string, unknown>,
       },
     });
-    // In-band elicitation first whenever the client declared it: the answer
+    // Under 2026-07-28 a server may not open a request mid-call: the client
+    // drops it and the call would wait out the answer timeout. Unwind to an
+    // InputRequiredResult instead, which the client answers on a retry.
+    if (mrtrEnabled) {
+      throw new InputRequiredSignal({
+        key: GATEWAY_INPUT_REQUEST_KEY,
+        request: {
+          method: "elicitation/create",
+          params: request.params as Record<string, unknown>,
+        },
+      });
+    }
+
+    // A legacy client that declared elicitation gets it in-band: the answer
     // arrives on a separate POST and is routed back to this Server, so the
-    // client renders its native form. MRTR is the fallback for a client that
-    // acts on an InputRequiredResult but never declared elicitation.
+    // client renders its native form.
     if (canElicit) {
       try {
         return {
@@ -2491,16 +2508,6 @@ function createGatewayUserElicit(params: {
         );
         return { status: "no_viewer" };
       }
-    }
-
-    if (mrtrEnabled) {
-      throw new InputRequiredSignal({
-        key: GATEWAY_INPUT_REQUEST_KEY,
-        request: {
-          method: "elicitation/create",
-          params: request.params as Record<string, unknown>,
-        },
-      });
     }
 
     return { status: "no_viewer" };

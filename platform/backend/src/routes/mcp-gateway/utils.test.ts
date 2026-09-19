@@ -77,6 +77,7 @@ type TestCallToolHandler = (
 ) => Promise<{
   content: Array<{ type: string; text: string }>;
   isError?: boolean;
+  resultType?: string;
   structuredContent?: { items?: unknown[] };
 }>;
 
@@ -3291,6 +3292,8 @@ describe("createAgentServer tools/list", () => {
       expect(sendRequest).toHaveBeenCalledWith(
         elicitationRequest,
         expect.any(Object),
+        // A person answers in minutes, not the SDK's default 60 seconds.
+        { timeout: 10 * 60 * 1000 },
       );
       expect(result).toEqual({
         action: "accept",
@@ -3419,6 +3422,49 @@ describe("createAgentServer tools/list", () => {
     expect(JSON.stringify(result.content)).toContain(
       "did not answer the question in time",
     );
+  });
+
+  test("ask_user asks a stateless-revision client with an input request, never mid-call", async ({
+    makeAgent,
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id });
+    const { server } = await createAgentServer({
+      agentId: agent.id,
+      mrtr: { enabled: true, clientCapabilities: { elicitation: {} } },
+    });
+    const callToolHandler = (
+      server.server as unknown as {
+        _requestHandlers: Map<string, TestCallToolHandler>;
+      }
+    )._requestHandlers.get("tools/call");
+    if (!callToolHandler) {
+      throw new Error("Expected tools/call handler to be registered");
+    }
+    const sendRequest = vi.fn();
+
+    const result = await callToolHandler(
+      {
+        method: "tools/call",
+        params: {
+          name: TOOL_ASK_USER_FULL_NAME,
+          arguments: {
+            question: "Accept this change for the rest of this session?",
+            options: [
+              { label: "Accept for this session" },
+              { label: "Do not accept" },
+            ],
+          },
+        },
+      },
+      { sendRequest },
+    );
+
+    // Such a client drops a request opened mid-call, which would leave the
+    // call waiting out the answer timeout.
+    expect(sendRequest).not.toHaveBeenCalled();
+    expect(result.resultType).toBe("input_required");
   });
 
   test("ask_user does not hang elicitation/create when the client never declared elicitation", async ({

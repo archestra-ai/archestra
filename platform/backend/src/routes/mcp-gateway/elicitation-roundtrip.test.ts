@@ -1,12 +1,12 @@
 /**
- * In-band elicitation round trip through the real gateway route, over a real
- * socket.
+ * Elicitation round trips through the real gateway route, over a real socket.
  *
- * A client that declares elicitation gets an SSE response; the gateway sends
- * elicitation/create on it mid tools/call and the client answers with a
+ * A legacy client that declares elicitation gets an SSE response; the gateway
+ * sends elicitation/create on it mid tools/call and the client answers with a
  * separate POST. Stateless mode builds a fresh Server per POST, so without
  * routing the answer back to the Server that is still waiting, the call hangs
- * until the SDK timeout — this test pins that the round trip completes.
+ * until the answer timeout. A client on the stateless revision instead gets
+ * the question as an input request and answers it on a retry.
  */
 
 import type { AddressInfo } from "node:net";
@@ -35,14 +35,13 @@ describe("MCP Gateway - in-band elicitation round trip", () => {
     await app.close();
   });
 
-  test("a client that declares elicitation answers elicitation/create on a separate POST", async ({
+  test("a client on the stateless revision gets its question as an input request, never mid-call", async ({
     makeAgent,
     makeOrganization,
   }) => {
     const agent = await makeAgent();
-    const org = await makeOrganization();
     const token = await TeamTokenModel.create({
-      organizationId: org.id,
+      organizationId: (await makeOrganization()).id,
       name: "Org Token",
       teamId: null,
       isOrganizationToken: true,
@@ -50,93 +49,69 @@ describe("MCP Gateway - in-band elicitation round trip", () => {
     await app.listen({ port: 0, host: "127.0.0.1" });
     const { port } = app.server.address() as AddressInfo;
     const url = `http://127.0.0.1:${port}/v1/mcp/${agent.id}`;
-    const headers = {
-      "content-type": "application/json",
-      accept: "application/json, text/event-stream",
-      authorization: `Bearer ${token.value}`,
-    };
-
-    const callResponse = await fetch(url, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({
-        jsonrpc: "2.0",
-        method: "tools/call",
-        params: {
-          name: "archestra__ask_user",
-          arguments: {
-            question: "Accept this change for the rest of this session?",
-            options: [
-              { label: "Accept for this session" },
-              { label: "Do not accept" },
-            ],
+    const call = (extraParams: Record<string, unknown>) =>
+      fetch(url, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          accept: "application/json, text/event-stream",
+          authorization: `Bearer ${token.value}`,
+        },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          method: "tools/call",
+          params: {
+            name: "archestra__ask_user",
+            arguments: {
+              question: "Accept this change for the rest of this session?",
+              options: [
+                { label: "Accept for this session" },
+                { label: "Do not accept" },
+              ],
+            },
+            // Capabilities on the request itself: a 2026-07-28 client.
+            _meta: {
+              [MCP_CLIENT_CAPABILITIES_META_KEY]: { elicitation: {} },
+            },
+            ...extraParams,
           },
-          _meta: {
-            [MCP_CLIENT_CAPABILITIES_META_KEY]: { elicitation: {} },
+          id: 2,
+        }),
+      });
+
+    // Such a client drops a request opened mid-call, so the question comes
+    // back as the call's result instead.
+    const first = await firstMessage(await call({}));
+    expect(first.method).toBeUndefined();
+    const interim = first.result as Record<string, unknown>;
+    expect(interim).toMatchObject({
+      resultType: "input_required",
+      inputRequests: {
+        gateway_elicitation: {
+          method: "elicitation/create",
+          params: {
+            message: "Accept this change for the rest of this session?",
           },
         },
-        id: 2,
-      }),
-    });
-
-    expect(callResponse.status).toBe(200);
-    expect(callResponse.headers.get("content-type")).toContain(
-      "text/event-stream",
-    );
-
-    const reader = callResponse.body?.getReader();
-    if (!reader) throw new Error("no response body");
-    const decoder = new TextDecoder();
-    let buffer = "";
-    const nextEvent = async () => {
-      for (;;) {
-        const boundary = buffer.indexOf("\n\n");
-        if (boundary !== -1) {
-          const frame = buffer.slice(0, boundary);
-          buffer = buffer.slice(boundary + 2);
-          const data = frame
-            .split("\n")
-            .find((line) => line.startsWith("data: "));
-          if (data) {
-            return JSON.parse(data.slice("data: ".length)) as Record<
-              string,
-              unknown
-            >;
-          }
-        }
-        const { value, done } = await reader.read();
-        if (done) throw new Error("stream ended early");
-        buffer += decoder.decode(value, { stream: true });
-      }
-    };
-
-    const elicitation = await nextEvent();
-    expect(elicitation).toMatchObject({
-      method: "elicitation/create",
-      params: {
-        mode: "form",
-        message: "Accept this change for the rest of this session?",
       },
     });
 
-    const answer = await fetch(url, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({
-        jsonrpc: "2.0",
-        id: elicitation.id,
-        result: {
-          action: "accept",
-          content: { choice: "Accept for this session" },
+    const answered = await firstMessage(
+      await call({
+        inputResponses: {
+          gateway_elicitation: {
+            action: "accept",
+            content: { choice: "Accept for this session" },
+          },
         },
+        requestState: interim.requestState,
       }),
-    });
-    expect(answer.status).toBe(202);
-
-    const result = await nextEvent();
-    expect(result).toMatchObject({
+    );
+    expect(answered).toMatchObject({
       id: 2,
       result: {
+        // Such a client rejects a result that does not say it is complete.
+        resultType: "complete",
         structuredContent: {
           action: "accept",
           selected: ["Accept for this session"],
@@ -437,13 +412,21 @@ describe("MCP Gateway - in-band elicitation round trip", () => {
                 { label: "Do not accept" },
               ],
             },
-            _meta: {
-              [MCP_CLIENT_CAPABILITIES_META_KEY]: { elicitation: {} },
-            },
           },
           id,
         }),
       );
+    // A legacy client: it declares elicitation once, at initialize.
+    await post(ownerToken, {
+      jsonrpc: "2.0",
+      method: "initialize",
+      params: {
+        protocolVersion: "2025-06-18",
+        capabilities: { elicitation: {} },
+        clientInfo: { name: "owner", version: "1" },
+      },
+      id: 0,
+    });
     const answer = (id: unknown, choice: string) => ({
       jsonrpc: "2.0",
       id,
@@ -521,4 +504,14 @@ function readEvents(response: Response) {
       }
     },
   };
+}
+
+/** The first JSON-RPC message of a gateway response, SSE or plain JSON. */
+async function firstMessage(
+  response: Response,
+): Promise<Record<string, unknown>> {
+  if (response.headers.get("content-type")?.includes("application/json")) {
+    return (await response.json()) as Record<string, unknown>;
+  }
+  return readEvents(response).next();
 }

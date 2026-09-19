@@ -157,6 +157,14 @@ describe("resolveProtocolRevision", () => {
     expect(resolution.message).toContain("2030-01-01");
     expect(resolution.message).toContain(STATELESS_MCP_PROTOCOL_REVISION);
     expect(resolution.message).toContain(LEGACY_MCP_PROTOCOL_REVISION);
+    // Clients pick the next version from the data, not from prose.
+    expect(resolution.data?.requested).toBe("2030-01-01");
+    expect(resolution.data?.supported).toEqual(
+      expect.arrayContaining([
+        STATELESS_MCP_PROTOCOL_REVISION,
+        LEGACY_MCP_PROTOCOL_REVISION,
+      ]),
+    );
   });
 });
 
@@ -357,11 +365,16 @@ describe("server/discover", () => {
       revision: STATELESS_MCP_PROTOCOL_REVISION,
     });
 
-    expect(result.protocolVersions).toEqual([
+    // `supportedVersions` is the revision's field: a client that validates
+    // the result falls back to the legacy handshake without it.
+    expect(result.supportedVersions).toEqual([
       STATELESS_MCP_PROTOCOL_REVISION,
       LEGACY_MCP_PROTOCOL_REVISION,
     ]);
+    expect(result.protocolVersions).toEqual(result.supportedVersions);
     expect(result.resultType).toBe("complete");
+    expect(result.cacheScope).toBe("private");
+    expect(result.ttlMs).toBeGreaterThan(0);
   });
 
   test("unimplemented subscription features are not advertised", () => {

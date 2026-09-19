@@ -56,9 +56,12 @@ under Settings > Plugins. Verify a fresh message appears in LLM Proxy Logs.
    Cursor: use its MCP settings to connect/authenticate the configured server.
    Codex: use codex mcp login SERVER_NAME.
    Let the user complete any browser consent or client execution approval.
+   Then close with one short, imperative user instruction and nothing else, e.g.:
+   "Open a new terminal, then run claude /mcp and select <server> to sign in."
 6. Verify the configured gateway can list tools before reporting a working connection —
    in the new session, after authentication; this session cannot verify anything.
    Configuration applied alone does not prove MCP authentication succeeded.
+   Verification is that session's job — never hand it to the user as a step.
 7. For other clients, delete the temporary bootstrap file when finished.
    For Desktop, leave this public temporary file in place and end the task after handoff.
 

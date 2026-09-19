@@ -1,24 +1,16 @@
-name: Deploy Staging Docs and Catalog
+name: Publish Docs on Main
 
-# Staging pulls docs and catalog data at build time. Production docs refresh
-# only after a stable platform release is published.
-
+# Refresh archestra.ai on every main commit, including docs and catalog changes.
 on:
   push:
     branches:
       - main
-      - release/1.3
-    paths:
-      - "mcp-catalog/data/**"
-      - "docs/**"
-      - ".github/workflows/trigger-website-deploy.yml"
-      - ".github/workflows/trigger-website-deploy-on-catalog-changes.yml"
 
 permissions: {}
 
 jobs:
   trigger-website-deploy:
-    name: Trigger Website Deploy
+    name: Publish Docs to archestra.ai
     permissions:
       contents: read
     uses: ./.github/workflows/trigger-website-deploy.yml

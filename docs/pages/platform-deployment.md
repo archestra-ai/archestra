@@ -2,7 +2,7 @@
 title: Deployment
 category: Archestra Platform
 order: 3
-lastUpdated: 2026-09-18
+lastUpdated: 2026-09-19
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -965,6 +965,21 @@ The controller does not install a container isolation runtime. Check your cluste
 | Self-Managed Kubernetes | Configure a compatible OCI runtime, CSI driver, and dynamically provisioned storage class. |
 
 For zonal disks, use `WaitForFirstConsumer` binding and compatible node zones. Node-local storage cannot preserve files after node loss. Use the storage and node-selector settings below to select compatible resources.
+
+#### EKS With Fargate
+
+Agent Runtime does not support Fargate-only clusters. Runtime containers require automatically provisioned `ReadWriteOnce` volumes. Fargate cannot mount EBS volumes or dynamically provision persistent volumes. Static EFS volumes are not a supported replacement for this storage. See [AWS Fargate storage limitations](https://docs.aws.amazon.com/eks/latest/userguide/fargate.html).
+
+You can keep Archestra on Fargate and run Agent Runtime on EC2 nodes:
+
+1. Add an EC2 node group with the EBS CSI driver and its required IAM permissions.
+2. Configure an EBS storage class with `WaitForFirstConsumer` volume binding.
+3. Set `ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_CLASS` to that storage class.
+4. Label the runtime nodes, for example `archestra-agent-runtime=true`. Set `ARCHESTRA_AGENT_RUNTIME_NODE_SELECTOR` to the same label selector.
+5. Exclude runtime pods from your Fargate profiles. Their namespace and labels must not match those profiles.
+6. Install the Agent Sandbox controller using the instructions above.
+
+The previous Kubernetes Jobs backend is no longer supported. Continuing to use Agent Runtime after upgrading requires the Sandbox prerequisites above.
 
 #### Startup Troubleshooting
 

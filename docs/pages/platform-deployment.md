@@ -2,7 +2,7 @@
 title: Deployment
 category: Archestra Platform
 order: 3
-lastUpdated: 2026-09-17
+lastUpdated: 2026-09-18
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -17,9 +17,9 @@ Select a published release from [GitHub Releases](https://github.com/archestra-a
 ### Release Channels
 
 - **Stable:** Docker tag `latest` and default Helm charts track the current stable release.
-- **Beta:** Version tags ending in `-beta.N` preview upcoming features from the main branch.
+- **Release candidate (RC):** Version tags ending in `-rc.N` preview upcoming releases from the main branch. Earlier prereleases used `-beta.N`.
 
-Archestra maintains one active stable release line at a time. Bug fixes and security patches publish to the active stable line and the next beta release.
+Archestra maintains one active stable release line at a time. Bug fixes and security patches publish to the active stable line and the next RC release.
 
 ### Upgrade Safety
 
@@ -27,8 +27,8 @@ Archestra maintains one active stable release line at a time. Bug fixes and secu
 2. Read the release notes for migration notices.
 3. Apply the upgrade to a staging environment first.
 
-Stable-to-beta upgrades can include repairs for migrations skipped by earlier releases.
-For databases previously running `1.3.56`, choose a beta release containing the migration repair.
+Stable-to-prerelease upgrades can include repairs for migrations skipped by earlier releases.
+For databases previously running `1.3.56`, choose a release containing the migration repair.
 The affected columns are `team.roles`, `knowledge_bases.visibility`, and `knowledge_bases.team_ids`.
 Rerunning migrations from `1.4.0-beta.4` does not restore these columns.
 

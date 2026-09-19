@@ -103,8 +103,15 @@ gh() {
     def test_github_publication_marks_prereleases_without_latest(self):
         section = WORKFLOW.read_text().split(
             "      - name: Publish GitHub release\n", 1
-        )[1].split("      - name:", 1)[0]
-        script = textwrap.dedent(section.split("        run: |\n", 1)[1])
+        )[1]
+        # The publish step can be the last step in its job.
+        lines = section.split("        run: |\n", 1)[1].splitlines()
+        script_lines = []
+        for line in lines:
+            if line.strip() and not line.startswith("          "):
+                break
+            script_lines.append(line)
+        script = textwrap.dedent("\n".join(script_lines))
         stub = "gh() { if [ \"$2\" = view ]; then echo true; else printf '%s\\n' \"$*\"; fi; };\n"
         for version, flags in (
             ("1.4.0-beta.13", "--prerelease --latest=false"),

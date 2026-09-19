@@ -3,7 +3,7 @@ title: Agent Runtime (Beta)
 category: Agents
 order: 7
 description: Run coding agents and delegated tasks in isolated containers
-lastUpdated: "2026-09-17"
+lastUpdated: "2026-09-19"
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -23,6 +23,8 @@ Kubernetes is currently the supported runtime backend. Archestra manages task st
 ## Cluster Prerequisites
 
 Your administrator must enable Agent Runtime on a Kubernetes cluster with persistent storage. See [Agent Runtime Deployment](/docs/platform-deployment#agent-runtime) for controller installation, provider requirements, and privileged workloads.
+
+Fargate-only clusters are not supported. See [EKS With Fargate](/docs/platform-deployment#eks-with-fargate) for a hybrid setup with EC2 runtime nodes.
 
 ## Configure Agent Runtime
 

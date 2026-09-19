@@ -440,23 +440,6 @@ jobs:
             gh release edit "$TAG_NAME" --draft=false --prerelease=false --latest
           fi
 
-      - name: Generate website deployment token
-        if: ${{ github.ref_name != 'main' }}
-        id: website-token
-        uses: ./.github/actions/github-app-token
-        with:
-          app-id: ${{ secrets.ARCHESTRA_WEBSITE_DEPLOY_GITHUB_APP_ID }}
-          private-key: ${{ secrets.ARCHESTRA_WEBSITE_DEPLOY_GITHUB_APP_PRIVATE_KEY }}
-          owner: archestra-ai
-          repositories: website
-          permission-actions: write
-
-      - name: Refresh release website
-        if: ${{ github.ref_name != 'main' }}
-        env:
-          GH_TOKEN: ${{ steps.website-token.outputs.token }}
-        run: gh workflow run deploy-docs.yml --repo archestra-ai/website --ref main -f "docs_ref=$TAG_NAME"
-
   notify-release-failure:
     name: Notify release failure
     # Pages #alerting when a release that was ACTUALLY being published fails, so a broken

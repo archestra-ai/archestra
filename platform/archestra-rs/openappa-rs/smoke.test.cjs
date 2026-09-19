@@ -425,6 +425,27 @@ builtin = "hitl"
     );
   });
 
+  await t.test('an offer accepted for a dispatched call retries it through the dispatch tool', async () => {
+    const hint = async (dispatch) => {
+      const session = scope();
+      const denied = await call(session, 'dispatched-read', 'read_untrusted', { path: 'report.txt' });
+      assert.ok(denied.offers?.length > 0, JSON.stringify(denied));
+      return (await byOffer(session, {
+        tool_call_id: `accept-${dispatch ?? 'direct'}`,
+        arguments: { offer_id: denied.offers[0].offer_id },
+        tool: 'read_untrusted',
+        spelling: 'read_untrusted',
+        ...(dispatch ? { dispatch } : {}),
+      })).approved_output;
+    };
+
+    const [prefix, retry] = (await hint('my_gateway_archestra__run_tool')).split('exactly these arguments: ');
+    assert.equal(prefix, '[appa] Authorized. Call the my_gateway_archestra__run_tool tool again with ');
+    assert.deepEqual(JSON.parse(retry), { tool_name: 'read_untrusted', tool_args: { path: 'report.txt' } });
+    // A direct call keeps naming the tool itself.
+    assert.match(await hint(undefined), /^\[appa\] Authorized\. Call the read_untrusted tool again/);
+  });
+
   await t.test('unknown hook event tags are rejected before receipt processing', async () => {
     await assert.rejects(
       () => native.dispatchHook(JSON.stringify({

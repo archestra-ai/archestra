@@ -682,6 +682,52 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     }
   });
 
+  test("signs the dispatch tool into the offer of a denied run_tool call", async () => {
+    // The retry hint the runtime renders after the offer is accepted names
+    // the tool the client called; a run_tool caller holds no tool by the
+    // target's own name.
+    config.openappa = {
+      ...config.openappa,
+      offerSigningSecret: "test-offer-signing-secret-32chars",
+    };
+    native.dispatchHook.mockImplementation(async (raw: string) => {
+      const event = JSON.parse(raw);
+      events.push(event);
+      if (event.event === "tool_call")
+        return JSON.stringify({
+          decision: "deny_call",
+          feedback: "[appa] Blocked",
+          offers: [{ offer_id: "offer-1" }],
+        });
+      return JSON.stringify({ decision: "ack" });
+    });
+    const body = payload(false);
+    body.tools.push({
+      name: "archestra__run_tool",
+      description: "Run a tool",
+      input_schema: { type: "object", properties: {} },
+    } as (typeof body.tools)[number]);
+    options = {
+      includeToolUse: true,
+      streamStopReason: "tool_use",
+      nonStreamingToolUse: {
+        name: "archestra__run_tool",
+        input: { tool_name: "archestra__whoami", tool_args: {} },
+      },
+    };
+
+    const response = await post(body);
+
+    expect(response.statusCode, response.body).toBe(200);
+    const [offer] = noticeFrom(response.body, false).input.offers as {
+      payload: string;
+    }[];
+    expect(JSON.parse(offer.payload)).toMatchObject({
+      tool: "archestra__whoami",
+      dispatch: "archestra__run_tool",
+    });
+  });
+
   test("admits a session that has not yet declared the APPA pair", async () => {
     const body = payload(false);
     body.tools = body.tools.filter(

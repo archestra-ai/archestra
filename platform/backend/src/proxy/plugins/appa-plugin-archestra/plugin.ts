@@ -266,6 +266,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
               offerIds: decision.offers ?? [],
               tool: identity.name,
               spelling: identity.name,
+              ...(identity.dispatch ? { dispatch: identity.dispatch } : {}),
             }),
             session: clientSessionId(binding.session.session_id),
           }),
@@ -323,6 +324,8 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     arguments: string | Record<string, unknown>;
     custom: boolean;
     namespace?: string;
+    /** The client's dispatch tool, when the call reached its target through it. */
+    dispatch?: string;
   } {
     const [normalized] = normalizeToolCallsForPolicy(
       [
@@ -341,6 +344,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         name: normalized.toolCallName,
         arguments: normalized.toolCallArgs,
         custom: false,
+        dispatch: call.name,
       };
     }
     return {
@@ -375,7 +379,12 @@ function cloneTrustedContext(context: AppaTrustedContext): AppaTrustedContext {
 
 function signedOffersForDenial(
   session: OpenAppaSession,
-  params: { offerIds: string[]; tool: string; spelling: string },
+  params: {
+    offerIds: string[];
+    tool: string;
+    spelling: string;
+    dispatch?: string;
+  },
 ): OfferJws[] {
   const secret = config.openappa.offerSigningSecret;
   if (params.offerIds.length === 0) return [];
@@ -395,6 +404,7 @@ function signedOffersForDenial(
         offerId,
         tool: params.tool,
         spelling: params.spelling,
+        ...(params.dispatch ? { dispatch: params.dispatch } : {}),
       }),
       secret,
     ),

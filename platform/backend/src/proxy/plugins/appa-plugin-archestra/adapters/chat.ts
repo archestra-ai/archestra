@@ -4,6 +4,8 @@ import type { AppaClientAdapter } from "../types";
 /** Maps the proxy-authenticated Chat call path without inferring client authority. */
 export class AppaChatAdapter implements AppaClientAdapter {
   readonly id = "archestra-chat" as const;
+  readonly reviewChannel = "host" as const;
+  readonly supportsHitl = true;
 
   matches(context: Parameters<AppaClientAdapter["matches"]>[0]): boolean {
     return context.trustedContext?.chatSource !== undefined;

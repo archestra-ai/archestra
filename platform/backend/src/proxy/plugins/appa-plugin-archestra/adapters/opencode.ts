@@ -4,6 +4,8 @@ import { readHeader } from "../utils";
 /** Identifies OpenCode Chat Completions requests and normalizes local tool names. */
 export class AppaOpenCodeAdapter implements AppaClientAdapter {
   readonly id = "opencode" as const;
+  readonly reviewChannel = "host" as const;
+  readonly supportsHitl = false;
 
   matches(context: Parameters<AppaClientAdapter["matches"]>[0]): boolean {
     const userAgent = (

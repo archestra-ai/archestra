@@ -19,8 +19,8 @@ use appa_runtime::{
     hooks,
 };
 use appa_runtime_api::{
-    Actor, HookDecision, HookEvent, OutcomeBody, ProposedCall, SpawnRef, ToolOutcome, TrajectoryId,
-    WireDecision,
+    Actor, HookDecision, HookEvent, OutcomeBody, ProposedCall, Ruling, SpawnRef, ToolOutcome,
+    TrajectoryId, WireDecision,
 };
 use futures_util::FutureExt;
 use napi_derive::napi;
@@ -130,6 +130,13 @@ impl Principal {
     }
 }
 
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum RulingInput {
+    Approve,
+    Deny,
+}
+
 /// Request payload to execute a remedy by offer ID.
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -156,6 +163,8 @@ struct OfferInput {
     /// Original argument JSON string before execution metadata stripping.
     original_arguments: String,
     presentation: PresentationInput,
+    #[serde(default)]
+    ruling: Option<RulingInput>,
 }
 
 #[derive(Clone, Copy, Deserialize, PartialEq, Eq)]
@@ -199,6 +208,8 @@ struct Input {
     spelling: Option<String>,
     #[serde(default)]
     presentation: Option<PresentationInput>,
+    #[serde(default)]
+    ruling: Option<RulingInput>,
 }
 
 #[derive(Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
@@ -575,11 +586,75 @@ pub async fn execute_remedy_by_offer(
         owner_root: Some(owner.root),
         spelling: owner.spelling,
         presentation: Some(input.presentation),
+        ruling: input.ruling,
     };
     validate(&input)?;
     let response: Value =
         serde_json::from_str(&run(input, policy_content).await?).map_err(error)?;
     Ok(with_offer_status(response, OfferStatusKind::Known)?.to_string())
+}
+
+#[napi(object)]
+#[derive(Serialize)]
+pub struct OfferReviewOutput {
+    pub offer_id: String,
+    pub text: String,
+    pub session_id: String,
+}
+
+/// Loads the review entry for an offer from the retained DenyCall in PostgreSQL.
+/// Session routing comes from the verified offer claims; no offer-owner lookup.
+#[napi(js_name = "loadOfferReview")]
+pub async fn load_offer_review(
+    organization_id: String,
+    session_id: String,
+    offer_id: String,
+) -> napi::Result<Option<OfferReviewOutput>> {
+    let session_id_for_output = session_id.clone();
+    // Mirror execute_remedy_by_offer: clone the store handle and release the
+    // state lock before any SQL runs, so review loads never contend with
+    // dispatches on the runtime state mutex.
+    let pg = {
+        let slot = STATE.get_or_init(|| Mutex::new(None)).lock().await;
+        let state = slot
+            .as_ref()
+            .ok_or_else(|| error("OpenAPPA is not initialized"))?;
+        postgres_store(&state.store)?.clone()
+    };
+    // The SQL closure needs its own offer id copy because it must be 'static.
+    let target_offer_id = offer_id.clone();
+    let review_text = pg
+        .with_client(move |client| {
+            // session_id is the leading PK column of openappa_operations, and
+            // organization_id is an additional tenancy guard. The JSONB match
+            // is pushed into SQL so only the matching entry's text crosses the
+            // boundary instead of every reviewed decision. The lateral join
+            // scans each reviewed decision's entries linearly, which is
+            // bounded by the handful of review entries a policy's DenyCall
+            // carries; it is not sized for unbounded per-decision reviews.
+            let row = client.query_opt(
+                "SELECT entry->>'text' AS text \
+                 FROM openappa_operations o \
+                 CROSS JOIN LATERAL jsonb_array_elements(o.decision->'review') AS entry \
+                 WHERE o.organization_id=$1 AND o.session_id=$2 AND o.status='complete' \
+                 AND o.decision->'review' IS NOT NULL \
+                 AND entry->>'offer_id' = $3 \
+                 ORDER BY o.created_at DESC \
+                 LIMIT 1",
+                &[&organization_id, &session_id, &target_offer_id],
+            )?;
+            Ok(row.map(|row| row.get::<_, String>("text")))
+        })
+        .map_err(error)?;
+
+    match review_text {
+        Some(text) => Ok(Some(OfferReviewOutput {
+            offer_id,
+            text,
+            session_id: session_id_for_output,
+        })),
+        None => Ok(None),
+    }
 }
 
 struct SessionLock {
@@ -847,6 +922,10 @@ impl State {
                     .clone()
                     .ok_or_else(|| error("missing remedy arguments"))?,
             };
+            let ruling = input.ruling.as_ref().map(|r| match r {
+                RulingInput::Approve => Ruling::Approve,
+                RulingInput::Deny => Ruling::Deny,
+            });
             let gate = hooks::handle(
                 &self.runtime,
                 HookEvent::ToolCall {
@@ -854,7 +933,7 @@ impl State {
                     call,
                     call_id: None,
                     spawn: false,
-                    ruling: None,
+                    ruling,
                 },
             )
             .await;

@@ -11,7 +11,13 @@ import {
   chatOpenAppaSession,
   executeRemedyByOffer,
   executeYell,
+  loadOfferReview,
 } from "@/openappa/service";
+import {
+  clientSupportsInputRequest,
+  GATEWAY_INPUT_REQUEST_KEY,
+  InputRequiredSignal,
+} from "@/routes/mcp-gateway/mrtr";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
 import { ApiError } from "@/types";
 import {
@@ -31,6 +37,20 @@ const RemedyPlanArgumentsSchema = z.object({
     .optional(),
   return_schema: z.record(z.string(), z.unknown()).optional(),
 });
+
+// Shared by the chat elicitation bridge and the MRTR input-required signal so
+// both channels request the identical approve/deny ruling form.
+const HITL_RULING_SCHEMA = {
+  type: "object",
+  properties: {
+    action: {
+      type: "string",
+      enum: ["approve", "deny"],
+      description: "Approve or deny this remedy plan",
+    },
+  },
+  required: ["action"],
+} as const;
 
 const registry = defineArchestraTools([
   defineArchestraTool({
@@ -197,6 +217,60 @@ const registry = defineArchestraTools([
       ) {
         return unknownOfferResult();
       }
+
+      // Check if this offer requires human review before executing or taking locks.
+      // Session routing comes from the verified claims, so the review lookup
+      // needs no offer-owner table.
+      const review = await loadOfferReview({
+        organizationId: context.organizationId,
+        sessionId: claims.session_id,
+        offerId: remedy.offer_id,
+      });
+
+      let ruling: "approve" | "deny" | undefined;
+      if (review) {
+        // Collect the person's answer through the plugin-owned client channel.
+        if (context.elicitation) {
+          // Chat client: interactive elicitation / inline approval card
+          const outcome = await context.elicitation.elicit({
+            toolName: TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
+            message: review.text,
+            requestedSchema: HITL_RULING_SCHEMA,
+          });
+          ruling = parseHitlRuling(
+            outcome.status === "answered" ? outcome.result : undefined,
+          );
+        } else if (context.mrtr) {
+          // MCP Gateway client (Claude Code, etc.)
+          const supportsElicit = clientSupportsInputRequest({
+            clientCapabilities: context.mrtr.clientCapabilities,
+            request: { method: "elicitation/create" },
+          });
+          if (supportsElicit) {
+            const supplied =
+              context.mrtr.inputResponses?.[GATEWAY_INPUT_REQUEST_KEY];
+            if (supplied !== undefined) {
+              // Retry round: consume the verified user answer from requestState.
+              ruling = parseHitlRuling(supplied);
+            } else {
+              // Initial round: ask the human via native MCP elicitation
+              throw new InputRequiredSignal({
+                key: GATEWAY_INPUT_REQUEST_KEY,
+                request: {
+                  method: "elicitation/create",
+                  params: {
+                    message: review.text,
+                    requestedSchema: HITL_RULING_SCHEMA,
+                  },
+                },
+              });
+            }
+          }
+          // If client does not support elicitation (Codex, OpenCode), per P7-R03 / P7-T20
+          // HITL is kept disabled, ruling remains undefined -> upstream returns NoAnswer.
+        }
+      }
+
       const byOffer = await executeRemedyByOffer({
         organizationId: context.organizationId,
         ...(context.userId ? { callerId: `user:${context.userId}` } : {}),
@@ -210,6 +284,7 @@ const registry = defineArchestraTools([
         originalArguments:
           originalArguments ?? JSON.stringify(submittedSemantic),
         args: remedy,
+        ruling,
       });
       return byOffer.result;
     },
@@ -236,6 +311,31 @@ function unknownOfferResult() {
       },
     ],
   };
+}
+
+/**
+ * Parses the unified elicitation envelope shared by the chat bridge and MRTR
+ * requestState into a remedy ruling. `accept` must carry an explicit
+ * `approve`/`deny` content action: a malformed or missing content action is
+ * NOT treated as approval — it yields no ruling, so the upstream runtime
+ * resolves the review as `NoAnswer` (fail closed). `decline` maps to deny;
+ * `cancel`, absence, or any unrecognized shape also yields no ruling.
+ */
+function parseHitlRuling(envelope: unknown): "approve" | "deny" | undefined {
+  if (typeof envelope !== "object" || envelope === null) return undefined;
+  const { action, content } = envelope as {
+    action?: unknown;
+    content?: unknown;
+  };
+  if (action === "decline") return "deny";
+  if (action !== "accept") return undefined;
+  const contentAction =
+    typeof content === "object" && content !== null
+      ? (content as { action?: unknown }).action
+      : undefined;
+  if (contentAction === "approve") return "approve";
+  if (contentAction === "deny") return "deny";
+  return undefined;
 }
 
 export function isOpenappaTool(shortName: string | null | undefined): boolean {

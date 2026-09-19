@@ -399,10 +399,21 @@ builtin = "hitl"
     await call(session, 'unknown', 'read_plain');
     assert.match((await result(session, 'unknown', 'unchecked body', 'unknown')).approved_output, /withheld/);
     const email = await call(session, 'email', 'send_email', { to: 'recipient@example.com' });
+    const review = await native.loadOfferReview(session.organization_id, session.session_id, email.review[0].offer_id);
+    assert.ok(review, 'loadOfferReview found the review entry');
+    assert.equal(review.offerId, email.review[0].offer_id);
+    assert.match(review.text, /email/);
+
     const human = await hook(session, {
       event: 'remedy', operation_id: 'remedy:email', arguments: { offer_id: email.review[0].offer_id },
     });
     assert.match(JSON.stringify(human.result.content), /unreachable|gave no answer/);
+
+    const emailApproved = await call(session, 'email-2', 'send_email', { to: 'recipient@example.com' });
+    const approved = await hook(session, {
+      event: 'remedy', operation_id: 'remedy:email-approved', arguments: { offer_id: emailApproved.review[0].offer_id }, ruling: 'approve',
+    });
+    assert.match(approved.approved_output, /Authorized/);
   });
 
   await t.test('unknown hook event tags are rejected before receipt processing', async () => {

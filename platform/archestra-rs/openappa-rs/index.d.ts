@@ -7,6 +7,18 @@ export declare function executeRemedyByOffer(input: string, policyContent?: stri
 
 export declare function initializeOpenappa(databaseUrl: string, postgresMaxConnections: number, policyContent: string, reporting?: ReportingOptions | undefined | null): Promise<void>
 
+/**
+ * Loads the review entry for an offer from the retained DenyCall in PostgreSQL.
+ * Session routing comes from the verified offer claims; no offer-owner lookup.
+ */
+export declare function loadOfferReview(organizationId: string, sessionId: string, offerId: string): Promise<OfferReviewOutput | null>
+
+export interface OfferReviewOutput {
+  offerId: string
+  text: string
+  sessionId: string
+}
+
 export interface ReportingOptions {
   endpoint: string
   hostname?: string

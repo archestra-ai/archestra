@@ -968,7 +968,7 @@ For zonal disks, use `WaitForFirstConsumer` binding and compatible node zones. N
 
 #### EKS With Fargate
 
-Agent Runtime does not support Fargate-only clusters. Its workspaces require automatically provisioned `ReadWriteOnce` volumes. Fargate cannot mount EBS volumes or dynamically provision persistent volumes. Static EFS volumes are not a supported replacement for these workspaces. See [AWS Fargate storage limitations](https://docs.aws.amazon.com/eks/latest/userguide/fargate.html).
+Agent Runtime does not support Fargate-only clusters. Runtime containers require automatically provisioned `ReadWriteOnce` volumes. Fargate cannot mount EBS volumes or dynamically provision persistent volumes. Static EFS volumes are not a supported replacement for this storage. See [AWS Fargate storage limitations](https://docs.aws.amazon.com/eks/latest/userguide/fargate.html).
 
 You can keep Archestra on Fargate and run Agent Runtime on EC2 nodes:
 

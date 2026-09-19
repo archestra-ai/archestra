@@ -1055,7 +1055,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             try {
               await persistNewMessages(
                 conversationId,
-                messages,
+                withoutContinuedAssistantTurn(messages),
                 "earlyUserMsg",
                 lockedChatKey,
               );
@@ -1911,6 +1911,10 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                             messagesToPersist,
                             "onFinish",
                             lockedChatKey,
+                            {
+                              continuedMessageId:
+                                getContinuedAssistantMessageId(messages),
+                            },
                           );
                         }
                         messagesPersisted = true;
@@ -4441,6 +4445,10 @@ async function persistNewMessages(
   messages: unknown[],
   context: string,
   conversationKey?: ConversationContentKey | null,
+  options?: {
+    /** The assistant turn this request continued; see getMessagesWithChangedContent. */
+    continuedMessageId?: string;
+  },
 ): Promise<number> {
   try {
     // Fetch existing messages to classify incoming ones as new or changed
@@ -4459,7 +4467,11 @@ async function persistNewMessages(
     // messages, so content updates are applied from that path alone.
     const changedMessages: Array<{ id: string; content: ChatMessage }> =
       context === "onFinish"
-        ? getMessagesWithChangedContent({ existingMessages, uiMessages })
+        ? getMessagesWithChangedContent({
+            existingMessages,
+            uiMessages,
+            continuedMessageId: options?.continuedMessageId,
+          })
         : [];
 
     if (newMessages.length === 0 && changedMessages.length === 0) {
@@ -4677,24 +4689,43 @@ function getMessagesNotYetPersisted(params: {
   });
 }
 
+/**
+ * A request that ends on an assistant turn is resuming it — after a
+ * browser-executed tool answered (the in-app assistant's page tools) or an
+ * approval was given — and the stream continues that same message. Saving it
+ * early would store the half-finished turn under the id onFinish then treats
+ * as already persisted, so the rest of the turn would never be written; it is
+ * left to onFinish, which saves it whole.
+ */
+function withoutContinuedAssistantTurn(messages: unknown[]): unknown[] {
+  const last = messages.at(-1) as { role?: unknown } | undefined;
+  return last?.role === "assistant" ? messages.slice(0, -1) : messages;
+}
+
+/** Id of the assistant turn a resume request continues, if it is one. */
+function getContinuedAssistantMessageId(
+  messages: unknown[],
+): string | undefined {
+  const last = messages.at(-1) as { role?: unknown; id?: unknown } | undefined;
+  return last?.role === "assistant" && typeof last.id === "string"
+    ? last.id
+    : undefined;
+}
+
 const TERMINAL_TOOL_STATES: ReadonlySet<string> = new Set([
   "output-available",
   "output-error",
   "output-denied",
 ]);
 
-const PENDING_TOOL_STATES: ReadonlySet<string> = new Set([
-  "approval-requested",
-  "input-available",
-]);
-
 /**
  * Returns the stored rows that should be overwritten in place by an incoming
- * message — specifically, an assistant turn whose tool call is still pending
- * and whose `toolCallId` arrives in a terminal state (`output-available`,
- * `output-error`, `output-denied`). A call is pending while it awaits the
- * user's approval (`approval-requested`) or a browser-executed tool's output
- * (`input-available`, the in-app assistant's page tools).
+ * message — specifically, an assistant turn whose tool call is still in
+ * `approval-requested` state and whose `toolCallId` arrives in a terminal
+ * state (`output-available`, `output-error`, `output-denied`), plus the
+ * assistant turn this request continued (`continuedMessageId`): a resume after
+ * the in-app assistant's browser-executed tools answered streams more of that
+ * same message, and its stored copy is superseded by the final one.
  *
  * Scoped tightly to those resolution flows so this update path cannot
  * be repurposed to overwrite arbitrary earlier messages whose parts happen
@@ -4703,9 +4734,35 @@ const PENDING_TOOL_STATES: ReadonlySet<string> = new Set([
 function getMessagesWithChangedContent(params: {
   existingMessages: Array<{ id: string; content: unknown }>;
   uiMessages: ChatMessage[];
+  continuedMessageId?: string;
 }): Array<{ id: string; content: ChatMessage }> {
-  // Index stored rows by the toolCallId of any pending tool part they carry —
-  // those are the only rows this update path can target.
+  const changedMessages = getResolvedApprovalMessages(params);
+  if (!params.continuedMessageId) {
+    return changedMessages;
+  }
+  const continuedRow = params.existingMessages.find(
+    (existing) =>
+      getMessageContentId(existing.content) === params.continuedMessageId,
+  );
+  const continuedMessage = normalizeChatMessages(params.uiMessages).find(
+    (message) => message.id === params.continuedMessageId,
+  );
+  if (
+    continuedRow &&
+    continuedMessage &&
+    !changedMessages.some((changed) => changed.id === continuedRow.id)
+  ) {
+    changedMessages.push({ id: continuedRow.id, content: continuedMessage });
+  }
+  return changedMessages;
+}
+
+function getResolvedApprovalMessages(params: {
+  existingMessages: Array<{ id: string; content: unknown }>;
+  uiMessages: ChatMessage[];
+}): Array<{ id: string; content: ChatMessage }> {
+  // Index stored rows by the toolCallId of any approval-requested tool part
+  // they carry — those are the only rows this update path can target.
   const pendingByToolCallId = new Map<
     string,
     { id: string; content: unknown }
@@ -4720,7 +4777,7 @@ function getMessagesWithChangedContent(params: {
       if (
         typeof part === "object" &&
         part !== null &&
-        PENDING_TOOL_STATES.has(String((part as { state?: unknown }).state)) &&
+        (part as { state?: unknown }).state === "approval-requested" &&
         typeof (part as { toolCallId?: unknown }).toolCallId === "string"
       ) {
         pendingByToolCallId.set(
@@ -4746,7 +4803,7 @@ function getMessagesWithChangedContent(params: {
       const stored = pendingByToolCallId.get(toolCallId);
       if (!stored) continue;
       changedMessages.push({ id: stored.id, content: incoming });
-      // Each pending row resolves at most once per sweep.
+      // Each approval-requested row resolves at most once per sweep.
       pendingByToolCallId.delete(toolCallId);
       break;
     }
@@ -5106,6 +5163,8 @@ async function validateChatApiKeyAccess(
 }
 
 export const __test = {
+  getContinuedAssistantMessageId,
+  withoutContinuedAssistantTurn,
   getMessagesNotYetPersisted,
   getMessagesWithChangedContent,
   persistNewMessages,

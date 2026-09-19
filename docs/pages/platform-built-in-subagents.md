@@ -3,12 +3,12 @@ title: Built-in Subagents
 category: Agents
 order: 11
 description: The system subagents Archestra seeds into every organization, and what each one does
-lastUpdated: 2026-08-26
+lastUpdated: 2026-09-19
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-Archestra seeds a set of built-in subagents into every organization. Each one handles a specific internal job — proposing tool policies, quarantining untrusted output, summarizing long chats, and so on. Most run automatically; you rarely invoke them directly. The Advisor is the exception: an administrator configures it once for the organization, and it can then be enabled on individual agents.
+Archestra seeds a set of built-in subagents into every organization. Each one handles a specific internal job — proposing tool policies, quarantining untrusted output, summarizing long chats, and so on. Most run automatically; you rarely invoke them directly. The Advisor is the exception: an administrator configures it once for the organization, and it can then be enabled on individual agents. The [Assistant](#assistant) is the other exception — you open it yourself from any page.
 
 An admin can open a built-in subagent in its settings and change its **system prompt** and **model** (requires `agent:admin`), and reset either back to the shipped default. Built-in subagents cannot be deleted or exported.
 
@@ -78,3 +78,13 @@ The Chat Title Generation Subagent generates a concise three-to-six-word title f
 The App Runtime LLM Agent backs `archestra.llm.complete()` for [MCP Apps](/docs/platform-apps). An app's completion request runs through it, so the call goes through the limit-enforcing LLM proxy and counts against the viewer's usage limits. Its system prompt is only a minimal fallback used when the app supplies none.
 
 The app cannot choose a model. An app runs from any chat and from its own page, so there is no calling agent to follow — set a model on this subagent to control which one serves apps. Without one, app completions use the organization's default model.
+
+## Assistant
+
+The Assistant is an in-app helper you can open from any page — select **Assistant** in the sidebar or press Cmd+J (Ctrl+J on Windows and Linux). It answers questions about the platform and does the work for you, whether you're a regular user or an administrator.
+
+It holds every built-in management tool, so it can create agents, register MCP servers, or review runs directly. It can also see the page you have open and click, type, and navigate in it, so it can walk you through a screen instead of only describing it.
+
+Everything it does runs as you. A tool your role doesn't allow is refused, the same as in the UI.
+
+Assistant conversations stay in the Assistant and don't appear in your chat list. Open one as a full chat from the Assistant's header when you want more room.

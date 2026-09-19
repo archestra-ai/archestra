@@ -10,6 +10,7 @@ import { ConversationSearchProvider } from "@/components/conversation-search-pro
 import { FeedbackPopupDialog } from "@/components/feedback-popup-dialog";
 import { ImpersonationBanner } from "@/components/impersonation-banner";
 import { LoadingState } from "@/components/loading";
+import { MetaAgentDialog } from "@/components/meta-agent/meta-agent-dialog";
 import {
   NavigationStatusProvider,
   useNavigationStatus,
@@ -240,6 +241,7 @@ export function AppShell({ children }: AppShellProps) {
           <ConversationSearchProvider />
           <OnboardingSurveyDialog />
           <FeedbackPopupDialog />
+          <MetaAgentDialog />
         </SidebarProvider>
       </NavigationStatusProvider>
     </ConnectivityProvider>

@@ -1007,6 +1007,109 @@ describe("persistNewMessages", () => {
       expect(storedParts.some((part) => part.type === "text")).toBe(true);
     });
   }
+
+  // The in-app assistant's page tools run in the browser. The first request
+  // ends on a bare tool call, which is not persistable on its own; the resume
+  // request re-sends that turn with the browser's output and the stream
+  // continues it. The early persist must leave the continued turn to onFinish,
+  // or the half-finished copy it saves hides the rest of the turn for good.
+  test("keeps the whole turn when it hands off to the browser more than once", async ({
+    makeUser,
+    makeOrganization,
+    makeMember,
+    makeAgent,
+  }) => {
+    const user = await makeUser();
+    const organization = await makeOrganization();
+    await makeMember(user.id, organization.id, { role: "admin" });
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      authorId: user.id,
+      scope: "personal",
+    });
+    const conversation = await ConversationModel.create({
+      userId: user.id,
+      organizationId: organization.id,
+      agentId: agent.id,
+      selectedModel: "gpt-4o",
+      selectedProvider: "openai",
+    });
+    const user1 = {
+      id: "user-ui-1",
+      role: "user",
+      parts: [{ type: "text", text: "Open the create team dialog" }],
+    };
+    const getPage = {
+      type: "tool-ui__get_page",
+      toolCallId: "call-get",
+      input: {},
+    };
+    const click = {
+      type: "tool-ui__click",
+      toolCallId: "call-click",
+      input: { ref: 17 },
+    };
+    const turn = (...parts: Array<Record<string, unknown>>) => ({
+      id: "assistant-ui-1",
+      role: "assistant",
+      parts,
+    });
+    // One request of the turn: early persist of what it was sent, then the
+    // finish persist of the message it streamed.
+    const request = async (
+      sent: Array<Record<string, unknown>>,
+      finished: Array<Record<string, unknown>>,
+    ) => {
+      await __test.persistNewMessages(
+        conversation.id,
+        __test.withoutContinuedAssistantTurn(sent),
+        "earlyUserMsg",
+      );
+      await __test.persistNewMessages(
+        conversation.id,
+        finished,
+        "onFinish",
+        null,
+        { continuedMessageId: __test.getContinuedAssistantMessageId(sent) },
+      );
+    };
+    const snapshotDone = { ...getPage, state: "output-available", output: {} };
+    const clickDone = { ...click, state: "output-available", output: {} };
+
+    // 1. The model asks the browser for a snapshot.
+    await request(
+      [user1],
+      [user1, turn({ ...getPage, state: "input-available" })],
+    );
+    // 2. Snapshot answered; the model asks the browser to click.
+    await request(
+      [user1, turn(snapshotDone)],
+      [user1, turn(snapshotDone, { ...click, state: "input-available" })],
+    );
+    // 3. Click answered; the model finishes in text.
+    await request(
+      [user1, turn(snapshotDone, clickDone)],
+      [
+        user1,
+        turn(snapshotDone, clickDone, {
+          type: "text",
+          text: "The create team dialog is open.",
+        }),
+      ],
+    );
+
+    const assistantRows = (
+      await MessageModel.findByConversation(conversation.id)
+    ).filter((row) => row.role === "assistant");
+    expect(assistantRows).toHaveLength(1);
+    const storedParts: Array<Record<string, unknown>> =
+      assistantRows[0]?.content?.parts ?? [];
+    expect(storedParts.map((part) => part.toolCallId ?? part.type)).toEqual([
+      "call-get",
+      "call-click",
+      "text",
+    ]);
+  });
 });
 
 describe("getMessagesWithChangedContent", () => {
@@ -1070,49 +1173,55 @@ describe("getMessagesWithChangedContent", () => {
     expect(changed[0]?.id).toBe("db-pending");
   });
 
-  it("updates a row whose browser-executed tool call awaited its output", () => {
-    // The in-app assistant's page tools run in the browser: the turn is saved
-    // with the call still `input-available`, and the resume request carries
-    // the output plus the rest of the turn. Without the update the reload
-    // would show the call forever pending and lose everything after it.
-    const pendingToolPart = {
-      type: "tool-ui__get_page",
-      toolCallId: "call-ui-1",
-      input: {},
-    };
-    const changed = __test.getMessagesWithChangedContent({
-      existingMessages: [
-        {
-          id: "db-pending-ui",
-          content: {
-            id: "assistant-1",
-            role: "assistant",
-            parts: [
-              { type: "text", text: "Let me look at the page." },
-              { ...pendingToolPart, state: "input-available" },
-            ],
-          },
-        },
-      ],
-      uiMessages: [
-        {
+  it("overwrites the turn a resume request continued, and only that one", () => {
+    // A resume after the in-app assistant's browser-executed tools answered
+    // streams more of the same assistant message; its stored copy is stale.
+    const existingMessages = [
+      {
+        id: "db-continued",
+        content: {
           id: "assistant-1",
           role: "assistant",
           parts: [
-            { type: "text", text: "Let me look at the page." },
             {
-              ...pendingToolPart,
+              type: "tool-ui__get_page",
+              toolCallId: "call-ui-1",
               state: "output-available",
+              input: {},
               output: { url: "/agents" },
             },
-            { type: "text", text: "You are on the agents page." },
           ],
         },
-      ],
-    });
+      },
+    ];
+    const uiMessages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-ui__get_page",
+            toolCallId: "call-ui-1",
+            state: "output-available",
+            input: {},
+            output: { url: "/agents" },
+          },
+          { type: "text", text: "You are on the agents page." },
+        ],
+      },
+    ] as ChatMessage[];
 
+    expect(
+      __test.getMessagesWithChangedContent({ existingMessages, uiMessages }),
+    ).toEqual([]);
+
+    const changed = __test.getMessagesWithChangedContent({
+      existingMessages,
+      uiMessages,
+      continuedMessageId: "assistant-1",
+    });
     expect(changed).toHaveLength(1);
-    expect(changed[0]?.id).toBe("db-pending-ui");
+    expect(changed[0]?.id).toBe("db-continued");
     expect(changed[0]?.content.parts?.at(-1)).toMatchObject({
       text: "You are on the agents page.",
     });

@@ -47954,6 +47954,21 @@
                                           "name"
                                         ],
                                         "additionalProperties": false
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "name": {
+                                            "type": "string",
+                                            "enum": [
+                                              "meta-agent"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "name"
+                                        ],
+                                        "additionalProperties": false
                                       }
                                     ]
                                   },
@@ -49611,6 +49626,21 @@
                                   "name"
                                 ],
                                 "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "name": {
+                                    "type": "string",
+                                    "enum": [
+                                      "meta-agent"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "name"
+                                ],
+                                "additionalProperties": false
                               }
                             ]
                           },
@@ -50664,6 +50694,20 @@
                         "required": [
                           "name"
                         ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "enum": [
+                              "meta-agent"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "name"
+                        ]
                       }
                     ]
                   },
@@ -51400,6 +51444,21 @@
                               "type": "string",
                               "enum": [
                                 "advisor-agent"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "name"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "enum": [
+                                "meta-agent"
                               ]
                             }
                           },
@@ -53119,6 +53178,21 @@
                               "name"
                             ],
                             "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string",
+                                "enum": [
+                                  "meta-agent"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "name"
+                            ],
+                            "additionalProperties": false
                           }
                         ]
                       },
@@ -54455,6 +54529,21 @@
                               "type": "string",
                               "enum": [
                                 "advisor-agent"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "name"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "enum": [
+                                "meta-agent"
                               ]
                             }
                           },
@@ -55874,6 +55963,21 @@
                                 "name"
                               ],
                               "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "name": {
+                                  "type": "string",
+                                  "enum": [
+                                    "meta-agent"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "name"
+                              ],
+                              "additionalProperties": false
                             }
                           ]
                         },
@@ -56969,6 +57073,21 @@
                             "name"
                           ],
                           "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "enum": [
+                                "meta-agent"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "name"
+                          ],
+                          "additionalProperties": false
                         }
                       ]
                     },
@@ -57968,6 +58087,20 @@
                         "required": [
                           "name"
                         ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "enum": [
+                              "meta-agent"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "name"
+                        ]
                       }
                     ]
                   },
@@ -58521,6 +58654,21 @@
                               "type": "string",
                               "enum": [
                                 "advisor-agent"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "name"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "enum": [
+                                "meta-agent"
                               ]
                             }
                           },
@@ -60915,6 +61063,21 @@
                             "name"
                           ],
                           "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "enum": [
+                                "meta-agent"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "name"
+                          ],
+                          "additionalProperties": false
                         }
                       ]
                     },
@@ -61996,6 +62159,21 @@
                               "type": "string",
                               "enum": [
                                 "advisor-agent"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "name"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "enum": [
+                                "meta-agent"
                               ]
                             }
                           },
@@ -69914,6 +70092,21 @@
                               "type": "string",
                               "enum": [
                                 "advisor-agent"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "name"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "enum": [
+                                "meta-agent"
                               ]
                             }
                           },
@@ -127757,7 +127950,8 @@
                         "enum": [
                           "user",
                           "schedule_trigger",
-                          "app_open"
+                          "app_open",
+                          "meta_agent"
                         ]
                       },
                       "titleIsPlaceholder": {
@@ -128579,7 +128773,8 @@
                       "enum": [
                         "user",
                         "schedule_trigger",
-                        "app_open"
+                        "app_open",
+                        "meta_agent"
                       ]
                     },
                     "titleIsPlaceholder": {
@@ -129350,7 +129545,8 @@
                         "enum": [
                           "user",
                           "schedule_trigger",
-                          "app_open"
+                          "app_open",
+                          "meta_agent"
                         ]
                       },
                       "titleIsPlaceholder": {
@@ -130132,7 +130328,8 @@
                       "enum": [
                         "user",
                         "schedule_trigger",
-                        "app_open"
+                        "app_open",
+                        "meta_agent"
                       ]
                     },
                     "titleIsPlaceholder": {
@@ -130969,7 +131166,8 @@
                       "enum": [
                         "user",
                         "schedule_trigger",
-                        "app_open"
+                        "app_open",
+                        "meta_agent"
                       ]
                     },
                     "titleIsPlaceholder": {
@@ -133527,7 +133725,8 @@
                       "enum": [
                         "user",
                         "schedule_trigger",
-                        "app_open"
+                        "app_open",
+                        "meta_agent"
                       ]
                     },
                     "titleIsPlaceholder": {
@@ -134442,6 +134641,270 @@
         }
       }
     },
+    "/api/chat/meta-agent": {
+      "get": {
+        "operationId": "getChatMetaAgent",
+        "tags": [
+          "Chat"
+        ],
+        "description": "Get the in-app assistant agent that chats started from its dialog use\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`chat:read`: View and access chat conversations",
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "agentId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "agentId"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "chat:read"
+          ]
+        }
+      }
+    },
     "/api/chat/conversations/{id}/restore": {
       "post": {
         "operationId": "restoreChatConversation",
@@ -134597,7 +135060,8 @@
                       "enum": [
                         "user",
                         "schedule_trigger",
-                        "app_open"
+                        "app_open",
+                        "meta_agent"
                       ]
                     },
                     "titleIsPlaceholder": {
@@ -135732,7 +136196,8 @@
                           "enum": [
                             "user",
                             "schedule_trigger",
-                            "app_open"
+                            "app_open",
+                            "meta_agent"
                           ]
                         },
                         "titleIsPlaceholder": {
@@ -137469,7 +137934,8 @@
                       "enum": [
                         "user",
                         "schedule_trigger",
-                        "app_open"
+                        "app_open",
+                        "meta_agent"
                       ]
                     },
                     "titleIsPlaceholder": {
@@ -138274,7 +138740,8 @@
                       "enum": [
                         "user",
                         "schedule_trigger",
-                        "app_open"
+                        "app_open",
+                        "meta_agent"
                       ]
                     },
                     "titleIsPlaceholder": {
@@ -139071,7 +139538,8 @@
                       "enum": [
                         "user",
                         "schedule_trigger",
-                        "app_open"
+                        "app_open",
+                        "meta_agent"
                       ]
                     },
                     "titleIsPlaceholder": {
@@ -139882,7 +140350,8 @@
                       "enum": [
                         "user",
                         "schedule_trigger",
-                        "app_open"
+                        "app_open",
+                        "meta_agent"
                       ]
                     },
                     "titleIsPlaceholder": {
@@ -364581,7 +365050,8 @@
                         "enum": [
                           "user",
                           "schedule_trigger",
-                          "app_open"
+                          "app_open",
+                          "meta_agent"
                         ]
                       },
                       "lastMessageAt": {
@@ -373514,7 +373984,8 @@
                       "enum": [
                         "user",
                         "schedule_trigger",
-                        "app_open"
+                        "app_open",
+                        "meta_agent"
                       ]
                     },
                     "titleIsPlaceholder": {

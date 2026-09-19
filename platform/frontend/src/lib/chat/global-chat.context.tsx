@@ -8,6 +8,7 @@ import {
   type ContextWindowEstimate,
   EXTERNAL_AGENT_ID_HEADER,
   getArchestraToolShortName,
+  isMetaAgentUiToolName,
   MCP_TASK_PART_TYPE,
   type McpTaskPartData,
   stripDanglingToolCalls,
@@ -66,6 +67,7 @@ import { lockedChatRequestHeaders } from "@/lib/chat/locked-chat";
 import { readThinkingEffort } from "@/lib/chat/thinking-effort-cache";
 import appConfig from "@/lib/config/config";
 import { useAppName } from "@/lib/hooks/use-app-name";
+import { metaAgentPageTools } from "@/lib/meta-agent/page-tools";
 
 const SESSION_CLEANUP_TIMEOUT = 10 * 60 * 1000; // 10 min
 const MAX_AUTO_RETRIES = 2;
@@ -112,6 +114,41 @@ function awaitingToolOutput(messages: UIMessage[]): boolean {
       (part.type === "dynamic-tool" || part.type.startsWith("tool-")) &&
       "state" in part &&
       part.state === "input-available",
+  );
+}
+
+/**
+ * Whether the turn is waiting to resume after the in-app assistant's page
+ * tools answered. Deliberately narrower than the SDK's
+ * lastAssistantMessageIsCompleteWithToolCalls: server-executed tools also end
+ * a step complete when a turn stops on its step limit, and resending then
+ * would loop. Only a step that contains a page-tool call was handed to the
+ * browser, so only that step resumes — once every call in it has an output.
+ */
+function lastStepAnsweredPageToolCalls(messages: UIMessage[]): boolean {
+  const lastMessage = messages.at(-1);
+  if (lastMessage?.role !== "assistant") return false;
+  const lastStepStart = lastMessage.parts.findLastIndex(
+    (part) => part.type === "step-start",
+  );
+  const toolParts = lastMessage.parts
+    .slice(lastStepStart + 1)
+    .filter(
+      (part) => part.type === "dynamic-tool" || part.type.startsWith("tool-"),
+    ) as Array<{ type: string; state?: string; toolName?: string }>;
+  const hasPageToolCall = toolParts.some((part) =>
+    isMetaAgentUiToolName(
+      part.type === "dynamic-tool"
+        ? (part.toolName ?? "")
+        : part.type.slice("tool-".length),
+    ),
+  );
+  return (
+    hasPageToolCall &&
+    toolParts.every(
+      (part) =>
+        part.state === "output-available" || part.state === "output-error",
+    )
   );
 }
 
@@ -615,6 +652,11 @@ function ChatSessionHook({
   const stopInFlightRef = useRef(false);
   const [isStopping, setIsStopping] = useState(false);
 
+  // onToolCall is captured by the useChat config before addToolOutput exists.
+  const addToolOutputRef = useRef<
+    ReturnType<typeof useChat>["addToolOutput"] | null
+  >(null);
+
   const {
     messages,
     sendMessage,
@@ -626,6 +668,7 @@ function ChatSessionHook({
     error,
     clearError,
     addToolResult,
+    addToolOutput,
     addToolApprovalResponse,
   } = useChat({
     messages: initialMessages,
@@ -957,6 +1000,32 @@ function ChatSessionHook({
       setIsRecovering(false);
     },
     onToolCall: ({ toolCall }) => {
+      // The in-app assistant's page tools have no server implementation: the
+      // call ends the model's step and lands here to run against the page.
+      // Not awaited — the SDK would hold the stream open for it — and the
+      // output resumes the turn through sendAutomaticallyWhen below.
+      if (isMetaAgentUiToolName(toolCall.toolName)) {
+        const toolName = toolCall.toolName;
+        void metaAgentPageTools
+          .execute(toolName, (toolCall.input ?? {}) as Record<string, unknown>)
+          .then((output) =>
+            addToolOutputRef.current?.({
+              tool: toolName,
+              toolCallId: toolCall.toolCallId,
+              output,
+            }),
+          )
+          .catch((error: unknown) =>
+            addToolOutputRef.current?.({
+              state: "output-error",
+              tool: toolName,
+              toolCallId: toolCall.toolCallId,
+              errorText: error instanceof Error ? error.message : String(error),
+            }),
+          );
+        return;
+      }
+
       const toolShortName = getCurrentArchestraToolShortName(
         toolCall.toolName,
         appName,
@@ -1099,8 +1168,9 @@ function ChatSessionHook({
     sendAutomaticallyWhen: ({ messages: msgs }) =>
       lastAssistantMessageIsCompleteWithApprovalResponses({
         messages: msgs,
-      }),
+      }) || lastStepAnsweredPageToolCalls(msgs),
   } as Parameters<typeof useChat>[0]);
+  addToolOutputRef.current = addToolOutput;
 
   latestMessagesRef.current = messages;
   latestStatusRef.current = status;

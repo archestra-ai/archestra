@@ -54,6 +54,14 @@ export const SHORTCUT_SIDEBAR = {
   label: "B",
 } as const;
 
+export const SHORTCUT_META_AGENT = {
+  key: "j",
+  label: "J",
+} as const;
+
+/** Window event that opens (or re-focuses) the in-app assistant dialog. */
+export const OPEN_META_AGENT_EVENT = "open-meta-agent";
+
 export const LOCAL_MCP_DISABLED_MESSAGE = (
   <>
     Unable to connect to Kubernetes cluster. Ensure K8s is running and the

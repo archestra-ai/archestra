@@ -390,6 +390,10 @@ function getBuiltInAgentConfigForSave(params: {
       return {
         name: BUILT_IN_AGENT_IDS.ADVISOR,
       };
+    case BUILT_IN_AGENT_IDS.META_AGENT:
+      return {
+        name: BUILT_IN_AGENT_IDS.META_AGENT,
+      };
     default: {
       // exhaustive check: a new BUILT_IN_AGENT_ID will fail the build here
       const _exhaustive: never = params.builtInAgentName;

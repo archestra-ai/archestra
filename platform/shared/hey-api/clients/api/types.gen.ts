@@ -14228,6 +14228,8 @@ export type GetAgentCatalogResponses = {
                     name: 'app-runtime-llm-agent';
                 } | {
                     name: 'advisor-agent';
+                } | {
+                    name: 'meta-agent';
                 } | null;
                 builtIn: boolean | null;
                 latestVersion: number;
@@ -14578,6 +14580,8 @@ export type GetAgentsResponses = {
                 name: 'app-runtime-llm-agent';
             } | {
                 name: 'advisor-agent';
+            } | {
+                name: 'meta-agent';
             } | null;
             builtIn: boolean | null;
             latestVersion: number;
@@ -14721,6 +14725,8 @@ export type CreateAgentData = {
             name: 'app-runtime-llm-agent';
         } | {
             name: 'advisor-agent';
+        } | {
+            name: 'meta-agent';
         } | null;
         deletedAt?: unknown;
         teams?: Array<string>;
@@ -14975,6 +14981,8 @@ export type CreateAgentResponses = {
             name: 'app-runtime-llm-agent';
         } | {
             name: 'advisor-agent';
+        } | {
+            name: 'meta-agent';
         } | null;
         builtIn: boolean | null;
         latestVersion: number;
@@ -15398,6 +15406,8 @@ export type GetAllAgentsResponses = {
             name: 'app-runtime-llm-agent';
         } | {
             name: 'advisor-agent';
+        } | {
+            name: 'meta-agent';
         } | null;
         builtIn: boolean | null;
         latestVersion: number;
@@ -15702,6 +15712,8 @@ export type GetDefaultMcpGatewayResponses = {
             name: 'app-runtime-llm-agent';
         } | {
             name: 'advisor-agent';
+        } | {
+            name: 'meta-agent';
         } | null;
         builtIn: boolean | null;
         latestVersion: number;
@@ -15998,6 +16010,8 @@ export type ImportAgentResponses = {
                 name: 'app-runtime-llm-agent';
             } | {
                 name: 'advisor-agent';
+            } | {
+                name: 'meta-agent';
             } | null;
             builtIn: boolean | null;
             latestVersion: number;
@@ -16307,6 +16321,8 @@ export type GetAgentResponses = {
             name: 'app-runtime-llm-agent';
         } | {
             name: 'advisor-agent';
+        } | {
+            name: 'meta-agent';
         } | null;
         builtIn: boolean | null;
         latestVersion: number;
@@ -16440,6 +16456,8 @@ export type UpdateAgentData = {
             name: 'app-runtime-llm-agent';
         } | {
             name: 'advisor-agent';
+        } | {
+            name: 'meta-agent';
         } | null;
         deletedAt?: unknown;
         teams?: Array<string>;
@@ -16615,6 +16633,8 @@ export type UpdateAgentResponses = {
             name: 'app-runtime-llm-agent';
         } | {
             name: 'advisor-agent';
+        } | {
+            name: 'meta-agent';
         } | null;
         builtIn: boolean | null;
         latestVersion: number;
@@ -17099,6 +17119,8 @@ export type RestoreAgentVersionResponses = {
             name: 'app-runtime-llm-agent';
         } | {
             name: 'advisor-agent';
+        } | {
+            name: 'meta-agent';
         } | null;
         builtIn: boolean | null;
         latestVersion: number;
@@ -17326,6 +17348,8 @@ export type CloneAgentResponses = {
             name: 'app-runtime-llm-agent';
         } | {
             name: 'advisor-agent';
+        } | {
+            name: 'meta-agent';
         } | null;
         builtIn: boolean | null;
         latestVersion: number;
@@ -19764,6 +19788,8 @@ export type RestoreAgentResponses = {
             name: 'app-runtime-llm-agent';
         } | {
             name: 'advisor-agent';
+        } | {
+            name: 'meta-agent';
         } | null;
         builtIn: boolean | null;
         latestVersion: number;
@@ -35577,7 +35603,7 @@ export type GetChatConversationsResponses = {
         } | Array<unknown> | null;
         artifact: string | null;
         projectId: string | null;
-        origin: 'user' | 'schedule_trigger' | 'app_open';
+        origin: 'user' | 'schedule_trigger' | 'app_open' | 'meta_agent';
         titleIsPlaceholder: boolean;
         lockedChat: boolean;
         pinnedAt: string | null;
@@ -35747,7 +35773,7 @@ export type CreateChatConversationResponses = {
         } | Array<unknown> | null;
         artifact: string | null;
         projectId: string | null;
-        origin: 'user' | 'schedule_trigger' | 'app_open';
+        origin: 'user' | 'schedule_trigger' | 'app_open' | 'meta_agent';
         titleIsPlaceholder: boolean;
         lockedChat: boolean;
         pinnedAt: string | null;
@@ -35909,7 +35935,7 @@ export type GetDeletedChatConversationsResponses = {
         } | Array<unknown> | null;
         artifact: string | null;
         projectId: string | null;
-        origin: 'user' | 'schedule_trigger' | 'app_open';
+        origin: 'user' | 'schedule_trigger' | 'app_open' | 'meta_agent';
         titleIsPlaceholder: boolean;
         lockedChat: boolean;
         pinnedAt: string | null;
@@ -36158,7 +36184,7 @@ export type GetChatConversationResponses = {
         } | Array<unknown> | null;
         artifact: string | null;
         projectId: string | null;
-        origin: 'user' | 'schedule_trigger' | 'app_open';
+        origin: 'user' | 'schedule_trigger' | 'app_open' | 'meta_agent';
         titleIsPlaceholder: boolean;
         lockedChat: boolean;
         pinnedAt: string | null;
@@ -36331,7 +36357,7 @@ export type UpdateChatConversationResponses = {
         } | Array<unknown> | null;
         artifact: string | null;
         projectId: string | null;
-        origin: 'user' | 'schedule_trigger' | 'app_open';
+        origin: 'user' | 'schedule_trigger' | 'app_open' | 'meta_agent';
         titleIsPlaceholder: boolean;
         lockedChat: boolean;
         pinnedAt: string | null;
@@ -36935,7 +36961,7 @@ export type ForkChatConversationResponses = {
         } | Array<unknown> | null;
         artifact: string | null;
         projectId: string | null;
-        origin: 'user' | 'schedule_trigger' | 'app_open';
+        origin: 'user' | 'schedule_trigger' | 'app_open' | 'meta_agent';
         titleIsPlaceholder: boolean;
         lockedChat: boolean;
         pinnedAt: string | null;
@@ -37092,6 +37118,89 @@ export type GetChatAgentMcpToolsResponses = {
 
 export type GetChatAgentMcpToolsResponse = GetChatAgentMcpToolsResponses[keyof GetChatAgentMcpToolsResponses];
 
+export type GetChatMetaAgentData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/chat/meta-agent';
+};
+
+export type GetChatMetaAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetChatMetaAgentError = GetChatMetaAgentErrors[keyof GetChatMetaAgentErrors];
+
+export type GetChatMetaAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        agentId: string;
+    };
+};
+
+export type GetChatMetaAgentResponse = GetChatMetaAgentResponses[keyof GetChatMetaAgentResponses];
+
 export type RestoreChatConversationData = {
     body?: never;
     path: {
@@ -37188,7 +37297,7 @@ export type RestoreChatConversationResponses = {
         } | Array<unknown> | null;
         artifact: string | null;
         projectId: string | null;
-        origin: 'user' | 'schedule_trigger' | 'app_open';
+        origin: 'user' | 'schedule_trigger' | 'app_open' | 'meta_agent';
         titleIsPlaceholder: boolean;
         lockedChat: boolean;
         pinnedAt: string | null;
@@ -37452,7 +37561,7 @@ export type CompactChatConversationResponses = {
             } | Array<unknown> | null;
             artifact: string | null;
             projectId: string | null;
-            origin: 'user' | 'schedule_trigger' | 'app_open';
+            origin: 'user' | 'schedule_trigger' | 'app_open' | 'meta_agent';
             titleIsPlaceholder: boolean;
             lockedChat: boolean;
             pinnedAt: string | null;
@@ -37890,7 +37999,7 @@ export type GetSharedConversationResponses = {
         } | Array<unknown> | null;
         artifact: string | null;
         projectId: string | null;
-        origin: 'user' | 'schedule_trigger' | 'app_open';
+        origin: 'user' | 'schedule_trigger' | 'app_open' | 'meta_agent';
         titleIsPlaceholder: boolean;
         lockedChat: boolean;
         pinnedAt: string | null;
@@ -38057,7 +38166,7 @@ export type ForkSharedConversationResponses = {
         } | Array<unknown> | null;
         artifact: string | null;
         projectId: string | null;
-        origin: 'user' | 'schedule_trigger' | 'app_open';
+        origin: 'user' | 'schedule_trigger' | 'app_open' | 'meta_agent';
         titleIsPlaceholder: boolean;
         lockedChat: boolean;
         pinnedAt: string | null;
@@ -38226,7 +38335,7 @@ export type GenerateChatConversationTitleResponses = {
         } | Array<unknown> | null;
         artifact: string | null;
         projectId: string | null;
-        origin: 'user' | 'schedule_trigger' | 'app_open';
+        origin: 'user' | 'schedule_trigger' | 'app_open' | 'meta_agent';
         titleIsPlaceholder: boolean;
         lockedChat: boolean;
         pinnedAt: string | null;
@@ -38395,7 +38504,7 @@ export type UpdateChatMessageResponses = {
         } | Array<unknown> | null;
         artifact: string | null;
         projectId: string | null;
-        origin: 'user' | 'schedule_trigger' | 'app_open';
+        origin: 'user' | 'schedule_trigger' | 'app_open' | 'meta_agent';
         titleIsPlaceholder: boolean;
         lockedChat: boolean;
         pinnedAt: string | null;
@@ -94301,7 +94410,7 @@ export type GetProjectConversationsResponses = {
         title: string | null;
         authorUserId: string;
         authorName: string | null;
-        origin: 'user' | 'schedule_trigger' | 'app_open';
+        origin: 'user' | 'schedule_trigger' | 'app_open' | 'meta_agent';
         lastMessageAt: string;
         createdAt: string;
         readOnly: boolean;
@@ -96787,7 +96896,7 @@ export type CreateScheduleTriggerRunConversationResponses = {
         } | Array<unknown> | null;
         artifact: string | null;
         projectId: string | null;
-        origin: 'user' | 'schedule_trigger' | 'app_open';
+        origin: 'user' | 'schedule_trigger' | 'app_open' | 'meta_agent';
         titleIsPlaceholder: boolean;
         lockedChat: boolean;
         pinnedAt: string | null;

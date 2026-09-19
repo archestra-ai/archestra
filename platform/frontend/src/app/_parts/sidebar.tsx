@@ -18,6 +18,7 @@ import {
   MoreHorizontal,
   PencilRuler,
   Slack,
+  Sparkles,
   Star,
 } from "lucide-react";
 import Link from "next/link";
@@ -37,6 +38,7 @@ import { AppLogo } from "@/components/app-logo";
 import { OnboardingDot } from "@/components/onboarding-dot";
 import { SidebarWarningsAccordion } from "@/components/sidebar-warnings-accordion";
 import { Badge } from "@/components/ui/badge";
+import { Kbd } from "@/components/ui/kbd";
 import {
   Sidebar,
   SidebarContent,
@@ -53,6 +55,7 @@ import {
   SidebarMenuSubItem,
   useSidebar,
 } from "@/components/ui/sidebar";
+import { OPEN_META_AGENT_EVENT, SHORTCUT_META_AGENT } from "@/consts";
 import { prefetchApps } from "@/lib/app.query";
 import { useIsAuthenticated } from "@/lib/auth/auth.hook";
 import { useHasPermissions, usePermissionMap } from "@/lib/auth/auth.query";
@@ -61,6 +64,7 @@ import { useFeature } from "@/lib/config/config.query";
 import { useGithubStars } from "@/lib/github/github.query";
 import { useAppIconLogo } from "@/lib/hooks/use-app-name";
 import { useOnce } from "@/lib/hooks/use-once";
+import { usePlatform } from "@/lib/hooks/use-platform";
 import type { NavDotKey } from "@/lib/onboarding/nav-onboarding";
 import { useNavOnboarding } from "@/lib/onboarding/use-nav-onboarding";
 import { cn } from "@/lib/utils";
@@ -641,6 +645,7 @@ export function AppSidebar() {
       </SidebarContent>
       <SidebarFooter>
         <SidebarWarningsAccordion />
+        {isAuthenticated && <MetaAgentSidebarButton />}
         {isAuthenticated && (
           <SidebarGroup className="mt-auto p-0">
             <SidebarGroupContent>
@@ -665,6 +670,33 @@ export function AppSidebar() {
         )}
       </SidebarFooter>
     </Sidebar>
+  );
+}
+
+/** Opens the in-app assistant; the dialog itself lives in the app shell. */
+function MetaAgentSidebarButton() {
+  const { isMobile, setOpenMobile } = useSidebar();
+  const { isMac } = usePlatform();
+  return (
+    <SidebarMenu>
+      <SidebarMenuItem>
+        <SidebarMenuButton
+          tooltip="Assistant"
+          data-testid={E2eTestId.SidebarMetaAgentButton}
+          onClick={() => {
+            if (isMobile) setOpenMobile(false);
+            window.dispatchEvent(new Event(OPEN_META_AGENT_EVENT));
+          }}
+        >
+          <Sparkles />
+          <span>Assistant</span>
+          <span className="ml-auto flex gap-0.5 group-data-[collapsible=icon]:hidden">
+            <Kbd>{isMac ? "⌘" : "Ctrl"}</Kbd>
+            <Kbd>{SHORTCUT_META_AGENT.label}</Kbd>
+          </span>
+        </SidebarMenuButton>
+      </SidebarMenuItem>
+    </SidebarMenu>
   );
 }
 

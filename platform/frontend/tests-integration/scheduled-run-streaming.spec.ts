@@ -75,6 +75,11 @@ test("shows scheduled output while running and replays it after refresh", async 
   });
   await mswControl.use({
     method: "get",
+    url: "/api/agents/credential-readiness",
+    body: [],
+  });
+  await mswControl.use({
+    method: "get",
     url: "/api/llm-provider-api-keys",
     body: [makeLlmProviderApiKey({ provider: "openai" })],
   });

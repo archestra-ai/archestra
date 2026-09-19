@@ -17,9 +17,15 @@ not change it.
 ## Read and explain
 
 Call \`archestra__get_guardrails_policy\` with no arguments. Read the returned
-\`content\` and \`revision\`. If the user only asked to inspect or explain,
-summarize what can run, what data becomes restricted, and what is blocked.
-Do not save or propose unrelated changes.
+\`content\` and \`revision\`. This is the organization's own policy text; the
+batteries installed for MCP servers compose into what is enforced on top of it,
+and they are managed in Studio, not through this tool. The returned
+\`effective\` is what the runtime enforces: its \`content\` is the composed
+policy, and its \`error\` is set when the last composition failed, in which
+case only the root text is enforced. If the user only asked to inspect or
+explain, summarize what is enforced from \`effective.content\`, note which
+rules come from batteries rather than the root text, and report an
+\`effective.error\` as a problem to fix. Do not save or propose unrelated changes.
 
 ## Inspect installed MCP servers
 
@@ -69,9 +75,12 @@ scan or save policy rules; follow these steps when handling the user's request.
    combine your intended change with those edits, and validate before retrying.
    Never just increase N and resend the old text. If the edits conflict in
    meaning, ask the user which behavior they want.
-7. Read back the saved policy. Briefly report the change and its save number.
-   Saved policies apply to new conversations. This conversation keeps its
-   original policy; a successful save does not prove the new behavior here.
+7. Read back the saved policy. If the save's \`effective.error\` is set, the
+   root text saved but its composition with the installed batteries failed and
+   only the root text is enforced: report that as a problem, not a success.
+   Otherwise briefly report the change and its save number. Saved policies
+   apply to new conversations. This conversation keeps its original policy; a
+   successful save does not prove the new behavior here.
 
 ## Boundaries
 
@@ -85,8 +94,10 @@ scan or save policy rules; follow these steps when handling the user's request.
 - Explicit rules still apply. Keep the catch-all unless the user wants unknown
   tools blocked. Do not quietly weaken a rule to make a blocked call succeed.
 - The supported editor format is \`[policy]\` plus \`[externals]\`.
-  Local commands and file includes are rejected. Do not copy Claude Code's
-  subprocess annotators, battery includes, CLI reload steps, or local hooks.
+  Local commands and file includes are rejected. Batteries are installed per
+  MCP server outside the policy text and compose into it automatically. Do not
+  copy Claude Code's subprocess annotators, battery includes, CLI reload steps,
+  or local hooks.
 - Keep secrets out of policy text. Existing remote bindings may refer to a
   backend environment variable with \`token_env\`; never invent a credential.
 - APPA is available only when \`ARCHESTRA_OPENAPPA_ENABLED=true\`.
@@ -191,7 +202,7 @@ review channel. Do not invent one or replace a denied operation with noop.
 When APPA provides a remedy offer, use only the exact offer_id from that
 response with the available remedy tool and the user's authorization.
 
-This guide does not configure subprocesses, battery file includes, or deployment
+This guide does not configure subprocesses, battery installs, or deployment
 changes. If the existing bindings cannot express the requested behavior,
 explain what support is missing rather than silently allowing it.
 `,

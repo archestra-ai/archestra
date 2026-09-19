@@ -130,5 +130,6 @@ url = "http://127.0.0.1:${server.address().port}/annotate"
   assert.equal((await call('unknown_after', 'unknown-after')).decision, 'allow_call');
   await result('unknown-after');
   assert.notEqual((await call('write_trusted', 'write')).decision, 'allow_call');
-  assert.deepEqual(requests.map(request => request.artifact.args.name), ['unknown_before', 'unknown_after']);
+  // Externals see the canonical identity the runtime judges, not the host's spelling.
+  assert.deepEqual(requests.map(request => request.artifact.args.name), ['host/archestra/unknown_before', 'host/archestra/unknown_after']);
 });

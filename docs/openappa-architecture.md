@@ -81,6 +81,65 @@ GitHub sync only pulls changes; it does not push editor changes to the repositor
 New conversations use the accepted revision; existing conversations retain theirs.
 Migration `0477_appa_github_sync` adds source storage, task deduplication, and the deployment switch.
 
+## Batteries
+
+A battery is an OpenAPPA policy package for one provider: a policy file that
+names tools by their canonical namespace (`mcp/github/get_file_contents`), optional
+helper scripts the policy consults over the externals protocol, and the
+`APPA_PROVIDER_*` credential each helper reads. The addon exposes the batteries
+bundled with the pinned OpenAPPA commit that declare the `archestra` host, and
+validates uploaded packages with the same marketplace checks. An organization can
+upload its own package under a bundled name to replace it.
+
+The runtime opens the composed *effective policy* rather than the root policy
+alone. A battery install binds a battery to one MCP catalog entry. The composer
+reads the organization's latest root revision, every enabled install, and the tool
+names synced for each installed catalog. Each battery namespace becomes a
+`server_aliases` entry whose targets are the catalog's tool prefixes, so a rule for
+`mcp/github/get_file_contents` judges the platform tool `github_prod__get_file_contents`
+and feedback to the model spells the platform name. The runtime is opened under the
+Archestra adapter, which splits a tool name at its last `__`; a catalog whose tool
+prefix contains `__` cannot be aliased and its install is marked `naming_conflict`.
+The composed document is stored per organization with the root revision and a
+fingerprint of the install inputs. A composition the runtime refuses stores the root
+alone with the refusal, so a refused revision is not retried on every call.
+
+Composition runs after each root save, GitHub import, install change, package upload,
+catalog rename, catalog delete, and tool sync, and hourly for every organization as a
+backstop. Before each dispatch the runtime compares the stored root revision to the
+latest one and recomposes on a mismatch. Installing an MCP server whose catalog
+matches a bundled battery attaches the battery automatically: enabled on a server
+URL host or container image match, disabled on a name-only match. The host or image
+is the catalog entry's own claim, so the permission to register MCP servers
+(`mcpRegistry`) is what lets a user attach a bundled battery. A battery without
+helpers activates at once; a battery with helpers stays `missing_credentials` until
+every declared credential is bound to an organization-level runtime credential, and
+only one install of such a battery is active per organization. A battery's externals
+must be `command` helpers; a `url` external is refused at upload and composition.
+
+Helper scripts never run on the API host. The composer rewrites every `command`
+binding into a URL binding on the loopback helper bridge,
+`POST /api/openappa/helpers/<install id>/<external name>`, authenticated by a
+per-process bearer the backend mints at boot and exports as
+`APPA_ARCHESTRA_BRIDGE_TOKEN`. Neither a root policy nor a battery may name an
+`APPA_ARCHESTRA_` variable in a `token_env` of its own (validation, upload and
+composition all refuse it), so no author can send the runtime, bearer in hand, to
+another install's helper or to an outside URL. The bridge refuses non-loopback sockets and any other
+bearer, resolves the install's credentials at organization scope, mounts the battery
+files into a fresh sandbox container under `/skills/<battery>`, passes the consult
+envelope on stdin and the credential as a Dagger secret, and returns the helper's
+stdout as the answer. The bridge needs the sandbox runtime
+(`ARCHESTRA_DAGGER_RUNTIME_ENABLED`). Its budget is 4.5 seconds including
+container start; a slow, failed, or unavailable helper answers 5xx, which the
+runtime treats as no answer, never as a denial. Because helper consults run
+while the runtime holds its global state lock, one slow helper delays every other
+OpenAPPA operation in the process for up to that budget.
+
+A battery with helpers can be enabled for one catalog entry per organization at a
+time. Uploaded packages cannot be deleted while an install references their name.
+Migration `0480_previous_gideon` adds the package, install, and effective policy
+tables.
+
 ## Tool calls and results
 
 ```mermaid

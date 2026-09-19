@@ -44,6 +44,7 @@ import {
   TeamModel,
   ToolModel,
 } from "@/models";
+import { openappaBatteriesService } from "@/openappa/batteries";
 import { isByosEnabled, secretManager } from "@/secrets-manager";
 import {
   filterMcpServersAssignableToTarget,
@@ -98,6 +99,7 @@ import {
   UnmuteMcpServerAlertQuerySchema,
   UuidIdSchema,
 } from "@/types";
+import { trackBackgroundWork } from "@/utils/background-work";
 import {
   broadcastMcpInstallationStatus,
   broadcastMcpServersChanged,
@@ -1059,6 +1061,11 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   catalogId: capturedCatalogId,
                   mcpServerId: mcpServer.id,
                 });
+                trackBackgroundWork(
+                  openappaBatteriesService.onCatalogToolsChanged(
+                    capturedCatalogId,
+                  ),
+                );
 
                 // Set status to success after tools are fetched
                 await McpServerModel.update(mcpServer.id, {
@@ -3480,6 +3487,9 @@ async function connectAndGetToolsForInstallation(params: {
       mcpServerId: params.mcpServerId,
       enterpriseTransportCredential: installDiscoveryCredential,
     });
+    trackBackgroundWork(
+      openappaBatteriesService.onCatalogToolsChanged(catalogItem.id),
+    );
     return tools;
   } catch (error) {
     if (
@@ -3528,6 +3538,9 @@ async function connectAndGetToolsForInstallation(params: {
         expiresInSeconds: null,
       },
     });
+    trackBackgroundWork(
+      openappaBatteriesService.onCatalogToolsChanged(catalogItem.id),
+    );
     return tools;
   }
 }

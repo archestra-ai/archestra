@@ -5,6 +5,7 @@ import {
 } from "@archestra/shared";
 import { z } from "zod";
 import config from "@/config";
+import { openappaBatteriesService } from "@/openappa/batteries";
 import { NoticeArguments, RemedyExecutionSchema } from "@/openappa/notice";
 import { OfferJwsSchema, verifyOfferClaims } from "@/openappa/offer-claims";
 import {
@@ -18,6 +19,7 @@ import {
   UpdateGuardrailsPolicySchema,
   ValidateGuardrailsPolicySchema,
 } from "@/types/guardrails-policy";
+import type { EffectivePolicy } from "@/types/openappa-batteries";
 import { defineArchestraTool, defineArchestraTools } from "./helpers";
 
 const RemedyPlanArgumentsSchema = z.object({
@@ -69,12 +71,16 @@ const registry = defineArchestraTools([
     shortName: "get_guardrails_policy",
     title: "Read guardrails policy",
     description:
-      "Read organization.appa.toml and its revision before changing guardrails. This is the policy used for new conversations. Preserve unrelated rules and comments when editing.",
+      "Read organization.appa.toml and its revision before changing guardrails. This is the organization's own policy text, used for new conversations; batteries installed for MCP servers compose into enforcement on top of it, and `effective` shows the composed result the runtime enforces. Preserve unrelated rules and comments when editing.",
     schema: z.strictObject({}),
     async handler({ context }) {
       if (!context.organizationId)
         throw new ApiError(401, "Organization context is required");
-      return result(await guardrailsPolicyService.get(context.organizationId));
+      const [root, effective] = await Promise.all([
+        guardrailsPolicyService.get(context.organizationId),
+        openappaBatteriesService.getEffectivePolicy(context.organizationId),
+      ]);
+      return result({ ...root, effective: enforced(effective) });
     },
   }),
   defineArchestraTool({
@@ -99,13 +105,15 @@ const registry = defineArchestraTools([
           401,
           "Authenticated organization context is required",
         );
-      return result(
-        await guardrailsPolicyService.update({
-          ...args,
-          organizationId: context.organizationId,
-          userId: context.userId,
-        }),
+      const saved = await guardrailsPolicyService.update({
+        ...args,
+        organizationId: context.organizationId,
+        userId: context.userId,
+      });
+      const effective = await openappaBatteriesService.getEffectivePolicy(
+        context.organizationId,
       );
+      return result({ ...saved, effective: enforced(effective) });
     },
   }),
   defineArchestraTool({
@@ -218,6 +226,14 @@ const registry = defineArchestraTools([
 
 export const toolEntries = registry.toolEntries;
 export const tools = registry.tools;
+
+/**
+ * What the runtime enforces: the root composed with the installed batteries,
+ * or the root alone with the error when the last composition failed.
+ */
+function enforced(effective: EffectivePolicy) {
+  return { content: effective.content, error: effective.lastError };
+}
 
 function result(value: object) {
   return {

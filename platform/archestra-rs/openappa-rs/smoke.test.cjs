@@ -402,7 +402,7 @@ builtin = "hitl"
     const human = await hook(session, {
       event: 'remedy', operation_id: 'remedy:email', arguments: { offer_id: email.review[0].offer_id },
     });
-    assert.match(JSON.stringify(human.result.content), /unreachable|gave no answer/);
+    assert.match(JSON.stringify(human.result.content), /unreachable|gave no answer|cannot be reached/);
   });
 
   await t.test('unknown hook event tags are rejected before receipt processing', async () => {

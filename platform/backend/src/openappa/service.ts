@@ -14,9 +14,9 @@ import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import config from "@/config";
 import { getDatabaseConnectionString } from "@/database";
 import logger from "@/logging";
+import { openappaBatteriesService } from "@/openappa/batteries";
 import { normalizeToolCallsForPolicy } from "@/routes/proxy/llm-proxy-helpers";
 import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
-import { guardrailsPolicyService } from "@/services/guardrails-policy";
 import { ApiError, type CommonToolResult } from "@/types";
 
 export { APPA_PARENT_HEADER, APPA_SESSION_HEADER };
@@ -210,9 +210,14 @@ async function binding(content: string) {
 async function dispatch(
   session: OpenAppaSession,
   event: Record<string, unknown>,
+  /** A policy the caller already read, shared across a batch of dispatches. */
+  policyContent?: string,
 ) {
-  return withRuntime(session.organization_id, (module, policy) =>
-    module.dispatchHook(JSON.stringify({ ...session, ...event }), policy),
+  return withRuntime(
+    session.organization_id,
+    (module, policy) =>
+      module.dispatchHook(JSON.stringify({ ...session, ...event }), policy),
+    policyContent,
   );
 }
 
@@ -223,23 +228,38 @@ async function withRuntime(
     module: Awaited<ReturnType<typeof binding>>,
     policyContent: string,
   ) => Promise<string>,
+  policyContent?: string,
 ) {
+  const policy = policyContent ?? (await effectivePolicy(organizationId));
+  try {
+    const module = await binding(policy);
+    const rawResult = await call(module, policy);
+    return NativeDecisionSchema.parse(JSON.parse(rawResult));
+  } catch (error) {
+    throw unsafeToProceed(error);
+  }
+}
+
+/** The organization's effective policy content, or the refusal every dispatch shares. */
+async function effectivePolicy(organizationId: string): Promise<string> {
   try {
     if (!(await isGuardrailsV2Active()))
       throw new Error("Guardrails v2 is disabled");
-    const policy = await guardrailsPolicyService.get(organizationId);
-    const module = await binding(policy.content);
-    const rawResult = await call(module, policy.content);
-    return NativeDecisionSchema.parse(JSON.parse(rawResult));
+    return (await openappaBatteriesService.getEffectivePolicy(organizationId))
+      .content;
   } catch (error) {
-    // Do not forward internal diagnostics or credentials to clients.
-    const failure = new ApiError(
-      503,
-      "OpenAPPA could not safely complete this operation",
-    );
-    failure.cause = error;
-    throw failure;
+    throw unsafeToProceed(error);
   }
+}
+
+/** Do not forward internal diagnostics or credentials to clients. */
+function unsafeToProceed(error: unknown): ApiError {
+  const failure = new ApiError(
+    503,
+    "OpenAPPA could not safely complete this operation",
+  );
+  failure.cause = error;
+  return failure;
 }
 
 export function chatOpenAppaSession(
@@ -308,8 +328,12 @@ export function sessionFromHeaders(params: {
   };
 }
 
-async function startSession(session: OpenAppaSession) {
-  const decision = await dispatch(session, { event: "session_start" });
+async function startSession(session: OpenAppaSession, policyContent?: string) {
+  const decision = await dispatch(
+    session,
+    { event: "session_start" },
+    policyContent,
+  );
   if (decision.decision === "context") {
     // The initial Chat adapter has no child-return lifecycle yet. Refuse
     // rather than silently discard a child's required return contract.
@@ -362,16 +386,21 @@ async function approveToolResult(params: {
   output: string;
   outcome: ExecutionOutcome;
   controlToolName?: string;
+  policyContent?: string;
 }): Promise<ProcessedToolResult> {
-  const decision = await dispatch(params.session, {
-    event: "tool_result",
-    tool_call_id: params.toolCallId,
-    output: params.output,
-    outcome: params.outcome,
-    ...(params.controlToolName
-      ? { presentation: nativePresentation(params.controlToolName) }
-      : {}),
-  });
+  const decision = await dispatch(
+    params.session,
+    {
+      event: "tool_result",
+      tool_call_id: params.toolCallId,
+      output: params.output,
+      outcome: params.outcome,
+      ...(params.controlToolName
+        ? { presentation: nativePresentation(params.controlToolName) }
+        : {}),
+    },
+    params.policyContent,
+  );
   const content = extractApprovedOutput(decision, params.output);
   const outputSource =
     ("output_source" in decision ? decision.output_source : undefined) ??
@@ -408,7 +437,9 @@ export async function processProxyResults(params: {
   controlToolName?: string;
   trustedChat?: boolean;
 }) {
-  await startSession(params.session);
+  // The results dispatch one after another; one policy read serves them all.
+  const policyContent = await effectivePolicy(params.session.organization_id);
+  await startSession(params.session, policyContent);
   const updates: Record<string, ProcessedToolResult> = {};
   for (const result of params.results) {
     if (params.trustedChat && isSeededAppRenderToolResult(result.content))
@@ -430,6 +461,7 @@ export async function processProxyResults(params: {
           : JSON.stringify(result.content),
       outcome,
       controlToolName: params.controlToolName,
+      policyContent,
     });
     updates[result.id] = approved;
   }

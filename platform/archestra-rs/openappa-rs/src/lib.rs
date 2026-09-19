@@ -1,6 +1,7 @@
 //! Archestra's host boundary. Policy evaluation and event serialization live in
 //! OpenAPPA; identity, call correlation and durable processing receipts live here.
 
+mod batteries;
 mod policy;
 
 use appa_eventlog::{
@@ -19,8 +20,8 @@ use appa_runtime::{
     hooks,
 };
 use appa_runtime_api::{
-    Actor, HookDecision, HookEvent, OutcomeBody, ProposedCall, SpawnRef, ToolOutcome, TrajectoryId,
-    WireDecision,
+    Actor, CanonicalTool, HookDecision, HookEvent, OutcomeBody, ProposedCall, SpawnRef,
+    ToolOutcome, TrajectoryId, WireDecision,
 };
 use futures_util::FutureExt;
 use napi_derive::napi;
@@ -339,7 +340,7 @@ pub async fn initialize_openappa(
             })
             .map_err(error)?,
         );
-        let runtime = Runtime::open_with_store(config, store.clone(), None).map_err(error)?;
+        let runtime = policy::open(config, store.clone()).map_err(error)?;
         Ok(State {
             runtime: Arc::new(runtime),
             store,
@@ -360,6 +361,183 @@ pub async fn validate_openappa_policy(content: String) -> napi::Result<Vec<Strin
         std::panic::catch_unwind(|| policy::validate(&content))
             .map(|result| result.err().into_iter().collect())
             .map_err(|_| error("OpenAPPA policy validation failed"))
+    })
+    .await
+    .map_err(error)?
+}
+
+#[napi(object)]
+pub struct ServerAliasInput {
+    pub alias: String,
+    pub targets: Vec<String>,
+}
+
+#[napi(object)]
+pub struct HelperBindingInput {
+    /// The endpoint every `command` external of the battery is served under; the
+    /// external's name is appended as the last path segment.
+    pub url_base: String,
+    /// The runtime variable holding the bearer token the endpoint checks.
+    pub token_env: String,
+}
+
+#[napi(object)]
+pub struct ComposeBatteryInput {
+    pub name: String,
+    pub policy: String,
+    pub helpers: Option<HelperBindingInput>,
+}
+
+#[napi(object)]
+pub struct ComposePolicyInput {
+    pub root: String,
+    pub server_aliases: Vec<ServerAliasInput>,
+    pub batteries: Vec<ComposeBatteryInput>,
+}
+
+#[napi(object)]
+pub struct ComposedPolicy {
+    /// The composed document, absent when composition failed.
+    pub content: Option<String>,
+    pub errors: Vec<String>,
+}
+
+/// Composes the effective policy: the root with the host's server aliases, then the
+/// batteries under it. Deterministic in its inputs, so equal inputs give equal bytes.
+#[napi(js_name = "composeOpenappaPolicy")]
+pub async fn compose_openappa_policy(input: ComposePolicyInput) -> napi::Result<ComposedPolicy> {
+    tokio::task::spawn_blocking(move || {
+        let aliases: Vec<policy::ServerAlias> = input
+            .server_aliases
+            .into_iter()
+            .map(|alias| policy::ServerAlias {
+                alias: alias.alias,
+                targets: alias.targets,
+            })
+            .collect();
+        let batteries: Vec<policy::ComposeBattery> = input
+            .batteries
+            .into_iter()
+            .map(|battery| policy::ComposeBattery {
+                name: battery.name,
+                policy: battery.policy,
+                helpers: battery.helpers.map(|helpers| policy::HelperBinding {
+                    url_base: helpers.url_base,
+                    token_env: helpers.token_env,
+                }),
+            })
+            .collect();
+        std::panic::catch_unwind(|| policy::compose(&input.root, &aliases, &batteries))
+            .map(|result| match result {
+                Ok(content) => ComposedPolicy {
+                    content: Some(content),
+                    errors: Vec::new(),
+                },
+                Err(message) => ComposedPolicy {
+                    content: None,
+                    errors: vec![message],
+                },
+            })
+            .map_err(|_| error("OpenAPPA policy composition failed"))
+    })
+    .await
+    .map_err(error)?
+}
+
+#[napi(object)]
+pub struct BatteryFileInput {
+    pub path: String,
+    pub text: String,
+}
+
+#[napi(object)]
+pub struct BatteryExternal {
+    pub kind: String,
+    pub name: String,
+    pub command: Vec<String>,
+    pub token_env: Option<String>,
+}
+
+#[napi(object)]
+pub struct BatteryPackage {
+    pub name: String,
+    pub description: String,
+    pub namespaces: Vec<String>,
+    pub policy: String,
+    pub helpers: Vec<String>,
+    pub credentials: Vec<String>,
+    pub externals: Vec<BatteryExternal>,
+    pub setup: Option<String>,
+    pub files: Vec<BatteryFileInput>,
+}
+
+impl From<&batteries::BatteryInfo> for BatteryPackage {
+    fn from(info: &batteries::BatteryInfo) -> Self {
+        BatteryPackage {
+            name: info.name.clone(),
+            description: info.description.clone(),
+            namespaces: info.namespaces.clone(),
+            policy: info.policy.clone(),
+            helpers: info.helpers.clone(),
+            credentials: info.credentials.clone(),
+            externals: info
+                .externals
+                .iter()
+                .map(|external| BatteryExternal {
+                    kind: external.kind.clone(),
+                    name: external.name.clone(),
+                    command: external.command.clone(),
+                    token_env: external.token_env.clone(),
+                })
+                .collect(),
+            setup: info.setup.clone(),
+            files: info
+                .files
+                .iter()
+                .map(|file| BatteryFileInput {
+                    path: file.path.clone(),
+                    text: file.text.clone(),
+                })
+                .collect(),
+        }
+    }
+}
+
+/// The batteries bundled with the pinned OpenAPPA checkout that declare the
+/// Archestra host.
+#[napi(js_name = "listBundledOpenappaBatteries")]
+pub async fn list_bundled_openappa_batteries() -> napi::Result<Vec<BatteryPackage>> {
+    tokio::task::spawn_blocking(|| {
+        std::panic::catch_unwind(|| {
+            batteries::bundled()
+                .iter()
+                .map(BatteryPackage::from)
+                .collect()
+        })
+        .map_err(|_| error("bundled OpenAPPA batteries failed to load"))
+    })
+    .await
+    .map_err(error)?
+}
+
+/// Validates an uploaded battery package with the marketplace's own checks and reads
+/// what the host needs from it. The message names the first refusal.
+#[napi(js_name = "inspectOpenappaBattery")]
+pub async fn inspect_openappa_battery(
+    files: Vec<BatteryFileInput>,
+) -> napi::Result<BatteryPackage> {
+    tokio::task::spawn_blocking(move || {
+        let files: Vec<batteries::BatteryFile> = files
+            .into_iter()
+            .map(|file| batteries::BatteryFile {
+                path: file.path,
+                text: file.text,
+            })
+            .collect();
+        std::panic::catch_unwind(|| batteries::inspect(&files))
+            .map_err(|_| error("OpenAPPA battery inspection failed"))?
+            .map(|info| BatteryPackage::from(&info))
+            .map_err(error)
     })
     .await
     .map_err(error)?
@@ -1080,7 +1258,7 @@ impl State {
             // must have reported ChildEnd through its adapter first.
             HookEvent::SpawnResult {
                 actor: actor.clone(),
-                call: proposed_recorded_call(&call),
+                call: proposed_recorded_call(&call)?,
                 call_id: Some(format!("call:{call_id}")),
                 outcome,
                 child: None,
@@ -1089,7 +1267,7 @@ impl State {
         } else {
             HookEvent::ToolResult {
                 actor: actor.clone(),
-                call: proposed_recorded_call(&call),
+                call: proposed_recorded_call(&call)?,
                 call_id: Some(format!("call:{call_id}")),
                 outcome,
             }
@@ -1323,12 +1501,6 @@ fn render_remedy_outcome(
             false,
             render_released_call("Authorized", &call, owner),
         ),
-        RemedyOutcome::Substituted { call } => (
-            OutputSource::Runtime,
-            None,
-            false,
-            render_substituted_call(&call, owner),
-        ),
         RemedyOutcome::Returned { value } => (OutputSource::Tool, None, false, value),
         RemedyOutcome::Declined { presentation } => {
             (OutputSource::Runtime, None, false, presentation.feedback)
@@ -1366,34 +1538,12 @@ fn unknown_control_reason(reason: &RemedyRefusal) -> Option<&'static str> {
 
 fn render_released_call(status: &str, call: &ProposedCall, owner: Option<&OfferOwner>) -> String {
     let tool = owner
-        .and_then(|owner| owner.spelling.as_deref())
-        .unwrap_or(&call.tool);
+        .and_then(|owner| owner.spelling.clone())
+        .unwrap_or_else(|| spelled_tool(&call.tool));
     format!(
         "[appa] {status}. Call the {tool} tool again with exactly these arguments: {}",
         call.arguments.get()
     )
-}
-
-fn render_substituted_call(call: &ProposedCall, owner: Option<&OfferOwner>) -> String {
-    let unchanged = owner
-        .and_then(|owner| owner.arguments.as_deref())
-        .is_some_and(|original| json_arguments_match(original, call.arguments.get()));
-    let status = if unchanged {
-        "Released unchanged. The sanitizer reviewed the arguments and admitted them as they were"
-    } else {
-        "Substituted. The sanitizer released the call"
-    };
-    render_released_call(status, call, owner)
-}
-
-fn json_arguments_match(original: &str, proposed: &str) -> bool {
-    match (
-        serde_json::from_str::<Value>(original),
-        serde_json::from_str::<Value>(proposed),
-    ) {
-        (Ok(original), Ok(proposed)) => original == proposed,
-        _ => false,
-    }
 }
 
 fn remedy_operation(input: &Input) -> napi::Result<String> {
@@ -1484,11 +1634,11 @@ fn recorded_call(context: Option<Value>, legacy_input: Value) -> napi::Result<Re
     serde_json::from_value(value).map_err(|_| error("released call receipt lacks call context"))
 }
 
-fn proposed_recorded_call(call: &RecordedCall) -> ProposedCall {
-    ProposedCall {
-        tool: call.tool.clone(),
+fn proposed_recorded_call(call: &RecordedCall) -> napi::Result<ProposedCall> {
+    Ok(ProposedCall {
+        tool: canonical_tool(&call.tool)?,
         arguments: call.arguments.clone(),
-    }
+    })
 }
 
 fn authoritative_unexecuted_response(decision: Value) -> napi::Result<Value> {
@@ -1592,12 +1742,34 @@ fn required_arguments(input: &Input) -> napi::Result<&str> {
 }
 fn proposed(input: &Input) -> napi::Result<ProposedCall> {
     Ok(ProposedCall {
-        tool: required(&input.tool, "tool")?.to_owned(),
+        tool: canonical_tool(required(&input.tool, "tool")?)?,
         arguments: input
             .arguments
             .clone()
             .ok_or_else(|| error("missing arguments"))?,
     })
+}
+
+/// The identity the runtime judges: the host's spelling derived through the
+/// Archestra adapter, the way the wire derives a served host's calls.
+fn canonical_tool(raw: &str) -> napi::Result<String> {
+    (appa_adapter_archestra::adapter().derive)(raw)
+        .map(|derived| derived.canonical.as_str().to_owned())
+        .map_err(|refusal| {
+            error(match refusal {
+                appa_runtime_api::ParseRefusal::Unreadable { detail }
+                | appa_runtime_api::ParseRefusal::Malformed { detail } => detail,
+            })
+        })
+}
+
+/// The host's spelling of a canonical identity the runtime hands back, for the
+/// model's eyes; a canonical id the adapter cannot spell stays as it is.
+fn spelled_tool(canonical: &str) -> String {
+    CanonicalTool::parse(canonical)
+        .ok()
+        .and_then(|tool| (appa_adapter_archestra::adapter().spell)(&tool))
+        .unwrap_or_else(|| canonical.to_owned())
 }
 
 fn routing_owner(
@@ -1759,10 +1931,7 @@ mod root_lock_tests {
 
 #[cfg(test)]
 mod typed_tests {
-    use super::{
-        OfferId, OfferOwner, RemedyPresentation, json_arguments_match, owner_can_be_spent_by,
-        presentation_offer_ids, render_substituted_call,
-    };
+    use super::{OfferId, RemedyPresentation, owner_can_be_spent_by, presentation_offer_ids};
     use appa_runtime_api::OfferedRemedy;
 
     #[test]
@@ -1843,28 +2012,6 @@ mod typed_tests {
         ));
         assert!(!owner_can_be_spent_by(Some("virtual-key:credential"), None));
         assert!(matches!(credential, super::Principal::VirtualKey(_)));
-    }
-
-    #[test]
-    fn substitution_comparison_uses_json_values_and_saved_spelling() {
-        let owner = OfferOwner {
-            organization_id: "organization".to_owned(),
-            caller_id: Some("user:owner".to_owned()),
-            session_id: "session".to_owned(),
-            parent_id: None,
-            root: "root".to_owned(),
-            arguments: Some(r#"{ "value": 1 }"#.to_owned()),
-            tool: Some("canonical_tool".to_owned()),
-            spelling: Some("client_tool".to_owned()),
-        };
-        let call = appa_runtime_api::ProposedCall {
-            tool: "canonical_tool".to_owned(),
-            arguments: serde_json::value::to_raw_value(&serde_json::json!({ "value": 1 })).unwrap(),
-        };
-
-        assert!(json_arguments_match(r#"{"value":1}"#, call.arguments.get()));
-        assert!(render_substituted_call(&call, Some(&owner)).contains("client_tool"));
-        assert!(render_substituted_call(&call, Some(&owner)).contains("Released unchanged"));
     }
 
     #[test]

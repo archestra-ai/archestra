@@ -17,6 +17,12 @@ const native = vi.hoisted(() => ({
   initializeOpenappa: vi.fn(),
   dispatchHook: vi.fn(),
   executeRemedyByOffer: vi.fn(),
+  // No batteries installed: the composed policy is the root alone.
+  listBundledOpenappaBatteries: vi.fn(async () => []),
+  composeOpenappaPolicy: vi.fn(async (input: { root: string }) => ({
+    content: input.root,
+    errors: [],
+  })),
 }));
 vi.mock("@archestra/openappa-rs", () => native);
 

@@ -37,6 +37,12 @@ const native = vi.hoisted(() => ({
   initializeOpenappa: vi.fn(),
   dispatchHook: vi.fn(),
   executeRemedyByOffer: vi.fn(),
+  // No batteries installed: the composed policy is the root alone.
+  listBundledOpenappaBatteries: vi.fn(async () => []),
+  composeOpenappaPolicy: vi.fn(async (input: { root: string }) => ({
+    content: input.root,
+    errors: [],
+  })),
 }));
 vi.mock("@archestra/openappa-rs", () => native);
 vi.mock("@/logging");
@@ -47,6 +53,19 @@ const session = {
 };
 
 beforeEach(async () => {
+  // The composed policy row references the organization, so the session's
+  // placeholder organization must exist.
+  await database.default
+    .insert(database.schema.organizationsTable)
+    .values({
+      id: session.organization_id,
+      name: "org",
+      slug: "org",
+      createdAt: new Date(),
+      theme: "cosmic-night",
+      customFont: "lato",
+    })
+    .onConflictDoNothing();
   config.llmProxy.plugins = ["appa"];
   config.openappa = {
     ...config.openappa,

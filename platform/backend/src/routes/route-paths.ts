@@ -113,3 +113,9 @@ export const AGENT_WORKSPACE_TRANSFER_PREFIX = "/api/agent-workspace-transfers";
 /** Stateless APPA annotator: returns no restrictions and reads no user data. */
 export const GUARDRAILS_NOOP_ANNOTATOR_PATH =
   "/api/guardrails-policy/annotators/noop";
+/**
+ * Battery helper bridge the APPA runtime consults over loopback:
+ * `POST <prefix>/:installId/:externalName`. Authenticated by the per-process
+ * bridge bearer the composed policy carries, not by a platform session.
+ */
+export const OPENAPPA_HELPERS_PREFIX = "/api/openappa/helpers";

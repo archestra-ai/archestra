@@ -9,17 +9,21 @@ publish = false
 crate-type = ["cdylib"]
 
 [dependencies]
-# Pinned to the first commit after OpenAPPA v0.23.1, which adds the PostgreSQL
-# connection pool. The embedded reporting helper currently requires upstream's
-# daemon feature.
-appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "a2720de2cbdfada272ad9fd2d252b6937a454d16" }
-appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "a2720de2cbdfada272ad9fd2d252b6937a454d16" }
-appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "a2720de2cbdfada272ad9fd2d252b6937a454d16", features = ["postgres"] }
+# Pinned to OpenAPPA PR #374 (Archestra adapter, hosted composition, bundled
+# batteries) merged with upstream main past v0.23.1, which adds the PostgreSQL
+# connection pool. Re-pin to main once #374 lands. The embedded reporting
+# helper currently requires upstream's daemon feature.
+appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "b40c27d91b9f5930d731c67fa51caa3e92a0559a" }
+appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "b40c27d91b9f5930d731c67fa51caa3e92a0559a" }
+appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "b40c27d91b9f5930d731c67fa51caa3e92a0559a", features = ["postgres"] }
+appa-adapter-archestra = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "b40c27d91b9f5930d731c67fa51caa3e92a0559a" }
+appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "b40c27d91b9f5930d731c67fa51caa3e92a0559a" }
 napi = { version = "3", features = ["tokio_rt"] }
 napi-derive = "3"
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["raw_value"] }
 sha2 = "0.11"
+tempfile = "3"
 toml = "1.1"
 tokio = { version = "1", features = ["sync", "time"] }
 futures-util = "0.3"

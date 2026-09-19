@@ -35640,6 +35640,13 @@ export type GetChatConversationsResponses = {
             compactedTokenEstimate: number;
             createdAt: string;
         }>;
+        scheduledRun?: {
+            id: string;
+            triggerId: string;
+            createdAt: string;
+            runKind: 'due' | 'manual';
+            scheduleName: string;
+        } | null;
     }>;
 };
 
@@ -96467,7 +96474,7 @@ export type RunScheduleTriggerNowResponses = {
         organizationId: string;
         triggerId: string;
         runKind: 'due' | 'manual';
-        status: 'running' | 'success' | 'failed';
+        status: 'running' | 'success' | 'failed' | 'cancelled';
         initiatedByUserId: string | null;
         chatConversationId: string | null;
         runtimeTaskId: string | null;
@@ -96489,7 +96496,7 @@ export type GetScheduleTriggerRunsData = {
     query?: {
         limit?: number;
         offset?: number;
-        status?: 'running' | 'success' | 'failed';
+        status?: 'running' | 'success' | 'failed' | 'cancelled';
     };
     url: '/api/schedule-triggers/{id}/runs';
 };
@@ -96569,7 +96576,7 @@ export type GetScheduleTriggerRunsResponses = {
             organizationId: string;
             triggerId: string;
             runKind: 'due' | 'manual';
-            status: 'running' | 'success' | 'failed';
+            status: 'running' | 'success' | 'failed' | 'cancelled';
             initiatedByUserId: string | null;
             chatConversationId: string | null;
             runtimeTaskId: string | null;
@@ -96676,7 +96683,7 @@ export type GetScheduleTriggerRunResponses = {
         organizationId: string;
         triggerId: string;
         runKind: 'due' | 'manual';
-        status: 'running' | 'success' | 'failed';
+        status: 'running' | 'success' | 'failed' | 'cancelled';
         initiatedByUserId: string | null;
         chatConversationId: string | null;
         runtimeTaskId: string | null;

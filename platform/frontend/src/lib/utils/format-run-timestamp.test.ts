@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { formatRunTimestamp } from "./format-run-timestamp";
+import { formatRunLabel, formatRunTimestamp } from "./format-run-timestamp";
 
 describe("formatRunTimestamp", () => {
   beforeEach(() => {
@@ -9,6 +9,15 @@ describe("formatRunTimestamp", () => {
   });
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  it("distinguishes manual and scheduled runs by invocation time and kind", () => {
+    expect(
+      formatRunLabel({ createdAt: "2026-01-15T09:30:00", runKind: "manual" }),
+    ).toMatch(/^Run · Today at .+ · Manual$/);
+    expect(
+      formatRunLabel({ createdAt: "2026-01-14T23:30:00", runKind: "due" }),
+    ).toMatch(/^Run · Yesterday at .+ · Scheduled$/);
   });
 
   it("labels a same-day timestamp as 'Today at <time>'", () => {

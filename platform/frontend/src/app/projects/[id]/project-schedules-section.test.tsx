@@ -219,6 +219,52 @@ describe("ProjectSchedulesSection with scheduledTask read+create", () => {
     expect(screen.getByText("Weekly summary")).toBeInTheDocument();
     expect(screen.getByText("Reporter")).toBeInTheDocument();
   });
+
+  it("opens the latest run chat and keeps editing and running in the actions menu", async () => {
+    const user = userEvent.setup();
+    const open = vi.fn();
+    vi.mocked(useDialogUrlParam).mockReturnValue({
+      entity: null,
+      open,
+      close: vi.fn(),
+    } as unknown as ReturnType<typeof useDialogUrlParam>);
+    vi.mocked(useScheduleTriggers).mockReturnValue({
+      data: { data: [SCHEDULE] },
+    } as unknown as ReturnType<typeof useScheduleTriggers>);
+    vi.mocked(useScheduleTriggerRuns).mockReturnValue({
+      data: {
+        data: [
+          {
+            id: "latest-run",
+            status: "success",
+            chatConversationId: "latest-chat",
+            runtimeTaskId: null,
+          },
+        ],
+      },
+    } as unknown as ReturnType<typeof useScheduleTriggerRuns>);
+    render(<ProjectSchedulesSection projectId="project-1" />);
+    await user.click(
+      screen.getByRole("button", { name: "View runs for Weekly summary" }),
+    );
+    expect(useRouter().push).toHaveBeenCalledWith(
+      "/chat/latest-chat?scheduleTriggerId=trigger-1&scheduleRunId=latest-run",
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Actions for Weekly summary" }),
+    );
+    expect(open).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("menuitem", { name: "Run manually" }));
+    expect(useRunScheduleTriggerNow().mutate).toHaveBeenCalledWith(
+      SCHEDULE.id,
+      expect.any(Object),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Actions for Weekly summary" }),
+    );
+    await user.click(screen.getByRole("menuitem", { name: "Edit" }));
+    expect(open).toHaveBeenCalledWith(SCHEDULE);
+  });
 });
 
 describe("ProjectSchedulesSection default agent", () => {
@@ -260,6 +306,13 @@ describe("ProjectSchedulesSection default agent", () => {
     return within(field).getByRole("combobox");
   }
 
+  function schedulePicker() {
+    const field = screen.getByText("Schedule", {
+      selector: "label",
+    }).parentElement;
+    return within(field as HTMLElement).getByRole("combobox");
+  }
+
   it("preselects the project's default agent when creating a schedule", async () => {
     render(
       <ProjectSchedulesSection
@@ -274,6 +327,24 @@ describe("ProjectSchedulesSection default agent", () => {
     );
 
     expect(agentPicker()).toHaveTextContent("Test1 Agent");
+    expect(schedulePicker()).toHaveTextContent("Manual");
+    expect(screen.queryByText("Timezone")).not.toBeInTheDocument();
+    await userEvent.type(screen.getByLabelText("Name"), "On-demand report");
+    await userEvent.type(
+      screen.getByLabelText("Task prompt"),
+      "Write a report",
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Create" }));
+    expect(useCreateScheduleTrigger().mutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({ enabled: false, projectId: "project-1" }),
+    );
+    await userEvent.click(schedulePicker());
+    await userEvent.click(screen.getByRole("button", { name: /^Every hour/ }));
+    expect(screen.getByText("Timezone")).toBeVisible();
+    await userEvent.click(screen.getByRole("button", { name: "Create" }));
+    expect(useCreateScheduleTrigger().mutateAsync).toHaveBeenLastCalledWith(
+      expect.objectContaining({ enabled: true, cronExpression: "0 * * * *" }),
+    );
   });
 
   it("leaves the agent unselected when the project pins none", async () => {
@@ -314,5 +385,30 @@ describe("ProjectSchedulesSection default agent", () => {
     expect(
       within(agentPicker()).getByLabelText("Dedicated runtime"),
     ).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(useUpdateScheduleTrigger().mutateAsync).toHaveBeenLastCalledWith({
+      id: SCHEDULE.id,
+      body: expect.objectContaining({
+        enabled: true,
+        cronExpression: SCHEDULE.cronExpression,
+      }),
+    });
+    const schedulePicker = screen.getByText("Schedule", {
+      selector: "label",
+    }).parentElement;
+    await userEvent.click(
+      within(schedulePicker as HTMLElement).getByRole("combobox"),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: /Manual.*Never runs automatically/ }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(useUpdateScheduleTrigger().mutateAsync).toHaveBeenLastCalledWith({
+      id: SCHEDULE.id,
+      body: expect.objectContaining({
+        enabled: false,
+        cronExpression: SCHEDULE.cronExpression,
+      }),
+    });
   });
 });

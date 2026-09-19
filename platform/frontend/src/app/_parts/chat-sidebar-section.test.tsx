@@ -66,6 +66,14 @@ let mockConversations: Array<{
   projectName?: string | null;
   projectIcon?: string | null;
   unread?: boolean;
+  origin?: string;
+  scheduledRun?: {
+    id: string;
+    triggerId: string;
+    createdAt: string;
+    runKind: "due" | "manual";
+    scheduleName: string;
+  };
 }> = [];
 
 let mockProjects: Array<{
@@ -303,6 +311,7 @@ vi.mock("@/components/ui/button", () => ({
       onClick={onClick}
       onPointerDown={onPointerDown}
       aria-label={props["aria-label"] as string | undefined}
+      aria-expanded={props["aria-expanded"] as boolean | undefined}
     >
       {children}
     </button>
@@ -401,6 +410,75 @@ describe("ChatSidebarSection", () => {
     mockConversations = [];
     const { container } = render(<ChatSidebarSection fadeIn={fadeIn} />);
     expect(container.innerHTML).toBe("");
+  });
+
+  it("collapses pinned and date groups independently and restores their chats", () => {
+    mockConversations = [
+      makeConv("pinned", "Pinned chat", { pinnedAt: new Date().toISOString() }),
+      makeConv("today", "Today's chat"),
+    ];
+    render(<ChatSidebarSection fadeIn={fadeIn} />);
+    const pinned = screen.getByRole("button", { name: "Pinned" });
+    const today = screen.getByRole("button", { name: "Today" });
+    fireEvent.click(pinned);
+    expect(pinned).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText("Pinned chat")).not.toBeInTheDocument();
+    expect(screen.getByText("Today's chat")).toBeInTheDocument();
+    fireEvent.click(today);
+    expect(screen.queryByText("Today's chat")).not.toBeInTheDocument();
+    fireEvent.click(pinned);
+    expect(screen.getByText("Pinned chat")).toBeInTheDocument();
+    expect(today).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it.each([
+    false,
+    true,
+  ])("shows one task and opens its newest run (pinned: %s)", (pinned) => {
+    mockConversations = [
+      {
+        ...makeConv("older-chat", "Repeated prompt"),
+        origin: "schedule_trigger",
+        scheduledRun: {
+          id: "older-run",
+          triggerId: "trigger-1",
+          createdAt: "2025-01-01T00:00:00Z",
+          runKind: "due",
+          scheduleName: "Daily summary",
+        },
+      },
+      {
+        ...makeConv(
+          "scheduled-chat",
+          "Repeated prompt",
+          pinned ? { pinnedAt: new Date().toISOString() } : undefined,
+        ),
+        origin: "schedule_trigger",
+        projectId: "project-1",
+        projectName: "Reports",
+        scheduledRun: {
+          id: "run-1",
+          triggerId: "trigger-1",
+          createdAt: new Date().toISOString(),
+          runKind: "manual",
+          scheduleName: "Daily summary",
+        },
+      },
+    ];
+    render(<ChatSidebarSection fadeIn={fadeIn} />);
+    const label = screen.getByText("Daily summary");
+    expect(screen.getAllByLabelText("Scheduled task")).toHaveLength(1);
+    fireEvent.click(label);
+    expect(mockRouterPush).toHaveBeenCalledWith(
+      "/chat/scheduled-chat?scheduleTriggerId=trigger-1&scheduleRunId=run-1",
+    );
+    mockRouterPush.mockClear();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open project Reports" }),
+    );
+    expect(mockRouterPush).toHaveBeenCalledExactlyOnceWith(
+      "/projects/project-1",
+    );
   });
 
   it("interweaves a durable run with chats and opens its terminal", () => {

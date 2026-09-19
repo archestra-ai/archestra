@@ -56,7 +56,9 @@ export function ProjectBadgeButton({
   return (
     <Tooltip>
       <TooltipTrigger asChild>{button}</TooltipTrigger>
-      <TooltipContent side="right">{projectName}</TooltipContent>
+      <TooltipContent side="top" sideOffset={6}>
+        {projectName}
+      </TooltipContent>
     </Tooltip>
   );
 }

@@ -148,6 +148,7 @@ import {
   UuidIdSchema,
 } from "@/types";
 import { ConversationFilesResponseSchema } from "@/types/conversation-file";
+import { SelectScheduleTriggerRunSchema } from "@/types/schedule-trigger";
 import {
   resolveAgentLlmOrDefault,
   resolveConversationLlmSelectionForAgent,
@@ -2321,17 +2322,44 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         querystring: z.object({
           search: z.string().optional(),
         }),
-        response: constructResponseSchema(z.array(SelectConversationSchema)),
+        response: constructResponseSchema(
+          z.array(
+            SelectConversationSchema.extend({
+              scheduledRun: SelectScheduleTriggerRunSchema.pick({
+                id: true,
+                triggerId: true,
+                createdAt: true,
+                runKind: true,
+              })
+                .extend({ scheduleName: z.string() })
+                .nullable()
+                .optional(),
+            }),
+          ),
+        ),
       },
     },
     async (request, reply) => {
       const { search } = request.query;
+      const conversations = await ConversationModel.findAll(
+        request.user.id,
+        request.organizationId,
+        search,
+      );
+      const runs = await ScheduleTriggerRunModel.findByChatConversationIds({
+        organizationId: request.organizationId,
+        conversationIds: conversations
+          .filter((c) => c.origin === "schedule_trigger")
+          .map((c) => c.id),
+      });
+      const byConversation = new Map(
+        runs.map((run) => [run.chatConversationId, run]),
+      );
       return reply.send(
-        await ConversationModel.findAll(
-          request.user.id,
-          request.organizationId,
-          search,
-        ),
+        conversations.map((conversation) => ({
+          ...conversation,
+          scheduledRun: byConversation.get(conversation.id) ?? null,
+        })),
       );
     },
   );

@@ -144,13 +144,13 @@ describe("TeamManagementDialog member roles", () => {
 
     const listbox = screen.getAllByRole("dialog").at(-1)!;
     expect(
-      within(listbox).getByRole("button", { name: "Product" }),
+      within(listbox).getByRole("option", { name: "Product" }),
     ).toBeInTheDocument();
     expect(
-      within(listbox).getByRole("button", { name: "Operations" }),
+      within(listbox).getByRole("option", { name: "Operations" }),
     ).toBeInTheDocument();
     expect(
-      within(listbox).queryByRole("button", { name: /Runtime/ }),
+      within(listbox).queryByRole("option", { name: /Runtime/ }),
     ).not.toBeInTheDocument();
   });
 

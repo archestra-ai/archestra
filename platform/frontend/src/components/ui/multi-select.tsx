@@ -8,6 +8,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { useListboxNavigation } from "@/lib/hooks/use-listbox-navigation";
 import { cn } from "@/lib/utils";
 
 interface MultiSelectProps {
@@ -65,6 +66,16 @@ export function MultiSelect({
     }
   };
 
+  const navigation = useListboxNavigation({
+    open: !disabled && open,
+    onOpenChange: setOpen,
+    values: [
+      ...(allValue === undefined ? [] : [allValue]),
+      ...filteredItems.map((item) => item.value),
+    ],
+    onSelect: handleToggleItem,
+  });
+
   const handleRemoveItem = (
     itemValue: string,
     e: React.MouseEvent | React.KeyboardEvent,
@@ -74,7 +85,10 @@ export function MultiSelect({
   };
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover
+      open={!disabled && open}
+      onOpenChange={(next) => !disabled && setOpen(next)}
+    >
       <PopoverTrigger asChild>
         <div
           role="combobox"
@@ -82,6 +96,8 @@ export function MultiSelect({
           aria-disabled={disabled}
           tabIndex={disabled ? -1 : 0}
           onKeyDown={(e) => {
+            if (disabled || e.target !== e.currentTarget) return;
+            navigation.onTriggerKeyDown(e);
             if (e.key === "Enter" || e.key === " ") {
               e.preventDefault();
               setOpen(!open);
@@ -143,6 +159,7 @@ export function MultiSelect({
           <div className="flex items-center border-b px-3 pb-2 pt-3">
             <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
             <input
+              {...navigation.inputProps}
               aria-label="Search options"
               placeholder="Search..."
               value={searchQuery}
@@ -151,14 +168,25 @@ export function MultiSelect({
             />
           </div>
         )}
-        <div className="max-h-[300px] overflow-y-auto p-1">
+        <div
+          {...navigation.listboxProps}
+          role="listbox"
+          aria-label={placeholder}
+          aria-multiselectable="true"
+          tabIndex={searchable ? undefined : 0}
+          className="max-h-[300px] overflow-y-auto p-1"
+        >
           {allValue !== undefined && (
             <button
+              {...navigation.getOptionProps(allValue)}
+              role="option"
+              aria-selected={isAllSelected}
               type="button"
               onClick={() => handleToggleItem(allValue)}
               className={cn(
                 "relative flex w-full cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors hover:bg-accent hover:text-accent-foreground",
-                isAllSelected && "bg-accent text-accent-foreground",
+                (isAllSelected || navigation.activeValue === allValue) &&
+                  "bg-accent text-accent-foreground",
               )}
             >
               <Check
@@ -182,12 +210,16 @@ export function MultiSelect({
               const isSelected = value.includes(item.value);
               return (
                 <button
-                  type="button"
                   key={item.value}
+                  {...navigation.getOptionProps(item.value)}
+                  role="option"
+                  aria-selected={isSelected}
+                  type="button"
                   onClick={() => handleToggleItem(item.value)}
                   className={cn(
                     "relative flex w-full cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors hover:bg-accent hover:text-accent-foreground",
-                    isSelected && "bg-accent text-accent-foreground",
+                    (isSelected || navigation.activeValue === item.value) &&
+                      "bg-accent text-accent-foreground",
                   )}
                 >
                   <Check

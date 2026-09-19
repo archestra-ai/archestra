@@ -29,7 +29,7 @@ describe("VirtualKeySearchableSelect", () => {
     );
 
     await user.click(screen.getByRole("combobox"));
-    await user.click(screen.getByRole("button", { name: /Production Key/i }));
+    await user.click(screen.getByRole("option", { name: /Production Key/i }));
 
     expect(onValueChange).toHaveBeenCalledWith("key-456");
   });

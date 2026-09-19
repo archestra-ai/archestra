@@ -58,16 +58,16 @@ describe("OwnerSelectField", () => {
     await user.click(screen.getByRole("combobox"));
 
     expect(
-      screen.getByRole("button", { name: /Yourself/i }),
+      screen.getByRole("option", { name: /Yourself/i }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /Alice Anderson/i }),
+      screen.getByRole("option", { name: /Alice Anderson/i }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /Bob Brown/i }),
+      screen.getByRole("option", { name: /Bob Brown/i }),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: /Self Admin/i }),
+      screen.queryByRole("option", { name: /Self Admin/i }),
     ).not.toBeInTheDocument();
   });
 
@@ -90,7 +90,7 @@ describe("OwnerSelectField", () => {
     render(<OwnerSelectField value="" onChange={onChange} />);
 
     await user.click(screen.getByRole("combobox"));
-    await user.click(screen.getByRole("button", { name: /Bob Brown/i }));
+    await user.click(screen.getByRole("option", { name: /Bob Brown/i }));
 
     expect(onChange).toHaveBeenCalledWith("u-b");
   });
@@ -107,7 +107,7 @@ describe("OwnerSelectField", () => {
     );
 
     await user.click(screen.getByRole("combobox"));
-    await user.click(screen.getByRole("button", { name: /Bob Brown/i }));
+    await user.click(screen.getByRole("option", { name: /Bob Brown/i }));
 
     expect(onSelectedOwnerChange).toHaveBeenCalledWith(
       expect.objectContaining({ userId: "u-b", name: "Bob Brown" }),
@@ -120,7 +120,7 @@ describe("OwnerSelectField", () => {
     render(<OwnerSelectField value="u-b" onChange={onChange} />);
 
     await user.click(screen.getByRole("combobox"));
-    await user.click(screen.getByRole("button", { name: /Yourself/i }));
+    await user.click(screen.getByRole("option", { name: /Yourself/i }));
 
     expect(onChange).toHaveBeenCalledWith("");
   });

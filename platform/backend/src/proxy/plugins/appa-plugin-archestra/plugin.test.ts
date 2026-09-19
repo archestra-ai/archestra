@@ -96,13 +96,17 @@ describe("AppaPluginArchestra", () => {
         normalizeLocalToolName: (name) => `local:${name}`,
       },
     ]);
+    // Each canonicalizer marks the local names it sees, so the output shows
+    // which request's binding ruled the call.
     const first = requestContext({
       sessionId: "first-session",
-      canonicalizeToolName: (name) => `first:${name}`,
+      canonicalizeToolName: (name) =>
+        name.startsWith("local:") ? `first:${name}` : name,
     });
     const second = requestContext({
       sessionId: "second-session",
-      canonicalizeToolName: (name) => `second:${name}`,
+      canonicalizeToolName: (name) =>
+        name.startsWith("local:") ? `second:${name}` : name,
     });
 
     try {
@@ -157,10 +161,35 @@ describe("AppaPluginArchestra", () => {
     }
   });
 
-  test("rules a Codex call inside an MCP namespace as the gateway's tool", async () => {
-    // Codex declares the gateway's tools in its `mcp__<server>` namespace
-    // under their bare names; ruling them as Codex builtins would miss the
-    // policy's gateway rules and the ask_user exemption alike.
+  test.each([
+    {
+      client: "Codex",
+      // Codex declares the gateway's tools in its `mcp__<server>` namespace
+      // under their bare names.
+      adapter: new AppaCodexAdapter(),
+      headers: { originator: "codex_cli_rs" },
+      gatewayCall: "archestra__ask_user",
+      namespaces: new Map([["archestra__ask_user", "mcp__my_gateway"]]),
+      localCall: "exec_command",
+    },
+    {
+      client: "OpenCode",
+      // OpenCode decorates the gateway's tools as `<label>_<tool>`.
+      adapter: new AppaOpenCodeAdapter(),
+      headers: { "x-opencode-session": "s" },
+      gatewayCall: "my_gateway_archestra__ask_user",
+      namespaces: new Map<string, string>(),
+      localCall: "exec_command",
+    },
+  ])("rules $client's call to a gateway tool as the gateway's tool, not a builtin", async ({
+    adapter,
+    headers,
+    gatewayCall,
+    namespaces,
+    localCall,
+  }) => {
+    // Ruled as a client builtin, a gateway tool would miss both the policy's
+    // rule for it and the ask_user exemption.
     const ruledAs: string[] = [];
     const evaluateToolCalls = vi
       .spyOn(appaService, "evaluateToolCalls")
@@ -168,31 +197,32 @@ describe("AppaPluginArchestra", () => {
         ruledAs.push(...calls.map((call) => options.canonicalize(call.name)));
         return calls.map(() => ({ kind: "allow" }) as const);
       });
-    const plugin = new AppaPluginArchestra([new AppaCodexAdapter()]);
+    const plugin = new AppaPluginArchestra([adapter]);
     const context = requestContext({
-      sessionId: "codex-namespace-session",
-      canonicalizeToolName: (name) => name,
+      sessionId: "client-naming-session",
+      canonicalizeToolName: (name) =>
+        name.replace(/^my_gateway_(?=archestra__)/, ""),
     });
     const trusted = context.resources.get(
       APPA_PLUGIN_TRUSTED_CONTEXT,
     ) as Record<string, unknown>;
     trusted.request = {
       ...(trusted.request as Record<string, unknown>),
-      namespaces: new Map([["archestra__ask_user", "mcp__my_gateway"]]),
+      namespaces,
     };
-    context.headers = { originator: "codex_cli_rs" };
+    context.headers = headers;
 
     try {
       await plugin.onSessionInit(context);
       await plugin.onToolCalls({
         ...context,
         toolCalls: [
-          { id: "ask", name: "archestra__ask_user", arguments: {} },
-          { id: "shell", name: "exec_command", arguments: {} },
+          { id: "ask", name: gatewayCall, arguments: {} },
+          { id: "shell", name: localCall, arguments: {} },
         ],
       });
 
-      expect(ruledAs).toEqual(["archestra__ask_user", "builtin:exec_command"]);
+      expect(ruledAs).toEqual(["archestra__ask_user", `builtin:${localCall}`]);
     } finally {
       evaluateToolCalls.mockRestore();
     }

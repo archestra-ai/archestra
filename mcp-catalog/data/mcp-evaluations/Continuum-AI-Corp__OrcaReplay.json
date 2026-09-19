@@ -1,0 +1,48 @@
+{
+  "name": "Continuum-AI-Corp__OrcaReplay",
+  "display_name": "OrcaReplay",
+  "description": "Read, replay and fork recorded coding-agent runs",
+  "author": {
+    "name": "Continuum-AI-Corp"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "orcareplay", "mcp"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# OrcaReplay MCP server\n\n`orca mcp` serves six tools over stdio for reading a recorded coding-agent run.\n\nOrcaReplay records an agent at the model-provider boundary, so a recording is the bytes the agent\nactually sent and received rather than a summary it wrote about itself. The MCP server lets an\nagent read those recordings.\n\n## Tools\n\n- `orca_list_runs` - list recorded runs\n- `orca_show_run` - read one run: turns, tool calls, exit status\n- `orca_checkpoints` - the points a replay can fork from\n- `orca_graph` - the run as a graph; its description spells out what `recorded` and `inferred` mean\n- `orca_replay` - replay the recorded run; free and offline, no provider contacted\n- `orca_compare` - compare two runs; its own description states what it costs\n\nFour of the six are read-only over the local trace store.\n\n## Usage\n\n```json\n{\n  \"mcpServers\": {\n    \"orca\": { \"command\": \"npx\", \"args\": [\"-y\", \"orcareplay\", \"mcp\"] }\n  }\n}\n```\n\n## Limits\n\n- A matching replay is not a determinism result: it proves the recorded exchange reproduces, not\n  that the agent or the model is deterministic.\n- Replay blocks model-provider egress only. It is not a sandbox - recorded tool calls still\n  execute for real.\n- The default adapter does not capture every call; embedding calls, for one, are not captured.\n\nApache-2.0. Node 20+. The on-disk trace format is specified separately under CC BY 4.0 in\n`spec/orca-trace-v0.md`, so a recording is readable without the CLI.\n",
+  "category": "AI Tools",
+  "archestra_config": {
+    "client_config_permutations": {
+      "orca": {
+        "command": "npx",
+        "args": ["-y", "orcareplay", "mcp"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "Continuum-AI-Corp",
+    "repo": "OrcaReplay",
+    "url": "https://github.com/Continuum-AI-Corp/OrcaReplay",
+    "name": "OrcaReplay",
+    "path": null,
+    "stars": 248,
+    "contributors": 8,
+    "issues": 7,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "b4df94160d29759a610eeb6ad0e815facd11d9b5"
+  },
+  "programming_language": "TypeScript"
+}

@@ -405,6 +405,68 @@ builtin = "hitl"
     assert.match(JSON.stringify(human.result.content), /unreachable|gave no answer/);
   });
 
+  await t.test('compact keeps labels on the root; an unprepared fork is refused; a stranger stays clean', async () => {
+    const parent = scope();
+    const before = await call(parent, 'write-before-taint', 'write_public');
+    assert.equal(before.decision, 'allow_call', JSON.stringify(before));
+    await result(parent, 'write-before-taint', 'ok');
+
+    const taint = await call(parent, 'taint', 'read_untrusted');
+    assert.ok(taint.offers?.length > 0, JSON.stringify(taint));
+    await byOffer(parent, {
+      tool_call_id: 'accept-taint',
+      arguments: { offer_id: taint.offers[0].offer_id },
+    });
+    assert.equal((await call(parent, 'taint-run', 'read_untrusted')).decision, 'allow_call');
+    await result(parent, 'taint-run', 'restricted contents');
+
+    // Compaction replays the same session id: the root reopens and the taint
+    // is still on it.
+    const afterCompact = await call(parent, 'write-after-compact', 'write_public');
+    assert.notEqual(
+      afterCompact.decision,
+      'allow_call',
+      'same session after further turns still carries the taint',
+    );
+
+    // A child only opens on a fork the parent's spawn prepared: a bare
+    // parent_id cannot smear or inherit the parent's labels.
+    const child = { ...parent, session_id: randomUUID(), parent_id: parent.session_id };
+    await assert.rejects(
+      () => call(child, 'write-after-fork', 'write_public'),
+      /no prepared fork to open this child/,
+    );
+
+    const stranger = scope();
+    const strangerWrite = await call(stranger, 'write-stranger', 'write_public');
+    assert.equal(
+      strangerWrite.decision,
+      'allow_call',
+      'an unrelated session is not tainted',
+    );
+  });
+
+  await t.test('an offer accepted for a dispatched call retries it through the dispatch tool', async () => {
+    const hint = async (dispatch) => {
+      const session = scope();
+      const denied = await call(session, 'dispatched-read', 'read_untrusted', { path: 'report.txt' });
+      assert.ok(denied.offers?.length > 0, JSON.stringify(denied));
+      return (await byOffer(session, {
+        tool_call_id: `accept-${dispatch ?? 'direct'}`,
+        arguments: { offer_id: denied.offers[0].offer_id },
+        tool: 'read_untrusted',
+        spelling: 'read_untrusted',
+        ...(dispatch ? { dispatch } : {}),
+      })).approved_output;
+    };
+
+    const [prefix, retry] = (await hint('my_gateway_archestra__run_tool')).split('exactly these arguments: ');
+    assert.equal(prefix, '[appa] Authorized. Call the my_gateway_archestra__run_tool tool again with ');
+    assert.deepEqual(JSON.parse(retry), { tool_name: 'read_untrusted', tool_args: { path: 'report.txt' } });
+    // A direct call keeps naming the tool itself.
+    assert.match(await hint(undefined), /^\[appa\] Authorized\. Call the read_untrusted tool again/);
+  });
+
   await t.test('unknown hook event tags are rejected before receipt processing', async () => {
     await assert.rejects(
       () => native.dispatchHook(JSON.stringify({

@@ -21,15 +21,16 @@ const {
 } = archestraApiSdk;
 
 /**
- * True when `value` is a full session ID — either a bare `<UUID>` or a
- * `scheduled-<UUID>`. The logs search box only supports session-ID lookup
- * (free-text content search was removed), so callers use this to decide
- * whether a typed term should filter or be ignored.
+ * True when `value` is a full session ID — a bare `<UUID>`, a
+ * `scheduled-<UUID>`, or an OpenCode `ses_…` id. The logs search box only
+ * supports session-ID lookup (free-text content search was removed), so
+ * callers use this to decide whether a typed term should filter or be ignored.
  */
 export const isSessionId = (value: string): boolean => {
   const sessionIdRegex =
     /^(scheduled-)?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  return sessionIdRegex.test(value);
+  const openCodeSessionIdRegex = /^ses_[0-9a-z]{20,40}$/i;
+  return sessionIdRegex.test(value) || openCodeSessionIdRegex.test(value);
 };
 
 export function useInteractions({

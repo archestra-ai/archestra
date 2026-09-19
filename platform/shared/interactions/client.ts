@@ -33,6 +33,9 @@ export const COPILOT_CLI_CLIENT_LABEL = "Copilot CLI";
 /** Human-readable label for the Cursor client id in the UI. */
 export const CURSOR_CLIENT_LABEL = "Cursor";
 
+/** Human-readable label for the OpenCode client id in the UI. */
+export const OPENCODE_CLIENT_LABEL = "OpenCode";
+
 /**
  * `external_agent_id` values for Claude clients:
  * - {@link CLAUDE_CLIENT_ID} — generic; recorded by auto-discovery when no
@@ -69,6 +72,12 @@ export const COPILOT_CLI_CLIENT_ID = "github_copilot_cli";
  * Cursor User-Agent (see {@link isCursorUserAgent}).
  */
 export const CURSOR_CLIENT_ID = "cursor";
+
+/**
+ * `external_agent_id` value for the OpenCode CLI. Recorded by auto-discovery
+ * of the OpenCode User-Agent or `originator` (see {@link isOpenCodeUserAgent}).
+ */
+export const OPENCODE_CLIENT_ID = "opencode";
 
 /**
  * First-party Codex originators. Codex stamps its client identity on every
@@ -120,6 +129,20 @@ export function isCursorUserAgent(
 ): boolean {
   return (
     !!userAgent && userAgent.split("/", 1)[0]?.trim().toLowerCase() === "cursor"
+  );
+}
+
+/**
+ * Whether a request's User-Agent or `originator` denotes OpenCode. OpenCode
+ * leads its User-Agent with `opencode/<version>` on every provider, and adds
+ * `originator: opencode` on the OpenAI Responses wire.
+ */
+export function isOpenCodeUserAgent(
+  userAgent: string | null | undefined,
+): boolean {
+  return (
+    !!userAgent &&
+    userAgent.split("/", 1)[0]?.trim().toLowerCase() === "opencode"
   );
 }
 
@@ -242,6 +265,24 @@ export function isCursorClientAgentId(
 }
 
 /**
+ * `external_agent_id` values for OpenCode clients. Only the one auto-discovered
+ * id exists today, but this stays a set to mirror the other client families.
+ */
+export const OPENCODE_CLIENT_AGENT_IDS = [OPENCODE_CLIENT_ID] as const;
+
+const OPENCODE_CLIENT_AGENT_ID_SET = new Set<string>(OPENCODE_CLIENT_AGENT_IDS);
+
+/** Whether an `external_agent_id` value denotes OpenCode. */
+export function isOpenCodeClientAgentId(
+  externalAgentId: string | null | undefined,
+): boolean {
+  if (!externalAgentId) {
+    return false;
+  }
+  return OPENCODE_CLIENT_AGENT_ID_SET.has(externalAgentId.trim().toLowerCase());
+}
+
+/**
  * Values used by the `/llm/logs` "Client" filter (URL/query key). Distinct from
  * the stored ids above: the backend expands each to its client's agent-id set
  * (see {@link clientFilterToAgentIds}).
@@ -250,6 +291,7 @@ export const CLAUDE_CLIENT_FILTER = "claude";
 export const CODEX_CLIENT_FILTER = "codex";
 export const COPILOT_CLI_CLIENT_FILTER = "copilot-cli";
 export const CURSOR_CLIENT_FILTER = "cursor";
+export const OPENCODE_CLIENT_FILTER = "opencode";
 
 export const ClientFilterSchema = z.enum([
   CLAUDE_CLIENT_FILTER,
@@ -258,6 +300,7 @@ export const ClientFilterSchema = z.enum([
   CODEX_CLIENT_FILTER,
   COPILOT_CLI_CLIENT_FILTER,
   CURSOR_CLIENT_FILTER,
+  OPENCODE_CLIENT_FILTER,
 ]);
 
 export type ClientFilter = z.infer<typeof ClientFilterSchema>;
@@ -328,6 +371,15 @@ const CLIENT_FAMILIES: ReadonlyArray<ClientFamily> = [
     icon: "/icons/cursor.png",
     agentIds: CURSOR_CLIENT_AGENT_IDS,
     isClientAgentId: isCursorClientAgentId,
+  },
+  {
+    filter: OPENCODE_CLIENT_FILTER,
+    label: OPENCODE_CLIENT_LABEL,
+    // OpenCode routes to many providers; its own mark takes precedence.
+    provider: "openai",
+    icon: "/icons/opencode.png",
+    agentIds: OPENCODE_CLIENT_AGENT_IDS,
+    isClientAgentId: isOpenCodeClientAgentId,
   },
 ];
 

@@ -182,6 +182,17 @@ describe("resolveLockedChatAuditContext", () => {
     ).resolves.toEqual({ kind: "none" });
   });
 
+  test("none when the session id is not a conversation UUID, without touching the database", async () => {
+    const lookup = vi.spyOn(ConversationModel, "getLockedChatAuditInfoOwnedBy");
+    await expect(
+      resolveLockedChatAuditContext({
+        ...chatParams(),
+        sessionId: "native-client-session",
+      }),
+    ).resolves.toEqual({ kind: "none" });
+    expect(lookup).not.toHaveBeenCalled();
+  });
+
   test("none when the session id is missing, without touching the database", async () => {
     const lookup = vi.spyOn(ConversationModel, "getLockedChatAuditInfoOwnedBy");
     await expect(

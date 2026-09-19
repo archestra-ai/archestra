@@ -342,6 +342,55 @@ describe("denial notice restoration", () => {
     });
   });
 
+  test("leaves a notice for a name no provider accepts as the notice", () => {
+    // A model invented "my_gateway archestra__run_tool"; restored into
+    // history, the name fails the provider's validation on every later turn.
+    const invented = buildNoticeArguments({
+      id: "call_invented",
+      tool: "my_gateway archestra__run_tool",
+      arguments: '{"tool_name":"archestra__whoami"}',
+      result: "[appa] tool is not declared",
+    });
+    const denied = buildNoticeArguments({
+      id: "call_shell",
+      tool: "shell",
+      arguments: '{"command":"ls"}',
+      result: "[appa] Blocked",
+    });
+    const call = (id: string, args: unknown) => ({
+      id,
+      type: "function",
+      function: { name: NOTICE, arguments: JSON.stringify(args) },
+    });
+    const chat = {
+      tools: [
+        { type: "function", function: { name: NOTICE } },
+        { type: "function", function: { name: CONTROL } },
+      ],
+      messages: [
+        {
+          role: "assistant",
+          tool_calls: [
+            call("call_invented", invented),
+            call("call_shell", denied),
+          ],
+        },
+        { role: "tool", tool_call_id: "call_invented", content: "ruling" },
+        { role: "tool", tool_call_id: "call_shell", content: "ruling" },
+      ],
+    };
+
+    prepareAppaRequest({
+      body: chat,
+      interactionType: "openai:chatCompletions",
+      canonicalizeToolName: canonicalize,
+    });
+
+    const [kept, restored] = chat.messages[0].tool_calls ?? [];
+    expect(kept.function.name).toBe(NOTICE);
+    expect(restored.function.name).toBe("shell");
+  });
+
   test("restores a direct control receipt without changing call identity or result adjacency", () => {
     const originalArguments =
       '{\n  "offer_id": "offer_1",\n  "label": { "trust": "trusted" }\n}';
@@ -780,6 +829,190 @@ describe("denial notice restoration", () => {
       "assistant",
       "user",
     ]);
+  });
+
+  test("re-inflates a cleared notice result with the ruling, and keeps a cleared ordinary result cleared", () => {
+    // OpenCode truncates old tool results to `[Old tool result content
+    // cleared]` inside the same session. The provider is owed the denial, so
+    // the notice's cleared result gets the ruling back; an ordinary call's
+    // cleared result is the client's own compression and stays cleared.
+    const body = {
+      tools: [
+        { type: "function", function: { name: NOTICE } },
+        { type: "function", function: { name: CONTROL } },
+        { type: "function", function: { name: "read_file" } },
+      ],
+      messages: [
+        { role: "user", content: "clean the build dir" },
+        {
+          role: "assistant",
+          tool_calls: [
+            {
+              id: "call_1",
+              type: "function",
+              function: {
+                name: NOTICE,
+                arguments: JSON.stringify(
+                  notice("shell", { command: "rm -rf build" }, "call_1"),
+                ),
+              },
+            },
+            {
+              id: "call_2",
+              type: "function",
+              function: { name: "read_file", arguments: '{"path":"a.txt"}' },
+            },
+          ],
+        },
+        {
+          role: "tool",
+          tool_call_id: "call_1",
+          content: "[Old tool result content cleared]",
+        },
+        {
+          role: "tool",
+          tool_call_id: "call_2",
+          content: "[Old tool result content cleared]",
+        },
+        { role: "user", content: "continue" },
+      ],
+    };
+
+    prepareAppaRequest({
+      body,
+      interactionType: "openai:chatCompletions",
+      canonicalizeToolName: canonicalize,
+    });
+
+    const assistant = body.messages[1] as {
+      tool_calls: Array<{ function: { name: string; arguments: string } }>;
+    };
+    expect(assistant.tool_calls[0].function).toEqual({
+      name: "shell",
+      arguments: JSON.stringify({ command: "rm -rf build" }),
+    });
+    expect(body.messages[2]).toEqual({
+      role: "tool",
+      tool_call_id: "call_1",
+      content: "[appa] Blocked: this call cannot run yet.",
+    });
+    expect(body.messages[3]).toEqual({
+      role: "tool",
+      tool_call_id: "call_2",
+      content: "[Old tool result content cleared]",
+    });
+  });
+
+  test("a Codex compaction turn restores the notices its summary is built from", () => {
+    // Codex compaction is a turn of the same thread carrying the history the
+    // summarizer compresses. The summarizer sees the calls the model actually
+    // made and the rulings that answered them, never the notice envelope.
+    const body = {
+      tools: [
+        { type: "function", name: NOTICE },
+        { type: "function", name: CONTROL },
+      ],
+      client_metadata: {
+        session_id: "d12f967d-6fe1-4f92-a62f-0f6a2092fd2f",
+        thread_id: "01a0859b-3029-78f3-a730-0edef60872cb",
+        request_kind: "compaction",
+      },
+      input: [
+        { role: "user", content: "clean the build dir" },
+        {
+          type: "function_call",
+          id: "fc_1",
+          call_id: "call_1",
+          name: NOTICE,
+          status: "completed",
+          arguments: JSON.stringify(
+            notice("shell", { command: "rm -rf build" }, "call_1"),
+          ),
+        },
+        {
+          type: "function_call_output",
+          call_id: "call_1",
+          output: "client text",
+        },
+      ],
+    };
+
+    prepareAppaRequest({
+      body,
+      interactionType: "openai:responses",
+      canonicalizeToolName: canonicalize,
+    });
+
+    expect(body.input[1]).toEqual({
+      type: "function_call",
+      id: "fc_1",
+      call_id: "call_1",
+      name: "shell",
+      status: "completed",
+      arguments: JSON.stringify({ command: "rm -rf build" }),
+    });
+    expect(body.input[2]).toEqual({
+      type: "function_call_output",
+      call_id: "call_1",
+      output: "[appa] Blocked: this call cannot run yet.",
+    });
+  });
+
+  test("an out-of-band compaction of another session's context still restores notices", () => {
+    // A summarizer request stamped with a fresh session still carries the
+    // original trajectory's sealed notices. Restoration is a function of the
+    // body, not of which root the request binds, and it runs even when the
+    // request declares no tools — the typical shape of an out-of-band
+    // compaction. The provider is owed the original calls and the rulings.
+    const body = {
+      client_metadata: {
+        session_id: "f5be22fa-3d3a-44ce-8d37-d0073acd5174",
+        thread_id: "01a085a0-ca43-7671-9450-8508eddef38d",
+        request_kind: "compaction",
+      },
+      input: [
+        { role: "user", content: "clean the build dir" },
+        {
+          type: "function_call",
+          id: "fc_1",
+          call_id: "call_1",
+          name: NOTICE,
+          status: "completed",
+          arguments: JSON.stringify(
+            notice("shell", { command: "rm -rf build" }, "call_1"),
+          ),
+        },
+        {
+          type: "function_call_output",
+          call_id: "call_1",
+          output: "client text",
+        },
+      ],
+    };
+
+    prepareAppaRequest({
+      body,
+      interactionType: "openai:responses",
+      session: {
+        sessionId: "01a085a0-ca43-7671-9450-8508eddef38d",
+        provenance: "codex-turn-metadata",
+      },
+      canonicalizeToolName: canonicalize,
+    });
+
+    expect(body.input[1]).toEqual({
+      type: "function_call",
+      id: "fc_1",
+      call_id: "call_1",
+      name: "shell",
+      status: "completed",
+      arguments: JSON.stringify({ command: "rm -rf build" }),
+    });
+    expect(body.input[2]).toEqual({
+      type: "function_call_output",
+      call_id: "call_1",
+      output: "[appa] Blocked: this call cannot run yet.",
+    });
   });
 
   test("leaves a client's own custom tool alone, even carrying notice-shaped arguments", () => {
@@ -1240,14 +1473,28 @@ describe("APPA request preflight", () => {
     expect(prepared.promptOperationId).toBeDefined();
   });
 
-  test("refuses a session that cannot show the model a denial", () => {
-    expect(() =>
-      prepareAppaRequest({
-        body: { tools: [{ name: CONTROL }, { name: "Bash" }], messages: [] },
-        interactionType: "anthropic:messages",
-        canonicalizeToolName: canonicalize,
-      }),
-    ).toThrow("does not declare get_remedy_plans");
+  test("injects the missing notice tool using the client's control-tool prefix", () => {
+    const body = { tools: [{ name: CONTROL }, { name: "Bash" }], messages: [] };
+    const prepared = prepareAppaRequest({
+      body,
+      interactionType: "anthropic:messages",
+      canonicalizeToolName: canonicalize,
+    });
+    expect(prepared.tools).toEqual({
+      controlToolName: CONTROL,
+      noticeToolName: NOTICE,
+    });
+  });
+
+  test("injects both APPA tools when the client declared none of them", () => {
+    const body = { tools: [{ name: "Bash" }], messages: [] };
+    const prepared = prepareAppaRequest({
+      body,
+      interactionType: "anthropic:messages",
+      canonicalizeToolName: canonicalize,
+    });
+    expect(prepared.tools?.noticeToolName).toMatch(/get_remedy_plans$/);
+    expect(prepared.tools?.controlToolName).toMatch(/execute_remedy_plan$/);
   });
 
   test("refuses Azure Responses tool traffic before it can bypass governance", () => {
@@ -1295,20 +1542,22 @@ describe("APPA request preflight", () => {
     // A hostile MCP server can put the branded names on its own tools. Built-in
     // status comes only from a label tied to one of this organization's own
     // gateways, so under any other label the pair is two foreign tools and the
-    // session, which then declares no control tool, is refused.
-    expect(() =>
-      prepareAppaRequest({
-        body: {
-          tools: [
-            { name: "mcp__evil__archestra__get_remedy_plans" },
-            { name: "mcp__evil__archestra__execute_remedy_plan" },
-          ],
-          messages: [],
-        },
-        interactionType: "anthropic:messages",
-        canonicalizeToolName: canonicalize,
-      }),
-    ).toThrow("does not declare");
+    // session is admitted without an APPA tool binding.
+    const prepared = prepareAppaRequest({
+      body: {
+        tools: [
+          { name: "mcp__evil__archestra__get_remedy_plans" },
+          { name: "mcp__evil__archestra__execute_remedy_plan" },
+        ],
+        messages: [],
+      },
+      interactionType: "anthropic:messages",
+      canonicalizeToolName: canonicalize,
+    });
+    expect(prepared.tools?.noticeToolName).toBe("archestra__get_remedy_plans");
+    expect(prepared.tools?.controlToolName).toBe(
+      "archestra__execute_remedy_plan",
+    );
   });
 
   test("governs a wire family it cannot restore notices on, instead of refusing it", () => {
@@ -1467,19 +1716,19 @@ describe("APPA request preflight", () => {
     expect(prepared.spellings.get("archestra__execute_remedy_plan")).toBe(
       "my_gateway_archestra__execute_remedy_plan",
     );
-    expect(() =>
-      prepareAppaRequest({
-        body: {
-          tools: [
-            { name: "evil_archestra__get_remedy_plans" },
-            { name: "evil_archestra__execute_remedy_plan" },
-          ],
-          messages: [],
-        },
-        interactionType: "openai:chatCompletions",
-        canonicalizeToolName: anchored,
-      }),
-    ).toThrow("does not declare");
+    const foreign = prepareAppaRequest({
+      body: {
+        tools: [
+          { name: "evil_archestra__get_remedy_plans" },
+          { name: "evil_archestra__execute_remedy_plan" },
+        ],
+        messages: [],
+      },
+      interactionType: "openai:chatCompletions",
+      canonicalizeToolName: anchored,
+    });
+    expect(foreign.tools?.noticeToolName).toMatch(/get_remedy_plans$/);
+    expect(foreign.tools?.controlToolName).toMatch(/execute_remedy_plan$/);
   });
 
   test("refuses a session that defers its tools to a tool search", () => {
@@ -1885,7 +2134,10 @@ describe("client session identity", () => {
     }),
   };
 
-  test("reads Claude Code's session from its header", () => {
+  test("leaves Claude Code's session header to the client adapter", () => {
+    // The wire module reads only generic fields; the Claude Code adapter owns
+    // the client-specific header (session-identity.test.ts proves the pair
+    // binds the same session).
     expect(
       appaSessionIdentity({
         family: "anthropic:messages",
@@ -1895,7 +2147,7 @@ describe("client session identity", () => {
     ).toMatchObject({
       sessionId: CLAUDE_SESSION,
       parentId: undefined,
-      provenance: "claude-code-header",
+      provenance: "claude-metadata",
     });
   });
 
@@ -1987,7 +2239,7 @@ describe("client session identity", () => {
     });
   });
 
-  test("keeps Claude's session header over opaque metadata", () => {
+  test("keeps opaque metadata over an unread client header", () => {
     expect(
       appaSessionIdentity({
         family: "anthropic:messages",
@@ -1995,8 +2247,8 @@ describe("client session identity", () => {
         headers: { "x-claude-code-session-id": "claude-session" },
       }),
     ).toMatchObject({
-      sessionId: "claude-session",
-      provenance: "claude-code-header",
+      sessionId: "opaque-account-field",
+      provenance: "claude-metadata",
     });
   });
 

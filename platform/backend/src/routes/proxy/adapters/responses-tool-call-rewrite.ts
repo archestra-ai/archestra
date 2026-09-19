@@ -21,7 +21,13 @@
 
 import type { HostedToolCall } from "@/types";
 
-type RewrittenToolCall = { id: string; name: string; arguments: string };
+type RewrittenToolCall = {
+  id: string;
+  name: string;
+  arguments: string;
+  /** The namespace the client declared the tool in (Codex MCP servers). */
+  namespace?: string;
+};
 
 type ResponsesFunctionCallItem = {
   id?: string;
@@ -29,6 +35,7 @@ type ResponsesFunctionCallItem = {
   call_id: string;
   name: string;
   arguments: string;
+  namespace?: string;
   status?: "completed" | "in_progress";
 };
 
@@ -52,6 +59,7 @@ export function responsesFunctionCallItem(
     type: "function_call" as const,
     name: toolCall.name,
     arguments: toolCall.arguments,
+    ...(toolCall.namespace ? { namespace: toolCall.namespace } : {}),
     status: "completed" as const,
   };
 }
@@ -149,11 +157,18 @@ export function rewriteResponsesOutput<TItem extends { type?: string }>(
               ) as unknown as TItem)
             : item.type === "custom_tool_call"
               ? item
-              : ({
-                  ...item,
-                  name: rewritten.name,
-                  arguments: rewritten.arguments,
-                } as TItem),
+              : (withNamespace(
+                  {
+                    ...item,
+                    name: rewritten.name,
+                    arguments: rewritten.arguments,
+                  },
+                  // A notice lives in its own tool's namespace, not the
+                  // denied call's.
+                  isNotice
+                    ? rewritten.namespace
+                    : (rewritten.namespace ?? namespaceOf(item).namespace),
+                ) as TItem),
         );
         continue;
       }
@@ -309,3 +324,12 @@ function hostedToolName(item: { type?: string }): string | undefined {
 const HOSTED_TOOL_NAME_BY_ITEM_TYPE: Partial<Record<string, string>> = {
   web_search_call: "web_search",
 };
+
+function withNamespace<T extends object>(
+  item: T,
+  namespace: string | undefined,
+): T {
+  if (namespace) return { ...item, namespace };
+  const { namespace: _dropped, ...rest } = item as T & { namespace?: unknown };
+  return rest as T;
+}

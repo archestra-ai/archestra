@@ -444,13 +444,14 @@ export async function createAgentServer(params: {
         ? getImplicitTaskControlTools()
         : [];
     // Both notice and remedy tools are required when OpenAPPA is active.
-    const implicitOpenAppaTools = (await isGuardrailsV2Active())
-      ? getArchestraMcpTools().filter((tool) =>
-          isImplicitOpenAppaTool(
-            archestraMcpBranding.getToolShortName(tool.name),
-          ),
-        )
-      : [];
+    const implicitOpenAppaTools =
+      openappaEnabled() || (await isGuardrailsV2Active())
+        ? getArchestraMcpTools().filter((tool) =>
+            isImplicitOpenAppaTool(
+              archestraMcpBranding.getToolShortName(tool.name),
+            ),
+          )
+        : [];
     const candidateTools = dedupeToolsByName(
       [
         ...mcpTools.filter(

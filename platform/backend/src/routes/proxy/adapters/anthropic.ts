@@ -811,6 +811,10 @@ class AnthropicStreamAdapter
             this.withOutIndex(chunk),
           )}\n\n`;
         } else {
+          // A tool called with no input streams no `partial_json`; its input
+          // is `{}`, not the empty string policy evaluation would reject.
+          const call = this.state.toolCalls[this.currentToolCallIndex];
+          if (call?.arguments === "") call.arguments = "{}";
           // Store raw event for replay after policy approval
           this.state.rawToolCallEvents.push(chunk);
           isToolCallChunk = true;

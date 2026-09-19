@@ -97,6 +97,9 @@ pub struct OfferOwner {
     pub arguments: Option<String>,
     pub tool: Option<String>,
     pub spelling: Option<String>,
+    /// The client's spelling of the dispatch tool (`run_tool`) the blocked
+    /// call went through, when it did: the retry goes back through it.
+    pub dispatch: Option<String>,
 }
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
@@ -148,6 +151,8 @@ struct OfferInput {
     tool: Option<String>,
     #[serde(default)]
     spelling: Option<String>,
+    #[serde(default)]
+    dispatch: Option<String>,
     /// Client tool call ID for binding durable remedy receipts.
     #[serde(default)]
     tool_call_id: Option<String>,
@@ -197,6 +202,8 @@ struct Input {
     owner_root: Option<String>,
     #[serde(default)]
     spelling: Option<String>,
+    #[serde(default)]
+    dispatch: Option<String>,
     #[serde(default)]
     presentation: Option<PresentationInput>,
 }
@@ -403,10 +410,10 @@ fn validate(input: &Input) -> napi::Result<()> {
     {
         return Err(error("invalid control tool presentation"));
     }
-    if let Some(spelling) = &input.spelling
-        && (spelling.is_empty() || spelling.len() > 1024 || spelling.chars().any(char::is_control))
-    {
-        return Err(error("invalid tool spelling"));
+    for spelling in [&input.spelling, &input.dispatch].into_iter().flatten() {
+        if spelling.is_empty() || spelling.len() > 1024 || spelling.chars().any(char::is_control) {
+            return Err(error("invalid tool spelling"));
+        }
     }
     // Reject malformed host requests before writing an interrupted-operation
     // receipt. A typo is not evidence that an external consult may have run.
@@ -574,6 +581,7 @@ pub async fn execute_remedy_by_offer(
         outcome: None,
         owner_root: Some(owner.root),
         spelling: owner.spelling,
+        dispatch: owner.dispatch,
         presentation: Some(input.presentation),
     };
     validate(&input)?;
@@ -897,6 +905,7 @@ impl State {
                 arguments: None,
                 tool: input.tool.clone(),
                 spelling: input.spelling.clone(),
+                dispatch: input.dispatch.clone(),
             };
             let response = render_remedy_outcome(outcome, Some(&owner))?;
             finish_operation(pg, &input, &operation, &response, ReceiptBinding::Caller)?;
@@ -1365,6 +1374,15 @@ fn unknown_control_reason(reason: &RemedyRefusal) -> Option<&'static str> {
 }
 
 fn render_released_call(status: &str, call: &ProposedCall, owner: Option<&OfferOwner>) -> String {
+    // A call made through the dispatch tool is retried through it: the client
+    // may hold no tool by the target's own name.
+    if let Some(dispatch) = owner.and_then(|owner| owner.dispatch.as_deref()) {
+        return format!(
+            "[appa] {status}. Call the {dispatch} tool again with exactly these arguments: {{\"tool_name\":{},\"tool_args\":{}}}",
+            Value::String(call.tool.clone()),
+            call.arguments.get()
+        );
+    }
     let tool = owner
         .and_then(|owner| owner.spelling.as_deref())
         .unwrap_or(&call.tool);
@@ -1622,6 +1640,7 @@ fn routing_owner(
         arguments: None,
         tool: input.tool.clone(),
         spelling: input.spelling.clone(),
+        dispatch: input.dispatch.clone(),
     }))
 }
 
@@ -1754,9 +1773,10 @@ mod root_lock_tests {
 mod typed_tests {
     use super::{
         OfferId, OfferOwner, RemedyPresentation, json_arguments_match, owner_can_be_spent_by,
-        presentation_offer_ids, render_substituted_call,
+        presentation_offer_ids, render_released_call, render_substituted_call,
     };
     use appa_runtime_api::OfferedRemedy;
+    use serde_json::Value;
 
     #[test]
     fn runtime_like_prose_cannot_create_offer_ownership() {
@@ -1817,6 +1837,7 @@ mod typed_tests {
             arguments: Some(r#"{ "value": 1 }"#.to_owned()),
             tool: Some("canonical_tool".to_owned()),
             spelling: Some("client_tool".to_owned()),
+            dispatch: None,
         };
         let call = appa_runtime_api::ProposedCall {
             tool: "canonical_tool".to_owned(),
@@ -1826,6 +1847,39 @@ mod typed_tests {
         assert!(json_arguments_match(r#"{"value":1}"#, call.arguments.get()));
         assert!(render_substituted_call(&call, Some(&owner)).contains("client_tool"));
         assert!(render_substituted_call(&call, Some(&owner)).contains("Released unchanged"));
+    }
+
+    #[test]
+    fn a_dispatched_call_is_retried_through_the_dispatch_tool() {
+        let owner = OfferOwner {
+            organization_id: "organization".to_owned(),
+            caller_id: Some("user:owner".to_owned()),
+            session_id: "session".to_owned(),
+            parent_id: None,
+            root: "root".to_owned(),
+            arguments: None,
+            tool: Some("archestra__whoami".to_owned()),
+            spelling: Some("archestra__whoami".to_owned()),
+            dispatch: Some("my_gateway_archestra__run_tool".to_owned()),
+        };
+        let call = appa_runtime_api::ProposedCall {
+            tool: "archestra__whoami".to_owned(),
+            arguments: serde_json::value::to_raw_value(&serde_json::json!({ "verbose": true }))
+                .unwrap(),
+        };
+
+        let hint = render_released_call("Authorized", &call, Some(&owner));
+        let (prefix, arguments) = hint
+            .split_once("exactly these arguments: ")
+            .expect("hint names the arguments");
+        assert_eq!(
+            prefix,
+            "[appa] Authorized. Call the my_gateway_archestra__run_tool tool again with "
+        );
+        assert_eq!(
+            serde_json::from_str::<Value>(arguments).unwrap(),
+            serde_json::json!({ "tool_name": "archestra__whoami", "tool_args": { "verbose": true } })
+        );
     }
 
     #[test]

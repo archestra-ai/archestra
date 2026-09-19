@@ -6,6 +6,7 @@ import {
 import { render, screen, waitFor } from "@testing-library/react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useFeature } from "@/lib/config/config.query";
 import {
   useInteraction,
   useInteractionSessions,
@@ -18,6 +19,9 @@ vi.mock("next/navigation");
 // The unattributed-user badge interpolates the white-label app name, and the
 // real hook reads it through TanStack Query — which this suite renders without.
 vi.mock("@/lib/hooks/use-app-name");
+vi.mock("@/lib/config/config.query", () => ({
+  useFeature: vi.fn(() => false),
+}));
 
 vi.mock("@/lib/interactions/interaction.query", () => ({
   useInteraction: vi.fn(),
@@ -52,6 +56,7 @@ describe("SessionDetailPage", () => {
     vi.mocked(useInteraction).mockReturnValue({
       data: null,
     } as unknown as ReturnType<typeof useInteraction>);
+    vi.mocked(useFeature).mockReturnValue(false);
   });
 
   it("says nothing at all while session interactions are loading", async () => {
@@ -222,6 +227,82 @@ describe("SessionDetailPage", () => {
 
     expect(await screen.findByText(/1,250 in/)).toBeVisible();
     expect(screen.queryByText(/cache read/)).not.toBeInTheDocument();
+  });
+
+  it("states OpenAPPA session identity in the heading when OpenAPPA is on", async () => {
+    vi.mocked(useFeature).mockReturnValue(true);
+    vi.mocked(useInteractionSessions).mockReturnValue({
+      data: {
+        data: [
+          {
+            sessionId: "user:abc|ses_chat_1",
+            sessionSource: "conversation",
+            source: "chat",
+            sources: ["chat", "chat:compaction"],
+            conversationTitle: "Weather in Lisbon",
+            profileName: "My Assistant",
+            totalInputTokens: 10,
+            totalOutputTokens: 4,
+            totalCacheReadTokens: 0,
+            totalCacheWriteTokens: 0,
+          },
+        ],
+      },
+    } as unknown as ReturnType<typeof useInteractionSessions>);
+    vi.mocked(useInteractionSummaries).mockReturnValue({
+      data: { data: [], pagination: { total: 0 } },
+      isLoading: false,
+    } as unknown as ReturnType<typeof useInteractionSummaries>);
+
+    renderSessionDetailPage();
+
+    expect(await screen.findByText("Session")).toBeVisible();
+    expect(screen.getByText("user:abc|ses_chat_1")).toBeVisible();
+    expect(screen.getByText("Session source")).toBeVisible();
+    expect(screen.getByText("conversation")).toBeVisible();
+    expect(screen.getByText("Origins")).toBeVisible();
+  });
+
+  it("labels the main agent by profile name and a compaction row as compaction, not Main", async () => {
+    vi.mocked(useInteractionSessions).mockReturnValue({
+      data: {
+        data: [{ profileName: "My Assistant" }],
+      },
+    } as unknown as ReturnType<typeof useInteractionSessions>);
+    vi.mocked(useInteractionSummaries).mockReturnValue({
+      data: {
+        data: [
+          {
+            id: "int-compact",
+            createdAt: "2026-09-18T10:00:00.000Z",
+            model: "claude-haiku",
+            inputTokens: 1,
+            outputTokens: 1,
+            source: "chat:compaction",
+            externalAgentId: null,
+            externalAgentIdLabel: null,
+          },
+          {
+            id: "int-main",
+            createdAt: "2026-09-18T09:59:00.000Z",
+            model: "claude-haiku",
+            inputTokens: 2,
+            outputTokens: 2,
+            source: "chat",
+            externalAgentId: null,
+            externalAgentIdLabel: null,
+          },
+        ],
+        pagination: { total: 2 },
+      },
+      isLoading: false,
+    } as unknown as ReturnType<typeof useInteractionSummaries>);
+
+    renderSessionDetailPage();
+
+    expect(await screen.findByText("Chat Compaction")).toBeVisible();
+    expect(screen.getAllByText("My Assistant").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Main")).not.toBeInTheDocument();
   });
 });
 

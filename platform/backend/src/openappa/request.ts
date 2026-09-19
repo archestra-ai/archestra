@@ -176,19 +176,39 @@ export function prepareAppaRequest(params: {
     }
   }
 
-  const controlToolName = found.get(TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME);
-  const noticeToolName = found.get(TOOL_GET_REMEDY_PLANS_SHORT_NAME);
+  let controlToolName = found.get(TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME);
+  let noticeToolName = found.get(TOOL_GET_REMEDY_PLANS_SHORT_NAME);
   if (!controlToolName || !noticeToolName) {
-    const missing = [
-      controlToolName ? undefined : TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
-      noticeToolName ? undefined : TOOL_GET_REMEDY_PLANS_SHORT_NAME,
-    ].filter((name): name is string => name !== undefined);
-    throw new ApiError(
-      400,
-      `OpenAPPA is enabled but this session does not declare ${missing.join(" and ")}. Connect the ${archestraMcpBranding.serverName} MCP server to this client and allow both tools, then start a new session.`,
-    );
+    // OpenAPPA is on for this request: every agent gets notice and control
+    // without an admin assigning them or the client listing them. Learn the
+    // client's MCP prefix from a tool it did declare, otherwise use the
+    // platform names. Clients that cap tools/list (Claude Code at 50) often
+    // drop get_remedy_plans; injecting it here is what keeps denials as
+    // notices on an already-running session.
+    const prefix = appaDeclarationPrefix(found);
+    if (!noticeToolName) {
+      noticeToolName = `${prefix}${TOOL_GET_REMEDY_PLANS_SHORT_NAME}`;
+      appendDeclaredTool(params.body, family, noticeToolName);
+      found.set(TOOL_GET_REMEDY_PLANS_SHORT_NAME, noticeToolName);
+      spellings.set(
+        archestraMcpBranding.getToolName(TOOL_GET_REMEDY_PLANS_SHORT_NAME),
+        noticeToolName,
+      );
+    }
+    if (!controlToolName) {
+      controlToolName = `${prefix}${TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME}`;
+      appendDeclaredTool(params.body, family, controlToolName);
+      found.set(TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME, controlToolName);
+      spellings.set(
+        archestraMcpBranding.getToolName(TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME),
+        controlToolName,
+      );
+    }
   }
 
+  // Read before the strip: a notice goes back to the client under the
+  // namespace the client declared it in, or the client cannot dispatch it.
+  const namespaces = declaredToolNamespaces(params.body);
   // Strip notice tool from provider request so the model cannot invoke it directly.
   stripAppaTools({ body: params.body, names: new Set([noticeToolName]) });
   return {
@@ -196,10 +216,31 @@ export function prepareAppaRequest(params: {
     session,
     spellings,
     customTools,
-    namespaces: declaredToolNamespaces(params.body),
+    namespaces,
     ...(family ? appaTurnBoundaries({ family, body: params.body }) : {}),
     ...(offerClaims ? { offerClaims } : {}),
   };
+}
+
+/**
+ * A platform tool as OpenCode spells it: its gateway label joined to the
+ * branded name by one `_` (`my_gateway_archestra__run_tool`). Resolved only
+ * when the label anchors on one of this organization's gateways, through the
+ * same `mcp__<label>__<name>` check Claude Code's names pass; under any other
+ * label the name stays foreign.
+ */
+export function underscoreLabeledPlatformToolName(
+  name: string,
+  canonicalize: (name: string) => string,
+): string | null {
+  for (let at = name.indexOf("_"); at > 0; at = name.indexOf("_", at + 1)) {
+    const rest = name.slice(at + 1);
+    if (rest.startsWith("_") || !archestraMcpBranding.isToolName(rest))
+      continue;
+    const canonical = canonicalize(`mcp__${name.slice(0, at)}__${rest}`);
+    if (archestraMcpBranding.isToolName(canonical)) return canonical;
+  }
+  return null;
 }
 
 // === Internal helpers ===
@@ -218,21 +259,12 @@ function anchoredLabelShort(
   name: string,
   canonicalize: (name: string) => string,
 ): ArchestraToolShortName | null {
-  for (const short of [
-    TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
-    TOOL_GET_REMEDY_PLANS_SHORT_NAME,
-  ] as const) {
-    const branded = archestraMcpBranding.getToolName(short);
-    if (!name.endsWith(`_${branded}`) || name.endsWith(`__${branded}`))
-      continue;
-    const label = name.slice(0, name.length - branded.length - 1);
-    if (
-      label.length > 0 &&
-      shortToolName(canonicalize(`mcp__${label}__${branded}`)) === short
-    )
-      return short;
-  }
-  return null;
+  const resolved = underscoreLabeledPlatformToolName(name, canonicalize);
+  const short = resolved ? shortToolName(resolved) : null;
+  return short === TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME ||
+    short === TOOL_GET_REMEDY_PLANS_SHORT_NAME
+    ? short
+    : null;
 }
 
 /** Refuses sessions where tools are deferred to a provider tool search. */
@@ -246,6 +278,56 @@ function refuseDeferredTools(declared: readonly unknown[]): void {
       "OpenAPPA cannot govern a session that defers its tools to a tool search; the tools it may call are not on the wire. Configure the client to declare its tools inline, or disable OpenAPPA for this client.",
     );
   }
+}
+
+/**
+ * The MCP prefix a client's own APPA declarations use, so an injected pair
+ * keeps the same spelling the client already knows.
+ */
+function appaDeclarationPrefix(found: Map<string, string>): string {
+  for (const [short, name] of found) {
+    if (name.endsWith(short)) return name.slice(0, name.length - short.length);
+  }
+  const branded = archestraMcpBranding.getToolName(
+    TOOL_GET_REMEDY_PLANS_SHORT_NAME,
+  );
+  return branded.slice(
+    0,
+    branded.length - TOOL_GET_REMEDY_PLANS_SHORT_NAME.length,
+  );
+}
+
+function appendDeclaredTool(
+  body: unknown,
+  family: AppaWireFamily | undefined,
+  name: string,
+): void {
+  const holder = asToolDeclaration(body);
+  if (!holder || !Array.isArray(holder.tools)) return;
+  if (family === "openai:responses") {
+    // Responses declares function tools flat; the nested Chat Completions
+    // shape is rejected by the provider for a missing `name`.
+    holder.tools.push({
+      type: "function",
+      name,
+      parameters: { type: "object", properties: {} },
+    });
+    return;
+  }
+  if (family === "openai:chatCompletions") {
+    holder.tools.push({
+      type: "function",
+      function: {
+        name,
+        parameters: { type: "object", properties: {} },
+      },
+    });
+    return;
+  }
+  holder.tools.push({
+    name,
+    input_schema: { type: "object", properties: {} },
+  });
 }
 
 /**

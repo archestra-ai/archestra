@@ -21,6 +21,12 @@ const OfferClaimsSchema = z.object({
   offer_id: z.string().min(1).max(128),
   tool: z.string().min(1).max(512).nullable(),
   spelling: z.string().min(1).max(1024).nullable(),
+  /**
+   * The client's spelling of the dispatch tool (`run_tool`) the blocked call
+   * went through, so the remedy's retry goes back through it. Absent on
+   * direct calls and on offers signed before it existed.
+   */
+  dispatch: z.string().min(1).max(1024).optional(),
 });
 
 /** Flattened JWS JSON Serialization (RFC 7515 §7.2.2) with RFC 7797 unencoded payload. */
@@ -84,6 +90,7 @@ export function unsignedOfferClaims(params: {
   offerId: string;
   tool?: string;
   spelling?: string;
+  dispatch?: string;
 }): OfferClaims {
   return {
     v: OFFER_CLAIMS_VERSION,
@@ -95,6 +102,7 @@ export function unsignedOfferClaims(params: {
     offer_id: params.offerId,
     tool: params.tool ?? null,
     spelling: params.spelling ?? null,
+    ...(params.dispatch ? { dispatch: params.dispatch } : {}),
   };
 }
 

@@ -14,6 +14,7 @@ import * as toolInvocation from "@/guardrails/tool-invocation";
 import * as trustedData from "@/guardrails/trusted-data";
 import { ModelModel, VirtualApiKeyModel } from "@/models";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
+import { buildNoticeArguments } from "@/openappa/notice";
 import { createAppaLlmProxyPlugin } from "@/proxy/plugins/appa-plugin-archestra";
 import { registerLlmProxyPlugin } from "@/proxy/plugins/registry";
 import { buildExternalAppRenderResult } from "@/services/apps/app-render-result";
@@ -21,10 +22,13 @@ import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import {
   type AnthropicStubOptions,
   createAnthropicTestClient,
+  createOpenAiTestClient,
 } from "@/test/llm-provider-stubs";
 import { type Agent, ApiError } from "@/types";
-import { anthropicAdapterFactory } from "./adapters";
+import { anthropicAdapterFactory, openaiAdapterFactory } from "./adapters";
+import { openAiResponsesAdapterFactory } from "./adapters/openai-responses";
 import anthropicProxyRoutes from "./routes/anthropic";
+import openAiProxyRoutes from "./routes/openai";
 
 const native = vi.hoisted(() => ({
   initializeOpenappa: vi.fn(),
@@ -269,7 +273,11 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     expect(notice.input.ruling).toBe(
       "[appa] NATIVE REFUSAL: execute_remedy_plan(offer_id: test-offer)",
     );
-    expect(notice.input.notice).toEqual({ v: 1, call_id: notice.id });
+    expect(notice.input.notice).toMatchObject({
+      v: 1,
+      call_id: notice.id,
+      session: expect.any(String),
+    });
     // A denial costs no second call to the provider.
     expect(providerRequests).toHaveLength(1);
     expect(events.filter((event) => event.event === "tool_call")).toHaveLength(
@@ -328,7 +336,11 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     expect(notice.input.ruling).toBe(
       "[appa] NATIVE REFUSAL: execute_remedy_plan(offer_id: test-offer)",
     );
-    expect(notice.input.notice).toEqual({ v: 1, call_id: notice.id });
+    expect(notice.input.notice).toMatchObject({
+      v: 1,
+      call_id: notice.id,
+      session: expect.any(String),
+    });
     expect(providerRequests).toHaveLength(1);
   });
 
@@ -670,18 +682,63 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     }
   });
 
-  test("refuses a session that cannot show the model a denial, before calling the provider", async () => {
+  test("signs the dispatch tool into the offer of a denied run_tool call", async () => {
+    // The retry hint the runtime renders after the offer is accepted names
+    // the tool the client called; a run_tool caller holds no tool by the
+    // target's own name.
+    config.openappa = {
+      ...config.openappa,
+      offerSigningSecret: "test-offer-signing-secret-32chars",
+    };
+    native.dispatchHook.mockImplementation(async (raw: string) => {
+      const event = JSON.parse(raw);
+      events.push(event);
+      if (event.event === "tool_call")
+        return JSON.stringify({
+          decision: "deny_call",
+          feedback: "[appa] Blocked",
+          offers: [{ offer_id: "offer-1" }],
+        });
+      return JSON.stringify({ decision: "ack" });
+    });
+    const body = payload(false);
+    body.tools.push({
+      name: "archestra__run_tool",
+      description: "Run a tool",
+      input_schema: { type: "object", properties: {} },
+    } as (typeof body.tools)[number]);
+    options = {
+      includeToolUse: true,
+      streamStopReason: "tool_use",
+      nonStreamingToolUse: {
+        name: "archestra__run_tool",
+        input: { tool_name: "archestra__whoami", tool_args: {} },
+      },
+    };
+
+    const response = await post(body);
+
+    expect(response.statusCode, response.body).toBe(200);
+    const [offer] = noticeFrom(response.body, false).input.offers as {
+      payload: string;
+    }[];
+    expect(JSON.parse(offer.payload)).toMatchObject({
+      tool: "archestra__whoami",
+      dispatch: "archestra__run_tool",
+    });
+  });
+
+  test("admits a session that has not yet declared the APPA pair", async () => {
     const body = payload(false);
     body.tools = body.tools.filter(
       (declared) => declared.name !== "archestra__get_remedy_plans",
     );
+    options = { includeToolUse: false, streamStopReason: "end_turn" };
 
     const response = await post(body);
 
-    expect(response.statusCode).toBe(400);
-    expect(response.body).toContain("does not declare get_remedy_plans");
-    expect(providerRequests).toHaveLength(0);
-    expect(events).toEqual([]);
+    expect(response.statusCode, response.body).toBe(200);
+    expect(providerRequests.length).toBeGreaterThan(0);
   });
 
   test("passes a tool-less request without opening a root", async () => {
@@ -1179,6 +1236,46 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     ]);
     expect(events.filter((event) => event.event === "tool_call")).toEqual([
       expect.objectContaining({ tool: expectedTool, session_id: sessionId }),
+    ]);
+  });
+
+  test.for([
+    ["my_gateway_archestra__whoami", "archestra__whoami"],
+    ["lookalike_archestra__whoami", "builtin:lookalike_archestra__whoami"],
+  ] as const)("rules OpenCode's %s by whether its label is one of our gateways", async ([
+    called,
+    expectedTool,
+  ], { makeAgent }) => {
+    await makeAgent({
+      name: "My Gateway",
+      agentType: "mcp_gateway",
+      organizationId: agent.organizationId,
+    });
+    const body = payload(false);
+    // OpenCode joins an MCP server's label to each tool name with one `_`.
+    for (const name of [
+      "my_gateway_archestra__whoami",
+      "lookalike_archestra__whoami",
+    ])
+      body.tools.push({
+        name,
+        description: name,
+        input_schema: { type: "object", properties: {} },
+      } as (typeof body.tools)[number]);
+    options = {
+      includeToolUse: true,
+      streamStopReason: "tool_use",
+      nonStreamingToolUse: { name: called, input: {} },
+    };
+
+    const response = await post(body, {
+      "user-agent": "opencode/1.18.31",
+      "x-session-id": "ses_opencode_labels",
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(events.filter((event) => event.event === "tool_call")).toEqual([
+      expect.objectContaining({ tool: expectedTool }),
     ]);
   });
 
@@ -1754,5 +1851,774 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     expect(JSON.stringify(providerRequests)).not.toContain("RAW SECRET");
     expect(response.body).toContain("this session contains sensitive data");
     expect(response.body).not.toContain('"type":"tool_use"');
+  });
+
+  test("Claude Code compact stays on the root and a new session opens a fresh root with no parent id", async () => {
+    const parent = "claude-label-parent";
+    const child = "claude-label-child";
+    const compactBody = payload(false);
+    compactBody.messages = [
+      { role: "user", content: "<command-name>/compact</command-name>" },
+    ];
+    expect(
+      (
+        await post(compactBody, {
+          "user-agent": "claude-code/2.1.258",
+          "x-claude-code-session-id": parent,
+          "x-appa-session-id": parent,
+          "x-archestra-source": "api",
+        })
+      ).statusCode,
+    ).toBe(200);
+    events.length = 0;
+    const response = await post(payload(false), {
+      "user-agent": "claude-code/2.1.258",
+      "x-claude-code-session-id": child,
+      "x-appa-session-id": child,
+      "x-archestra-source": "api",
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    // The runtime opens children only on a spawn the parent prepared; a bare
+    // parent id would refuse the forked session outright. A client fork opens
+    // a fresh root: same label state as a stranger, nothing smeared.
+    const starts = events.filter((event) => event.event === "session_start");
+    expect(starts).toHaveLength(1);
+    expect(starts[0].session_id).toContain(child);
+    expect(starts[0].parent_id).toBeUndefined();
+  });
+
+  test("Chat compaction stays on the conversation root and a new conversation opens a fresh root", async ({
+    makeConversation,
+  }) => {
+    const compact = await post(payload(false), {
+      "x-archestra-source": "chat:compaction",
+    });
+    expect(compact.statusCode, compact.body).toBe(200);
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        event: "session_start",
+        session_id: expect.stringContaining(sessionId),
+      }),
+    );
+    events.length = 0;
+    const childConversation = await makeConversation(agent.id, {
+      userId,
+      organizationId: agent.organizationId,
+    });
+    const response = await post(payload(false), {
+      "x-appa-session-id": childConversation.id,
+      "x-archestra-source": "chat",
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    const starts = events.filter((event) => event.event === "session_start");
+    expect(starts).toHaveLength(1);
+    expect(starts[0].session_id).toContain(childConversation.id);
+    expect(starts[0].parent_id).toBeUndefined();
+  });
+});
+
+/** Client-native trajectory binding: the adapter-read ids reach the runtime. */
+describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
+  const CODEX_SESSION = "d12f967d-6fe1-4f92-a62f-0f6a2092fd2f";
+  const CODEX_RESUMED_SESSION = "f5be22fa-3d3a-44ce-8d37-d0073acd5174";
+  const CODEX_THREAD = "01a0859b-3029-78f3-a730-0edef60872cb";
+  const CODEX_FORK_THREAD = "01a085a0-ca43-7671-9450-8508eddef38d";
+  const OPENCODE_SESSION = "ses_01J8ZQ3V0R1Y8M0P4K0W3M7P9A";
+  const OPENCODE_FORK_SESSION = "ses_01J8ZQ7K2M4N6P8R0T2W4Y6A8C";
+
+  let app: FastifyInstance;
+  let agent: Agent;
+  let userId: string;
+  let events: Array<Record<string, unknown>>;
+  let providerCalls: number;
+  let providerBodies: unknown[];
+  let unregisterAppaPlugin: () => void;
+
+  beforeEach(async ({ makeAgent, makeMember, makeUser }) => {
+    config.openappa = parseOpenAppaConfig("true");
+    await GuardrailsDeploymentModel.setEnabled(true);
+    config.llmProxy.plugins = parseLlmProxyPlugins(
+      undefined,
+      config.openappa.enabled,
+    );
+    unregisterAppaPlugin = registerLlmProxyPlugin(createAppaLlmProxyPlugin());
+    vi.spyOn(database, "getDatabaseConnectionString").mockReturnValue(
+      "postgresql://test:test@localhost/test?schema=public",
+    );
+    app = Fastify().withTypeProvider<ZodTypeProvider>();
+    app.setValidatorCompiler(validatorCompiler);
+    app.setSerializerCompiler(serializerCompiler);
+    app.setErrorHandler((error, _request, reply) =>
+      reply.status(error instanceof ApiError ? error.statusCode : 500).send({
+        error: {
+          message: error instanceof Error ? error.message : String(error),
+          type:
+            error instanceof ApiError
+              ? error.type
+              : "api_internal_server_error",
+        },
+      }),
+    );
+    await app.register(openAiProxyRoutes);
+    agent = await makeAgent({ name: "Native proxy OpenAI test" });
+    userId = (await makeUser()).id;
+    await makeMember(userId, agent.organizationId);
+    events = [];
+    providerCalls = 0;
+    providerBodies = [];
+    native.initializeOpenappa.mockResolvedValue(undefined);
+    native.dispatchHook.mockImplementation(async (raw: string) => {
+      const event = JSON.parse(raw);
+      events.push(event);
+      if (event.event === "tool_call")
+        return JSON.stringify({ decision: "allow_call" });
+      if (event.event === "tool_result")
+        return JSON.stringify({
+          decision: "replace_output",
+          approved_output: "APPROVED REPLACEMENT",
+          output_source: "tool",
+        });
+      return JSON.stringify({ decision: "ack" });
+    });
+    vi.spyOn(openAiResponsesAdapterFactory, "createClient").mockImplementation(
+      () =>
+        ({
+          responses: {
+            create: async (params: unknown) => {
+              providerCalls += 1;
+              providerBodies.push(params);
+              return {
+                async *[Symbol.asyncIterator]() {
+                  yield {
+                    type: "response.completed",
+                    sequence_number: 1,
+                    response: {
+                      id: "resp_1",
+                      object: "response",
+                      status: "completed",
+                      output: [],
+                      usage: {
+                        input_tokens: 3,
+                        output_tokens: 2,
+                        total_tokens: 5,
+                      },
+                    },
+                  };
+                },
+              };
+            },
+          },
+        }) as never,
+    );
+    vi.spyOn(openaiAdapterFactory, "createClient").mockImplementation(
+      () => createOpenAiTestClient() as never,
+    );
+    for (const modelId of ["gpt-5.5", "gpt-4.1"]) {
+      await ModelModel.upsert({
+        externalId: `openai/${modelId}`,
+        provider: "openai",
+        modelId,
+        inputModalities: null,
+        outputModalities: null,
+        lastSyncedAt: new Date(),
+      });
+    }
+  });
+
+  afterEach(async () => {
+    unregisterAppaPlugin();
+    vi.restoreAllMocks();
+    vi.unstubAllEnvs();
+    await app.close();
+  });
+
+  const codexPayload = (clientMetadata: Record<string, unknown>) => ({
+    model: "gpt-5.5",
+    stream: true,
+    input: [{ role: "user", content: "Check the weather" }],
+    client_metadata: clientMetadata,
+    tools: [
+      {
+        type: "function",
+        name: "get_weather",
+        description: "Weather",
+        parameters: {
+          type: "object",
+          properties: { location: { type: "string" } },
+        },
+      },
+      {
+        type: "function",
+        name: "archestra__execute_remedy_plan",
+        description: "Execute a remedy",
+        parameters: { type: "object", properties: {} },
+      },
+      {
+        type: "function",
+        name: "archestra__get_remedy_plans",
+        description: "Read a ruling",
+        parameters: { type: "object", properties: {} },
+      },
+    ],
+  });
+
+  const codexHeaders = () => ({
+    authorization: "Bearer test-key",
+    "x-archestra-user-id": userId,
+    "user-agent": "codex_cli_rs/0.153.0 (Linux 6.6; x86_64)",
+    originator: "codex_cli_rs",
+  });
+
+  const openCodePayload = () => ({
+    model: "gpt-4.1",
+    messages: [{ role: "user", content: "Check the weather" }],
+    tools: [
+      {
+        type: "function",
+        function: {
+          name: "get_weather",
+          description: "Weather",
+          parameters: {
+            type: "object",
+            properties: { location: { type: "string" } },
+          },
+        },
+      },
+      {
+        type: "function",
+        function: {
+          name: "archestra__execute_remedy_plan",
+          description: "Execute a remedy",
+          parameters: { type: "object", properties: {} },
+        },
+      },
+      {
+        type: "function",
+        function: {
+          name: "archestra__get_remedy_plans",
+          description: "Read a ruling",
+          parameters: { type: "object", properties: {} },
+        },
+      },
+    ],
+  });
+
+  const openCodeHeaders = () => ({
+    authorization: "Bearer test-key",
+    "x-archestra-user-id": userId,
+    "user-agent": "opencode/1.18.29",
+  });
+
+  test("injects a missing APPA pair in the flat Responses tool shape", async () => {
+    const payload = codexPayload({
+      session_id: CODEX_SESSION,
+      thread_id: CODEX_THREAD,
+    });
+    payload.tools = payload.tools.filter(
+      (declared) => !declared.name.startsWith("archestra__"),
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/responses`,
+      remoteAddress: "127.0.0.1",
+      headers: codexHeaders(),
+      payload: payload as Record<string, unknown>,
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    // The notice tool never reaches the model; the injected control tool must
+    // use the declaration shape the Responses API accepts.
+    const sent = providerBodies.at(-1) as { tools: Record<string, unknown>[] };
+    expect(sent.tools.map((tool) => tool.name)).toEqual([
+      "get_weather",
+      "archestra__execute_remedy_plan",
+    ]);
+    expect(sent.tools[1]).toEqual({
+      type: "function",
+      name: "archestra__execute_remedy_plan",
+      parameters: { type: "object", properties: {} },
+    });
+  });
+
+  test("delivers a Codex denial notice under the namespace Codex declared it in", async () => {
+    native.dispatchHook.mockImplementation(async (raw: string) => {
+      const event = JSON.parse(raw);
+      events.push(event);
+      if (event.event === "tool_call")
+        return JSON.stringify({
+          decision: "deny_call",
+          feedback: "[appa] NATIVE REFUSAL",
+        });
+      return JSON.stringify({ decision: "ack" });
+    });
+    vi.spyOn(openAiResponsesAdapterFactory, "createClient").mockImplementation(
+      () =>
+        ({
+          responses: {
+            create: async () => ({
+              id: "resp_denied",
+              object: "response",
+              created_at: 1,
+              status: "completed",
+              model: "gpt-5.5",
+              output: [
+                {
+                  type: "function_call",
+                  id: "fc_shell",
+                  call_id: "call_shell",
+                  name: "exec_command",
+                  arguments: '{"cmd":"echo hi"}',
+                  status: "completed",
+                },
+              ],
+              usage: { input_tokens: 3, output_tokens: 2, total_tokens: 5 },
+            }),
+          },
+        }) as never,
+    );
+    // Codex declares an MCP server's tools as members of one namespace.
+    const payload = {
+      ...codexPayload({ session_id: CODEX_SESSION, thread_id: CODEX_THREAD }),
+      stream: false,
+      tools: [
+        {
+          type: "function",
+          name: "exec_command",
+          parameters: { type: "object", properties: {} },
+        },
+        {
+          type: "namespace",
+          name: "mcp__my_gateway",
+          tools: [
+            {
+              type: "function",
+              name: "archestra__execute_remedy_plan",
+              parameters: { type: "object", properties: {} },
+            },
+            {
+              type: "function",
+              name: "archestra__get_remedy_plans",
+              parameters: { type: "object", properties: {} },
+            },
+          ],
+        },
+      ],
+    };
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/responses`,
+      remoteAddress: "127.0.0.1",
+      headers: codexHeaders(),
+      payload: payload as Record<string, unknown>,
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json().output).toEqual([
+      expect.objectContaining({
+        type: "function_call",
+        call_id: "call_shell",
+        name: "archestra__get_remedy_plans",
+        namespace: "mcp__my_gateway",
+      }),
+    ]);
+  });
+
+  test("rules a Codex call by the namespace it names: the gateway's is ours, a lookalike's stays foreign", async ({
+    makeAgent,
+  }) => {
+    await makeAgent({
+      name: "My Gateway",
+      agentType: "mcp_gateway",
+      organizationId: agent.organizationId,
+    });
+    const whoami = (namespace: string, callId: string) => ({
+      type: "function_call",
+      id: `fc_${callId}`,
+      call_id: callId,
+      name: "archestra__whoami",
+      namespace,
+      arguments: "{}",
+      status: "completed",
+    });
+    vi.spyOn(openAiResponsesAdapterFactory, "createClient").mockImplementation(
+      () =>
+        ({
+          responses: {
+            create: async () => ({
+              id: "resp_ns",
+              object: "response",
+              created_at: 1,
+              status: "completed",
+              model: "gpt-5.5",
+              output: [
+                whoami("mcp__my_gateway", "call_gateway"),
+                whoami("mcp__lookalike", "call_lookalike"),
+              ],
+              usage: { input_tokens: 3, output_tokens: 2, total_tokens: 5 },
+            }),
+          },
+        }) as never,
+    );
+    const member = (name: string) => ({
+      type: "function",
+      name,
+      parameters: { type: "object", properties: {} },
+    });
+    const payload = {
+      ...codexPayload({ session_id: CODEX_SESSION, thread_id: CODEX_THREAD }),
+      stream: false,
+      tools: [
+        member("exec_command"),
+        {
+          type: "namespace",
+          name: "mcp__my_gateway",
+          tools: [
+            member("archestra__execute_remedy_plan"),
+            member("archestra__get_remedy_plans"),
+            member("archestra__whoami"),
+          ],
+        },
+        {
+          type: "namespace",
+          name: "mcp__lookalike",
+          tools: [member("archestra__whoami")],
+        },
+      ],
+    };
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/responses`,
+      remoteAddress: "127.0.0.1",
+      headers: codexHeaders(),
+      payload: payload as Record<string, unknown>,
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(
+      events
+        .filter((event) => event.event === "tool_call")
+        .map((event) => event.tool),
+    ).toEqual(["archestra__whoami", "mcp__lookalike__archestra__whoami"]);
+  });
+
+  test("a Codex resume reopens the thread's root; a fork opens a fresh one", async () => {
+    const first = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/responses`,
+      remoteAddress: "127.0.0.1",
+      headers: codexHeaders(),
+      payload: codexPayload({
+        session_id: CODEX_SESSION,
+        thread_id: CODEX_THREAD,
+      }) as Record<string, unknown>,
+    });
+    expect(first.statusCode, first.body).toBe(200);
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        session_id: `user:${userId}|${CODEX_THREAD}`,
+      }),
+    );
+
+    // A resume replays the durable thread under a fresh per-run session id.
+    events.length = 0;
+    const resumed = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/responses`,
+      remoteAddress: "127.0.0.1",
+      headers: codexHeaders(),
+      payload: codexPayload({
+        session_id: CODEX_RESUMED_SESSION,
+        thread_id: CODEX_THREAD,
+      }) as Record<string, unknown>,
+    });
+    expect(resumed.statusCode, resumed.body).toBe(200);
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        session_id: `user:${userId}|${CODEX_THREAD}`,
+      }),
+    );
+
+    // A fork mints a new thread id and therefore binds a fresh root.
+    events.length = 0;
+    const forked = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/responses`,
+      remoteAddress: "127.0.0.1",
+      headers: codexHeaders(),
+      payload: codexPayload({
+        session_id: CODEX_RESUMED_SESSION,
+        thread_id: CODEX_FORK_THREAD,
+        forked_from_thread_id: CODEX_THREAD,
+      }) as Record<string, unknown>,
+    });
+    expect(forked.statusCode, forked.body).toBe(200);
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        session_id: `user:${userId}|${CODEX_FORK_THREAD}`,
+      }),
+    );
+    expect(events).not.toContainEqual(
+      expect.objectContaining({
+        session_id: `user:${userId}|${CODEX_THREAD}`,
+      }),
+    );
+  });
+
+  test("a Codex compaction turn stays on the thread's root", async () => {
+    const compaction = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/responses`,
+      remoteAddress: "127.0.0.1",
+      headers: { ...codexHeaders(), "x-openai-subagent": "compact" },
+      payload: codexPayload({
+        session_id: CODEX_SESSION,
+        thread_id: CODEX_THREAD,
+        request_kind: "compaction",
+      }) as Record<string, unknown>,
+    });
+
+    expect(compaction.statusCode, compaction.body).toBe(200);
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        session_id: `user:${userId}|${CODEX_THREAD}`,
+      }),
+    );
+  });
+
+  test("an out-of-band compaction of another session's context binds a fresh root and still restores notices", async () => {
+    // A summarizer request that compresses thread A's denied history under a
+    // new thread id must not reopen A's root (that would launder A's labels
+    // into a clean trajectory) and must still restore the notices so the
+    // provider sees the original call and the ruling, never the envelope.
+    const noticeArguments = buildNoticeArguments({
+      id: "call_1",
+      tool: "shell",
+      arguments: { command: "rm -rf build" },
+      result: "[appa] Blocked: this call cannot run yet.",
+    });
+    const payload = {
+      ...codexPayload({
+        session_id: CODEX_RESUMED_SESSION,
+        thread_id: CODEX_FORK_THREAD,
+        request_kind: "compaction",
+      }),
+      input: [
+        { role: "user", content: "clean the build dir" },
+        {
+          type: "function_call",
+          id: "fc_1",
+          call_id: "call_1",
+          name: "archestra__get_remedy_plans",
+          status: "completed",
+          arguments: JSON.stringify(noticeArguments),
+        },
+        {
+          type: "function_call_output",
+          call_id: "call_1",
+          output: "client text",
+        },
+      ],
+    };
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/responses`,
+      remoteAddress: "127.0.0.1",
+      headers: { ...codexHeaders(), "x-openai-subagent": "compact" },
+      payload: payload as Record<string, unknown>,
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        session_id: `user:${userId}|${CODEX_FORK_THREAD}`,
+      }),
+    );
+    expect(events).not.toContainEqual(
+      expect.objectContaining({
+        session_id: `user:${userId}|${CODEX_THREAD}`,
+      }),
+    );
+    const sent = JSON.stringify(providerBodies);
+    expect(sent).toContain('"name":"shell"');
+    expect(sent).toContain("APPROVED REPLACEMENT");
+    expect(sent).not.toContain("client text");
+    expect(sent).not.toContain("archestra__get_remedy_plans");
+  });
+
+  test("contradictory Codex trajectory metadata is refused before the provider", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/responses`,
+      remoteAddress: "127.0.0.1",
+      headers: {
+        ...codexHeaders(),
+        "x-codex-turn-metadata": JSON.stringify({
+          session_id: CODEX_SESSION,
+          thread_id: CODEX_FORK_THREAD,
+        }),
+      },
+      payload: codexPayload({
+        session_id: CODEX_SESSION,
+        thread_id: CODEX_THREAD,
+      }) as Record<string, unknown>,
+    });
+
+    expect(response.statusCode, response.body).toBe(400);
+    expect(response.body).toContain("contradictory Codex trajectory metadata");
+    expect(events).toHaveLength(0);
+    expect(providerCalls).toBe(0);
+  });
+
+  test("an OpenCode resume reopens the session's root; a fork opens a fresh one", async () => {
+    const first = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/chat/completions`,
+      remoteAddress: "127.0.0.1",
+      headers: {
+        ...openCodeHeaders(),
+        "x-session-id": OPENCODE_SESSION,
+        "x-session-affinity": OPENCODE_SESSION,
+      },
+      payload: openCodePayload() as Record<string, unknown>,
+    });
+    expect(first.statusCode, first.body).toBe(200);
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        session_id: `user:${userId}|${OPENCODE_SESSION}`,
+      }),
+    );
+
+    events.length = 0;
+    const forked = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/chat/completions`,
+      remoteAddress: "127.0.0.1",
+      headers: {
+        ...openCodeHeaders(),
+        "x-session-id": OPENCODE_FORK_SESSION,
+      },
+      payload: openCodePayload() as Record<string, unknown>,
+    });
+    expect(forked.statusCode, forked.body).toBe(200);
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        session_id: `user:${userId}|${OPENCODE_FORK_SESSION}`,
+      }),
+    );
+  });
+
+  test("contradictory OpenCode session headers are refused before the provider", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/chat/completions`,
+      remoteAddress: "127.0.0.1",
+      headers: {
+        ...openCodeHeaders(),
+        "x-session-id": OPENCODE_SESSION,
+        "x-session-affinity": OPENCODE_FORK_SESSION,
+      },
+      payload: openCodePayload() as Record<string, unknown>,
+    });
+
+    expect(response.statusCode, response.body).toBe(400);
+    expect(response.body).toContain("contradictory OpenCode session headers");
+    expect(events).toHaveLength(0);
+  });
+
+  test("Codex compaction stays on the thread and a new thread opens a fresh root with no parent id", async () => {
+    const compact = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/responses`,
+      remoteAddress: "127.0.0.1",
+      headers: { ...codexHeaders(), "x-openai-subagent": "compact" },
+      payload: codexPayload({
+        session_id: CODEX_SESSION,
+        thread_id: CODEX_THREAD,
+        request_kind: "compaction",
+      }) as Record<string, unknown>,
+    });
+    expect(compact.statusCode, compact.body).toBe(200);
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        event: "session_start",
+        session_id: expect.stringContaining(CODEX_THREAD),
+      }),
+    );
+    events.length = 0;
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/responses`,
+      remoteAddress: "127.0.0.1",
+      headers: codexHeaders(),
+      payload: codexPayload({
+        session_id: CODEX_RESUMED_SESSION,
+        thread_id: CODEX_FORK_THREAD,
+        forked_from_thread_id: CODEX_THREAD,
+      }) as Record<string, unknown>,
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        event: "session_start",
+        session_id: expect.stringContaining(CODEX_FORK_THREAD),
+      }),
+    );
+    const starts = events.filter((event) => event.event === "session_start");
+    expect(starts).toHaveLength(1);
+    expect(starts[0].parent_id).toBeUndefined();
+  });
+
+  test("OpenCode compaction stays on the session and a new session opens a fresh root with no parent id", async () => {
+    const compact = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/chat/completions`,
+      remoteAddress: "127.0.0.1",
+      headers: {
+        ...openCodeHeaders(),
+        "x-session-id": OPENCODE_SESSION,
+      },
+      payload: {
+        ...openCodePayload(),
+        messages: [
+          {
+            role: "user",
+            content: "[Old tool result content cleared]",
+          },
+        ],
+      } as Record<string, unknown>,
+    });
+    expect(compact.statusCode, compact.body).toBe(200);
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        event: "session_start",
+        session_id: expect.stringContaining(OPENCODE_SESSION),
+      }),
+    );
+    events.length = 0;
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/chat/completions`,
+      remoteAddress: "127.0.0.1",
+      headers: {
+        ...openCodeHeaders(),
+        "x-session-id": OPENCODE_FORK_SESSION,
+        "x-parent-session-id": OPENCODE_SESSION,
+      },
+      payload: openCodePayload() as Record<string, unknown>,
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        event: "session_start",
+        session_id: expect.stringContaining(OPENCODE_FORK_SESSION),
+      }),
+    );
+    const starts = events.filter((event) => event.event === "session_start");
+    expect(starts).toHaveLength(1);
+    expect(starts[0].parent_id).toBeUndefined();
   });
 });

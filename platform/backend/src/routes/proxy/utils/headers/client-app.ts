@@ -6,6 +6,8 @@ import {
   isCodexOriginator,
   isCodexUserAgent,
   isCursorUserAgent,
+  isOpenCodeUserAgent,
+  OPENCODE_CLIENT_ID,
 } from "@archestra/shared";
 import { getHeaderValue } from "./meta-header";
 import { isClaudeMetadataUserId } from "./session-id";
@@ -90,6 +92,25 @@ export function detectCursorClientId(
 ): typeof CURSOR_CLIENT_ID | undefined {
   if (isCursorUserAgent(getHeaderValue(headers, "user-agent"))) {
     return CURSOR_CLIENT_ID;
+  }
+  return undefined;
+}
+
+/**
+ * OpenCode client auto-discovery — the OpenCode counterpart to
+ * {@link detectClaudeClientId}. OpenCode leads its User-Agent with
+ * `opencode/<version>` on every provider and adds `originator: opencode` on the
+ * OpenAI Responses wire; either attributes the request to
+ * {@link OPENCODE_CLIENT_ID}.
+ */
+export function detectOpenCodeClientId(
+  headers: Record<string, string | string[] | undefined>,
+): typeof OPENCODE_CLIENT_ID | undefined {
+  if (
+    isOpenCodeUserAgent(getHeaderValue(headers, "user-agent")) ||
+    getHeaderValue(headers, "originator")?.trim().toLowerCase() === "opencode"
+  ) {
+    return OPENCODE_CLIENT_ID;
   }
   return undefined;
 }

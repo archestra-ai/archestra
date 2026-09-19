@@ -89,7 +89,8 @@ import {
   openappaEnabled,
   sessionFromHeaders,
 } from "@/openappa/service";
-import { appaSessionIdentity, appaWireFamily } from "@/openappa/wire";
+import { appaWireFamily } from "@/openappa/wire";
+import { extractAppaSessionIdentity } from "@/proxy/plugins/appa-plugin-archestra/session-identity";
 import {
   APPA_PLUGIN_TRUSTED_CONTEXT,
   type AppaTrustedContext,
@@ -326,7 +327,8 @@ export async function handleLLMProxy<
   // app from the request and record it (Claude clients → "anthropic_claude"
   // from the request body; Codex clients → "openai_codex" from the
   // client_metadata body shape or the originator/User-Agent headers the Codex
-  // CLI stamps on every request; Cursor → "cursor" from its User-Agent).
+  // CLI stamps on every request; Cursor → "cursor" from its User-Agent;
+  // OpenCode → "opencode" from its User-Agent or originator).
   const externalAgentId =
     utils.headers.externalAgentId.getExternalAgentId(headersForExtraction) ??
     utils.headers.clientApp.detectClaudeClientId(bodyForExtraction) ??
@@ -334,7 +336,8 @@ export async function handleLLMProxy<
       headersForExtraction,
       bodyForExtraction,
     ) ??
-    utils.headers.clientApp.detectCursorClientId(headersForExtraction);
+    utils.headers.clientApp.detectCursorClientId(headersForExtraction) ??
+    utils.headers.clientApp.detectOpenCodeClientId(headersForExtraction);
   const runId = utils.headers.runId.getRunId(headersForExtraction);
   const authOverride = (
     request as FastifyRequest & { llmProxyAuthOverride?: LLMProxyAuthOverride }
@@ -1186,11 +1189,14 @@ export async function handleLLMProxy<
               ? `virtual-key:${virtualKeyId}`
               : undefined;
         // Convert client-native session metadata into universal X-Appa-* headers.
+        // The matched client adapter reads the client's own trajectory id
+        // (resume reopens the root; a fork opens a fresh one) before the
+        // generic wire fallbacks.
         const incomingAppaSessionHeader =
           headersForExtraction[APPA_SESSION_HEADER.toLowerCase()];
         const appaFamily = appaWireFamily(provider.interactionType);
         appaIdentity = appaFamily
-          ? appaSessionIdentity({
+          ? extractAppaSessionIdentity({
               family: appaFamily,
               body,
               headers: headersForExtraction,

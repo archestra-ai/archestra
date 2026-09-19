@@ -206514,6 +206514,34 @@
                           "externalAgentIdLabel": {
                             "nullable": true,
                             "type": "string"
+                          },
+                          "source": {
+                            "nullable": true,
+                            "type": "string",
+                            "enum": [
+                              "api",
+                              "model_router",
+                              "chat",
+                              "chat:compaction",
+                              "a2a:compaction",
+                              "chat:title_generation",
+                              "chat:tool_call_repair",
+                              "a2a:tool_call_repair",
+                              "skill:description_generation",
+                              "guardrail:dual_llm",
+                              "chatops:slack",
+                              "chatops:ms-teams",
+                              "chatops:telegram",
+                              "email",
+                              "schedule-trigger",
+                              "knowledge:embedding",
+                              "knowledge:reranker",
+                              "knowledge:query-expansion",
+                              "knowledge:contextual-retrieval",
+                              "knowledge:ocr",
+                              "app:llm_complete",
+                              "app:recording_enhancement"
+                            ]
                           }
                         },
                         "required": [
@@ -206895,7 +206923,8 @@
                 "claude-desktop",
                 "codex",
                 "copilot-cli",
-                "cursor"
+                "cursor",
+                "opencode"
               ]
             },
             "in": "query",
@@ -405385,7 +405414,8 @@
                 "claude-desktop",
                 "codex",
                 "copilot-cli",
-                "cursor"
+                "cursor",
+                "opencode"
               ]
             },
             "in": "query",
@@ -405940,7 +405970,8 @@
                           "claude-desktop",
                           "codex",
                           "copilot-cli",
-                          "cursor"
+                          "cursor",
+                          "opencode"
                         ]
                       }
                     }

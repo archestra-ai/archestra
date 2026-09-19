@@ -20,6 +20,8 @@ const NoticeMetadata = z.object({
   v: z.literal(NOTICE_VERSION),
   call_id: z.string().min(1),
   namespace: z.string().min(1).optional(),
+  /** Unscoped client session id this denial was minted under. */
+  session: z.string().min(1).optional(),
 });
 
 const FunctionArguments = z.union([
@@ -109,6 +111,8 @@ type AppaNotice = {
   namespace?: string;
   /** Signed offer routing claims. Not used for restoration. */
   offers?: OfferJws[];
+  /** Unscoped client session id this denial was minted under. */
+  session?: string;
 };
 
 export function buildNoticeArguments(
@@ -137,6 +141,7 @@ export function buildNoticeArguments(
       call_id: notice.id,
       ...(notice.custom ? { custom: true } : {}),
       ...(notice.namespace ? { namespace: notice.namespace } : {}),
+      ...(notice.session ? { session: notice.session } : {}),
     },
     ...(notice.offers && notice.offers.length > 0
       ? { offers: notice.offers }
@@ -170,6 +175,7 @@ export function readNotice(params: {
     ...(notice.custom ? { custom: true } : {}),
     ...(notice.namespace ? { namespace: notice.namespace } : {}),
     ...(offers && offers.length > 0 ? { offers } : {}),
+    ...(notice.session ? { session: notice.session } : {}),
   };
 }
 

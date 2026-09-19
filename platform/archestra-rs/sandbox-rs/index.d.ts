@@ -132,6 +132,27 @@ export interface RunSandboxInput {
    * under. A request whose entries carry `hostPath` fails without it.
    */
   spoolRoot?: string
+  /**
+   * Secret environment variables visible only to the live command, never to
+   * replayed history. Names are validated at the boundary.
+   */
+  secretEnv?: Array<SecretEnvVar>
+  /**
+   * Bytes written to the live command's standard input. Part of the exec
+   * definition (not a filesystem layer), so it never persists in the sandbox.
+   */
+  stdin?: string
+}
+
+/**
+ * an environment variable whose value is handed to the live command as a
+ * Dagger secret: it never lands in a filesystem layer and the engine scrubs it
+ * from captured output. the value is redacted from `Debug` and `Serialize` so
+ * a logged request can never leak it.
+ */
+export interface SecretEnvVar {
+  name: string
+  value: string
 }
 
 export interface SnapshotFile {

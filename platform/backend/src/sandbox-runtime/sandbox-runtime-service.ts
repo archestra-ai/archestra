@@ -1,4 +1,8 @@
-import type { EnvironmentTarget, ReplayEntry } from "@archestra/sandbox-rs";
+import type {
+  EnvironmentTarget,
+  ReplayEntry,
+  SecretEnvVar,
+} from "@archestra/sandbox-rs";
 import {
   context as otelContext,
   propagation as otelPropagation,
@@ -68,6 +72,14 @@ interface RunCommandParams extends SandboxLimits {
    * engine.
    */
   environment?: EnvironmentTarget;
+  /**
+   * Environment variables handed to the live command as Dagger secrets: never
+   * written to a filesystem layer, never part of the replay log. Names must be
+   * upper-case POSIX identifiers and may not shadow the sandbox's own variables.
+   */
+  secretEnv?: SecretEnvVar[];
+  /** Bytes written to the live command's standard input. */
+  stdin?: string;
 }
 
 interface RunCommandResult {
@@ -182,6 +194,8 @@ class SandboxRuntimeService {
           cwd: params.cwd,
           timeoutSeconds: params.timeoutSeconds,
           environment: params.environment,
+          secretEnv: params.secretEnv,
+          stdin: params.stdin,
         }),
       );
     } catch (error) {

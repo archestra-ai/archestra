@@ -269,6 +269,48 @@ describe("renderStartupGuardPowerShell (Claude Code)", () => {
     expect(whiteLabel).toContain("'Acme AI'");
   });
 
+  test("gates Unicode output on a UTF-8 capability switch; the legacy console gets the ASCII mark and transliterated glyphs", () => {
+    const script = renderStartupGuardPowerShell(CTX, CLAUDE_CODE_GUARD_CLIENT);
+    // the same capability convention as the connect banner: Windows Terminal
+    // or PowerShell 7+ switches the session to UTF-8, anything else (Windows
+    // PowerShell 5.1 in conhost) would mojibake braille on its OEM codepage
+    expect(script).toContain("$ArchUtf8 = $false");
+    expect(script).toContain(
+      "if ($env:WT_SESSION -or $PSVersionTable.PSVersion.Major -ge 6) {",
+    );
+    expect(script).toContain(
+      "[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new()",
+    );
+    // the braille mark only renders behind the capability gate; the legacy
+    // path shows the same ASCII rendition as the connect banner
+    expect(script).toContain(
+      "if ($ArchUtf8) {\nWrite-Arch '⠀⠀⠀⢀⣤⣶⣶⣦⡀⠀⠀⠀⠀⠀' White",
+    );
+    expect(script).toContain("} else {\nWrite-Host ''\nWrite-Host");
+    expect(script).toContain(".------------------.");
+    // one choke point transliterates every status glyph and dash a BOM-decoded
+    // guard can print, so source strings stay identical to the bash guard's
+    expect(script).toContain("function ConvertTo-ArchConsole");
+    expect(script).toContain("if ($ArchUtf8) { return $Text }");
+    for (const code of [
+      "0x25CB", // ○
+      "0x2713", // ✓
+      "0x2714", // ✔
+      "0x2716", // ✖
+      "0x2717", // ✗
+      "0x2014", // —
+      "0x00B7", // ·
+      "0x2026", // …
+    ]) {
+      expect(script).toContain(`[char]${code}`);
+    }
+    expect(script).toContain("$Text = ConvertTo-ArchConsole $Text");
+    // the non-interactive stderr advisories pass through it too
+    expect(script).toContain(
+      "[Console]::Error.WriteLine((ConvertTo-ArchConsole",
+    );
+  });
+
   test("never blocks: opt-out env var and non-interactive paths return to the wrapper", () => {
     const script = renderStartupGuardPowerShell(CTX, CLAUDE_CODE_GUARD_CLIENT);
     expect(script).toContain("ARCHESTRA_CLAUDE_GUARD");

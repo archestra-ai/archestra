@@ -29,9 +29,11 @@ export type AppaClientAdapter = {
   normalizeLocalToolName(name: string): string;
   /**
    * Reads the trajectory identity the client itself puts on the wire: the id
-   * it keeps stable across a resumed or compacted conversation and replaces
-   * on a fork, so a resume reopens the same OpenAPPA root and a fork opens a
-   * fresh one. Runs before the generic wire-family fallbacks; returning
+   * it keeps stable across a resumed or compacted conversation, so a resume
+   * reopens the same OpenAPPA root. A fork or an out-of-band summarizer gets a
+   * new id, but the history it replays carries the parent's trajectory stamps,
+   * which continue the parent's root instead (`openappa/trajectory-stamp.ts`).
+   * Runs before the generic wire-family fallbacks; returning
    * `undefined` defers to them. A request whose native signals contradict
    * each other is refused rather than bound to a trajectory chosen by
    * precedence.

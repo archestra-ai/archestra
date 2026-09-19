@@ -89,7 +89,12 @@ import {
   openappaEnabled,
   sessionFromHeaders,
 } from "@/openappa/service";
-import { appaWireFamily } from "@/openappa/wire";
+import { stampedTrajectory } from "@/openappa/trajectory-stamp";
+import {
+  type AppaSessionIdentity,
+  appaWireFamily,
+  restoreTrajectoryStamps,
+} from "@/openappa/wire";
 import { extractAppaSessionIdentity } from "@/proxy/plugins/appa-plugin-archestra/session-identity";
 import {
   APPA_PLUGIN_TRUSTED_CONTEXT,
@@ -418,6 +423,14 @@ export async function handleLLMProxy<
     request.headers,
   );
 
+  // On OpenAPPA turns the proxy gives clients stamped tool-call ids (see
+  // `openappa/trajectory-stamp.ts`). The provider's own ids go back before
+  // anything reads the history; the stamps say which session the context
+  // came from, which binds the OpenAPPA session below.
+  const stampFamily = appaWireFamily(provider.interactionType);
+  const trajectoryStamps = stampFamily
+    ? restoreTrajectoryStamps({ family: stampFamily, body })
+    : [];
   const requestAdapter = provider.createRequestAdapter(body);
   const streamAdapter = provider.createStreamAdapter(body);
   const providerMessages = requestAdapter.getProviderMessages();
@@ -1129,7 +1142,7 @@ export async function handleLLMProxy<
       | Awaited<ReturnType<LlmProxyPluginRegistry["onToolResults"]>>
       | undefined;
     let openappaSession: OpenAppaSession | undefined;
-    let appaIdentity: { sessionId?: string; parentId?: string } = {};
+    let appaIdentity: AppaSessionIdentity = {};
     // Chat's own requests arrive over loopback and bring no credential of
     // this platform that proves nobody: the stored provider secret goes to
     // the provider. A request that brings an organization credential and
@@ -1190,7 +1203,8 @@ export async function handleLLMProxy<
               : undefined;
         // Convert client-native session metadata into universal X-Appa-* headers.
         // The matched client adapter reads the client's own trajectory id
-        // (resume reopens the root; a fork opens a fresh one) before the
+        // (resume reopens the root; a fork's is superseded below by the
+        // trajectory stamps its replayed history carries) before the
         // generic wire fallbacks.
         const incomingAppaSessionHeader =
           headersForExtraction[APPA_SESSION_HEADER.toLowerCase()];
@@ -1202,6 +1216,29 @@ export async function handleLLMProxy<
               headers: headersForExtraction,
             })
           : {};
+        // Context that carries this caller's trajectory stamps came from the
+        // session that made those calls. A summarizer compacting it in a
+        // session of its own, or a fork, continues that session's trajectory,
+        // labels and all, the way an in-band compaction does. A root the
+        // client names explicitly is its own to manage.
+        const stampedSession =
+          callerId &&
+          !isInternalChat &&
+          !incomingAppaSessionHeader &&
+          !headersForExtraction[APPA_PARENT_HEADER.toLowerCase()]
+            ? stampedTrajectory({
+                stamps: trajectoryStamps,
+                organizationId: resolvedAgent.organizationId,
+                callerId,
+                secret: config.openappa.offerSigningSecret,
+              })
+            : undefined;
+        if (stampedSession && stampedSession !== appaIdentity.sessionId) {
+          appaIdentity = {
+            sessionId: stampedSession,
+            provenance: "trajectory-stamp",
+          };
+        }
         if (
           appaIdentity.sessionId &&
           isWellFormedAppaId(appaIdentity.sessionId) &&
@@ -2943,6 +2980,7 @@ async function evaluateProxyPluginToolCalls(
           const original = originalCalls[index];
           return (
             call.id !== original.id ||
+            call.wireId !== original.wireId ||
             call.name !== original.name ||
             call.namespace !== original.namespace ||
             call.arguments !== original.arguments

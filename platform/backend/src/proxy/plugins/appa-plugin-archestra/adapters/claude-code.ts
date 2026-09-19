@@ -29,8 +29,9 @@ export class AppaClaudeCodeAdapter implements AppaClientAdapter {
 
   /**
    * Claude Code stamps its session id on every request: the same id across a
-   * resume and a `/compact` continuation, a fresh one on a fork — which is
-   * exactly the root semantics the runtime's reopen gives it. The
+   * resume and a `/compact` continuation, which the runtime's reopen keeps on
+   * one root. A fork's fresh id is continued on the parent's root by the
+   * trajectory stamps in the history it replays. The
    * `metadata.user_id` session blob every Claude client sends stays in the
    * generic wire fallback.
    */

@@ -17,6 +17,8 @@ import {
   type OpenAppaSession,
   processProxyResults,
 } from "@/openappa/service";
+import { stampToolCallId } from "@/openappa/trajectory-stamp";
+import { appaWireFamily } from "@/openappa/wire";
 import type {
   LlmProxyBeforeModelContext,
   LlmProxyContextTrust,
@@ -276,8 +278,13 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
 
     // Keep turn open while tool calls are awaiting client execution.
     binding.turnOpen = true;
-    if (blocked.length === 0) return;
-    return { decision: "allow", toolCalls: released, blocked };
+    const stamp = trajectoryStamper(binding, context.interactionType);
+    if (blocked.length === 0 && !stamp) return;
+    return {
+      decision: "allow",
+      toolCalls: stamp ? released.map(stamp) : released,
+      ...(blocked.length > 0 ? { blocked } : {}),
+    };
   }
 
   async onModelResponse(
@@ -512,6 +519,47 @@ function noticeNamespace(request: {
   const notice = request.tools?.noticeToolName;
   const namespace = notice ? request.namespaces.get(notice) : undefined;
   return namespace ? { namespace } : {};
+}
+
+/**
+ * Gives every call the client receives a trajectory stamp for its id, so the
+ * context this turn adds names its session wherever the client takes it (see
+ * `openappa/trajectory-stamp.ts`). Only on a wire family whose history the
+ * proxy restores, and only for a root session scoped to its caller: Chat names
+ * its conversation itself, a child's lineage is its parent's to carry, and a
+ * stamp signed for no caller would bind nobody.
+ */
+function trajectoryStamper(
+  binding: AppaPluginBinding,
+  interactionType: string,
+):
+  | ((
+      call: LlmProxyToolCallsContext["toolCalls"][number],
+    ) => LlmProxyToolCallsContext["toolCalls"][number])
+  | undefined {
+  const { session } = binding;
+  const callerId = session.caller_id;
+  const secret = config.openappa.offerSigningSecret;
+  if (
+    binding.chat ||
+    secret.length === 0 ||
+    !callerId ||
+    session.parent_id ||
+    !appaWireFamily(interactionType) ||
+    !session.session_id.startsWith(`${callerId}|`)
+  )
+    return undefined;
+  const sessionId = clientSessionId(session.session_id);
+  return (call) => ({
+    ...call,
+    wireId: stampToolCallId({
+      callId: call.id,
+      sessionId,
+      organizationId: session.organization_id,
+      callerId,
+      secret,
+    }),
+  });
 }
 
 function clientSessionId(scopedSessionId: string): string {

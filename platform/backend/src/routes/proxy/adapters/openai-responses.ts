@@ -437,7 +437,12 @@ class OpenAiResponsesResponseAdapter
   }
 
   withRewrittenToolCalls(
-    toolCalls: Array<{ id: string; name: string; arguments: string }>,
+    toolCalls: Array<{
+      id: string;
+      name: string;
+      arguments: string;
+      wireId?: string;
+    }>,
   ): OpenAiResponsesResponse {
     return {
       ...this.response,

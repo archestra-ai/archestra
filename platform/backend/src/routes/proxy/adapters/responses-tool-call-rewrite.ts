@@ -27,6 +27,8 @@ type RewrittenToolCall = {
   arguments: string;
   /** The namespace the client declared the tool in (Codex MCP servers). */
   namespace?: string;
+  /** Written to the client as `call_id` in place of `id` (OpenAPPA's trajectory stamp). */
+  wireId?: string;
 };
 
 type ResponsesFunctionCallItem = {
@@ -55,7 +57,7 @@ export function responsesFunctionCallItem(
 ): ResponsesFunctionCallItem {
   return {
     id: itemId ?? `fc_${toolCall.id}`,
-    call_id: toolCall.id,
+    call_id: toolCall.wireId ?? toolCall.id,
     type: "function_call" as const,
     name: toolCall.name,
     arguments: toolCall.arguments,
@@ -129,9 +131,10 @@ export function formatResponsesFunctionCallFrames(params: {
 
 /**
  * A response `output` with its function-call items replaced by the rewritten
- * calls, matched by `call_id` so ids — what the client correlates tool results
- * by — are untouched. Non-call items (text, reasoning) pass through in place; a
- * rewritten call with no upstream item to replace is appended.
+ * calls, matched by the provider's `call_id`. That id — what the client
+ * correlates tool results by — is kept unless the call carries the one the
+ * client is given instead. Non-call items (text, reasoning) pass through in
+ * place; a rewritten call with no upstream item to replace is appended.
  */
 export function rewriteResponsesOutput<TItem extends { type?: string }>(
   output: readonly TItem[],
@@ -156,10 +159,14 @@ export function rewriteResponsesOutput<TItem extends { type?: string }>(
                 (item as { id?: string }).id,
               ) as unknown as TItem)
             : item.type === "custom_tool_call"
-              ? item
+              ? ({
+                  ...item,
+                  call_id: rewritten.wireId ?? callId,
+                } as TItem)
               : (withNamespace(
                   {
                     ...item,
+                    call_id: rewritten.wireId ?? callId,
                     name: rewritten.name,
                     arguments: rewritten.arguments,
                   },
@@ -251,7 +258,7 @@ function formatCustomToolCallFrames(params: {
   const input = customToolInput(toolCall.arguments) ?? toolCall.arguments;
   const item: ResponsesCustomCallItem = {
     id,
-    call_id: toolCall.id,
+    call_id: toolCall.wireId ?? toolCall.id,
     type: "custom_tool_call" as const,
     name: toolCall.name,
     input,

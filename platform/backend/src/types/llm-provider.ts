@@ -249,7 +249,13 @@ export interface LLMResponseAdapter<TResponse> {
    * provider, so no response shape is ever rewritten speculatively.
    */
   withRewrittenToolCalls?(
-    toolCalls: Array<{ id: string; name: string; arguments: string }>,
+    toolCalls: Array<{
+      id: string;
+      name: string;
+      arguments: string;
+      /** Written to the client in place of `id` (OpenAPPA's trajectory stamp). */
+      wireId?: string;
+    }>,
   ): TResponse;
 
   /**
@@ -297,6 +303,8 @@ export interface StreamAccumulatorState {
     id: string;
     name: string;
     arguments: string;
+    /** Written to the client in place of `id` (OpenAPPA's trajectory stamp). */
+    wireId?: string;
   }>;
   /** Raw tool call events stored for replay after policy approval */
   rawToolCallEvents: unknown[];

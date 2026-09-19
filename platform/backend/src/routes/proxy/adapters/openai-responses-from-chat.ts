@@ -79,7 +79,12 @@ class ResponsesFromChatAdapter<TResponse>
   }
 
   withRewrittenToolCalls(
-    toolCalls: Array<{ id: string; name: string; arguments: string }>,
+    toolCalls: Array<{
+      id: string;
+      name: string;
+      arguments: string;
+      wireId?: string;
+    }>,
   ): TResponse {
     const inner =
       this.inner.withRewrittenToolCalls?.(toolCalls) ??
@@ -423,7 +428,7 @@ class ResponsesFromChatStreamAdapter<TChunk, TResponse>
       output.push(
         ...(toolCallsOverride ?? this.state.toolCalls).map((toolCall) => ({
           id: toolCall.id,
-          call_id: toolCall.id,
+          call_id: toolCall.wireId ?? toolCall.id,
           type: "function_call",
           name: toolCall.name,
           arguments: toolCall.arguments,

@@ -25,6 +25,7 @@ import {
   readRemedyExecution,
 } from "./notice";
 import type { OfferJws } from "./offer-claims";
+import { parseTrajectoryStamp, type TrajectoryStamp } from "./trajectory-stamp";
 
 export type AppaWireFamily =
   | "anthropic:messages"
@@ -45,6 +46,8 @@ export type AppaSessionIdentity = {
     | "prompt-cache-key"
     | "metadata-session-id"
     | "conversation"
+    /** The session the history's trajectory stamps name. */
+    | "trajectory-stamp"
     | "none";
 };
 
@@ -152,6 +155,45 @@ export function restoreAppaRemedyExecutions(params: {
     });
   }
   return historicalControlToolName;
+}
+
+/**
+ * Puts the provider's own id back wherever the history carries a trajectory
+ * stamp — on a call and on the result that answers it — and returns the
+ * stamps it found, so the caller can tell which trajectory the context came
+ * from. Runs before anything else reads the history: notices, results and the
+ * provider request all see the ids the provider minted.
+ */
+export function restoreTrajectoryStamps(params: {
+  family: AppaWireFamily;
+  body: unknown;
+}): TrajectoryStamp[] {
+  const found: TrajectoryStamp[] = [];
+  const restore = (record: Record<string, unknown>, key: string) => {
+    const value = record[key];
+    const stamp =
+      typeof value === "string" ? parseTrajectoryStamp(value) : undefined;
+    if (!stamp) return;
+    record[key] = stamp.callId;
+    found.push(stamp);
+  };
+  if (params.family === "anthropic:messages") {
+    for (const block of anthropicBlocks(params.body)) {
+      if (block.type === "tool_use") restore(block, "id");
+      else if (block.type === "tool_result") restore(block, "tool_use_id");
+    }
+  } else if (params.family === "openai:responses") {
+    for (const item of responsesItems(params.body)) restore(item, "call_id");
+  } else {
+    for (const message of chatMessages(params.body)) {
+      restore(message, "tool_call_id");
+      for (const call of asArray(message.tool_calls) ?? []) {
+        const record = asRecord(call);
+        if (record) restore(record, "id");
+      }
+    }
+  }
+  return found;
 }
 
 /** Removes tools from every declaration container, by exact wire name. */

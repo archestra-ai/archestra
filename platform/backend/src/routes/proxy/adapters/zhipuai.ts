@@ -546,7 +546,12 @@ class ZhipuaiResponseAdapter implements LLMResponseAdapter<ZhipuaiResponse> {
   }
 
   withRewrittenToolCalls(
-    toolCalls: Array<{ id: string; name: string; arguments: string }>,
+    toolCalls: Array<{
+      id: string;
+      name: string;
+      arguments: string;
+      wireId?: string;
+    }>,
   ): ZhipuaiResponse {
     const choice = this.response.choices[0];
     return {
@@ -557,7 +562,7 @@ class ZhipuaiResponseAdapter implements LLMResponseAdapter<ZhipuaiResponse> {
           message: {
             ...choice.message,
             tool_calls: toolCalls.map((toolCall) => ({
-              id: toolCall.id,
+              id: toolCall.wireId ?? toolCall.id,
               type: "function" as const,
               function: {
                 name: toolCall.name,
@@ -823,7 +828,7 @@ class ZhipuaiStreamAdapter
           delta: {
             tool_calls: toolCalls.map((toolCall, index) => ({
               index,
-              id: toolCall.id,
+              id: toolCall.wireId ?? toolCall.id,
               type: "function" as const,
               function: {
                 name: toolCall.name,

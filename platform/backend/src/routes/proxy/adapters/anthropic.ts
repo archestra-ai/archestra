@@ -561,10 +561,16 @@ class AnthropicResponseAdapter
   }
 
   withRewrittenToolCalls(
-    toolCalls: Array<{ id: string; name: string; arguments: string }>,
+    toolCalls: Array<{
+      id: string;
+      name: string;
+      arguments: string;
+      wireId?: string;
+    }>,
   ): AnthropicResponse {
     // Positional: one rewritten entry per call this response carries, in
-    // order, so ids the client correlates by are untouched.
+    // order. The id the client correlates by is the provider's unless the
+    // call carries the one it is given instead.
     let next = 0;
     const content = this.response.content.map((block) => {
       if (block.type !== "tool_use") return block;
@@ -572,6 +578,7 @@ class AnthropicResponseAdapter
       if (!rewritten) return block;
       return {
         ...block,
+        id: rewritten.wireId ?? block.id,
         name: rewritten.name,
         input: parseArgs(rewritten.arguments),
       };
@@ -911,7 +918,7 @@ class AnthropicStreamAdapter
           index,
           content_block: {
             type: "tool_use",
-            id: toolCall.id,
+            id: toolCall.wireId ?? toolCall.id,
             name: toolCall.name,
             input: {},
           },

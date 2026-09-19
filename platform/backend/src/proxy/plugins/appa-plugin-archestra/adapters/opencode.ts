@@ -67,7 +67,9 @@ export class AppaOpenCodeAdapter implements AppaClientAdapter {
     if (normal) {
       // `x-parent-session-id` marks a task child, but the runtime only opens
       // a child on a spawn the parent prepared — stamping it would refuse the
-      // session. A client fork or task opens a fresh root instead.
+      // session. A task starts from its own prompt and opens a fresh root; a
+      // fork replays the parent's history, whose trajectory stamps continue
+      // the parent's root.
       return { sessionId: normal, provenance: "opencode-session-header" };
     }
     return hosted

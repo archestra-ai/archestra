@@ -140,6 +140,12 @@ export interface AccumulatedToolCall {
   arguments: string;
   /** The namespace the model called the tool in, on a wire that has them. */
   namespace?: string;
+  /**
+   * The id the client is given for this call when it is not the provider's:
+   * OpenAPPA's trajectory stamp. Matching against the provider's response
+   * stays on `id`; only what is written to the client changes.
+   */
+  wireId?: string;
 }
 
 /**

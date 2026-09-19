@@ -79,7 +79,11 @@ async function applySetup({ scriptPath, origin, platform }) {
   const directory = await mkdtemp(join(tmpdir(), 'client-connect-'));
   try {
     const filename = join(directory, platform === 'windows' ? 'setup.ps1' : 'setup.sh');
-    await writeFile(filename, await response.text(), { mode: 0o600 });
+    const script = await response.text();
+    // Windows PowerShell 5.1 reads a BOM-less .ps1 in the system ANSI codepage,
+    // garbling the banner's Unicode mark and the startup-guard body the script
+    // installs. A UTF-8 BOM makes powershell.exe -File decode it correctly.
+    await writeFile(filename, platform === 'windows' ? '\uFEFF' + script : script, { mode: 0o600 });
     console.log('Approval received. Applying the reviewed setup...');
     const child = platform === 'windows'
       ? spawnSync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', filename], { stdio: 'inherit' })

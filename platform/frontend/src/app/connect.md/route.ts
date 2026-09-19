@@ -46,13 +46,22 @@ under Settings > Plugins. Verify a fresh message appears in LLM Proxy Logs.
    The browser code must match the code printed in the terminal.
    If no browser opens, show the printed approval URL to the user.
 4. The installer applies the approved configuration automatically.
+   If the organization has runtime handoff instructions enabled, the setup also
+   installs a system-prompt file injected into every future session launch —
+   tell the user plainly; the client itself does not make that obvious.
 5. Follow the setup output to reload the client and finish its native MCP OAuth sign-in.
-   Claude Code: open /mcp, select the configured server, and authenticate.
+   The gateway only registers in a NEW session — the current one cannot see it, so
+   never send the user to /mcp here and do not attempt the sign-in yourself.
+   Claude Code: in the new session, open /mcp, select the configured server, and authenticate.
    Cursor: use its MCP settings to connect/authenticate the configured server.
    Codex: use codex mcp login SERVER_NAME.
    Let the user complete any browser consent or client execution approval.
-6. Verify the configured gateway can list tools before reporting a working connection.
+   Then close with one short, imperative user instruction and nothing else, e.g.:
+   "Open a new terminal, then run claude /mcp and select <server> to sign in."
+6. Verify the configured gateway can list tools before reporting a working connection —
+   in the new session, after authentication; this session cannot verify anything.
    Configuration applied alone does not prove MCP authentication succeeded.
+   Verification is that session's job — never hand it to the user as a step.
 7. For other clients, delete the temporary bootstrap file when finished.
    For Desktop, leave this public temporary file in place and end the task after handoff.
 

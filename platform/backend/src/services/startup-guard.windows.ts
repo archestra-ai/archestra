@@ -8,6 +8,7 @@ import {
   ARCHESTRA_MARK_NAME_ROW,
   ARCHESTRA_MARK_TAGLINE,
   ARCHESTRA_MARK_TAGLINE_ROW,
+  archestraMarkWithText,
 } from "./archestra-mark";
 import { CODEX_HANDOFF_HELPER } from "./codex-handoff";
 import { describeMarketplaceContents } from "./marketplace-copy";
@@ -187,7 +188,31 @@ try { $UseVt = [bool]$Host.UI.SupportsVirtualTerminal } catch { }
 # under conpty, while VT sequences always work there.
 $VtCodes = @{ Cyan = '96'; Magenta = '95'; Red = '91'; Yellow = '93'; DarkGray = '90'; White = '97' }
 
+# Glyph and mark capability, the same convention as the connect banner:
+# Windows Terminal and PowerShell 7 render the Unicode braille mark and the
+# status glyphs; the legacy console (Windows PowerShell 5.1 in conhost)
+# garbles them on its OEM codepage, so it gets ASCII stand-ins. Switching the
+# session to UTF-8 is best-effort and harmless if it fails.
+$ArchUtf8 = $false
+try {
+  if ($env:WT_SESSION -or $PSVersionTable.PSVersion.Major -ge 6) {
+    [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new()
+    $OutputEncoding = [System.Text.UTF8Encoding]::new()
+    $ArchUtf8 = $true
+  }
+} catch { }
+
+# The one choke point every status glyph and dash passes through, so source
+# strings stay identical to the bash guard's and a legacy console can never
+# mojibake. The header mark is NOT transliterable (each braille cell is art);
+# it picks the ASCII rendition itself below.
+function ConvertTo-ArchConsole([string]$Text) {
+  if ($ArchUtf8) { return $Text }
+  return $Text.Replace([string][char]0x25CB, 'o').Replace([string][char]0x2713, '+').Replace([string][char]0x2714, '+').Replace([string][char]0x2716, 'x').Replace([string][char]0x2717, 'x').Replace([string][char]0x2014, '-').Replace([string][char]0x00B7, '-').Replace([string][char]0x2026, '...')
+}
+
 function Write-Arch([string]$Text, [string]$Color, [switch]$NoNewline) {
+  $Text = ConvertTo-ArchConsole $Text
   if ($UseColor -and $Color -and $UseVt) {
     Write-Host -NoNewline:$NoNewline ("$Esc[" + $VtCodes[$Color] + 'm' + $Text + "$Esc[0m")
   } elseif ($UseColor -and $Color) {
@@ -252,11 +277,11 @@ if (-not $Interactive) {
   }
   foreach ($r in $ActiveRemotes) {
     if (Test-ArchResourceDown $r) {
-      [Console]::Error.WriteLine('archestra: failed to connect to ' + $r.FailName + ' — ${client.binary} is configured to use it and may fail. Disconnect it from the ' + $AppName + ' /connection page, or run ${client.binary} interactively to be offered a disconnect.')
+      [Console]::Error.WriteLine((ConvertTo-ArchConsole ('archestra: failed to connect to ' + $r.FailName + ' — ${client.binary} is configured to use it and may fail. Disconnect it from the ' + $AppName + ' /connection page, or run ${client.binary} interactively to be offered a disconnect.')))
     }
   }
   if (Test-ArchVersionStale) {
-    [Console]::Error.WriteLine('archestra: a newer ' + $AppName + ' setup for ${client.binary} is available — re-run the setup from the ' + $AppName + ' /connection page to update this startup check.')
+    [Console]::Error.WriteLine((ConvertTo-ArchConsole ('archestra: a newer ' + $AppName + ' setup for ${client.binary} is available — re-run the setup from the ' + $AppName + ' /connection page to update this startup check.')))
   }
   return
 }
@@ -283,7 +308,7 @@ function Show-ArchSpinStart([string]$Label, [string]$Suffix) {
   $Script:SpinText = $text
   $Script:SpinDots = 0
   Clear-ArchLine
-  Write-Host -NoNewline ('  ' + $text)
+  Write-Host -NoNewline (ConvertTo-ArchConsole ('  ' + $text))
 }
 function Show-ArchSpinTick {
   $Script:SpinDots++
@@ -456,10 +481,10 @@ function Show-ArchMenuRow([int]$i, [int]$count, [int]$baseTop, $done) {
   Move-ArchRowStart $i $count $baseTop
   if ($done.ContainsKey($r.Kind)) {
     Write-Arch '✓' Magenta -NoNewline
-    Write-Host -NoNewline (' Disconnected ' + $r.Label)
+    Write-Host -NoNewline (ConvertTo-ArchConsole (' Disconnected ' + $r.Label))
   } else {
     Write-Arch ('[' + ($i + 1) + ']') Magenta -NoNewline
-    Write-Host -NoNewline (' ' + $r.Label)
+    Write-Host -NoNewline (ConvertTo-ArchConsole (' ' + $r.Label))
   }
   Move-ArchRowEnd $i $count $baseTop
 }
@@ -482,7 +507,7 @@ function Disconnect-ArchMenuRow([int]$i, [int]$count, [int]$baseTop) {
     return $false
   }
   Write-Arch '✓' Magenta -NoNewline
-  Write-Host -NoNewline (' Disconnected ' + $r.Label)
+  Write-Host -NoNewline (ConvertTo-ArchConsole (' Disconnected ' + $r.Label))
   Move-ArchRowEnd $i $count $baseTop
   Add-ArchDisconnected $r.Kind
   return $true
@@ -491,7 +516,7 @@ function Show-ArchMenuRowResult([int]$i, [int]$count, [int]$baseTop) {
   $r = $ActiveRemotes[$i]
   Move-ArchRowStart $i $count $baseTop
   if (Test-ArchResourceDown $r) { Write-Arch ('✗ Failed to connect to ' + $r.FailName) Red -NoNewline }
-  else { Write-Arch '✓' Magenta -NoNewline; Write-Host -NoNewline (' ' + $r.Label) }
+  else { Write-Arch '✓' Magenta -NoNewline; Write-Host -NoNewline (ConvertTo-ArchConsole (' ' + $r.Label)) }
   Move-ArchRowEnd $i $count $baseTop
 }
 function Show-ArchMenuFooter([int]$count, [int]$baseTop) {
@@ -1139,7 +1164,11 @@ Write-Host ''`;
   // The exact canonical mark (identical art to the bash guard and the connect
   // banner): braille lines in White, product name (Cyan) and tagline (DarkGray)
   // overlaid on their rows. The .ps1 is written UTF-8-with-BOM, so PowerShell
-  // decodes the braille glyphs correctly.
+  // decodes the braille glyphs correctly; the $ArchUtf8 guard keeps them off a
+  // legacy console, which shows the same ASCII rendition as the connect banner.
+  // (Per-line Write-Host calls, not a here-string: this body is itself embedded
+  // in the setup script's $archGuardBody here-string, and a nested closing '@
+  // would terminate that outer string early.)
   const lines = ARCHESTRA_MARK.unicode;
   const out = lines.map((line, i) => {
     if (i === ARCHESTRA_MARK_NAME_ROW) {
@@ -1152,8 +1181,18 @@ Write-Arch ${psq(ARCHESTRA_MARK_GAP + ARCHESTRA_MARK_TAGLINE)} DarkGray`;
     }
     return `Write-Arch ${psq(line)} White`;
   });
-  out.push("Write-Host ''");
-  return out.join("\n");
+  const asciiLines = archestraMarkWithText({
+    appName: ctx.appName,
+    variant: "ascii",
+  }).map((line) => `Write-Host ${psq(line)}`);
+  return `if ($ArchUtf8) {
+${out.join("\n")}
+} else {
+Write-Host ''
+${asciiLines.join("\n")}
+Write-Host ''
+}
+Write-Host ''`;
 }
 
 /**

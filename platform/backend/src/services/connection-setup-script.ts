@@ -175,9 +175,12 @@ export function copilotAttributionHeadersValue(
  * Claude Code's post-install OAuth step, shared by the bash and PowerShell
  * renderers. Registering the gateway is not enough: it authorizes each user
  * individually, so its tools unlock only after a one-time browser sign-in.
+ * The running session never picks the server up — only a new one reads the
+ * updated config — so the step must send the user to a NEW session; naming
+ * `/mcp` alone strands them in a session where the gateway does not exist.
  */
 export function claudeCodeOAuthNextStep(serverName: string): string {
-  return `Run \`claude /mcp\`, select "${serverName}", and sign in via your browser — the gateway grants tool access per user, so its tools unlock after this one-time approval.`;
+  return `Start a new \`claude\` session, run \`/mcp\` there, select "${serverName}", and sign in via your browser — the gateway grants tool access per user, so its tools unlock after this one-time approval.`;
 }
 
 export function renderSetupScript(rawCtx: SetupScriptContext): string {

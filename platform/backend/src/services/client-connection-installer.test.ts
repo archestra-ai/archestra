@@ -1,5 +1,6 @@
 import { execFile, spawn, spawnSync } from "node:child_process";
 import { EventEmitter } from "node:events";
+import { readFileSync } from "node:fs";
 import * as fileSystem from "node:fs/promises";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
@@ -14,6 +15,7 @@ let directory: string;
 let server: Server;
 let origin: string;
 let status: "approved" | "denied" | "expired";
+let scriptBody: string;
 let downloads: number;
 let polls: number;
 let transientFailure: boolean;
@@ -25,6 +27,7 @@ beforeEach(async () => {
   directory = await mkdtemp(join(tmpdir(), "connect-installer-test-"));
   await writeFile(join(directory, "connect.cjs"), CLIENT_CONNECTION_INSTALLER);
   status = "approved";
+  scriptBody = `#!/bin/bash\nprintf applied > '${join(directory, "applied")}'\n`;
   downloads = 0;
   polls = 0;
   transientFailure = false;
@@ -60,9 +63,7 @@ beforeEach(async () => {
     ) {
       downloads++;
       res.setHeader("Content-Type", "text/plain");
-      res.end(
-        `#!/bin/bash\nprintf applied > '${join(directory, "applied")}'\n`,
-      );
+      res.end(scriptBody);
     } else {
       res.writeHead(404);
       res.end();
@@ -118,6 +119,63 @@ test("Desktop downloads and executes its approved setup through the same protoco
   expect(await readFile(join(directory, "applied"), "utf8")).toBe("applied");
   expect(downloads).toBe(1);
   expect(result.output).not.toContain("A".repeat(43));
+});
+
+test("writes the approved Windows setup with a UTF-8 BOM so powershell.exe -File decodes its glyphs", async () => {
+  // Windows PowerShell 5.1 reads a BOM-less .ps1 in the system ANSI codepage,
+  // garbling the banner's Unicode mark and the startup-guard body the script
+  // installs — the BOM is what makes -File decode UTF-8.
+  scriptBody = "# ⣾⣿ banner mark\nWrite-Host 'setup'\n";
+  let written: Buffer | null = null;
+  const applied = new Promise<void>((resolve, reject) => {
+    runInNewContext(CLIENT_CONNECTION_INSTALLER, {
+      __filename: join(directory, "connect.cjs"),
+      process: {
+        argv: [
+          process.execPath,
+          "connect.cjs",
+          "--url",
+          origin,
+          "--client",
+          "claude-code",
+          "--no-open",
+        ],
+        platform: "win32",
+        execPath: process.execPath,
+      },
+      URL,
+      fetch,
+      AbortSignal,
+      setTimeout,
+      clearTimeout,
+      console: {
+        log: (message: string) => {
+          if (message.includes("Setup applied")) resolve();
+        },
+        error: (message: string) => reject(new Error(message)),
+      },
+      require: (name: string) => {
+        if (name === "node:fs/promises") return fileSystem;
+        if (name === "node:path") return { join };
+        if (name === "node:os") return { tmpdir: () => directory };
+        if (name === "node:child_process")
+          return {
+            spawn,
+            spawnSync: (_command: string, args: string[]) => {
+              written = readFileSync(args[args.length - 1] as string);
+              return { status: 0 };
+            },
+          };
+        throw new Error(`Unexpected module ${name}`);
+      },
+    });
+  });
+  await applied;
+  expect(downloads).toBe(1);
+  if (!written) throw new Error("setup.ps1 was never executed");
+  const bytes: Buffer = written;
+  expect([...bytes.subarray(0, 3)]).toEqual([0xef, 0xbb, 0xbf]);
+  expect(bytes.subarray(3).toString("utf8")).toBe(scriptBody);
 });
 
 test("a downloaded Desktop setup redeems its reviewed ticket without another approval flow", async () => {

@@ -372,6 +372,11 @@ describe("isThreadMuteCommand", () => {
     "stay quiet",
     "shut up",
     "Shut up!",
+    ":mute:",
+    ":shushing_face:",
+    ":Mute:",
+    "  :mute:  ",
+    ":shushing_face:.",
   ])("treats %j as a mute command", (text) => {
     expect(isThreadMuteCommand(text)).toBe(true);
   });
@@ -387,6 +392,11 @@ describe("isThreadMuteCommand", () => {
     "unmute",
     "mute mute",
     "shut up about the deploy",
+    ":mute", // missing trailing colon
+    "mute:", // missing leading colon
+    ":mute: please", // not the whole message
+    ":shushing_face", // missing trailing colon
+    ":muted:", // not the recognized shortcode
   ])("does not treat %j as a mute command", (text) => {
     expect(isThreadMuteCommand(text)).toBe(false);
   });
@@ -769,6 +779,24 @@ describe.each([
 
     // A redelivered / repeated mute must not spam the thread.
     await gate({ text: "mute" });
+    expect(postMutedNotice).toHaveBeenCalledTimes(1);
+  });
+
+  test.each([
+    ":mute:",
+    ":shushing_face:",
+  ])("a literal %j message silences the thread and confirms exactly once", async (text) => {
+    enableAnswerAll(true);
+
+    expect(await gate({ text })).toEqual({
+      proceed: false,
+      addressed: false,
+    });
+    expect(postMutedNotice).toHaveBeenCalledTimes(1);
+    expect(await isChannelThreadMuted(activation)).toBe(true);
+
+    // A redelivered / repeated mute must not spam the thread.
+    await gate({ text });
     expect(postMutedNotice).toHaveBeenCalledTimes(1);
   });
 

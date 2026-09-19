@@ -131,13 +131,14 @@ the proxy filters model input, not data already stored or displayed by Chat.
 
 ## Storage and interrupted processing
 
-Migration `0471_openappa_native.sql` creates the event and receipt tables. Migration `0479_perpetual_malcolm_colcord.sql` adds host-key indexes. Offer routing is a host-signed plaintext claim, not a table.
+Migration `0471_openappa_native.sql` creates the event and receipt tables. Migration `0479_perpetual_malcolm_colcord.sql` adds host-key indexes. Migration `0483_openappa_session_forks.sql` adds fork lineage and context anchors. Offer routing is a host-signed plaintext claim, not a table.
 
 | Table | Owner / purpose |
 | --- | --- |
 | `openappa_events` | Rust-encoded ordered event batches by root and sequence |
 | `openappa_policy_files` | Original policy bytes addressed by their hash |
-| `openappa_sessions` | Scoped actor/root/parent mapping and start decision |
+| `openappa_sessions` | Scoped actor/root/parent mapping, start decision, and fork lineage (`forked_from`, `forked_at`) |
+| `openappa_context_anchors` | Scoped digests that identify eligible compacted-history forks without storing content |
 | `openappa_operations` | Call, lifecycle, and remedy receipts |
 | `openappa_processed_results` | Result status, decision, and approved output |
 
@@ -159,6 +160,22 @@ events, so a failed dispatch leaves nothing to discard. A durable pending
 receipt blocks further work in that family after an interruption.
 
 Completed result keys are session ID + tool call ID. Operation keys are session ID + operation ID. Remedy-execution receipts bind the authenticated spender. Submitting different result bytes under a completed result key returns the saved approved output without re-evaluating hooks. Submitting changed arguments under an existing logical call ID is refused.
+
+## Forks
+
+The proxy can place a new session as a fork only before that session has opened a
+trajectory, after it has traced the caller's history to a started session in the
+same organization. A session cannot be both a child and a fork, and a session
+that already owns a root cannot be moved onto another history. The fork opens a
+root of its own with the parent root's policy revision, current state, effects,
+and denials; later parent and child activity remain separate.
+
+`forked_at` is the database-clock watermark taken while the parent root lock is
+held. A fork returns only completed parent decisions whose receipt was claimed
+strictly before that watermark, including through a chain of forks. A result
+that the parent admitted after the fork opened is unknown to the fork and is
+withheld. If a process crashed after writing a fork opening but before writing
+the session row, recovery records a NULL watermark and inherits no results.
 
 Pending receipts deliberately require operator investigation. Inspect the
 scoped operation/result, native event history, and external authority records.

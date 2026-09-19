@@ -66,6 +66,9 @@ export const openappaSessionsTable = pgTable(
      * labels, so this links the two for lineage and logs only.
      */
     forkedFrom: text("forked_from"),
+    // The database time at which this fork captured its parent's state. A NULL
+    // value is a crash-recovery opening and deliberately inherits no results.
+    forkedAt: timestamp("forked_at", { withTimezone: true }),
     startDecision: jsonb("start_decision").notNull(),
   },
   (table) => [
@@ -73,6 +76,10 @@ export const openappaSessionsTable = pgTable(
     index("openappa_sessions_forked_from_idx").on(
       table.organizationId,
       table.forkedFrom,
+    ),
+    index("openappa_sessions_unscoped_session_idx").on(
+      table.organizationId,
+      sql`substr(${table.sessionId}, strpos(${table.sessionId}, '|') + 1)`,
     ),
   ],
 );

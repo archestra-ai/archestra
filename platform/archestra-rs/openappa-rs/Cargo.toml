@@ -13,9 +13,9 @@ crate-type = ["cdylib"]
 # on top of the first commit after OpenAPPA v0.23.1, which adds the PostgreSQL
 # connection pool. The embedded reporting helper currently requires upstream's
 # daemon feature.
-appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "ea4af105ded453d361c28eaf1dbf4686e05cfffd" }
-appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "ea4af105ded453d361c28eaf1dbf4686e05cfffd" }
-appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "ea4af105ded453d361c28eaf1dbf4686e05cfffd", features = ["postgres"] }
+appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "902e59e31db548fdc16093c46699b6e277c602e3" }
+appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "902e59e31db548fdc16093c46699b6e277c602e3" }
+appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "902e59e31db548fdc16093c46699b6e277c602e3", features = ["postgres"] }
 napi = { version = "3", features = ["tokio_rt"] }
 napi-derive = "3"
 serde = { version = "1", features = ["derive"] }

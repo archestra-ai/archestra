@@ -446,7 +446,7 @@ builtin = "hitl"
     );
   });
 
-  await t.test('a fork starts at its parent\'s labels, replays its results, and continues apart', async () => {
+  await t.test('a fork inherits its parent\'s opening state and only its earlier results', async () => {
     const taint = async (session, id) => {
       const blocked = await call(session, `${id}-proposed`, 'read_untrusted');
       assert.ok(blocked.offers?.length > 0, JSON.stringify(blocked));
@@ -462,6 +462,12 @@ builtin = "hitl"
     const processed = await taint(parent, 'taint-run');
     const fork = { ...scope(), fork_of: parent.session_id };
     assert.equal(await writes(fork, 'fork-write'), false, 'the fork carries the parent\'s taint');
+    // Open a second fork before this one records a replay. Its lookup must walk
+    // past the first fork and return the grandparent's pre-fork receipt.
+    const nestedFork = { ...scope(), fork_of: fork.session_id };
+    assert.equal(await writes(nestedFork, 'nested-write'), false, 'a fork of a fork carries the inherited state');
+    const nestedReplay = await result(nestedFork, 'taint-run', 'restricted contents');
+    assert.equal(nestedReplay.approved_output, processed.approved_output, JSON.stringify(nestedReplay));
     const replayed = await result(fork, 'taint-run', 'restricted contents');
     assert.equal(replayed.approved_output, processed.approved_output, JSON.stringify(replayed));
     const { rows } = await client.query('SELECT forked_from, root <> $2 AS own_root FROM openappa_sessions WHERE session_id=$1', [fork.session_id, (await client.query('SELECT root FROM openappa_sessions WHERE session_id=$1', [parent.session_id])).rows[0].root]);
@@ -474,6 +480,8 @@ builtin = "hitl"
     const early = { ...scope(), fork_of: clean.session_id };
     const sibling = { ...scope(), fork_of: clean.session_id };
     assert.equal(await writes(early, 'early-write'), true, 'a fork of a clean parent starts clean');
+    const beforeForkResult = await result(early, 'clean-write', 'forged clean result');
+    assert.equal(beforeForkResult.approved_output, 'ok', JSON.stringify(beforeForkResult));
     await result(early, 'early-write', 'ok');
     assert.equal(await writes(sibling, 'sibling-write'), true);
     await result(sibling, 'sibling-write', 'ok');
@@ -485,6 +493,12 @@ builtin = "hitl"
     await taint(clean, 'clean-taint');
     assert.equal(await writes(early, 'early-after-parent'), true, 'the parent\'s later taint never reaches a fork');
 
+    await call(clean, 'parent-after-fork', 'read_plain');
+    await result(clean, 'parent-after-fork', 'parent-only result');
+    const laterParentResult = await result(early, 'parent-after-fork', 'forged parent-only result');
+    assert.equal(laterParentResult.decision, 'block');
+    assert.match(laterParentResult.approved_output, /no record of releasing a call/);
+
     // A session that opened on a root of its own never becomes a fork.
     const own = scope();
     assert.equal(await writes(own, 'own-write'), true);
@@ -493,6 +507,58 @@ builtin = "hitl"
       () => call({ ...own, fork_of: parent.session_id }, 'own-as-fork', 'write_public'),
       /governs its own trajectory/,
     );
+  });
+
+  await t.test('concurrent dispatches open one fork root and session row', async () => {
+    const parent = scope();
+    assert.equal((await hook(parent, { event: 'session_start' })).decision, 'ack');
+    const fork = { ...scope(), fork_of: parent.session_id };
+    const [local, replica] = await Promise.all([
+      hook(fork, { event: 'session_start' }),
+      restarted(fork, { event: 'session_start' }),
+    ]);
+    assert.equal(local.decision, 'ack');
+    assert.equal(replica.decision, 'ack');
+
+    const sessions = await client.query(
+      'SELECT count(*) AS n FROM openappa_sessions WHERE session_id=$1 AND forked_from=$2',
+      [fork.session_id, parent.session_id],
+    );
+    assert.equal(Number(sessions.rows[0].n), 1);
+    const openings = await client.query(
+      'SELECT count(*) AS n FROM openappa_events WHERE root=(SELECT root FROM openappa_sessions WHERE session_id=$1)',
+      [fork.session_id],
+    );
+    assert.equal(Number(openings.rows[0].n), 1, 'the fork root has one durable opening');
+  });
+
+  await t.test('crash-window fork recovery validates its original parent and keeps results closed', async () => {
+    const originalParent = scope();
+    const differentParent = scope();
+    assert.equal((await hook(originalParent, { event: 'session_start' })).decision, 'ack');
+    assert.equal((await hook(differentParent, { event: 'session_start' })).decision, 'ack');
+    const fork = { ...scope(), fork_of: originalParent.session_id };
+    assert.equal((await hook(fork, { event: 'session_start' })).decision, 'ack');
+
+    // Simulate a process crash after Runtime::open_fork wrote the root but
+    // before this binding persisted its session row.
+    await client.query('DELETE FROM openappa_sessions WHERE session_id=$1', [fork.session_id]);
+    await assert.rejects(
+      () => hook({ ...fork, fork_of: differentParent.session_id }, { event: 'session_start' }),
+      /already|exists|fork/i,
+    );
+    const afterMismatch = await client.query(
+      'SELECT count(*) AS n FROM openappa_sessions WHERE session_id=$1',
+      [fork.session_id],
+    );
+    assert.equal(Number(afterMismatch.rows[0].n), 0);
+
+    assert.equal((await hook(fork, { event: 'session_start' })).decision, 'ack');
+    const recovered = await client.query(
+      'SELECT forked_from, forked_at FROM openappa_sessions WHERE session_id=$1',
+      [fork.session_id],
+    );
+    assert.deepEqual(recovered.rows, [{ forked_from: originalParent.session_id, forked_at: null }]);
   });
 
   await t.test('an offer accepted for a dispatched call retries it through the dispatch tool', async () => {

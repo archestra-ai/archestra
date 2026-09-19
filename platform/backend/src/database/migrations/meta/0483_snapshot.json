@@ -26750,6 +26750,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "forked_at": {
+          "name": "forked_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
         "start_decision": {
           "name": "start_decision",
           "type": "jsonb",
@@ -26785,6 +26791,27 @@
             {
               "expression": "forked_from",
               "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "openappa_sessions_unscoped_session_idx": {
+          "name": "openappa_sessions_unscoped_session_idx",
+          "columns": [
+            {
+              "expression": "organization_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "substr(\"session_id\", strpos(\"session_id\", '|') + 1)",
+              "isExpression": true,
               "asc": true,
               "nulls": "last"
             }

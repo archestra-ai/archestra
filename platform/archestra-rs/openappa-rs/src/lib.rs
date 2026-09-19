@@ -32,7 +32,7 @@ use std::{
     num::NonZeroUsize,
     panic::AssertUnwindSafe,
     sync::{Arc, OnceLock},
-    time::Duration,
+    time::{Duration, SystemTime},
 };
 use tokio::sync::{Mutex, OwnedMutexGuard, OwnedSemaphorePermit, Semaphore};
 
@@ -44,10 +44,12 @@ pub struct ReportingOptions {
 }
 
 /// Process-wide runtime slot. The mutex covers initialize, policy reload, and
-/// the start hook that opens a trajectory only. Dispatch otherwise runs
-/// concurrently: same-trajectory exclusion is the in-process root lock plus
-/// the ledger's advisory session lock, and every ledger write is a short
-/// self-committing transaction, so no outer transaction ever spans hook I/O.
+/// the start hook that opens a trajectory only. A root keeps its opening policy
+/// revision, so a fork keeps its parent's revision even when this slot serves a
+/// newer policy for new roots. Dispatch otherwise runs concurrently:
+/// same-trajectory exclusion is the in-process root lock plus the ledger's
+/// advisory session lock, and every ledger write is a short self-committing
+/// transaction, so no outer transaction ever spans hook I/O.
 static STATE: OnceLock<Mutex<Option<State>>> = OnceLock::new();
 
 #[derive(Clone)]
@@ -487,11 +489,11 @@ async fn run(input: Input, policy_content: Option<String>) -> napi::Result<Strin
 }
 
 /// Runs a start hook under the policy content its dispatch carried, on the
-/// runtime this dispatch already leased. A start opens a new root under
-/// whatever deployment serves at that moment, and the root keeps that policy
-/// for its whole life. A sibling dispatch carrying other content can reload
-/// after this dispatch's reload in `run`, so the start serves its own
-/// content again and opens under the same hold of the mutex.
+/// runtime this dispatch already leased. A new root keeps that opening policy
+/// for its whole life; a fork already has its parent's policy in its durable
+/// opening, so this reload cannot replace its revision. A sibling dispatch
+/// carrying other content can reload after this dispatch's reload in `run`, so
+/// a new root's start serves its own content again under the same mutex hold.
 ///
 /// The connection is leased before `dispatch` takes this mutex, so the hold
 /// covers only an in-memory recompile-and-reload plus the start's own ledger
@@ -660,15 +662,16 @@ fn root_locks() -> &'static Mutex<HashMap<String, Arc<Mutex<()>>>> {
 
 impl State {
     /// Open this session's root as a fork of `fork_of`, a started session of the same caller and
-    /// organization. The runtime freezes that session's labels, effects and denials into the new
-    /// root's opening; from then on the two share nothing.
+    /// organization. The runtime freezes that session's policy revision, labels, effects and
+    /// denials into the new root's opening; from then on the two share nothing. Returns the
+    /// parent-lock-protected database watermark that bounds inheritable results.
     fn open_fork(
         &self,
         pg: &PostgresStore,
         input: &Input,
         fork_of: &str,
         actor_id: &str,
-    ) -> napi::Result<()> {
+    ) -> napi::Result<Option<SystemTime>> {
         if input.parent_id.is_some() {
             return Err(error(
                 "an OpenAPPA session cannot both fork a session and be its child",
@@ -691,13 +694,51 @@ impl State {
             })
             .map_err(error)?
             .ok_or_else(|| error("the session this one forks has not started"))?;
+
+        let fork_root = actor_id.to_owned();
+        let already_opened = pg
+            .with_client(move |client| {
+                Ok(client
+                    .query_one(
+                        "SELECT EXISTS (SELECT 1 FROM openappa_events WHERE root = $1)",
+                        &[&fork_root],
+                    )?
+                    .get::<_, bool>(0))
+            })
+            .map_err(error)?;
+        if already_opened {
+            // A crash after `Runtime::open_fork` but before our session row left a
+            // durable opening without a reliable boundary. Re-open it to verify
+            // its immutable origin matches this request, but keep results closed.
+            self.runtime
+                .open_fork(
+                    &TrajectoryId(parent_root),
+                    &TrajectoryId(parent_actor),
+                    &TrajectoryId(actor_id.to_owned()),
+                )
+                .map_err(error)?;
+            return Ok(None);
+        }
+
+        // This dispatch already holds the child lock. It then takes the parent
+        // lock, while a parent never takes a child lock, so this order has no cycle.
+        let _parent_lock = SessionLock::acquire(pg, parent_root.clone())?;
         self.runtime
             .open_fork(
                 &TrajectoryId(parent_root),
                 &TrajectoryId(parent_actor),
                 &TrajectoryId(actor_id.to_owned()),
             )
-            .map_err(error)
+            .map_err(error)?;
+        // A parent result claims `created_at` under this same parent lock. The
+        // database clock taken before releasing it is therefore an exact cutoff.
+        pg.with_client(|client| {
+            Ok(client
+                .query_one("SELECT clock_timestamp()", &[])?
+                .get::<_, SystemTime>(0))
+        })
+        .map(Some)
+        .map_err(error)
     }
 
     /// Makes `content` the serving policy unless it already is. A refused
@@ -825,9 +866,12 @@ impl State {
                 ));
             }
         } else {
-            if let Some(fork_of) = &input.fork_of {
-                self.open_fork(pg, &input, fork_of, &actor_id)?;
-            }
+            let forked_at = input
+                .fork_of
+                .as_deref()
+                .map(|fork_of| self.open_fork(pg, &input, fork_of, &actor_id))
+                .transpose()?
+                .flatten();
             let start = if let Some(child) = &actor.child {
                 HookEvent::ChildStart {
                     root: actor.root.clone(),
@@ -848,8 +892,8 @@ impl State {
             let start_decision = wire(&decision)?;
             let (id, root, input) = (actor_id.clone(), root.clone(), input.clone());
             pg.with_client(move |client| {
-                client.execute("INSERT INTO openappa_sessions (actor, root, organization_id, caller_id, session_id, parent_id, forked_from, start_decision) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)",
-                    &[&id, &root, &input.organization_id, &input.caller_id, &input.session_id, &input.parent_id, &input.fork_of, &start_decision])?;
+                client.execute("INSERT INTO openappa_sessions (actor, root, organization_id, caller_id, session_id, parent_id, forked_from, forked_at, start_decision) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)",
+                    &[&id, &root, &input.organization_id, &input.caller_id, &input.session_id, &input.parent_id, &input.fork_of, &forked_at, &start_decision])?;
                 Ok(())
             }).map_err(error)?;
         }
@@ -1553,7 +1597,8 @@ fn raw_object_value(arguments: Option<&RawValue>, name: &str) -> napi::Result<Va
 const MAX_FORK_DEPTH: usize = 32;
 
 /// The decision the session this one forks from processed for `call_id`, looked up the fork
-/// line: the fork replays that history, so its results come back as the parent saw them.
+/// line. A child accepts only results claimed before its parent-lock-protected watermark, so it
+/// replays the history it started with rather than later parent activity.
 fn inherited_result(
     pg: &PostgresStore,
     input: &Input,
@@ -1566,18 +1611,21 @@ fn inherited_result(
     );
     pg.with_client(move |client| {
         for _ in 0..MAX_FORK_DEPTH {
-            let Some(parent) = client
+            let Some((parent, forked_at)) = client
                 .query_opt(
-                    "SELECT forked_from FROM openappa_sessions WHERE actor = $1 AND organization_id = $2",
+                    "SELECT forked_from, forked_at FROM openappa_sessions WHERE actor = $1 AND organization_id = $2",
                     &[&session_actor(&session), &organization_id],
                 )?
-                .and_then(|row| row.get::<_, Option<String>>(0))
+                .and_then(|row| {
+                    row.get::<_, Option<String>>(0)
+                        .zip(row.get::<_, Option<SystemTime>>(1))
+                })
             else {
                 return Ok(None);
             };
             if let Some(row) = client.query_opt(
-                "SELECT decision FROM openappa_processed_results WHERE session_id = $1 AND tool_call_id = $2 AND organization_id = $3 AND status = 'complete'",
-                &[&parent, &call_id, &organization_id],
+                "SELECT decision FROM openappa_processed_results WHERE session_id = $1 AND tool_call_id = $2 AND organization_id = $3 AND status = 'complete' AND created_at < $4",
+                &[&parent, &call_id, &organization_id, &forked_at],
             )? {
                 return Ok(row.get::<_, Option<Value>>(0));
             }

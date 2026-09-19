@@ -293,11 +293,11 @@ describe("LlmProviderApiKeyForm", () => {
       "lm studio",
     );
 
-    const match = await screen.findByRole("button", {
+    const match = await screen.findByRole("option", {
       name: /OpenAI-compatible/,
     });
     expect(match).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /^OpenAI$/ })).toBeNull();
+    expect(screen.queryByRole("option", { name: /^OpenAI$/ })).toBeNull();
 
     await user.click(match);
 

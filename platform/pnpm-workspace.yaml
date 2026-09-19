@@ -160,6 +160,19 @@ packageExtensions:
       zod: ^4.3.4
 
 patchedDependencies:
+  # OAuth-only SSO (GitHub) has userinfo but no JWKS/discovery document.
+  # Skip runtime discovery only with explicit non-OIDC scopes and complete
+  # OAuth endpoints; retain OIDC discovery and URL/SSRF validation.
+  # Also resolve private GitHub emails through its verified-email API.
+  # Related upstream email tracking (social OAuth, not a fix for this SSO flow):
+  # https://github.com/better-auth/better-auth/issues/9124
+  # https://github.com/better-auth/better-auth/pull/9331
+  # No matching OAuth-only SSO discovery fix found as of 2026-09-19;
+  # upstream v1.7.5 still requires JWKS in needsRuntimeDiscovery.
+  # Remove only after an upgrade supports both explicit OAuth-only endpoints
+  # without discovery and verified private GitHub email lookup in SSO;
+  # re-run backend/src/auth/github-sso.ee.test.ts and real GitHub sign-in.
+  '@better-auth/sso@1.6.22': patches/ee/@better-auth__sso@1.6.22.patch
   # Native Ollama /api/chat sends `"content": ""` on every thinking-phase chunk,
   # and the package opened the text part on `content != null` and processed text
   # before thinking — so the UI text part was created before the reasoning part

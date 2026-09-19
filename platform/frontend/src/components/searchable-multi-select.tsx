@@ -9,6 +9,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { useListboxNavigation } from "@/lib/hooks/use-listbox-navigation";
 import { matchesSearchTokens } from "@/lib/search-tokens";
 import { cn } from "@/lib/utils";
 
@@ -92,6 +93,12 @@ export function SearchableMultiSelect({
 
   const selectedItems = items.filter((item) => value.includes(item.value));
 
+  const isItemDisabled = (item: (typeof items)[number]) =>
+    !!item.disabled ||
+    (value.includes(item.value)
+      ? value.length <= minSelected
+      : maxSelected !== undefined && value.length >= maxSelected);
+
   const handleToggleItem = (itemValue: string) => {
     if (disabled) return;
     if (value.includes(itemValue)) {
@@ -101,6 +108,15 @@ export function SearchableMultiSelect({
       onValueChange([...value, itemValue]);
     }
   };
+
+  const navigation = useListboxNavigation({
+    open: !disabled && open,
+    onOpenChange: setOpen,
+    values: filteredItems
+      .filter((item) => !isItemDisabled(item))
+      .map((item) => item.value),
+    onSelect: handleToggleItem,
+  });
 
   const handleRemoveItem = (
     itemValue: string,
@@ -131,7 +147,8 @@ export function SearchableMultiSelect({
           aria-disabled={disabled}
           tabIndex={disabled ? -1 : 0}
           onKeyDown={(e) => {
-            if (disabled) return;
+            if (disabled || e.target !== e.currentTarget) return;
+            navigation.onTriggerKeyDown(e);
             if (e.key === "Enter" || e.key === " ") {
               e.preventDefault();
               setOpen(!open);
@@ -208,6 +225,7 @@ export function SearchableMultiSelect({
             <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
           )}
           <input
+            {...navigation.inputProps}
             aria-label={searchPlaceholder || "Search options"}
             placeholder={searchPlaceholder}
             value={searchQuery}
@@ -219,6 +237,10 @@ export function SearchableMultiSelect({
           />
         </div>
         <div
+          {...navigation.listboxProps}
+          role="listbox"
+          aria-label={ariaLabel ?? placeholder}
+          aria-multiselectable="true"
           className={cn(
             "max-h-[min(300px,calc(var(--radix-popover-content-available-height)-3rem))] overflow-y-auto p-1",
             listClassName,
@@ -234,23 +256,23 @@ export function SearchableMultiSelect({
               const isSelected = value.includes(item.value);
               return (
                 <button
-                  type="button"
                   key={item.value}
-                  disabled={
-                    item.disabled || (isSelected && value.length <= minSelected)
-                  }
-                  aria-disabled={
-                    item.disabled || (isSelected && value.length <= minSelected)
-                  }
-                  aria-pressed={isSelected}
+                  {...navigation.getOptionProps(item.value)}
+                  role="option"
+                  type="button"
+                  disabled={isItemDisabled(item)}
+                  aria-disabled={isItemDisabled(item)}
+                  aria-selected={isSelected}
                   onClick={() => {
-                    if (item.disabled) return;
+                    if (isItemDisabled(item)) return;
                     handleToggleItem(item.value);
                   }}
                   className={cn(
                     "relative flex w-full cursor-default select-none items-center justify-between rounded-sm px-2 py-1.5 text-left text-sm outline-none transition-colors hover:bg-accent hover:text-accent-foreground",
                     isSelected && "bg-accent text-accent-foreground",
-                    item.disabled &&
+                    navigation.activeValue === item.value &&
+                      "bg-accent text-accent-foreground",
+                    isItemDisabled(item) &&
                       "cursor-not-allowed opacity-60 hover:bg-transparent hover:text-inherit",
                   )}
                 >

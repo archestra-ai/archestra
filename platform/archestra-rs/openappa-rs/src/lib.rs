@@ -310,7 +310,7 @@ fn identity(input: &Input) -> String {
 }
 
 fn session_actor(session_id: &str) -> String {
-    format!("archestra:{:x}", Sha256::digest(session_id.as_bytes()))
+    format!("archestra:{}", sha256_hex(session_id.as_bytes()))
 }
 
 #[napi(js_name = "initializeOpenappa")]
@@ -1402,10 +1402,17 @@ fn remedy_operation(input: &Input) -> napi::Result<String> {
         // Direct clients without a provider call id get a durable crash fence,
         // but no later result is inferred from a fabricated transport id.
         None => Ok(format!(
-            "remedy:untracked:{:x}",
-            Sha256::digest(serde_json::to_vec(&remedy_fingerprint(input)?).map_err(error)?)
+            "remedy:untracked:{}",
+            sha256_hex(serde_json::to_vec(&remedy_fingerprint(input)?).map_err(error)?)
         )),
     }
+}
+
+fn sha256_hex(input: impl AsRef<[u8]>) -> String {
+    Sha256::digest(input)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
 }
 
 fn remedy_fingerprint(input: &Input) -> napi::Result<Value> {
@@ -1757,6 +1764,38 @@ mod typed_tests {
         presentation_offer_ids, render_substituted_call,
     };
     use appa_runtime_api::OfferedRemedy;
+
+    #[test]
+    fn session_actor_preserves_existing_sha256_identifiers() {
+        assert_eq!(
+            super::session_actor(""),
+            "archestra:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        );
+        assert_eq!(
+            super::session_actor("abc"),
+            "archestra:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
+    }
+
+    #[test]
+    fn remedy_operation_preserves_existing_receipt_identifiers() {
+        let mut input: super::Input = serde_json::from_str(
+            r#"{
+                "organization_id": "test-organization",
+                "session_id": "test-session",
+                "event": "remedy",
+                "arguments": {"value": 1}
+            }"#,
+        )
+        .unwrap();
+
+        assert_eq!(
+            super::remedy_operation(&input).unwrap(),
+            "remedy:untracked:1069ef23007b183f1d41a1944bbab35a87080806febc7c4fba3a17ae9750c58a"
+        );
+        input.tool_call_id = Some("test-call".to_owned());
+        assert_eq!(super::remedy_operation(&input).unwrap(), "remedy:test-call");
+    }
 
     #[test]
     fn runtime_like_prose_cannot_create_offer_ownership() {

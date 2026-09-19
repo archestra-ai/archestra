@@ -883,6 +883,79 @@ describe("SlackProvider.parseWebhookNotification — answer-all channels", () =>
     );
     expect(afterReMention).not.toBeNull();
   });
+
+  async function expectLiteralMuteTokenMutes(
+    text: string,
+    channel: string,
+  ): Promise<void> {
+    const provider = createProvider();
+    const postMessage = vi.fn().mockResolvedValue({ ts: "1.0" });
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — inject client mock
+    (provider as any).client = { chat: { postMessage } };
+    const threadTs = "7777777777.000030";
+    await seedAnswerAllChannel(channel);
+
+    // Un-mentioned message flows because the channel answers all.
+    const first = await provider.parseWebhookNotification(
+      makeEventPayload(
+        {},
+        {
+          type: "message",
+          channel,
+          text: "hi",
+          ts: "7777777777.000031",
+          thread_ts: threadTs,
+        },
+      ),
+      {},
+    );
+    expect(first).not.toBeNull();
+
+    // The literal shortcode text — not a reaction — gates the thread and
+    // confirms once, same as the bare "mute" command.
+    const mute = await provider.parseWebhookNotification(
+      makeEventPayload(
+        {},
+        {
+          type: "message",
+          channel,
+          text,
+          ts: "7777777777.000032",
+          thread_ts: threadTs,
+        },
+      ),
+      {},
+    );
+    expect(mute).toBeNull();
+    expect(postMessage).toHaveBeenCalledTimes(1);
+
+    // Later un-mentioned messages stay quiet despite answer-all.
+    const afterMute = await provider.parseWebhookNotification(
+      makeEventPayload(
+        {},
+        {
+          type: "message",
+          channel,
+          text: "still there?",
+          ts: "7777777777.000033",
+          thread_ts: threadTs,
+        },
+      ),
+      {},
+    );
+    expect(afterMute).toBeNull();
+  }
+
+  test("a literal ':mute:' message (not a reaction) mutes an answer-all thread", async () => {
+    await expectLiteralMuteTokenMutes(":mute:", "C_ANSWER_ALL_MUTE_TEXT_1");
+  });
+
+  test("a literal ':shushing_face:' message (not a reaction) mutes an answer-all thread", async () => {
+    await expectLiteralMuteTokenMutes(
+      ":shushing_face:",
+      "C_ANSWER_ALL_MUTE_TEXT_2",
+    );
+  });
 });
 
 describe("SlackProvider.parseWebhookNotification — thread mute command", () => {

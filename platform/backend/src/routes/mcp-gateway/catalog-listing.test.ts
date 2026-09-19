@@ -8,7 +8,8 @@ import {
 import { HttpResponse, http } from "msw";
 import { vi } from "vitest";
 import mcpClient from "@/clients/mcp-client";
-import { TeamTokenModel } from "@/models";
+import { McpServerModel, UserTokenModel } from "@/models";
+import { secretManager } from "@/secrets-manager";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { useMswServer } from "@/test/msw";
 import mcpGatewayRoutes from "./index";
@@ -32,15 +33,22 @@ describe("MCP gateway catalog listing", () => {
     await app.close();
   });
 
-  test.for([
-    { method: "resources/list", key: "resources" },
-    { method: "resources/templates/list", key: "resourceTemplates" },
-    { method: "prompts/list", key: "prompts" },
-  ])("$method loads catalog metadata in a batch and lists each upstream once", async ({
+  test.for(
+    [
+      { method: "resources/list", key: "resources" },
+      { method: "resources/templates/list", key: "resourceTemplates" },
+      { method: "prompts/list", key: "prompts" },
+    ].flatMap((listing) =>
+      (["static", "dynamic"] as const).map((mode) => ({ ...listing, mode })),
+    ),
+  )("$method with $mode credentials batches metadata and lists each upstream once", async ({
     method,
     key,
+    mode,
   }, {
     makeOrganization,
+    makeUser,
+    makeMember,
     makeAgent,
     makeInternalMcpCatalog,
     makeMcpServer,
@@ -48,14 +56,14 @@ describe("MCP gateway catalog listing", () => {
     makeAgentTool,
   }) => {
     const org = await makeOrganization();
+    const user = await makeUser();
+    const otherUser = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
     const agent = await makeAgent({ organizationId: org.id });
-    const token = await TeamTokenModel.create({
-      organizationId: org.id,
-      name: "Listing token",
-      teamId: null,
-      isOrganizationToken: true,
-    });
+    const token = await UserTokenModel.create(user.id, org.id);
     const listedCatalogs: string[] = [];
+    const authorizations: string[] = [];
+    const serverIds: string[] = [];
     upstream.use(
       http.get(
         "https://listing.example/:catalog",
@@ -80,6 +88,7 @@ describe("MCP gateway catalog listing", () => {
           } else if (body.method === method) {
             const name = String(params.catalog);
             listedCatalogs.push(name);
+            authorizations.push(request.headers.get("authorization") ?? "");
             result = {
               [key]: [
                 {
@@ -102,19 +111,33 @@ describe("MCP gateway catalog listing", () => {
         serverType: "remote",
         serverUrl: `https://listing.example/catalog-${index}`,
       });
+      // Another caller's install must not be selected by the batch resolver.
+      await makeMcpServer({
+        catalogId: catalog.id,
+        serverType: "remote",
+        scope: "personal",
+        ownerId: otherUser.id,
+      });
+      const secret = await secretManager().createSecret(
+        { access_token: `synthetic-listing-${index}` },
+        `listing-${index}`,
+      );
       const server = await makeMcpServer({
         catalogId: catalog.id,
         serverType: "remote",
-        scope: "org",
+        scope: "personal",
+        ownerId: user.id,
+        secretId: secret.id,
       });
+      serverIds.push(server.id);
       for (let toolIndex = 0; toolIndex < 2; toolIndex++) {
         const tool = await makeTool({
           name: `listing-${index}__tool-${toolIndex}`,
           catalogId: catalog.id,
         });
         await makeAgentTool(agent.id, tool.id, {
-          mcpServerId: server.id,
-          credentialResolutionMode: "static",
+          mcpServerId: mode === "static" ? server.id : null,
+          credentialResolutionMode: mode,
         });
       }
     }
@@ -146,5 +169,44 @@ describe("MCP gateway catalog listing", () => {
       sql.includes('from "mcp_catalog_labels"'),
     );
     expect(labelQueries).toHaveLength(1);
+    const serverQueries = queries.mock.calls.filter(([sql]) =>
+      sql.includes('from "mcp_server"'),
+    );
+    // One readiness lookup plus at most two listing-wide server lookups.
+    expect(serverQueries.length).toBeLessThanOrEqual(3);
+    expect(authorizations.sort()).toEqual(
+      Array.from(
+        { length: 5 },
+        (_, index) => `Bearer synthetic-listing-${index}`,
+      ),
+    );
+
+    const rotated = await secretManager().createSecret(
+      { access_token: "synthetic-rotated" },
+      "listing-rotated",
+    );
+    await McpServerModel.update(serverIds[0], { secretId: rotated.id });
+    authorizations.length = 0;
+    const listAgain = () =>
+      app.inject({
+        method: "POST",
+        url: `/v1/mcp/${agent.id}`,
+        headers: {
+          "content-type": "application/json",
+          accept: "application/json, text/event-stream",
+          authorization: `Bearer ${token.value}`,
+        },
+        payload: { jsonrpc: "2.0", id: 2, method, params: {} },
+      });
+    const afterRotation = await listAgain();
+    expect(afterRotation.json().result[key]).toHaveLength(5);
+    expect(authorizations).toContain("Bearer synthetic-rotated");
+    expect(authorizations).not.toContain("Bearer synthetic-listing-0");
+
+    await McpServerModel.delete(serverIds[0]);
+    listedCatalogs.length = 0;
+    const afterRemoval = await listAgain();
+    expect(afterRemoval.json().result[key]).toHaveLength(4);
+    expect(listedCatalogs).not.toContain("catalog-0");
   });
 });

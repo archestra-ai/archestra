@@ -429,6 +429,7 @@ export const RouteId = {
   GetChatConversationFiles: "getChatConversationFiles",
   GetChatAgentMcpTools: "getChatAgentMcpTools",
   CreateChatConversation: "createChatConversation",
+  GetChatMetaAgent: "getChatMetaAgent",
   ForkChatConversation: "forkChatConversation",
   UpdateChatConversation: "updateChatConversation",
   SetConversationHooksDebug: "setConversationHooksDebug",

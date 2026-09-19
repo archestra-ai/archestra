@@ -1,3 +1,4 @@
+import { META_AGENT_UI_TOOL_NAMES } from "@archestra/shared";
 import { beforeEach, vi } from "vitest";
 import { ConversationEnabledToolModel } from "@/models";
 import { describe, expect, test } from "@/test";
@@ -29,6 +30,7 @@ describe("buildChatContext enabled-tool selection", () => {
     agentName: string;
     organizationId: string;
     user: { id: string; email: string; name: string };
+    includeUiTools?: boolean;
   }) =>
     buildChatContext({
       conversationId: params.conversationId,
@@ -44,6 +46,7 @@ describe("buildChatContext enabled-tool selection", () => {
       hookSessionContext: undefined,
       projectInstructions: undefined,
       openedApp: undefined,
+      includeUiTools: params.includeUiTools ?? false,
       projectFileNames: undefined,
       hookRunCollector: [],
       kbChunksCollector: [],
@@ -122,5 +125,40 @@ describe("buildChatContext enabled-tool selection", () => {
       hasCustomSelection: true,
       enabledToolCount: 0,
     });
+  });
+
+  test("the assistant's chats get browser-executed page tools, other chats do not", async ({
+    makeAgent,
+    makeConversation,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const agent = await makeAgent({ organizationId: org.id });
+    const conversation = await makeConversation(agent.id, {
+      organizationId: org.id,
+      userId: user.id,
+    });
+    const params = {
+      conversationId: conversation.id,
+      agentId: agent.id,
+      agentName: agent.name,
+      organizationId: org.id,
+      user: { id: user.id, email: user.email, name: user.name },
+    };
+
+    const plain = await run(params);
+    expect(Object.keys(plain.mcpTools)).toEqual([]);
+
+    const assistant = await run({ ...params, includeUiTools: true });
+    const uiToolNames = Object.values(META_AGENT_UI_TOOL_NAMES);
+    expect(Object.keys(assistant.mcpTools).sort()).toEqual(
+      [...uiToolNames].sort(),
+    );
+    // No server-side execute: the call must stream to the browser to run.
+    for (const name of uiToolNames) {
+      expect(assistant.mcpTools[name]?.execute).toBeUndefined();
+    }
   });
 });

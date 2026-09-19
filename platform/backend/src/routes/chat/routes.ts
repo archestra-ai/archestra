@@ -926,6 +926,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 hookSessionContext,
                 projectInstructions,
                 openedApp,
+                includeUiTools: conversation.origin === "meta_agent",
                 projectFileNames,
                 hookRunCollector,
                 kbChunksCollector,
@@ -2924,8 +2925,40 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           chatApiKeyId: llmSelection.chatApiKeyId,
           projectId: projectId ?? null,
           thinkingEffort,
+          // Chats with the in-app assistant carry its page tools and stay
+          // out of the conversations list; the origin records both.
+          ...(agentId ===
+          (await AgentModel.getBuiltInAgentId(
+            BUILT_IN_AGENT_IDS.META_AGENT,
+            organizationId,
+          ))
+            ? { origin: "meta_agent" as const }
+            : {}),
         }),
       );
+    },
+  );
+
+  fastify.get(
+    "/api/chat/meta-agent",
+    {
+      schema: {
+        operationId: RouteId.GetChatMetaAgent,
+        description:
+          "Get the in-app assistant agent that chats started from its dialog use",
+        tags: ["Chat"],
+        response: constructResponseSchema(z.object({ agentId: z.string() })),
+      },
+    },
+    async ({ organizationId }, reply) => {
+      const agentId = await AgentModel.getBuiltInAgentId(
+        BUILT_IN_AGENT_IDS.META_AGENT,
+        organizationId,
+      );
+      if (!agentId) {
+        throw new ApiError(404, "Assistant agent not found");
+      }
+      return reply.send({ agentId });
     },
   );
 
@@ -4650,13 +4683,20 @@ const TERMINAL_TOOL_STATES: ReadonlySet<string> = new Set([
   "output-denied",
 ]);
 
+const PENDING_TOOL_STATES: ReadonlySet<string> = new Set([
+  "approval-requested",
+  "input-available",
+]);
+
 /**
  * Returns the stored rows that should be overwritten in place by an incoming
- * message — specifically, an assistant turn whose tool call is still in
- * `approval-requested` state and whose `toolCallId` arrives in a terminal
- * state (`output-available`, `output-error`, `output-denied`).
+ * message — specifically, an assistant turn whose tool call is still pending
+ * and whose `toolCallId` arrives in a terminal state (`output-available`,
+ * `output-error`, `output-denied`). A call is pending while it awaits the
+ * user's approval (`approval-requested`) or a browser-executed tool's output
+ * (`input-available`, the in-app assistant's page tools).
  *
- * Scoped tightly to the approval-resolution flow so this update path cannot
+ * Scoped tightly to those resolution flows so this update path cannot
  * be repurposed to overwrite arbitrary earlier messages whose parts happen
  * to differ — those edits still go through `updateTextPartAndDeleteSubsequent`.
  */
@@ -4664,8 +4704,8 @@ function getMessagesWithChangedContent(params: {
   existingMessages: Array<{ id: string; content: unknown }>;
   uiMessages: ChatMessage[];
 }): Array<{ id: string; content: ChatMessage }> {
-  // Index stored rows by the toolCallId of any approval-requested tool part
-  // they carry — those are the only rows this update path can target.
+  // Index stored rows by the toolCallId of any pending tool part they carry —
+  // those are the only rows this update path can target.
   const pendingByToolCallId = new Map<
     string,
     { id: string; content: unknown }
@@ -4680,7 +4720,7 @@ function getMessagesWithChangedContent(params: {
       if (
         typeof part === "object" &&
         part !== null &&
-        (part as { state?: unknown }).state === "approval-requested" &&
+        PENDING_TOOL_STATES.has(String((part as { state?: unknown }).state)) &&
         typeof (part as { toolCallId?: unknown }).toolCallId === "string"
       ) {
         pendingByToolCallId.set(
@@ -4706,7 +4746,7 @@ function getMessagesWithChangedContent(params: {
       const stored = pendingByToolCallId.get(toolCallId);
       if (!stored) continue;
       changedMessages.push({ id: stored.id, content: incoming });
-      // Each approval-requested row resolves at most once per sweep.
+      // Each pending row resolves at most once per sweep.
       pendingByToolCallId.delete(toolCallId);
       break;
     }

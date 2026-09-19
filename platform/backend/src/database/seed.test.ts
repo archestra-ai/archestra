@@ -2,6 +2,7 @@ import {
   ADMIN_ROLE_NAME,
   ADVISOR_AGENT_DESCRIPTION,
   ADVISOR_SYSTEM_PROMPT,
+  ARCHESTRA_MCP_CATALOG_ID,
   ARCHESTRA_TOOL_PREFIX,
   BUILT_IN_AGENT_IDS,
   BUILT_IN_AGENT_NAMES,
@@ -37,6 +38,7 @@ import {
 } from "@/skills/built-in-skills";
 import { describe, expect, test } from "@/test";
 import {
+  assignArchestraToolsToMetaAgents,
   decideEnvSeed,
   seedDefaultAppsForPristineOrgs,
   syncBuiltInAgents,
@@ -100,6 +102,32 @@ describe("syncBuiltInAgents", () => {
     expect(await AgentToolModel.findToolIdsByAgent(advisor?.id ?? "")).toEqual(
       [],
     );
+  });
+
+  test("seeds the in-app assistant with every built-in management tool", async ({
+    makeOrganization,
+  }) => {
+    const organization = await makeOrganization();
+    await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+
+    await syncBuiltInAgents();
+    await assignArchestraToolsToMetaAgents();
+
+    const assistant = await AgentModel.getBuiltInAgent(
+      BUILT_IN_AGENT_IDS.META_AGENT,
+      organization.id,
+    );
+    // Org-scoped, so every member can open it; what it may do is then bounded
+    // by each caller's own permissions, checked per tool call.
+    expect(assistant?.scope).toBe("org");
+    const builtInTools = await db
+      .select({ id: schema.toolsTable.id })
+      .from(schema.toolsTable)
+      .where(eq(schema.toolsTable.catalogId, ARCHESTRA_MCP_CATALOG_ID));
+    expect(builtInTools.length).toBeGreaterThan(0);
+    expect(
+      (await AgentToolModel.findToolIdsByAgent(assistant?.id ?? "")).sort(),
+    ).toEqual(builtInTools.map((tool) => tool.id).sort());
   });
 
   test("seeds one org-wide advisor even when environments exist", async ({

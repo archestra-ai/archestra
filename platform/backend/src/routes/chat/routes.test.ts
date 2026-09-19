@@ -1069,6 +1069,54 @@ describe("getMessagesWithChangedContent", () => {
     expect(changed).toHaveLength(1);
     expect(changed[0]?.id).toBe("db-pending");
   });
+
+  it("updates a row whose browser-executed tool call awaited its output", () => {
+    // The in-app assistant's page tools run in the browser: the turn is saved
+    // with the call still `input-available`, and the resume request carries
+    // the output plus the rest of the turn. Without the update the reload
+    // would show the call forever pending and lose everything after it.
+    const pendingToolPart = {
+      type: "tool-ui__get_page",
+      toolCallId: "call-ui-1",
+      input: {},
+    };
+    const changed = __test.getMessagesWithChangedContent({
+      existingMessages: [
+        {
+          id: "db-pending-ui",
+          content: {
+            id: "assistant-1",
+            role: "assistant",
+            parts: [
+              { type: "text", text: "Let me look at the page." },
+              { ...pendingToolPart, state: "input-available" },
+            ],
+          },
+        },
+      ],
+      uiMessages: [
+        {
+          id: "assistant-1",
+          role: "assistant",
+          parts: [
+            { type: "text", text: "Let me look at the page." },
+            {
+              ...pendingToolPart,
+              state: "output-available",
+              output: { url: "/agents" },
+            },
+            { type: "text", text: "You are on the agents page." },
+          ],
+        },
+      ],
+    });
+
+    expect(changed).toHaveLength(1);
+    expect(changed[0]?.id).toBe("db-pending-ui");
+    expect(changed[0]?.content.parts?.at(-1)).toMatchObject({
+      text: "You are on the agents page.",
+    });
+  });
 });
 
 describe("extractFirstMessages", () => {

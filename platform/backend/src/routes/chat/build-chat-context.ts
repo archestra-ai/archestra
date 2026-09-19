@@ -14,6 +14,7 @@ import type { KbChunkForQuoteCheck } from "@/knowledge-base/quote-verification";
 import { ConversationEnabledToolModel } from "@/models";
 import type { OpenedApp } from "@/services/apps/opened-app-context";
 import type { ToolExposureMode } from "@/types";
+import { buildMetaAgentUiTools } from "./meta-agent-ui-tools";
 
 /**
  * Assemble everything the chat stream needs about its agent before the first
@@ -38,6 +39,11 @@ export async function buildChatContext(params: {
   projectInstructions: string | undefined;
   /** The app this chat was opened with, when it was opened from one. */
   openedApp: OpenedApp | undefined;
+  /**
+   * Adds the browser-executed page tools. Only the in-app assistant's chats
+   * set this: they run in a dialog layered over the page those tools act on.
+   */
+  includeUiTools: boolean;
   /** Filenames of the project's shared files, when this chat belongs to a project. */
   projectFileNames: string[] | undefined;
   hookRunCollector: CollectedHookRun[];
@@ -81,6 +87,7 @@ export async function buildChatContext(params: {
     hookSessionContext,
     projectInstructions,
     openedApp,
+    includeUiTools,
     projectFileNames,
     hookRunCollector,
     kbChunksCollector,
@@ -103,7 +110,7 @@ export async function buildChatContext(params: {
   // Fetch MCP tools with enabled tool filtering
   // Pass undefined if no custom selection (use all tools)
   // Pass the actual array (even if empty) if there is custom selection
-  const [mcpTools, toolUiResourceUris] = await Promise.all([
+  const [agentTools, toolUiResourceUris] = await Promise.all([
     getChatMcpTools({
       agentName: agent.name,
       agentId,
@@ -132,6 +139,9 @@ export async function buildChatContext(params: {
     }),
     getChatMcpToolUiResourceUris(agentId),
   ]);
+  const mcpTools = includeUiTools
+    ? { ...agentTools, ...buildMetaAgentUiTools() }
+    : agentTools;
 
   const systemPrompt = await buildAgentSystemPrompt({
     agent,

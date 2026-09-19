@@ -154,6 +154,10 @@ const AdvisorAgentConfigSchema = z.object({
   name: z.literal(BUILT_IN_AGENT_IDS.ADVISOR),
 });
 
+const MetaAgentConfigSchema = z.object({
+  name: z.literal(BUILT_IN_AGENT_IDS.META_AGENT),
+});
+
 // Discriminated union — add future built-in agents here
 export const BuiltInAgentConfigSchema = z.discriminatedUnion("name", [
   PolicyConfigAgentConfigSchema,
@@ -163,6 +167,7 @@ export const BuiltInAgentConfigSchema = z.discriminatedUnion("name", [
   ChatTitleGenerationAgentConfigSchema,
   AppRuntimeAgentConfigSchema,
   AdvisorAgentConfigSchema,
+  MetaAgentConfigSchema,
 ]);
 
 export type BuiltInAgentConfig = z.infer<typeof BuiltInAgentConfigSchema>;

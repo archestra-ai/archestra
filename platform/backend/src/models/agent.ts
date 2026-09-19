@@ -3435,6 +3435,25 @@ class AgentModel {
     };
   }
 
+  /** Id of an organization's built-in agent, without hydrating the row. */
+  static async getBuiltInAgentId(
+    builtInName: string,
+    organizationId: string,
+  ): Promise<string | null> {
+    const [row] = await db
+      .select({ id: schema.agentsTable.id })
+      .from(schema.agentsTable)
+      .where(
+        and(
+          sql`${schema.agentsTable.builtInAgentConfig}->>'name' = ${builtInName}`,
+          eq(schema.agentsTable.organizationId, organizationId),
+          notDeleted(schema.agentsTable),
+        ),
+      )
+      .limit(1);
+    return row?.id ?? null;
+  }
+
   /**
    * Find a built-in agent by its config name discriminator.
    * When organizationId is provided, scopes the query to that org

@@ -1198,6 +1198,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetChatConversations]: {
     chat: ["read"],
   },
+  [RouteId.GetChatMetaAgent]: {
+    chat: ["read"],
+  },
   // Listing soft-deleted conversations (the "Trash" view) is gated on delete,
   // not read: seeing which chats were trashed is part of the delete/restore
   // lifecycle, so a chat:read-only role sees active chats but not the trash.

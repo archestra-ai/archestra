@@ -1,4 +1,4 @@
-import { ChatErrorCode } from "@archestra/shared";
+import { BUILT_IN_AGENT_IDS, ChatErrorCode } from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import client from "prom-client";
 import db, { schema } from "@/database";
@@ -121,6 +121,54 @@ describe("chat conversation and message routes", () => {
       },
     });
     expect(await listIds()).toContain(draft.id);
+  });
+
+  test("chats with the in-app assistant are tagged and kept out of the list", async ({
+    makeAgent,
+  }) => {
+    const assistant = await makeAgent({
+      organizationId,
+      scope: "org",
+      builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.META_AGENT },
+    });
+    const regularAgent = await makeAgent({
+      organizationId,
+      authorId: currentUser.id,
+      scope: "personal",
+    });
+
+    const lookup = await app.inject({
+      method: "GET",
+      url: "/api/chat/meta-agent",
+    });
+    expect(lookup.statusCode).toBe(200);
+    expect(lookup.json()).toEqual({ agentId: assistant.id });
+
+    const create = (agentId: string) =>
+      app.inject({
+        method: "POST",
+        url: "/api/chat/conversations",
+        payload: { agentId },
+      });
+    const assistantChat = (await create(assistant.id)).json();
+    const regularChat = (await create(regularAgent.id)).json();
+    expect(assistantChat.origin).toBe("meta_agent");
+    expect(regularChat.origin).toBe("user");
+
+    const list = await app.inject({
+      method: "GET",
+      url: "/api/chat/conversations",
+    });
+    const listedIds = (list.json() as Array<{ id: string }>).map((c) => c.id);
+    expect(listedIds).toContain(regularChat.id);
+    expect(listedIds).not.toContain(assistantChat.id);
+
+    // Still reachable directly, so the dialog can reopen it.
+    const direct = await app.inject({
+      method: "GET",
+      url: `/api/chat/conversations/${assistantChat.id}`,
+    });
+    expect(direct.statusCode).toBe(200);
   });
 
   test("pins and unpins a conversation", async ({ makeAgent }) => {

@@ -22,12 +22,14 @@ const ConversationShareSummarySchema = z
  * How a conversation was started: a person, a scheduled trigger run, or
  * opening an app from the apps page. `app_open` chats are drafts — hidden from
  * the conversations list until the user writes a message (see
- * `ConversationModel.findAll`).
+ * `ConversationModel.findAll`). `meta_agent` chats belong to the in-app
+ * assistant dialog and never appear in the conversations list.
  */
 export const ConversationOriginSchema = z.enum([
   "user",
   "schedule_trigger",
   "app_open",
+  "meta_agent",
 ]);
 export type ConversationOrigin = z.infer<typeof ConversationOriginSchema>;
 

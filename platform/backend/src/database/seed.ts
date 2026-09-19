@@ -13,6 +13,7 @@ import {
   DUAL_LLM_MAIN_SYSTEM_PROMPT,
   DUAL_LLM_QUARANTINE_SYSTEM_PROMPT,
   isSubscriptionCredential,
+  META_AGENT_SYSTEM_PROMPT,
   PLAYWRIGHT_MCP_CATALOG_ID,
   PLAYWRIGHT_MCP_ICON,
   PLAYWRIGHT_MCP_SERVER_NAME,
@@ -178,6 +179,18 @@ export async function syncBuiltInAgents(): Promise<void> {
         } as const,
       },
       advisorAgentDefinition(),
+      {
+        builtInAgentId: BUILT_IN_AGENT_IDS.META_AGENT,
+        name: BUILT_IN_AGENT_NAMES.META_AGENT,
+        description:
+          "The in-app assistant: operates the platform with the management tools and drives the page the user has open, always within the user's own permissions",
+        systemPrompt: archestraMcpBranding.brandBuiltInText(
+          META_AGENT_SYSTEM_PROMPT,
+        ),
+        builtInAgentConfig: {
+          name: BUILT_IN_AGENT_IDS.META_AGENT,
+        } as const,
+      },
     ];
 
     // The advisor used to have a row per environment; a replica still running
@@ -352,6 +365,29 @@ async function seedArchestraCatalogAndTools(): Promise<void> {
     );
   }
   logger.info("Seeded Archestra catalog and tools");
+}
+
+/**
+ * Gives every organization's meta agent the full built-in tool set. Runs on
+ * every boot (after tools are seeded) so a tool added in a release reaches the
+ * assistant without a migration. Assignment is not access: each tool still
+ * checks the calling user's permissions when it runs.
+ *
+ * @public — exported for testability
+ */
+export async function assignArchestraToolsToMetaAgents(): Promise<void> {
+  const organizations = await getOrganizationsForBuiltInAgentSync();
+  for (const organization of organizations) {
+    const metaAgent = await AgentModel.getBuiltInAgent(
+      BUILT_IN_AGENT_IDS.META_AGENT,
+      organization.id,
+    );
+    if (!metaAgent) continue;
+    await ToolModel.assignArchestraToolsToAgent(
+      metaAgent.id,
+      ARCHESTRA_MCP_CATALOG_ID,
+    );
+  }
 }
 
 /**
@@ -1014,6 +1050,7 @@ export async function seedRequiredStartingData(): Promise<void> {
     logger.warn({ err: error }, "Default plugin seeding failed");
   });
   await seedArchestraCatalogAndTools();
+  await assignArchestraToolsToMetaAgents();
   await enableSkillToolsForExistingOrgs();
   await seedPlaywrightCatalog();
   await migratePlaywrightToolsToDynamicCredential();

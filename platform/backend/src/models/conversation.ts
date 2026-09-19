@@ -7,6 +7,7 @@ import {
   ilike,
   isNotNull,
   isNull,
+  ne,
   or,
   type SQL,
   sql,
@@ -114,6 +115,8 @@ class ConversationModel {
         WHERE ${schema.messagesTable.conversationId} = ${schema.conversationsTable.id}
         AND ${schema.messagesTable.role} = 'user'
       ))`,
+      // The in-app assistant keeps its own history inside its dialog.
+      ne(schema.conversationsTable.origin, "meta_agent"),
     ];
 
     // Add search filter if provided

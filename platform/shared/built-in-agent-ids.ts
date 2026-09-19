@@ -7,4 +7,5 @@ export const BUILT_IN_AGENT_IDS = {
   CHAT_TITLE_GENERATION: "chat-title-generation-subagent",
   APP_RUNTIME: "app-runtime-llm-agent",
   ADVISOR: "advisor-agent",
+  META_AGENT: "meta-agent",
 } as const;

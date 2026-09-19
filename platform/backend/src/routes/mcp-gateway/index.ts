@@ -27,6 +27,8 @@ import { getPublicRequestOrigin } from "../request-origin";
 import {
   clientCapabilityKey,
   clientCapabilityStore,
+  encodeCapabilitySession,
+  readCapabilitySession,
 } from "./client-capabilities";
 import {
   dispatchLegacySseMessage,
@@ -82,6 +84,9 @@ import {
 // =============================================================================
 // MCP Gateway request handling (stateless mode)
 // =============================================================================
+
+/** Where a legacy client echoes the session id the gateway gave it. */
+const MCP_SESSION_ID_HEADER = "mcp-session-id";
 
 /**
  * Sets the WWW-Authenticate header with the OAuth protected resource metadata URL.
@@ -255,6 +260,12 @@ async function handleMcpPostRequest(
   const isInitialize =
     typeof body?.method === "string" && body.method === "initialize";
 
+  const principal = deriveStatePrincipal({
+    userId: tokenAuthContext?.userId,
+    tokenId: tokenAuthContext?.tokenId,
+    organizationId: tokenAuthContext?.organizationId,
+  });
+  let capabilitySessionId: string | undefined;
   if (isInitialize) {
     // A legacy client declares its capabilities once, here, and the next
     // POST builds a fresh Server that no longer knows them. Remember them so
@@ -266,12 +277,36 @@ async function handleMcpPostRequest(
     if (capabilities !== undefined) {
       clientCapabilityStore.remember({ key: capabilityKey, capabilities });
     }
+    // A client that can be asked something also gets them back as its
+    // session id, which it echoes on every request: that record outlives
+    // this process and reaches every replica.
+    if (
+      (["elicitation/create", "sampling/createMessage"] as const).some(
+        (method) =>
+          clientSupportsInputRequest({
+            clientCapabilities: capabilities,
+            request: { method, params: {} },
+          }),
+      )
+    ) {
+      capabilitySessionId = encodeCapabilitySession({
+        profileId,
+        principal,
+        capabilities,
+      });
+    }
   }
 
   // Capabilities for this call: per-request `_meta` (2026-07-28 clients)
-  // first, the initialize-time declaration (legacy clients) after.
+  // first, then the initialize-time declaration (legacy clients) from the
+  // session id the client echoes, then from this process's memory.
   const clientCapabilities =
     readClientCapabilities(body) ??
+    readCapabilitySession({
+      sessionId: readHeader(request, MCP_SESSION_ID_HEADER),
+      profileId,
+      principal,
+    }) ??
     clientCapabilityStore.lookup({ key: capabilityKey });
 
   fastify.log.trace(
@@ -417,6 +452,9 @@ async function handleMcpPostRequest(
       (revision === STATELESS_MCP_PROTOCOL_REVISION ? revision : undefined);
     if (echoVersion) {
       reply.raw.setHeader(MCP_PROTOCOL_VERSION_HEADER, echoVersion);
+    }
+    if (capabilitySessionId) {
+      reply.raw.setHeader(MCP_SESSION_ID_HEADER, capabilitySessionId);
     }
 
     // The bundled SDK transport validates this header against its own supported

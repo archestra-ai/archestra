@@ -368,6 +368,121 @@ describe("MCP Gateway - in-band elicitation round trip", () => {
     });
   });
 
+  test("a legacy client keeps its forms when this process no longer remembers it", async ({
+    makeAgent,
+    makeOrganization,
+  }) => {
+    const agent = await makeAgent();
+    const token = await TeamTokenModel.create({
+      organizationId: (await makeOrganization()).id,
+      name: "Org Token",
+      teamId: null,
+      isOrganizationToken: true,
+    });
+    const otherToken = await TeamTokenModel.create({
+      organizationId: (await makeOrganization()).id,
+      name: "Other Token",
+      teamId: null,
+      isOrganizationToken: true,
+    });
+    await app.listen({ port: 0, host: "127.0.0.1" });
+    const { port } = app.server.address() as AddressInfo;
+    const url = `http://127.0.0.1:${port}/v1/mcp/${agent.id}`;
+    const post = (params: {
+      bearer: string;
+      userAgent: string;
+      sessionId?: string;
+      body: unknown;
+    }) =>
+      fetch(url, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          accept: "application/json, text/event-stream",
+          authorization: `Bearer ${params.bearer}`,
+          "user-agent": params.userAgent,
+          ...(params.sessionId && { "mcp-session-id": params.sessionId }),
+        },
+        body: JSON.stringify(params.body),
+      });
+    const askUser = {
+      jsonrpc: "2.0",
+      method: "tools/call",
+      params: {
+        name: "archestra__ask_user",
+        arguments: {
+          question: "Accept this change for the rest of this session?",
+          options: [
+            { label: "Accept for this session" },
+            { label: "Do not accept" },
+          ],
+        },
+      },
+      id: 2,
+    };
+
+    const init = await post({
+      bearer: token.value,
+      userAgent: "legacy-client/1",
+      body: {
+        jsonrpc: "2.0",
+        method: "initialize",
+        params: {
+          protocolVersion: "2025-06-18",
+          capabilities: { elicitation: {} },
+          clientInfo: { name: "legacy-client", version: "1" },
+        },
+        id: 1,
+      },
+    });
+    const sessionId = init.headers.get("mcp-session-id");
+    expect(sessionId).toBeTruthy();
+    await init.arrayBuffer();
+
+    // Under a User-Agent this process never saw initialize, it remembers
+    // nothing about the client, as after a restart or on another replica:
+    // the echoed session id alone carries what the client declared.
+    const call = await post({
+      bearer: token.value,
+      userAgent: "legacy-client/1 (after restart)",
+      sessionId: sessionId ?? undefined,
+      body: askUser,
+    });
+    const events = readEvents(call);
+    const question = await events.next();
+    expect(question.method).toBe("elicitation/create");
+    await post({
+      bearer: token.value,
+      userAgent: "legacy-client/1 (after restart)",
+      body: {
+        jsonrpc: "2.0",
+        id: question.id,
+        result: { action: "accept", content: { choice: "Do not accept" } },
+      },
+    });
+    expect(await events.next()).toMatchObject({
+      id: 2,
+      result: { structuredContent: { selected: ["Do not accept"] } },
+    });
+
+    // The id is bound to the caller it was issued to: another caller who
+    // presents it is not treated as able to answer a form.
+    const foreign = await post({
+      bearer: otherToken.value,
+      userAgent: "legacy-client/1",
+      sessionId: sessionId ?? undefined,
+      body: askUser,
+    });
+    const foreignResult = (await firstMessage(foreign)).result as {
+      isError?: boolean;
+      content?: Array<{ text?: string }>;
+    };
+    expect(foreignResult.isError).toBe(true);
+    expect(foreignResult.content?.[0]?.text).toContain(
+      "did not answer the choice form",
+    );
+  });
+
   test("only the caller that was asked can answer, under an id no other question shares", async ({
     makeAgent,
     makeOrganization,

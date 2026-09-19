@@ -924,15 +924,15 @@ describe("KnowledgeSettingsPage", () => {
       // accessible name repeats the label (the option renders an icon whose alt
       // text is the provider name), so an exact string will not match either.
       expect(
-        screen.getByRole("button", { name: /^OpenAI(?!-)/ }),
+        screen.getByRole("option", { name: /^OpenAI(?!-)/ }),
       ).toBeEnabled();
       // The two Ollama transports collapse to one "Ollama" entry. Embeddings
       // only work over `/v1`, so this entry must resolve to that transport —
       // collapsing to `ollama-native` (which reports supportsEmbeddings: false)
       // would render it disabled and leave no way to add an Ollama embedding key.
-      expect(screen.getByRole("button", { name: /^Ollama\b/ })).toBeEnabled();
-      expect(screen.getByRole("button", { name: /Anthropic/i })).toBeEnabled();
-      expect(screen.getByRole("button", { name: /Gemini/i })).toBeEnabled();
+      expect(screen.getByRole("option", { name: /^Ollama\b/ })).toBeEnabled();
+      expect(screen.getByRole("option", { name: /Anthropic/i })).toBeEnabled();
+      expect(screen.getByRole("option", { name: /Gemini/i })).toBeEnabled();
     });
   });
 

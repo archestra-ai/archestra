@@ -187,7 +187,7 @@ describe("McpGatewayLogsPage filters", () => {
       screen.queryByText("document-search-installation-a1b2c3"),
     ).toBeNull();
     await user.click(
-      screen.getByRole("button", {
+      screen.getByRole("option", {
         name: /Document Search.*first\.owner@example\.com/,
       }),
     );

@@ -90,6 +90,25 @@ class KubernetesAgentRuntimeBackendDriver implements AgentRuntimeBackendDriver {
     return agentRuntimeManager.accessWorkspaceFile(params);
   }
 
+  async runWorkspaceTransferCommand(params: {
+    session: AgentRunRecord;
+    args: string[];
+    stdin?: Readable;
+    timeoutMs: number;
+  }) {
+    return agentRuntimeManager.runWorkspaceTransferCommand(params);
+  }
+
+  async readWorkspaceTransferRange(params: {
+    session: AgentRunRecord;
+    transferId: string;
+    offset: number;
+    length: number;
+    timeoutMs: number;
+  }) {
+    return agentRuntimeManager.readWorkspaceTransferRange(params);
+  }
+
   async suspendWorkspace(
     session: Pick<AgentRunRecord, "id" | "runtimeScope" | "workloadName">,
   ): Promise<void> {

@@ -1,5 +1,5 @@
 {
-  "id": "7452ec71-7ea2-4079-9a8a-7c5852f3e52e",
+  "id": "cc9b3292-fb04-4a8f-b972-25869f10be87",
   "prevId": "43032aa1-78b6-447d-9e1c-7287494b2b86",
   "version": "7",
   "dialect": "postgresql",
@@ -18182,6 +18182,19 @@
           "notNull": true,
           "default": true
         },
+        "connection_runtime_handoff_enabled": {
+          "name": "connection_runtime_handoff_enabled",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "connection_runtime_handoff_instructions": {
+          "name": "connection_runtime_handoff_instructions",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "model_provider_overrides": {
           "name": "model_provider_overrides",
           "type": "jsonb",
@@ -26677,12 +26690,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "forked_from": {
-          "name": "forked_from",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "start_decision": {
           "name": "start_decision",
           "type": "jsonb",
@@ -26696,27 +26703,6 @@
           "columns": [
             {
               "expression": "root",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "openappa_sessions_forked_from_idx": {
-          "name": "openappa_sessions_forked_from_idx",
-          "columns": [
-            {
-              "expression": "organization_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "forked_from",
               "isExpression": false,
               "asc": true,
               "nulls": "last"

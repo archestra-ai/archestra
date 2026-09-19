@@ -98,12 +98,12 @@ it("combines type and ownership filters and clears an empty result", async () =>
   renderTable();
   await screen.findByText("Credential 0");
   await user.click(screen.getByRole("combobox", { name: "Filter by type" }));
-  await user.click(screen.getByRole("button", { name: "GitHub App" }));
+  await user.click(screen.getByRole("option", { name: "GitHub App" }));
   expect(screen.getByText("Credential 11")).toBeVisible();
   expect(screen.queryByText("Credential 0")).not.toBeInTheDocument();
   await user.click(screen.getByRole("combobox", { name: "Filter by scope" }));
   await user.click(
-    screen.getByRole("button", { name: "Each user (personal)" }),
+    screen.getByRole("option", { name: "Each user (personal)" }),
   );
   expect(screen.getByText("No credentials match your filters")).toBeVisible();
   await user.click(

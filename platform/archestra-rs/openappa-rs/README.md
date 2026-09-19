@@ -142,18 +142,21 @@ Migration `0471_openappa_native.sql` creates the event and receipt tables. Migra
 | `openappa_processed_results` | Result status, decision, and approved output |
 
 Rust owns event encoding, decoding, policy validation, replay, ordering, and
-compare-and-swap behavior. TypeScript does not interpret policy events. A
-dedicated PostgreSQL connection thread supports the existing synchronous store
-API under async hook dispatch. The host's transaction and receipt SQL use that
-same connection.
+compare-and-swap behavior. TypeScript does not interpret policy events. The
+store keeps a pool of PostgreSQL connections, each on its own thread, sized by
+`ARCHESTRA_OPENAPPA_POSTGRES_MAX_CONNECTIONS`. A dispatch leases one connection
+and runs the advisory lock, the receipt SQL and the runtime's event writes on
+it: the lock and the event writes take the same key, which only one connection
+can hold twice. The pool replaces a connection the server has ended.
 
-The initial native runtime serializes dispatch in-process. A PostgreSQL advisory
-lock serializes each trajectory family across backend processes. Before an
-operation that might consult an external authority, the binding commits a
-`pending` receipt. It then opens one transaction for all hook event writes and
-the completed receipt/approved output. Success commits both; errors roll back
-both and discard tentative in-memory runtime state. A durable pending receipt
-blocks further work in that family after an interruption.
+Dispatches for different trajectory families run concurrently. An in-process
+lock serializes each family within a backend process, and a PostgreSQL advisory
+lock serializes it across backend processes. Before an operation that might
+consult an external authority, the binding commits a `pending` receipt. Hook
+event writes and the completed receipt/approved output then commit as separate
+short transactions. The runtime keeps no trajectory state in memory between
+events, so a failed dispatch leaves nothing to discard. A durable pending
+receipt blocks further work in that family after an interruption.
 
 Completed result keys are session ID + tool call ID. Operation keys are session ID + operation ID. Remedy-execution receipts bind the authenticated spender. Submitting different result bytes under a completed result key returns the saved approved output without re-evaluating hooks. Submitting changed arguments under an existing logical call ID is refused.
 

@@ -19,6 +19,32 @@ const sections = [
 ];
 
 describe("SelectableFileList", () => {
+  it("offers Edit only for editable files and opens the selected file", async () => {
+    const edit = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <SelectableFileList
+        sections={sections}
+        canManage
+        onOpen={vi.fn()}
+        onRequestDelete={vi.fn()}
+        canEdit={(item) => item.id === "one"}
+        onEdit={edit}
+      />,
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Actions for one.txt" }),
+    );
+    await user.click(screen.getByRole("menuitem", { name: "Edit" }));
+    expect(edit).toHaveBeenCalledWith("one");
+    await user.click(
+      screen.getByRole("button", { name: "Actions for two.txt" }),
+    );
+    expect(
+      screen.queryByRole("menuitem", { name: "Edit" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("selects a Shift range across sections without including unmanageable rows", async () => {
     renderFileList();
 

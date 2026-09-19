@@ -19,15 +19,7 @@ import {
   XIcon,
 } from "lucide-react";
 import Link from "next/link";
-import {
-  memo,
-  useCallback,
-  useEffect,
-  useId,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ConnectorTypeIcon } from "@/app/knowledge/knowledge-bases/_parts/connector-icons";
 import { LocalServerInstallDialog } from "@/app/mcp/registry/_parts/local-server-install-dialog";
 import { NoAuthInstallDialog } from "@/app/mcp/registry/_parts/no-auth-install-dialog";
@@ -96,6 +88,7 @@ import {
 } from "@/lib/chat/agent-connection-gate";
 import { useFeature } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
+import { useListboxNavigation } from "@/lib/hooks/use-listbox-navigation";
 import { useConnectors } from "@/lib/knowledge/connector.query";
 import { useKnowledgeBases } from "@/lib/knowledge/knowledge-base.query";
 import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
@@ -115,7 +108,6 @@ import {
 import { cn } from "@/lib/utils";
 import {
   filterAndSortInitialAgents,
-  getAdjacentAgentId,
   truncateAgentDescription,
 } from "./initial-agent-selector.utils";
 
@@ -134,9 +126,6 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
   const { data: allAgents = [] } = useChatAgents();
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const [highlightedAgentId, setHighlightedAgentId] = useState<string | null>(
-    null,
-  );
   const [editingAgentId, setEditingAgentId] = useState<string | null>(null);
   const [cloningAgentId, setCloningAgentId] = useState<string | null>(null);
   const { data: credentialReadiness } = useAgentCredentialReadiness({
@@ -161,8 +150,6 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
   const userId = session?.user?.id;
   const { data: isAgentAdmin } = useHasPermissions({ agent: ["admin"] });
   const createProfile = useCreateProfile();
-  const agentListboxId = useId();
-  const agentOptionRefs = useRef(new Map<string, HTMLButtonElement>());
   const cloningStartedForRef = useRef<string | null>(null);
   const [dialogView, setDialogView] = useState<
     | "settings"
@@ -299,62 +286,17 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
     onAgentChange(agentId);
     setOpen(false);
     setSearch("");
-    setHighlightedAgentId(null);
   };
 
-  const handleSearchKeyDown = (
-    event: React.KeyboardEvent<HTMLInputElement>,
-  ) => {
-    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-      event.preventDefault();
-      setHighlightedAgentId((current) =>
-        getAdjacentAgentId({
-          agentIds: keyboardNavigableAgentIds,
-          currentAgentId: current,
-          direction: event.key === "ArrowDown" ? "next" : "previous",
-        }),
-      );
-      return;
-    }
-
-    if (
-      event.key === "Enter" &&
-      highlightedAgentId &&
-      keyboardNavigableAgentIds.includes(highlightedAgentId)
-    ) {
-      event.preventDefault();
-      handleAgentSelect(highlightedAgentId);
-    }
-  };
-
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-
-    setHighlightedAgentId((current) => {
-      if (current && keyboardNavigableAgentIds.includes(current)) {
-        return current;
-      }
-      if (
-        currentAgentId &&
-        keyboardNavigableAgentIds.includes(currentAgentId)
-      ) {
-        return currentAgentId;
-      }
-      return keyboardNavigableAgentIds[0] ?? null;
-    });
-  }, [currentAgentId, keyboardNavigableAgentIds, open]);
-
-  useEffect(() => {
-    if (!open || !highlightedAgentId) {
-      return;
-    }
-
-    agentOptionRefs.current
-      .get(highlightedAgentId)
-      ?.scrollIntoView({ block: "nearest" });
-  }, [highlightedAgentId, open]);
+  const navigation = useListboxNavigation({
+    open,
+    onOpenChange: setOpen,
+    values: keyboardNavigableAgentIds,
+    selectedValue: keyboardNavigableAgentIds.includes(currentAgentId ?? "")
+      ? currentAgentId
+      : keyboardNavigableAgentIds[0],
+    onSelect: handleAgentSelect,
+  });
 
   const handleAddTool = useCallback(() => {
     if (currentAgentId) {
@@ -417,7 +359,6 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
           setOpen(newOpen);
           if (!newOpen) {
             setSearch("");
-            setHighlightedAgentId(null);
           }
         }}
       >
@@ -426,6 +367,7 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
             role="combobox"
             aria-expanded={open}
             data-agent-selector
+            onKeyDown={navigation.onTriggerKeyDown}
             className="max-w-[300px] min-w-0"
           >
             <AgentIcon icon={currentAgent?.icon} size={16} />
@@ -461,25 +403,16 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
               <Input
                 placeholder="Search..."
                 aria-label="Search agents"
-                role="combobox"
-                aria-autocomplete="list"
-                aria-controls={agentListboxId}
-                aria-expanded={open}
-                aria-activedescendant={
-                  highlightedAgentId
-                    ? `${agentListboxId}-option-${highlightedAgentId}`
-                    : undefined
-                }
+                {...navigation.inputProps}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                onKeyDown={handleSearchKeyDown}
                 className="h-8 pl-8 text-sm rounded-lg border-0 bg-muted/50 focus-visible:ring-1"
                 autoFocus
               />
             </div>
           </div>
           <div
-            id={agentListboxId}
+            {...navigation.listboxProps}
             role="listbox"
             aria-label="Agents"
             className="max-h-[300px] overflow-y-auto px-1.5 pb-1.5"
@@ -491,7 +424,7 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
             ) : (
               filteredAgents.map((agent) => {
                 const isSelected = currentAgentId === agent.id;
-                const isHighlighted = highlightedAgentId === agent.id;
+                const isHighlighted = navigation.activeValue === agent.id;
                 const canEdit = isAgentAdmin || agent.authorId === userId;
                 const gate = resolveAgentConnectionGate(
                   readinessByAgent.get(agent.id),
@@ -508,22 +441,12 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
                   >
                     <div className="flex w-full items-center gap-2.5">
                       <button
-                        ref={(node) => {
-                          if (node) {
-                            agentOptionRefs.current.set(agent.id, node);
-                          } else {
-                            agentOptionRefs.current.delete(agent.id);
-                          }
-                        }}
-                        id={`${agentListboxId}-option-${agent.id}`}
-                        type="button"
+                        {...navigation.getOptionProps(agent.id)}
                         role="option"
+                        type="button"
                         aria-selected={isSelected}
                         disabled={isBlocked}
                         onClick={() => handleAgentSelect(agent.id)}
-                        onMouseMove={() => {
-                          if (!isBlocked) setHighlightedAgentId(agent.id);
-                        }}
                         className={cn(
                           "flex flex-1 items-center gap-2.5 text-left min-w-0",
                           isBlocked ? "cursor-not-allowed" : "cursor-pointer",

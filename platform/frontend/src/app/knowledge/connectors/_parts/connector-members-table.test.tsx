@@ -233,7 +233,7 @@ describe("ConnectorMembersTable", () => {
     // The org-user picker is the app-standard searchable select (the
     // dialog's only combobox); it opens on the current state, "Unassigned".
     await user.click(within(dialog).getByRole("combobox"));
-    await user.click(await screen.findByRole("button", { name: /Frank/ }));
+    await user.click(await screen.findByRole("option", { name: /Frank/ }));
     await user.click(screen.getByRole("button", { name: "Save Changes" }));
 
     expect(mockUpsertMutateAsync).toHaveBeenCalledWith({
@@ -255,7 +255,7 @@ describe("ConnectorMembersTable", () => {
     );
     const dialog = screen.getByRole("dialog");
     await user.click(within(dialog).getByRole("combobox"));
-    await user.click(await screen.findByRole("button", { name: "Unassigned" }));
+    await user.click(await screen.findByRole("option", { name: "Unassigned" }));
     await user.click(screen.getByRole("button", { name: "Save Changes" }));
 
     expect(mockDeleteMutateAsync).toHaveBeenCalledWith("acc-dave");

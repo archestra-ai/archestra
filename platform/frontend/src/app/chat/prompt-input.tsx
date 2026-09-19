@@ -1135,6 +1135,11 @@ const PromptInputContent = ({
               <TooltipTrigger asChild>
                 <PromptInputSubmit
                   className="!h-8"
+                  aria-label={
+                    isResponseInFlight && onStop && !isQueueingSubmit
+                      ? "Stop"
+                      : "Submit"
+                  }
                   status={submitStatus}
                   disabled={
                     composerLocked ||

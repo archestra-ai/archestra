@@ -2,7 +2,7 @@ import { EventEmitter } from "node:events";
 import type { Exec } from "@kubernetes/client-node";
 import { afterEach, expect, test, vi } from "vitest";
 import type WebSocket from "ws";
-import { execAgentRuntimeCommand } from "./exec";
+import { execAgentRuntimeCommand, streamAgentRuntimeCommand } from "./exec";
 
 afterEach(() => vi.useRealTimers());
 
@@ -74,6 +74,65 @@ test("does not expose runtime diagnostics in failed command errors", async () =>
   );
 });
 
+test("streams output before the command completes, without leaking stderr", async () => {
+  const boundary = connection();
+  let complete!: () => void;
+  boundary.exec.mockImplementation(async (...args) => {
+    args[4]?.write("early bytes");
+    args[5]?.write("private diagnostic");
+    complete = () => args[8]?.({ status: "Success" });
+    return boundary.socket;
+  });
+  const { stdout, completed } = runStream(boundary);
+  let finished = false;
+  void completed.then(() => {
+    finished = true;
+  });
+  const chunk = await new Promise<Buffer>((resolve) =>
+    stdout.once("data", resolve),
+  );
+  // A buffering implementation could not hand over bytes this early.
+  expect(chunk.toString()).toBe("early bytes");
+  expect(finished).toBe(false);
+  complete();
+  await expect(completed).resolves.toBeUndefined();
+});
+
+test("reports a failed streaming command without runtime diagnostics", async () => {
+  const boundary = connection();
+  boundary.exec.mockImplementation(async (...args) => {
+    args[5]?.write("private file contents");
+    args[8]?.({ status: "Failure", message: "private status contents" });
+    return boundary.socket;
+  });
+  const { stdout, completed } = runStream(boundary);
+  stdout.on("error", () => {});
+  await expect(completed).rejects.toThrow(
+    /^Command in Agent Runtime pod failed$/,
+  );
+});
+
+test("terminates the connection when the consumer stops reading", async () => {
+  const boundary = connection();
+  const { stdout, completed } = runStream(boundary);
+  await Promise.resolve();
+  // A client that disconnects mid-download must not leave the session running.
+  stdout.destroy();
+  await expect(completed).rejects.toThrow("disconnected");
+  expect(boundary.terminate).toHaveBeenCalledOnce();
+});
+
+test("bounds a streaming transfer that never finishes", async () => {
+  vi.useFakeTimers();
+  const boundary = connection();
+  boundary.exec.mockImplementation(() => new Promise(() => {}));
+  const { stdout, completed } = runStream(boundary, { timeoutMs: 100 });
+  stdout.on("error", () => {});
+  const result = expect(completed).rejects.toThrow("timed out");
+  await vi.advanceTimersByTimeAsync(100);
+  await result;
+});
+
 function connection() {
   const terminate = vi.fn();
   const socket = Object.assign(new EventEmitter(), {
@@ -96,6 +155,21 @@ function run(
     podName: "workspace",
     container: "agent-runtime",
     command: ["true"],
+    ...options,
+  });
+}
+
+function runStream(
+  boundary: ReturnType<typeof connection>,
+  options: { timeoutMs?: number } = {},
+) {
+  return streamAgentRuntimeCommand({
+    exec: boundary,
+    namespace: "test",
+    podName: "workspace",
+    container: "agent-runtime",
+    command: ["true"],
+    timeoutMs: 30_000,
     ...options,
   });
 }

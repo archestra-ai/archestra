@@ -269,6 +269,24 @@ describe("MSTeamsProvider.parseWebhookNotification is mention-agnostic", () => {
 
     expect(result).not.toBeNull();
   });
+
+  // Teams gating (isThreadMuteCommand via applyChannelGate) runs at the route
+  // level, not in this method — see chatops.ts. That gate matches on the exact
+  // cleaned text, so a literal ":mute:"/":shushing_face:" message must reach it
+  // unmangled, the same way any other un-mentioned channel text does.
+  test.each([
+    ":mute:",
+    ":shushing_face:",
+  ])("a literal %j message is parsed unmangled (mute gating happens at the route)", async (text) => {
+    const provider = createProvider();
+    const result = await provider.parseWebhookNotification(
+      makeActivity({ text, entities: [] }),
+      {},
+    );
+
+    expect(result).not.toBeNull();
+    expect(result?.text).toBe(text);
+  });
 });
 
 describe("MSTeamsProvider file attachment downloads", () => {

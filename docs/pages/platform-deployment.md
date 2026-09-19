@@ -17,9 +17,9 @@ Select a published release from [GitHub Releases](https://github.com/archestra-a
 ### Release Channels
 
 - **Stable:** Docker tag `latest` and default Helm charts track the current stable release.
-- **Beta:** Version tags ending in `-beta.N` preview upcoming features from the main branch.
+- **Release candidate (RC):** Version tags ending in `-rc.N` preview upcoming releases from the main branch. Earlier prereleases used `-beta.N`.
 
-Archestra maintains one active stable release line at a time. Bug fixes and security patches publish to the active stable line and the next beta release.
+Archestra maintains one active stable release line at a time. Bug fixes and security patches publish to the active stable line and the next RC release.
 
 ### Upgrade Safety
 
@@ -27,8 +27,8 @@ Archestra maintains one active stable release line at a time. Bug fixes and secu
 2. Read the release notes for migration notices.
 3. Apply the upgrade to a staging environment first.
 
-Stable-to-beta upgrades can include repairs for migrations skipped by earlier releases.
-For databases previously running `1.3.56`, choose a beta release containing the migration repair.
+Stable-to-prerelease upgrades can include repairs for migrations skipped by earlier releases.
+For databases previously running `1.3.56`, choose a release containing the migration repair.
 The affected columns are `team.roles`, `knowledge_bases.visibility`, and `knowledge_bases.team_ids`.
 Rerunning migrations from `1.4.0-beta.4` does not restore these columns.
 
@@ -124,7 +124,7 @@ Helm deployment is our recommended approach for deploying Archestra Platform to 
 Install Archestra Platform using the Helm chart from our OCI registry:
 
 ```bash
-export ARCHESTRA_VERSION="1.4.0-beta.13" # x-release-please-version
+export ARCHESTRA_VERSION="1.4.0-rc.15" # x-release-please-version
 helm upgrade archestra-platform \
   oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts/archestra-platform \
   --version "$ARCHESTRA_VERSION" \
@@ -966,6 +966,21 @@ The controller does not install a container isolation runtime. Check your cluste
 
 For zonal disks, use `WaitForFirstConsumer` binding and compatible node zones. Node-local storage cannot preserve files after node loss. Use the storage and node-selector settings below to select compatible resources.
 
+#### EKS With Fargate
+
+Agent Runtime does not support Fargate-only clusters. Runtime containers require automatically provisioned `ReadWriteOnce` volumes. Fargate cannot mount EBS volumes or dynamically provision persistent volumes. Static EFS volumes are not a supported replacement for this storage. See [AWS Fargate storage limitations](https://docs.aws.amazon.com/eks/latest/userguide/fargate.html).
+
+You can keep Archestra on Fargate and run Agent Runtime on EC2 nodes:
+
+1. Add an EC2 node group with the EBS CSI driver and its required IAM permissions.
+2. Configure an EBS storage class with `WaitForFirstConsumer` volume binding.
+3. Set `ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_CLASS` to that storage class.
+4. Label the runtime nodes, for example `archestra-agent-runtime=true`. Set `ARCHESTRA_AGENT_RUNTIME_NODE_SELECTOR` to the same label selector.
+5. Exclude runtime pods from your Fargate profiles. Their namespace and labels must not match those profiles.
+6. Install the Agent Sandbox controller using the instructions above.
+
+The previous Kubernetes Jobs backend is no longer supported. Continuing to use Agent Runtime after upgrading requires the Sandbox prerequisites above.
+
 #### Startup Troubleshooting
 
 Check **Settings → Agents → Runtime Backend** if the runtime is unavailable. Confirm the controller is installed and healthy. For runs waiting on storage, check the storage class and available capacity. For image-pull failures, check the image name, registry access, and pull credentials. Chat shows the reported startup failure.
@@ -1025,7 +1040,7 @@ On GKE, custom Sandbox controllers can produce a “not backed by a controller�
   - Values: `true`, `false`
 
 - **`ARCHESTRA_AGENT_RUNTIME_BASE_IMAGE`** - Container image prefilled when Agent Runtime is enabled on an Agent. The built-in image supplies the default Agent loop. Custom images can replace it and set their own command.
-  - Default: `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/agent-archestra:1.4.0-beta.13` <!-- x-release-please-version -->
+  - Default: `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/agent-archestra:1.4.0-rc.15` <!-- x-release-please-version -->
 
 - **`ARCHESTRA_AGENT_RUNTIME_ALLOW_PRIVILEGED`** - Allows Agent administrators to configure privileged Agent Runtime pods. Privileged containers have node-level access.
   - Default: `false`
@@ -2108,6 +2123,7 @@ To learn more about enterprise licensing, see the [pricing model](/docs/platform
 - `ARCHESTRA_OPENAPPA_ENABLED`: defaults to `false`. Explicit `true` enables OpenAPPA and its policy editor.
 - `ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET`: HMAC secret for offer routing JWS on `get_remedy_plans` / `execute_remedy_plan`. The proxy attaches a flattened JWS JSON Serialization (RFC 7515 §7.2.2) with an unencoded payload (RFC 7797): `protected`, `payload`, `signature`. This is JWS (integrity), not JWE (encryption). `protected` carries `alg` (`HS256`) and `kid` (`default`); unknown algorithms fail closed. Remedy arguments (`offer_id`, `plan`) and the execution receipt stay outside the JWS. The same secret signs the tool-call ids the proxy gives CLI clients. A new session that replays a signed history — a fork, or a summarizer that compacts context in its own session — starts from the original session's guardrail state and then continues on its own. Required when OpenAPPA is enabled. Every backend replica must use the same value.
 - `ARCHESTRA_OPENAPPA_YELL_ENABLED`: defaults to `true`. Set `false` to disable reporting. With OpenAPPA and Guardrails v2 enabled, exposes agent feedback reporting. Reports go to Archestra’s shared HTTPS receiver, private GCS storage, and internal Slack channel. No GCP credentials are required in your deployment.
+- `ARCHESTRA_OPENAPPA_POSTGRES_MAX_CONNECTIONS`: defaults to `4`. Each backend process opens up to this many PostgreSQL connections for OpenAPPA. A guardrail check holds one connection until it finishes, including its calls to external authorities. Checks beyond the limit wait up to 30 seconds, then fail. Raise the value if your policies consult slow authorities.
 - `ARCHESTRA_LLM_PROXY_PLUGINS`: comma-separated plugin list, empty by default. Enabling OpenAPPA automatically registers its plugin. The list alone does not enable APPA.
 
 Policies are stored in PostgreSQL and edited in OpenAPPA. Container policy paths are no longer used. Save your existing policy in the editor when upgrading. Saved revisions apply to new conversations. Existing conversations keep their original policy.

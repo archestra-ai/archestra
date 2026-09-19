@@ -1,6 +1,6 @@
 {
-  "id": "0b780735-8bce-4b8f-93c1-862716361cdf",
-  "prevId": "7452ec71-7ea2-4079-9a8a-7c5852f3e52e",
+  "id": "d6a629f0-7074-4b5c-99f9-c863498b7ba7",
+  "prevId": "cc9b3292-fb04-4a8f-b972-25869f10be87",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -18181,6 +18181,19 @@
           "primaryKey": false,
           "notNull": true,
           "default": true
+        },
+        "connection_runtime_handoff_enabled": {
+          "name": "connection_runtime_handoff_enabled",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "connection_runtime_handoff_instructions": {
+          "name": "connection_runtime_handoff_instructions",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
         },
         "model_provider_overrides": {
           "name": "model_provider_overrides",

@@ -735,6 +735,11 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DeleteAgentWorkspace]: { agent: ["read"] },
   [RouteId.ReadAgentWorkspaceFile]: { agent: ["read"] },
   [RouteId.WriteAgentWorkspaceFile]: { agent: ["read"] },
+  [RouteId.StartAgentWorkspaceTransfer]: { agent: ["read"] },
+  // The content endpoints carry a transfer ticket instead of a session, so the
+  // authnz layer exempts them. These entries keep the map exhaustive.
+  [RouteId.DownloadAgentWorkspaceTransfer]: { agent: ["read"] },
+  [RouteId.UploadAgentWorkspaceTransfer]: { agent: ["read"] },
   [RouteId.DeleteAgentRun]: { agent: ["read"] },
   [RouteId.GetAgentRunShare]: { agent: ["read"] },
   [RouteId.ShareAgentRun]: { agent: ["read"] },

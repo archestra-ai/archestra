@@ -54,6 +54,33 @@ describe("AgentRunState", () => {
     expect(screen.queryByText("Needs input")).not.toBeInTheDocument();
   });
 
+  it("reports a completed turn as running while its retained session still calls the model", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime("2026-09-03T12:00:00.000Z");
+
+    const { rerender } = render(
+      <AgentRunState
+        state="TASK_STATE_COMPLETED"
+        lastModelActivityAt="2026-09-03T11:58:00.000Z"
+        startedAt="2026-09-03T10:00:00.000Z"
+        endedAt="2026-09-03T11:20:00.000Z"
+        compact
+      />,
+    );
+    expect(screen.getByText("Running")).toBeInTheDocument();
+
+    rerender(
+      <AgentRunState
+        state="TASK_STATE_COMPLETED"
+        lastModelActivityAt="2026-09-03T11:30:00.000Z"
+        startedAt="2026-09-03T10:00:00.000Z"
+        endedAt="2026-09-03T11:20:00.000Z"
+        compact
+      />,
+    );
+    expect(screen.getByText("Completed")).toBeInTheDocument();
+  });
+
   it("calls out an active run with no recent model activity", () => {
     vi.useFakeTimers();
     vi.setSystemTime("2026-09-03T12:00:00.000Z");

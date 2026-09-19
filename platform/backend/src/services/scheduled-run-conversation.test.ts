@@ -210,15 +210,35 @@ test("backfillRunConversationMessages materializes chat messages from a run's in
     ownerUserId: actor.id,
   });
 
+  // Viewing an in-flight run must not freeze an intermediate interaction into
+  // its transcript. Only terminal runs may use the interaction fallback.
+  expect(await MessageModel.findByConversation(conversation.id)).toHaveLength(
+    0,
+  );
+  // Recover a successful run whose prompt was seeded but final write failed.
+  await persistRunUserMessage({
+    conversation,
+    userText: trigger.messageTemplate,
+  });
+  await backfillRunConversationMessages({
+    conversation,
+    trigger,
+    run: { ...run, status: "success" },
+    ownerUserId: actor.id,
+  });
+
   const messages = await MessageModel.findByConversation(conversation.id);
-  expect(messages.length).toBeGreaterThan(0);
+  expect(messages.map((message) => message.role)).toEqual([
+    "user",
+    "assistant",
+  ]);
 
   // Idempotent: a second backfill (e.g. via the lazy view route) is a no-op once
   // messages exist, so the transcript isn't duplicated.
   await backfillRunConversationMessages({
     conversation,
     trigger,
-    run,
+    run: { ...run, status: "success" },
     ownerUserId: actor.id,
   });
   expect(await MessageModel.findByConversation(conversation.id)).toHaveLength(
@@ -297,7 +317,7 @@ test("backfillRunConversationMessages strips inline <thinking> blocks from the r
   await backfillRunConversationMessages({
     conversation,
     trigger,
-    run,
+    run: { ...run, status: "success" },
     ownerUserId: actor.id,
   });
 
@@ -386,7 +406,7 @@ test("backfillRunConversationMessages substitutes a notice for a thinking-only a
   await backfillRunConversationMessages({
     conversation,
     trigger,
-    run,
+    run: { ...run, status: "success" },
     ownerUserId: actor.id,
   });
 
@@ -442,7 +462,7 @@ test("persistRunConversationMessages writes [user, assistant] from the executor 
   // A complete assistant turn as the AI SDK hands it back: a tool call plus the
   // final answer text, all in one message.
   const assistantMessage = {
-    id: "asst-1",
+    id: crypto.randomUUID(),
     role: "assistant" as const,
     parts: [
       {
@@ -467,6 +487,7 @@ test("persistRunConversationMessages writes [user, assistant] from the executor 
 
   const messages = await MessageModel.findByConversation(conversation.id);
   expect(messages.map((m) => m.role)).toEqual(["user", "assistant"]);
+  expect(messages[1].id).toBe(assistantMessage.id);
 
   const userContent = messages[0].content as {
     parts: Array<{ text?: string }>;

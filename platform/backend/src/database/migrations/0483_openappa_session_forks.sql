@@ -6,3 +6,6 @@ CREATE TABLE "openappa_context_anchors" (
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "openappa_context_anchors_pk" PRIMARY KEY("organization_id","caller_id","digest","session_id")
 );
+--> statement-breakpoint
+ALTER TABLE "openappa_sessions" ADD COLUMN "forked_from" text;--> statement-breakpoint
+CREATE INDEX "openappa_sessions_forked_from_idx" ON "openappa_sessions" USING btree ("organization_id","forked_from");

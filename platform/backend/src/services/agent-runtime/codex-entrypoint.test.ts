@@ -11,6 +11,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { describe, expect, test } from "vitest";
+import { agentRuntimeFailureReason } from "./failure-reason";
 
 const execFileAsync = promisify(execFile);
 const ENTRYPOINT = path.resolve(
@@ -19,6 +20,35 @@ const ENTRYPOINT = path.resolve(
 );
 
 describe("Codex image entrypoint", () => {
+  test("publishes Unicode errors within the platform decoder limits", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "codex-unicode-error-"));
+    try {
+      await execFileAsync(
+        "python3",
+        [
+          "-c",
+          'import runpy, sys; from pathlib import Path; watch = runpy.run_path(sys.argv[1]); watch["publish_failure"](Path(sys.argv[2]), "Authentication failed. " + "x" * 1500 + "\\U0001f99e" * 300)',
+          path.join(path.dirname(ENTRYPOINT), "archestra-codex-failure-watch"),
+          root,
+        ],
+        {
+          env: {
+            ...process.env,
+            ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX: path.join(root, "turn"),
+          },
+        },
+      );
+      const payload = await readFile(path.join(root, "turn.failure"), "utf8");
+      const envelope = JSON.parse(payload);
+      expect(agentRuntimeFailureReason(`1\n${payload}`)).toBe(
+        `${envelope.message} (Runtime exit status 1.)`,
+      );
+      expect(envelope.message).toMatch(/^Authentication failed\./);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   test.each([
     "one_shot",
     "interactive",
@@ -226,6 +256,112 @@ printf '%s\n' "$*" >> "$ARCHESTRA_AGENT_RUNTIME_DIR/attention-calls"
         },
       }),
     ).rejects.toMatchObject({ code: 78 });
+  });
+
+  test.each([
+    "one_shot",
+    "interactive",
+  ])("surfaces terminal native errors in %s mode without replaying old or child errors", async (mode) => {
+    const root = await mkdtemp(path.join(tmpdir(), "codex-failure-"));
+    try {
+      const runtime = path.join(root, "runtime");
+      const bin = path.join(root, "bin");
+      await mkdir(runtime);
+      await mkdir(bin);
+      const transcript = path.join(runtime, "main.jsonl");
+      await writeFile(path.join(runtime, "codex-main-session"), "main");
+      await writeFile(path.join(runtime, "codex-main-transcript"), transcript);
+      await writeFile(
+        transcript,
+        `${JSON.stringify({ type: "event_msg", payload: { type: "task_complete", error: { message: "old error" } } })}\n`,
+      );
+      await writeExecutable(
+        path.join(bin, "codex"),
+        `#!/usr/bin/env python3
+import json, os, pathlib, subprocess, time
+runtime = pathlib.Path(os.environ["ARCHESTRA_AGENT_RUNTIME_DIR"])
+hooks = json.loads((pathlib.Path(os.environ["CODEX_HOME"]) / "hooks.json").read_text())
+hook = hooks["hooks"]["SessionStart"][0]["hooks"][0]["command"]
+def start(session, transcript):
+    subprocess.run([hook], input=json.dumps({"hook_event_name":"SessionStart", "session_id":session, "transcript_path":str(transcript)}), text=True, check=True)
+def event(path, kind, message):
+    with path.open("a") as f:
+        f.write(json.dumps({"type":"event_msg", "payload":{"type":kind, "error":{"message":message}}}) + "\\n")
+main = runtime / "main.jsonl"
+start("main", main)
+child = runtime / "child.jsonl"
+start("child", child)
+event(child, "task_complete", "child error")
+event(main, "stream_error", "retry error")
+time.sleep(0.5)
+assert not (runtime / "turn-complete").exists(), "old, child or retry error settled main"
+event(main, "task_complete", 'Authentication failed. Reconnect your account. token=synthetic-secret url: https://user:secret@example.test/?api_key=secret')
+for _ in range(50):
+    if (runtime / "turn-complete").exists() or "API error" in (runtime / "attention-calls").read_text():
+        break
+    time.sleep(0.1)
+else:
+    raise SystemExit(99)
+if os.environ["ARCHESTRA_AGENT_RUNTIME_MODE"] == "one_shot":
+    time.sleep(10)
+`,
+      );
+      await writeFile(path.join(runtime, "attention-calls"), "");
+      await writeExecutable(
+        path.join(bin, "attention"),
+        '#!/bin/sh\nprintf "%s\\n" "$*" >> "$ARCHESTRA_AGENT_RUNTIME_DIR/attention-calls"\n',
+      );
+      const result = await execFileAsync("bash", [ENTRYPOINT], {
+        cwd: root,
+        timeout: 15000,
+        env: {
+          ...process.env,
+          PATH: `${bin}:${process.env.PATH}`,
+          ARCHESTRA_LLM_PROXY_PROTOCOL: "openai_responses",
+          ARCHESTRA_AGENT_RUNTIME_DIR: runtime,
+          ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX: path.join(root, "turn"),
+          ARCHESTRA_AGENT_RUNTIME_MODE: mode,
+          ARCHESTRA_AGENT_RUNTIME_CONTINUE: "1",
+          ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL: "test-model",
+          ARCHESTRA_AGENT_RUNTIME_TASK_ID: "main",
+          ARCHESTRA_AGENT_RUNTIME_TASK: "Complete the task.",
+          ARCHESTRA_AGENT_ATTENTION_COMMAND: path.join(bin, "attention"),
+          ARCHESTRA_MCP_GATEWAY_URL: "http://localhost/mcp",
+          ARCHESTRA_MCP_GATEWAY_TOKEN: "synthetic-token",
+          OPENAI_BASE_URL: "http://localhost/v1",
+          OPENAI_API_KEY: "synthetic-secret",
+        },
+      }).catch((error) => error);
+      if (mode === "one_shot") {
+        expect(result.code).toBe(1);
+        const failure = JSON.parse(
+          await readFile(path.join(root, "turn.failure"), "utf8"),
+        );
+        expect(failure).toEqual({
+          version: 1,
+          code: "codex_turn_failed",
+          message:
+            "Authentication failed. Reconnect your account. token=[REDACTED] url: [REDACTED]",
+        });
+        expect(
+          await readFile(path.join(runtime, "final-answer.txt"), "utf8"),
+        ).toBe(`${failure.message}\n`);
+        expect(result.stdout).not.toContain("synthetic-secret");
+      } else {
+        expect(result.code ?? 0).toBe(0);
+        await expect(
+          readFile(path.join(root, "turn.failure")),
+        ).rejects.toMatchObject({ code: "ENOENT" });
+        await expect(
+          readFile(path.join(runtime, "turn-complete")),
+        ).rejects.toMatchObject({ code: "ENOENT" });
+        expect(
+          await readFile(path.join(runtime, "attention-calls"), "utf8"),
+        ).toContain("set API error: check terminal");
+      }
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 });
 

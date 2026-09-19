@@ -49,6 +49,7 @@ const session = {
 beforeEach(async () => {
   config.llmProxy.plugins = ["appa"];
   config.openappa = {
+    ...config.openappa,
     enabled: true,
     yellEnabled: false,
     offerSigningSecret: "test-offer-signing-secret-32chars",

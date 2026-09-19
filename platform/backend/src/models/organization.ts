@@ -844,6 +844,9 @@ class OrganizationModel {
       connectionSkillsEnabled: org.connectionSkillsEnabled,
       connectionLlmProxyEnabled: org.connectionLlmProxyEnabled,
       connectionPluginsEnabled: org.connectionPluginsEnabled,
+      connectionRuntimeHandoffEnabled: org.connectionRuntimeHandoffEnabled,
+      connectionRuntimeHandoffInstructions:
+        org.connectionRuntimeHandoffInstructions ?? null,
       modelProviderOverrides: org.modelProviderOverrides ?? null,
       messagingChannelOverrides: org.messagingChannelOverrides ?? null,
       knowledgeConnectorOverrides: org.knowledgeConnectorOverrides ?? null,

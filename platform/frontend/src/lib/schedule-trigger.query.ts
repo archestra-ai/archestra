@@ -17,7 +17,11 @@ const {
   createScheduleTriggerRunConversation,
 } = archestraApiSdk;
 
-export type ScheduleTriggerRunStatus = "running" | "success" | "failed";
+export type ScheduleTriggerRunStatus =
+  | "running"
+  | "success"
+  | "failed"
+  | "cancelled";
 
 export type ScheduleTriggerRunKind = "due" | "manual";
 
@@ -474,7 +478,6 @@ export function useRunScheduleTriggerNow() {
     },
     onSuccess: (data) => {
       if (!data) return;
-      toast.success("Run queued");
       queryClient.invalidateQueries({ queryKey: scheduleTriggerKeys.all });
       queryClient.invalidateQueries({
         queryKey: scheduleTriggerKeys.runsPrefix(data.triggerId),

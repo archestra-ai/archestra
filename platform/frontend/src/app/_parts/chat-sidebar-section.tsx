@@ -6,6 +6,8 @@ import {
 } from "@archestra/shared";
 import {
   AppWindow,
+  CalendarClock,
+  ChevronDown,
   Folder,
   FolderPlus,
   Loader2,
@@ -23,7 +25,7 @@ import { type ReactNode, useEffect, useRef, useState } from "react";
 import { ChatListSkeleton } from "@/app/_parts/chat-list-skeleton";
 import { ConversationProjectActions } from "@/app/_parts/conversation-project-actions";
 import { CreateProjectFromChatDialog } from "@/app/_parts/create-project-from-chat-dialog";
-import { isScheduledRunConversation } from "@/app/_parts/scheduled-run-sidebar.utils";
+import { groupSidebarTasks } from "@/app/_parts/scheduled-run-sidebar.utils";
 import { AgentIcon } from "@/components/agent-icon";
 import { LockedChatIcon } from "@/components/chat/locked-chat-icon";
 import { RunStateIcon } from "@/components/chat/run-state-icon";
@@ -32,6 +34,11 @@ import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { ProjectBadgeButton } from "@/components/project-badge-button";
 import { TruncatedText } from "@/components/truncated-text";
 import { Button } from "@/components/ui/button";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -196,9 +203,8 @@ export function ChatSidebarSection({
     ? (pathname.split("/").at(-1) ?? null)
     : null;
 
-  const recentUnpinnedChats = conversations.filter(
-    (c) => !c.pinnedAt && !isScheduledRunConversation(c),
-  );
+  const sidebarConversations = groupSidebarTasks(conversations);
+  const recentUnpinnedChats = sidebarConversations.filter((c) => !c.pinnedAt);
   const recentUnpinnedRuns = runs.filter((run) => !run.pinnedAt);
 
   // /api/projects requires project:read; skip the fetch for roles without it
@@ -216,7 +222,7 @@ export function ChatSidebarSection({
   const openExternalAppMutation = useOpenExternalAppInChat();
   const pinnedApps = (appsData?.data ?? []).filter((a) => a.pinnedAt);
   const pinnedItems = buildPinnedSidebarItems({
-    chats: conversations.filter((c) => !isScheduledRunConversation(c)),
+    chats: sidebarConversations,
     projects: pinnedProjects,
     apps: pinnedApps,
     runs,
@@ -233,7 +239,14 @@ export function ChatSidebarSection({
     if (isMobile) {
       setOpenMobile(false);
     }
-    router.push(`/chat/${id}`);
+    const run = conversations.find(
+      (conversation) => conversation.id === id,
+    )?.scheduledRun;
+    router.push(
+      run
+        ? `/chat/${id}?scheduleTriggerId=${run.triggerId}&scheduleRunId=${run.id}`
+        : `/chat/${id}`,
+    );
   };
 
   const handleStartEdit = (id: string, currentTitle: string | null) => {
@@ -401,6 +414,50 @@ export function ChatSidebarSection({
   };
 
   const renderConversationItem = (conv: (typeof conversations)[number]) => {
+    if (conv.scheduledRun) {
+      const activeTriggerId = conversations.find(
+        (c) => c.id === currentConversationId,
+      )?.scheduledRun?.triggerId;
+      return (
+        <SidebarMenuSubItem key={conv.scheduledRun.triggerId}>
+          <div
+            className={cn(
+              "flex items-center justify-between w-full gap-2 rounded-md pr-2 hover:bg-sidebar-accent focus-within:bg-sidebar-accent",
+              activeTriggerId === conv.scheduledRun.triggerId &&
+                "bg-sidebar-accent",
+            )}
+          >
+            <SidebarMenuButton
+              onClick={() => handleSelectConversation(conv.id)}
+              isActive={activeTriggerId === conv.scheduledRun.triggerId}
+              title={conv.scheduledRun.scheduleName}
+              className="cursor-pointer flex-1 min-w-0"
+            >
+              <CalendarClock
+                className="h-3.5 w-3.5 shrink-0"
+                aria-label="Scheduled task"
+              />
+              <span className="truncate">{conv.scheduledRun.scheduleName}</span>
+            </SidebarMenuButton>
+            {conv.projectId && conv.projectName && (
+              <ProjectBadgeButton
+                projectId={conv.projectId}
+                projectName={conv.projectName}
+                projectIcon={conv.projectIcon}
+                compact
+                onNavigate={(projectId) => {
+                  if (isMobile) setOpenMobile(false);
+                  router.push(`/projects/${projectId}`);
+                }}
+              />
+            )}
+            {(canUpdateConversation || canDeleteConversation) && (
+              <span className="w-4 shrink-0" aria-hidden />
+            )}
+          </div>
+        </SidebarMenuSubItem>
+      );
+    }
     const isCurrentConversation = currentConversationId === conv.id;
     const sessionStatus = getSession(conv.id)?.status;
     const isGenerating =
@@ -436,7 +493,12 @@ export function ChatSidebarSection({
 
     return (
       <SidebarMenuSubItem key={conv.id}>
-        <div className="flex items-center justify-between w-full gap-1">
+        <div
+          className={cn(
+            "flex items-center justify-between w-full gap-2 rounded-md pr-2 hover:bg-sidebar-accent focus-within:bg-sidebar-accent",
+            isCurrentConversation && "bg-sidebar-accent",
+          )}
+        >
           {editingId === conv.id ? (
             <div className="flex items-center gap-1 flex-1">
               <Input
@@ -1023,10 +1085,7 @@ export function ChatSidebarSection({
       ) : (
         <ChatListFadeIn fadeIn={fadeIn}>
           {pinnedItems.length > 0 && (
-            <SidebarGroup className="pt-0">
-              <SidebarGroupLabel role="heading" aria-level={2}>
-                Pinned
-              </SidebarGroupLabel>
+            <CollapsibleSidebarGroup label="Pinned">
               <SidebarGroupContent>
                 <SidebarMenu>
                   <SidebarMenuItem>
@@ -1044,14 +1103,11 @@ export function ChatSidebarSection({
                   </SidebarMenuItem>
                 </SidebarMenu>
               </SidebarGroupContent>
-            </SidebarGroup>
+            </CollapsibleSidebarGroup>
           )}
 
           {recentChatGroups.map((group, groupIndex) => (
-            <SidebarGroup key={group.label} className="pt-0">
-              <SidebarGroupLabel role="heading" aria-level={2}>
-                {group.label}
-              </SidebarGroupLabel>
+            <CollapsibleSidebarGroup key={group.label} label={group.label}>
               <SidebarGroupContent>
                 <SidebarMenu>
                   <SidebarMenuItem>
@@ -1077,7 +1133,7 @@ export function ChatSidebarSection({
                   </SidebarMenuItem>
                 </SidebarMenu>
               </SidebarGroupContent>
-            </SidebarGroup>
+            </CollapsibleSidebarGroup>
           ))}
         </ChatListFadeIn>
       )}
@@ -1138,5 +1194,35 @@ export function ChatSidebarSection({
         onOpenChange={(open) => !open && setCreateProjectConv(null)}
       />
     </>
+  );
+}
+
+function CollapsibleSidebarGroup({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <Collapsible defaultOpen asChild>
+      <SidebarGroup className="pt-0 pb-1">
+        <SidebarGroupLabel role="heading" aria-level={2} className="px-0">
+          <CollapsibleTrigger asChild>
+            <Button
+              variant="ghost"
+              className="group/section h-8 w-full justify-start gap-1 px-2 text-xs font-medium text-sidebar-foreground/70 hover:bg-transparent"
+            >
+              <span>{label}</span>
+              <ChevronDown
+                aria-hidden
+                className="size-3 opacity-0 transition-opacity group-hover/section:opacity-100 group-focus-visible/section:opacity-100 group-data-[state=closed]/section:-rotate-90"
+              />
+            </Button>
+          </CollapsibleTrigger>
+        </SidebarGroupLabel>
+        <CollapsibleContent>{children}</CollapsibleContent>
+      </SidebarGroup>
+    </Collapsible>
   );
 }

@@ -103,6 +103,10 @@ export function restoreAppaNotices(params: {
     // call it a custom tool call again, since the request carrying it back may
     // declare no tools at all.
     const custom = notice.original.kind === "custom";
+    // A model can call a name no tool has, spaces and all. Put back in
+    // history, that name fails the provider's own validation and ends the
+    // session; the notice already records the call and its ruling.
+    if (!PROVIDER_TOOL_NAME.test(notice.tool)) continue;
     if (!call.restore(notice.tool, notice.original, notice.namespace)) continue;
     restoreResult({
       ...params,
@@ -510,6 +514,9 @@ function endsWithUserTurn(params: {
     !content.some((block) => asRecord(block)?.type === "tool_result")
   );
 }
+
+/** The tool names every APPA wire's provider accepts in a request. */
+const PROVIDER_TOOL_NAME = /^[A-Za-z0-9_-]+$/;
 
 type ToolCallSite = {
   id: string;

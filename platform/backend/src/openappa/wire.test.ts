@@ -342,6 +342,55 @@ describe("denial notice restoration", () => {
     });
   });
 
+  test("leaves a notice for a name no provider accepts as the notice", () => {
+    // A model invented "my_gateway archestra__run_tool"; restored into
+    // history, the name fails the provider's validation on every later turn.
+    const invented = buildNoticeArguments({
+      id: "call_invented",
+      tool: "my_gateway archestra__run_tool",
+      arguments: '{"tool_name":"archestra__whoami"}',
+      result: "[appa] tool is not declared",
+    });
+    const denied = buildNoticeArguments({
+      id: "call_shell",
+      tool: "shell",
+      arguments: '{"command":"ls"}',
+      result: "[appa] Blocked",
+    });
+    const call = (id: string, args: unknown) => ({
+      id,
+      type: "function",
+      function: { name: NOTICE, arguments: JSON.stringify(args) },
+    });
+    const chat = {
+      tools: [
+        { type: "function", function: { name: NOTICE } },
+        { type: "function", function: { name: CONTROL } },
+      ],
+      messages: [
+        {
+          role: "assistant",
+          tool_calls: [
+            call("call_invented", invented),
+            call("call_shell", denied),
+          ],
+        },
+        { role: "tool", tool_call_id: "call_invented", content: "ruling" },
+        { role: "tool", tool_call_id: "call_shell", content: "ruling" },
+      ],
+    };
+
+    prepareAppaRequest({
+      body: chat,
+      interactionType: "openai:chatCompletions",
+      canonicalizeToolName: canonicalize,
+    });
+
+    const [kept, restored] = chat.messages[0].tool_calls ?? [];
+    expect(kept.function.name).toBe(NOTICE);
+    expect(restored.function.name).toBe("shell");
+  });
+
   test("restores a direct control receipt without changing call identity or result adjacency", () => {
     const originalArguments =
       '{\n  "offer_id": "offer_1",\n  "label": { "trust": "trusted" }\n}';

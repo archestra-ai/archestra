@@ -1064,7 +1064,7 @@ class ProjectService {
     id: string;
     organizationId: string;
     userId: string;
-  }): Promise<GetAgentRunResponse[]> {
+  }): Promise<Omit<GetAgentRunResponse, "terminalRetained">[]> {
     const project = await this.requireReadable(params);
     const canReadAll = await this.callerCanReadAllProjectSessions(params);
     const rows = await AgentRunModel.listForProject({

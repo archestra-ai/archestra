@@ -516,7 +516,9 @@ describe("ChatSidebarSection", () => {
     render(<ChatSidebarSection fadeIn={fadeIn} />);
 
     expect(screen.getByText("Add export command")).toBeInTheDocument();
-    expect(screen.getByLabelText("Run may be stalled")).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Running · quiet for 20m"),
+    ).toBeInTheDocument();
     expect(screen.getByLabelText("Run actions")).toBeInTheDocument();
     fireEvent.click(screen.getByText("Add export command"));
     expect(mockRouterPush).toHaveBeenCalledWith("/chat/runs/task-1");

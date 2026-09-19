@@ -55,6 +55,44 @@ describe("useMyAgentRun", () => {
     queryClient.clear();
   });
 
+  it("refreshes the sidebar list when the session's current turn moves", async () => {
+    vi.useFakeTimers();
+    const response = (turn: {
+      taskId: string;
+      state: string;
+      endedAt: string | null;
+    }) => ({ data: { ...turn, workspace: null }, error: undefined }) as never;
+    const working = {
+      taskId: "task-1",
+      state: "TASK_STATE_WORKING",
+      endedAt: null,
+    };
+    sdk.getMyAgentRun.mockResolvedValue(response(working));
+    const queryClient = new QueryClient();
+    const invalidate = vi.spyOn(queryClient, "invalidateQueries");
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+    const { unmount } = renderHook(() => useMyAgentRun("session-1"), {
+      wrapper,
+    });
+
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(invalidate).toHaveBeenCalledTimes(1);
+    await act(() => vi.advanceTimersByTimeAsync(4_000));
+    expect(invalidate).toHaveBeenCalledTimes(1);
+    sdk.getMyAgentRun.mockResolvedValue(
+      response({ ...working, taskId: "task-2" }),
+    );
+    await act(() => vi.advanceTimersByTimeAsync(2_000));
+    expect(invalidate).toHaveBeenCalledTimes(2);
+    expect(invalidate).toHaveBeenLastCalledWith({
+      queryKey: ["agent-runs", "mine"],
+    });
+    unmount();
+    queryClient.clear();
+  });
+
   it("stops polling after a run load exhausts its retries", async () => {
     vi.useFakeTimers();
     sdk.getMyAgentRun.mockResolvedValue({

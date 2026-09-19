@@ -175,7 +175,7 @@ function getLivenessPresentation(
   };
 }
 
-function modelActivityBaseline(
+export function modelActivityBaseline(
   run: Pick<AgentRun, "lastModelActivityAt" | "startedAt">,
 ): Date {
   return new Date(run.lastModelActivityAt ?? run.startedAt);

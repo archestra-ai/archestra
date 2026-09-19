@@ -3,7 +3,7 @@ title: Knowledge
 category: Knowledge
 order: 1
 description: Built-in RAG knowledge — Knowledge Bases, connectors, and how retrieval works
-lastUpdated: 2026-09-16
+lastUpdated: 2026-09-19
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -42,7 +42,7 @@ flowchart LR
 
 A search runs both a semantic and a keyword pass, then narrows the results.
 
-1. **Expand the query.** The reranking model rewrites the question into a semantic phrasing and a set of keyword queries. This catches documents that use different words than the asker did. Identifiers, ticket numbers, and error codes are preserved verbatim.
+1. **Expand the query.** The reranking model rewrites the question into a semantic phrasing and a set of keyword queries. This catches documents that use different words than the asker did. Identifiers, ticket numbers, and error codes are preserved verbatim. A month or period in the question is expanded into the dates it covers. Words like "latest" or "yesterday" are resolved against the current date.
 2. **Search both ways.** Every query variant runs against the vector index and the keyword index in parallel.
 3. **Fuse.** Results are merged with Reciprocal Rank Fusion, which favors chunks that rank well across several variants rather than one.
 4. **Rerank.** The reranking model scores each surviving chunk against the original question and drops the irrelevant ones. See [Query Results Ranking](#query-results-ranking).

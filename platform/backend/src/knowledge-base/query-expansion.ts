@@ -231,7 +231,12 @@ async function keywordExpansion(params: {
           "{current_date}",
           currentDate,
         ),
-        prompt: KEYWORD_REPHRASE_USER_PROMPT.replace("{user_query}", queryText),
+        // The date goes in first so a query that happens to contain the
+        // placeholder text is never rewritten.
+        prompt: KEYWORD_REPHRASE_USER_PROMPT.replace(
+          "{current_date}",
+          currentDate,
+        ).replace("{user_query}", queryText),
       }),
     buildInteraction: (res) =>
       buildQueryExpansionInteraction(rerankerConfig, queryText, res),
@@ -325,6 +330,7 @@ Rules:
 - Never paraphrase identifiers, ticket numbers, error codes, or domain-specific jargon — use them verbatim
 - Vary the terms across queries; do not repeat the same keywords
 - When the query contains a date or time period, expand it into the specific dates it covers. For example, for "september 2025" produce queries like "2025-09", "Sep 2025", "September 2025", "09/2025"
+- When the query asks for something recent without naming a date ("latest", "last", "most recent", "newest", "today", "yesterday", "this week"), resolve it against the current date and expand it the same way: put one specific date in each query next to the topic keywords, starting from the current date and working backwards (repeating the topic keywords across these queries is fine). For example, for "our last daily meeting" produce queries like "daily meeting {current_date}" and then the same keywords with the days just before it
 
 CRITICAL: Output ONLY the keyword queries, one per line. No numbering, bullets, or commentary.
 

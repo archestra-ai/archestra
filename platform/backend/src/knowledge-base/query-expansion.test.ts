@@ -278,6 +278,39 @@ describe("expandQuery", () => {
     expect(keywords[1].queryText).toBe("kw2");
   });
 
+  it("fills the current date and the query into both expansion prompts", async () => {
+    mockResolveRerankerConfig.mockResolvedValue(MOCK_RERANKER_CONFIG);
+    // Pin the clock: the keyword rules resolve "latest"/"last" against the
+    // date the prompt carries. The shared setup restores real timers.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-09-19T10:00:00Z"));
+
+    const prompts: string[] = [];
+    server.use(
+      http.post(`${TEST_BASE_URL}/chat/completions`, async ({ request }) => {
+        const body = (await request.json()) as {
+          messages: Array<{ role: string; content: string }>;
+        };
+        prompts.push(body.messages.map((m) => m.content).join("\n"));
+        return chatCompletion("kw1");
+      }),
+    );
+
+    await expandQuery({
+      queryText: "our last daily meeting",
+      organizationId: "org-1",
+    });
+
+    expect(prompts).toHaveLength(2);
+    for (const prompt of prompts) {
+      expect(prompt).toContain("2026-09-19");
+      expect(prompt).toContain("our last daily meeting");
+      // An unfilled placeholder would silently ask the model to expand
+      // around the literal text "{current_date}".
+      expect(prompt).not.toMatch(/\{[a-z_]+\}/);
+    }
+  });
+
   it("tags both expansion calls with the connector the query was scoped to", async () => {
     mockResolveRerankerConfig.mockResolvedValue(MOCK_RERANKER_CONFIG);
     vi.mocked(withKbObservability).mockClear();

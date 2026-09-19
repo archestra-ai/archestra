@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { useHasPermissions } from "@/lib/auth/auth.query";
@@ -18,12 +19,31 @@ import {
  */
 export function CatalogBatteryToggles({ catalogId }: { catalogId: string }) {
   const openappaEnabled = useFeature("openappaEnabled") === true;
-  const { data: matches } = useBatteryMatches(catalogId, openappaEnabled);
+  const {
+    data: matches,
+    isError,
+    refetch,
+  } = useBatteryMatches(catalogId, openappaEnabled);
   const { data: canManage } = useHasPermissions({
     organization: ["update"],
     toolPolicy: ["update"],
   });
   const setEnabled = useSetBatteryEnabled(catalogId);
+  // A failed lookup must not read as "no battery applies".
+  if (isError)
+    return (
+      <p role="alert" className="text-sm text-destructive">
+        <span>Could not check which guardrails batteries apply. </span>
+        <Button
+          variant="link"
+          size="sm"
+          className="h-auto p-0"
+          onClick={() => refetch()}
+        >
+          Retry
+        </Button>
+      </p>
+    );
   if (!matches?.length) return null;
   return (
     <div className="space-y-2 rounded-md border p-3">

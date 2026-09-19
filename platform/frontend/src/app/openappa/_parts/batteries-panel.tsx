@@ -39,9 +39,9 @@ export function BatteriesPanel() {
     organization: ["update"],
     toolPolicy: ["update"],
   });
-  // An uploaded package may carry helper scripts that run with a bound
-  // credential, so uploading takes the credential permission as well.
-  const { data: canUpload } = useHasPermissions({
+  // Binding a credential hands its value to helper code, and an uploaded
+  // package may carry such code, so both take the credential permission too.
+  const { data: canBind } = useHasPermissions({
     organization: ["update"],
     toolPolicy: ["update"],
     credential: ["update"],
@@ -82,7 +82,7 @@ export function BatteriesPanel() {
             </p>
           </div>
         </div>
-        {canUpload === true && (
+        {canBind === true && (
           <Button variant="outline" onClick={() => setUploading(true)}>
             <Upload className="size-4" />
             <span>Upload package</span>
@@ -104,6 +104,7 @@ export function BatteriesPanel() {
                 install={install}
                 serverName={serverName(install.catalogId)}
                 canManage={canManage === true}
+                canBind={canBind === true}
               />
             ))}
           </ul>
@@ -141,21 +142,17 @@ function InstallRow({
   install,
   serverName,
   canManage,
+  canBind,
 }: {
   battery: BatterySummary;
   install: BatteryInstall;
   serverName: string;
   canManage: boolean;
+  canBind: boolean;
 }) {
   const update = useUpdateBatteryInstall();
   const remove = useDeleteBatteryInstall();
   const [removing, setRemoving] = useState(false);
-  // Binding hands the credential's value to helper code, so it takes the
-  // credential permission on top of the one every install write needs.
-  const { data: credentialPermission } = useHasPermissions({
-    credential: ["update"],
-  });
-  const canBind = canManage && credentialPermission === true;
   const credentials = useRuntimeCredentials(
     canBind && battery.credentials.length > 0,
   );

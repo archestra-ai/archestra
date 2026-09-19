@@ -198,6 +198,24 @@ test("renders nothing when the server matches no battery or guardrails v2 is off
   await waitFor(() => expect(second.container).toBeEmptyDOMElement());
 });
 
+test("a failed lookup shows an error with a retry instead of nothing", async () => {
+  let attempts = 0;
+  server.use(
+    http.get(`${baseUrl}/api/openappa/battery-matches`, () => {
+      attempts += 1;
+      return attempts === 1
+        ? new HttpResponse(null, { status: 503 })
+        : HttpResponse.json([
+            { battery: "github", evidence: "host", install: null },
+          ]);
+    }),
+  );
+  show();
+  fireEvent.click(await screen.findByRole("button", { name: "Retry" }));
+  expect(await screen.findByRole("checkbox", { name: /github/ })).toBeChecked();
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+});
+
 test("the checkbox is read-only without the permission to manage guardrails", async () => {
   matches = [{ battery: "github", evidence: "host", install: install({}) }];
   vi.mocked(useHasPermissions).mockReturnValue({ data: false } as ReturnType<

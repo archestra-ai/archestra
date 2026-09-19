@@ -231,7 +231,9 @@ describe("renderStartupGuardPowerShell (Claude Code)", () => {
     expect(script).toContain(
       "foreach ($r in $ActiveRemotes) { Write-Arch ('  ' + $r.Label) DarkGray }",
     );
-    expect(script).toContain("Write-Host -NoNewline ('  ' + $text)");
+    expect(script).toContain(
+      "Write-Host -NoNewline (ConvertTo-ArchConsole ('  ' + $text))",
+    );
     // colors go out as raw VT codes — console-API colors die on the
     // alternate screen buffer under conpty; checks are the brand purple
     expect(script).toContain("Magenta = '95'");

@@ -45,8 +45,8 @@ describe("RoleSelect filters", () => {
     await user.type(screen.getByPlaceholderText("Search roles..."), "ledger");
 
     // The search narrowed the roles, but the way back out of it survives.
-    expect(screen.queryByRole("button", { name: /^Admin$/ })).toBeNull();
-    await user.click(screen.getByRole("button", { name: "All roles" }));
+    expect(screen.queryByRole("option", { name: /^Admin$/ })).toBeNull();
+    await user.click(screen.getByRole("option", { name: "All roles" }));
 
     expect(onValueChange).toHaveBeenCalledWith("all");
   });
@@ -66,7 +66,7 @@ describe("RoleSelect filters", () => {
       screen.getByPlaceholderText("Search roles..."),
       "night_auditor",
     );
-    await user.click(screen.getByRole("button", { name: "Ledger Watch" }));
+    await user.click(screen.getByRole("option", { name: "Ledger Watch" }));
 
     expect(onValueChange).toHaveBeenCalledWith("night_auditor");
   });

@@ -1453,7 +1453,10 @@ function ListedSkillSourceBadge({
       </Badge>
     );
   }
-  const repo = parseRepoFromSourceRef(item.skill.sourceRef);
+  const repo = parseRepoFromSourceRef(
+    item.skill.sourceRef,
+    item.skill.sourceOrigin,
+  );
   return repo ? (
     <Badge
       variant="secondary"
@@ -1488,7 +1491,10 @@ function ListedSkillIcon({
   }
   return (
     <SkillSourceIcon
-      repo={parseRepoFromSourceRef(item.skill.sourceRef)}
+      repo={parseRepoFromSourceRef(
+        item.skill.sourceRef,
+        item.skill.sourceOrigin,
+      )}
       builtIn={item.skill.sourceType === "built_in"}
       appIconLogo={appIconLogo}
     />

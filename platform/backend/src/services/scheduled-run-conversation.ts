@@ -36,8 +36,8 @@ import {
  * Creation is centralized here and linked with a compare-and-swap so the two
  * paths can never create two conversations for one run.
  *
- * Messages are written by one of two paths, both idempotent (no-op once the
- * conversation has messages):
+ * The worker seeds the prompt before streaming. The completed assistant turn
+ * is written once by one of two paths:
  *   - PRIMARY (`persistRunConversationMessages`): the run handler, at completion,
  *     stores `[user, responseUiMessage]` from the executor's in-memory result —
  *     race-free, since it never reads the run's `interactions` rows.
@@ -133,8 +133,8 @@ export async function createAndLinkRunConversation(params: {
  * already holds every tool-call, tool-result, and the final answer text). This
  * is race-free: it does not read the `interactions` rows, which the LLM proxy
  * commits in a `finally` after the stream is flushed and so are not reliably
- * visible at run completion. Idempotent — a no-op once the conversation has any
- * messages, so the lazy view-path stays a safe fallback.
+ * visible at run completion. Idempotent — a no-op once an assistant message
+ * exists. The worker may already have seeded the user prompt for live replay.
  */
 export async function persistRunConversationMessages(params: {
   conversation: Conversation;
@@ -143,7 +143,8 @@ export async function persistRunConversationMessages(params: {
 }): Promise<void> {
   const { conversation, userText, assistantMessage } = params;
 
-  if (await MessageModel.existsForConversation(conversation.id)) {
+  const existing = await MessageModel.findByConversation(conversation.id);
+  if (existing.some((message) => message.role === "assistant")) {
     return;
   }
 
@@ -152,13 +153,21 @@ export async function persistRunConversationMessages(params: {
   // literal, so the createdAt passthrough type-checks (matches backfill below).
   const createdAt = Date.now();
   const rows = [
+    ...(existing.length === 0
+      ? [
+          {
+            conversationId: conversation.id,
+            role: "user",
+            content: {
+              role: "user",
+              parts: [{ type: "text", text: userText }],
+            },
+            createdAt: new Date(createdAt),
+          },
+        ]
+      : []),
     {
-      conversationId: conversation.id,
-      role: "user",
-      content: { role: "user", parts: [{ type: "text", text: userText }] },
-      createdAt: new Date(createdAt),
-    },
-    {
+      id: assistantMessage.id,
       conversationId: conversation.id,
       role: assistantMessage.role,
       content: assistantMessage,
@@ -271,8 +280,17 @@ export async function backfillRunConversationMessages(params: {
   ownerUserId: string;
 }): Promise<void> {
   const { conversation, trigger, run, ownerUserId } = params;
+  // A live run owns its transcript. Reconstructing an intermediate interaction
+  // would insert a partial assistant turn and block the worker's final write.
+  if (run.status === "running") {
+    return;
+  }
   const existing = await MessageModel.findByConversation(conversation.id);
-  if (existing.length > 0) {
+  if (
+    existing.some((message) => message.role === "assistant") ||
+    ((run.status === "failed" || run.status === "cancelled") &&
+      existing.length > 0)
+  ) {
     return;
   }
 
@@ -295,12 +313,14 @@ export async function backfillRunConversationMessages(params: {
 
   const createdAt = Date.now();
   await MessageModel.bulkCreate(
-    uiMessages.map((message, index) => ({
-      conversationId: conversation.id,
-      role: message.role,
-      content: message,
-      createdAt: new Date(createdAt + index),
-    })),
+    uiMessages
+      .filter((message) => existing.length === 0 || message.role !== "user")
+      .map((message, index) => ({
+        conversationId: conversation.id,
+        role: message.role,
+        content: message,
+        createdAt: new Date(createdAt + index),
+      })),
   );
 }
 

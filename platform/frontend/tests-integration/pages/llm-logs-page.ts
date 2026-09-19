@@ -34,12 +34,11 @@ export class LlmLogsPage {
 
   /**
    * Open the Client filter and pick an option by its visible label.
-   * SearchableSelect renders options as buttons (not role="option"), and the
    * Claude options also carry the Anthropic logo's alt text ("Anthropic …"),
    * so match on the label as a substring.
    */
   async selectClient(label: string) {
     await this.clientFilter.click();
-    await this.page.getByRole("button", { name: label }).click();
+    await this.page.getByRole("option", { name: label }).click();
   }
 }

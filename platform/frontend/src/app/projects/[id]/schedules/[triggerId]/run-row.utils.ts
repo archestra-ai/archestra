@@ -11,7 +11,7 @@ export function runRowKind(run: {
   if (run.chatConversationId) {
     return "open-chat";
   }
-  if (run.status === "success" || run.status === "failed") {
+  if (run.status !== "running") {
     return "resolve";
   }
   return "running";

@@ -59,7 +59,7 @@ describe("RoleSelect", () => {
     await user.click(screen.getByRole("combobox"));
     await user.type(screen.getByPlaceholderText("Search roles..."), "squad 29");
 
-    const match = screen.getByRole("button", { name: /Squad 29/i });
+    const match = screen.getByRole("option", { name: /Squad 29/i });
     await user.click(match);
 
     expect(onValueChange).toHaveBeenCalledWith("squad_29");
@@ -74,7 +74,7 @@ describe("RoleSelect", () => {
     await user.click(screen.getByRole("combobox"));
     await user.type(screen.getByPlaceholderText("Search roles..."), "squad_17");
 
-    await user.click(screen.getByRole("button", { name: /Squad 17/i }));
+    await user.click(screen.getByRole("option", { name: /Squad 17/i }));
 
     expect(onValueChange).toHaveBeenCalledWith("squad_17");
   });
@@ -94,7 +94,7 @@ describe("RoleSelect", () => {
 
     await user.click(screen.getByRole("combobox"));
 
-    const escalating = screen.getByRole("button", { name: /Squad 00/i });
+    const escalating = screen.getByRole("option", { name: /Squad 00/i });
     expect(escalating).toBeDisabled();
 
     await user.click(escalating);
@@ -121,7 +121,7 @@ describe("RoleSelect", () => {
     );
 
     await user.click(screen.getByRole("combobox"));
-    await user.click(screen.getByRole("button", { name: /Squad 00/i }));
+    await user.click(screen.getByRole("option", { name: /Squad 00/i }));
 
     expect(onValueChange).toHaveBeenCalledWith("squad_00");
   });
@@ -143,7 +143,7 @@ it("adds multiple roles without replacing earlier choices and removes an individ
   ).toBeDisabled();
   await user.click(screen.getByRole("combobox"));
   await user.type(screen.getByPlaceholderText("Search roles..."), "squad 29");
-  await user.click(screen.getByRole("button", { name: /Squad 29/ }));
+  await user.click(screen.getByRole("option", { name: /Squad 29/ }));
   expect(
     screen.getAllByRole("button", { name: "Remove selected item" })[0],
   ).toBeEnabled();
@@ -171,7 +171,7 @@ it.each([
   await user.click(screen.getByRole("combobox"));
   await user.type(screen.getByPlaceholderText("Search roles..."), "deployment");
   expect(
-    screen.getByRole("button", {
+    screen.getByRole("option", {
       name: /Squad 00.*Review deployment activity/,
     }),
   ).toBeVisible();

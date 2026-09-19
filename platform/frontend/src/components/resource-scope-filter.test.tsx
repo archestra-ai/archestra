@@ -30,7 +30,6 @@ vi.mock("@/components/label-select", () => ({
   parseLabelsParam: () => null,
   serializeLabels: () => "",
 }));
-vi.mock("@/components/ui/multi-select", () => ({ MultiSelect: () => null }));
 vi.mock("@/components/user-searchable-multi-select", () => ({
   UserSearchableMultiSelect: () => null,
 }));

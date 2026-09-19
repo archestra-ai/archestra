@@ -721,22 +721,35 @@ export const parseLogFormat = (
 };
 
 /** @public — exported for testability */
-export const parseDatabasePoolMax = (envValue?: string | undefined): number => {
-  const value = envValue?.trim();
+export const parseDatabasePoolMax = (envValue?: string | undefined): number =>
+  parsePoolSize({
+    envValue,
+    envName: "ARCHESTRA_DATABASE_POOL_MAX",
+    defaultValue: DEFAULT_DATABASE_POOL_MAX,
+    maxValue: MAX_DATABASE_POOL_MAX,
+  });
+
+function parsePoolSize(params: {
+  envValue: string | undefined;
+  envName: string;
+  defaultValue: number;
+  maxValue: number;
+}): number {
+  const value = params.envValue?.trim();
   if (!value) {
-    return DEFAULT_DATABASE_POOL_MAX;
+    return params.defaultValue;
   }
 
   const parsed = Number.parseInt(value, 10);
-  if (Number.isNaN(parsed) || parsed < 1 || parsed > MAX_DATABASE_POOL_MAX) {
+  if (Number.isNaN(parsed) || parsed < 1 || parsed > params.maxValue) {
     logger.warn(
-      `Invalid ARCHESTRA_DATABASE_POOL_MAX value "${value}", using default ${DEFAULT_DATABASE_POOL_MAX}`,
+      `Invalid ${params.envName} value "${value}", using default ${params.defaultValue}`,
     );
-    return DEFAULT_DATABASE_POOL_MAX;
+    return params.defaultValue;
   }
 
   return parsed;
-};
+}
 
 /** @public — exported for testability */
 export const parseChatMaxOutputTokens = (
@@ -2008,6 +2021,8 @@ export function parseLlmProxyPlugins(
   return plugins as LlmProxyPluginName[];
 }
 
+const MIN_OPENAPPA_OFFER_SIGNING_SECRET_LENGTH = 32;
+
 /**
  * Validates APPA settings only when its feature flag is explicitly enabled.
  * @public — exported for testability
@@ -2015,11 +2030,44 @@ export function parseLlmProxyPlugins(
 export function parseOpenAppaConfig(
   enabled: string | undefined,
   yellEnabled?: string,
+  offerSigningSecret?: string,
+  postgresMaxConnections?: string,
 ) {
+  const secret = offerSigningSecret ?? "";
+  const isEnabled = enabled === "true";
+  if (
+    secret.length > 0 &&
+    secret.length < MIN_OPENAPPA_OFFER_SIGNING_SECRET_LENGTH
+  ) {
+    throw new Error(
+      `ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET must be at least ${MIN_OPENAPPA_OFFER_SIGNING_SECRET_LENGTH} characters`,
+    );
+  }
+  if (isEnabled && secret.length === 0) {
+    logger.warn(
+      "OpenAPPA is enabled without ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET: denials that carry remedy offers will fail closed (503) until the secret is set on every replica",
+    );
+  }
   return {
-    enabled: enabled === "true",
-    yellEnabled: enabled === "true" && (yellEnabled ?? "true") === "true",
+    enabled: isEnabled,
+    yellEnabled: isEnabled && (yellEnabled ?? "true") === "true",
+    offerSigningSecret: secret,
+    postgresMaxConnections: parseOpenAppaPostgresMaxConnections(
+      postgresMaxConnections,
+    ),
   };
+}
+
+const DEFAULT_OPENAPPA_POSTGRES_MAX_CONNECTIONS = 4;
+const MAX_OPENAPPA_POSTGRES_MAX_CONNECTIONS = 64;
+
+function parseOpenAppaPostgresMaxConnections(envValue?: string): number {
+  return parsePoolSize({
+    envValue,
+    envName: "ARCHESTRA_OPENAPPA_POSTGRES_MAX_CONNECTIONS",
+    defaultValue: DEFAULT_OPENAPPA_POSTGRES_MAX_CONNECTIONS,
+    maxValue: MAX_OPENAPPA_POSTGRES_MAX_CONNECTIONS,
+  });
 }
 
 /**
@@ -2212,6 +2260,8 @@ const fileStorageS3Config = parseFileStorageS3Config({
 const openappa = parseOpenAppaConfig(
   process.env.ARCHESTRA_OPENAPPA_ENABLED,
   process.env.ARCHESTRA_OPENAPPA_YELL_ENABLED,
+  process.env.ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET,
+  process.env.ARCHESTRA_OPENAPPA_POSTGRES_MAX_CONNECTIONS,
 );
 const llmProxyPlugins = parseLlmProxyPlugins(
   process.env.ARCHESTRA_LLM_PROXY_PLUGINS,

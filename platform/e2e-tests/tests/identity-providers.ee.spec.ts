@@ -386,21 +386,21 @@ async function selectRoleOption(
   const popover = page.locator(`[id="${popoverId}"]`);
   // Descriptions contribute to the accessible name. Match the role label at
   // the beginning, retaining the boundary between Admin and Platform Admin.
-  const role = popover.getByRole("button", {
+  const role = popover.getByRole("option", {
     name: new RegExp(`^${roleName}\\b`),
   });
-  if ((await role.getAttribute("aria-pressed")) !== "true") {
+  if ((await role.getAttribute("aria-selected")) !== "true") {
     await role.click();
   }
   // Add the target before removing other selections to preserve minSelected=1.
   const otherRoles = popover
-    .getByRole("button", { pressed: true })
+    .getByRole("option", { selected: true })
     .filter({ hasNot: page.getByText(roleName, { exact: true }) });
   while (await otherRoles.count()) {
     await otherRoles.first().click();
   }
   await popover
-    .getByRole("textbox", { name: "Search roles..." })
+    .getByRole("combobox", { name: "Search roles..." })
     .press("Escape");
   await expect(popover).not.toBeVisible();
 }

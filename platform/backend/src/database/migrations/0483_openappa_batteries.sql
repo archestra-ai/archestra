@@ -38,4 +38,5 @@ ALTER TABLE "openappa_battery_installs" ADD CONSTRAINT "openappa_battery_install
 ALTER TABLE "openappa_battery_packages" ADD CONSTRAINT "openappa_battery_packages_organization_id_organization_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organization"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "openappa_effective_policies" ADD CONSTRAINT "openappa_effective_policies_organization_id_organization_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organization"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 CREATE UNIQUE INDEX "openappa_battery_installs_org_catalog_battery_idx" ON "openappa_battery_installs" USING btree ("organization_id","catalog_id","battery_name");--> statement-breakpoint
+CREATE INDEX "openappa_battery_installs_catalog_idx" ON "openappa_battery_installs" USING btree ("catalog_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "openappa_battery_packages_org_name_idx" ON "openappa_battery_packages" USING btree ("organization_id","name");

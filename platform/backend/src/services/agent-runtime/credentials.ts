@@ -11,11 +11,12 @@ import {
   resolveCredentialValue,
 } from "@/services/credentials";
 import type {
+  AgentRuntime,
   AgentRuntimeCredentialDeclaration,
   MissingAgentRuntimeCredential,
   ResolvedAgentRuntime,
 } from "@/types";
-import { ApiError } from "@/types";
+import { AgentRuntimeCredentialDeclarationSchema, ApiError } from "@/types";
 import type { RenewableCredential } from "@/types/renewable-credential";
 
 /**
@@ -202,6 +203,69 @@ export async function preflightAgentRuntimeCredentials(params: {
   }
 
   return { configured, missing, misconfigured };
+}
+
+/**
+ * Store one credential personally for the calling user, declaring it on the Agent
+ * first when the key is new.
+ *
+ * This is the path a connected client uses during a handoff, so it is deliberately
+ * narrower than `setAgentRuntimeCredential`: it never writes an organization value.
+ * A key already declared `shared` is refused rather than silently widened — that
+ * declaration hands the value to every user's runs of the Agent, which is an
+ * administrator's decision to make in Settings, not a side effect of a tool call.
+ */
+export async function transferPersonalRuntimeCredential(params: {
+  runtime: ResolvedAgentRuntime;
+  organizationId: string;
+  userId: string;
+  key: string;
+  value: string;
+  label?: string;
+}): Promise<{ declarationCreated: boolean }> {
+  const existing = params.runtime.credentials?.find(
+    (entry) => entry.key === params.key,
+  );
+
+  if (existing?.scope === "shared") {
+    throw new ApiError(
+      400,
+      `"${params.key}" is declared as a shared credential on this Agent. A shared value applies to every user's runs, so it is set in Settings rather than transferred from a client.`,
+    );
+  }
+
+  let runtime = params.runtime;
+  const declarationCreated = !existing;
+
+  if (declarationCreated) {
+    const declaration = AgentRuntimeCredentialDeclarationSchema.parse({
+      key: params.key,
+      scope: "per_user",
+      label: params.label?.trim() || params.key,
+      required: false,
+    });
+    const credentials = [...(params.runtime.credentials ?? []), declaration];
+    // Persist the declaration before the value: `setAgentRuntimeCredential`
+    // refuses an undeclared key, and a stored value under a key the Agent does
+    // not declare would never be injected anyway.
+    await AgentModel.update(params.runtime.agentId, {
+      runtime: {
+        ...stripResolvedFields(params.runtime),
+        credentials,
+      },
+    });
+    runtime = { ...params.runtime, credentials };
+  }
+
+  await setAgentRuntimeCredential({
+    runtime,
+    organizationId: params.organizationId,
+    userId: params.userId,
+    key: params.key,
+    value: params.value,
+  });
+
+  return { declarationCreated };
 }
 
 /**
@@ -442,6 +506,13 @@ async function deleteSecretQuietly(secretId: string): Promise<void> {
       "Failed to delete replaced Agent Runtime credential secret",
     );
   }
+}
+
+/** `ResolvedAgentRuntime` carries server-only associations the column does not. */
+function stripResolvedFields(runtime: ResolvedAgentRuntime): AgentRuntime {
+  const { agentId, organizationId, environmentId, secretId, ...stored } =
+    runtime;
+  return stored;
 }
 
 // Claude Code owns subscription authentication. Legacy pasted tokens must not

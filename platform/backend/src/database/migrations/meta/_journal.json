@@ -3365,15 +3365,29 @@
     {
       "idx": 480,
       "version": "7",
-      "when": 1789742989422,
-      "tag": "0480_previous_gideon",
+      "when": 1789734303412,
+      "tag": "0480_far_sasquatch",
       "breakpoints": true
     },
     {
       "idx": 481,
       "version": "7",
-      "when": 1789756759975,
-      "tag": "0481_great_magus",
+      "when": 1789734363412,
+      "tag": "0481_drop_openappa_offer_owners",
+      "breakpoints": true
+    },
+    {
+      "idx": 482,
+      "version": "7",
+      "when": 1789769471078,
+      "tag": "0482_runtime_handoff_instructions",
+      "breakpoints": true
+    },
+    {
+      "idx": 483,
+      "version": "7",
+      "when": 1789833505836,
+      "tag": "0483_openappa_batteries",
       "breakpoints": true
     }
   ]

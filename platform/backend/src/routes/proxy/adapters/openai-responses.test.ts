@@ -571,3 +571,138 @@ describe("OpenAiResponsesStreamAdapter.toProviderResponse", () => {
     );
   });
 });
+
+describe("OpenAiResponsesStreamAdapter hosted tool calls", () => {
+  type Chunk = Parameters<
+    ReturnType<
+      typeof openAiResponsesAdapterFactory.createStreamAdapter
+    >["processChunk"]
+  >[0];
+  const searchItem = {
+    id: "ws_1",
+    type: "web_search_call",
+    status: "completed",
+    action: { type: "search", query: "latest rust" },
+  };
+  const answerItem = {
+    id: "msg_2",
+    type: "message",
+    role: "assistant",
+    status: "completed",
+    content: [{ type: "output_text", text: "Rust 1.98", annotations: [] }],
+  };
+  const turn = [
+    {
+      type: "response.output_text.delta",
+      item_id: "msg_1",
+      output_index: 0,
+      content_index: 0,
+      sequence_number: 1,
+      delta: "Let me look. ",
+    },
+    {
+      type: "response.output_item.added",
+      output_index: 1,
+      sequence_number: 2,
+      item: { ...searchItem, status: "in_progress" },
+    },
+    {
+      type: "response.output_item.done",
+      output_index: 1,
+      sequence_number: 3,
+      item: searchItem,
+    },
+    {
+      type: "response.output_text.delta",
+      item_id: "msg_2",
+      output_index: 2,
+      content_index: 0,
+      sequence_number: 4,
+      delta: "Rust 1.98",
+    },
+    {
+      type: "response.output_item.done",
+      output_index: 2,
+      sequence_number: 5,
+      item: answerItem,
+    },
+    {
+      type: "response.completed",
+      sequence_number: 6,
+      response: {
+        id: "resp_search",
+        object: "response",
+        status: "completed",
+        model: "gpt-5.2",
+        output: [
+          { id: "msg_1", type: "message", role: "assistant", content: [] },
+          searchItem,
+          answerItem,
+        ],
+      },
+    },
+  ] as unknown as Chunk[];
+  const frameTypes = (frames: (string | Uint8Array)[]) =>
+    frames.map(
+      (frame) => JSON.parse(String(frame).replace(/^data: /, "")).type,
+    );
+
+  test("forwards a search-backed turn as it arrives when nothing rules on it", () => {
+    const adapter = openAiResponsesAdapterFactory.createStreamAdapter();
+
+    const forwarded = turn.map(
+      (chunk) => adapter.processChunk(chunk).sseData !== null,
+    );
+
+    expect(forwarded).toEqual(turn.map(() => true));
+    expect(adapter.getHostedToolCalls?.()).toEqual([]);
+  });
+
+  test("withholds everything from the search on, and releases it in order", () => {
+    const adapter = openAiResponsesAdapterFactory.createStreamAdapter();
+    adapter.withholdHostedToolCalls?.();
+
+    const forwarded = turn.map(
+      (chunk) => adapter.processChunk(chunk).sseData !== null,
+    );
+
+    expect(forwarded).toEqual([true, false, false, false, false, false]);
+    expect(adapter.getHostedToolCalls?.()).toEqual([
+      {
+        id: "ws_1",
+        name: "web_search",
+        arguments: searchItem.action,
+        output: JSON.stringify([searchItem, answerItem]),
+      },
+    ]);
+    expect(frameTypes(adapter.getRawToolCallEvents())).toEqual(
+      turn.slice(1).map((chunk) => chunk.type),
+    );
+  });
+
+  test("a held turn reaches the client as the notice, without what the search brought in", () => {
+    const adapter = openAiResponsesAdapterFactory.createStreamAdapter();
+    adapter.withholdHostedToolCalls?.();
+    for (const chunk of turn) adapter.processChunk(chunk);
+    const notice = {
+      id: "ws_1",
+      name: "archestra__get_remedy_plans",
+      arguments: "{}",
+    };
+
+    const frames = adapter.formatHeldHostedToolCallsSSE?.([notice]) ?? [];
+
+    expect(frameTypes(frames).at(-1)).toBe("response.completed");
+    const output = adapter.toProviderResponse().output;
+    expect(output.map((item) => item.type)).toEqual([
+      "message",
+      "function_call",
+    ]);
+    expect(output[1]).toMatchObject({
+      call_id: "ws_1",
+      name: "archestra__get_remedy_plans",
+    });
+    expect(adapter.state.text).toBe("Let me look. ");
+    expect(adapter.state.toolCalls).toEqual([notice]);
+  });
+});

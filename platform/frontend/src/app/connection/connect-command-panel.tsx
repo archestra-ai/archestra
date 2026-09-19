@@ -956,16 +956,15 @@ export function ConnectCommandPanel({
                     {providerCatalog.label(provider)}
                   </span>{" "}
                   through{" "}
-                  <ResourceLink href="/llm/proxy">the LLM Proxy</ResourceLink>{" "}
+                  <span className="font-medium text-foreground">
+                    the LLM Proxy
+                  </span>{" "}
                   using{" "}
                   <span className="font-medium text-foreground">
                     {client.id === "claude-desktop"
                       ? "your Claude subscription"
                       : "your provider key"}
-                  </span>{" "}
-                  <RecommendationChip>
-                    Good for reusing a subscription
-                  </RecommendationChip>
+                  </span>
                 </>
               )}
             </SetupSummaryRow>
@@ -1413,15 +1412,6 @@ function ResourceLink({
     >
       {children}
     </Link>
-  );
-}
-
-/** Small positive chip used to flag a recommended option. */
-function RecommendationChip({ children }: { children: React.ReactNode }) {
-  return (
-    <span className="ml-1 inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300">
-      {children}
-    </span>
   );
 }
 

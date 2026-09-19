@@ -202,6 +202,13 @@ export const AgentRuntimeSchema = z.object({
   resources: AgentRuntimeResourcesSchema.nullable(),
   environment: z.array(AgentRuntimeEnvironmentEntrySchema).nullable(),
   credentials: z.array(AgentRuntimeCredentialDeclarationSchema).nullable(),
+  /**
+   * Whether a connected client may hand this Agent a credential VALUE through
+   * the transfer_credential tool. Off unless an operator turns it on: the value
+   * passes through the calling model's context and that client's transcript, so
+   * it is a deliberate trade rather than a default.
+   */
+  allowAgentSuppliedCredentialValues: z.boolean().optional(),
   /** Native Claude account authentication and its CLI-published model alias. */
   claudeCode: z
     .object({

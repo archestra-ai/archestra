@@ -1,3 +1,10 @@
+export function formatRunLabel(run: {
+  createdAt: string;
+  runKind: "due" | "manual";
+}): string {
+  return `Run · ${formatRunTimestamp(run.createdAt)} · ${run.runKind === "manual" ? "Manual" : "Scheduled"}`;
+}
+
 /**
  * Format a scheduled run's ISO timestamp for the runs UI: "Today at 3:04 PM",
  * "Yesterday at 3:04 PM", or "Jan 5 at 3:04 PM" for older dates.

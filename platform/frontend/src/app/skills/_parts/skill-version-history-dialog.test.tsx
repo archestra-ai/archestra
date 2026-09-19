@@ -251,10 +251,14 @@ describe("SkillVersionHistoryDialog", () => {
     expect(within(headRow).getByText("Current")).toBeInTheDocument();
   });
 
-  it("links a synced version to the upstream tree it was pulled from", () => {
+  it.each([
+    null,
+    "https://git.example.com",
+  ])("links a synced version to the upstream tree on %s", (sourceOrigin) => {
     mockSkill({
       sourceType: "github",
       sourceRef: "eph5xx/tiebreaker@main:skills/tiebreaker",
+      sourceOrigin,
     });
     mockVersionDetails({
       3: versionDetail({
@@ -269,7 +273,7 @@ describe("SkillVersionHistoryDialog", () => {
     const link = screen.getByRole("link", { name: "Open version in GitHub" });
     expect(link).toHaveAttribute(
       "href",
-      "https://github.com/eph5xx/tiebreaker/tree/6500e3659dd2a3ceeb745b03eb6ab2d169d4e1e7/skills/tiebreaker",
+      `${sourceOrigin ?? "https://github.com"}/eph5xx/tiebreaker/tree/6500e3659dd2a3ceeb745b03eb6ab2d169d4e1e7/skills/tiebreaker`,
     );
     // the commit is not spelled out in the header, so the title carries it.
     expect(link).toHaveAttribute(

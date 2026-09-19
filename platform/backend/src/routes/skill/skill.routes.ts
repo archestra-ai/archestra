@@ -52,8 +52,8 @@ import {
   findBuiltInSkillBySourceRef,
 } from "@/skills/built-in-skills";
 import {
-  resolveGithubAppInstallationToken,
   resolveGithubPatToken,
+  resolveGithubSkillAppCredentials,
 } from "@/skills/github-app-token";
 import {
   discoverSkills,
@@ -61,6 +61,7 @@ import {
   MAX_FILES_PER_SKILL,
   SkillImportError,
 } from "@/skills/github-import";
+import type { GithubSkillSource } from "@/skills/github-source";
 import {
   normalizeAllowedTools,
   parseSkillManifest,
@@ -1671,7 +1672,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async ({ body, organizationId, user }, reply) => {
       await assertOnlineSkillCatalogEnabled(organizationId);
-      const githubToken = await resolveGithubImportToken({
+      const githubCredentials = await resolveGithubImportCredentials({
         githubToken: body.githubToken,
         githubAppConfigId: body.githubAppConfigId,
         githubPatId: body.githubPatId,
@@ -1682,7 +1683,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         discoverSkills({
           repoUrl: body.repoUrl,
           path: body.path,
-          githubToken,
+          ...githubCredentials,
         }),
       );
 
@@ -1750,7 +1751,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async ({ body, organizationId, user }, reply) => {
       await assertOnlineSkillCatalogEnabled(organizationId);
-      const githubToken = await resolveGithubImportToken({
+      const githubCredentials = await resolveGithubImportCredentials({
         githubToken: body.githubToken,
         githubAppConfigId: body.githubAppConfigId,
         githubPatId: body.githubPatId,
@@ -1761,7 +1762,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         importSkills({
           repoUrl: body.repoUrl,
           path: body.path,
-          githubToken,
+          ...githubCredentials,
           skillPaths: [body.skillPath],
         }),
       );
@@ -1848,7 +1849,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         teamIds,
       });
 
-      const githubToken = await resolveGithubImportToken({
+      const githubCredentials = await resolveGithubImportCredentials({
         githubToken: body.githubToken,
         githubAppConfigId: body.githubAppConfigId,
         githubPatId: body.githubPatId,
@@ -1859,7 +1860,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         importSkills({
           repoUrl: body.repoUrl,
           path: body.path,
-          githubToken,
+          ...githubCredentials,
           skillPaths: body.skillPaths,
         }),
       );
@@ -1876,6 +1877,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
               authorId: user.id,
               sourceType: "github",
               sourceRef: item.sourceRef,
+              sourceOrigin: item.sourceOrigin,
               sourceCommit: item.sourceCommit,
               scope,
               // every import is synced: record the schedule, tracking ref
@@ -2000,18 +2002,16 @@ async function assertSkillEnvironmentsAssignable(params: {
 }
 
 /**
- * Resolve the token a GitHub skill import authenticates with. A stored GitHub
- * App config (org-scoped, github.com only) is exchanged for a short-lived
- * installation token; a stored PAT is read from the secret manager; otherwise
- * the transient one-time PAT (if any) is passed through.
+ * Keep the configured GitHub host with App credentials through every import
+ * request. PAT and anonymous imports retain their github.com destination.
  */
-async function resolveGithubImportToken(params: {
+async function resolveGithubImportCredentials(params: {
   githubToken?: string;
   githubAppConfigId?: string;
   githubPatId?: string;
   organizationId: string;
   userId: string;
-}): Promise<string | undefined> {
+}): Promise<{ githubToken?: string; githubSource?: GithubSkillSource }> {
   const {
     githubToken,
     githubAppConfigId,
@@ -2020,7 +2020,7 @@ async function resolveGithubImportToken(params: {
     userId,
   } = params;
   if (!githubAppConfigId && !githubPatId) {
-    return githubToken;
+    return { githubToken };
   }
 
   // using a stored credential requires read access to GitHub credentials
@@ -2035,9 +2035,11 @@ async function resolveGithubImportToken(params: {
   }
 
   if (githubPatId) {
-    return resolveGithubPatToken({ githubPatId, organizationId });
+    return {
+      githubToken: await resolveGithubPatToken({ githubPatId, organizationId }),
+    };
   }
-  return resolveGithubAppInstallationToken({
+  return resolveGithubSkillAppCredentials({
     // hasSingleGithubAuth guarantees exactly one stored-credential id here
     githubAppConfigId: githubAppConfigId as string,
     organizationId,

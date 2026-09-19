@@ -1,0 +1,37 @@
+diff --git a/dist/index.mjs b/dist/index.mjs
+index 9f665e0423a261216436c5a35e98d6722c156704..63fa19962a272ac66790bb26719b97eeb9493f53 100644
+--- a/dist/index.mjs
++++ b/dist/index.mjs
+@@ -632,7 +632,10 @@ function selectTokenEndpointAuthMethod(doc, existing) {
+ */
+ function needsRuntimeDiscovery(config) {
+ 	if (!config) return true;
+-	return !config.tokenEndpoint || !config.jwksEndpoint || !config.authorizationEndpoint;
++	// OAuth-only providers identify users through userinfo, not signed ID tokens.
++	// Keep OIDC discovery for default/openid scopes and incomplete configurations.
++	const oauthUserInfo = config.userInfoEndpoint && config.scopes?.length && !config.scopes.includes("openid");
++	return !config.tokenEndpoint || (!config.jwksEndpoint && !oauthUserInfo) || !config.authorizationEndpoint;
+ }
+ /**
+ * Runs runtime OIDC discovery when the stored config is missing required
+@@ -3019,6 +3022,20 @@ async function handleOIDCCallback(ctx, options, providerId, stateData) {
+ 		});
+ 		if (userInfoResponse.error) throw ctx.redirect(`${errorURL || callbackURL}?error=invalid_provider&error_description=${userInfoResponse.error.message}`);
+ 		const rawUserInfo = userInfoResponse.data;
++		// GitHub's profile endpoint omits private emails. Use only verified emails
++		// from the same account, preferring its primary address.
++		if (!rawUserInfo[mapping.email || "email"] && provider.issuer === "https://github.com" && config.userInfoEndpoint === "https://api.github.com/user") {
++			const emailsResponse = await betterFetch("https://api.github.com/user/emails", {
++				headers: { Authorization: `Bearer ${tokenResponse.accessToken}` },
++				redirect: "error"
++			});
++			const emails = Array.isArray(emailsResponse.data) ? emailsResponse.data : [];
++			const verifiedEmail = emails.find((email) => email.verified === true && email.primary === true && typeof email.email === "string" && email.email) || emails.find((email) => email.verified === true && typeof email.email === "string" && email.email);
++			if (!emailsResponse.error && verifiedEmail) {
++				rawUserInfo[mapping.email || "email"] = verifiedEmail.email;
++				rawUserInfo[mapping.emailVerified || "email_verified"] = true;
++			}
++		}
+ 		userInfo = {
+ 			...Object.fromEntries(Object.entries(mapping.extraFields || {}).map(([key, value]) => [key, rawUserInfo[value]])),
+ 			id: rawUserInfo[mapping.id || "sub"],

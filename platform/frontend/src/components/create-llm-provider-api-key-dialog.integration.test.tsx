@@ -122,14 +122,14 @@ describe("CreateLlmProviderApiKeyDialog integration", () => {
     await user.click(screen.getByLabelText("Provider"));
 
     expect(
-      screen.getByRole("button", { name: /Anthropic/ }),
+      screen.getByRole("option", { name: /Anthropic/ }),
     ).not.toBeDisabled();
     expect(
-      screen.getByRole("button", { name: /AWS Bedrock/ }),
+      screen.getByRole("option", { name: /AWS Bedrock/ }),
     ).not.toBeDisabled();
-    expect(screen.getByRole("button", { name: /OpenAI/ })).not.toBeDisabled();
+    expect(screen.getByRole("option", { name: /OpenAI/ })).not.toBeDisabled();
     expect(
-      screen.queryByRole("button", { name: /Gemini/ }),
+      screen.queryByRole("option", { name: /Gemini/ }),
     ).not.toBeInTheDocument();
   });
 });

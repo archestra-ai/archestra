@@ -21,20 +21,20 @@ test.describe("Users settings role filter", () => {
 
     // First selection — this much always worked.
     await filter.click();
-    await page.getByRole("button", { name: /^Admin\b/ }).click();
+    await page.getByRole("option", { name: /^Admin\b/ }).click();
     await expect(page).toHaveURL(/role=admin/);
     await expect(filter).toContainText(/admin/i);
 
     // Reopening after a selection is the actual regression: the list must be
     // on-screen and its options clickable, not merely present in the DOM.
     await filter.click();
-    await page.getByRole("button", { name: /^Member\b/ }).click();
+    await page.getByRole("option", { name: /^Member\b/ }).click();
     await expect(page).toHaveURL(/role=member/);
     await expect(filter).toContainText(/member/i);
 
     // And clearing the filter must work from that state too.
     await filter.click();
-    await page.getByRole("button", { name: "All roles", exact: true }).click();
+    await page.getByRole("option", { name: "All roles", exact: true }).click();
     await expect(page).not.toHaveURL(/role=/);
 
     // A dropdown that never finished closing strands `pointer-events: none` on
@@ -58,7 +58,7 @@ test.describe("Users settings role filter", () => {
     await expect(filter).toContainText(/admin/i);
 
     await filter.click();
-    await page.getByRole("button", { name: /^Editor\b/ }).click();
+    await page.getByRole("option", { name: /^Editor\b/ }).click();
     await expect(page).toHaveURL(/role=editor/);
   });
 });

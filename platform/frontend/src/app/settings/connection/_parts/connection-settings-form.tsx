@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS,
   providerRequiresPerUserCredential,
   type SupportedProvider,
 } from "@archestra/shared";
@@ -30,6 +31,7 @@ import { MultiSelectCombobox } from "@/components/ui/multi-select-combobox";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { SingleSelectCombobox } from "@/components/ui/single-select-combobox";
 import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import { useProfiles } from "@/lib/agent.query";
 import config from "@/lib/config/config";
 import { useFeature } from "@/lib/config/config.query";
@@ -70,6 +72,10 @@ export function ConnectionSettingsForm() {
   const [skillsEnabled, setSkillsEnabled] = useState(true);
   const [llmProxyEnabled, setLlmProxyEnabled] = useState(true);
   const [pluginsEnabled, setPluginsEnabled] = useState(true);
+  const [runtimeHandoffEnabled, setRuntimeHandoffEnabled] = useState(true);
+  const [runtimeHandoffInstructions, setRuntimeHandoffInstructions] = useState(
+    DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS,
+  );
   const pluginsFeatureEnabled = useFeature("plugins") === true;
   const { data: providerApiKeys } = useLlmProviderApiKeys();
   const providerCatalog = useModelProviderCatalog();
@@ -93,6 +99,13 @@ export function ConnectionSettingsForm() {
     setSkillsEnabled(organization.connectionSkillsEnabled);
     setLlmProxyEnabled(organization.connectionLlmProxyEnabled);
     setPluginsEnabled(organization.connectionPluginsEnabled);
+    setRuntimeHandoffEnabled(
+      organization.connectionRuntimeHandoffEnabled ?? true,
+    );
+    setRuntimeHandoffInstructions(
+      organization.connectionRuntimeHandoffInstructions ??
+        DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS,
+    );
   }, [organization]);
 
   const updateMutation = useUpdateConnectionSettings(
@@ -135,6 +148,11 @@ export function ConnectionSettingsForm() {
   const serverSkillsEnabled = organization?.connectionSkillsEnabled ?? true;
   const serverLlmProxyEnabled = organization?.connectionLlmProxyEnabled ?? true;
   const serverPluginsEnabled = organization?.connectionPluginsEnabled ?? true;
+  const serverRuntimeHandoffEnabled =
+    organization?.connectionRuntimeHandoffEnabled ?? true;
+  const serverRuntimeHandoffInstructions =
+    organization?.connectionRuntimeHandoffInstructions ??
+    DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS;
 
   const hasChanges =
     JSON.stringify(defaultProviderKeys) !==
@@ -145,6 +163,8 @@ export function ConnectionSettingsForm() {
       JSON.stringify(serverShownClients) ||
     skillsEnabled !== serverSkillsEnabled ||
     llmProxyEnabled !== serverLlmProxyEnabled ||
+    runtimeHandoffEnabled !== serverRuntimeHandoffEnabled ||
+    runtimeHandoffInstructions !== serverRuntimeHandoffInstructions ||
     (pluginsFeatureEnabled && pluginsEnabled !== serverPluginsEnabled) ||
     baseUrlsDirty;
 
@@ -156,9 +176,17 @@ export function ConnectionSettingsForm() {
       : selected;
 
   const handleSave = () => {
+    if (runtimeHandoffEnabled && !runtimeHandoffInstructions.trim()) return;
     updateMutation.mutate({
       connectionDefaultMcpGatewayId: gatewayId,
       connectionDefaultClientId: defaultClientId,
+      connectionRuntimeHandoffEnabled: runtimeHandoffEnabled,
+      connectionRuntimeHandoffInstructions:
+        !runtimeHandoffInstructions.trim() ||
+        runtimeHandoffInstructions.trim() ===
+          DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS
+          ? null
+          : runtimeHandoffInstructions.trim(),
       connectionShownClientIds: collapseIfAll(shownClientIds, ALL_CLIENT_IDS),
       connectionBaseUrls: collapseBaseUrlMeta(envBaseUrls, baseUrlMeta),
       connectionDefaultProviderKeys:
@@ -186,6 +214,8 @@ export function ConnectionSettingsForm() {
     setSkillsEnabled(serverSkillsEnabled);
     setLlmProxyEnabled(serverLlmProxyEnabled);
     setPluginsEnabled(serverPluginsEnabled);
+    setRuntimeHandoffEnabled(serverRuntimeHandoffEnabled);
+    setRuntimeHandoffInstructions(serverRuntimeHandoffInstructions);
   };
 
   const setBaseUrlDescription = (url: string, description: string) =>
@@ -227,6 +257,36 @@ export function ConnectionSettingsForm() {
         return (
           <>
             <SettingsSectionStack>
+              <SettingsBlock
+                title="Suggest runtime handoff"
+                description="Let your coding agent suggest moving work to Agent Runtime."
+                control={
+                  <Switch
+                    checked={runtimeHandoffEnabled}
+                    onCheckedChange={setRuntimeHandoffEnabled}
+                    disabled={locked}
+                    aria-label="Suggest runtime handoff"
+                  />
+                }
+              >
+                <Textarea
+                  aria-label="Runtime handoff instructions"
+                  value={runtimeHandoffInstructions}
+                  onChange={(event) =>
+                    setRuntimeHandoffInstructions(event.target.value)
+                  }
+                  rows={8}
+                  maxLength={20000}
+                  disabled={locked || !runtimeHandoffEnabled}
+                />
+                {runtimeHandoffEnabled &&
+                  !runtimeHandoffInstructions.trim() && (
+                    <p role="alert" className="mt-2 text-sm text-destructive">
+                      Enter instructions.
+                    </p>
+                  )}
+              </SettingsBlock>
+
               <SettingRow
                 title="Default MCP Gateway"
                 description="Pre-selected for everyone; users can still switch."

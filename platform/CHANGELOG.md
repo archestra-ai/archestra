@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.4.0-rc.16](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-rc.15...platform-v1.4.0-rc.16) (2026-09-19)
+
+
+### Features
+
+* **openappa:** batteries v0 — per-provider policy packages, composition, helper bridge ([#8054](https://github.com/archestra-ai/archestra/issues/8054)) ([ed26fee](https://github.com/archestra-ai/archestra/commit/ed26fee93edf35a2ab51cf03519e84b73c0fe855))
+* **openappa:** install-time battery choice and Batteries panel ([#8062](https://github.com/archestra-ai/archestra/issues/8062)) ([7701bc2](https://github.com/archestra-ai/archestra/commit/7701bc251abd8aafce9e9982e452fd49ab85b085))
+* **sandbox:** pass secret env vars and stdin to the live exec ([#8040](https://github.com/archestra-ai/archestra/issues/8040)) ([292f8a3](https://github.com/archestra-ai/archestra/commit/292f8a352e3ac298fa4a9a8c77efb33f7b40da7f))
+
+
+### Bug Fixes
+
+* **connect:** repair the Windows startup screen and connect-flow guidance ([#8072](https://github.com/archestra-ai/archestra/issues/8072)) ([65b2eab](https://github.com/archestra-ai/archestra/commit/65b2eabb2f09c8f3630448feb94b6951bdd9a862))
+
 ## [1.4.0-rc.15](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-rc.14...platform-v1.4.0-rc.15) (2026-09-19)
 
 

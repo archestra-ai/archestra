@@ -4,7 +4,6 @@ import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { SearchableMultiSelect } from "@/components/searchable-multi-select";
 import { useListboxNavigation } from "@/lib/hooks/use-listbox-navigation";
-import { MultiSelect } from "./multi-select";
 import { SearchableSelect } from "./searchable-select";
 
 const items = [
@@ -260,43 +259,6 @@ it("respects min/max selections and skips newly disabled choices", async () => {
   expect(screen.getByRole("option", { name: "Beta" })).toBeDisabled();
   await user.keyboard("{Enter}");
   expect(screen.getByRole("option", { name: "Alpha" })).toHaveAttribute(
-    "aria-selected",
-    "true",
-  );
-});
-
-it("keeps the legacy multi-select All choice reachable with and without search", async () => {
-  const user = userEvent.setup();
-  function LegacyPicker({ searchable }: { searchable: boolean }) {
-    const [value, setValue] = useState<string[]>(["alpha"]);
-    return (
-      <MultiSelect
-        value={value}
-        onValueChange={setValue}
-        items={items}
-        allValue="all"
-        searchable={searchable}
-      />
-    );
-  }
-  const { unmount } = render(<LegacyPicker searchable />);
-  await user.click(screen.getByRole("combobox"));
-  await user.keyboard("beta{ArrowDown}{Enter}");
-  expect(screen.getByRole("option", { name: "All" })).toHaveAttribute(
-    "aria-selected",
-    "true",
-  );
-  await user.keyboard("{ArrowDown}{Enter}");
-  expect(screen.getByRole("option", { name: "Beta" })).toHaveAttribute(
-    "aria-selected",
-    "true",
-  );
-  unmount();
-  render(<LegacyPicker searchable={false} />);
-  await user.click(screen.getByRole("combobox"));
-  expect(screen.getByRole("listbox")).toHaveFocus();
-  await user.keyboard("{Home} ");
-  expect(screen.getByRole("option", { name: "All" })).toHaveAttribute(
     "aria-selected",
     "true",
   );

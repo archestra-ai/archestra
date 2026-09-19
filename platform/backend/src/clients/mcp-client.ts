@@ -1920,11 +1920,13 @@ class McpClient {
     toolCall,
     owner,
     lockedChatContent,
+    serverLookup,
   }: {
     targetMcpServerId: string;
     toolCall: CommonToolCall;
     owner: ToolOwner;
     lockedChatContent?: ToolCallContentDisposition;
+    serverLookup?: ListingServerLookup;
   }): Promise<
     | {
         secrets: Record<string, unknown>;
@@ -1939,9 +1941,9 @@ class McpClient {
     // findById() additionally performs a 4-table join and a per-server
     // mcp_server_user lookup, which turns into an N+1 when several tool calls
     // in the same turn target the same server. Use the lightweight lookup.
-    const [mcpServer] = await McpServerModel.findByIdsBasic([
-      targetMcpServerId,
-    ]);
+    const mcpServer = serverLookup
+      ? serverLookup.byId.get(targetMcpServerId)
+      : (await McpServerModel.findByIdsBasic([targetMcpServerId]))[0];
     if (!mcpServer) {
       return {
         error: await this.createErrorResult({
@@ -2018,6 +2020,7 @@ class McpClient {
     catalogItem,
     authInfo,
     lockedChatContent,
+    serverLookup,
   }: {
     tool: McpToolAssignment;
     toolCall: CommonToolCall;
@@ -2028,6 +2031,7 @@ class McpClient {
     // Identity of the caller, so a refusal here is recorded and rendered like
     // any other result rather than as an anonymous error.
     authInfo?: ToolCallAuthInfo;
+    serverLookup?: ListingServerLookup;
   }): Promise<
     | {
         targetMcpServerId: string;
@@ -2091,7 +2095,9 @@ class McpClient {
         // sibling, or a reconnect not yet re-pinned), else return the typed
         // "reconnect" result. catalogItem is the resolved catalog for this tool,
         // so use its id rather than the assignment's possibly-stale catalogId.
-        const installs = await McpServerModel.findByCatalogId(catalogItem.id);
+        const installs = serverLookup
+          ? (serverLookup.byCatalogId.get(catalogItem.id) ?? [])
+          : await McpServerModel.findByCatalogId(catalogItem.id);
         const resolved = await this.pickInstallForCaller(installs, tokenAuth);
         if (resolved) {
           return {
@@ -2117,9 +2123,9 @@ class McpClient {
         };
       }
       // Only the display name is needed here, so avoid the heavier findById().
-      const [mcpServer] = await McpServerModel.findByIdsBasic([
-        tool.mcpServerId,
-      ]);
+      const mcpServer = serverLookup
+        ? serverLookup.byId.get(tool.mcpServerId)
+        : (await McpServerModel.findByIdsBasic([tool.mcpServerId]))[0];
       logger.info(
         {
           toolName: toolCall.name,
@@ -2141,9 +2147,11 @@ class McpClient {
     if (tool.credentialResolutionMode === "enterprise_managed") {
       const explicitTargetMcpServerId = tool.mcpServerId;
       if (explicitTargetMcpServerId) {
-        const [mcpServer] = await McpServerModel.findByIdsBasic([
-          explicitTargetMcpServerId,
-        ]);
+        const mcpServer = serverLookup
+          ? serverLookup.byId.get(explicitTargetMcpServerId)
+          : (
+              await McpServerModel.findByIdsBasic([explicitTargetMcpServerId])
+            )[0];
         return {
           targetMcpServerId: explicitTargetMcpServerId,
           mcpServerName: mcpServer?.name || fallbackName,
@@ -2151,9 +2159,9 @@ class McpClient {
         };
       }
 
-      const allServers = await McpServerModel.findByCatalogId(
-        tool.catalogId ?? "",
-      );
+      const allServers = serverLookup
+        ? (serverLookup.byCatalogId.get(tool.catalogId ?? "") ?? [])
+        : await McpServerModel.findByCatalogId(tool.catalogId ?? "");
       const resolvedServer = allServers[0];
       if (!resolvedServer) {
         return {
@@ -2206,7 +2214,9 @@ class McpClient {
     }
 
     // Get all servers for this catalog
-    const allServers = await McpServerModel.findByCatalogId(tool.catalogId);
+    const allServers = serverLookup
+      ? (serverLookup.byCatalogId.get(tool.catalogId) ?? [])
+      : await McpServerModel.findByCatalogId(tool.catalogId);
 
     // The catalog item defines how agents connect to it. A pinned connection
     // ("service account") routes every runtime-resolved call through that one
@@ -4855,6 +4865,36 @@ class McpClient {
       Array.from(toolsByCatalogId.keys()),
       { expandSecrets: true },
     );
+    // Keep this snapshot local to the listing request so a later request sees
+    // removed installations and rotated credential references.
+    const [catalogServers, pinnedServers] = await Promise.all([
+      McpServerModel.findByCatalogIds(Array.from(toolsByCatalogId.keys())),
+      McpServerModel.findByIdsBasic(
+        Array.from(
+          new Set(
+            Array.from(toolsByCatalogId.values()).flatMap((tool) =>
+              tool.mcpServerId ? [tool.mcpServerId] : [],
+            ),
+          ),
+        ),
+      ),
+    ]);
+    const byCatalogId = new Map<string, McpServer[]>();
+    for (const server of catalogServers) {
+      if (!server.catalogId) continue;
+      const siblings = byCatalogId.get(server.catalogId) ?? [];
+      siblings.push(server);
+      byCatalogId.set(server.catalogId, siblings);
+    }
+    const serverLookup: ListingServerLookup = {
+      byId: new Map(
+        [...catalogServers, ...pinnedServers].map((server) => [
+          server.id,
+          server,
+        ]),
+      ),
+      byCatalogId,
+    };
     const clients: PassiveMcpClient[] = [];
 
     for (const [catalogId, tool] of toolsByCatalogId) {
@@ -4873,6 +4913,7 @@ class McpClient {
             },
             owner: agentOwner(agentId),
             catalogItem,
+            serverLookup,
           });
         if ("error" in targetResult) continue;
 
@@ -4915,6 +4956,10 @@ class McpClient {
           targetMcpServerId,
           toolCall: { id: "list-op", name: tool.toolName, arguments: {} },
           owner: agentOwner(agentId),
+          // Browser installations are owner-specific and resolved separately.
+          serverLookup: isPlaywrightCatalogItem(catalogId)
+            ? undefined
+            : serverLookup,
         });
         if ("error" in secretResult) continue;
 
@@ -5872,6 +5917,11 @@ function buildDefaultAuthorizationHeaders(
 
   return headers;
 }
+
+type ListingServerLookup = {
+  byId: ReadonlyMap<string, McpServer>;
+  byCatalogId: ReadonlyMap<string, McpServer[]>;
+};
 
 function fingerprintHeaders(headers: Record<string, string>): string {
   const canonicalHeaders = Object.entries(headers)

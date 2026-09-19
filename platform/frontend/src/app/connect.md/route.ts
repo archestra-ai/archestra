@@ -47,11 +47,14 @@ under Settings > Plugins. Verify a fresh message appears in LLM Proxy Logs.
    If no browser opens, show the printed approval URL to the user.
 4. The installer applies the approved configuration automatically.
 5. Follow the setup output to reload the client and finish its native MCP OAuth sign-in.
-   Claude Code: open /mcp, select the configured server, and authenticate.
+   The gateway only registers in a NEW session — the current one cannot see it, so
+   never send the user to /mcp here and do not attempt the sign-in yourself.
+   Claude Code: in the new session, open /mcp, select the configured server, and authenticate.
    Cursor: use its MCP settings to connect/authenticate the configured server.
    Codex: use codex mcp login SERVER_NAME.
    Let the user complete any browser consent or client execution approval.
-6. Verify the configured gateway can list tools before reporting a working connection.
+6. Verify the configured gateway can list tools before reporting a working connection —
+   in the new session, after authentication; this session cannot verify anything.
    Configuration applied alone does not prove MCP authentication succeeded.
 7. For other clients, delete the temporary bootstrap file when finished.
    For Desktop, leave this public temporary file in place and end the task after handoff.

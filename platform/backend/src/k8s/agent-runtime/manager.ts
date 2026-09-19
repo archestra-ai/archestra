@@ -52,6 +52,7 @@ import {
   AgentWorkspaceFileResultSchema,
 } from "@/types/agent-workspace-file";
 import { RenewableCredentialBundleSchema } from "@/types/renewable-credential";
+import { buildAtomicFileWriteCommand } from "./atomic-file-write";
 import {
   AgentRuntimeCommandTransportError,
   execAgentRuntimeCommand,
@@ -1343,11 +1344,9 @@ class AgentRuntimeManager {
     await this.execInPod({
       session,
       podName: podName ?? pod.metadata.name,
-      command: [
-        "/bin/sh",
-        "-c",
-        "set -eu; umask 077; mkdir -p /var/run/archestra/credentials; cat > /var/run/archestra/credentials/current.json.tmp; mv /var/run/archestra/credentials/current.json.tmp /var/run/archestra/credentials/current.json",
-      ],
+      command: buildAtomicFileWriteCommand(
+        "/var/run/archestra/credentials/current.json",
+      ),
       stdin: NodeReadable.from([
         data ? Buffer.from(data, "base64") : Buffer.from("{}"),
       ]),

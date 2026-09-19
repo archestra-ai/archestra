@@ -455,7 +455,13 @@ class OpenAiResponsesResponseAdapter
   }
 
   withHeldHostedToolCalls(
-    notices: Array<{ id: string; name: string; arguments: string }>,
+    notices: Array<{
+      id: string;
+      name: string;
+      arguments: string;
+      namespace?: string;
+      wireId?: string;
+    }>,
   ): OpenAiResponsesResponse {
     return {
       ...this.response,

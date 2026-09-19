@@ -3055,6 +3055,10 @@ async function holdProxyPluginHostedToolCalls(
         typeof notice.arguments === "string"
           ? notice.arguments
           : JSON.stringify(notice.arguments),
+      // Codex dispatches a notice by the namespace its tool is declared in,
+      // and the client is given the id the plugin chose for it.
+      ...(notice.namespace ? { namespace: notice.namespace } : {}),
+      ...(notice.wireId ? { wireId: notice.wireId } : {}),
     })),
     blocked: outcome.blocked,
   };

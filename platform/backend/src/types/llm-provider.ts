@@ -270,7 +270,15 @@ export interface LLMResponseAdapter<TResponse> {
    * brought in.
    */
   withHeldHostedToolCalls?(
-    notices: Array<{ id: string; name: string; arguments: string }>,
+    notices: Array<{
+      id: string;
+      name: string;
+      arguments: string;
+      /** The namespace the client declared the notice tool in (Codex). */
+      namespace?: string;
+      /** Written to the client in place of `id` (OpenAPPA's trajectory stamp). */
+      wireId?: string;
+    }>,
   ): TResponse;
 
   /** Get finish reasons array for OTEL tracing (e.g., ["stop"], ["tool_calls"]) */

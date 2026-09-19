@@ -2510,6 +2510,127 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
     });
   });
 
+  test.for([
+    false,
+    true,
+  ])("delivers a held web search's notice under the gateway's namespace, with a stamped id (stream=%s)", async (stream, {
+    makeAgent,
+  }) => {
+    config.openappa = {
+      ...config.openappa,
+      offerSigningSecret: "test-offer-signing-secret-32chars",
+    };
+    await makeAgent({
+      name: "My Gateway",
+      agentType: "mcp_gateway",
+      organizationId: agent.organizationId,
+    });
+    native.dispatchHook.mockImplementation(async (raw: string) => {
+      const event = JSON.parse(raw);
+      events.push(event);
+      if (event.event === "tool_call")
+        return JSON.stringify({
+          decision: "deny_call",
+          feedback: "[appa] NATIVE REFUSAL",
+        });
+      return JSON.stringify({ decision: "ack" });
+    });
+    const search = {
+      id: "ws_1",
+      type: "web_search_call",
+      status: "completed",
+      action: { type: "search", query: "latest release" },
+    };
+    const answer = {
+      id: "msg_1",
+      type: "message",
+      role: "assistant",
+      status: "completed",
+      content: [{ type: "output_text", text: "Found it", annotations: [] }],
+    };
+    const completed = {
+      id: "resp_search",
+      object: "response",
+      created_at: 1,
+      status: "completed",
+      model: "gpt-5.5",
+      output: [search, answer],
+      usage: { input_tokens: 3, output_tokens: 2, total_tokens: 5 },
+    };
+    vi.spyOn(openAiResponsesAdapterFactory, "createClient").mockImplementation(
+      () =>
+        ({
+          responses: {
+            create: async (params: { stream?: boolean }) => {
+              if (!params.stream) return completed;
+              return {
+                async *[Symbol.asyncIterator]() {
+                  yield {
+                    type: "response.output_item.added",
+                    sequence_number: 1,
+                    output_index: 0,
+                    item: { ...search, status: "in_progress" },
+                  };
+                  yield {
+                    type: "response.output_item.done",
+                    sequence_number: 2,
+                    output_index: 0,
+                    item: search,
+                  };
+                  yield {
+                    type: "response.output_item.done",
+                    sequence_number: 3,
+                    output_index: 1,
+                    item: answer,
+                  };
+                  yield {
+                    type: "response.completed",
+                    sequence_number: 4,
+                    response: completed,
+                  };
+                },
+              };
+            },
+          },
+        }) as never,
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/responses`,
+      remoteAddress: "127.0.0.1",
+      headers: codexHeaders(),
+      payload: {
+        ...codexPayload({ session_id: CODEX_SESSION, thread_id: CODEX_THREAD }),
+        stream,
+        tools: [{ type: "web_search" }, codexNamespace("mcp__my_gateway")],
+      } as Record<string, unknown>,
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    // What Codex keeps: the last completed envelope, or the whole response.
+    const output: Record<string, unknown>[] = stream
+      ? response.body
+          .split("\n")
+          .filter(
+            (line) => line.startsWith("data: ") && line !== "data: [DONE]",
+          )
+          .map((line) => JSON.parse(line.slice("data: ".length)))
+          .findLast((event) => event.type === "response.completed").response
+          .output
+      : response.json().output;
+    const notice = output.find((item) => item.type === "function_call");
+    expect(notice).toMatchObject({
+      name: "archestra__get_remedy_plans",
+      namespace: "mcp__my_gateway",
+    });
+    expect(parseTrajectoryStamp(String(notice?.call_id))).toMatchObject({
+      sessionId: CODEX_THREAD,
+      callId: "ws_1",
+    });
+    expect(JSON.stringify(output)).not.toContain("Found it");
+  });
+
   test("rules a Codex call by the namespace it names: the gateway's is ours, a lookalike's stays foreign", async ({
     makeAgent,
   }) => {

@@ -178,21 +178,23 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     if (held.length === 0) return { decision: "release" };
     // The client must run the notices, so the turn stays open.
     binding.turnOpen = true;
+    const notices = held.map(({ call, feedback }) => ({
+      id: call.id,
+      name: tools.noticeToolName,
+      ...noticeNamespace(tools),
+      arguments: JSON.stringify(
+        buildNoticeArguments({
+          id: call.id,
+          tool: call.name,
+          arguments: call.arguments,
+          result: feedback,
+        }),
+      ),
+    }));
+    const stamp = trajectoryStamper(binding, context.interactionType);
     return {
       decision: "hold",
-      notices: held.map(({ call, feedback }) => ({
-        id: call.id,
-        name: tools.noticeToolName,
-        ...noticeNamespace(tools),
-        arguments: JSON.stringify(
-          buildNoticeArguments({
-            id: call.id,
-            tool: call.name,
-            arguments: call.arguments,
-            result: feedback,
-          }),
-        ),
-      })),
+      notices: stamp ? notices.map(stamp) : notices,
       blocked: held.map(({ call, feedback }) => ({
         id: call.id,
         name: call.name,

@@ -722,22 +722,35 @@ export const parseLogFormat = (
 };
 
 /** @public — exported for testability */
-export const parseDatabasePoolMax = (envValue?: string | undefined): number => {
-  const value = envValue?.trim();
+export const parseDatabasePoolMax = (envValue?: string | undefined): number =>
+  parsePoolSize({
+    envValue,
+    envName: "ARCHESTRA_DATABASE_POOL_MAX",
+    defaultValue: DEFAULT_DATABASE_POOL_MAX,
+    maxValue: MAX_DATABASE_POOL_MAX,
+  });
+
+function parsePoolSize(params: {
+  envValue: string | undefined;
+  envName: string;
+  defaultValue: number;
+  maxValue: number;
+}): number {
+  const value = params.envValue?.trim();
   if (!value) {
-    return DEFAULT_DATABASE_POOL_MAX;
+    return params.defaultValue;
   }
 
   const parsed = Number.parseInt(value, 10);
-  if (Number.isNaN(parsed) || parsed < 1 || parsed > MAX_DATABASE_POOL_MAX) {
+  if (Number.isNaN(parsed) || parsed < 1 || parsed > params.maxValue) {
     logger.warn(
-      `Invalid ARCHESTRA_DATABASE_POOL_MAX value "${value}", using default ${DEFAULT_DATABASE_POOL_MAX}`,
+      `Invalid ${params.envName} value "${value}", using default ${params.defaultValue}`,
     );
-    return DEFAULT_DATABASE_POOL_MAX;
+    return params.defaultValue;
   }
 
   return parsed;
-};
+}
 
 /** @public — exported for testability */
 export const parseChatMaxOutputTokens = (
@@ -2020,6 +2033,7 @@ export function parseOpenAppaConfig(
   enabled: string | undefined,
   yellEnabled?: string,
   offerSigningSecret?: string,
+  postgresMaxConnections?: string,
   authSecret?: string,
 ) {
   const dedicated = offerSigningSecret ?? "";
@@ -2046,6 +2060,9 @@ export function parseOpenAppaConfig(
     enabled: isEnabled,
     yellEnabled: isEnabled && (yellEnabled ?? "true") === "true",
     offerSigningSecret: secret,
+    postgresMaxConnections: parseOpenAppaPostgresMaxConnections(
+      postgresMaxConnections,
+    ),
   };
 }
 
@@ -2054,6 +2071,18 @@ function deriveOfferSigningSecret(authSecret: string | undefined): string {
   return createHmac("sha256", authSecret)
     .update(OFFER_SIGNING_DOMAIN)
     .digest("base64url");
+}
+
+const DEFAULT_OPENAPPA_POSTGRES_MAX_CONNECTIONS = 4;
+const MAX_OPENAPPA_POSTGRES_MAX_CONNECTIONS = 64;
+
+function parseOpenAppaPostgresMaxConnections(envValue?: string): number {
+  return parsePoolSize({
+    envValue,
+    envName: "ARCHESTRA_OPENAPPA_POSTGRES_MAX_CONNECTIONS",
+    defaultValue: DEFAULT_OPENAPPA_POSTGRES_MAX_CONNECTIONS,
+    maxValue: MAX_OPENAPPA_POSTGRES_MAX_CONNECTIONS,
+  });
 }
 
 /**
@@ -2251,6 +2280,7 @@ const openappa = parseOpenAppaConfig(
   process.env.ARCHESTRA_OPENAPPA_ENABLED,
   process.env.ARCHESTRA_OPENAPPA_YELL_ENABLED,
   process.env.ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET,
+  process.env.ARCHESTRA_OPENAPPA_POSTGRES_MAX_CONNECTIONS,
   authSessionSecret,
 );
 const llmProxyPlugins = parseLlmProxyPlugins(

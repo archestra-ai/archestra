@@ -5,6 +5,7 @@ import {
   Bot,
   Boxes,
   Brain,
+  Cable,
   Fingerprint,
   KeyRound,
   Library,
@@ -13,7 +14,6 @@ import {
   MessagesSquare,
   Palette,
   Plug,
-  PlugZap,
   ShieldCheck,
   ShieldUser,
   UserCog,
@@ -70,7 +70,7 @@ export function useSettingsTabs() {
       ? [{ label: "MCP", href: "/settings/mcp", Icon: Plug }]
       : []),
     ...(permissionMap?.["/settings/connection"]
-      ? [{ label: "Connection", href: "/settings/connection", Icon: PlugZap }]
+      ? [{ label: "Connect Page", href: "/settings/connection", Icon: Cable }]
       : []),
     ...(permissionMap?.["/settings/apps"]
       ? [{ label: "Apps", href: "/settings/apps", Icon: AppWindow }]

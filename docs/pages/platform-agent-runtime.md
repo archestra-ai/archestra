@@ -175,6 +175,14 @@ Use environment variables for ordinary configuration and **Secret** for sensitiv
 
 Administrators manage shared connections; users connect their own personal accounts. See [Credentials](/docs/platform-credentials) for supported scopes and Vault setup.
 
+#### Transfer A Credential From A Connected Client
+
+A client that already holds a credential — a CLI token the local session was using — can hand it to an Agent during a handoff instead of switching to Settings. The Agent must allow client-supplied credential values; the setting is off until an administrator turns it on.
+
+The value is stored personally for the caller. It applies to every run that person starts on the Agent and to nobody else's runs. A key already declared at organization scope is refused rather than widened.
+
+Two limits are worth stating to anyone who uses this. The value passes through the calling model's context and that client's transcript, and some clients display tool arguments when asking for approval; Archestra redacts it from the tool-call log, not from anything before it. A credential that should never enter a model's context belongs in Settings. The value also reaches the workspace on the Agent's next turn — a run already in progress keeps the environment it started with.
+
 ### Run Controls
 
 | Control | Behavior |

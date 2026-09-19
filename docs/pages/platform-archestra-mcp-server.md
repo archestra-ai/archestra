@@ -2381,6 +2381,7 @@ Required RBAC permission: `plugin:admin`
 |------|-------------|--------------------------|
 | `delete_workspace` | Permanently delete a retained runtime workspace and all of its files. | `agent:read` |
 | `read_workspace_file` | Read a file from your Agent Runtime's retained workspace using a run ID. | `agent:read` |
+| `transfer_workspace_file` | Copy a file between this machine and an Agent Runtime workspace without reading it. | `agent:read` |
 | `write_workspace_file` | Create a file in your Agent Runtime's retained workspace using a run ID. | `agent:read` |
 | `start_run` | Create a NEW run only for work that has no prior runtime session. | `agent:read` |
 | `get_run` | Read a run's state and the output it has produced so far. | `agent:read` |
@@ -2389,6 +2390,7 @@ Required RBAC permission: `plugin:admin`
 | `steer_run` | Interject one message into a live run's container session — a course correction without stopping the work. | `agent:read` |
 | `cancel_run` | Stop an active run. | `agent:read` |
 | `post_run_file` | Upload a file into the messaging-channel thread a run reports to — a demo recording, for example — so it renders natively there (Slack plays video uploads inline). | `agent:read` |
+| `transfer_credential` | Give an Agent Runtime Agent a credential this client already holds, so a handed-over task can use the CLI authentication the local session was using. | `credential:create` |
 
 #### delete_workspace
 
@@ -2413,6 +2415,22 @@ Required RBAC permission: `agent:read`
 | `task_id` | `string` | Yes |  |
 | `path` | `string` | Yes |  |
 | `encoding` | `"utf8" \| "base64"` | No |  |
+
+
+#### transfer_workspace_file
+
+Required RBAC permission: `agent:read`
+
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `task_id` | `string` | Yes | From start_run or list_runs. |
+| `direction` | `"download" \| "upload"` | Yes | download reads from the workspace; upload writes to it. |
+| `path` | `string` | Yes | Workspace-relative path, for example reports/summary.md. |
+| `local_path` | `string` | Yes | Absolute path on this machine, used to build the command. |
+| `size` | `integer` | No | Upload only: the local file's size in bytes. |
+| `sha256` | `string` | No | Upload only: the local file's sha256, as hex. |
 
 
 #### write_workspace_file
@@ -2609,6 +2627,30 @@ Required RBAC permission: `agent:read`
 | `content_base64` | `string` | Yes |  |
 | `comment` | `string` | No |  |
 
+
+#### transfer_credential
+
+Required RBAC permission: `credential:create`
+
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `agent_id` | `string` | Yes | The Agent to give the credential to. |
+| `environment` | `object[]` | Yes | Exactly one credential to transfer. Never include more than the task needs. |
+| `environment[].key` | `string` | Yes | Environment variable name, e.g. AWS_SECRET_ACCESS_KEY. |
+| `environment[].type` | `"secret"` | Yes | Always 'secret'. Marks the value for redaction in logs. |
+| `environment[].value` | `string` | Yes | The credential value to transfer. |
+| `label` | `string` | No | Human-readable name shown in the Agent's credential list. Defaults to the key. |
+
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `key` | `string` | Yes | The environment variable the value is stored under. |
+| `scope` | `"personal"` | Yes | Who the value applies to. Always personal to the calling user. |
+| `declarationCreated` | `boolean` | Yes | Whether this call declared the credential on the Agent. |
+| `availability` | `string` | Yes | When a run can read the value, in plain words. |
 
 ### Code Sandbox
 

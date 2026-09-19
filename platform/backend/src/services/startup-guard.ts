@@ -12,6 +12,7 @@ import {
   ARCHESTRA_MARK_TAGLINE,
   ARCHESTRA_MARK_TAGLINE_ROW,
 } from "./archestra-mark";
+import { CODEX_HANDOFF_HELPER } from "./codex-handoff";
 import type { SetupScriptContext } from "./connection-setup-script";
 import { describeMarketplaceContents } from "./marketplace-copy";
 
@@ -111,6 +112,7 @@ export interface StartupGuardContext {
   mcp: StartupGuardMcpSection | null;
   proxy: StartupGuardProxySection | null;
   skills: StartupGuardSkillsSection | null;
+  runtimeHandoffInstructions?: string | null;
 }
 
 /**
@@ -285,6 +287,7 @@ export function buildStartupGuardContext(
         }
       : null,
     skills: ctx.skills,
+    runtimeHandoffInstructions: ctx.mcp ? ctx.runtimeHandoffInstructions : null,
   };
 }
 
@@ -1145,9 +1148,51 @@ export function buildStartupGuardInstallSection(
     client,
     functionName: refreshFunctionName,
   });
+  const promptPath = `${guardPath}.prompt.md`;
+  const handoffEnabled = !!ctx.mcp && !!ctx.runtimeHandoffInstructions;
+  const promptInstall = handoffEnabled
+    ? `printf '%s' ${sh(ctx.runtimeHandoffInstructions ?? "")} > "${promptPath}"\nchmod 600 "${promptPath}"`
+    : `rm -f "${promptPath}"`;
+  const extraInstall =
+    client.clientId === "codex"
+      ? handoffEnabled
+        ? `printf '%s' ${sh(CODEX_HANDOFF_HELPER)} > "${guardPath}.handoff.cjs"`
+        : `rm -f "${guardPath}.handoff.cjs"`
+      : client.clientId === "copilot-cli"
+        ? handoffEnabled
+          ? `mkdir -p "${guardPath}.instructions"\ncp "${promptPath}" "${guardPath}.instructions/AGENTS.md"`
+          : `rm -f "${guardPath}.instructions/AGENTS.md"`
+        : "";
+  const launchArgs =
+    client.clientId === "codex"
+      ? `local archestra_prompt_config
+    archestra_prompt_config=$(node "${guardPath}.handoff.cjs" "${promptPath}" "$@") || archestra_prompt_config=''
+    if [ -n "$archestra_prompt_config" ]; then set -- -c "$archestra_prompt_config" "$@"; fi`
+      : client.clientId === "copilot-cli"
+        ? `archestra_instructions_dir="${guardPath}.instructions"`
+        : `set -- --append-system-prompt-file "${promptPath}" "$@"`;
+  const promptArgs = handoffEnabled
+    ? `
+  local archestra_add_prompt=1 archestra_arg
+  ${client.clientId === "copilot-cli" ? "local archestra_instructions_dir=''" : ""}
+  case "\${1:-}" in
+    auth|mcp|plugin|plugins|install|uninstall|update|upgrade|doctor|setup-token|completion|completions|config|agents|login|logout|mcp-server|app-server|remote-control|app|sandbox|debug|apply|a|archive|delete|unarchive|cloud|exec-server|features|help) archestra_add_prompt=0 ;;
+  esac
+  for archestra_arg in "$@"; do
+    case "$archestra_arg" in
+      --) break ;;
+      --system-prompt|--system-prompt=*|--system-prompt-file|--system-prompt-file=*|--append-system-prompt|--append-system-prompt=*|--append-system-prompt-file|--append-system-prompt-file=*|--help|-h|--version|-v) archestra_add_prompt=0 ;;
+    esac
+  done
+  if [ "$archestra_add_prompt" = 1 ] && [ -f "${guardPath}" ] && [ -r "${promptPath}" ] && ! grep -qx mcp "$HOME/${client.skipRelpath}" 2>/dev/null; then
+    ${launchArgs}
+  fi`
+    : "";
 
   return `say ${sh(`Installing the ${ctx.appName} startup guard for ${client.label}`)}
 mkdir -p "$(dirname "${guardPath}")"
+${promptInstall}
+${extraInstall}
 # A guard installed BEFORE the version-check feature has no GUARD_FORMAT_VERSION
 # stamp and no [U] update check, so at launch it can never nudge the user to
 # re-connect on its own — the [U] launch prompt only exists in version-aware
@@ -1187,8 +1232,16 @@ ${refreshBlock}
 ${client.binary}() {
   if [ -x "$HOME/${client.scriptRelpath}" ]; then
     "$HOME/${client.scriptRelpath}" "$@" || true
-  fi
+  fi${promptArgs}
+  ${
+    handoffEnabled && client.clientId === "copilot-cli"
+      ? `if [ -n "$archestra_instructions_dir" ]; then
+    COPILOT_CUSTOM_INSTRUCTIONS_DIRS="\${COPILOT_CUSTOM_INSTRUCTIONS_DIRS:+$COPILOT_CUSTOM_INSTRUCTIONS_DIRS,}$archestra_instructions_dir" command ${client.binary} "$@"
+  else`
+      : ""
+  }
   command ${client.binary} "$@"
+  ${handoffEnabled && client.clientId === "copilot-cli" ? "fi" : ""}
   archestra_client_status=$?
   ${refreshBlock ? `${refreshFunctionName} "$@" || true` : ":"}
   return "$archestra_client_status"

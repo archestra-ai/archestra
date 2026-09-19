@@ -13,9 +13,13 @@ export function StatusBadge({ label }: { label: string }) {
           "border-destructive/30 bg-destructive/10 text-destructive",
         label === "running" &&
           "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400",
+        label === "cancelled" && "text-muted-foreground",
       )}
     >
-      {label}
+      {DISPLAY_LABELS[label] ?? label}
     </Badge>
   );
 }
+
+// A user-stopped run is not a failure; show it neutrally.
+const DISPLAY_LABELS: Record<string, string> = { cancelled: "stopped" };

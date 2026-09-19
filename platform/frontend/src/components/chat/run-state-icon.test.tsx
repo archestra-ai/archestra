@@ -33,6 +33,39 @@ describe("RunStateIcon", () => {
     expect(screen.getByLabelText("Run may be stalled")).toBeInTheDocument();
   });
 
+  it("keeps a completed turn active while its retained session still calls the model", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime("2026-09-03T12:00:00.000Z");
+
+    const { rerender } = render(
+      <RunStateIcon
+        state="TASK_STATE_COMPLETED"
+        startedAt="2026-09-03T11:00:00.000Z"
+        endedAt="2026-09-03T11:20:00.000Z"
+        lastModelActivityAt="2026-09-03T11:58:00.000Z"
+      />,
+    );
+    expect(screen.getByLabelText("Run active")).toBeInTheDocument();
+    rerender(
+      <RunStateIcon
+        state="TASK_STATE_COMPLETED"
+        startedAt="2026-09-03T11:00:00.000Z"
+        endedAt="2026-09-03T11:20:00.000Z"
+        lastModelActivityAt="2026-09-03T11:30:00.000Z"
+      />,
+    );
+    expect(screen.getByLabelText("Run completed")).toBeInTheDocument();
+    rerender(
+      <RunStateIcon
+        state="TASK_STATE_COMPLETED"
+        startedAt="2026-09-03T11:00:00.000Z"
+        endedAt="2026-09-03T11:59:00.000Z"
+        lastModelActivityAt="2026-09-03T11:58:00.000Z"
+      />,
+    );
+    expect(screen.getByLabelText("Run completed")).toBeInTheDocument();
+  });
+
   it.each([
     ["TASK_STATE_AUTH_REQUIRED", "Run authentication required"],
     ["TASK_STATE_COMPLETED", "Run completed"],

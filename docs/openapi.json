@@ -47730,6 +47730,9 @@
                                           "additionalProperties": false
                                         }
                                       },
+                                      "allowAgentSuppliedCredentialValues": {
+                                        "type": "boolean"
+                                      },
                                       "claudeCode": {
                                         "type": "object",
                                         "properties": {
@@ -49384,6 +49387,9 @@
                                   "additionalProperties": false
                                 }
                               },
+                              "allowAgentSuppliedCredentialValues": {
+                                "type": "boolean"
+                              },
                               "claudeCode": {
                                 "type": "object",
                                 "properties": {
@@ -50460,6 +50466,9 @@
                           ]
                         }
                       },
+                      "allowAgentSuppliedCredentialValues": {
+                        "type": "boolean"
+                      },
                       "claudeCode": {
                         "type": "object",
                         "properties": {
@@ -51173,6 +51182,9 @@
                             ],
                             "additionalProperties": false
                           }
+                        },
+                        "allowAgentSuppliedCredentialValues": {
+                          "type": "boolean"
                         },
                         "claudeCode": {
                           "type": "object",
@@ -52883,6 +52895,9 @@
                               "additionalProperties": false
                             }
                           },
+                          "allowAgentSuppliedCredentialValues": {
+                            "type": "boolean"
+                          },
                           "claudeCode": {
                             "type": "object",
                             "properties": {
@@ -54222,6 +54237,9 @@
                             ],
                             "additionalProperties": false
                           }
+                        },
+                        "allowAgentSuppliedCredentialValues": {
+                          "type": "boolean"
                         },
                         "claudeCode": {
                           "type": "object",
@@ -55632,6 +55650,9 @@
                                 "additionalProperties": false
                               }
                             },
+                            "allowAgentSuppliedCredentialValues": {
+                              "type": "boolean"
+                            },
                             "claudeCode": {
                               "type": "object",
                               "properties": {
@@ -56724,6 +56745,9 @@
                             "additionalProperties": false
                           }
                         },
+                        "allowAgentSuppliedCredentialValues": {
+                          "type": "boolean"
+                        },
                         "claudeCode": {
                           "type": "object",
                           "properties": {
@@ -57746,6 +57770,9 @@
                           ]
                         }
                       },
+                      "allowAgentSuppliedCredentialValues": {
+                        "type": "boolean"
+                      },
                       "claudeCode": {
                         "type": "object",
                         "properties": {
@@ -58276,6 +58303,9 @@
                             ],
                             "additionalProperties": false
                           }
+                        },
+                        "allowAgentSuppliedCredentialValues": {
+                          "type": "boolean"
                         },
                         "claudeCode": {
                           "type": "object",
@@ -60661,6 +60691,9 @@
                             "additionalProperties": false
                           }
                         },
+                        "allowAgentSuppliedCredentialValues": {
+                          "type": "boolean"
+                        },
                         "claudeCode": {
                           "type": "object",
                           "properties": {
@@ -61745,6 +61778,9 @@
                             ],
                             "additionalProperties": false
                           }
+                        },
+                        "allowAgentSuppliedCredentialValues": {
+                          "type": "boolean"
                         },
                         "claudeCode": {
                           "type": "object",
@@ -69660,6 +69696,9 @@
                             ],
                             "additionalProperties": false
                           }
+                        },
+                        "allowAgentSuppliedCredentialValues": {
+                          "type": "boolean"
                         },
                         "claudeCode": {
                           "type": "object",
@@ -79822,6 +79861,684 @@
                   },
                   "required": [
                     "success"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "agent:read"
+          ]
+        }
+      }
+    },
+    "/api/agent-runs/{taskId}/workspace/transfers": {
+      "post": {
+        "operationId": "startAgentWorkspaceTransfer",
+        "tags": [
+          "Agents"
+        ],
+        "description": "Authorize a resumable transfer of one file to or from the caller's retained runtime workspace\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: View and list agents",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "direction": {
+                        "type": "string",
+                        "enum": [
+                          "download"
+                        ]
+                      },
+                      "path": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1024
+                      }
+                    },
+                    "required": [
+                      "direction",
+                      "path"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "direction": {
+                        "type": "string",
+                        "enum": [
+                          "upload"
+                        ]
+                      },
+                      "path": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1024
+                      },
+                      "size": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "sha256": {
+                        "type": "string",
+                        "pattern": "^[0-9a-f]{64}$"
+                      }
+                    },
+                    "required": [
+                      "direction",
+                      "path",
+                      "size",
+                      "sha256"
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "path",
+            "name": "taskId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "transferId": {
+                      "type": "string"
+                    },
+                    "token": {
+                      "type": "string"
+                    },
+                    "contentUrl": {
+                      "type": "string"
+                    },
+                    "path": {
+                      "type": "string"
+                    },
+                    "size": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "sha256": {
+                      "type": "string"
+                    },
+                    "expiresInSeconds": {
+                      "type": "integer",
+                      "exclusiveMinimum": true,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "transferId",
+                    "token",
+                    "contentUrl",
+                    "path",
+                    "size",
+                    "sha256",
+                    "expiresInSeconds"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "agent:read"
+          ]
+        }
+      }
+    },
+    "/api/agent-workspace-transfers/{transferId}/content": {
+      "get": {
+        "operationId": "downloadAgentWorkspaceTransfer",
+        "tags": [
+          "Agents"
+        ],
+        "description": "Stream the pinned contents of an authorized transfer; supports Range for resume\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: View and list agents",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "transferId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "agent:read"
+          ]
+        }
+      },
+      "put": {
+        "operationId": "uploadAgentWorkspaceTransfer",
+        "tags": [
+          "Agents"
+        ],
+        "description": "Stream an authorized upload into the workspace and replace the destination atomically\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: View and list agents",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "transferId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "type": "string"
+                    },
+                    "size": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "sha256": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "path",
+                    "size",
+                    "sha256"
                   ],
                   "additionalProperties": false
                 }
@@ -127392,6 +128109,44 @@
                           ],
                           "additionalProperties": false
                         }
+                      },
+                      "scheduledRun": {
+                        "nullable": true,
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "triggerId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "runKind": {
+                            "type": "string",
+                            "enum": [
+                              "due",
+                              "manual"
+                            ]
+                          },
+                          "scheduleName": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "triggerId",
+                          "createdAt",
+                          "runKind",
+                          "scheduleName"
+                        ],
+                        "additionalProperties": false
                       }
                     },
                     "required": [
@@ -331007,6 +331762,13 @@
                     "connectionPluginsEnabled": {
                       "type": "boolean"
                     },
+                    "connectionRuntimeHandoffEnabled": {
+                      "type": "boolean"
+                    },
+                    "connectionRuntimeHandoffInstructions": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "modelProviderOverrides": {
                       "nullable": true,
                       "type": "object",
@@ -331202,6 +331964,8 @@
                     "connectionSkillsEnabled",
                     "connectionLlmProxyEnabled",
                     "connectionPluginsEnabled",
+                    "connectionRuntimeHandoffEnabled",
+                    "connectionRuntimeHandoffInstructions",
                     "modelProviderOverrides",
                     "messagingChannelOverrides",
                     "knowledgeConnectorOverrides",
@@ -332090,6 +332854,13 @@
                     "connectionPluginsEnabled": {
                       "type": "boolean"
                     },
+                    "connectionRuntimeHandoffEnabled": {
+                      "type": "boolean"
+                    },
+                    "connectionRuntimeHandoffInstructions": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "modelProviderOverrides": {
                       "nullable": true,
                       "type": "object",
@@ -332285,6 +333056,8 @@
                     "connectionSkillsEnabled",
                     "connectionLlmProxyEnabled",
                     "connectionPluginsEnabled",
+                    "connectionRuntimeHandoffEnabled",
+                    "connectionRuntimeHandoffInstructions",
                     "modelProviderOverrides",
                     "messagingChannelOverrides",
                     "knowledgeConnectorOverrides",
@@ -333428,6 +334201,13 @@
                     "connectionPluginsEnabled": {
                       "type": "boolean"
                     },
+                    "connectionRuntimeHandoffEnabled": {
+                      "type": "boolean"
+                    },
+                    "connectionRuntimeHandoffInstructions": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "modelProviderOverrides": {
                       "nullable": true,
                       "type": "object",
@@ -333623,6 +334403,8 @@
                     "connectionSkillsEnabled",
                     "connectionLlmProxyEnabled",
                     "connectionPluginsEnabled",
+                    "connectionRuntimeHandoffEnabled",
+                    "connectionRuntimeHandoffInstructions",
                     "modelProviderOverrides",
                     "messagingChannelOverrides",
                     "knowledgeConnectorOverrides",
@@ -334363,6 +335145,13 @@
                     "connectionPluginsEnabled": {
                       "type": "boolean"
                     },
+                    "connectionRuntimeHandoffEnabled": {
+                      "type": "boolean"
+                    },
+                    "connectionRuntimeHandoffInstructions": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "modelProviderOverrides": {
                       "nullable": true,
                       "type": "object",
@@ -334558,6 +335347,8 @@
                     "connectionSkillsEnabled",
                     "connectionLlmProxyEnabled",
                     "connectionPluginsEnabled",
+                    "connectionRuntimeHandoffEnabled",
+                    "connectionRuntimeHandoffInstructions",
                     "modelProviderOverrides",
                     "messagingChannelOverrides",
                     "knowledgeConnectorOverrides",
@@ -335298,6 +336089,13 @@
                     "connectionPluginsEnabled": {
                       "type": "boolean"
                     },
+                    "connectionRuntimeHandoffEnabled": {
+                      "type": "boolean"
+                    },
+                    "connectionRuntimeHandoffInstructions": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "modelProviderOverrides": {
                       "nullable": true,
                       "type": "object",
@@ -335493,6 +336291,8 @@
                     "connectionSkillsEnabled",
                     "connectionLlmProxyEnabled",
                     "connectionPluginsEnabled",
+                    "connectionRuntimeHandoffEnabled",
+                    "connectionRuntimeHandoffInstructions",
                     "modelProviderOverrides",
                     "messagingChannelOverrides",
                     "knowledgeConnectorOverrides",
@@ -336245,6 +337045,13 @@
                     "connectionPluginsEnabled": {
                       "type": "boolean"
                     },
+                    "connectionRuntimeHandoffEnabled": {
+                      "type": "boolean"
+                    },
+                    "connectionRuntimeHandoffInstructions": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "modelProviderOverrides": {
                       "nullable": true,
                       "type": "object",
@@ -336440,6 +337247,8 @@
                     "connectionSkillsEnabled",
                     "connectionLlmProxyEnabled",
                     "connectionPluginsEnabled",
+                    "connectionRuntimeHandoffEnabled",
+                    "connectionRuntimeHandoffInstructions",
                     "modelProviderOverrides",
                     "messagingChannelOverrides",
                     "knowledgeConnectorOverrides",
@@ -336752,6 +337561,15 @@
                   },
                   "connectionPluginsEnabled": {
                     "type": "boolean"
+                  },
+                  "connectionRuntimeHandoffEnabled": {
+                    "type": "boolean"
+                  },
+                  "connectionRuntimeHandoffInstructions": {
+                    "nullable": true,
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 20000
                   },
                   "connectionBaseUrls": {
                     "nullable": true,
@@ -337246,6 +338064,13 @@
                     "connectionPluginsEnabled": {
                       "type": "boolean"
                     },
+                    "connectionRuntimeHandoffEnabled": {
+                      "type": "boolean"
+                    },
+                    "connectionRuntimeHandoffInstructions": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "modelProviderOverrides": {
                       "nullable": true,
                       "type": "object",
@@ -337441,6 +338266,8 @@
                     "connectionSkillsEnabled",
                     "connectionLlmProxyEnabled",
                     "connectionPluginsEnabled",
+                    "connectionRuntimeHandoffEnabled",
+                    "connectionRuntimeHandoffInstructions",
                     "modelProviderOverrides",
                     "messagingChannelOverrides",
                     "knowledgeConnectorOverrides",
@@ -338219,6 +339046,13 @@
                     "connectionPluginsEnabled": {
                       "type": "boolean"
                     },
+                    "connectionRuntimeHandoffEnabled": {
+                      "type": "boolean"
+                    },
+                    "connectionRuntimeHandoffInstructions": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "modelProviderOverrides": {
                       "nullable": true,
                       "type": "object",
@@ -338414,6 +339248,8 @@
                     "connectionSkillsEnabled",
                     "connectionLlmProxyEnabled",
                     "connectionPluginsEnabled",
+                    "connectionRuntimeHandoffEnabled",
+                    "connectionRuntimeHandoffInstructions",
                     "modelProviderOverrides",
                     "messagingChannelOverrides",
                     "knowledgeConnectorOverrides",
@@ -339224,6 +340060,13 @@
                     "connectionPluginsEnabled": {
                       "type": "boolean"
                     },
+                    "connectionRuntimeHandoffEnabled": {
+                      "type": "boolean"
+                    },
+                    "connectionRuntimeHandoffInstructions": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "modelProviderOverrides": {
                       "nullable": true,
                       "type": "object",
@@ -339419,6 +340262,8 @@
                     "connectionSkillsEnabled",
                     "connectionLlmProxyEnabled",
                     "connectionPluginsEnabled",
+                    "connectionRuntimeHandoffEnabled",
+                    "connectionRuntimeHandoffInstructions",
                     "modelProviderOverrides",
                     "messagingChannelOverrides",
                     "knowledgeConnectorOverrides",
@@ -340173,6 +341018,13 @@
                     "connectionPluginsEnabled": {
                       "type": "boolean"
                     },
+                    "connectionRuntimeHandoffEnabled": {
+                      "type": "boolean"
+                    },
+                    "connectionRuntimeHandoffInstructions": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "modelProviderOverrides": {
                       "nullable": true,
                       "type": "object",
@@ -340368,6 +341220,8 @@
                     "connectionSkillsEnabled",
                     "connectionLlmProxyEnabled",
                     "connectionPluginsEnabled",
+                    "connectionRuntimeHandoffEnabled",
+                    "connectionRuntimeHandoffInstructions",
                     "modelProviderOverrides",
                     "messagingChannelOverrides",
                     "knowledgeConnectorOverrides",
@@ -341153,6 +342007,13 @@
                     "connectionPluginsEnabled": {
                       "type": "boolean"
                     },
+                    "connectionRuntimeHandoffEnabled": {
+                      "type": "boolean"
+                    },
+                    "connectionRuntimeHandoffInstructions": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "modelProviderOverrides": {
                       "nullable": true,
                       "type": "object",
@@ -341348,6 +342209,8 @@
                     "connectionSkillsEnabled",
                     "connectionLlmProxyEnabled",
                     "connectionPluginsEnabled",
+                    "connectionRuntimeHandoffEnabled",
+                    "connectionRuntimeHandoffInstructions",
                     "modelProviderOverrides",
                     "messagingChannelOverrides",
                     "knowledgeConnectorOverrides",
@@ -342070,6 +342933,13 @@
                     "connectionPluginsEnabled": {
                       "type": "boolean"
                     },
+                    "connectionRuntimeHandoffEnabled": {
+                      "type": "boolean"
+                    },
+                    "connectionRuntimeHandoffInstructions": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "modelProviderOverrides": {
                       "nullable": true,
                       "type": "object",
@@ -342265,6 +343135,8 @@
                     "connectionSkillsEnabled",
                     "connectionLlmProxyEnabled",
                     "connectionPluginsEnabled",
+                    "connectionRuntimeHandoffEnabled",
+                    "connectionRuntimeHandoffInstructions",
                     "modelProviderOverrides",
                     "messagingChannelOverrides",
                     "knowledgeConnectorOverrides",
@@ -344175,6 +345047,13 @@
                     "connectionPluginsEnabled": {
                       "type": "boolean"
                     },
+                    "connectionRuntimeHandoffEnabled": {
+                      "type": "boolean"
+                    },
+                    "connectionRuntimeHandoffInstructions": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "modelProviderOverrides": {
                       "nullable": true,
                       "type": "object",
@@ -344370,6 +345249,8 @@
                     "connectionSkillsEnabled",
                     "connectionLlmProxyEnabled",
                     "connectionPluginsEnabled",
+                    "connectionRuntimeHandoffEnabled",
+                    "connectionRuntimeHandoffInstructions",
                     "modelProviderOverrides",
                     "messagingChannelOverrides",
                     "knowledgeConnectorOverrides",
@@ -371407,7 +372288,8 @@
                       "enum": [
                         "running",
                         "success",
-                        "failed"
+                        "failed",
+                        "cancelled"
                       ]
                     },
                     "initiatedByUserId": {
@@ -371742,7 +372624,8 @@
               "enum": [
                 "running",
                 "success",
-                "failed"
+                "failed",
+                "cancelled"
               ]
             },
             "in": "query",
@@ -371798,7 +372681,8 @@
                             "enum": [
                               "running",
                               "success",
-                              "failed"
+                              "failed",
+                              "cancelled"
                             ]
                           },
                           "initiatedByUserId": {
@@ -372207,7 +373091,8 @@
                       "enum": [
                         "running",
                         "success",
-                        "failed"
+                        "failed",
+                        "cancelled"
                       ]
                     },
                     "initiatedByUserId": {

@@ -535,7 +535,11 @@ export function ChatMessages({
     [subagentToolCalls],
   );
 
-  if (messages.length === 0 && chatErrors.length === 0) {
+  if (
+    messages.length === 0 &&
+    chatErrors.length === 0 &&
+    !isResponseInProgress
+  ) {
     // Don't show "start conversation" message while loading - prevents flash of empty state
     if (isLoadingConversation) {
       return null;

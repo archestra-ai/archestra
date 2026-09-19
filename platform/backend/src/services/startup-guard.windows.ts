@@ -9,6 +9,7 @@ import {
   ARCHESTRA_MARK_TAGLINE,
   ARCHESTRA_MARK_TAGLINE_ROW,
 } from "./archestra-mark";
+import { CODEX_HANDOFF_HELPER } from "./codex-handoff";
 import { describeMarketplaceContents } from "./marketplace-copy";
 import type { StartupGuardClient, StartupGuardContext } from "./startup-guard";
 
@@ -909,9 +910,51 @@ export function buildWindowsStartupGuardInstallSection(
   try { Invoke-Archestra${client.binary}MarketplaceRefresh -ClientArgs $args | Out-Null } catch { }
   $global:LASTEXITCODE = $archClientExit`
     : "";
+  const promptRelpath = `${client.psScriptRelpath}.prompt.md`;
+  const handoffEnabled = !!ctx.mcp && !!ctx.runtimeHandoffInstructions;
+  const promptInstall = handoffEnabled
+    ? `[IO.File]::WriteAllBytes((Join-Path $env:USERPROFILE ${psq(promptRelpath)}), [Convert]::FromBase64String('${Buffer.from(ctx.runtimeHandoffInstructions ?? "", "utf8").toString("base64")}'))`
+    : `Remove-Item -Force -ErrorAction SilentlyContinue (Join-Path $env:USERPROFILE ${psq(promptRelpath)})`;
+  const extraInstall =
+    client.clientId === "codex"
+      ? handoffEnabled
+        ? `[IO.File]::WriteAllBytes(($archGuardPath + '.handoff.cjs'), [Convert]::FromBase64String('${Buffer.from(CODEX_HANDOFF_HELPER).toString("base64")}'))`
+        : `Remove-Item -Force -ErrorAction SilentlyContinue ($archGuardPath + '.handoff.cjs')`
+      : client.clientId === "copilot-cli"
+        ? handoffEnabled
+          ? `$null = New-Item -ItemType Directory -Force ($archGuardPath + '.instructions')\nCopy-Item -Force (Join-Path $env:USERPROFILE ${psq(promptRelpath)}) ($archGuardPath + '.instructions/AGENTS.md')`
+          : `Remove-Item -Force -ErrorAction SilentlyContinue ($archGuardPath + '.instructions/AGENTS.md')`
+        : "";
+  const launchArgs =
+    client.clientId === "codex"
+      ? `try {
+        $archPromptConfig = & node ($archGuard + '.handoff.cjs') $archPromptPath --output-base64 @args
+        if ($LASTEXITCODE -eq 0 -and $archPromptConfig) { $archLaunchArgs = @('-c', [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String([string]$archPromptConfig))) + $archLaunchArgs }
+      } catch { Write-Warning 'Runtime handoff instructions skipped: could not read Codex configuration.' }`
+      : client.clientId === "copilot-cli"
+        ? `$archInstructionsDir = $archGuard + '.instructions'`
+        : `$archLaunchArgs = @('--append-system-prompt-file', $archPromptPath) + $archLaunchArgs`;
+  const promptArgs = handoffEnabled
+    ? `
+    $archLaunchArgs = @($args)
+    $archInstructionsDir = $null
+    $archAddPrompt = $true
+    if ($args.Count -gt 0 -and $args[0] -in @('auth', 'mcp', 'plugin', 'plugins', 'install', 'uninstall', 'update', 'upgrade', 'doctor', 'setup-token', 'completion', 'completions', 'config', 'agents', 'login', 'logout', 'mcp-server', 'app-server', 'remote-control', 'app', 'sandbox', 'debug', 'apply', 'a', 'archive', 'delete', 'unarchive', 'cloud', 'exec-server', 'features', 'help')) { $archAddPrompt = $false }
+    foreach ($archArg in $args) {
+      if ($archArg -eq '--') { break }
+      if ($archArg -match '^--(system-prompt|system-prompt-file|append-system-prompt|append-system-prompt-file)(=|$)' -or $archArg -in @('--help', '-h', '--version', '-v')) { $archAddPrompt = $false }
+    }
+    $archPromptPath = Join-Path $env:USERPROFILE ${psq(promptRelpath)}
+    $archSkipped = @(Get-Content -Path (Join-Path $env:USERPROFILE ${psq(client.skipRelpath)}) -ErrorAction SilentlyContinue)
+    if ($archAddPrompt -and (Test-Path $archGuard) -and (Test-Path $archPromptPath) -and 'mcp' -notin $archSkipped) {
+      ${launchArgs}
+    }`
+    : "";
   return `Say ${psq(`Installing the ${ctx.appName} startup guard for ${client.label}`)}
 $archGuardPath = Join-Path $env:USERPROFILE ${psq(client.psScriptRelpath)}
 $null = New-Item -ItemType Directory -Force -Path (Split-Path -Parent $archGuardPath)
+${promptInstall}
+${extraInstall}
 # A guard installed BEFORE the version-check feature has no $GuardFormatVersion
 # stamp and no [U] update check, so at launch it can never nudge the user to
 # re-connect on its own. Running connect is the one moment we can lift such a
@@ -950,8 +993,16 @@ function ${client.binary} {
       Where-Object { $_.CommandType -in @('Application', 'ExternalScript') } |
       Select-Object -First 1
   }
-  if ($archReal) {
-    & $archReal.Source @args
+  if ($archReal) {${promptArgs}
+    ${
+      handoffEnabled && client.clientId === "copilot-cli"
+        ? `$archPreviousDirs = $env:COPILOT_CUSTOM_INSTRUCTIONS_DIRS
+    try {
+      if ($archInstructionsDir) { $env:COPILOT_CUSTOM_INSTRUCTIONS_DIRS = (@($archPreviousDirs, $archInstructionsDir) | Where-Object { $_ }) -join ',' }`
+        : ""
+    }
+    & $archReal.Source ${handoffEnabled ? "@archLaunchArgs" : "@args"}
+    ${handoffEnabled && client.clientId === "copilot-cli" ? `} finally { $env:COPILOT_CUSTOM_INSTRUCTIONS_DIRS = $archPreviousDirs }` : ""}
     ${refreshCall}
   }
   else { Write-Error "${client.binary} executable not found on PATH" }

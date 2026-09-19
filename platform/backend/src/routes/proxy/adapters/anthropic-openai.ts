@@ -209,7 +209,8 @@ class AnthropicOpenaiStreamAdapter
         delta: {
           tool_calls: toolCalls.map((toolCall, index) => ({
             index,
-            id: toolCall.id,
+            // The id the client is given, as the non-streamed turn does.
+            id: toolCall.wireId ?? toolCall.id,
             type: "function" as const,
             function: { name: toolCall.name, arguments: toolCall.arguments },
           })),

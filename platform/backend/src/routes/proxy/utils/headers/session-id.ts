@@ -72,8 +72,9 @@ export interface SessionInfo {
  *    `session-id` header its Responses requests carry (source:
  *    'opencode_session')
  * 6. Claude Code `x-claude-code-session-id` (source: 'claude_code_header').
- *    `/fork` mints a new id here; `metadata.user_id.session_id` often does not
- *    change, so this must beat claude_metadata or forks collapse in the logs.
+ *    `/branch` or `--fork-session` mints a new id here;
+ *    `metadata.user_id.session_id` often does not change, so this must beat
+ *    claude_metadata or forks collapse in the logs.
  * 7. Claude/Anthropic metadata.user_id (source: 'claude_metadata')
  * 8. OpenAI user field (source: 'openai_user')
  *
@@ -157,8 +158,9 @@ export function extractSessionInfo({
     }
   }
 
-  // Priority 6: Claude Code's own session header. `/fork` mints a new value
-  // here while `metadata.user_id.session_id` stays on the parent conversation.
+  // Priority 6: Claude Code's own session header. `/branch` or
+  // `--fork-session` mints a new value here while `metadata.user_id.session_id`
+  // stays on the parent conversation.
   const claudeCodeSessionId = getHeaderValue(
     headers,
     "x-claude-code-session-id",

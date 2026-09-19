@@ -510,6 +510,37 @@ describe("client trajectory identity", () => {
       ).toThrow(/contradictory OpenCode session headers/);
     });
 
+    test("roots on the session-id header OpenCode sends on the Responses wire", () => {
+      expect(
+        extractAppaSessionIdentity({
+          family: "openai:responses",
+          body: { prompt_cache_key: OPENCODE_SESSION },
+          headers: {
+            ...openCodeHeaders,
+            originator: "opencode",
+            "session-id": OPENCODE_SESSION,
+          },
+        }),
+      ).toMatchObject({
+        sessionId: OPENCODE_SESSION,
+        provenance: "opencode-session-header",
+      });
+    });
+
+    test("refuses a session-id header contradicting X-Session-Id", () => {
+      expect(() =>
+        extractAppaSessionIdentity({
+          family: "openai:responses",
+          body: {},
+          headers: {
+            ...openCodeHeaders,
+            "x-session-id": OPENCODE_SESSION,
+            "session-id": OPENCODE_FORK_SESSION,
+          },
+        }),
+      ).toThrow(/contradictory OpenCode session headers/);
+    });
+
     test("a bare x-session-id is never attributed without OpenCode evidence", () => {
       const identity = extractAppaSessionIdentity({
         family: "openai:chatCompletions",

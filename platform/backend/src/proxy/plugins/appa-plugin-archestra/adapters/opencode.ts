@@ -34,8 +34,8 @@ export class AppaOpenCodeAdapter implements AppaClientAdapter {
 
   /**
    * OpenCode stamps its session id on every request: `X-Session-Id` and its
-   * `x-session-affinity` repeat toward ordinary providers, `x-opencode-session`
-   * toward OpenCode-hosted ones. The id is stable across a resume and across
+   * `x-session-affinity` repeat toward ordinary providers (`session-id` on the
+   * OpenAI Responses wire), `x-opencode-session` toward OpenCode-hosted ones. The id is stable across a resume and across
    * compaction (the summarizer and title generator run inside the session),
    * and `Session.fork` mints a fresh one — so the session id maps directly
    * onto root reopen and fresh-root-on-fork semantics. `x-parent-session-id`
@@ -46,16 +46,18 @@ export class AppaOpenCodeAdapter implements AppaClientAdapter {
   extractSessionIdentity(context: {
     headers: Readonly<Record<string, string | string[] | undefined>>;
   }): AppaSessionIdentity | undefined {
-    const sessionId = readHeader(context.headers, "x-session-id");
-    const affinity = readHeader(context.headers, "x-session-affinity");
+    const claims = OPENCODE_SESSION_HEADERS.flatMap((header) => {
+      const value = readHeader(context.headers, header);
+      return value ? [value] : [];
+    });
     const hosted = readHeader(context.headers, "x-opencode-session");
-    if (sessionId && affinity && sessionId !== affinity) {
+    const [normal] = claims;
+    if (claims.some((claim) => claim !== normal)) {
       throw new ApiError(
         400,
         "OpenAPPA cannot bind contradictory OpenCode session headers",
       );
     }
-    const normal = sessionId ?? affinity;
     if (normal && hosted && normal !== hosted) {
       throw new ApiError(
         400,
@@ -73,3 +75,10 @@ export class AppaOpenCodeAdapter implements AppaClientAdapter {
       : undefined;
   }
 }
+
+/** The headers OpenCode repeats its session id in toward ordinary providers. */
+const OPENCODE_SESSION_HEADERS = [
+  "x-session-id",
+  "x-session-affinity",
+  "session-id",
+] as const;

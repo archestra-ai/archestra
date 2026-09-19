@@ -1,4 +1,4 @@
-import { and, count, desc, eq, isNotNull, isNull } from "drizzle-orm";
+import { and, count, desc, eq, inArray, isNotNull, isNull } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type {
   ScheduleTrigger,
@@ -109,6 +109,42 @@ class ScheduleTriggerRunModel {
     return run ?? null;
   }
 
+  static async findByChatConversationIds(params: {
+    organizationId: string;
+    conversationIds: string[];
+  }) {
+    if (params.conversationIds.length === 0) return [];
+    return db
+      .select({
+        id: schema.scheduleTriggerRunsTable.id,
+        triggerId: schema.scheduleTriggerRunsTable.triggerId,
+        createdAt: schema.scheduleTriggerRunsTable.createdAt,
+        runKind: schema.scheduleTriggerRunsTable.runKind,
+        chatConversationId: schema.scheduleTriggerRunsTable.chatConversationId,
+        scheduleName: schema.scheduleTriggersTable.name,
+      })
+      .from(schema.scheduleTriggerRunsTable)
+      .innerJoin(
+        schema.scheduleTriggersTable,
+        eq(
+          schema.scheduleTriggersTable.id,
+          schema.scheduleTriggerRunsTable.triggerId,
+        ),
+      )
+      .where(
+        and(
+          eq(
+            schema.scheduleTriggerRunsTable.organizationId,
+            params.organizationId,
+          ),
+          inArray(
+            schema.scheduleTriggerRunsTable.chatConversationId,
+            params.conversationIds,
+          ),
+        ),
+      );
+  }
+
   static async findByChatConversationId(
     chatConversationId: string,
   ): Promise<ScheduleTriggerRun | null> {
@@ -176,7 +212,7 @@ class ScheduleTriggerRunModel {
 
   static async markCompleted(params: {
     runId: string;
-    status: Extract<ScheduleTriggerRunStatus, "success" | "failed">;
+    status: Exclude<ScheduleTriggerRunStatus, "running">;
     error?: string | null;
   }): Promise<ScheduleTriggerRun | null> {
     const [run] = await db

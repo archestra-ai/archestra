@@ -5,12 +5,10 @@ import { useParams } from "next/navigation";
 import { PageBackLink } from "@/components/page-back-link";
 import { PageLayout } from "@/components/page-layout";
 import { ScheduleRunsList } from "@/components/scheduled-tasks/schedule-runs-list";
+import { useStartScheduleRun } from "@/components/scheduled-tasks/use-start-schedule-run";
 import { Button } from "@/components/ui/button";
 import { useProject } from "@/lib/projects/projects.query";
-import {
-  useRunScheduleTriggerNow,
-  useScheduleTrigger,
-} from "@/lib/schedule-trigger.query";
+import { useScheduleTrigger } from "@/lib/schedule-trigger.query";
 import { formatCronSchedule } from "@/lib/utils/format-cron";
 
 export function ProjectScheduleRunsClient() {
@@ -22,13 +20,13 @@ export function ProjectScheduleRunsClient() {
   const { data: project } = useProject(projectId);
   const { data: trigger, isLoading: triggerLoading } =
     useScheduleTrigger(triggerId);
-  const runNowMutation = useRunScheduleTriggerNow();
+  const runNowMutation = useStartScheduleRun(triggerId);
 
   const projectName = project?.name ?? "Project";
   const triggerName = trigger?.name ?? "Schedule";
 
   const onRunNow = () => {
-    runNowMutation.mutate(triggerId);
+    runNowMutation.start();
   };
 
   if (triggerLoading) {
@@ -42,7 +40,9 @@ export function ProjectScheduleRunsClient() {
         trigger ? (
           <>
             {trigger.agent?.name ?? "Default agent"} ·{" "}
-            {formatCronSchedule(trigger.cronExpression)} · {trigger.timezone}
+            {trigger.enabled === false
+              ? "Manual — never runs automatically"
+              : `${formatCronSchedule(trigger.cronExpression)} · ${trigger.timezone}`}
           </>
         ) : undefined
       }
@@ -63,7 +63,7 @@ export function ProjectScheduleRunsClient() {
           ) : (
             <Play className="mr-1.5 h-3.5 w-3.5" />
           )}
-          <span>Run now</span>
+          <span>Start New Run</span>
         </Button>
       }
       maxWidth="wizard"

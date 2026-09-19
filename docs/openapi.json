@@ -127290,6 +127290,44 @@
                           ],
                           "additionalProperties": false
                         }
+                      },
+                      "scheduledRun": {
+                        "nullable": true,
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "triggerId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "runKind": {
+                            "type": "string",
+                            "enum": [
+                              "due",
+                              "manual"
+                            ]
+                          },
+                          "scheduleName": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "triggerId",
+                          "createdAt",
+                          "runKind",
+                          "scheduleName"
+                        ],
+                        "additionalProperties": false
                       }
                     },
                     "required": [
@@ -371257,7 +371295,8 @@
                       "enum": [
                         "running",
                         "success",
-                        "failed"
+                        "failed",
+                        "cancelled"
                       ]
                     },
                     "initiatedByUserId": {
@@ -371592,7 +371631,8 @@
               "enum": [
                 "running",
                 "success",
-                "failed"
+                "failed",
+                "cancelled"
               ]
             },
             "in": "query",
@@ -371648,7 +371688,8 @@
                             "enum": [
                               "running",
                               "success",
-                              "failed"
+                              "failed",
+                              "cancelled"
                             ]
                           },
                           "initiatedByUserId": {
@@ -372057,7 +372098,8 @@
                       "enum": [
                         "running",
                         "success",
-                        "failed"
+                        "failed",
+                        "cancelled"
                       ]
                     },
                     "initiatedByUserId": {

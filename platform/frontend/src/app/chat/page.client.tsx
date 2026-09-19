@@ -391,11 +391,8 @@ export function ChatPageContent({
   const scheduledRun = scheduledRunContext(searchParams);
   const scheduledRunTriggerId = scheduledRun?.triggerId ?? null;
 
-  // Poll the pinned scheduled run while it's still running. A project-scoped
-  // run's transcript is only persisted at completion, so the chat shows an
-  // in-progress placeholder (and hides the composer) until then, and reveals the
-  // transcript the moment the run finishes. Polling stops once the run is
-  // terminal so a completed run's chat isn't polled forever.
+  // Poll for schedule status/composer availability. Message deltas arrive via
+  // the normal active-run replay stream, independently of this status poll.
   const { data: scheduledRunData } = useScheduleTriggerRun(
     scheduledRunTriggerId,
     scheduledRun?.runId ?? null,
@@ -862,9 +859,14 @@ export function ChatPageContent({
     () => (conversation?.messages ?? []) as UIMessage[],
     [conversation?.messages],
   );
+  const isWaitingForScheduledPrompt =
+    conversation?.origin === "schedule_trigger" &&
+    persistedConversationMessages.length === 0 &&
+    (conversation.chatErrors?.length ?? 0) === 0;
   const shouldEnableChatSession =
     !!conversationId &&
     !isReadOnlyConversation &&
+    !isWaitingForScheduledPrompt &&
     (!routeConversationId || !!conversation);
   const chatSession = useChatSession({
     conversationId: shouldEnableChatSession ? conversationId : undefined,
@@ -1625,7 +1627,13 @@ export function ChatPageContent({
     oversightAppId !== null && oversightApp.isPending;
   const sendMessage = chatSession?.sendMessage;
   const regenerateUserMessage = chatSession?.regenerateUserMessage;
-  const status = chatSession?.status ?? "ready";
+  const isAwaitingScheduledStream =
+    isScheduledRunInProgress &&
+    chatSession?.status !== "streaming" &&
+    chatSession?.status !== "submitted";
+  const status = isAwaitingScheduledStream
+    ? "submitted"
+    : (chatSession?.status ?? "ready");
   const setMessages = chatSession?.setMessages;
   const stop = chatSession?.stop;
   const { isTransportStalled, isUpstreamIdle } = useStreamStall({
@@ -3317,7 +3325,7 @@ export function ChatPageContent({
                         isRightPanelOpen && "hidden md:block",
                       )}
                     >
-                      {isScheduledRunInProgress ? (
+                      {isReadOnlyConversation && isScheduledRunInProgress ? (
                         <ScheduledRunInProgress />
                       ) : isReadOnlyConversation ? (
                         <MessageThread
@@ -3386,7 +3394,7 @@ export function ChatPageContent({
                     </div>
                   </ViewTransition>
 
-                  {isScheduledRunInProgress ? null : isReadOnlyConversation ? (
+                  {isReadOnlyConversation ? (
                     <div className="sticky bottom-0 bg-background border-t p-4">
                       <div className="max-w-4xl mx-auto space-y-3">
                         <div className="relative">
@@ -3513,6 +3521,8 @@ export function ChatPageContent({
                                 conversation?.agent?.llmApiKeyId ?? null
                               }
                               submitDisabled={
+                                isWaitingForScheduledPrompt ||
+                                isAwaitingScheduledStream ||
                                 isApplyingAgentSelection ||
                                 isAgentSubscriptionMetadataPending
                               }

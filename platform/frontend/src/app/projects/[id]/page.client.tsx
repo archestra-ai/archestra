@@ -6,7 +6,6 @@ import {
 } from "@archestra/shared";
 import {
   CalendarClock,
-  Download,
   Eye,
   Loader2,
   MessageCircle,
@@ -14,12 +13,13 @@ import {
   Pencil,
   Pin,
   PinOff,
+  Plus,
   TerminalSquare,
   Trash2,
 } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import {
   collapseProjectChats,
@@ -29,13 +29,11 @@ import {
 import { ProjectSchedulesSection } from "@/app/projects/[id]/project-schedules-section";
 import { runHref } from "@/app/projects/[id]/schedules/[triggerId]/run-row.utils";
 import { AgentIcon } from "@/components/agent-icon";
-import { FileDetailHeader } from "@/components/chat/file-detail-header";
 import type { FileListItem } from "@/components/chat/file-list-section";
 import { FilePreview } from "@/components/chat/file-preview";
 import { NewChatComposer } from "@/components/chat/new-chat-composer";
 import {
   INSTRUCTIONS_SELECTION,
-  InstructionsRow,
   ProjectInstructionsPanel,
 } from "@/components/chat/project-instructions";
 import { ResizableRightPanel } from "@/components/chat/resizable-right-panel";
@@ -43,6 +41,7 @@ import { RunStateIcon } from "@/components/chat/run-state-icon";
 import { SelectableFileList } from "@/components/chat/selectable-file-list";
 import { CreatedByCell } from "@/components/created-by-cell";
 import { FileDropZone } from "@/components/files/file-drop-zone";
+import { FormDialog } from "@/components/form-dialog";
 import { PageLayout } from "@/components/page-layout";
 import { EditProjectDialog } from "@/components/projects/edit-project-dialog";
 import { projectVisibilityToScope } from "@/components/projects/project-visibility";
@@ -66,6 +65,7 @@ import { setPendingChatHandoffFiles } from "@/lib/chat/pending-chat-handoff-file
 import { setPendingProjectChatHandoff } from "@/lib/chat/pending-project-chat-handoff";
 import { useFileDeletion } from "@/lib/chat/use-file-deletion";
 import { useDialogFlagUrlParam } from "@/lib/hooks/use-dialog-url-param";
+import { useIsMobile } from "@/lib/hooks/use-mobile";
 import {
   canDeleteProject,
   canManageProject,
@@ -77,12 +77,12 @@ import {
   useProject,
   useProjectConversations,
   useProjectFiles,
+  useProjectInstructions,
   useProjectRuns,
   useUploadProjectFiles,
 } from "@/lib/projects/projects.query";
 import { useScheduleTriggerRuns } from "@/lib/schedule-trigger.query";
 import { sandboxArtifactUrl } from "@/lib/skills-sandbox/sandbox-file-preview";
-import { cn } from "@/lib/utils";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { ProjectDeleteConfirmDialog } from "../project-delete-confirm-dialog";
 
@@ -95,6 +95,7 @@ export default function ProjectDetailPageClient() {
 }
 
 function ProjectDetail() {
+  const isMobile = useIsMobile();
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const { data: project, isPending, isLoadingError, refetch } = useProject(id);
@@ -290,11 +291,13 @@ function ProjectDetail() {
                 defaultAgentId={project.defaultAgent?.id ?? null}
               />
             )}
-            <ProjectSchedulesSection
-              projectId={project.id}
-              canCreate={canChat}
-              defaultAgentId={project.defaultAgent?.id ?? null}
-            />
+            {isMobile && (
+              <ProjectSchedulesSection
+                projectId={project.id}
+                canCreate={canChat}
+                defaultAgentId={project.defaultAgent?.id ?? null}
+              />
+            )}
             {!isAdminView && <RunsList runs={runs ?? []} />}
             {!isAdminView && <ChatsList conversations={conversations ?? []} />}
           </div>
@@ -302,15 +305,19 @@ function ProjectDetail() {
       </div>
 
       {/* Right-side Files panel - desktop only, like the chat page */}
-      <div className="hidden md:flex h-full min-h-0">
-        <ProjectFilesSidebar
-          projectId={project.id}
-          canManageProject={canManage}
-          // Anyone with real project access (owner or shared) may edit its text
-          // files; the admin-oversight view is read-only.
-          canEditFiles={!isAdminView}
-        />
-      </div>
+      {!isMobile && (
+        <div className="hidden md:flex h-full min-h-0">
+          <ProjectFilesSidebar
+            projectId={project.id}
+            canCreateSchedules={canChat}
+            defaultAgentId={project.defaultAgent?.id ?? null}
+            canManageProject={canManage}
+            // Anyone with real project access (owner or shared) may edit its text
+            // files; the admin-oversight view is read-only.
+            canEditFiles={!isAdminView}
+          />
+        </div>
+      )}
     </div>
   );
 }
@@ -606,29 +613,45 @@ function ChatsList({
 }
 
 /**
- * The project's files as a full-height right sidebar — the same resizable shell
- * and stacked list-over-preview body as the chat-page Files panel, minus the tab
- * header: Files is the only view here, and the project name already shows in the
- * page title, so both are dropped.
+ * Project instructions, files, and schedules share a resizable sidebar.
+ * Content opens in dialogs so the project overview stays in place.
  */
 function ProjectFilesSidebar({
   projectId,
+  canCreateSchedules,
+  defaultAgentId,
   canManageProject,
   canEditFiles,
 }: {
   projectId: string;
+  canCreateSchedules: boolean;
+  defaultAgentId: string | null;
   /** Owner / project-admin — gates editing the pinned instructions. */
   canManageProject: boolean;
   /** Real project access (owner/shared, not oversight) — gates editing files. */
   canEditFiles: boolean;
 }) {
   const { data: files } = useProjectFiles(projectId);
+  const { data: instructions } = useProjectInstructions(projectId);
+  const uploadInput = useRef<HTMLInputElement>(null);
+  const instructionsPreview = useRef<HTMLSpanElement>(null);
+  const [instructionsTruncated, setInstructionsTruncated] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  // The selected file's in-place editor is open. Lifted here so the Edit toggle
-  // can sit in the action row next to Download/Delete.
   const [editing, setEditing] = useState(false);
-  // Opening a file shows it below the list (split); `expanded` fills the panel.
-  const [expanded, setExpanded] = useState(false);
+
+  useEffect(() => {
+    const preview = instructionsPreview.current;
+    if (!preview) return;
+    const measure = () =>
+      setInstructionsTruncated(
+        !!instructions?.content?.trim() &&
+          preview.scrollHeight > preview.clientHeight,
+      );
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(preview);
+    return () => observer.disconnect();
+  }, [instructions?.content]);
 
   // The instructions file is surfaced only as the pinned entry, so keep it out
   // of the ordinary list (filtered from `items` below).
@@ -663,16 +686,22 @@ function ProjectFilesSidebar({
 
   const openFile = (id: string) => {
     setSelectedId(id);
-    // Files and instructions both open in the read view; editing is entered
-    // explicitly via the Edit affordance in the action row.
-    setEditing(false);
-    setExpanded(false);
+    const file = items.find((item) => item.id === id);
+    setEditing(
+      id === INSTRUCTIONS_SELECTION
+        ? canManageProject
+        : !!file &&
+            canEditFiles &&
+            !!file.rowId &&
+            isEditableTextFile({
+              filename: file.name,
+              mimeType: file.mimeType,
+            }),
+    );
   };
-  const collapse = () => setExpanded(false);
   const deselect = () => {
     setSelectedId(null);
     setEditing(false);
-    setExpanded(false);
   };
 
   // If the open file disappears (e.g. deleted elsewhere), fall back to the list.
@@ -682,7 +711,6 @@ function ProjectFilesSidebar({
     if (selectedMissing) {
       setSelectedId(null);
       setEditing(false);
-      setExpanded(false);
     }
   }, [selectedMissing]);
 
@@ -706,119 +734,131 @@ function ProjectFilesSidebar({
         uploading={uploadProjectFiles.isPending}
         className="flex-1 min-h-0 flex flex-col gap-0"
       >
-        <div className="flex-1 min-h-0 overflow-hidden relative">
-          <div className="flex h-full flex-col">
-            {/* The list fills the panel when nothing is open, is capped above
-                the preview in the split, and is hidden when expanded. Kept
-                mounted so an in-progress multi-selection survives previewing. */}
-            <div
-              className={cn(
-                "flex flex-col",
-                previewing
-                  ? expanded
-                    ? "hidden"
-                    : "max-h-[45%] shrink-0 overflow-hidden border-b"
-                  : "min-h-0 flex-1",
-              )}
-            >
-              <SelectableFileList<FileListItem>
-                sections={[{ items }]}
-                canManage
-                selectedId={selectedId}
-                onOpen={openFile}
-                onRequestDelete={requestDelete}
-                leading={
-                  <InstructionsRow
-                    selected={instructionsSelected}
-                    onSelect={() => openFile(INSTRUCTIONS_SELECTION)}
-                  />
+        <div className="flex-1 min-h-0 overflow-y-auto divide-y">
+          <section className="p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-medium">Instructions</h2>
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label={
+                  canManageProject ? "Edit instructions" : "View instructions"
                 }
+                onClick={() => openFile(INSTRUCTIONS_SELECTION)}
+              >
+                {canManageProject ? (
+                  <Pencil className="h-4 w-4" />
+                ) : (
+                  <Eye className="h-4 w-4" />
+                )}
+              </Button>
+            </div>
+            <Button
+              variant="ghost"
+              className="h-auto w-full flex-col items-start gap-1 whitespace-normal p-2 text-left font-normal text-muted-foreground"
+              onClick={() => openFile(INSTRUCTIONS_SELECTION)}
+            >
+              <span
+                ref={instructionsPreview}
+                className="line-clamp-3 w-full whitespace-pre-wrap break-words"
+              >
+                {instructions?.content?.trim() ||
+                  "Add guidance for every chat in this project."}
+              </span>
+              {instructionsTruncated && (
+                <span className="text-xs text-foreground">Show more</span>
+              )}
+            </Button>
+          </section>
+          <section className="px-4 pt-3 pb-1">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-medium">Files</h2>
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Upload files"
+                disabled={uploadProjectFiles.isPending}
+                onClick={() => uploadInput.current?.click()}
+              >
+                <Plus className="h-4 w-4" />
+              </Button>
+              <input
+                ref={uploadInput}
+                type="file"
+                multiple
+                className="hidden"
+                onChange={(event) => {
+                  const files = Array.from(event.target.files ?? []);
+                  if (files.length) uploadProjectFiles.mutate(files);
+                  event.target.value = "";
+                }}
               />
             </div>
-            {previewing && (
-              <FileDetailHeader
-                title={detailName}
-                expanded={expanded}
-                onExpand={() => setExpanded(true)}
-                onCollapse={collapse}
-              >
-                {instructionsSelected && canManageProject && !editing && (
-                  <button
-                    type="button"
-                    onClick={() => setEditing(true)}
-                    title="Edit instructions"
-                    className="flex h-8 w-8 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
-                  >
-                    <Pencil className="h-4 w-4" />
-                    <span className="sr-only">Edit instructions</span>
-                  </button>
-                )}
-                {selected && !instructionsSelected && (
-                  <div className="flex shrink-0 items-center">
-                    {selected.contentUrl && (
-                      <a
-                        href={selected.contentUrl}
-                        download={selected.name}
-                        title={`Download ${selected.name}`}
-                        className="flex h-8 w-8 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
-                      >
-                        <Download className="h-4 w-4" />
-                        <span className="sr-only">
-                          Download {selected.name}
-                        </span>
-                      </a>
-                    )}
-                    {selectedEditable && !editing && (
-                      <button
-                        type="button"
-                        onClick={() => setEditing(true)}
-                        title={`Edit ${selected.name}`}
-                        className="flex h-8 w-8 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
-                      >
-                        <Pencil className="h-4 w-4" />
-                        <span className="sr-only">Edit {selected.name}</span>
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() =>
-                        requestDelete([selected], (failedIds) => {
-                          if (!failedIds.includes(selected.id)) deselect();
-                        })
-                      }
-                      title={`Delete ${selected.name}`}
-                      className="flex h-8 w-8 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-destructive"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                      <span className="sr-only">Delete {selected.name}</span>
-                    </button>
-                  </div>
-                )}
-              </FileDetailHeader>
+            {items.length === 0 ? (
+              <p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+                Add files for your agent to use in this project.
+              </p>
+            ) : (
+              <div className="-mx-3 -mt-1">
+                <SelectableFileList<FileListItem>
+                  sections={[{ items }]}
+                  canManage
+                  selectedId={selectedId}
+                  onOpen={openFile}
+                  onEdit={openFile}
+                  canEdit={(file) =>
+                    canEditFiles &&
+                    !!file.rowId &&
+                    isEditableTextFile({
+                      filename: file.name,
+                      mimeType: file.mimeType,
+                    })
+                  }
+                  onRequestDelete={requestDelete}
+                />
+              </div>
             )}
-            {previewing && instructionsSelected ? (
-              <ProjectInstructionsPanel
-                projectId={projectId}
-                isOwner={canManageProject}
-                editing={editing}
-                onExitEdit={() => setEditing(false)}
-              />
-            ) : previewing && selected ? (
-              <FilePreview
-                // Per-file key: drop any editor state when the previewed file changes.
-                key={selected.id}
-                file={selected}
-                onClose={deselect}
-                // Only row-backed files are editable; a rowless (obj_) object has
-                // no `rowId`, so `selectedEditable` is false and Edit stays hidden.
-                fileId={selected.rowId ?? undefined}
-                editing={editing && selectedEditable}
-                onExitEdit={() => setEditing(false)}
-              />
-            ) : null}
+          </section>
+          <div className="p-4">
+            <ProjectSchedulesSection
+              projectId={projectId}
+              canCreate={canCreateSchedules}
+              defaultAgentId={defaultAgentId}
+            />
           </div>
         </div>
       </FileDropZone>
+      {previewing && (
+        <FormDialog
+          open
+          onOpenChange={(open) => {
+            if (!open) deselect();
+          }}
+          title={instructionsSelected ? "Instructions" : detailName}
+          size="large"
+        >
+          {previewing && instructionsSelected ? (
+            <ProjectInstructionsPanel
+              projectId={projectId}
+              isOwner={canManageProject}
+              editing={editing}
+              onExitEdit={deselect}
+            />
+          ) : previewing && selected ? (
+            <FilePreview
+              // Per-file key: drop any editor state when the previewed file changes.
+              key={selected.id}
+              file={selected}
+              onClose={deselect}
+              // Only row-backed files are editable; a rowless (obj_) object has
+              // no `rowId`, so `selectedEditable` is false and Edit stays hidden.
+              fileId={selected.rowId ?? undefined}
+              editing={editing && selectedEditable}
+              onExitEdit={deselect}
+            />
+          ) : null}
+        </FormDialog>
+      )}
       {deleteDialog}
     </ResizableRightPanel>
   );

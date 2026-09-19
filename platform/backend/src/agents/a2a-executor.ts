@@ -11,7 +11,7 @@ import {
   requiresOpenAiResponsesApi,
   type SupportedProvider,
 } from "@archestra/shared";
-import type { ModelMessage, UIMessage, UserContent } from "ai";
+import type { ModelMessage, UIMessage, UIMessageChunk, UserContent } from "ai";
 import {
   consumeStream as consumeReadableStream,
   convertToModelMessages,
@@ -193,6 +193,9 @@ export interface A2AExecuteParams {
    * stream is only surfaced for the committed attempt).
    */
   onTextDelta?: (delta: string) => void;
+
+  /** Persist live chat events for a background run, including tool activity. */
+  onUiMessageChunk?: (chunk: UIMessageChunk) => Promise<void>;
 }
 
 /** @public — exported for testability */
@@ -650,31 +653,41 @@ export async function executeA2AMessage(
       getCapturedStreamError = runStream.getCapturedStreamError;
 
       const uiMessageStreamConsumption = consumeReadableStream({
-        stream: stream.toUIMessageStream<UIMessage>({
-          originalMessages: params.originalUiMessages,
-          generateMessageId: () => crypto.randomUUID(),
-          onFinish: ({ responseMessage }) => {
-            responseUiMessage = responseMessage;
-          },
-          onError: (error) => {
-            // a nonexistent-tool call is recoverable: the SDK already feeds the
-            // tool-error back to the model and continues the loop, so return the
-            // recovery text as the part's errorText instead of killing the run
-            const unavailableToolError = getUnavailableToolErrorDetails(error);
-            if (unavailableToolError) {
-              logger.info(
-                { agentId: agent.id, unavailableToolError },
-                "Returning unavailable tool error as tool-level error in A2A execution",
+        stream: stream
+          .toUIMessageStream<UIMessage>({
+            originalMessages: params.originalUiMessages,
+            generateMessageId: () => crypto.randomUUID(),
+            onFinish: ({ responseMessage }) => {
+              responseUiMessage = responseMessage;
+            },
+            onError: (error) => {
+              // a nonexistent-tool call is recoverable: the SDK already feeds the
+              // tool-error back to the model and continues the loop, so return the
+              // recovery text as the part's errorText instead of killing the run
+              const unavailableToolError =
+                getUnavailableToolErrorDetails(error);
+              if (unavailableToolError) {
+                logger.info(
+                  { agentId: agent.id, unavailableToolError },
+                  "Returning unavailable tool error as tool-level error in A2A execution",
+                );
+                return formatUnavailableToolErrorDetails(unavailableToolError);
+              }
+              logger.error(
+                { agentId: agent.id, error },
+                "Error stream.toUIMessageStream when parsing A2A execution response",
               );
-              return formatUnavailableToolErrorDetails(unavailableToolError);
-            }
-            logger.error(
-              { agentId: agent.id, error },
-              "Error stream.toUIMessageStream when parsing A2A execution response",
-            );
-            throw error;
-          },
-        }),
+              throw error;
+            },
+          })
+          .pipeThrough(
+            new TransformStream<UIMessageChunk, UIMessageChunk>({
+              async transform(chunk, controller) {
+                await params.onUiMessageChunk?.(chunk);
+                controller.enqueue(chunk);
+              },
+            }),
+          ),
         onError: (error) => {
           logger.error(
             { agentId: agent.id, error },

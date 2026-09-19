@@ -68,7 +68,6 @@
       "release-type": "node",
       "versioning": "prerelease",
       "prerelease-type": "rc",
-      "release-as": "1.4.0-rc.14",
       "prerelease": true,
       "initial-version": "0.0.1",
       "draft": true,

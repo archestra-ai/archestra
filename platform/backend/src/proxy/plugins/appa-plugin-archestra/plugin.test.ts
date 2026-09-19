@@ -229,6 +229,82 @@ describe("AppaPluginArchestra", () => {
   });
 });
 
+describe("asking through the client's own question tool", () => {
+  test.each([
+    { declared: true, expected: "question" },
+    // `opencode run` declares no question tool: nothing could render it.
+    { declared: false, expected: "my_gateway_archestra__ask_user" },
+  ])("hands OpenCode the model's ask_user as its question tool (declared=$declared)", async ({
+    declared,
+    expected,
+  }) => {
+    const plugin = new AppaPluginArchestra([new AppaOpenCodeAdapter()]);
+    const context = requestContext({
+      sessionId: "opencode-question-session",
+      canonicalizeToolName: (name) =>
+        name.replace(/^my_gateway_(?=archestra__)/, ""),
+    });
+    const trusted = context.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as Record<string, unknown>;
+    trusted.request = {
+      ...(trusted.request as Record<string, unknown>),
+      tools: {
+        controlToolName: "my_gateway_archestra__execute_remedy_plan",
+        noticeToolName: "my_gateway_archestra__get_remedy_plans",
+      },
+      spellings: new Map(declared ? [["question", "question"]] : []),
+    };
+    context.headers = { "x-opencode-session": "s" };
+    const askUser = {
+      question: "Accept this change for the rest of this session?",
+      options: [
+        { label: "Accept", description: "Narrow who can read it" },
+        { label: "Do not accept" },
+      ],
+    };
+
+    try {
+      await plugin.onSessionInit(context);
+      const toolCalls = [
+        {
+          id: "call_ask",
+          name: "my_gateway_archestra__ask_user",
+          arguments: JSON.stringify(askUser),
+        },
+      ];
+      const outcome = await plugin.onPrepareToolCalls({
+        ...context,
+        toolCalls,
+      });
+
+      // No outcome means the calls go out as the model made them.
+      const released =
+        outcome?.decision === "allow" ? outcome.toolCalls : toolCalls;
+      expect(released).toHaveLength(1);
+      expect(released[0].id).toBe("call_ask");
+      expect(released[0].name).toBe(expected);
+      if (declared) {
+        expect(JSON.parse(released[0].arguments as string)).toEqual({
+          questions: [
+            {
+              question: askUser.question,
+              header: "Question",
+              options: [
+                { label: "Accept", description: "Narrow who can read it" },
+                { label: "Do not accept", description: "Do not accept" },
+              ],
+              multiple: false,
+            },
+          ],
+        });
+      }
+    } finally {
+      await plugin.onCleanup(context);
+    }
+  });
+});
+
 describe("rendering runtime text for this client", () => {
   test("refuses the turn, with the ruling, when a denied call has no notice tool to carry it", async () => {
     // A request that declared no tools opened no notice tool, and a call

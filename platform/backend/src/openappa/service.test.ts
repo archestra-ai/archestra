@@ -496,6 +496,10 @@ describe("APPA feature boundary", () => {
   test.each([
     // The runtime ruled on no ask_user call, so it would withhold the answer.
     { name: "mcp__archestra__ask_user", reported: false },
+    // Nor on a client's own question tool, which asks the same way.
+    { name: "host/claude-code/AskUserQuestion", reported: false },
+    { name: "builtin:request_user_input", reported: false },
+    { name: "builtin:question", reported: false },
     // Another server's tool of the same name is an ordinary governed tool.
     { name: "mcp__other__ask_user", reported: true },
   ])("reports a $name result to the runtime: $reported", async ({

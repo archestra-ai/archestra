@@ -1,4 +1,4 @@
-import type { AppaClientAdapter } from "../types";
+import type { AppaClientAdapter, AskUserArguments } from "../types";
 import { readHeader } from "../utils";
 
 /** Identifies OpenCode Chat Completions requests and normalizes local tool names. */
@@ -28,4 +28,23 @@ export class AppaOpenCodeAdapter implements AppaClientAdapter {
       ? name
       : `builtin:${name}`;
   }
+
+  // OpenCode shows no MCP forms (its client declares no elicitation), but its
+  // own `question` tool renders one.
+  readonly nativeQuestion = {
+    toolName: "question",
+    fromAskUser: (args: AskUserArguments) => ({
+      questions: [
+        {
+          question: args.question,
+          header: "Question",
+          options: args.options.map((option) => ({
+            label: option.label,
+            description: option.description ?? option.label,
+          })),
+          multiple: args.allowMultiple === true,
+        },
+      ],
+    }),
+  };
 }

@@ -415,8 +415,8 @@ export async function processProxyResults(params: {
   for (const result of params.results) {
     if (params.trustedChat && isSeededAppRenderToolResult(result.content))
       continue;
-    // The runtime released no ask_user call, so it would withhold the answer.
-    if (isAskUser(result.name, params.canonicalize)) continue;
+    // The runtime released no question call, so it would withhold the answer.
+    if (isUserQuestion(result.name, params.canonicalize)) continue;
     const error =
       extractMcpToolError(result) ?? extractMcpToolError(result.content);
     const outcome: ExecutionOutcome =
@@ -487,7 +487,7 @@ export async function evaluateToolCalls(
       if (options.controlToolName && call.name === options.controlToolName) {
         return { kind: "control" as const };
       }
-      if (isAskUser(call.name, options.canonicalize)) {
+      if (isUserQuestion(call.name, options.canonicalize)) {
         return { kind: "allow" as const };
       }
       const tool =
@@ -767,13 +767,26 @@ function nativePresentation(controlToolName?: string): {
 }
 
 /**
- * Asking the user is a conversation primitive, not a governed tool: its call
- * is never ruled on, so the runtime holds no record of it, and its result is
- * the user's own answer.
+ * Asking the user is a conversation primitive, not a governed tool, whether
+ * the platform's ask_user or a client's own question tool asks: the call is
+ * never ruled on, so the runtime holds no record of it, and its result is the
+ * user's own answer.
  */
-function isAskUser(name: string, canonicalize: (name: string) => string) {
+function isUserQuestion(
+  name: string,
+  canonicalize: (name: string) => string,
+): boolean {
+  const canonical = canonicalize(name);
   return (
-    archestraMcpBranding.getToolShortName(canonicalize(name)) ===
-    TOOL_ASK_USER_SHORT_NAME
+    CLIENT_QUESTION_TOOLS.has(canonical) ||
+    archestraMcpBranding.getToolShortName(canonical) ===
+      TOOL_ASK_USER_SHORT_NAME
   );
 }
+
+/** The clients' own question tools, as their adapters name them for policy. */
+const CLIENT_QUESTION_TOOLS = new Set([
+  "host/claude-code/AskUserQuestion",
+  "builtin:request_user_input",
+  "builtin:question",
+]);

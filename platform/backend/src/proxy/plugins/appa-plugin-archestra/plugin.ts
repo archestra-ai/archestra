@@ -36,6 +36,7 @@ import {
   APPA_PLUGIN_TRUSTED_CONTEXT,
   type AppaClientAdapter,
   type AppaTrustedContext,
+  type AskUserArguments,
 } from "./types";
 
 type AppaPluginBinding = {
@@ -135,6 +136,13 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         );
         changed ||= stamped !== call;
         return stamped;
+      }
+      // Before any policy sees it: the call the policies rule on is the one
+      // the client will run.
+      const native = binding ? this.asNativeQuestion(binding, call) : call;
+      if (native !== call) {
+        changed = true;
+        return native;
       }
       if (call.name === askUser) {
         const stamped = stampAskUserOffers(call, binding?.request.offerClaims);
@@ -288,6 +296,35 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
 
   // === Internal helpers ===
 
+  /**
+   * The model's ask_user call, handed to a client that cannot show it as a
+   * form as a call to the client's own question tool, under the same call id.
+   * Anything else, and any client without such a tool on this request, keeps
+   * the call as the model made it.
+   */
+  private asNativeQuestion(
+    binding: AppaPluginBinding,
+    call: LlmProxyToolCallsContext["toolCalls"][number],
+  ): LlmProxyToolCallsContext["toolCalls"][number] {
+    const native = binding.adapter?.nativeQuestion;
+    if (
+      !native ||
+      binding.request.spellings.get(native.toolName) !== native.toolName ||
+      archestraMcpBranding.getToolShortName(
+        this.canonicalize(binding, call.name),
+      ) !== TOOL_ASK_USER_SHORT_NAME
+    ) {
+      return call;
+    }
+    const args = parseAskUserArguments(call.arguments);
+    if (!args) return call;
+    return {
+      id: call.id,
+      name: native.toolName,
+      arguments: JSON.stringify(native.fromAskUser(args)),
+    };
+  }
+
   private canonicalize(binding: AppaPluginBinding, name: string): string {
     const canonical = binding.canonicalizeToolName(name);
     // A gateway tool whatever the client's local naming says: a name the
@@ -343,6 +380,28 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       namespace: call.namespace ?? binding.request.namespaces.get(call.name),
     };
   }
+}
+
+function parseAskUserArguments(
+  raw: string | Record<string, unknown>,
+): AskUserArguments | undefined {
+  let value: unknown = raw;
+  if (typeof raw === "string") {
+    try {
+      value = JSON.parse(raw);
+    } catch {
+      return undefined;
+    }
+  }
+  const args = value as Partial<AskUserArguments> | null;
+  if (
+    typeof args?.question !== "string" ||
+    !Array.isArray(args.options) ||
+    !args.options.every((option) => typeof option?.label === "string")
+  ) {
+    return undefined;
+  }
+  return args as AskUserArguments;
 }
 
 /** Codex names the namespace of an MCP server's tools `mcp__<server>`. */

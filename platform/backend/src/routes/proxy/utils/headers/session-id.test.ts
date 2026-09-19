@@ -344,7 +344,7 @@ describe("extractSessionInfo", () => {
     ).toEqual({ sessionId: null, sessionSource: null });
   });
 
-  test("Codex attribution: client_metadata.session_id wins over the session-id header", () => {
+  test("Codex attribution: durable client_metadata.thread_id wins over session and header ids", () => {
     const result = extractSessionInfo({
       headers: { "session-id": "019f66bc-ffff-72d1-b927-4d96fad7dc3a" },
       body: {
@@ -357,6 +357,23 @@ describe("extractSessionInfo", () => {
     });
 
     expect(result).toEqual({
+      sessionId: "019f66bc-aaaa-72d1-b927-4d96fad7dc3a",
+      sessionSource: "codex_session",
+    });
+  });
+
+  test("Codex attribution: client_metadata.session_id is used without a durable thread", () => {
+    expect(
+      extractSessionInfo({
+        headers: {},
+        body: {
+          client_metadata: {
+            session_id: "019f66bc-440e-72d1-b927-4d96fad7dc3a",
+          },
+        },
+        externalAgentId: CODEX_CLIENT_ID,
+      }),
+    ).toEqual({
       sessionId: "019f66bc-440e-72d1-b927-4d96fad7dc3a",
       sessionSource: "codex_session",
     });

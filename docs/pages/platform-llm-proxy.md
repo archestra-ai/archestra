@@ -92,6 +92,8 @@ The router accepts OpenAI Responses and Chat Completions requests, resolves prov
 
 Archestra supports the following custom headers on LLM Proxy requests. All headers are optional.
 
+With OpenAPPA enabled, supported external sessions receive signed, proxy-issued tool-call IDs. This requires an authenticated caller and `ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET`. The proxy restores provider IDs before forwarding later requests. Archestra Chat and Mistral-family models retain provider IDs.
+
 | Header                     | Description                                                                                                                                                                                                                                          | Example Value                          |
 | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
 | `X-Archestra-Agent-Id`     | Identifier for the calling agent or application. Stored with each interaction and included in [trace attributes](/docs/platform-observability#distributed-tracing) as `archestra.external_agent_id`. Client-provided when set; if absent, Archestra auto-discovers known clients — Claude (recorded as `anthropic_claude`), Codex (recorded as `openai_codex`), Cursor (recorded as `cursor`), and OpenCode (recorded as `opencode`). Use it to tell apart the applications sharing the LLM Proxy.                       | `my-chatbot-prod`                      |

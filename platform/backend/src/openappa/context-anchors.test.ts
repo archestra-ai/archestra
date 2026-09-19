@@ -1,13 +1,35 @@
+import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
+import { openappaActor } from "./actor";
 import { anchoredSessions, recordResponseAnchors } from "./context-anchors";
 
 const organizationId = "org-anchors";
 const callerId = "user:alice";
-const session = (id: string, caller = callerId) => ({
+const session = (id: string) => ({
   organization_id: organizationId,
-  caller_id: caller,
-  session_id: `${caller}|${id}`,
+  caller_id: callerId,
+  session_id: `${callerId}|${id}`,
 });
+
+async function started(id: string) {
+  const value = session(id);
+  await db.insert(schema.openappaSessionsTable).values({
+    actor: openappaActor(value.session_id),
+    root: openappaActor(value.session_id),
+    organizationId,
+    callerId,
+    sessionId: value.session_id,
+    startDecision: { decision: "ack" },
+  });
+}
+
+const record = (id: string, response: unknown, requestBody: unknown = {}) =>
+  recordResponseAnchors({
+    session: session(id),
+    family: "anthropic:messages",
+    requestBody,
+    response,
+  });
 
 const summary = [
   "1. Primary Request and Intent: the user asked to read package.json and report its description, then to run a shell command.",
@@ -24,12 +46,12 @@ const compaction = {
   ],
 };
 
-/** The history a client builds from that summary: its own preamble around the paragraphs. */
-const continued = (paragraphs: string[]) => ({
+/** The history a client builds from that summary: its own preamble around the lines. */
+const continued = (lines: string[]) => ({
   messages: [
     {
       role: "user",
-      content: `This session is being continued from a previous conversation that ran out of context.\n\nSummary:\n${paragraphs.join("\n\n")}`,
+      content: `This session is being continued from a previous conversation that ran out of context.\n\nSummary:\n${lines.join("\n\n")}`,
     },
     { role: "user", content: "Run this exact Bash command: echo after" },
   ],
@@ -45,55 +67,56 @@ const trace = (body: unknown, caller = callerId) =>
 
 describe("context anchors", () => {
   test("a summary a client wraps in its own preamble still names the session that wrote it", async () => {
-    await recordResponseAnchors({
-      session: session("parent"),
-      family: "anthropic:messages",
-      response: compaction,
-    });
+    await started("parent");
+    await record("parent", compaction);
 
     expect(await trace(continued(summary))).toEqual(["parent"]);
   });
 
-  test("short paragraphs, another caller's history and a paragraph two sessions wrote name nothing", async () => {
-    await recordResponseAnchors({
-      session: session("parent"),
-      family: "anthropic:messages",
-      response: compaction,
-    });
-    await recordResponseAnchors({
-      session: session("other"),
-      family: "anthropic:messages",
-      response: { content: [{ type: "text", text: summary[1] }] },
-    });
-    await recordResponseAnchors({
-      session: session("short"),
-      family: "anthropic:messages",
-      response: { content: [{ type: "text", text: "Done." }] },
-    });
+  test("short lines, another caller's history and a line two sessions wrote name nothing", async () => {
+    await Promise.all([started("parent"), started("other"), started("short")]);
+    await record("parent", compaction);
+    await record("other", { content: [{ type: "text", text: summary[1] }] });
+    await record("short", { content: [{ type: "text", text: "Done." }] });
 
     expect(await trace(continued([summary[1]]))).toEqual([]);
     expect(await trace(continued(["Done."]))).toEqual([]);
     expect(await trace(continued(summary), "user:mallory")).toEqual([]);
-    expect(await trace(continued(summary))).toEqual(["parent"]);
+    expect(await trace(continued(summary))).toEqual([]);
   });
 
-  test("the session whose paragraphs appear last comes last", async () => {
+  test("the session whose lines appear last comes last", async () => {
     const later =
       "3. Next step: the forked session continued on its own and summarized the remaining work in a paragraph of its own.";
-    await recordResponseAnchors({
-      session: session("parent"),
-      family: "anthropic:messages",
-      response: compaction,
-    });
-    await recordResponseAnchors({
-      session: session("fork"),
-      family: "anthropic:messages",
-      response: { content: [{ type: "text", text: later }] },
-    });
+    await Promise.all([started("parent"), started("fork")]);
+    await record("parent", compaction);
+    await record("fork", { content: [{ type: "text", text: later }] });
 
-    expect(await trace(continued([...summary, later]))).toEqual([
+    // The fork matches only one line, so it cannot become the advisory parent.
+    expect(await trace(continued([...summary, later]))).toEqual(["parent"]);
+  });
+
+  test("does not record response lines already present anywhere in the request", async () => {
+    const echoed =
+      "This client-injected instruction is long enough to be an anchor but must never identify a session that merely repeated it.";
+    const first =
+      "The first new decision is long enough to identify the session only when paired with a second independently new response line.";
+    const second =
+      "The second new decision makes the response a reliable context anchor for a later compaction summary.";
+    await started("parent");
+    await record(
       "parent",
-      "fork",
-    ]);
+      { content: [{ type: "text", text: [echoed, first, second].join("\n") }] },
+      { system: echoed },
+    );
+
+    expect(await trace(continued([echoed]))).toEqual([]);
+    expect(await trace(continued([first, second]))).toEqual(["parent"]);
+  });
+
+  test("ignores anchors from a session whose runtime never started", async () => {
+    await record("tool-less", compaction);
+
+    expect(await trace(continued(summary))).toEqual([]);
   });
 });

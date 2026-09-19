@@ -580,7 +580,7 @@ function interactionSource(interaction: {
 }
 
 function isAuxiliaryInteractionSource(source: string | null): boolean {
-  return Boolean(source?.includes(":"));
+  return Boolean(source?.includes(":") && !source.startsWith("chatops:"));
 }
 
 function sessionInteractionAgentLabel(params: {

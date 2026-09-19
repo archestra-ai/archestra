@@ -219,24 +219,41 @@ export function restoreTrajectoryStamps(params: {
 }
 
 /**
- * The text of every message in this request's history, in order: user and
- * assistant turns, whatever the part shape. Tool results are left out; they
- * are the tools' words, not the context a session wrote.
+ * User and assistant text in history order. Instructions and tool results
+ * are not evidence that a session wrote the context.
  */
 export function historyTexts(params: {
   family: AppaWireFamily;
   body: unknown;
 }): string[] {
+  const input = asRecord(params.body)?.input;
+  if (params.family === "openai:responses" && typeof input === "string")
+    return [input];
   const messages =
     params.family === "openai:responses"
       ? responsesItems(params.body).filter(
           (item) => item.type === undefined || item.type === "message",
         )
-      : (asArray(asRecord(params.body)?.messages) ?? []).flatMap((message) => {
-          const record = asRecord(message);
-          return record ? [record] : [];
-        });
-  return messages.flatMap((message) => partTexts(message.content));
+      : chatMessages(params.body);
+  return messages.flatMap((message) =>
+    message.role === "user" || message.role === "assistant"
+      ? partTexts(message.content)
+      : [],
+  );
+}
+
+/** All request strings, including instructions and tools, to exclude echoes. */
+export function requestTexts(body: unknown): string[] {
+  const texts: string[] = [];
+  const pending = [body];
+  while (pending.length > 0) {
+    const value = pending.pop();
+    if (typeof value === "string") texts.push(value);
+    else if (value !== null && typeof value === "object") {
+      for (const part of Object.values(value)) pending.push(part);
+    }
+  }
+  return texts;
 }
 
 /** The text the model wrote in one provider response, in order. */

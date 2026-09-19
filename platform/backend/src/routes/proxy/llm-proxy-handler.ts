@@ -57,6 +57,7 @@ import {
   LimitValidationService,
   LlmProviderApiKeyModel,
   ModelModel,
+  OpenAppaSessionModel,
   OrganizationModel,
   TeamModel,
   UserModel,
@@ -79,6 +80,7 @@ import {
   EVENT_GENAI_CONTENT_COMPLETION,
   type SpanTeamInfo,
 } from "@/observability/tracing";
+import { scopedSessionId } from "@/openappa/actor";
 import { anchoredSessions } from "@/openappa/context-anchors";
 import { forkedSession } from "@/openappa/lineage";
 import { prepareAppaRequest } from "@/openappa/request";
@@ -1227,45 +1229,48 @@ export async function handleLLMProxy<
         // of its own that starts from that session's labels, after which the
         // two continue apart. A root the client names explicitly is its own
         // to manage.
-        const stamped =
+        const traceable =
           callerId &&
           appaIdentity.sessionId &&
+          appaFamily &&
           !isInternalChat &&
           !incomingAppaSessionHeader &&
-          !headersForExtraction[APPA_PARENT_HEADER.toLowerCase()]
-            ? stampedSessions({
-                stamps: trajectoryStamps,
-                organizationId: resolvedAgent.organizationId,
-                callerId,
-                secret: config.openappa.offerSigningSecret,
-              })
-            : [];
+          !headersForExtraction[APPA_PARENT_HEADER.toLowerCase()];
+        const stamped = traceable
+          ? stampedSessions({
+              stamps: trajectoryStamps,
+              organizationId: resolvedAgent.organizationId,
+              callerId,
+              secret: config.openappa.offerSigningSecret,
+            })
+          : [];
         // A history compacted to text carries no call ids; the lines its
         // sessions' models wrote trace it instead.
-        const traced =
-          stamped.length > 0 ||
-          !callerId ||
-          !appaIdentity.sessionId ||
-          !appaFamily ||
-          isInternalChat ||
-          incomingAppaSessionHeader ||
-          headersForExtraction[APPA_PARENT_HEADER.toLowerCase()]
-            ? stamped
-            : await anchoredSessions({
+        const anchored =
+          callerId && appaFamily && traceable && stamped.length === 0
+            ? await anchoredSessions({
                 organizationId: resolvedAgent.organizationId,
                 callerId,
                 family: appaFamily,
                 body,
-              });
+              })
+            : [];
         const forkOf =
-          callerId && appaIdentity.sessionId && traced.length > 0
+          stamped.length > 0 && callerId && appaIdentity.sessionId
             ? await forkedSession({
                 organizationId: resolvedAgent.organizationId,
                 sessionId: appaIdentity.sessionId,
-                stamped: traced,
-                scope: (session) => `${callerId}|${session}`,
+                traced: stamped,
+                scope: (session) => scopedSessionId(callerId, session),
               })
-            : undefined;
+            : anchored.length > 0 && callerId && appaIdentity.sessionId
+              ? (await OpenAppaSessionModel.find({
+                  organizationId: resolvedAgent.organizationId,
+                  sessionId: scopedSessionId(callerId, appaIdentity.sessionId),
+                }))
+                ? undefined
+                : anchored.at(-1)
+              : undefined;
         if (
           appaIdentity.sessionId &&
           isWellFormedAppaId(appaIdentity.sessionId) &&
@@ -1313,7 +1318,7 @@ export async function handleLLMProxy<
         if (forkOf && callerId)
           openappaSession = {
             ...openappaSession,
-            fork_of: `${callerId}|${forkOf}`,
+            fork_of: scopedSessionId(callerId, forkOf),
           };
         if (
           callerId &&

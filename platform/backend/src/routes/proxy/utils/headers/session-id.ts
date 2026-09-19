@@ -65,7 +65,7 @@ export interface SessionInfo {
  * 2. X-Archestra-Meta third segment (source: 'meta_header')
  * 3. Open WebUI X-OpenWebUI-Chat-Id header (source: 'openwebui_chat')
  * 4. Codex session id — only when `externalAgentId` is a Codex client id:
- *    `client_metadata.session_id` body field first, then the `session-id`
+ *    `client_metadata.thread_id` body field first, then `session_id`, then the `session-id`
  *    request header (source: 'codex_session')
  * 5. OpenCode session id — only when `externalAgentId` is the OpenCode client
  *    id: `x-session-id`, `x-session-affinity`, `x-opencode-session`, then the
@@ -126,9 +126,9 @@ export function extractSessionInfo({
   // the `session-id` header name is generic, so it is never read as a Codex
   // session on its own.
   if (isCodexClientAgentId(externalAgentId)) {
-    const metadataSessionId = codexClientMetadataSessionId(
-      body?.client_metadata,
-    );
+    const metadataSessionId =
+      codexClientMetadataThreadId(body?.client_metadata) ??
+      codexClientMetadataSessionId(body?.client_metadata);
     if (metadataSessionId) {
       return { sessionId: metadataSessionId, sessionSource: "codex_session" };
     }
@@ -188,6 +188,15 @@ export function extractSessionInfo({
   }
 
   return { sessionId: null, sessionSource: null };
+}
+
+/** Codex keeps a durable thread id alongside its per-run session id. */
+function codexClientMetadataThreadId(clientMetadata: unknown): string | null {
+  if (!clientMetadata || typeof clientMetadata !== "object") return null;
+  const threadId = (clientMetadata as { thread_id?: unknown }).thread_id;
+  return typeof threadId === "string" && isCodexSessionId(threadId.trim())
+    ? threadId.trim()
+    : null;
 }
 
 /**

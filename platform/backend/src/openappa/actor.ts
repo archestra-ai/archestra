@@ -8,3 +8,14 @@ import { createHash } from "node:crypto";
 export function openappaActor(sessionId: string): string {
   return `archestra:${createHash("sha256").update(sessionId).digest("hex")}`;
 }
+
+/** A caller's private runtime session id (`<caller>|<client id>`). */
+export function scopedSessionId(callerId: string, sessionId: string): string {
+  return `${callerId}|${sessionId}`;
+}
+
+/** The client id from a caller-scoped runtime session id. */
+export function clientSessionId(sessionId: string): string {
+  const separator = sessionId.indexOf("|");
+  return separator >= 0 ? sessionId.slice(separator + 1) : sessionId;
+}

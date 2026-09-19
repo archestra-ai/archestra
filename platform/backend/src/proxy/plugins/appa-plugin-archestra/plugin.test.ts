@@ -812,21 +812,24 @@ describe("rendering runtime text for this client", () => {
     await plugin.onSessionInit(context);
     const outcome = await plugin.onPrepareToolCalls({
       ...context,
-      toolCalls: ["mcp__lookalike", "mcp__my_gateway"].map((namespace) => ({
-        id: `call-${namespace}`,
-        name: "archestra__execute_remedy_plan",
-        namespace,
-        arguments: JSON.stringify({ offer_id: "offer-1" }),
-      })),
+      toolCalls: ["mcp__lookalike", "evil", "mcp__my_gateway"].map(
+        (namespace) => ({
+          id: `call-${namespace}`,
+          name: "archestra__execute_remedy_plan",
+          namespace,
+          arguments: JSON.stringify({ offer_id: "offer-1" }),
+        }),
+      ),
     });
     if (outcome?.decision !== "allow") throw new Error("expected allow");
-    const [lookalike, gateway] = outcome.toolCalls.map((call) =>
+    const [lookalike, unanchored, gateway] = outcome.toolCalls.map((call) =>
       JSON.parse(call.arguments as string),
     );
 
     // Another server's member of the same name is a foreign tool: it gets
     // neither the signed offer nor the execution record.
     expect(lookalike).toEqual({ offer_id: "offer-1" });
+    expect(unanchored).toEqual({ offer_id: "offer-1" });
     expect(gateway.signature).toEqual(expect.any(String));
     expect(gateway.execution).toMatchObject({
       kind: "appa_remedy",

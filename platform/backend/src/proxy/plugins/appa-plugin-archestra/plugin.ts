@@ -1,4 +1,6 @@
 import config from "@/config";
+import logger from "@/logging";
+import { clientSessionId } from "@/openappa/actor";
 import { recordResponseAnchors } from "@/openappa/context-anchors";
 import { buildNoticeArguments, type RemedyExecution } from "@/openappa/notice";
 import type { OfferJws } from "@/openappa/offer-claims";
@@ -39,6 +41,7 @@ import type {
 } from "@/proxy/plugins/registry";
 import { normalizeToolCallsForPolicy } from "@/routes/proxy/llm-proxy-helpers";
 import { ApiError } from "@/types";
+import { trackBackgroundWork } from "@/utils/background-work";
 import {
   APPA_PLUGIN_TRUSTED_CONTEXT,
   type AppaClientAdapter,
@@ -311,11 +314,19 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     if (!binding) return;
     const family = appaWireFamily(context.interactionType);
     if (family && tracesLineage(binding)) {
-      await recordResponseAnchors({
-        session: binding.session,
-        family,
-        response: context.response,
-      });
+      trackBackgroundWork(
+        recordResponseAnchors({
+          session: binding.session,
+          family,
+          requestBody: context.requestBody,
+          response: context.response,
+        }).catch((error: unknown) =>
+          logger.error(
+            { err: error },
+            "OpenAPPA failed to record context anchors",
+          ),
+        ),
+      );
     }
     if (!binding.request.tools || binding.turnOpen) return;
     if (!binding.request.turnEndOperationId) return;
@@ -626,11 +637,4 @@ function tracesLineage(binding: AppaPluginBinding): boolean {
     callerId !== undefined &&
     binding.session.session_id.startsWith(`${callerId}|`)
   );
-}
-
-function clientSessionId(scopedSessionId: string): string {
-  const separator = scopedSessionId.indexOf("|");
-  return separator >= 0
-    ? scopedSessionId.slice(separator + 1)
-    : scopedSessionId;
 }

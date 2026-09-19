@@ -1,7 +1,14 @@
 import { createHash } from "node:crypto";
 import { OpenAppaContextAnchorModel } from "@/models";
+import OpenAppaSessionModel from "@/models/openappa-session";
+import { clientSessionId } from "./actor";
 import type { OpenAppaSession } from "./service";
-import { type AppaWireFamily, historyTexts, responseTexts } from "./wire";
+import {
+  type AppaWireFamily,
+  historyTexts,
+  requestTexts,
+  responseTexts,
+} from "./wire";
 
 /**
  * Context anchors follow a session's context where its stamped tool calls do
@@ -16,14 +23,15 @@ import { type AppaWireFamily, historyTexts, responseTexts } from "./wire";
 export async function recordResponseAnchors(params: {
   session: OpenAppaSession;
   family: AppaWireFamily;
+  requestBody: unknown;
   response: unknown;
 }): Promise<void> {
   const callerId = params.session.caller_id;
   if (!callerId) return;
-  const digests = lineDigests(responseTexts(params)).slice(
-    0,
-    MAX_RECORDED_LINES,
-  );
+  const requestDigests = new Set(lineDigests(requestTexts(params.requestBody)));
+  const digests = lineDigests(responseTexts(params))
+    .filter((digest) => !requestDigests.has(digest))
+    .slice(0, MAX_RECORDED_LINES);
   if (digests.length === 0) return;
   await OpenAppaContextAnchorModel.record({
     organizationId: params.session.organization_id,
@@ -36,8 +44,8 @@ export async function recordResponseAnchors(params: {
 /**
  * The caller's sessions whose lines this history repeats, as client session
  * ids, each once, ordered by where its lines last appear: the last one wrote
- * the history's most recent content. A line more than one session wrote names
- * none of them.
+ * the history's most recent content. A session needs two distinct, uniquely
+ * owned matching lines; one line is too weak to identify a fork parent.
  */
 export async function anchoredSessions(params: {
   organizationId: string;
@@ -45,18 +53,30 @@ export async function anchoredSessions(params: {
   family: AppaWireFamily;
   body: unknown;
 }): Promise<string[]> {
-  const digests = lineDigests(historyTexts(params)).slice(-MAX_LOOKED_UP_LINES);
+  const digests = tailLineDigests(historyTexts(params), MAX_LOOKED_UP_LINES);
   if (digests.length === 0) return [];
   const owners = await OpenAppaContextAnchorModel.sessionsFor({
     organizationId: params.organizationId,
     callerId: params.callerId,
     digests,
   });
+  const started = await OpenAppaSessionModel.startedSessionIds({
+    organizationId: params.organizationId,
+    sessionIds: [...new Set([...owners.values()].flat())],
+  });
+  const matches = new Map<string, number>();
+  for (const digest of digests) {
+    const writers = owners.get(digest)?.filter((writer) => started.has(writer));
+    if (writers?.length !== 1) continue;
+    const session = clientSessionId(writers[0]);
+    matches.set(session, (matches.get(session) ?? 0) + 1);
+  }
   const sessions = new Set<string>();
   for (const digest of digests) {
-    const writers = owners.get(digest);
+    const writers = owners.get(digest)?.filter((writer) => started.has(writer));
     if (writers?.length !== 1) continue;
-    const session = unscoped(writers[0]);
+    const session = clientSessionId(writers[0]);
+    if ((matches.get(session) ?? 0) < MIN_MATCHING_LINES) continue;
     sessions.delete(session);
     sessions.add(session);
   }
@@ -72,12 +92,6 @@ const MAX_RECORDED_LINES = 128;
 /** A history is matched on at most its latest this many lines. */
 const MAX_LOOKED_UP_LINES = 512;
 
-/** The client's own id inside a caller-scoped session id (`<caller>|<id>`). */
-function unscoped(sessionId: string): string {
-  const separator = sessionId.indexOf("|");
-  return separator >= 0 ? sessionId.slice(separator + 1) : sessionId;
-}
-
 /** Digests of the substantial lines of `texts`, each once, in order of last appearance. */
 function lineDigests(texts: readonly string[]): string[] {
   const digests = new Set<string>();
@@ -92,3 +106,23 @@ function lineDigests(texts: readonly string[]): string[] {
   }
   return [...digests];
 }
+
+/** The latest distinct anchor lines, without hashing older history first. */
+function tailLineDigests(texts: readonly string[], limit: number): string[] {
+  const digests = new Set<string>();
+  for (let textIndex = texts.length - 1; textIndex >= 0; textIndex--) {
+    const lines = texts[textIndex].split("\n");
+    for (let lineIndex = lines.length - 1; lineIndex >= 0; lineIndex--) {
+      const normalized = lines[lineIndex].replace(/\s+/g, " ").trim();
+      if (normalized.length < MIN_LINE_LENGTH) continue;
+      const digest = createHash("sha256").update(normalized).digest("hex");
+      if (digests.has(digest)) continue;
+      digests.add(digest);
+      if (digests.size === limit) return [...digests].reverse();
+    }
+  }
+  return [...digests].reverse();
+}
+
+/** Require more than one independently matching line to name a parent. */
+const MIN_MATCHING_LINES = 2;

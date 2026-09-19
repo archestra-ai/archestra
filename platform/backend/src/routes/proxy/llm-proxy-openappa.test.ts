@@ -9,11 +9,13 @@ import {
 } from "fastify-type-provider-zod";
 import { vi } from "vitest";
 import config, { parseLlmProxyPlugins, parseOpenAppaConfig } from "@/config";
-import * as database from "@/database";
+import db, * as database from "@/database";
 import * as toolInvocation from "@/guardrails/tool-invocation";
 import * as trustedData from "@/guardrails/trusted-data";
 import { InteractionModel, ModelModel, VirtualApiKeyModel } from "@/models";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
+import { openappaActor } from "@/openappa/actor";
+import { recordResponseAnchors } from "@/openappa/context-anchors";
 import { buildNoticeArguments } from "@/openappa/notice";
 import { parseTrajectoryStamp } from "@/openappa/trajectory-stamp";
 import { createAppaLlmProxyPlugin } from "@/proxy/plugins/appa-plugin-archestra";
@@ -103,6 +105,23 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     native.dispatchHook.mockImplementation(async (raw: string) => {
       const event = JSON.parse(raw);
       events.push(event);
+      if (event.event === "session_start") {
+        const runtimeSessionId = String(event.session_id);
+        await db
+          .insert(database.schema.openappaSessionsTable)
+          .values({
+            actor: openappaActor(runtimeSessionId),
+            root: openappaActor(runtimeSessionId),
+            organizationId: String(event.organization_id),
+            callerId:
+              typeof event.caller_id === "string" ? event.caller_id : null,
+            sessionId: runtimeSessionId,
+            forkedFrom:
+              typeof event.fork_of === "string" ? event.fork_of : null,
+            startDecision: { decision: "ack" },
+          })
+          .onConflictDoNothing();
+      }
       if (event.event === "tool_call") {
         if (fail) throw new Error("private native database error");
         if (!block || event.tool === "allowed_first")
@@ -982,6 +1001,77 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     const sent = JSON.stringify(providerRequests);
     expect(sent).toContain("toolu_test_weather");
     expect(sent).not.toContain(given.id);
+  });
+
+  test("text anchors never refuse an existing session", async () => {
+    const parent = "0d3990dc-ace0-4952-8ac5-2d5281e7261b";
+    const summarizer = "65337062-8b5e-4bd0-9d8e-6f1c2a3b4c5d";
+    const lines = [
+      "The first compacted decision is long enough to anchor a history without depending on a provider tool-call identifier.",
+      "The second compacted decision makes the trace advisory rather than allowing ordinary text overlap to reject a request.",
+    ];
+    const callerId = `user:${userId}`;
+    const start = async (id: string) => {
+      const scoped = `${callerId}|${id}`;
+      await db.insert(database.schema.openappaSessionsTable).values({
+        actor: openappaActor(scoped),
+        root: openappaActor(scoped),
+        organizationId: agent.organizationId,
+        callerId,
+        sessionId: scoped,
+        startDecision: { decision: "ack" },
+      });
+    };
+    await start(parent);
+    await start(summarizer);
+    await recordResponseAnchors({
+      session: {
+        organization_id: agent.organizationId,
+        caller_id: callerId,
+        session_id: `${callerId}|${summarizer}`,
+      },
+      family: "anthropic:messages",
+      requestBody: {},
+      response: { content: [{ type: "text", text: lines.join("\n") }] },
+    });
+    const claudeCode = (session: string) => ({
+      ...externalClientHeaders(),
+      "user-agent": "claude-cli/2.1.278 (external, cli)",
+      "x-claude-code-session-id": session,
+    });
+
+    const parentResponse = await app.inject({
+      method: "POST",
+      url: url(),
+      remoteAddress: "127.0.0.1",
+      headers: claudeCode(parent),
+      payload: payload(false, [{ role: "user", content: lines.join("\n") }]),
+    });
+    expect(parentResponse.statusCode, parentResponse.body).toBe(200);
+
+    const existing = "5f53969f-ea57-41f7-83be-d10f5037cfa5";
+    await start(existing);
+    const existingResponse = await app.inject({
+      method: "POST",
+      url: url(),
+      remoteAddress: "127.0.0.1",
+      headers: claudeCode(existing),
+      payload: payload(false, [{ role: "user", content: lines.join("\n") }]),
+    });
+    expect(existingResponse.statusCode, existingResponse.body).toBe(200);
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        event: "session_start",
+        session_id: `${callerId}|${existing}`,
+      }),
+    );
+    expect(events).not.toContainEqual(
+      expect.objectContaining({
+        event: "session_start",
+        session_id: `${callerId}|${existing}`,
+        fork_of: `${callerId}|${summarizer}`,
+      }),
+    );
   });
 
   test("a history stamped for another member, or with a forged stamp, opens the replaying session's own root", async ({
@@ -2195,6 +2285,23 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
     native.dispatchHook.mockImplementation(async (raw: string) => {
       const event = JSON.parse(raw);
       events.push(event);
+      if (event.event === "session_start") {
+        const runtimeSessionId = String(event.session_id);
+        await db
+          .insert(database.schema.openappaSessionsTable)
+          .values({
+            actor: openappaActor(runtimeSessionId),
+            root: openappaActor(runtimeSessionId),
+            organizationId: String(event.organization_id),
+            callerId:
+              typeof event.caller_id === "string" ? event.caller_id : null,
+            sessionId: runtimeSessionId,
+            forkedFrom:
+              typeof event.fork_of === "string" ? event.fork_of : null,
+            startDecision: { decision: "ack" },
+          })
+          .onConflictDoNothing();
+      }
       if (event.event === "tool_call")
         return JSON.stringify({ decision: "allow_call" });
       if (event.event === "tool_result")

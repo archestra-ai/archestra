@@ -20,8 +20,14 @@ const NoticeMetadata = z.object({
   v: z.literal(NOTICE_VERSION),
   call_id: z.string().min(1),
   namespace: z.string().min(1).optional(),
-  /** Unscoped client session id this denial was minted under. */
-  session: z.string().min(1).optional(),
+  /** Root that denied this call, retained for QA and support diagnostics. */
+  session: z
+    .string()
+    .min(1)
+    .optional()
+    .describe(
+      "Root session that denied this call, used for support diagnostics.",
+    ),
 });
 
 const FunctionArguments = z.union([
@@ -111,7 +117,7 @@ type AppaNotice = {
   namespace?: string;
   /** Signed offer routing claims. Not used for restoration. */
   offers?: OfferJws[];
-  /** Unscoped client session id this denial was minted under. */
+  /** Root that denied this call, retained for QA and support diagnostics. */
   session?: string;
 };
 

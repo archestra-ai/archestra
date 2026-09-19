@@ -82,7 +82,13 @@ export function stampedSessions(params: {
 }): string[] {
   if (params.secret.length === 0) return [];
   const sessions = new Set<string>();
-  for (const stamp of params.stamps) {
+  const verifiedPayloads = new Set<string>();
+  // A call and its result carry the same stamp. Walk back from the newest
+  // history item so each payload is verified once while preserving last use.
+  for (let index = params.stamps.length - 1; index >= 0; index--) {
+    const stamp = params.stamps[index];
+    if (verifiedPayloads.has(stamp.payload)) continue;
+    verifiedPayloads.add(stamp.payload);
     const expected = Buffer.from(
       stampTag({ ...params, payload: stamp.payload }),
       "utf8",
@@ -90,11 +96,9 @@ export function stampedSessions(params: {
     const actual = Buffer.from(stamp.tag, "utf8");
     if (actual.length !== expected.length || !timingSafeEqual(actual, expected))
       continue;
-    // Re-inserting moves a session to the end: the order is of last appearance.
-    sessions.delete(stamp.sessionId);
     sessions.add(stamp.sessionId);
   }
-  return [...sessions];
+  return [...sessions].reverse();
 }
 
 // === Internal helpers ===

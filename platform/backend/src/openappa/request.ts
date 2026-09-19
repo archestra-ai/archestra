@@ -275,12 +275,17 @@ export function underscoreLabeledPlatformToolName(
  * they spell what Claude Code sends for the same tool, so the gateway
  * canonicalizer anchors it on the organization's real gateway label and a
  * same-named member of any other server keeps a foreign name.
+ * Bare platform names in other namespaces also keep their namespace; they
+ * must not become controls just because the namespace lacks the MCP prefix.
+ * Host tools and already gateway-qualified names retain their spelling.
  */
 export function namespacedToolName(
   name: string,
   namespace: string | undefined,
 ): string {
-  return namespace?.startsWith(`mcp${MCP_SERVER_TOOL_NAME_SEPARATOR}`)
+  return namespace !== undefined &&
+    (namespace.startsWith(`mcp${MCP_SERVER_TOOL_NAME_SEPARATOR}`) ||
+      shortToolName(name) !== null)
     ? `${namespace}${MCP_SERVER_TOOL_NAME_SEPARATOR}${name}`
     : name;
 }
@@ -360,7 +365,11 @@ function appendDeclaredTool(
   name: string,
 ): void {
   const holder = asToolDeclaration(body);
-  if (!holder || !Array.isArray(holder.tools)) return;
+  if (!holder) return;
+  // Codex can declare its existing tools only in additional_tools input items.
+  if (family === "openai:responses" && holder.tools === undefined)
+    holder.tools = [];
+  if (!Array.isArray(holder.tools)) return;
   if (family === "openai:responses") {
     // Responses declares function tools flat; the nested Chat Completions
     // shape is rejected by the provider for a missing `name`.

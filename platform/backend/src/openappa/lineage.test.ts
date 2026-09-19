@@ -20,10 +20,10 @@ async function started(session: string, forkedFrom?: string) {
   });
 }
 
-const place = (sessionId: string, stamped: string[]) =>
-  forkedSession({ organizationId, sessionId, stamped, scope });
+const place = (sessionId: string, traced: string[]) =>
+  forkedSession({ organizationId, sessionId, traced, scope });
 
-describe("where a stamped history belongs", () => {
+describe("where a traced stamped history belongs", () => {
   test("a new session replaying another session's calls forks it", async () => {
     await started("parent");
 
@@ -69,5 +69,11 @@ describe("where a stamped history belongs", () => {
 
     expect(refusal).toBeInstanceOf(ApiError);
     expect(refusal.statusCode).toBe(409);
+  });
+
+  test("ignores a stamped session whose runtime never started", async () => {
+    await started("parent");
+
+    expect(await place("replaying", ["parent", "tool-less"])).toBe("parent");
   });
 });

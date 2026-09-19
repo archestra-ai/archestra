@@ -20,9 +20,7 @@ vi.mock("next/navigation");
 // The unattributed-user badge interpolates the white-label app name, and the
 // real hook reads it through TanStack Query — which this suite renders without.
 vi.mock("@/lib/hooks/use-app-name");
-vi.mock("@/lib/config/config.query", () => ({
-  useFeature: vi.fn(() => false),
-}));
+vi.mock("@/lib/config/config.query");
 
 vi.mock("@/lib/interactions/interaction.query", () => ({
   useInteraction: vi.fn(),
@@ -291,7 +289,7 @@ describe("SessionDetailPage", () => {
     expect(screen.getByText("Origins")).toBeVisible();
   });
 
-  it("labels the main agent by profile name and a compaction row as compaction, not Main", async () => {
+  it("labels main-agent and ChatOps rows by profile name while labeling compaction", async () => {
     vi.mocked(useInteractionSessions).mockReturnValue({
       data: {
         data: [{ profileName: "My Assistant" }],
@@ -320,8 +318,38 @@ describe("SessionDetailPage", () => {
             externalAgentId: null,
             externalAgentIdLabel: null,
           },
+          {
+            id: "int-slack",
+            createdAt: "2026-09-18T09:58:00.000Z",
+            model: "claude-haiku",
+            inputTokens: 2,
+            outputTokens: 2,
+            source: "chatops:slack",
+            externalAgentId: null,
+            externalAgentIdLabel: null,
+          },
+          {
+            id: "int-teams",
+            createdAt: "2026-09-18T09:57:00.000Z",
+            model: "claude-haiku",
+            inputTokens: 2,
+            outputTokens: 2,
+            source: "chatops:ms-teams",
+            externalAgentId: null,
+            externalAgentIdLabel: null,
+          },
+          {
+            id: "int-telegram",
+            createdAt: "2026-09-18T09:56:00.000Z",
+            model: "claude-haiku",
+            inputTokens: 2,
+            outputTokens: 2,
+            source: "chatops:telegram",
+            externalAgentId: null,
+            externalAgentIdLabel: null,
+          },
         ],
-        pagination: { total: 2 },
+        pagination: { total: 5 },
       },
       isLoading: false,
     } as unknown as ReturnType<typeof useInteractionSummaries>);
@@ -329,7 +357,12 @@ describe("SessionDetailPage", () => {
     renderSessionDetailPage();
 
     expect(await screen.findByText("Chat Compaction")).toBeVisible();
-    expect(screen.getAllByText("My Assistant").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("My Assistant").length).toBeGreaterThanOrEqual(
+      5,
+    );
+    expect(screen.queryByText("Slack")).not.toBeInTheDocument();
+    expect(screen.queryByText("MS Teams")).not.toBeInTheDocument();
+    expect(screen.queryByText("Telegram")).not.toBeInTheDocument();
     expect(screen.queryByText("Main")).not.toBeInTheDocument();
   });
 });

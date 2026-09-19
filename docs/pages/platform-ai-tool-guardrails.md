@@ -2,7 +2,7 @@
 title: Tool Guardrails
 category: LLM Proxy
 order: 5
-lastUpdated: 2026-09-18
+lastUpdated: 2026-09-19
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -23,6 +23,8 @@ Set `ARCHESTRA_OPENAPPA_ENABLED=true` to enable the OpenAPPA sidebar entry in St
 The built-in APPA Guide skill helps agents inspect, explain, and edit this policy. It uses the same read, validate, and update tools as the editor. The skill is available only while APPA is enabled.
 
 APPA evaluates each tool call before releasing it. Allowed calls run in parallel, and their results can return in any order. When a call is denied, the proxy returns a remedy notice. Other allowed calls in the same response still run.
+
+Recognized client forks and summarizer sessions retain the source session's policy revision. Recognition requires history traced to the same authenticated caller. Unrelated new sessions use the current policy.
 
 An agent that calls a tool through `run_tool` is evaluated on the tool that runs. A rule for `send_email` applies to a `run_tool` dispatch with `tool_name = "send_email"` exactly as it applies to a direct call. The remedy notice for a denied dispatch names that tool, not `run_tool`.
 

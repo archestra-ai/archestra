@@ -5,7 +5,7 @@ import { ApiError } from "@/types";
  * Where a request whose history carries this caller's stamped calls belongs.
  *
  * The session that made the history's latest calls is its head: the request's
- * own session when it made calls in this history, otherwise the last stamped
+ * own session when it made calls in this history, otherwise the last traced
  * session. Every other session the history names must be an ancestor of the
  * head on its fork line; a history that mixes unrelated sessions has no one
  * trajectory to continue, and taking any one of them would drop the others'
@@ -19,13 +19,20 @@ import { ApiError } from "@/types";
 export async function forkedSession(params: {
   organizationId: string;
   sessionId: string;
-  stamped: readonly string[];
+  traced: readonly string[];
   scope: (sessionId: string) => string;
 }): Promise<string | undefined> {
-  const own = params.stamped.includes(params.sessionId);
-  const head = own ? params.sessionId : params.stamped.at(-1);
+  const started = await OpenAppaSessionModel.startedSessionIds({
+    organizationId: params.organizationId,
+    sessionIds: params.traced.map(params.scope),
+  });
+  const traced = params.traced.filter((session) =>
+    started.has(params.scope(session)),
+  );
+  const own = traced.includes(params.sessionId);
+  const head = own ? params.sessionId : traced.at(-1);
   if (head === undefined) return undefined;
-  const others = params.stamped.filter((session) => session !== head);
+  const others = traced.filter((session) => session !== head);
   if (others.length > 0) {
     const line = new Set(
       await OpenAppaSessionModel.forkLine({
@@ -36,7 +43,7 @@ export async function forkedSession(params: {
     if (others.some((session) => !line.has(params.scope(session)))) {
       throw new ApiError(
         400,
-        "OpenAPPA cannot continue a history that mixes calls from unrelated sessions; resume one of those sessions instead",
+        "OpenAPPA cannot continue a history that mixes stamped calls from unrelated sessions; resume one of those sessions instead",
       );
     }
   }

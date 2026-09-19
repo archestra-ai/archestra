@@ -8,8 +8,8 @@ import { restoreTrajectoryStamps } from "./wire";
 
 const secret = "test-offer-signing-secret-32chars";
 const owner = { organizationId: "org-1", callerId: "user:alice", secret };
-const stamp = (sessionId: string, callId: string, signer = owner) =>
-  stampToolCallId({ ...signer, sessionId, callId });
+const stamp = (sessionId: string, callId: string) =>
+  stampToolCallId({ ...owner, sessionId, callId });
 const parsed = (id: string) => {
   const value = parseTrajectoryStamp(id);
   if (!value) throw new Error(`not a stamp: ${id}`);
@@ -65,6 +65,7 @@ describe("trajectory stamps", () => {
       parsed(stamp("parent", "call_1")),
       parsed(stamp("fork", "call_2")),
       parsed(stamp("parent", "call_3")),
+      parsed(stamp("fork", "call_4")),
       parsed(stamp("fork", "call_4")),
     ];
 

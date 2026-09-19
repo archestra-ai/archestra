@@ -6,13 +6,15 @@ import {
   RemedyExecutionSchema,
   readNotice,
 } from "./notice";
-import { prepareAppaRequest } from "./request";
+import { namespacedToolName, prepareAppaRequest } from "./request";
 import {
   appaSessionIdentity,
   appaTurnBoundaries,
   appaWireFamily,
   canonicalJson,
   declaredToolName,
+  historyTexts,
+  requestTexts,
 } from "./wire";
 
 const NOTICE = "mcp__archestra__get_remedy_plans";
@@ -21,6 +23,105 @@ const canonicalize = (name: string) =>
   name.startsWith("mcp__archestra__")
     ? `archestra__${name.slice("mcp__archestra__".length)}`
     : name;
+
+describe("context anchor text", () => {
+  test.each([
+    "anthropic:messages",
+    "openai:chatCompletions",
+  ] as const)("%s matches only user and assistant text, not instructions or results", (family) => {
+    expect(
+      historyTexts({
+        family,
+        body: {
+          messages: [
+            { role: "system", content: "shared system instructions" },
+            { role: "developer", content: "shared developer instructions" },
+            { role: "user", content: "user context" },
+            { role: "tool", content: "tool result" },
+            {
+              role: "user",
+              content: [
+                { type: "tool_result", content: "nested tool result" },
+                { type: "text", text: "user follow-up" },
+              ],
+            },
+            {
+              role: "assistant",
+              content: [{ type: "text", text: "assistant context" }],
+            },
+          ],
+        },
+      }),
+    ).toEqual(["user context", "user follow-up", "assistant context"]);
+  });
+
+  test("Responses ignores instructions and non-message items", () => {
+    expect(
+      historyTexts({
+        family: "openai:responses",
+        body: {
+          instructions: "shared instructions",
+          input: [
+            { role: "system", content: "system message" },
+            { role: "developer", content: "developer message" },
+            { role: "user", content: "user context" },
+            {
+              type: "function_call_output",
+              output: "tool result",
+              content: "not a message",
+            },
+            {
+              type: "message",
+              role: "assistant",
+              content: [{ type: "output_text", text: "assistant context" }],
+            },
+          ],
+        },
+      }),
+    ).toEqual(["user context", "assistant context"]);
+  });
+
+  test("Responses accepts its shorthand string user input", () => {
+    expect(
+      historyTexts({
+        family: "openai:responses",
+        body: { instructions: "system text", input: "compaction summary" },
+      }),
+    ).toEqual(["compaction summary"]);
+  });
+
+  test("echo exclusions include every role, top-level prompts, and nested tools", () => {
+    const body = {
+      system: [{ type: "text", text: "system text" }],
+      instructions: "instructions text",
+      input: [{ type: "function_call_output", output: "response result" }],
+      messages: [
+        { role: "developer", content: "developer text" },
+        { role: "user", content: "user text" },
+        { role: "assistant", content: "assistant text" },
+        { role: "tool", content: "chat result" },
+        {
+          role: "user",
+          content: [{ type: "tool_result", content: "nested result" }],
+        },
+      ],
+      tools: [{ description: "shared tool instructions" }],
+    };
+    expect(requestTexts(body)).toEqual(
+      expect.arrayContaining([
+        "system text",
+        "instructions text",
+        "response result",
+        "developer text",
+        "user text",
+        "assistant text",
+        "chat result",
+        "nested result",
+        "shared tool instructions",
+      ]),
+    );
+  });
+});
 
 describe("denial notice restoration", () => {
   test("keeps the public notice schema strict for function and custom calls", () => {
@@ -1561,6 +1662,16 @@ describe("APPA request preflight", () => {
   });
 
   describe("Codex namespaces", () => {
+    test("keeps unanchored platform calls foreign without renaming host tools", () => {
+      expect(namespacedToolName("archestra__execute_remedy_plan", "evil")).toBe(
+        "evil__archestra__execute_remedy_plan",
+      );
+      expect(namespacedToolName("shell", "functions")).toBe("shell");
+      expect(namespacedToolName(CONTROL, "functions")).toBe(CONTROL);
+      expect(
+        namespacedToolName("archestra__execute_remedy_plan", undefined),
+      ).toBe("archestra__execute_remedy_plan");
+    });
     // Codex declares each MCP server's tools as members of its
     // `mcp__<server>` namespace, under their bare names, so any server can
     // declare a member named like the platform's notice and control tools.
@@ -1597,8 +1708,12 @@ describe("APPA request preflight", () => {
       });
     });
 
-    test("a pair only a lookalike's namespace declares is missing: the proxy injects its own", () => {
-      const body = { tools: [pairIn("mcp__lookalike")], input: [] };
+    test.each([
+      "mcp__lookalike",
+      "evil",
+      "functions",
+    ])("a bare pair in %s is not gateway-anchored: the proxy injects its own", (namespace) => {
+      const body = { tools: [pairIn(namespace)], input: [] };
 
       const prepared = prepareAppaRequest({
         body,
@@ -1615,6 +1730,36 @@ describe("APPA request preflight", () => {
         name: "archestra__execute_remedy_plan",
         parameters: { type: "object", properties: {} },
       });
+    });
+
+    test("injects a trusted control when foreign tools exist only in a nested input item", () => {
+      const body: { input: unknown[]; tools?: unknown[] } = {
+        input: [
+          {
+            type: "additional_tools",
+            role: "developer",
+            tools: [pairIn("functions")],
+          },
+        ],
+      };
+      const prepared = prepareAppaRequest({
+        body,
+        interactionType: "openai:responses",
+        canonicalizeToolName: gatewayOnly,
+      });
+
+      expect(prepared.tools).toEqual({
+        controlToolName: "archestra__execute_remedy_plan",
+        noticeToolName: "archestra__get_remedy_plans",
+      });
+      // The notice is proxy-issued, not model-callable; only control remains.
+      expect(body.tools).toEqual([
+        {
+          type: "function",
+          name: "archestra__execute_remedy_plan",
+          parameters: { type: "object", properties: {} },
+        },
+      ]);
     });
 
     test("refuses the pair declared in two gateways' namespaces", () => {

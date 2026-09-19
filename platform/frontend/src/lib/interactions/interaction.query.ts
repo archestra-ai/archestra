@@ -5,6 +5,7 @@ import {
   type archestraApiTypes,
   type ClientFilter,
   type InteractionSource,
+  isUuid,
 } from "@archestra/shared";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -28,10 +29,11 @@ const {
  * callers use this to decide whether a typed term should filter or be ignored.
  */
 export const isSessionId = (value: string): boolean => {
-  const sessionIdRegex =
-    /^(scheduled-)?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   const openCodeSessionIdRegex = /^ses_[0-9a-z]{20,40}$/i;
-  return sessionIdRegex.test(value) || openCodeSessionIdRegex.test(value);
+  const uuid = value.startsWith("scheduled-")
+    ? value.slice("scheduled-".length)
+    : value;
+  return isUuid(uuid) || openCodeSessionIdRegex.test(value);
 };
 
 export function useInteractions({
@@ -271,7 +273,7 @@ export function useSessionLineage({
       const response = await getInteractionSessionLineage({
         path: { sessionId },
       });
-      throwOnApiError(response.error, { toastOnError: false });
+      throwOnApiError(response.error);
       return response.data ?? { forkedFrom: null, forks: [] };
     },
     enabled,

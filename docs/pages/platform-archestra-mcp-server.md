@@ -82,7 +82,7 @@ Required RBAC permission: None (no additional RBAC permission required)
 | `notice.v` | `1` | Yes |  |
 | `notice.call_id` | `string` | Yes |  |
 | `notice.namespace` | `string` | No |  |
-| `notice.session` | `string` | No |  |
+| `notice.session` | `string` | No | Root session that denied this call, used for support diagnostics. |
 | `notice.custom` | `true` | No |  |
 | `offers` | `object[]` | No |  |
 | `offers[].protected` | `string` | Yes |  |

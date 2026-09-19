@@ -2045,7 +2045,7 @@ export function parseOpenAppaConfig(
   }
   if (isEnabled && secret.length === 0) {
     logger.warn(
-      "OpenAPPA is enabled without ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET: denials that carry remedy offers will fail closed (503) until the secret is set on every replica",
+      "OpenAPPA is enabled without ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET: denials that carry remedy offers will fail closed (503), and no tool-call ids are stamped with their session, so a fork or an out-of-band compaction is traced to its parent session only through context anchors, until the secret is set on every replica",
     );
   }
   return {

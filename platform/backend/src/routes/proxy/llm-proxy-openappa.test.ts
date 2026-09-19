@@ -12,7 +12,7 @@ import config, { parseLlmProxyPlugins, parseOpenAppaConfig } from "@/config";
 import * as database from "@/database";
 import * as toolInvocation from "@/guardrails/tool-invocation";
 import * as trustedData from "@/guardrails/trusted-data";
-import { ModelModel, VirtualApiKeyModel } from "@/models";
+import { InteractionModel, ModelModel, VirtualApiKeyModel } from "@/models";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import { buildNoticeArguments } from "@/openappa/notice";
 import { parseTrajectoryStamp } from "@/openappa/trajectory-stamp";
@@ -926,6 +926,11 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       sessionId: parent,
       callId: "toolu_test_weather",
     });
+    // The log keeps the provider's id, which the history the next request
+    // logs answers the call by.
+    const logged = await latestLoggedResponse(agent.id);
+    expect(logged).toContain("toolu_test_weather");
+    expect(logged).not.toContain(given.id);
 
     // The client hands that context to a summarizer under a new session id,
     // as an out-of-band compaction does.
@@ -2950,6 +2955,11 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
       sessionId: CODEX_THREAD,
       callId: "call_weather",
     });
+    // The log keeps the provider's id, which the history the next request
+    // logs answers the call by.
+    const logged = await latestLoggedResponse(agent.id);
+    expect(logged).toContain('"call_id":"call_weather"');
+    expect(logged).not.toContain(given.call_id);
     if (stream) {
       // A client that keeps the last completed envelope holds the same id.
       const envelope = first.body
@@ -3179,3 +3189,15 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
     expect(starts[0].parent_id).toBeUndefined();
   });
 });
+
+/** The response the interaction log recorded for the profile's latest turn. */
+async function latestLoggedResponse(profileId: string): Promise<string> {
+  // A streamed turn is logged once the client's response has ended.
+  return await vi.waitFor(async () => {
+    const latest = (
+      await InteractionModel.getAllInteractionsForProfile(profileId)
+    ).at(-1);
+    if (!latest) throw new Error("nothing logged yet");
+    return JSON.stringify(latest.response);
+  });
+}

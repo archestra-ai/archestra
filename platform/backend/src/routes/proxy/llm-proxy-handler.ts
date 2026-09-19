@@ -153,6 +153,7 @@ import {
   shouldForwardAnthropicBeta,
   toSpanUserInfo,
   toToolCallBlock,
+  withProviderToolCallIds,
   withSessionContext,
 } from "./llm-proxy-helpers";
 import { StreamKeepAlive } from "./stream-keepalive";
@@ -2232,7 +2233,8 @@ async function handleStreaming<
         // call the client cannot execute. `state.toolCalls` is updated to match
         // what actually went out, so the persisted interaction and
         // `toProviderResponse()` describe the turn the client saw rather than
-        // the one the model first wrote.
+        // the one the model first wrote — logged under the provider's call
+        // ids, as the requests are.
         const allEvents =
           rewrittenToolCalls && streamAdapter.formatToolCallsSSE
             ? streamAdapter.formatToolCallsSSE(rewrittenToolCalls)
@@ -2416,7 +2418,10 @@ async function handleStreaming<
           providerType: provider.interactionType,
           request: originalRequest,
           processedRequest: request,
-          response: streamAdapter.toProviderResponse(),
+          response: withProviderToolCallIds(
+            streamAdapter.toProviderResponse(),
+            streamAdapter.state.toolCalls,
+          ),
           actualModel,
           usage,
           costs,
@@ -2440,7 +2445,12 @@ async function handleStreaming<
       // the failure; otherwise the provider ended the stream early (a truncated
       // response), and the partial content is all we have to log. Either way the
       // call must not disappear from interaction history.
-      await recordUsagelessInteraction(streamAdapter.toProviderResponse());
+      await recordUsagelessInteraction(
+        withProviderToolCallIds(
+          streamAdapter.toProviderResponse(),
+          streamAdapter.state.toolCalls,
+        ),
+      );
     }
   }
 }
@@ -2933,7 +2943,11 @@ async function handleNonStreaming<
       // A repaired batch logs what the client actually received. `getLoggedResponse`
       // still wins where it exists: those adapters log a different wire shape on
       // purpose, and after a rewrite they hand back that shape's rewritten form.
-      response: responseAdapter.getLoggedResponse?.() ?? clientResponse,
+      // Either way under the provider's call ids, as the requests are logged.
+      response: withProviderToolCallIds(
+        responseAdapter.getLoggedResponse?.() ?? clientResponse,
+        [...(rewrittenToolCalls ?? []), ...(hostedHold?.notices ?? [])],
+      ),
       actualModel,
       usage,
       costs,

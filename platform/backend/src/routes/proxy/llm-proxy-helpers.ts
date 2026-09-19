@@ -508,6 +508,37 @@ export function buildInteractionRecord(params: {
 }
 
 /**
+ * The response as the interaction log records it: a call the client was
+ * given under an id of the proxy's (`wireId`, OpenAPPA's trajectory stamp) is
+ * logged under the provider's own. Requests are logged with the provider's
+ * ids, so a logged turn's calls match the results the next logged request
+ * answers them with, whichever wire or stream mode carried the turn.
+ */
+export function withProviderToolCallIds<T>(
+  response: T,
+  toolCalls: readonly { id: string; wireId?: string }[],
+): T {
+  const providerIds = new Map(
+    toolCalls.flatMap((call) =>
+      call.wireId && call.wireId !== call.id
+        ? [[call.wireId, call.id] as const]
+        : [],
+    ),
+  );
+  if (providerIds.size === 0) return response;
+  const restore = (value: unknown): unknown => {
+    if (typeof value === "string") return providerIds.get(value) ?? value;
+    if (Array.isArray(value)) return value.map(restore);
+    if (typeof value === "object" && value !== null)
+      return Object.fromEntries(
+        Object.entries(value).map(([key, entry]) => [key, restore(entry)]),
+      );
+    return value;
+  };
+  return restore(response) as T;
+}
+
+/**
  * Record OTEL spans and Prometheus metrics for blocked tool calls.
  * Used by both streaming and non-streaming paths when tool invocation
  * policies refuse tool calls.

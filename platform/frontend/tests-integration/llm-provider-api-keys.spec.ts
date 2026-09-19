@@ -37,7 +37,7 @@ test.describe("LLM Provider API Keys", () => {
     await llmKeysPage.addButton.click();
     await page.getByRole("combobox", { name: "Provider" }).click();
     await page
-      .getByRole("button", { name: PROVIDER_OPTION_NAME, exact: true })
+      .getByRole("option", { name: PROVIDER_OPTION_NAME, exact: true })
       .click();
     await page.getByLabel(/^Name/).fill(KEY_NAME);
     await page
@@ -125,7 +125,7 @@ test.describe("LLM Provider API Keys", () => {
     await llmKeysPage.addButton.click();
     await page.getByRole("combobox", { name: "Provider" }).click();
     await page
-      .getByRole("button", { name: PROVIDER_OPTION_NAME, exact: true })
+      .getByRole("option", { name: PROVIDER_OPTION_NAME, exact: true })
       .click();
     await page.getByLabel(/^Name/).fill(KEY_A);
     await page
@@ -148,7 +148,7 @@ test.describe("LLM Provider API Keys", () => {
     await llmKeysPage.addButton.click();
     await page.getByRole("combobox", { name: "Provider" }).click();
     await page
-      .getByRole("button", { name: PROVIDER_OPTION_NAME, exact: true })
+      .getByRole("option", { name: PROVIDER_OPTION_NAME, exact: true })
       .click();
     await page.getByLabel(/^Name/).fill(KEY_B);
     await page
@@ -190,7 +190,7 @@ test.describe("LLM Provider API Keys", () => {
     await llmKeysPage.addButton.click();
     await page.getByRole("combobox", { name: "Provider" }).click();
     await page
-      .getByRole("button", { name: PROVIDER_OPTION_NAME, exact: true })
+      .getByRole("option", { name: PROVIDER_OPTION_NAME, exact: true })
       .click();
     await page.getByLabel(/^Name/).fill(PRIMARY);
     await page
@@ -223,7 +223,7 @@ test.describe("LLM Provider API Keys", () => {
     await llmKeysPage.addButton.click();
     await page.getByRole("combobox", { name: "Provider" }).click();
     await page
-      .getByRole("button", { name: PROVIDER_OPTION_NAME, exact: true })
+      .getByRole("option", { name: PROVIDER_OPTION_NAME, exact: true })
       .click();
     await page.getByLabel(/^Name/).fill(SECONDARY);
     await page

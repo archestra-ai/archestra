@@ -57,13 +57,13 @@ test.describe("LLM logs — Client filter", () => {
     await llmLogsPage.goto();
     await llmLogsPage.clientFilter.click();
 
-    // Options render as buttons (not role="option") and carry the Anthropic
+    // Options carry the Anthropic
     // logo's alt text alongside the label, so match the label as a substring.
     await expect(
-      page.getByRole("button", { name: "Claude Code" }),
+      page.getByRole("option", { name: "Claude Code" }),
     ).toBeVisible();
     await expect(
-      page.getByRole("button", { name: "Claude Desktop" }),
+      page.getByRole("option", { name: "Claude Desktop" }),
     ).toBeVisible();
   });
 
@@ -101,9 +101,9 @@ test.describe("LLM logs — Client filter", () => {
   }) => {
     await llmLogsPage.goto();
 
-    // Source filter is the 3rd combobox; pick "API" (options are buttons).
+    // Source filter is the 3rd combobox; pick "API".
     await page.getByRole("combobox").nth(2).click();
-    await page.getByRole("button", { name: "API", exact: true }).click();
+    await page.getByRole("option", { name: "API", exact: true }).click();
     await expect(page).toHaveURL(/source=api/);
 
     await llmLogsPage.selectClient("Claude Code");

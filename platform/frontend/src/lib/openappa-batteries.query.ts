@@ -6,12 +6,7 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { toast } from "sonner";
-import {
-  getApiErrorType,
-  handleApiError,
-  throwOnApiError,
-  toApiError,
-} from "@/lib/utils";
+import { getApiErrorType, reportApiError, throwOnApiError } from "@/lib/utils";
 
 export type BatteryMatch =
   archestraApiTypes.GetOpenappaBatteryMatchesResponses["200"][number];
@@ -142,10 +137,7 @@ async function setInstallEnabled(id: string, enabled: boolean) {
 
 /** The SDK call's data, or its refusal toasted and thrown. */
 function settled<T>(result: { data?: T; error?: unknown }): T {
-  if (result.error !== undefined) {
-    handleApiError(result.error);
-    throw toApiError(result.error);
-  }
+  if (result.error !== undefined) throw reportApiError(result.error);
   if (result.data === undefined)
     throw new Error("The API answered with neither data nor an error");
   return result.data;

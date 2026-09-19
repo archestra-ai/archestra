@@ -39,6 +39,13 @@ export function BatteriesPanel() {
     organization: ["update"],
     toolPolicy: ["update"],
   });
+  // An uploaded package may carry helper scripts that run with a bound
+  // credential, so uploading takes the credential permission as well.
+  const { data: canUpload } = useHasPermissions({
+    organization: ["update"],
+    toolPolicy: ["update"],
+    credential: ["update"],
+  });
   const [uploading, setUploading] = useState(false);
   if (batteries.isPending) return <Skeleton className="h-32 w-full" />;
   if (batteries.isError || !batteries.data)
@@ -75,7 +82,7 @@ export function BatteriesPanel() {
             </p>
           </div>
         </div>
-        {canManage === true && (
+        {canUpload === true && (
           <Button variant="outline" onClick={() => setUploading(true)}>
             <Upload className="size-4" />
             <span>Upload package</span>
@@ -229,7 +236,7 @@ function InstallRow({
         open={removing}
         onOpenChange={setRemoving}
         title={`Remove the ${battery.name} battery?`}
-        description={`Its guardrails stop applying to ${serverName}. The server's own tools are not affected.`}
+        description={`Its guardrails stop applying to ${serverName || "this server"}. The server's own tools are not affected.`}
         confirmLabel="Remove"
         pendingLabel="Removing…"
         isPending={remove.isPending}

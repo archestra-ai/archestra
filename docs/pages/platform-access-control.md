@@ -3,7 +3,7 @@ title: "Access Control"
 category: Administration
 description: "Role-based access control (RBAC) system for managing user permissions in Archestra"
 order: 1
-lastUpdated: 2026-09-04
+lastUpdated: 2026-09-17
 ---
 <!--
 GENERATED FILE — edit codegen-access-control-docs.ts, not this page.
@@ -420,6 +420,8 @@ Some MCP-related resources also apply runtime scope checks in addition to RBAC, 
 - Internal MCP catalog items can be `personal`, `team`, or `org`
 - Organization-wide catalog items require `mcpServerInstallation:admin`
 - Team MCP server installations depend on team membership, with broader control for organization-level team managers and admins of the selected team
+
+Deleting a team retains its MCP connections but removes access based on team membership. Organization-level team managers (`team:create`) can still refresh, reauthenticate, reinstall, or revoke those connections. Each action also requires its usual MCP installation permission.
 
 When designing custom roles, treat the permission matrix as the first gate and the resource's scope rules as the second gate.
 

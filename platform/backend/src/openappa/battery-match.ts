@@ -1,15 +1,12 @@
 import type { InternalMcpCatalog } from "@/types";
+import type { BatteryMatchEvidence } from "@/types/openappa-batteries";
 
 type BatteryMatchCatalog = Pick<
   InternalMcpCatalog,
   "name" | "serverUrl" | "localConfig"
 >;
 
-type BatteryMatch = {
-  battery: string;
-  /** What the catalog entry was matched on; a name alone is a weak signal. */
-  evidence: "host" | "image" | "name";
-};
+type BatteryMatch = { battery: string; evidence: BatteryMatchEvidence };
 
 /** Whether any battery rule at all could match the catalog entry. */
 export function matchesAnyRule(catalog: BatteryMatchCatalog): boolean {

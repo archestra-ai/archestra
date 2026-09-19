@@ -5,6 +5,7 @@
  */
 import {
   type ArchestraToolShortName,
+  MCP_SERVER_TOOL_NAME_SEPARATOR,
   TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
   TOOL_GET_REMEDY_PLANS_SHORT_NAME,
 } from "@archestra/shared";
@@ -32,6 +33,10 @@ export type AppaRequestTools = {
   controlToolName: string;
   /** Client-declared spelling of the denial notice tool. */
   noticeToolName: string;
+  /** The gateway namespace the control tool is declared in (Codex). */
+  controlNamespace?: string;
+  /** The gateway namespace the notice tool is declared in, which Codex needs to dispatch a notice. */
+  noticeNamespace?: string;
 };
 
 export type AppaPreparedRequest = {
@@ -122,14 +127,20 @@ export function prepareAppaRequest(params: {
       ...(offerClaims ? { offerClaims } : {}),
     };
   }
-  if (family) refuseCodexCodeMode({ family, declared, body: params.body });
-  refuseProviderHostedTools({ family, declared });
-  refuseDeferredTools(declared);
+  const toolDeclarations = declared.map(({ tool }) => tool);
+  if (family)
+    refuseCodexCodeMode({
+      family,
+      declared: toolDeclarations,
+      body: params.body,
+    });
+  refuseProviderHostedTools({ family, declared: toolDeclarations });
+  refuseDeferredTools(toolDeclarations);
 
-  const found = new Map<string, string>();
+  const found = new Map<string, AppaToolDeclaration>();
   const spellings = new Map<string, string>();
   const customTools = new Set<string>();
-  for (const tool of declared) {
+  for (const { tool, namespace } of declared) {
     // The provider runs it, so the client never names or calls it: its calls
     // are ruled on from the response, not matched against a declared spelling.
     if (isResultGovernedHostedTool({ family, tool })) continue;
@@ -142,16 +153,21 @@ export function prepareAppaRequest(params: {
       );
     }
     if (asToolDeclaration(tool)?.type === "custom") customTools.add(name);
-    const canonical = params.canonicalizeToolName(name);
+    // A Codex namespace member is read the way its calls are: joined with
+    // the `mcp__<server>` namespace that declares it, so the label anchored
+    // is the server's, not whatever its member is called.
+    const anchored = namespacedToolName(name, namespace);
+    const canonical = params.canonicalizeToolName(anchored);
     spellings.set(canonical, name);
     // Built-in status comes from the strict anchor alone: a decorated name
     // counts only under a label the canonicalizer ties to one of this
     // organization's gateways. A lookalike under any other label stays a
     // foreign tool, which is what keeps a hostile MCP server from naming a
-    // tool of its own into the control tool.
+    // tool of its own into the control tool, or into the notice tool that
+    // would carry it every denied call.
     const short =
       shortToolName(canonical) ??
-      anchoredLabelShort(name, params.canonicalizeToolName);
+      anchoredLabelShort(anchored, params.canonicalizeToolName);
     if (short) spellings.set(archestraMcpBranding.getToolName(short), name);
     if (
       short === TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME ||
@@ -163,56 +179,66 @@ export function prepareAppaRequest(params: {
           "OpenAPPA control tools require structured function arguments, not free-form custom input",
         );
       }
-      // One declaration each. A second spelling of the same tool leaves the
-      // session ambiguous about which name to render and which call to trust.
+      // One declaration each. A second spelling of the same tool, or the
+      // same one in a second gateway's namespace, leaves the session
+      // ambiguous about where to deliver a notice and which call to trust.
       const first = found.get(short);
-      if (first !== undefined && first !== name) {
+      if (
+        first !== undefined &&
+        (first.name !== name || first.namespace !== namespace)
+      ) {
         throw new ApiError(
           400,
-          `OpenAPPA needs exactly one declaration of ${short}; this request declares both ${first} and ${name}. Connect this client to one gateway of this platform at a time.`,
+          `OpenAPPA needs exactly one declaration of ${short}; this request declares both ${declarationLabel(first)} and ${declarationLabel({ name, namespace })}. Connect this client to one gateway of this platform at a time.`,
         );
       }
-      found.set(short, name);
+      found.set(short, { name, ...(namespace ? { namespace } : {}) });
     }
   }
 
-  let controlToolName = found.get(TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME);
-  let noticeToolName = found.get(TOOL_GET_REMEDY_PLANS_SHORT_NAME);
-  if (!controlToolName || !noticeToolName) {
+  let control = found.get(TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME);
+  let notice = found.get(TOOL_GET_REMEDY_PLANS_SHORT_NAME);
+  if (!control || !notice) {
     // OpenAPPA is on for this request: every agent gets notice and control
     // without an admin assigning them or the client listing them. Learn the
     // client's MCP prefix from a tool it did declare, otherwise use the
     // platform names. Clients that cap tools/list (Claude Code at 50) often
     // drop get_remedy_plans; injecting it here is what keeps denials as
-    // notices on an already-running session.
+    // notices on an already-running session. A pair only an unanchored
+    // namespace declares is missing too: that server is not the gateway.
     const prefix = appaDeclarationPrefix(found);
-    if (!noticeToolName) {
-      noticeToolName = `${prefix}${TOOL_GET_REMEDY_PLANS_SHORT_NAME}`;
-      appendDeclaredTool(params.body, family, noticeToolName);
-      found.set(TOOL_GET_REMEDY_PLANS_SHORT_NAME, noticeToolName);
+    if (!notice) {
+      notice = { name: `${prefix}${TOOL_GET_REMEDY_PLANS_SHORT_NAME}` };
+      appendDeclaredTool(params.body, family, notice.name);
+      found.set(TOOL_GET_REMEDY_PLANS_SHORT_NAME, notice);
       spellings.set(
         archestraMcpBranding.getToolName(TOOL_GET_REMEDY_PLANS_SHORT_NAME),
-        noticeToolName,
+        notice.name,
       );
     }
-    if (!controlToolName) {
-      controlToolName = `${prefix}${TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME}`;
-      appendDeclaredTool(params.body, family, controlToolName);
-      found.set(TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME, controlToolName);
+    if (!control) {
+      control = { name: `${prefix}${TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME}` };
+      appendDeclaredTool(params.body, family, control.name);
+      found.set(TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME, control);
       spellings.set(
         archestraMcpBranding.getToolName(TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME),
-        controlToolName,
+        control.name,
       );
     }
   }
 
-  // Read before the strip: a notice goes back to the client under the
-  // namespace the client declared it in, or the client cannot dispatch it.
+  // Read before the strip: a denied call's notice records the namespace its
+  // tool was declared in, so restoration can put the call back under it.
   const namespaces = declaredToolNamespaces(params.body);
   // Strip notice tool from provider request so the model cannot invoke it directly.
-  stripAppaTools({ body: params.body, names: new Set([noticeToolName]) });
+  stripAppaTools({ body: params.body, names: new Set([notice.name]) });
   return {
-    tools: { controlToolName, noticeToolName },
+    tools: {
+      controlToolName: control.name,
+      noticeToolName: notice.name,
+      ...(control.namespace ? { controlNamespace: control.namespace } : {}),
+      ...(notice.namespace ? { noticeNamespace: notice.namespace } : {}),
+    },
     session,
     spellings,
     customTools,
@@ -243,7 +269,36 @@ export function underscoreLabeledPlatformToolName(
   return null;
 }
 
+/**
+ * Codex declares an MCP server's tools as members of an `mcp__<server>`
+ * namespace and calls a member by its bare name. Joined with the namespace,
+ * they spell what Claude Code sends for the same tool, so the gateway
+ * canonicalizer anchors it on the organization's real gateway label and a
+ * same-named member of any other server keeps a foreign name.
+ */
+export function namespacedToolName(
+  name: string,
+  namespace: string | undefined,
+): string {
+  return namespace?.startsWith(`mcp${MCP_SERVER_TOOL_NAME_SEPARATOR}`)
+    ? `${namespace}${MCP_SERVER_TOOL_NAME_SEPARATOR}${name}`
+    : name;
+}
+
 // === Internal helpers ===
+
+/** Where a request declares one of the APPA tools. */
+type AppaToolDeclaration = {
+  name: string;
+  /** The Codex namespace that declares it; absent for a flat declaration. */
+  namespace?: string;
+};
+
+function declarationLabel(declaration: AppaToolDeclaration): string {
+  return declaration.namespace
+    ? `${declaration.name} (namespace ${declaration.namespace})`
+    : declaration.name;
+}
 
 /** A name that ends in the notice tool's short name, under any client label. */
 const NOTICE_TOOL_SPELLING = new RegExp(
@@ -284,8 +339,10 @@ function refuseDeferredTools(declared: readonly unknown[]): void {
  * The MCP prefix a client's own APPA declarations use, so an injected pair
  * keeps the same spelling the client already knows.
  */
-function appaDeclarationPrefix(found: Map<string, string>): string {
-  for (const [short, name] of found) {
+function appaDeclarationPrefix(
+  found: ReadonlyMap<string, AppaToolDeclaration>,
+): string {
+  for (const [short, { name }] of found) {
     if (name.endsWith(short)) return name.slice(0, name.length - short.length);
   }
   const branded = archestraMcpBranding.getToolName(

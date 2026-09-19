@@ -262,14 +262,26 @@ export function stripAppaTools(params: {
  *
  * Codex groups an MCP server's tools under one `namespace` declaration and
  * calls a member by its own name, so a namespace's members are returned under
- * those names.
+ * those names, each with the namespace that declares it: the name alone does
+ * not say which server a member belongs to.
  */
-export function declaredTools(body: unknown): unknown[] {
+export function declaredTools(
+  body: unknown,
+): Array<{ tool: unknown; namespace?: string }> {
   return toolContainers(body)
     .flatMap(({ holder, key }) =>
       Array.isArray(holder[key]) ? (holder[key] as unknown[]) : [],
     )
-    .flatMap((tool) => groupedMembers(tool)?.members ?? [tool]);
+    .flatMap((tool) => {
+      const group = groupedMembers(tool);
+      if (!group) return [{ tool }];
+      const namespace = asRecord(tool)?.name;
+      return group.members.map((member) =>
+        typeof namespace === "string"
+          ? { tool: member, namespace }
+          : { tool: member },
+      );
+    });
 }
 
 /**

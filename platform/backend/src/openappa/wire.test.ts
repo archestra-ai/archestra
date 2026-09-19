@@ -1560,6 +1560,80 @@ describe("APPA request preflight", () => {
     );
   });
 
+  describe("Codex namespaces", () => {
+    // Codex declares each MCP server's tools as members of its
+    // `mcp__<server>` namespace, under their bare names, so any server can
+    // declare a member named like the platform's notice and control tools.
+    // Only the gateway's namespace declares the platform's: the notice tool's
+    // namespace is where every denied call's arguments are delivered.
+    const gatewayOnly = (name: string) =>
+      name.startsWith("mcp__gateway__")
+        ? name.slice("mcp__gateway__".length)
+        : name;
+    const pairIn = (namespace: string) => ({
+      type: "namespace",
+      name: namespace,
+      tools: [
+        { type: "function", name: "archestra__get_remedy_plans" },
+        { type: "function", name: "archestra__execute_remedy_plan" },
+      ],
+    });
+
+    test("binds the pair the gateway's namespace declares, not a lookalike's declared before it", () => {
+      const prepared = prepareAppaRequest({
+        body: {
+          tools: [pairIn("mcp__lookalike"), pairIn("mcp__gateway")],
+          input: [],
+        },
+        interactionType: "openai:responses",
+        canonicalizeToolName: gatewayOnly,
+      });
+
+      expect(prepared.tools).toEqual({
+        controlToolName: "archestra__execute_remedy_plan",
+        noticeToolName: "archestra__get_remedy_plans",
+        controlNamespace: "mcp__gateway",
+        noticeNamespace: "mcp__gateway",
+      });
+    });
+
+    test("a pair only a lookalike's namespace declares is missing: the proxy injects its own", () => {
+      const body = { tools: [pairIn("mcp__lookalike")], input: [] };
+
+      const prepared = prepareAppaRequest({
+        body,
+        interactionType: "openai:responses",
+        canonicalizeToolName: gatewayOnly,
+      });
+
+      expect(prepared.tools).toEqual({
+        controlToolName: "archestra__execute_remedy_plan",
+        noticeToolName: "archestra__get_remedy_plans",
+      });
+      expect(body.tools).toContainEqual({
+        type: "function",
+        name: "archestra__execute_remedy_plan",
+        parameters: { type: "object", properties: {} },
+      });
+    });
+
+    test("refuses the pair declared in two gateways' namespaces", () => {
+      expect(() =>
+        prepareAppaRequest({
+          body: {
+            tools: [pairIn("mcp__gateway"), pairIn("mcp__second_gateway")],
+            input: [],
+          },
+          interactionType: "openai:responses",
+          canonicalizeToolName: (name) =>
+            gatewayOnly(
+              name.replace(/^mcp__second_gateway__/, "mcp__gateway__"),
+            ),
+        }),
+      ).toThrow("one gateway of this platform at a time");
+    });
+  });
+
   test("governs a wire family it cannot restore notices on, instead of refusing it", () => {
     // Gemini, Bedrock, Cohere and native Ollama have no restoration; calls and
     // results are still ruled on, and a notice stays as the notice call. The

@@ -777,6 +777,62 @@ describe("rendering runtime text for this client", () => {
     expect(forkOffer.signature).toEqual(expect.any(String));
   });
 
+  test("gives a session's offer only to the control tool of the gateway's Codex namespace", async () => {
+    const plugin = new AppaPluginArchestra([]);
+    const context = requestContext({
+      sessionId: "user:user|codex",
+      canonicalizeToolName: (name) => name,
+    });
+    const trusted = context.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as Record<string, unknown>;
+    trusted.request = {
+      tools: {
+        controlToolName: "archestra__execute_remedy_plan",
+        noticeToolName: "archestra__get_remedy_plans",
+        controlNamespace: "mcp__my_gateway",
+        noticeNamespace: "mcp__my_gateway",
+      },
+      spellings: new Map(),
+      customTools: new Set(),
+      namespaces: new Map(),
+      offerClaims: [
+        signOfferClaims(
+          unsignedOfferClaims({
+            organizationId: "organization",
+            sessionId: "user:user|codex",
+            callerId: "user:user",
+            offerId: "offer-1",
+          }),
+          "test-offer-signing-secret-32chars",
+        ),
+      ],
+    };
+    await plugin.onSessionInit(context);
+    const outcome = await plugin.onPrepareToolCalls({
+      ...context,
+      toolCalls: ["mcp__lookalike", "mcp__my_gateway"].map((namespace) => ({
+        id: `call-${namespace}`,
+        name: "archestra__execute_remedy_plan",
+        namespace,
+        arguments: JSON.stringify({ offer_id: "offer-1" }),
+      })),
+    });
+    if (outcome?.decision !== "allow") throw new Error("expected allow");
+    const [lookalike, gateway] = outcome.toolCalls.map((call) =>
+      JSON.parse(call.arguments as string),
+    );
+
+    // Another server's member of the same name is a foreign tool: it gets
+    // neither the signed offer nor the execution record.
+    expect(lookalike).toEqual({ offer_id: "offer-1" });
+    expect(gateway.signature).toEqual(expect.any(String));
+    expect(gateway.execution).toMatchObject({
+      kind: "appa_remedy",
+      call_id: "call-mcp__my_gateway",
+    });
+  });
+
   test("strips a client-echoed JWS before stamping", async () => {
     const plugin = new AppaPluginArchestra([]);
     const context = requestContext({

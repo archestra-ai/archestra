@@ -1,4 +1,3 @@
-import { MCP_SERVER_TOOL_NAME_SEPARATOR } from "@archestra/shared";
 import config from "@/config";
 import { recordResponseAnchors } from "@/openappa/context-anchors";
 import { buildNoticeArguments, type RemedyExecution } from "@/openappa/notice";
@@ -9,7 +8,11 @@ import {
   signOfferClaims,
   unsignedOfferClaims,
 } from "@/openappa/offer-claims";
-import { underscoreLabeledPlatformToolName } from "@/openappa/request";
+import {
+  type AppaRequestTools,
+  namespacedToolName,
+  underscoreLabeledPlatformToolName,
+} from "@/openappa/request";
 import {
   cancelCalls,
   endTurn,
@@ -125,20 +128,25 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
   async onPrepareToolCalls(
     context: LlmProxyToolCallsContext,
   ): Promise<LlmProxyToolCallsOutcome | undefined> {
-    const control = this.bindings.get(context.resources)?.request.tools
-      ?.controlToolName;
-    if (!control) return;
+    const binding = this.bindings.get(context.resources);
+    const tools = binding?.request.tools;
+    if (!binding || !tools) return;
     let changed = false;
     const toolCalls = context.toolCalls.map((call) => {
-      if (call.name !== control) return call;
-      const binding = this.bindings.get(context.resources);
+      // The control tool the gateway declared, in the namespace it declared
+      // it in: a same-named member of another server is a foreign tool, and
+      // never carries this session's offers.
+      if (
+        call.name !== tools.controlToolName ||
+        call.namespace !== tools.controlNamespace
+      )
+        return call;
       const stamped = stampControlExecution(
         call,
-        binding &&
-          sessionOfferClaims(
-            binding.request.offerClaims,
-            binding.session.session_id,
-          ),
+        sessionOfferClaims(
+          binding.request.offerClaims,
+          binding.session.session_id,
+        ),
       );
       changed ||= stamped !== call;
       return stamped;
@@ -175,7 +183,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       notices: held.map(({ call, feedback }) => ({
         id: call.id,
         name: tools.noticeToolName,
-        ...noticeNamespace(binding.request),
+        ...noticeNamespace(tools),
         arguments: JSON.stringify(
           buildNoticeArguments({
             id: call.id,
@@ -199,7 +207,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     const binding = this.bindings.get(context.resources);
     if (!binding) return;
     const calls = [...context.toolCalls];
-    const control = binding.request.tools?.controlToolName;
+    const tools = binding.request.tools;
     const decisions = await evaluateToolCalls(
       binding.session,
       calls.map((call) => ({
@@ -208,18 +216,18 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       })),
       {
         canonicalize: (name) => this.canonicalize(binding, name),
-        ...(control
+        ...(tools
           ? {
               controlToolName: namespacedToolName(
-                control,
-                binding.request.namespaces.get(control),
+                tools.controlToolName,
+                tools.controlNamespace,
               ),
             }
           : {}),
       },
     );
 
-    const notice = binding.request.tools?.noticeToolName;
+    const notice = tools?.noticeToolName;
     const blocked: { id: string; name: string; reason: string }[] = [];
     const released: typeof calls = [];
     for (const [index, call] of calls.entries()) {
@@ -262,7 +270,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       released.push({
         id: call.id,
         name: notice,
-        ...noticeNamespace(binding.request),
+        ...noticeNamespace(tools),
         arguments: JSON.stringify(
           buildNoticeArguments({
             id: call.id,
@@ -526,29 +534,15 @@ function toolInputOf(
 }
 
 /**
- * Codex declares an MCP server's tools as members of an `mcp__<server>`
- * namespace and calls a member by its bare name. Joined with the namespace the
- * call itself names, they spell what Claude Code sends for the same tool, so
- * the gateway canonicalizer anchors it on the organization's real gateway
- * label and a same-named member of any other server keeps a foreign name.
+ * The gateway namespace the client declared its notice tool in, which Codex
+ * needs to dispatch the notice. Only the declaration anchored on this
+ * organization's gateway is one (see `prepareAppaRequest`): a same-named
+ * member of another server would receive every denied call.
  */
-function namespacedToolName(
-  name: string,
-  namespace: string | undefined,
-): string {
-  return namespace?.startsWith(`mcp${MCP_SERVER_TOOL_NAME_SEPARATOR}`)
-    ? `${namespace}${MCP_SERVER_TOOL_NAME_SEPARATOR}${name}`
-    : name;
-}
-
-/** The namespace the client declared its notice tool in, which Codex needs to dispatch the notice. */
-function noticeNamespace(request: {
-  tools?: { noticeToolName: string };
-  namespaces: ReadonlyMap<string, string>;
-}): { namespace?: string } {
-  const notice = request.tools?.noticeToolName;
-  const namespace = notice ? request.namespaces.get(notice) : undefined;
-  return namespace ? { namespace } : {};
+function noticeNamespace(tools: AppaRequestTools | undefined): {
+  namespace?: string;
+} {
+  return tools?.noticeNamespace ? { namespace: tools.noticeNamespace } : {};
 }
 
 /**

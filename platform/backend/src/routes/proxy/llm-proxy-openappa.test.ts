@@ -2361,7 +2361,26 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
     });
   });
 
-  test("delivers a Codex denial notice under the namespace Codex declared it in", async () => {
+  /** Codex declares an MCP server's tools as members of one namespace. */
+  const codexNamespace = (name: string) => ({
+    type: "namespace",
+    name,
+    tools: [
+      "archestra__execute_remedy_plan",
+      "archestra__get_remedy_plans",
+    ].map((member) => ({
+      type: "function",
+      name: member,
+      parameters: { type: "object", properties: {} },
+    })),
+  });
+
+  /**
+   * A non-streamed Codex turn whose one call the runtime denies, under the
+   * given declarations: what the client receives, and what the provider was
+   * sent.
+   */
+  const deniedCodexTurn = async (tools: unknown[]) => {
     native.dispatchHook.mockImplementation(async (raw: string) => {
       const event = JSON.parse(raw);
       events.push(event);
@@ -2376,66 +2395,69 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
       () =>
         ({
           responses: {
-            create: async () => ({
-              id: "resp_denied",
-              object: "response",
-              created_at: 1,
-              status: "completed",
-              model: "gpt-5.5",
-              output: [
-                {
-                  type: "function_call",
-                  id: "fc_shell",
-                  call_id: "call_shell",
-                  name: "exec_command",
-                  arguments: '{"cmd":"echo hi"}',
-                  status: "completed",
-                },
-              ],
-              usage: { input_tokens: 3, output_tokens: 2, total_tokens: 5 },
-            }),
+            create: async (params: unknown) => {
+              providerBodies.push(structuredClone(params));
+              return {
+                id: "resp_denied",
+                object: "response",
+                created_at: 1,
+                status: "completed",
+                model: "gpt-5.5",
+                output: [
+                  {
+                    type: "function_call",
+                    id: "fc_shell",
+                    call_id: "call_shell",
+                    name: "exec_command",
+                    arguments: '{"cmd":"echo hi"}',
+                    status: "completed",
+                  },
+                ],
+                usage: { input_tokens: 3, output_tokens: 2, total_tokens: 5 },
+              };
+            },
           },
         }) as never,
     );
-    // Codex declares an MCP server's tools as members of one namespace.
-    const payload = {
-      ...codexPayload({ session_id: CODEX_SESSION, thread_id: CODEX_THREAD }),
-      stream: false,
-      tools: [
-        {
-          type: "function",
-          name: "exec_command",
-          parameters: { type: "object", properties: {} },
-        },
-        {
-          type: "namespace",
-          name: "mcp__my_gateway",
-          tools: [
-            {
-              type: "function",
-              name: "archestra__execute_remedy_plan",
-              parameters: { type: "object", properties: {} },
-            },
-            {
-              type: "function",
-              name: "archestra__get_remedy_plans",
-              parameters: { type: "object", properties: {} },
-            },
-          ],
-        },
-      ],
-    };
-
     const response = await app.inject({
       method: "POST",
       url: `/v1/openai/${agent.id}/responses`,
       remoteAddress: "127.0.0.1",
       headers: codexHeaders(),
-      payload: payload as Record<string, unknown>,
+      payload: {
+        ...codexPayload({ session_id: CODEX_SESSION, thread_id: CODEX_THREAD }),
+        stream: false,
+        tools: [
+          {
+            type: "function",
+            name: "exec_command",
+            parameters: { type: "object", properties: {} },
+          },
+          ...tools,
+        ],
+      } as Record<string, unknown>,
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    return {
+      output: response.json().output as Record<string, unknown>[],
+      sent: providerBodies.at(-1) as { tools: Record<string, unknown>[] },
+    };
+  };
+
+  test("delivers a Codex denial notice under the namespace Codex declared it in", async ({
+    makeAgent,
+  }) => {
+    await makeAgent({
+      name: "My Gateway",
+      agentType: "mcp_gateway",
+      organizationId: agent.organizationId,
     });
 
-    expect(response.statusCode, response.body).toBe(200);
-    expect(response.json().output).toEqual([
+    const { output } = await deniedCodexTurn([
+      codexNamespace("mcp__my_gateway"),
+    ]);
+
+    expect(output).toEqual([
       expect.objectContaining({
         type: "function_call",
         call_id: "call_shell",
@@ -2443,6 +2465,49 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
         namespace: "mcp__my_gateway",
       }),
     ]);
+  });
+
+  test("never delivers a Codex denial notice to a lookalike's namespace declared before the gateway's", async ({
+    makeAgent,
+  }) => {
+    await makeAgent({
+      name: "My Gateway",
+      agentType: "mcp_gateway",
+      organizationId: agent.organizationId,
+    });
+
+    // The notice carries the denied call's arguments: in the lookalike's
+    // namespace, Codex would hand them to that server.
+    const { output } = await deniedCodexTurn([
+      codexNamespace("mcp__lookalike"),
+      codexNamespace("mcp__my_gateway"),
+    ]);
+
+    expect(output).toEqual([
+      expect.objectContaining({
+        call_id: "call_shell",
+        name: "archestra__get_remedy_plans",
+        namespace: "mcp__my_gateway",
+      }),
+    ]);
+  });
+
+  test("a Codex session without its gateway gets the injected pair, never a lookalike's", async () => {
+    const { output, sent } = await deniedCodexTurn([
+      codexNamespace("mcp__lookalike"),
+    ]);
+
+    expect(output).toHaveLength(1);
+    expect(output[0]).toMatchObject({
+      call_id: "call_shell",
+      name: "archestra__get_remedy_plans",
+    });
+    expect(output[0].namespace).toBeUndefined();
+    expect(sent.tools).toContainEqual({
+      type: "function",
+      name: "archestra__execute_remedy_plan",
+      parameters: { type: "object", properties: {} },
+    });
   });
 
   test("rules a Codex call by the namespace it names: the gateway's is ours, a lookalike's stays foreign", async ({

@@ -1,0 +1,185 @@
+#!/usr/bin/env python3
+"""Bridge terminal Codex rollout errors to the Runtime failure contract."""
+
+import json
+import os
+from pathlib import Path
+import re
+import signal
+import subprocess
+import sys
+import time
+from urllib.parse import quote, quote_plus
+
+
+def public_message(message: str) -> str:
+    # Codex may include a JSON response body in its message. Keep only the
+    # provider's public message, never unrelated response fields.
+    body_start = message.find("{")
+    if body_start >= 0:
+        try:
+            body, _ = json.JSONDecoder().raw_decode(message[body_start:])
+            detail = body.get("error", {}).get("message")
+            if isinstance(detail, str):
+                message = message[:body_start] + detail
+            else:
+                message = message[:body_start] + "The provider rejected the request. Check the configured credential."
+        except (ValueError, AttributeError):
+            message = message[:body_start] + "The provider rejected the request. Check the configured credential."
+
+    secrets = {
+        value for name, value in os.environ.items()
+        if value and re.search(r"TOKEN|SECRET|PASSWORD|API_KEY|VIRTUAL_KEY", name)
+        and not name.endswith(("_FILE", "_PATH", "_DIR"))
+    }
+    credentials_file = os.environ.get("ARCHESTRA_AGENT_RUNTIME_CREDENTIALS_FILE")
+    if credentials_file:
+        try:
+            credentials = json.loads(Path(credentials_file).read_text())["credentials"]
+            secrets.update(
+                entry["value"] for entry in credentials.values()
+                if isinstance(entry, dict) and isinstance(entry.get("value"), str) and entry["value"]
+            )
+        except (OSError, ValueError, KeyError, TypeError, AttributeError):
+            pass
+    encoded_secrets = set()
+    for value in secrets:
+        escaped = json.dumps(value)[1:-1]
+        encoded_secrets.update((value, quote(value, safe=""), quote_plus(value),
+                                escaped, escaped.replace("/", "\\/"),
+                                json.dumps(value, ensure_ascii=False)[1:-1]))
+    encoded_secrets.update(re.sub(r"%[0-9A-F]{2}", lambda match: match[0].lower(), value)
+                           for value in list(encoded_secrets))
+    for value in sorted(encoded_secrets, key=len, reverse=True):
+        message = message.replace(value, "[REDACTED]")
+    message = re.sub(r", url:\s*https?://\S+", "", message, flags=re.IGNORECASE)
+    message = re.sub(r"https?://[^\s<>\"']+", "[REDACTED]", message, flags=re.IGNORECASE)
+    message = re.sub(r"(?i)\b(Bearer|Basic)\s+[^\s,;\"']+", r"\1 [REDACTED]", message)
+    label = r"\b(?:api[_ -]?key|access[_ -]?token|refresh[_ -]?token|token|password|secret)\b[\"']?\s*[:=]\s*"
+    message = re.sub(r"(?i)(" + label + r")([\"'])(.*?)\2", r"\1\2[REDACTED]\2", message)
+    message = re.sub(
+        r"(?i)(" + label + r")(?!\[REDACTED\])[^\s,;\"']+",
+        r"\1[REDACTED]", message,
+    )
+    message = re.sub(r"\b(?:sk-[A-Za-z0-9_-]+|gh[pousr]_[A-Za-z0-9_]+)\b", "[REDACTED]", message)
+    message = re.sub(r"\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b", "[REDACTED]", message)
+    message = message.replace("\r\n", "\n").replace("\r", "\n")
+    message = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", "", message).strip()
+    # The platform's string limit counts UTF-16 units, including surrogate pairs.
+    message = message.encode("utf-16-le", errors="replace")[:4000].decode("utf-16-le", errors="ignore")
+    return message or "Codex could not complete the request. Check the configured provider credential and retry."
+
+
+def atomic_write(path: Path, value: str) -> None:
+    temporary = path.with_name(path.name + ".tmp")
+    temporary.write_text(value)
+    temporary.replace(path)
+
+
+def publish_failure(runtime: Path, message: str, code: str = "codex_turn_failed") -> None:
+    message = public_message(message)
+    envelope = {"version": 1, "code": code, "message": message}
+    while len(json.dumps(envelope, ensure_ascii=False).encode()) > 4096:
+        message = message[:-1]
+        envelope["message"] = message
+    prefix = os.environ.get("ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX")
+    if prefix:
+        try:
+            atomic_write(Path(prefix + ".failure"), json.dumps(envelope, ensure_ascii=False))
+        except OSError:
+            pass
+    atomic_write(runtime / "final-answer.txt", message + "\n")
+    (runtime / "turn-complete.failed").touch()
+    (runtime / "turn-complete").touch()
+
+
+class FailureWatch:
+    def __init__(self, runtime: Path):
+        self.runtime = runtime
+        self.pointer = runtime / "codex-main-transcript"
+        self.offsets = {}
+        self.finished = False
+        self.one_shot = os.environ.get("ARCHESTRA_AGENT_RUNTIME_MODE", "one_shot") == "one_shot"
+        # A continued conversation contains prior failures. Snapshot before
+        # launching Codex so only records produced by this invocation count.
+        paths = list(Path(os.environ["CODEX_HOME"]).glob("sessions/**/*.jsonl"))
+        if self.pointer.exists():
+            paths.append(Path(self.pointer.read_text().strip()))
+        for path in paths:
+            try:
+                self.offsets[path] = path.stat().st_size
+            except OSError:
+                pass
+        self.pointer.unlink(missing_ok=True)
+
+    def poll(self) -> None:
+        if self.finished or not self.pointer.exists():
+            return
+        try:
+            path = Path(self.pointer.read_text().strip())
+            with path.open("rb") as transcript:
+                transcript.seek(self.offsets.get(path, 0))
+                while True:
+                    line = transcript.readline()
+                    if not line.endswith(b"\n"):
+                        return
+                    self.offsets[path] = transcript.tell()
+                    try:
+                        entry = json.loads(line)
+                    except (ValueError, UnicodeDecodeError):
+                        continue
+                    if not isinstance(entry, dict) or entry.get("type") != "event_msg":
+                        continue
+                    payload = entry.get("payload")
+                    if not isinstance(payload, dict) or payload.get("type") != "task_complete":
+                        continue
+                    error = payload.get("error")
+                    if self.one_shot:
+                        # Successful TUIs remain alive for terminal follow-ups;
+                        # those later turns must not change this task's result.
+                        self.finished = True
+                    if isinstance(error, dict) and isinstance(error.get("message"), str):
+                        if self.one_shot:
+                            publish_failure(self.runtime, error["message"])
+                        else:
+                            subprocess.run(
+                                [os.environ.get("ARCHESTRA_AGENT_ATTENTION_COMMAND", "archestra-agent-attention"),
+                                 "set", "API error: check terminal"],
+                                check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                            )
+                    if self.one_shot:
+                        return
+        except OSError:
+            # The CLI still owns the exit status if reporting is unavailable.
+            return
+
+
+def main() -> int:
+    runtime = Path(os.environ.get("ARCHESTRA_AGENT_RUNTIME_DIR", "/var/run/archestra"))
+    watch = FailureWatch(runtime)
+    try:
+        child = subprocess.Popen(sys.argv[1:])
+    except OSError:
+        if watch.one_shot:
+            try:
+                publish_failure(runtime, "Codex could not start. Check the runtime image and command, then retry.", "codex_startup")
+            except OSError:
+                pass
+        return 127
+    for signum in (signal.SIGINT, signal.SIGTERM):
+        signal.signal(signum, lambda number, _frame: child.send_signal(number))
+    while child.poll() is None:
+        watch.poll()
+        time.sleep(0.1)
+    watch.poll()
+    status = child.returncode
+    if status > 0 and not watch.finished and watch.one_shot:
+        try:
+            publish_failure(runtime, "Codex exited before completing the turn. Check the configured provider credential and runtime configuration, then retry.", "codex_startup")
+        except OSError:
+            pass
+    return status if status >= 0 else 128 - status
+
+
+if __name__ == "__main__":
+    sys.exit(main())

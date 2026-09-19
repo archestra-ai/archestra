@@ -2,12 +2,37 @@
  * Returns true if the conversation was created by a scheduled run
  * (`origin === "schedule_trigger"`), false otherwise.
  *
- * Scheduled-run conversations are surfaced only in the schedule's runs view and
- * must not appear in flat chat lists such as the project ChatsList or the main
- * sidebar Recents.
+ * Used to identify scheduled runs in the sidebar and group them in project Recents.
  */
 export function isScheduledRunConversation(c: { origin: string }): boolean {
   return c.origin === "schedule_trigger";
+}
+
+/** Keep one task entry, backed by its newest run, alongside normal chats. */
+export function groupSidebarTasks<
+  T extends {
+    id: string;
+    origin?: string;
+    scheduledRun?: { triggerId: string; createdAt: string } | null;
+  },
+>(conversations: T[]): T[] {
+  const latest = new Map<string, T>();
+  for (const conversation of conversations) {
+    const run = conversation.scheduledRun;
+    if (!run) continue;
+    const previous = latest.get(run.triggerId);
+    if (
+      !previous?.scheduledRun ||
+      Date.parse(run.createdAt) > Date.parse(previous.scheduledRun.createdAt)
+    ) {
+      latest.set(run.triggerId, conversation);
+    }
+  }
+  return conversations.filter((conversation) =>
+    conversation.scheduledRun
+      ? latest.get(conversation.scheduledRun.triggerId)?.id === conversation.id
+      : conversation.origin !== "schedule_trigger",
+  );
 }
 
 /**

@@ -157,9 +157,8 @@ export function isScheduleTriggerRunActive(
 
 /**
  * Decides how the chat pane should present a conversation that backs a scheduled
- * run. A run's transcript is only persisted once it completes, so while it is
- * still running the chat must show an in-progress placeholder and hide the
- * composer instead of a blank thread. `context` is the schedule context read
+ * run. Live output uses chat replay with the normal composer and Stop control.
+ * `context` is the schedule context read
  * from the chat URL (null for an ordinary chat); `runStatus` is the pinned run's
  * status (undefined until it loads).
  */

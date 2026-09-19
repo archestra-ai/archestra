@@ -15,6 +15,7 @@ import { formatCronSchedule } from "@/lib/utils/format-cron";
 export type CronPresetOption = {
   label: string;
   value: string;
+  description?: string;
 };
 
 export const DEFAULT_CRON_PRESET_OPTIONS: CronPresetOption[] = [
@@ -121,7 +122,7 @@ export function CronExpressionPicker({
               <span className="min-w-0 flex-1">
                 {preset.label}
                 <span className="block text-xs text-muted-foreground">
-                  {formatCronSchedule(preset.value)}
+                  {preset.description ?? formatCronSchedule(preset.value)}
                 </span>
               </span>
               <Check

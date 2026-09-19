@@ -18,6 +18,7 @@ import {
 import { MODEL_ROUTER_PREFIX } from "@/routes/proxy/common";
 import { getPublicRequestOrigin } from "@/routes/request-origin";
 import {
+  AGENT_WORKSPACE_TRANSFER_PREFIX,
   ARCHESTRA_CATALOG_PROXY_PREFIX,
   AUTH_STATE_PATH,
   CONNECTION_HEALTH_PATH,
@@ -245,7 +246,13 @@ export class Authnz {
       url.startsWith(`${ARCHESTRA_CATALOG_PROXY_PREFIX}/`) ||
       // ChatOps webhooks - Bot Framework calls these directly
       // JWT validation is handled by the Bot Framework adapter
-      url.startsWith("/api/webhooks/chatops/")
+      url.startsWith("/api/webhooks/chatops/") ||
+      // Workspace transfer bodies are moved by a plain HTTP client that holds
+      // no session. The ticket on the request is the proof, and the route
+      // re-runs the owner-only workspace gate before any byte moves. The
+      // trailing slash keeps this exemption to the transfer endpoints, so a
+      // later sibling path cannot inherit it by name alone.
+      url.startsWith(`${AGENT_WORKSPACE_TRANSFER_PREFIX}/`)
     ) {
       return true;
     }

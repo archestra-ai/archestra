@@ -39,6 +39,10 @@ empty changes and requirements, leaving trust and audience unchanged. Explicit
 tool rules take precedence over the catch-all. The local backend serves this
 fixed answer without calling a model or accessing user data.
 
+Tool names match exactly, or as the `*` catch-all; partial globs do not exist,
+so a rule named `grain__*` matches nothing. Globs live in argument selectors
+(`shell(command:*publish*)`).
+
 | Boundary | APPA inactive | Flag and global switch on |
 | --- | --- | --- |
 | Incoming tool results | Existing result policies | Existing result policies, then APPA admission and saved output |
@@ -166,6 +170,8 @@ sequenceDiagram
 
 The proxy replaces a denied call with `archestra__get_remedy_plans`. The notice keeps the original call position and provider call ID. Notice arguments contain the blocked tool name, proposed arguments, and the policy ruling in plain text. The ruling is unencoded so client classifiers (such as Claude Code auto-mode) inspect plain text. The client executes the notice through its normal tool loop. The model reads the ruling and selects an offered remedy plan in the same turn.
 
+A `run_tool` dispatch is ruled on as the tool it targets. The runtime receives the target's name and its own `tool_args`, so named rules, annotator bindings, and the wildcard catch-all apply to the tool that executes, not the wrapper. A denial presents the same identity: the notice names the target and carries its arguments, and history restores the target call with the ruling. A released call stays the wrapper the client declared.
+
 On later requests, the proxy restores notice calls back to original tool calls and injects the ruling as their result. Restoration is a stateless pure function of the request body. It requires no database lookup, surviving restarts and replica changes. The runtime withholds results for call IDs it never released.
 
 ## Remedies
@@ -176,9 +182,9 @@ Two MCP tools handle remedies:
 
 The model selects each remedy. The proxy releases the model's `execute_remedy_plan` call to the client for execution.
 
-Remedy offers and execution receipts are stored in PostgreSQL (`openappa_offer_owners`). Any backend replica can resolve an offer after a restart or routing change. The runtime validates the offer before execution.
+Remedy routing is a flattened JWS (RFC 7515 §7.2.2, RFC 7797 unencoded payload) on the denial notice and `execute_remedy_plan` call: `protected`, `payload`, `signature`. That is integrity (JWS), not encryption (JWE). `protected.alg` selects the verify method; unknown algorithms fail closed. The event log is the authority for whether the offer still stands. A claim carries no expiry: it is a routing token, not an authorization, and the event log's operation idempotency gates the spend — replaying a claim from another conversation can only reach an offer the same session minted, and never twice.
 
-Session receipts belong to authorized users within an organization. A personal offer requires its original user. An organization offer allows any caller in that organization. Spent, unknown, or unauthorized offers return terminal feedback without executing.
+Session receipts belong to authorized users within an organization. A personal offer requires its original user. An offer id alone cannot be spent; the caller must present a valid signature for that offer. Spent, unknown, or unauthorized offers return terminal feedback without executing.
 
 Interactive human approval is not connected. Calls requiring human approval stay blocked.
 

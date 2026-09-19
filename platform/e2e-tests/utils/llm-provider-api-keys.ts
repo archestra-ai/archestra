@@ -28,10 +28,10 @@ export async function createLlmProviderApiKey(
   ).toBeVisible();
 
   if (params.providerOptionName) {
-    // The picker is a searchable popover whose option buttons are named
+    // The picker is a searchable popover whose options are named
     // after the provider; decorative icons do not add to the accessible name.
     await page.getByRole("combobox", { name: "Provider" }).click();
-    await page.getByRole("button", { name: params.providerOptionName }).click();
+    await page.getByRole("option", { name: params.providerOptionName }).click();
   }
 
   await page.getByLabel(/Name/i).fill(params.name);

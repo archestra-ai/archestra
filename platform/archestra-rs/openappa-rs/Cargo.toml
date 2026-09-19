@@ -9,21 +9,28 @@ publish = false
 crate-type = ["cdylib"]
 
 [dependencies]
-# The embedded reporting helper currently requires upstream's daemon feature.
-appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "9f9b02c1baeaa86791d2495895f928e9ef09e2c7" }
-appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "9f9b02c1baeaa86791d2495895f928e9ef09e2c7" }
-appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "9f9b02c1baeaa86791d2495895f928e9ef09e2c7", features = ["postgres"] }
-appa-adapter-archestra = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "9f9b02c1baeaa86791d2495895f928e9ef09e2c7" }
-appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "9f9b02c1baeaa86791d2495895f928e9ef09e2c7" }
+# Pinned to OpenAPPA PR #374 (Archestra adapter, hosted composition, bundled
+# batteries) merged with upstream main past v0.23.1, which adds the PostgreSQL
+# connection pool. Re-pin to main once #374 lands. The embedded reporting
+# helper currently requires upstream's daemon feature.
+appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "b40c27d91b9f5930d731c67fa51caa3e92a0559a" }
+appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "b40c27d91b9f5930d731c67fa51caa3e92a0559a" }
+appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "b40c27d91b9f5930d731c67fa51caa3e92a0559a", features = ["postgres"] }
+appa-adapter-archestra = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "b40c27d91b9f5930d731c67fa51caa3e92a0559a" }
+appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "b40c27d91b9f5930d731c67fa51caa3e92a0559a" }
 napi = { version = "3", features = ["tokio_rt"] }
 napi-derive = "3"
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["raw_value"] }
-sha2 = "0.10"
+sha2 = "0.11"
 tempfile = "3"
 toml = "1.1"
-tokio = { version = "1", features = ["sync"] }
+tokio = { version = "1", features = ["sync", "time"] }
 futures-util = "0.3"
+
+[dev-dependencies]
+# A paused clock: the connection-wait test does not spend its thirty seconds.
+tokio = { version = "1", features = ["rt", "test-util"] }
 
 [target.'cfg(target_env = "musl")'.dependencies]
 # Cross-builds need OpenSSL compiled for musl. The Docker builder uses its

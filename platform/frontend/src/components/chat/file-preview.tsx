@@ -91,6 +91,7 @@ export function FilePreview({
         key={contentUrl}
         fileId={fileId}
         contentUrl={contentUrl}
+        markdown={kind === "markdown"}
         onCancel={() => onExitEdit?.()}
         onSaved={() => {
           setReloadNonce((n) => n + 1);
@@ -153,11 +154,13 @@ function withReload(url: string, nonce: number): string {
 function FileContentEditor({
   fileId,
   contentUrl,
+  markdown,
   onSaved,
   onCancel,
 }: {
   fileId: string;
   contentUrl: string;
+  markdown: boolean;
   onSaved: () => void;
   onCancel: () => void;
 }) {
@@ -184,6 +187,7 @@ function FileContentEditor({
 
   return (
     <PlainTextEditor
+      markdown={markdown}
       value={draft}
       onChange={(value) => setDraft(value)}
       // Files are bounded by stored byte size, not character count.

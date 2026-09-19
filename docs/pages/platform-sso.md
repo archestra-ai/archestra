@@ -4,7 +4,7 @@ category: Administration
 subcategory: Identity Providers
 description: "Sign users in with their existing identity provider via OIDC or SAML"
 order: 4
-lastUpdated: 2026-08-06
+lastUpdated: 2026-09-19
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -147,7 +147,7 @@ Cookies are being blocked, or the callback URL doesn't match.
 
 ### `missing_user_info` error
 
-The IdP didn't return the required user attributes. For GitHub, the user must have a **public** email set in their GitHub profile.
+The IdP did not return the required user attributes. For GitHub accounts without a public email, verify an email address and grant `user:email` access.
 
 ### `account not linked` error
 

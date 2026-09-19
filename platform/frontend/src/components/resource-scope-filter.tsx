@@ -14,8 +14,8 @@ import {
 } from "@/components/label-select";
 import { PermissionRequirementHint } from "@/components/permission-requirement-hint";
 import { SCOPE_META, scopeStyles } from "@/components/scope-vocabulary";
+import { SearchableMultiSelect } from "@/components/searchable-multi-select";
 import { Badge } from "@/components/ui/badge";
-import { MultiSelect } from "@/components/ui/multi-select";
 import {
   Select,
   SelectContent,
@@ -317,7 +317,8 @@ export function ResourceScopeFilter({
         scope === "team" &&
         canReadTeams &&
         teamItems.length > 0 && (
-          <MultiSelect
+          <SearchableMultiSelect
+            ariaLabel="Filter by teams"
             value={selectedTeamIds}
             onValueChange={handleTeamIdsChange}
             items={teamItems}

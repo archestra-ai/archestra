@@ -6,10 +6,13 @@
  *
  * Failed runs per agent:
  * sum by (agent_name) (rate(schedule_trigger_runs_total{status="failed"}[5m]))
+ *
+ * User-stopped runs are counted with status="cancelled".
  */
 
 import client from "prom-client";
 import logger from "@/logging";
+import type { ScheduleTriggerRunStatus } from "@/types/schedule-trigger";
 
 let scheduleTriggerRunsTotal: client.Counter<string>;
 
@@ -30,7 +33,7 @@ export function initializeScheduleTriggerMetrics(): void {
 
 export function reportScheduleTriggerRun(
   agentName: string,
-  status: "success" | "failed",
+  status: Exclude<ScheduleTriggerRunStatus, "running">,
 ): void {
   if (!scheduleTriggerRunsTotal) return;
   scheduleTriggerRunsTotal.inc({ agent_name: agentName, status });

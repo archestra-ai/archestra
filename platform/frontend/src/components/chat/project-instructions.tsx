@@ -148,6 +148,7 @@ function InstructionsEditor({
 
   return (
     <PlainTextEditor
+      markdown
       value={draft}
       onChange={setDraft}
       // Instructions are bounded by character count (they go into every prompt).

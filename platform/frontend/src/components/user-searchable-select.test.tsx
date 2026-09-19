@@ -23,7 +23,7 @@ describe("UserSearchableSelect", () => {
     );
 
     await user.click(screen.getByRole("combobox"));
-    await user.click(screen.getByRole("button", { name: /John Doe/i }));
+    await user.click(screen.getByRole("option", { name: /John Doe/i }));
 
     expect(onValueChange).toHaveBeenCalledWith("user-456");
   });
@@ -45,7 +45,7 @@ describe("UserSearchableSelect", () => {
     );
 
     await user.click(screen.getByRole("combobox"));
-    await user.click(screen.getByRole("button", { name: /user-789/i }));
+    await user.click(screen.getByRole("option", { name: /user-789/i }));
 
     expect(onValueChange).toHaveBeenCalledWith("user-789");
   });
@@ -76,7 +76,7 @@ describe("UserSearchableSelect", () => {
 
     await user.click(screen.getByRole("combobox"));
 
-    const disabledItem = screen.getByRole("button", {
+    const disabledItem = screen.getByRole("option", {
       name: /Already Added/i,
     });
     expect(disabledItem).toBeDisabled();
@@ -84,7 +84,7 @@ describe("UserSearchableSelect", () => {
     await user.click(disabledItem);
     expect(onValueChange).not.toHaveBeenCalled();
 
-    await user.click(screen.getByRole("button", { name: /Available/i }));
+    await user.click(screen.getByRole("option", { name: /Available/i }));
     expect(onValueChange).toHaveBeenCalledWith("user-2");
   });
 

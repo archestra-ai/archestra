@@ -30,6 +30,7 @@ function makeOrgSkill(id: string, name: string): OrgSkill {
     metadata: {},
     sourceType: "manual",
     sourceRef: null,
+    sourceOrigin: null,
     sourceCommit: null,
     githubSyncInterval: null,
     githubSyncRef: null,

@@ -1,4 +1,5 @@
 import { describe, expect, test } from "@/test";
+import { ApiError } from "@/types";
 import {
   buildNoticeArguments,
   NoticeArguments,
@@ -1514,6 +1515,43 @@ describe("APPA request preflight", () => {
         canonicalizeToolName: canonicalize,
       }),
     ).toThrow("provider-hosted tool");
+  });
+
+  test("governs a Responses web search by its result instead of refusing the session", () => {
+    const prepared = prepareAppaRequest({
+      body: {
+        tools: [
+          { type: "function", name: NOTICE },
+          { type: "function", name: CONTROL },
+          { type: "web_search" },
+        ],
+        input: [],
+      },
+      interactionType: "openai:responses",
+      canonicalizeToolName: canonicalize,
+    });
+
+    expect(prepared.tools).toEqual({
+      controlToolName: CONTROL,
+      noticeToolName: NOTICE,
+    });
+  });
+
+  test("still refuses a hosted tool that acts, whose call a withheld result cannot undo", () => {
+    expect(() =>
+      prepareAppaRequest({
+        body: {
+          tools: [
+            { type: "function", name: NOTICE },
+            { type: "function", name: CONTROL },
+            { type: "mcp", server_label: "remote" },
+          ],
+          input: [],
+        },
+        interactionType: "openai:responses",
+        canonicalizeToolName: canonicalize,
+      }),
+    ).toThrow(ApiError);
   });
 
   test("refuses Codex code mode, where calls are wrapped in exec", () => {

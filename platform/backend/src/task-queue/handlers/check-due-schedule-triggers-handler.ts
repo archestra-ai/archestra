@@ -16,7 +16,12 @@ export async function handleCheckDueScheduleTriggers(): Promise<void> {
       activeRuntimeTriggerIds.add(run.triggerId);
       continue;
     }
-    const status = run.state === "TASK_STATE_COMPLETED" ? "success" : "failed";
+    const status =
+      run.state === "TASK_STATE_COMPLETED"
+        ? "success"
+        : run.state === "TASK_STATE_CANCELED"
+          ? "cancelled"
+          : "failed";
     const completed = await ScheduleTriggerRunModel.markCompleted({
       runId: run.runId,
       status,

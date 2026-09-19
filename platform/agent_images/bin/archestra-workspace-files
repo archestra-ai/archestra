@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Bounded file operations for the runtime workspace; one JSON request on stdin."""
+"""File operations for the runtime workspace.
+
+Without arguments: one bounded JSON request on stdin, one JSON reply on stdout.
+With arguments: streaming transfer operations that never buffer a whole file,
+so large deliverables move without passing through a model context.
+"""
 
 import base64
 import hashlib
@@ -7,33 +12,61 @@ import json
 import os
 import stat
 import sys
+import time
 import uuid
 
 MAX_BYTES = 4 * 1024 * 1024
+BLOCK_BYTES = 1024 * 1024
+STAGING = ".archestra-transfers"
+ABSENT = "-"
+# Comfortably beyond both a ticket's lifetime and a transfer's own timeout.
+STALE_SECONDS = 6 * 60 * 60
+
+
+def workspace_root():
+    return os.environ.get(
+        "ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ROOT", "/home/node/workspace"
+    )
+
+
+def open_parent(root, path):
+    """Return (parent_fd, final_name) for a workspace-relative path.
+
+    Opens each directory relative to an already-open directory descriptor.
+    Refusing symlinks at every component prevents ancestor substitution races.
+    The caller closes the returned descriptor.
+    """
+    parts = path.split("/")
+    if not path or any(part in ("", ".", "..") for part in parts) or "\0" in path:
+        raise ValueError("Use a non-empty workspace-relative path without traversal")
+    directory = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        for part in parts[:-1]:
+            child = os.open(
+                part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=directory
+            )
+            os.close(directory)
+            directory = child
+    except BaseException:
+        os.close(directory)
+        raise
+    return directory, parts[-1]
 
 
 def operate(request):
     if not isinstance(request, dict):
         raise ValueError("Request must be an object")
-    root = os.environ.get("ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ROOT", "/home/node/workspace")
+    root = workspace_root()
     path = request.get("path", "")
-    parts = path.split("/")
-    if not path or any(part in ("", ".", "..") for part in parts) or "\0" in path:
-        raise ValueError("Use a non-empty workspace-relative path without traversal")
     operation = request.get("operation")
     if operation not in ("read", "write"):
         raise ValueError("Unsupported file operation")
-    # Open each directory relative to an already-open directory descriptor.
-    # Refusing symlinks at every component prevents ancestor substitution races.
-    directory = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    directory, name = open_parent(root, path)
     try:
-        for part in parts[:-1]:
-            child = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=directory)
-            os.close(directory)
-            directory = child
-        name = parts[-1]
         if operation == "read":
-            fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory)
+            fd = os.open(
+                name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory
+            )
             with os.fdopen(fd, "rb") as source:
                 info = os.fstat(source.fileno())
                 if not stat.S_ISREG(info.st_mode):
@@ -82,11 +115,257 @@ def operate(request):
         os.close(directory)
 
 
-try:
-    raw = sys.stdin.buffer.read(6 * 1024 * 1024 + 1)
-    if len(raw) > 6 * 1024 * 1024:
-        raise ValueError("Request exceeds the transfer limit")
-    print(json.dumps({"ok": True, **operate(json.loads(raw))}))
-except (OSError, ValueError, TypeError) as error:
-    # No file contents or credential values are included in failures.
-    print(json.dumps({"ok": False, "error": str(error)}))
+# === Streaming transfer operations ===================================
+
+
+def open_staging(root):
+    """Open the staging directory, creating it with owner-only access.
+
+    Staging sits inside the workspace so hard links stay on one filesystem.
+    Stale entries are removed here rather than by the caller. A control plane
+    can restart or lose a ticket, and an abandoned snapshot holds its inode, so
+    space the owner believes it freed would never come back.
+    """
+    try:
+        os.mkdir(os.path.join(root, STAGING), 0o700)
+    except FileExistsError:
+        pass
+    directory = os.open(
+        os.path.join(root, STAGING), os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+    )
+    sweep(directory)
+    return directory
+
+
+def sweep(staging):
+    """Remove staging entries older than any transfer could still be using.
+
+    The window is far longer than a transfer's own timeout, so this never
+    removes an entry a live transfer still reads.
+    """
+    cutoff = time.time() - STALE_SECONDS
+    try:
+        names = os.listdir(staging)
+    except OSError:
+        return
+    for name in names:
+        try:
+            info = os.stat(name, dir_fd=staging, follow_symlinks=False)
+            if stat.S_ISREG(info.st_mode) and info.st_mtime < cutoff:
+                os.unlink(name, dir_fd=staging)
+        except OSError:
+            # A concurrent transfer may finalize an entry while this runs.
+            continue
+
+
+def describe(info):
+    # Nanosecond times and inodes exceed the range a JSON consumer can hold as
+    # an exact number, so they travel as strings and stay comparable.
+    return {
+        "size": info.st_size,
+        "mtime_ns": str(info.st_mtime_ns),
+        "ino": str(info.st_ino),
+    }
+
+
+def stat_path(path):
+    """Report a file's identity without reading it. Absent is not an error."""
+    directory, name = open_parent(workspace_root(), path)
+    try:
+        try:
+            info = os.stat(name, dir_fd=directory, follow_symlinks=False)
+        except FileNotFoundError:
+            return {"path": path, "present": False}
+        if not stat.S_ISREG(info.st_mode):
+            raise ValueError("Only regular files can be transferred")
+        return {"path": path, "present": True, **describe(info)}
+    finally:
+        os.close(directory)
+
+
+def snapshot(path):
+    """Pin the current version of a file, then hash it.
+
+    A hard link is atomic and copies no data. It holds the inode, so a later
+    rename over the original name cannot shift bytes under a resumed read.
+    """
+    root = workspace_root()
+    directory, name = open_parent(root, path)
+    staging = open_staging(root)
+    try:
+        info = os.stat(name, dir_fd=directory, follow_symlinks=False)
+        if not stat.S_ISREG(info.st_mode):
+            raise ValueError("Only regular files can be transferred")
+        transfer_id = uuid.uuid4().hex
+        os.link(
+            name, transfer_id, src_dir_fd=directory, dst_dir_fd=staging,
+            follow_symlinks=False,
+        )
+        digest = hashlib.sha256()
+        fd = os.open(transfer_id, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=staging)
+        with os.fdopen(fd, "rb") as source:
+            for block in iter(lambda: source.read(BLOCK_BYTES), b""):
+                digest.update(block)
+        return {"transfer_id": transfer_id, "path": path,
+                "sha256": digest.hexdigest(), **describe(info)}
+    finally:
+        os.close(staging)
+        os.close(directory)
+
+
+def read_range(transfer_id, offset, length):
+    """Stream raw bytes of a snapshot to stdout. Never buffers the whole file."""
+    staging = open_staging(workspace_root())
+    try:
+        fd = os.open(transfer_id, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=staging)
+        with os.fdopen(fd, "rb") as source:
+            source.seek(offset)
+            remaining = length
+            out = sys.stdout.buffer
+            while remaining != 0:
+                want = BLOCK_BYTES if remaining < 0 else min(BLOCK_BYTES, remaining)
+                block = source.read(want)
+                if not block:
+                    break
+                out.write(block)
+                if remaining > 0:
+                    remaining -= len(block)
+            out.flush()
+    finally:
+        os.close(staging)
+
+
+def write_stream(upload_id):
+    """Stream stdin into a staging file, hashing during the single pass."""
+    staging = open_staging(workspace_root())
+    try:
+        fd = os.open(
+            upload_id, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+            0o600, dir_fd=staging,
+        )
+        digest = hashlib.sha256()
+        size = 0
+        with os.fdopen(fd, "wb") as destination:
+            source = sys.stdin.buffer
+            for block in iter(lambda: source.read(BLOCK_BYTES), b""):
+                destination.write(block)
+                digest.update(block)
+                size += len(block)
+            destination.flush()
+            os.fsync(destination.fileno())
+        return {"upload_id": upload_id, "size": size, "sha256": digest.hexdigest()}
+    finally:
+        os.close(staging)
+
+
+def finalize(upload_id, path, expect_sha256, expect_ino, expect_mtime_ns):
+    """Verify the upload, then replace the destination atomically.
+
+    Refuses when the destination changed since the transfer was authorized, so
+    a slower upload never overwrites a newer file.
+    """
+    root = workspace_root()
+    directory, name = open_parent(root, path)
+    staging = open_staging(root)
+    try:
+        digest = hashlib.sha256()
+        fd = os.open(upload_id, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=staging)
+        with os.fdopen(fd, "rb") as source:
+            for block in iter(lambda: source.read(BLOCK_BYTES), b""):
+                digest.update(block)
+        if digest.hexdigest() != expect_sha256:
+            os.unlink(upload_id, dir_fd=staging)
+            raise ValueError("Uploaded bytes do not match the expected checksum")
+        mode = 0o600
+        try:
+            existing = os.stat(name, dir_fd=directory, follow_symlinks=False)
+        except FileNotFoundError:
+            if expect_ino != ABSENT:
+                raise ValueError("The destination changed since this transfer began")
+        else:
+            if not stat.S_ISREG(existing.st_mode):
+                raise ValueError("Only regular files can be overwritten")
+            if (
+                expect_ino == ABSENT
+                or int(expect_ino) != existing.st_ino
+                or int(expect_mtime_ns) != existing.st_mtime_ns
+            ):
+                raise ValueError("The destination changed since this transfer began")
+            # Preserve ordinary permissions, never privilege-bearing mode bits.
+            mode = stat.S_IMODE(existing.st_mode) & 0o777
+        fd = os.open(upload_id, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=staging)
+        try:
+            os.fchmod(fd, mode)
+        finally:
+            os.close(fd)
+        # Rename replaces the directory entry, never follows its target.
+        os.rename(upload_id, name, src_dir_fd=staging, dst_dir_fd=directory)
+        return {"path": path, "size": os.stat(name, dir_fd=directory,
+                                              follow_symlinks=False).st_size,
+                "sha256": expect_sha256}
+    finally:
+        os.close(staging)
+        os.close(directory)
+
+
+def discard(entry_id):
+    """Remove a staging entry. Missing entries are not an error."""
+    staging = open_staging(workspace_root())
+    try:
+        try:
+            os.unlink(entry_id, dir_fd=staging)
+        except FileNotFoundError:
+            pass
+        return {"discarded": entry_id}
+    finally:
+        os.close(staging)
+
+
+def dispatch(argv):
+    """Route a streaming command. Staging ids are opaque and never traversed."""
+    command = argv[0]
+    if command == "stat":
+        return stat_path(argv[1])
+    if command == "snapshot":
+        return snapshot(argv[1])
+    if command == "write-stream":
+        return write_stream(require_id(argv[1]))
+    if command == "finalize":
+        return finalize(require_id(argv[1]), argv[2], argv[3], argv[4], argv[5])
+    if command == "discard":
+        return discard(require_id(argv[1]))
+    raise ValueError("Unsupported transfer operation")
+
+
+def require_id(value):
+    """Staging ids are hex tokens this program generates; reject anything else."""
+    if len(value) != 32 or any(c not in "0123456789abcdef" for c in value):
+        raise ValueError("Malformed transfer id")
+    return value
+
+
+if __name__ == "__main__":
+    if len(sys.argv) > 1 and sys.argv[1] == "read-range":
+        # Raw bytes own stdout, so failures report through the exit status.
+        try:
+            read_range(
+                require_id(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4])
+            )
+        except (OSError, ValueError, TypeError, IndexError) as error:
+            print(str(error), file=sys.stderr)
+            sys.exit(1)
+    elif len(sys.argv) > 1:
+        try:
+            print(json.dumps({"ok": True, **dispatch(sys.argv[1:])}))
+        except (OSError, ValueError, TypeError, IndexError) as error:
+            # No file contents or credential values are included in failures.
+            print(json.dumps({"ok": False, "error": str(error)}))
+    else:
+        try:
+            raw = sys.stdin.buffer.read(6 * 1024 * 1024 + 1)
+            if len(raw) > 6 * 1024 * 1024:
+                raise ValueError("Request exceeds the transfer limit")
+            print(json.dumps({"ok": True, **operate(json.loads(raw))}))
+        except (OSError, ValueError, TypeError) as error:
+            # No file contents or credential values are included in failures.
+            print(json.dumps({"ok": False, "error": str(error)}))

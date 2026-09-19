@@ -119,16 +119,10 @@ const IDP_CONFIGS: IdpConfig[] = [
     },
   },
   {
-    /**
-     * GitHub OAuth limitation: Users must have a public email set in their
-     * GitHub profile settings for SSO to work. This is because the SSO plugin
-     * only calls /user endpoint, not /user/emails.
-     * See: https://grafana.com/docs/grafana/latest/setup-grafana/configure-access/configure-authentication/github/
-     */
     id: "github",
     providerId: IDENTITY_PROVIDER_ID.GITHUB,
     name: "GitHub",
-    description: "Sign in with GitHub OAuth (requires public email)",
+    description: "Sign in with GitHub OAuth",
     bgColor: "bg-gray-50",
     hideProviderId: true,
     providerType: "oidc",

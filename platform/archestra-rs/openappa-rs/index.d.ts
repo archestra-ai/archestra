@@ -63,7 +63,7 @@ export interface HelperBindingInput {
   tokenEnv: string
 }
 
-export declare function initializeOpenappa(databaseUrl: string, policyContent: string, reporting?: ReportingOptions | undefined | null): Promise<void>
+export declare function initializeOpenappa(databaseUrl: string, postgresMaxConnections: number, policyContent: string, reporting?: ReportingOptions | undefined | null): Promise<void>
 
 /**
  * Validates an uploaded battery package with the marketplace's own checks and reads

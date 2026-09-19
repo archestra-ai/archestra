@@ -19,6 +19,8 @@
  *   envelope the upstream already produced (which named the originals).
  */
 
+import type { HostedToolCall } from "@/types";
+
 type RewrittenToolCall = { id: string; name: string; arguments: string };
 
 type ResponsesFunctionCallItem = {
@@ -166,6 +168,57 @@ export function rewriteResponsesOutput<TItem extends { type?: string }>(
   return next;
 }
 
+/** Where the provider-run part of a turn starts, or -1 when the turn has none. */
+export function firstHostedOutputIndex(
+  output: readonly { type?: string }[],
+): number {
+  return output.findIndex((item) => hostedToolName(item) !== undefined);
+}
+
+/**
+ * The calls the provider ran, in order. The model wrote everything after them
+ * with their results in view, and the wire carries those results nowhere else,
+ * so the last call's output is that tail; an earlier call has only its own
+ * record to show.
+ */
+export function responsesHostedToolCalls(
+  output: readonly { type?: string }[],
+): HostedToolCall[] {
+  const hosted = output.flatMap((item, index) => {
+    const name = hostedToolName(item);
+    const { id, action } = item as { id?: unknown; action?: unknown };
+    return name !== undefined && typeof id === "string"
+      ? [{ id, name, action, index }]
+      : [];
+  });
+  return hosted.map(({ id, name, action, index }, position) => ({
+    id,
+    name,
+    arguments:
+      typeof action === "object" && action !== null && !Array.isArray(action)
+        ? (action as Record<string, unknown>)
+        : {},
+    output: JSON.stringify(
+      position === hosted.length - 1 ? output.slice(index) : output[index],
+    ),
+  }));
+}
+
+/**
+ * The turn with its provider-run part withheld: everything from the first
+ * hosted call on is dropped, and the notices stand where it began.
+ */
+export function holdResponsesHostedOutput<TItem extends { type?: string }>(
+  output: readonly TItem[],
+  notices: RewrittenToolCall[],
+): Array<TItem | ResponsesFunctionCallItem> {
+  const first = firstHostedOutputIndex(output);
+  return [
+    ...output.slice(0, first === -1 ? output.length : first),
+    ...notices.map((notice) => responsesFunctionCallItem(notice)),
+  ];
+}
+
 /**
  * The four streaming frames of a custom tool call, whose input is free-form
  * text: the item, its input deltas, the done marker, and the completed item.
@@ -245,3 +298,14 @@ export function customToolInput(argumentsJson: string): string | undefined {
     return undefined;
   }
 }
+
+/** The policy name of the hosted tool an output item records a run of. */
+function hostedToolName(item: { type?: string }): string | undefined {
+  return item.type === undefined
+    ? undefined
+    : HOSTED_TOOL_NAME_BY_ITEM_TYPE[item.type];
+}
+
+const HOSTED_TOOL_NAME_BY_ITEM_TYPE: Partial<Record<string, string>> = {
+  web_search_call: "web_search",
+};

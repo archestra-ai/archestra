@@ -65,10 +65,10 @@ jobs:
           jq -e '.packages.platform.draft == true' "$CONFIG" \
             || { echo "::error::Config must keep draft=true; releases are published by the approval job"; exit 1; }
           if [ "$BRANCH" = main ]; then
-            [[ "$NEXT" =~ ^[0-9]+\.[0-9]+\.0-beta\.[1-9][0-9]*$ ]] \
-              || { echo "::error::Main must release X.Y.0-beta.N"; exit 1; }
-            jq -e '.packages.platform | .prerelease == true and .versioning == "prerelease" and .["prerelease-type"] == "beta"' "$CONFIG" \
-              || { echo "::error::Main config must set prerelease=true, versioning=prerelease, and prerelease-type=beta"; exit 1; }
+            [[ "$NEXT" =~ ^[0-9]+\.[0-9]+\.0-rc\.[1-9][0-9]*$ ]] \
+              || { echo "::error::Main must release X.Y.0-rc.N"; exit 1; }
+            jq -e '.packages.platform | .prerelease == true and .versioning == "prerelease" and .["prerelease-type"] == "rc"' "$CONFIG" \
+              || { echo "::error::Main config must set prerelease=true, versioning=prerelease, and prerelease-type=rc"; exit 1; }
           else
             [[ "$NEXT" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ && "${NEXT%.*}" = "${BRANCH#release/}" ]] \
               || { echo "::error::Stable version must match release/X.Y"; exit 1; }
@@ -101,7 +101,7 @@ jobs:
           target-branch: ${{ github.ref_name }}
           skip-github-pull-request: true
 
-      # All releases start as drafts. Betas publish after artifacts are ready;
+      # All releases start as drafts. Prereleases publish after artifacts are ready;
       # stable releases additionally require approval of the publication job.
       #
       # We do NOT toggle a published release back to draft: GitHub's immutable-releases
@@ -325,7 +325,7 @@ jobs:
     with:
       version: ${{ needs.release-please.outputs.platform_version }}
       # Stable charts remain workflow artifacts until explicit qualification/publication.
-      push_chart: ${{ contains(needs.release-please.outputs.platform_version, '-beta.') }}
+      push_chart: ${{ contains(needs.release-please.outputs.platform_version, '-') }}
       checkout_ref: ${{ needs.release-please.outputs.platform_checkout_ref }}
     secrets:
       GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
@@ -338,7 +338,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: ${{ github.ref_name == 'main' && 'beta-release' || 'stable-release' }}
     concurrency:
-      # Keep beta publishing independent of stable qualification.
+      # Keep the existing prerelease environment and concurrency group names.
       group: release-publication-${{ github.ref_name == 'main' && 'beta' || 'stable' }}
       cancel-in-progress: false
     needs:
@@ -370,7 +370,7 @@ jobs:
           RELEASE_FREEZE: ${{ vars.RELEASE_FREEZE }}
         run: |
           test "$RELEASE_FREEZE" != true || { echo "::error::Releases are frozen"; exit 1; }
-          if [[ "$VERSION" != *-beta.* ]]; then
+          if [[ "$VERSION" != *-* ]]; then
             # Fetch every page before comparing: process substitution hides API failures.
             # An empty successful list permits the first stable release without a 404 exception.
             STABLE_TAGS=$(gh api --paginate "repos/$GH_REPO/releases?per_page=100" --jq '.[] | select(.prerelease | not) | .tag_name') \
@@ -434,28 +434,11 @@ jobs:
           IS_DRAFT=$(gh release view "$TAG_NAME" --json isDraft --jq .isDraft)
           [ "$IS_DRAFT" = true ] || exit 0
           gh release upload "$TAG_NAME" "archestra-platform-${VERSION}.tgz" --clobber
-          if [[ "$VERSION" == *-beta.* ]]; then
+          if [[ "$VERSION" == *-* ]]; then
             gh release edit "$TAG_NAME" --draft=false --prerelease --latest=false
           else
             gh release edit "$TAG_NAME" --draft=false --prerelease=false --latest
           fi
-
-      - name: Generate website deployment token
-        if: ${{ github.ref_name != 'main' }}
-        id: website-token
-        uses: ./.github/actions/github-app-token
-        with:
-          app-id: ${{ secrets.ARCHESTRA_WEBSITE_DEPLOY_GITHUB_APP_ID }}
-          private-key: ${{ secrets.ARCHESTRA_WEBSITE_DEPLOY_GITHUB_APP_PRIVATE_KEY }}
-          owner: archestra-ai
-          repositories: website
-          permission-actions: write
-
-      - name: Refresh release website
-        if: ${{ github.ref_name != 'main' }}
-        env:
-          GH_TOKEN: ${{ steps.website-token.outputs.token }}
-        run: gh workflow run deploy-docs.yml --repo archestra-ai/website --ref main -f "docs_ref=$TAG_NAME"
 
   notify-release-failure:
     name: Notify release failure

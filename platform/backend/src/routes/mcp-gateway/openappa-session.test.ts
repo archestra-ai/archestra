@@ -102,20 +102,7 @@ describe("OpenAPPA sessions on the MCP gateway", () => {
     expect(response.statusCode, response.body).toBe(200);
     expect(retry.statusCode, retry.body).toBe(200);
     expect(JSON.stringify(response.json())).toContain("No live offer");
-    expect(native.executeRemedyByOffer).toHaveBeenCalledTimes(2);
-    expect(native.executeRemedyByOffer.mock.calls[1][0]).toBe(
-      native.executeRemedyByOffer.mock.calls[0][0],
-    );
-    expect(
-      JSON.parse(native.executeRemedyByOffer.mock.calls[0][0]),
-    ).toMatchObject({
-      organization_id: agent.organizationId,
-      caller_id: `user:${user.id}`,
-      execution_mode: "tracked",
-      tool_call_id: "logical-retry-1",
-      original_arguments: '{"offer_id":"offer-1"}',
-      arguments: { offer_id: "offer-1" },
-    });
+    expect(native.executeRemedyByOffer).not.toHaveBeenCalled();
     expect(native.dispatchHook).not.toHaveBeenCalled();
   });
 
@@ -166,14 +153,7 @@ describe("OpenAPPA sessions on the MCP gateway", () => {
 
     expect(response.statusCode, response.body).toBe(200);
     expect(JSON.stringify(response.json())).toContain("No live offer");
-    expect(
-      JSON.parse(native.executeRemedyByOffer.mock.calls[0][0]),
-    ).toMatchObject({
-      organization_id: org.id,
-      execution_mode: "untracked",
-      original_arguments: '{"offer_id":"offer-1"}',
-      arguments: { offer_id: "offer-1" },
-    });
+    expect(native.executeRemedyByOffer).not.toHaveBeenCalled();
     expect(native.dispatchHook).not.toHaveBeenCalled();
 
     // An empty header is a malformed one, for this token too.

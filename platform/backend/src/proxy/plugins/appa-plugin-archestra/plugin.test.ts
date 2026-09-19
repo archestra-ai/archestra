@@ -183,6 +183,7 @@ describe("rendering runtime text for this client", () => {
           kind: "deny" as const,
           feedback:
             "[appa] Refused: tool builtin:exec is not declared in this policy",
+          offers: [],
         },
       ]);
     try {
@@ -232,7 +233,11 @@ describe("rendering runtime text for this client", () => {
       .spyOn(appaService, "evaluateToolCalls")
       .mockImplementation(async () => [
         { kind: "allow" as const },
-        { kind: "deny" as const, feedback: "[appa] Refused: no plan." },
+        {
+          kind: "deny" as const,
+          feedback: "[appa] Refused: no plan.",
+          offers: [],
+        },
         { kind: "control" as const },
       ]);
     const cancelCalls = vi
@@ -258,6 +263,281 @@ describe("rendering runtime text for this client", () => {
       });
       expect(cancelCalls).toHaveBeenCalledTimes(1);
       expect(cancelCalls.mock.calls[0][1]).toEqual(["admitted"]);
+    } finally {
+      cancelCalls.mockRestore();
+      evaluateToolCalls.mockRestore();
+    }
+  });
+
+  test("presents a denied run_tool dispatch as the target tool it named", async () => {
+    // Static rules, annotator bindings, and the wildcard catch-all all evaluate
+    // the dispatch's target, so the denial the model reads names that target —
+    // its name and its own arguments — exactly as if the client had called it
+    // directly. The wrapper is transport, not identity.
+    const plugin = new AppaPluginArchestra([]);
+    const context = requestContext({
+      sessionId: "dispatch-session",
+      canonicalizeToolName: (name) => name,
+    });
+    const trusted = context.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as Record<string, unknown>;
+    trusted.request = {
+      tools: {
+        controlToolName: "archestra__execute_remedy_plan",
+        noticeToolName: "archestra__get_remedy_plans",
+      },
+      spellings: new Map(),
+      customTools: new Set(),
+      namespaces: new Map(),
+    };
+    const evaluateToolCalls = vi
+      .spyOn(appaService, "evaluateToolCalls")
+      .mockImplementation(async () => [
+        {
+          kind: "deny" as const,
+          feedback:
+            "[appa] Refused: grain__list_meetings needs the internal audience",
+        },
+      ]);
+    try {
+      await plugin.onSessionInit(context);
+      const outcome = await plugin.onToolCalls({
+        ...context,
+        toolCalls: [
+          {
+            id: "dispatch-1",
+            name: "archestra__run_tool",
+            arguments: {
+              tool_name: "grain__list_meetings",
+              tool_args: { limit: 5 },
+            },
+          },
+        ],
+      });
+      if (outcome?.decision !== "allow") throw new Error("expected a notice");
+      expect(outcome.toolCalls).toHaveLength(1);
+      const noticeCall = outcome.toolCalls[0];
+      // Same position, same provider call id — only the identity changed hands.
+      expect(noticeCall.name).toBe("archestra__get_remedy_plans");
+      expect(noticeCall.id).toBe("dispatch-1");
+      expect(JSON.parse(String(noticeCall.arguments))).toEqual({
+        tool: "grain__list_meetings",
+        arguments: JSON.stringify({ limit: 5 }),
+        ruling:
+          "[appa] Refused: grain__list_meetings needs the internal audience",
+        notice: { v: 1, call_id: "dispatch-1" },
+      });
+      // `blocked` stays the wire batch's bookkeeping: the registry pins its
+      // name to the call as given. The ruled-on identity lives in the notice.
+      expect(outcome.blocked).toEqual([
+        {
+          id: "dispatch-1",
+          name: "archestra__run_tool",
+          reason:
+            "[appa] Refused: grain__list_meetings needs the internal audience",
+        },
+      ]);
+    } finally {
+      evaluateToolCalls.mockRestore();
+    }
+  });
+
+  test("presents a denied dispatch under a client alias the platform does not know as its target", async () => {
+    // The alias a client registered the gateway under is free text; the loose
+    // wrapper match still recovers the dispatch, and the notice names the
+    // target the runtime ruled on.
+    const plugin = new AppaPluginArchestra([]);
+    const context = requestContext({
+      sessionId: "aliased-dispatch",
+      canonicalizeToolName: (name) => name,
+    });
+    const trusted = context.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as Record<string, unknown>;
+    trusted.request = {
+      tools: {
+        controlToolName: "archestra__execute_remedy_plan",
+        noticeToolName: "archestra__get_remedy_plans",
+      },
+      spellings: new Map(),
+      customTools: new Set(),
+      namespaces: new Map(),
+    };
+    const evaluateToolCalls = vi
+      .spyOn(appaService, "evaluateToolCalls")
+      .mockImplementation(async () => [
+        { kind: "deny" as const, feedback: "[appa] Refused: no plan." },
+      ]);
+    try {
+      await plugin.onSessionInit(context);
+      const outcome = await plugin.onToolCalls({
+        ...context,
+        toolCalls: [
+          {
+            id: "dispatch-2",
+            name: "mcp__some_local_alias__archestra__run_tool",
+            arguments: JSON.stringify({
+              tool_name: "grain__fetch_meeting",
+              tool_args: { meeting_id: "m-1" },
+            }),
+          },
+        ],
+      });
+      if (outcome?.decision !== "allow") throw new Error("expected a notice");
+      expect(JSON.parse(String(outcome.toolCalls[0].arguments))).toMatchObject({
+        tool: "grain__fetch_meeting",
+        arguments: JSON.stringify({ meeting_id: "m-1" }),
+        notice: { call_id: "dispatch-2" },
+      });
+    } finally {
+      evaluateToolCalls.mockRestore();
+    }
+  });
+
+  test("expands a bare Archestra short name the way run_tool's own dispatch does", async () => {
+    // run_tool accepts `read_file` and dispatches `archestra__read_file`; the
+    // policy identity is the expansion, so a rule on the built-in name matches
+    // either spelling of the call.
+    const plugin = new AppaPluginArchestra([]);
+    const context = requestContext({
+      sessionId: "bare-target",
+      canonicalizeToolName: (name) => name,
+    });
+    const trusted = context.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as Record<string, unknown>;
+    trusted.request = {
+      tools: {
+        controlToolName: "archestra__execute_remedy_plan",
+        noticeToolName: "archestra__get_remedy_plans",
+      },
+      spellings: new Map(),
+      customTools: new Set(),
+      namespaces: new Map(),
+    };
+    const evaluateToolCalls = vi
+      .spyOn(appaService, "evaluateToolCalls")
+      .mockImplementation(async () => [
+        { kind: "deny" as const, feedback: "[appa] Refused: no plan." },
+      ]);
+    try {
+      await plugin.onSessionInit(context);
+      const outcome = await plugin.onToolCalls({
+        ...context,
+        toolCalls: [
+          {
+            id: "dispatch-3",
+            name: "archestra__run_tool",
+            arguments: { tool_name: "list_agents", tool_args: {} },
+          },
+        ],
+      });
+      if (outcome?.decision !== "allow") throw new Error("expected a notice");
+      expect(JSON.parse(String(outcome.toolCalls[0].arguments))).toMatchObject({
+        tool: "archestra__list_agents",
+        arguments: "{}",
+      });
+      expect(outcome.blocked?.[0]?.name).toBe("archestra__run_tool");
+    } finally {
+      evaluateToolCalls.mockRestore();
+    }
+  });
+
+  test("a dispatch whose target cannot be recovered keeps the wrapper identity", async () => {
+    // No usable tool_name means no target to name: the notice presents the
+    // wrapper call as emitted. The gateway refuses such a call at execution.
+    const plugin = new AppaPluginArchestra([]);
+    const context = requestContext({
+      sessionId: "opaque-dispatch",
+      canonicalizeToolName: (name) => name,
+    });
+    const trusted = context.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as Record<string, unknown>;
+    trusted.request = {
+      tools: {
+        controlToolName: "archestra__execute_remedy_plan",
+        noticeToolName: "archestra__get_remedy_plans",
+      },
+      spellings: new Map(),
+      customTools: new Set(),
+      namespaces: new Map(),
+    };
+    const evaluateToolCalls = vi
+      .spyOn(appaService, "evaluateToolCalls")
+      .mockImplementation(async () => [
+        { kind: "deny" as const, feedback: "[appa] Refused: no plan." },
+      ]);
+    try {
+      await plugin.onSessionInit(context);
+      const outcome = await plugin.onToolCalls({
+        ...context,
+        toolCalls: [
+          { id: "dispatch-4", name: "archestra__run_tool", arguments: {} },
+        ],
+      });
+      if (outcome?.decision !== "allow") throw new Error("expected a notice");
+      expect(JSON.parse(String(outcome.toolCalls[0].arguments))).toMatchObject({
+        tool: "archestra__run_tool",
+        notice: { call_id: "dispatch-4" },
+      });
+      expect(outcome.blocked?.[0]?.name).toBe("archestra__run_tool");
+    } finally {
+      evaluateToolCalls.mockRestore();
+    }
+  });
+
+  test("refuses a denied dispatch with the target's identity when no notice tool can carry it", async () => {
+    const plugin = new AppaPluginArchestra([]);
+    const context = requestContext({
+      sessionId: "toolless-dispatch",
+      canonicalizeToolName: (name) => name,
+    });
+    const trusted = context.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as Record<string, unknown>;
+    trusted.request = {
+      tools: undefined,
+      spellings: new Map(),
+      customTools: new Set(),
+      namespaces: new Map(),
+    };
+    const evaluateToolCalls = vi
+      .spyOn(appaService, "evaluateToolCalls")
+      .mockImplementation(async () => [
+        { kind: "deny" as const, feedback: "[appa] Refused: no plan." },
+      ]);
+    const cancelCalls = vi
+      .spyOn(appaService, "cancelCalls")
+      .mockResolvedValue(undefined);
+    try {
+      await plugin.onSessionInit(context);
+      const outcome = await plugin.onToolCalls({
+        ...context,
+        toolCalls: [
+          {
+            id: "dispatch-5",
+            name: "archestra__run_tool",
+            arguments: {
+              tool_name: "grain__list_meetings",
+              tool_args: { limit: 5 },
+            },
+          },
+        ],
+      });
+      expect(outcome).toMatchObject({
+        decision: "refuse",
+        refusal: {
+          reason: "openappa_no_notice_tool",
+          blockedToolName: "grain__list_meetings",
+          blockedToolId: "dispatch-5",
+          toolInput: { limit: 5 },
+        },
+      });
+      // Nothing else in the batch was admitted, so nothing needs cancelling.
+      expect(cancelCalls).toHaveBeenCalledTimes(1);
+      expect(cancelCalls.mock.calls[0][1]).toEqual([]);
     } finally {
       cancelCalls.mockRestore();
       evaluateToolCalls.mockRestore();
@@ -293,6 +573,7 @@ describe("rendering runtime text for this client", () => {
         calls.map(() => ({
           kind: "deny" as const,
           feedback: "[appa] Refused: no plan.",
+          offers: [],
         })),
       );
     try {
@@ -440,6 +721,48 @@ describe("rendering runtime text for this client", () => {
     } finally {
       evaluateToolCalls.mockRestore();
     }
+  });
+
+  test("strips a client-echoed JWS before stamping", async () => {
+    const plugin = new AppaPluginArchestra([]);
+    const context = requestContext({
+      sessionId: "control-envelope-stale-jws",
+      canonicalizeToolName: (name) => name,
+    });
+    const trusted = context.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as Record<string, unknown>;
+    trusted.request = {
+      tools: {
+        controlToolName: "archestra__execute_remedy_plan",
+        noticeToolName: "archestra__get_remedy_plans",
+      },
+      spellings: new Map(),
+      customTools: new Set(),
+      namespaces: new Map(),
+    };
+    await plugin.onSessionInit(context);
+    const outcome = await plugin.onPrepareToolCalls({
+      ...context,
+      toolCalls: [
+        {
+          id: "provider-call-1",
+          name: "archestra__execute_remedy_plan",
+          arguments: JSON.stringify({
+            offer_id: "offer-1",
+            protected: "stale",
+            payload: "stale",
+            signature: "stale",
+          }),
+        },
+      ],
+    });
+    if (outcome?.decision !== "allow") throw new Error("expected allow");
+    const argumentsValue = JSON.parse(outcome.toolCalls[0].arguments as string);
+    expect(argumentsValue.protected).toBeUndefined();
+    expect(argumentsValue.payload).toBeUndefined();
+    expect(argumentsValue.signature).toBeUndefined();
+    expect(argumentsValue.execution.call_id).toBe("provider-call-1");
   });
 });
 

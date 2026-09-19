@@ -1494,23 +1494,28 @@ export type AnthropicMessagesRequestInput = {
             [key: string]: unknown;
         };
         description?: string;
+        [key: string]: unknown;
     } | {
         name: 'bash';
         type: 'bash_20250124';
         cache_control?: unknown;
+        [key: string]: unknown;
     } | {
         name: 'str_replace_editor';
         type: 'text_editor_20250124';
         cache_control?: unknown;
+        [key: string]: unknown;
     } | {
         name: 'str_replace_based_edit_tool';
         type: 'text_editor_20250429';
         cache_control?: unknown;
+        [key: string]: unknown;
     } | {
         name: 'str_replace_based_edit_tool';
         type: 'text_editor_20250728';
         cache_control?: unknown;
         max_characters?: number | null;
+        [key: string]: unknown;
     } | {
         name: 'web_search';
         type: 'web_search_20250305';
@@ -1519,6 +1524,10 @@ export type AnthropicMessagesRequestInput = {
         cache_control?: unknown;
         max_uses?: number | null;
         user_location?: unknown;
+        [key: string]: unknown;
+    } | {
+        type: string;
+        [key: string]: unknown;
     }>;
     top_k?: number;
     top_p?: number;
@@ -7785,23 +7794,28 @@ export type AnthropicMessagesRequest = {
             [key: string]: unknown;
         };
         description?: string;
+        [key: string]: unknown;
     } | {
         name: 'bash';
         type: 'bash_20250124';
         cache_control?: unknown;
+        [key: string]: unknown;
     } | {
         name: 'str_replace_editor';
         type: 'text_editor_20250124';
         cache_control?: unknown;
+        [key: string]: unknown;
     } | {
         name: 'str_replace_based_edit_tool';
         type: 'text_editor_20250429';
         cache_control?: unknown;
+        [key: string]: unknown;
     } | {
         name: 'str_replace_based_edit_tool';
         type: 'text_editor_20250728';
         cache_control?: unknown;
         max_characters?: number | null;
+        [key: string]: unknown;
     } | {
         name: 'web_search';
         type: 'web_search_20250305';
@@ -7810,6 +7824,10 @@ export type AnthropicMessagesRequest = {
         cache_control?: unknown;
         max_uses?: number | null;
         user_location?: unknown;
+        [key: string]: unknown;
+    } | {
+        type: string;
+        [key: string]: unknown;
     }>;
     top_k?: number;
     top_p?: number;
@@ -14176,6 +14194,7 @@ export type GetAgentCatalogResponses = {
                         description?: string;
                         required: boolean;
                     }> | null;
+                    allowAgentSuppliedCredentialValues?: boolean;
                     claudeCode?: {
                         authentication: 'provider' | 'subscription';
                         model?: string;
@@ -14525,6 +14544,7 @@ export type GetAgentsResponses = {
                     description?: string;
                     required: boolean;
                 }> | null;
+                allowAgentSuppliedCredentialValues?: boolean;
                 claudeCode?: {
                     authentication: 'provider' | 'subscription';
                     model?: string;
@@ -14671,6 +14691,7 @@ export type CreateAgentData = {
                 description?: string;
                 required: boolean;
             }> | null;
+            allowAgentSuppliedCredentialValues?: boolean;
             claudeCode?: {
                 authentication: 'provider' | 'subscription';
                 model?: string;
@@ -14920,6 +14941,7 @@ export type CreateAgentResponses = {
                 description?: string;
                 required: boolean;
             }> | null;
+            allowAgentSuppliedCredentialValues?: boolean;
             claudeCode?: {
                 authentication: 'provider' | 'subscription';
                 model?: string;
@@ -15342,6 +15364,7 @@ export type GetAllAgentsResponses = {
                 description?: string;
                 required: boolean;
             }> | null;
+            allowAgentSuppliedCredentialValues?: boolean;
             claudeCode?: {
                 authentication: 'provider' | 'subscription';
                 model?: string;
@@ -15645,6 +15668,7 @@ export type GetDefaultMcpGatewayResponses = {
                 description?: string;
                 required: boolean;
             }> | null;
+            allowAgentSuppliedCredentialValues?: boolean;
             claudeCode?: {
                 authentication: 'provider' | 'subscription';
                 model?: string;
@@ -15940,6 +15964,7 @@ export type ImportAgentResponses = {
                     description?: string;
                     required: boolean;
                 }> | null;
+                allowAgentSuppliedCredentialValues?: boolean;
                 claudeCode?: {
                     authentication: 'provider' | 'subscription';
                     model?: string;
@@ -16248,6 +16273,7 @@ export type GetAgentResponses = {
                 description?: string;
                 required: boolean;
             }> | null;
+            allowAgentSuppliedCredentialValues?: boolean;
             claudeCode?: {
                 authentication: 'provider' | 'subscription';
                 model?: string;
@@ -16384,6 +16410,7 @@ export type UpdateAgentData = {
                 description?: string;
                 required: boolean;
             }> | null;
+            allowAgentSuppliedCredentialValues?: boolean;
             claudeCode?: {
                 authentication: 'provider' | 'subscription';
                 model?: string;
@@ -16554,6 +16581,7 @@ export type UpdateAgentResponses = {
                 description?: string;
                 required: boolean;
             }> | null;
+            allowAgentSuppliedCredentialValues?: boolean;
             claudeCode?: {
                 authentication: 'provider' | 'subscription';
                 model?: string;
@@ -17037,6 +17065,7 @@ export type RestoreAgentVersionResponses = {
                 description?: string;
                 required: boolean;
             }> | null;
+            allowAgentSuppliedCredentialValues?: boolean;
             claudeCode?: {
                 authentication: 'provider' | 'subscription';
                 model?: string;
@@ -17263,6 +17292,7 @@ export type CloneAgentResponses = {
                 description?: string;
                 required: boolean;
             }> | null;
+            allowAgentSuppliedCredentialValues?: boolean;
             claudeCode?: {
                 authentication: 'provider' | 'subscription';
                 model?: string;
@@ -19700,6 +19730,7 @@ export type RestoreAgentResponses = {
                 description?: string;
                 required: boolean;
             }> | null;
+            allowAgentSuppliedCredentialValues?: boolean;
             claudeCode?: {
                 authentication: 'provider' | 'subscription';
                 model?: string;
@@ -22507,6 +22538,208 @@ export type ShareAgentRunResponses = {
 };
 
 export type ShareAgentRunResponse = ShareAgentRunResponses[keyof ShareAgentRunResponses];
+
+export type StartAgentWorkspaceTransferData = {
+    body: {
+        direction: 'download';
+        path: string;
+    } | {
+        direction: 'upload';
+        path: string;
+        size: number;
+        sha256: string;
+    };
+    path: {
+        taskId: string;
+    };
+    query?: never;
+    url: '/api/agent-runs/{taskId}/workspace/transfers';
+};
+
+export type StartAgentWorkspaceTransferErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type StartAgentWorkspaceTransferError = StartAgentWorkspaceTransferErrors[keyof StartAgentWorkspaceTransferErrors];
+
+export type StartAgentWorkspaceTransferResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        transferId: string;
+        token: string;
+        contentUrl: string;
+        path: string;
+        size: number;
+        sha256: string;
+        expiresInSeconds: number;
+    };
+};
+
+export type StartAgentWorkspaceTransferResponse = StartAgentWorkspaceTransferResponses[keyof StartAgentWorkspaceTransferResponses];
+
+export type DownloadAgentWorkspaceTransferData = {
+    body?: never;
+    path: {
+        transferId: string;
+    };
+    query?: never;
+    url: '/api/agent-workspace-transfers/{transferId}/content';
+};
+
+export type DownloadAgentWorkspaceTransferResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type UploadAgentWorkspaceTransferData = {
+    body?: never;
+    path: {
+        transferId: string;
+    };
+    query?: never;
+    url: '/api/agent-workspace-transfers/{transferId}/content';
+};
+
+export type UploadAgentWorkspaceTransferErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UploadAgentWorkspaceTransferError = UploadAgentWorkspaceTransferErrors[keyof UploadAgentWorkspaceTransferErrors];
+
+export type UploadAgentWorkspaceTransferResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        path: string;
+        size: number;
+        sha256: string;
+    };
+};
+
+export type UploadAgentWorkspaceTransferResponse = UploadAgentWorkspaceTransferResponses[keyof UploadAgentWorkspaceTransferResponses];
 
 export type GetAllAgentToolsData = {
     body?: never;
@@ -33613,23 +33846,28 @@ export type BedrockInvokeWithDefaultAgentAndModelData = {
                 [key: string]: unknown;
             };
             description?: string;
+            [key: string]: unknown;
         } | {
             name: 'bash';
             type: 'bash_20250124';
             cache_control?: unknown;
+            [key: string]: unknown;
         } | {
             name: 'str_replace_editor';
             type: 'text_editor_20250124';
             cache_control?: unknown;
+            [key: string]: unknown;
         } | {
             name: 'str_replace_based_edit_tool';
             type: 'text_editor_20250429';
             cache_control?: unknown;
+            [key: string]: unknown;
         } | {
             name: 'str_replace_based_edit_tool';
             type: 'text_editor_20250728';
             cache_control?: unknown;
             max_characters?: number | null;
+            [key: string]: unknown;
         } | {
             name: 'web_search';
             type: 'web_search_20250305';
@@ -33638,6 +33876,10 @@ export type BedrockInvokeWithDefaultAgentAndModelData = {
             cache_control?: unknown;
             max_uses?: number | null;
             user_location?: unknown;
+            [key: string]: unknown;
+        } | {
+            type: string;
+            [key: string]: unknown;
         }>;
         top_k?: number;
         top_p?: number;
@@ -33943,23 +34185,28 @@ export type BedrockInvokeWithAgentAndModelData = {
                 [key: string]: unknown;
             };
             description?: string;
+            [key: string]: unknown;
         } | {
             name: 'bash';
             type: 'bash_20250124';
             cache_control?: unknown;
+            [key: string]: unknown;
         } | {
             name: 'str_replace_editor';
             type: 'text_editor_20250124';
             cache_control?: unknown;
+            [key: string]: unknown;
         } | {
             name: 'str_replace_based_edit_tool';
             type: 'text_editor_20250429';
             cache_control?: unknown;
+            [key: string]: unknown;
         } | {
             name: 'str_replace_based_edit_tool';
             type: 'text_editor_20250728';
             cache_control?: unknown;
             max_characters?: number | null;
+            [key: string]: unknown;
         } | {
             name: 'web_search';
             type: 'web_search_20250305';
@@ -33968,6 +34215,10 @@ export type BedrockInvokeWithAgentAndModelData = {
             cache_control?: unknown;
             max_uses?: number | null;
             user_location?: unknown;
+            [key: string]: unknown;
+        } | {
+            type: string;
+            [key: string]: unknown;
         }>;
         top_k?: number;
         top_p?: number;
@@ -34274,23 +34525,28 @@ export type BedrockInvokeStreamWithDefaultAgentAndModelData = {
                 [key: string]: unknown;
             };
             description?: string;
+            [key: string]: unknown;
         } | {
             name: 'bash';
             type: 'bash_20250124';
             cache_control?: unknown;
+            [key: string]: unknown;
         } | {
             name: 'str_replace_editor';
             type: 'text_editor_20250124';
             cache_control?: unknown;
+            [key: string]: unknown;
         } | {
             name: 'str_replace_based_edit_tool';
             type: 'text_editor_20250429';
             cache_control?: unknown;
+            [key: string]: unknown;
         } | {
             name: 'str_replace_based_edit_tool';
             type: 'text_editor_20250728';
             cache_control?: unknown;
             max_characters?: number | null;
+            [key: string]: unknown;
         } | {
             name: 'web_search';
             type: 'web_search_20250305';
@@ -34299,6 +34555,10 @@ export type BedrockInvokeStreamWithDefaultAgentAndModelData = {
             cache_control?: unknown;
             max_uses?: number | null;
             user_location?: unknown;
+            [key: string]: unknown;
+        } | {
+            type: string;
+            [key: string]: unknown;
         }>;
         top_k?: number;
         top_p?: number;
@@ -34537,23 +34797,28 @@ export type BedrockInvokeStreamWithAgentAndModelData = {
                 [key: string]: unknown;
             };
             description?: string;
+            [key: string]: unknown;
         } | {
             name: 'bash';
             type: 'bash_20250124';
             cache_control?: unknown;
+            [key: string]: unknown;
         } | {
             name: 'str_replace_editor';
             type: 'text_editor_20250124';
             cache_control?: unknown;
+            [key: string]: unknown;
         } | {
             name: 'str_replace_based_edit_tool';
             type: 'text_editor_20250429';
             cache_control?: unknown;
+            [key: string]: unknown;
         } | {
             name: 'str_replace_based_edit_tool';
             type: 'text_editor_20250728';
             cache_control?: unknown;
             max_characters?: number | null;
+            [key: string]: unknown;
         } | {
             name: 'web_search';
             type: 'web_search_20250305';
@@ -34562,6 +34827,10 @@ export type BedrockInvokeStreamWithAgentAndModelData = {
             cache_control?: unknown;
             max_uses?: number | null;
             user_location?: unknown;
+            [key: string]: unknown;
+        } | {
+            type: string;
+            [key: string]: unknown;
         }>;
         top_k?: number;
         top_p?: number;
@@ -35371,6 +35640,13 @@ export type GetChatConversationsResponses = {
             compactedTokenEstimate: number;
             createdAt: string;
         }>;
+        scheduledRun?: {
+            id: string;
+            triggerId: string;
+            createdAt: string;
+            runKind: 'due' | 'manual';
+            scheduleName: string;
+        } | null;
     }>;
 };
 
@@ -49517,23 +49793,28 @@ export type GetInteractionsResponses = {
                         [key: string]: unknown;
                     };
                     description?: string;
+                    [key: string]: unknown;
                 } | {
                     name: 'bash';
                     type: 'bash_20250124';
                     cache_control?: unknown;
+                    [key: string]: unknown;
                 } | {
                     name: 'str_replace_editor';
                     type: 'text_editor_20250124';
                     cache_control?: unknown;
+                    [key: string]: unknown;
                 } | {
                     name: 'str_replace_based_edit_tool';
                     type: 'text_editor_20250429';
                     cache_control?: unknown;
+                    [key: string]: unknown;
                 } | {
                     name: 'str_replace_based_edit_tool';
                     type: 'text_editor_20250728';
                     cache_control?: unknown;
                     max_characters?: number | null;
+                    [key: string]: unknown;
                 } | {
                     name: 'web_search';
                     type: 'web_search_20250305';
@@ -49542,6 +49823,10 @@ export type GetInteractionsResponses = {
                     cache_control?: unknown;
                     max_uses?: number | null;
                     user_location?: unknown;
+                    [key: string]: unknown;
+                } | {
+                    type: string;
+                    [key: string]: unknown;
                 }>;
                 top_k?: number;
                 top_p?: number;
@@ -49757,23 +50042,28 @@ export type GetInteractionsResponses = {
                         [key: string]: unknown;
                     };
                     description?: string;
+                    [key: string]: unknown;
                 } | {
                     name: 'bash';
                     type: 'bash_20250124';
                     cache_control?: unknown;
+                    [key: string]: unknown;
                 } | {
                     name: 'str_replace_editor';
                     type: 'text_editor_20250124';
                     cache_control?: unknown;
+                    [key: string]: unknown;
                 } | {
                     name: 'str_replace_based_edit_tool';
                     type: 'text_editor_20250429';
                     cache_control?: unknown;
+                    [key: string]: unknown;
                 } | {
                     name: 'str_replace_based_edit_tool';
                     type: 'text_editor_20250728';
                     cache_control?: unknown;
                     max_characters?: number | null;
+                    [key: string]: unknown;
                 } | {
                     name: 'web_search';
                     type: 'web_search_20250305';
@@ -49782,6 +50072,10 @@ export type GetInteractionsResponses = {
                     cache_control?: unknown;
                     max_uses?: number | null;
                     user_location?: unknown;
+                    [key: string]: unknown;
+                } | {
+                    type: string;
+                    [key: string]: unknown;
                 }>;
                 top_k?: number;
                 top_p?: number;
@@ -56593,23 +56887,28 @@ export type GetInteractionResponses = {
                     [key: string]: unknown;
                 };
                 description?: string;
+                [key: string]: unknown;
             } | {
                 name: 'bash';
                 type: 'bash_20250124';
                 cache_control?: unknown;
+                [key: string]: unknown;
             } | {
                 name: 'str_replace_editor';
                 type: 'text_editor_20250124';
                 cache_control?: unknown;
+                [key: string]: unknown;
             } | {
                 name: 'str_replace_based_edit_tool';
                 type: 'text_editor_20250429';
                 cache_control?: unknown;
+                [key: string]: unknown;
             } | {
                 name: 'str_replace_based_edit_tool';
                 type: 'text_editor_20250728';
                 cache_control?: unknown;
                 max_characters?: number | null;
+                [key: string]: unknown;
             } | {
                 name: 'web_search';
                 type: 'web_search_20250305';
@@ -56618,6 +56917,10 @@ export type GetInteractionResponses = {
                 cache_control?: unknown;
                 max_uses?: number | null;
                 user_location?: unknown;
+                [key: string]: unknown;
+            } | {
+                type: string;
+                [key: string]: unknown;
             }>;
             top_k?: number;
             top_p?: number;
@@ -56833,23 +57136,28 @@ export type GetInteractionResponses = {
                     [key: string]: unknown;
                 };
                 description?: string;
+                [key: string]: unknown;
             } | {
                 name: 'bash';
                 type: 'bash_20250124';
                 cache_control?: unknown;
+                [key: string]: unknown;
             } | {
                 name: 'str_replace_editor';
                 type: 'text_editor_20250124';
                 cache_control?: unknown;
+                [key: string]: unknown;
             } | {
                 name: 'str_replace_based_edit_tool';
                 type: 'text_editor_20250429';
                 cache_control?: unknown;
+                [key: string]: unknown;
             } | {
                 name: 'str_replace_based_edit_tool';
                 type: 'text_editor_20250728';
                 cache_control?: unknown;
                 max_characters?: number | null;
+                [key: string]: unknown;
             } | {
                 name: 'web_search';
                 type: 'web_search_20250305';
@@ -56858,6 +57166,10 @@ export type GetInteractionResponses = {
                 cache_control?: unknown;
                 max_uses?: number | null;
                 user_location?: unknown;
+                [key: string]: unknown;
+            } | {
+                type: string;
+                [key: string]: unknown;
             }>;
             top_k?: number;
             top_p?: number;
@@ -86646,6 +86958,8 @@ export type GetOrganizationResponses = {
         connectionSkillsEnabled: boolean;
         connectionLlmProxyEnabled: boolean;
         connectionPluginsEnabled: boolean;
+        connectionRuntimeHandoffEnabled: boolean;
+        connectionRuntimeHandoffInstructions: string | null;
         modelProviderOverrides: {
             [key: string]: {
                 hidden?: boolean;
@@ -86965,6 +87279,8 @@ export type UpdateAppearanceSettingsResponses = {
         connectionSkillsEnabled: boolean;
         connectionLlmProxyEnabled: boolean;
         connectionPluginsEnabled: boolean;
+        connectionRuntimeHandoffEnabled: boolean;
+        connectionRuntimeHandoffInstructions: string | null;
         modelProviderOverrides: {
             [key: string]: {
                 hidden?: boolean;
@@ -87167,6 +87483,8 @@ export type UpdateSecuritySettingsResponses = {
         connectionSkillsEnabled: boolean;
         connectionLlmProxyEnabled: boolean;
         connectionPluginsEnabled: boolean;
+        connectionRuntimeHandoffEnabled: boolean;
+        connectionRuntimeHandoffInstructions: string | null;
         modelProviderOverrides: {
             [key: string]: {
                 hidden?: boolean;
@@ -87364,6 +87682,8 @@ export type UpdateMcpSettingsResponses = {
         connectionSkillsEnabled: boolean;
         connectionLlmProxyEnabled: boolean;
         connectionPluginsEnabled: boolean;
+        connectionRuntimeHandoffEnabled: boolean;
+        connectionRuntimeHandoffInstructions: string | null;
         modelProviderOverrides: {
             [key: string]: {
                 hidden?: boolean;
@@ -87561,6 +87881,8 @@ export type UpdateSkillsSettingsResponses = {
         connectionSkillsEnabled: boolean;
         connectionLlmProxyEnabled: boolean;
         connectionPluginsEnabled: boolean;
+        connectionRuntimeHandoffEnabled: boolean;
+        connectionRuntimeHandoffInstructions: string | null;
         modelProviderOverrides: {
             [key: string]: {
                 hidden?: boolean;
@@ -87759,6 +88081,8 @@ export type UpdateAgentSettingsResponses = {
         connectionSkillsEnabled: boolean;
         connectionLlmProxyEnabled: boolean;
         connectionPluginsEnabled: boolean;
+        connectionRuntimeHandoffEnabled: boolean;
+        connectionRuntimeHandoffInstructions: string | null;
         modelProviderOverrides: {
             [key: string]: {
                 hidden?: boolean;
@@ -87809,6 +88133,8 @@ export type UpdateConnectionSettingsData = {
         connectionSkillsEnabled?: boolean;
         connectionLlmProxyEnabled?: boolean;
         connectionPluginsEnabled?: boolean;
+        connectionRuntimeHandoffEnabled?: boolean;
+        connectionRuntimeHandoffInstructions?: string | null;
         connectionBaseUrls?: Array<{
             url: string;
             description?: string;
@@ -87970,6 +88296,8 @@ export type UpdateConnectionSettingsResponses = {
         connectionSkillsEnabled: boolean;
         connectionLlmProxyEnabled: boolean;
         connectionPluginsEnabled: boolean;
+        connectionRuntimeHandoffEnabled: boolean;
+        connectionRuntimeHandoffInstructions: string | null;
         modelProviderOverrides: {
             [key: string]: {
                 hidden?: boolean;
@@ -88181,6 +88509,8 @@ export type UpdateIntegrationSettingsResponses = {
         connectionSkillsEnabled: boolean;
         connectionLlmProxyEnabled: boolean;
         connectionPluginsEnabled: boolean;
+        connectionRuntimeHandoffEnabled: boolean;
+        connectionRuntimeHandoffInstructions: string | null;
         modelProviderOverrides: {
             [key: string]: {
                 hidden?: boolean;
@@ -88388,6 +88718,8 @@ export type UpdateDefaultEnvironmentResponses = {
         connectionSkillsEnabled: boolean;
         connectionLlmProxyEnabled: boolean;
         connectionPluginsEnabled: boolean;
+        connectionRuntimeHandoffEnabled: boolean;
+        connectionRuntimeHandoffInstructions: string | null;
         modelProviderOverrides: {
             [key: string]: {
                 hidden?: boolean;
@@ -88590,6 +88922,8 @@ export type UpdateAuthSettingsResponses = {
         connectionSkillsEnabled: boolean;
         connectionLlmProxyEnabled: boolean;
         connectionPluginsEnabled: boolean;
+        connectionRuntimeHandoffEnabled: boolean;
+        connectionRuntimeHandoffInstructions: string | null;
         modelProviderOverrides: {
             [key: string]: {
                 hidden?: boolean;
@@ -88794,6 +89128,8 @@ export type UpdateKnowledgeSettingsResponses = {
         connectionSkillsEnabled: boolean;
         connectionLlmProxyEnabled: boolean;
         connectionPluginsEnabled: boolean;
+        connectionRuntimeHandoffEnabled: boolean;
+        connectionRuntimeHandoffInstructions: string | null;
         modelProviderOverrides: {
             [key: string]: {
                 hidden?: boolean;
@@ -88988,6 +89324,8 @@ export type DropEmbeddingConfigResponses = {
         connectionSkillsEnabled: boolean;
         connectionLlmProxyEnabled: boolean;
         connectionPluginsEnabled: boolean;
+        connectionRuntimeHandoffEnabled: boolean;
+        connectionRuntimeHandoffInstructions: string | null;
         modelProviderOverrides: {
             [key: string]: {
                 hidden?: boolean;
@@ -89532,6 +89870,8 @@ export type CompleteOnboardingResponses = {
         connectionSkillsEnabled: boolean;
         connectionLlmProxyEnabled: boolean;
         connectionPluginsEnabled: boolean;
+        connectionRuntimeHandoffEnabled: boolean;
+        connectionRuntimeHandoffInstructions: string | null;
         modelProviderOverrides: {
             [key: string]: {
                 hidden?: boolean;
@@ -96893,7 +97233,7 @@ export type RunScheduleTriggerNowResponses = {
         organizationId: string;
         triggerId: string;
         runKind: 'due' | 'manual';
-        status: 'running' | 'success' | 'failed';
+        status: 'running' | 'success' | 'failed' | 'cancelled';
         initiatedByUserId: string | null;
         chatConversationId: string | null;
         runtimeTaskId: string | null;
@@ -96915,7 +97255,7 @@ export type GetScheduleTriggerRunsData = {
     query?: {
         limit?: number;
         offset?: number;
-        status?: 'running' | 'success' | 'failed';
+        status?: 'running' | 'success' | 'failed' | 'cancelled';
     };
     url: '/api/schedule-triggers/{id}/runs';
 };
@@ -96995,7 +97335,7 @@ export type GetScheduleTriggerRunsResponses = {
             organizationId: string;
             triggerId: string;
             runKind: 'due' | 'manual';
-            status: 'running' | 'success' | 'failed';
+            status: 'running' | 'success' | 'failed' | 'cancelled';
             initiatedByUserId: string | null;
             chatConversationId: string | null;
             runtimeTaskId: string | null;
@@ -97102,7 +97442,7 @@ export type GetScheduleTriggerRunResponses = {
         organizationId: string;
         triggerId: string;
         runKind: 'due' | 'manual';
-        status: 'running' | 'success' | 'failed';
+        status: 'running' | 'success' | 'failed' | 'cancelled';
         initiatedByUserId: string | null;
         chatConversationId: string | null;
         runtimeTaskId: string | null;
@@ -99764,6 +100104,7 @@ export type GetSkillsResponses = {
             };
             sourceType: 'manual' | 'github' | 'built_in';
             sourceRef: string | null;
+            sourceOrigin: string | null;
             sourceCommit: string | null;
             githubSyncInterval: '15m' | '1h' | '1d' | null;
             githubSyncRef: string | null;
@@ -99951,6 +100292,7 @@ export type CreateSkillResponses = {
         };
         sourceType: 'manual' | 'github' | 'built_in';
         sourceRef: string | null;
+        sourceOrigin: string | null;
         sourceCommit: string | null;
         githubSyncInterval: '15m' | '1h' | '1d' | null;
         githubSyncRef: string | null;
@@ -100187,6 +100529,7 @@ export type GetSkillResponses = {
         };
         sourceType: 'manual' | 'github' | 'built_in';
         sourceRef: string | null;
+        sourceOrigin: string | null;
         sourceCommit: string | null;
         githubSyncInterval: '15m' | '1h' | '1d' | null;
         githubSyncRef: string | null;
@@ -100378,6 +100721,7 @@ export type UpdateSkillResponses = {
         };
         sourceType: 'manual' | 'github' | 'built_in';
         sourceRef: string | null;
+        sourceOrigin: string | null;
         sourceCommit: string | null;
         githubSyncInterval: '15m' | '1h' | '1d' | null;
         githubSyncRef: string | null;
@@ -101113,6 +101457,7 @@ export type RestoreSkillResponses = {
         };
         sourceType: 'manual' | 'github' | 'built_in';
         sourceRef: string | null;
+        sourceOrigin: string | null;
         sourceCommit: string | null;
         githubSyncInterval: '15m' | '1h' | '1d' | null;
         githubSyncRef: string | null;
@@ -101349,6 +101694,7 @@ export type ResetSkillResponses = {
         };
         sourceType: 'manual' | 'github' | 'built_in';
         sourceRef: string | null;
+        sourceOrigin: string | null;
         sourceCommit: string | null;
         githubSyncInterval: '15m' | '1h' | '1d' | null;
         githubSyncRef: string | null;
@@ -101513,6 +101859,7 @@ export type UpdateSkillGithubSyncResponses = {
         };
         sourceType: 'manual' | 'github' | 'built_in';
         sourceRef: string | null;
+        sourceOrigin: string | null;
         sourceCommit: string | null;
         githubSyncInterval: '15m' | '1h' | '1d' | null;
         githubSyncRef: string | null;
@@ -102069,6 +102416,7 @@ export type ImportGithubSkillsResponses = {
             };
             sourceType: 'manual' | 'github' | 'built_in';
             sourceRef: string | null;
+            sourceOrigin: string | null;
             sourceCommit: string | null;
             githubSyncInterval: '15m' | '1h' | '1d' | null;
             githubSyncRef: string | null;

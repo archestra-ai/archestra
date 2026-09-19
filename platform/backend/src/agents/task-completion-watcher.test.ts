@@ -17,11 +17,84 @@ vi.mock("@/agents/incoming-email", () => ({
 }));
 
 import { A2AContextModel, A2ATaskModel, AgentRunModel } from "@/models";
+import { agentRuntimeFailureReason } from "@/services/agent-runtime/failure-reason";
 import { describe, expect, test } from "@/test";
 import type { AgentRunCompletionTarget } from "@/types";
 import { watchTaskCompletion } from "./task-completion-watcher";
 
 describe("watchTaskCompletion", () => {
+  test("delivers an image failure verbatim to its originating thread once", async ({
+    makeAgent,
+    makeUser,
+  }) => {
+    const user = await makeUser();
+    const agent = await makeAgent();
+    const context = await A2AContextModel.create({
+      actorKind: "user",
+      actorId: user.id,
+    });
+    const task = await A2ATaskModel.createForRun({
+      contextId: context.id,
+      agentId: agent.id,
+    });
+    const target = {
+      type: "chatops" as const,
+      bindingId: crypto.randomUUID(),
+      threadId: "originating-thread",
+    };
+    await AgentRunModel.create({
+      organizationId: agent.organizationId,
+      taskId: task.id,
+      agentId: agent.id,
+      actorKind: "user",
+      actorId: user.id,
+      actorUserId: user.id,
+      workloadName: `runner-${task.id}`,
+      backend: "kubernetes",
+      runtimeScope: "archestra-dev",
+      completionTarget: target,
+    });
+    const statusReason = agentRuntimeFailureReason(
+      `75\n${JSON.stringify({
+        version: 1,
+        code: "custom_runtime.authentication_failed",
+        message:
+          "Authentication failed: your session has expired.\nReconnect your account and retry the task.",
+      })}`,
+    );
+    await A2ATaskModel.transitionStateWithEvent({
+      id: task.id,
+      to: "TASK_STATE_FAILED",
+      allowedFrom: ["TASK_STATE_SUBMITTED"],
+      statusReason,
+      eventPayload: {
+        statusUpdate: {
+          taskId: task.id,
+          contextId: context.id,
+          status: { state: "TASK_STATE_FAILED" },
+        },
+      },
+    });
+
+    const notification = { taskId: task.id, target, agentName: agent.name };
+    await Promise.all([
+      watchTaskCompletion(notification),
+      watchTaskCompletion(notification),
+    ]);
+    await watchTaskCompletion(notification);
+
+    expect(notifyBindingThread).toHaveBeenCalledExactlyOnceWith({
+      bindingId: target.bindingId,
+      threadId: target.threadId,
+      agentName: agent.name,
+      text: "Task failed. Authentication failed: your session has expired.\nReconnect your account and retry the task. (Runtime exit status 75.)",
+    });
+    expect(sendEmailReply).not.toHaveBeenCalled();
+    expect(
+      (await AgentRunModel.findByTaskId(task.id))?.completionNotifiedAt,
+    ).toEqual(expect.any(Date));
+  });
+
   test("delivers each durable completion once through its configured interface", async ({
     makeAgent,
     makeOrganization,

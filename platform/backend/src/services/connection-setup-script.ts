@@ -124,6 +124,8 @@ export interface SetupScriptContext {
   mcp: SetupScriptMcpSection | null;
   proxy: SetupScriptProxySection | null;
   skills: SetupScriptSkillsSection | null;
+  /** Copied locally by setup, never fetched from the platform at launch. */
+  runtimeHandoffInstructions?: string | null;
 }
 
 /**
@@ -403,6 +405,13 @@ ARCHESTRA_REVOKE`);
 
 function nextStepsFor(ctx: SetupScriptContext): string[] {
   const steps: string[] = [];
+  if (ctx.clientId === "cursor") {
+    steps.push(
+      ctx.mcp && ctx.runtimeHandoffInstructions
+        ? "Runtime handoff needs a manual step: paste the printed handoff instructions into Cursor Customize > Rules > User Rules. Keep your existing rules."
+        : "If you previously added runtime handoff instructions to Cursor User Rules, remove that text to disable them.",
+    );
+  }
   switch (ctx.clientId) {
     case "claude-code":
       if (ctx.mcp) {
@@ -1222,6 +1231,11 @@ print(f"Updated {path}")`;
 
 function cursorSections(ctx: SetupScriptContext): string[] {
   const sections: string[] = [];
+
+  if (ctx.mcp && ctx.runtimeHandoffInstructions) {
+    sections.push(`say ${sh("Runtime handoff instructions — copy into Cursor User Rules")}
+printf '%s\\n' ${sh(ctx.runtimeHandoffInstructions)}`);
+  }
 
   if (ctx.mcp) {
     sections.push(`say ${sh(`Adding MCP gateway "${ctx.mcp.serverName}" to ~/.cursor/mcp.json (OAuth)`)}

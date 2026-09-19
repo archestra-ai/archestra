@@ -13,12 +13,23 @@ const { databaseUrl } = require('./test-database.cjs');
 test('native typed remedies are durable, scoped, and replayed by logical call id', { skip: !databaseUrl, timeout: 60000 }, async (t) => {
   const dir = mkdtempSync(path.join(tmpdir(), 'openappa-native-smoke-'));
   let sanitizations = 0;
+  let sanitizerBarrier = null;
   const sanitizer = createServer((request, response) => {
     request.resume();
     request.on('end', () => {
       sanitizations += 1;
-      response.writeHead(200, { 'content-type': 'application/json' });
-      response.end(JSON.stringify({ version: 1, answer: { body: 'approved scrubbed output' } }));
+      const reply = () => {
+        response.writeHead(200, { 'content-type': 'application/json' });
+        response.end(JSON.stringify({ version: 1, answer: { body: 'approved scrubbed output' } }));
+      };
+      if (sanitizerBarrier) {
+        sanitizerBarrier.pending.push(reply);
+        if (sanitizerBarrier.pending.length >= sanitizerBarrier.needed) {
+          for (const flush of sanitizerBarrier.pending.splice(0)) flush();
+        }
+        return;
+      }
+      reply();
     });
   });
   await new Promise((resolve) => sanitizer.listen(0, '127.0.0.1', resolve));
@@ -54,7 +65,11 @@ permits = { attention = ["email-review"] }
 [externals.authorities.email-operator]
 builtin = "hitl"
 `);
-  await native.initializeOpenappa(databaseUrl, readFileSync(policyPath, 'utf8'));
+  // Names this process's ledger connections so a test can end exactly those.
+  const ledgerName = `openappa-smoke-${randomUUID()}`;
+  const ledgerUrl = new URL(databaseUrl);
+  ledgerUrl.searchParams.set('application_name', ledgerName);
+  await native.initializeOpenappa(ledgerUrl.toString(), 4, readFileSync(policyPath, 'utf8'));
   const client = new Client({ connectionString: databaseUrl });
   await client.connect();
   t.after(() => { sanitizer.close(); client.end(); rmSync(dir, { recursive: true, force: true }); });
@@ -89,6 +104,8 @@ builtin = "hitl"
     return {
       organization_id: session.organization_id,
       caller_id: session.caller_id,
+      session_id: session.session_id,
+      owner_caller_id: session.owner_caller_id ?? session.caller_id,
       execution_mode: event.tool_call_id ? 'tracked' : 'untracked',
       original_arguments: JSON.stringify(original_arguments || event.arguments),
       presentation: { control_tool: 'archestra__execute_remedy_plan', supports_delegation: false },
@@ -163,6 +180,50 @@ builtin = "hitl"
     assert.equal(attempts.filter((response) => response.result.isError === true).length, 1);
   });
 
+  await t.test('unrelated sessions overlap consult I/O instead of sharing a process lock', { timeout: 15000 }, async () => {
+    const presentation = { control_tool: 'gateway.custom_remedy', supports_delegation: false };
+    const prepare = async () => {
+      const session = scope();
+      const denied = await hook(session, {
+        event: 'tool_call', operation_id: 'call:held', tool: 'leak_partial', arguments: {}, presentation,
+      });
+      await byOffer(session, { tool_call_id: 'install-scrub', arguments: { offer_id: denied.offers.at(-1).offer_id } });
+      assert.equal((await hook(session, {
+        event: 'tool_call', operation_id: 'call:read', tool: 'leak_partial', arguments: {}, presentation,
+      })).decision, 'allow_call');
+      return session;
+    };
+    const [first, second] = [await prepare(), await prepare()];
+    sanitizerBarrier = { needed: 2, pending: [] };
+    t.after(() => { sanitizerBarrier = null; });
+    const replies = await Promise.all([
+      result(first, 'read', 'raw sensitive payload'),
+      result(second, 'read', 'raw sensitive payload'),
+    ]);
+    sanitizerBarrier = null;
+    for (const blocked of replies) {
+      assert.equal(blocked.output_source, 'runtime', JSON.stringify(blocked));
+      assert.ok(!blocked.approved_output.includes('raw sensitive payload'));
+    }
+  });
+
+  await t.test('ledger connections the server ended are replaced without a restart', async () => {
+    const readAcrossThePool = () => Promise.all(
+      Array.from({ length: 4 }, () => call(scope(), randomUUID(), 'read_plain')),
+    );
+    await readAcrossThePool();
+    const ended = await client.query(
+      'SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE application_name = $1',
+      [ledgerName],
+    );
+    assert.ok(ended.rowCount > 0, 'the pool held connections to end');
+    // The pool trusts a connection returned within the last second.
+    await new Promise(resolve => setTimeout(resolve, 1100));
+    for (const released of await readAcrossThePool()) {
+      assert.equal(released.decision, 'allow_call', JSON.stringify(released));
+    }
+  });
+
   await t.test('a result-time offer preserves original presentation and redeems its staged value on another replica', async () => {
     const session = scope();
     const presentation = { control_tool: 'gateway.custom_remedy', supports_delegation: false };
@@ -179,9 +240,8 @@ builtin = "hitl"
     assert.ok(blocked.approved_output.includes(presentation.control_tool));
     assert.ok(!blocked.approved_output.includes('raw sensitive payload'));
     assert.equal(sanitizations, before + 1);
-    const owners = await client.query('SELECT offer_id FROM openappa_offer_owners WHERE organization_id=$1 AND session_id=$2', [session.organization_id, session.session_id]);
-    const stagedOffers = owners.rows.filter((row) => !initialIds.has(row.offer_id));
-    assert.ok(stagedOffers.length > 0, 'typed result-time offers were durably registered');
+    const stagedOffers = (blocked.offers ?? []).filter((offer) => !initialIds.has(offer.offer_id));
+    assert.ok(stagedOffers.length > 0, 'typed result-time offers were returned on the blocked result');
     const returned = await remoteOffer(session, { tool_call_id: 'accept-staged', arguments: { offer_id: stagedOffers[0].offer_id } });
     assert.notEqual(returned.result.isError, true);
     assert.equal(returned.approved_output, 'approved scrubbed output');
@@ -195,7 +255,7 @@ builtin = "hitl"
     const offer_id = denied.offers[0].offer_id;
     const event = { tool_call_id: 'provider-remedy-scope', arguments: { offer_id } };
     const wrongOrganization = await byOffer({ ...session, organization_id: `other-${randomUUID()}` }, event);
-    const wrongUser = await byOffer({ ...session, caller_id: 'user:wrong' }, event);
+    const wrongUser = await byOffer({ ...session, caller_id: 'user:wrong', owner_caller_id: 'user:owner' }, event);
     for (const response of [wrongOrganization, wrongUser]) {
       assert.equal(response.offer.status, 'unknown');
       assert.equal(response.reason, 'unknown_control_call');
@@ -208,7 +268,7 @@ builtin = "hitl"
   await t.test('credential-owned offers permit an authenticated same-organization spender', async () => {
     const session = scope('virtual-key:credential');
     const denied = await call(session, 'held', 'read_untrusted');
-    const response = await byOffer({ ...session, caller_id: 'user:spender' }, {
+    const response = await byOffer({ ...session, caller_id: 'user:spender', owner_caller_id: 'virtual-key:credential' }, {
       tool_call_id: 'credential-remedy',
       arguments: { offer_id: denied.offers[0].offer_id },
     });
@@ -242,6 +302,21 @@ builtin = "hitl"
     assert.equal(b.approved_output, 'second');
     assert.equal((await result(session, 'a', 'forged')).approved_output, 'first');
     assert.equal((await result(session, 'b', 'forged')).approved_output, 'second');
+  });
+
+  await t.test('eighteen identified calls keep sequential results while siblings remain open', async () => {
+    const session = scope();
+    const ids = Array.from({ length: 18 }, (_, i) => `p${i}`);
+    for (const id of ids) {
+      const admitted = await call(session, id, 'read_plain', { query: id });
+      assert.equal(admitted.decision, 'allow_call');
+    }
+    for (const id of ids) {
+      const reported = await result(session, id, `ok-${id}`);
+      assert.equal(reported.decision, 'ack');
+      assert.equal(reported.approved_output, `ok-${id}`);
+      assert.ok(!/already outstanding/i.test(JSON.stringify(reported)));
+    }
   });
 
   await t.test('same-organization participants share calls and immutable replays', async () => {
@@ -327,7 +402,7 @@ builtin = "hitl"
     const human = await hook(session, {
       event: 'remedy', operation_id: 'remedy:email', arguments: { offer_id: email.review[0].offer_id },
     });
-    assert.match(JSON.stringify(human.result.content), /unreachable|gave no answer/);
+    assert.match(JSON.stringify(human.result.content), /unreachable|gave no answer|cannot be reached/);
   });
 
   await t.test('unknown hook event tags are rejected before receipt processing', async () => {

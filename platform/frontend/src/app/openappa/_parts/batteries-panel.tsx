@@ -55,8 +55,10 @@ export function BatteriesPanel() {
     (battery) => battery.source === "organization",
   );
   const serverName = (catalogId: string) =>
-    catalog.data?.find((entry) => entry.id === catalogId)?.name ??
-    "Removed server";
+    catalog.data
+      ? (catalog.data.find((entry) => entry.id === catalogId)?.name ??
+        "Removed server")
+      : "";
   return (
     <section
       aria-label="Guardrails batteries"
@@ -141,9 +143,14 @@ function InstallRow({
   const update = useUpdateBatteryInstall();
   const remove = useDeleteBatteryInstall();
   const [removing, setRemoving] = useState(false);
-  const { data: canBind } = useHasPermissions({ credential: ["update"] });
+  // Binding hands the credential's value to helper code, so it takes the
+  // credential permission on top of the one every install write needs.
+  const { data: credentialPermission } = useHasPermissions({
+    credential: ["update"],
+  });
+  const canBind = canManage && credentialPermission === true;
   const credentials = useRuntimeCredentials(
-    canBind === true && battery.credentials.length > 0,
+    canBind && battery.credentials.length > 0,
   );
   const options =
     credentials.data?.filter((credential) => credential.allowOrganization) ??
@@ -166,7 +173,7 @@ function InstallRow({
               </Label>
               <Select
                 value={install.credentialBindings[name] ?? UNBOUND}
-                disabled={canBind !== true || update.isPending}
+                disabled={!canBind || update.isPending}
                 onValueChange={(value) =>
                   update.mutate({
                     id: install.id,

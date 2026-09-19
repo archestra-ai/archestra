@@ -136,6 +136,48 @@ test("a battery matched by name alone starts off and is installed when turned on
   expect(screen.getByRole("link")).toHaveAttribute("href", "/openappa");
 });
 
+test("a choice made while a tool sync attaches the battery lands on the new install", async () => {
+  matches = [{ battery: "github", evidence: "host", install: null }];
+  server.use(
+    http.post(`${baseUrl}/api/openappa/battery-installs`, () => {
+      matches = [
+        {
+          battery: "github",
+          evidence: "host",
+          install: install({ id: "install-3" }),
+        },
+      ];
+      return HttpResponse.json(
+        {
+          error: {
+            message: "This battery is already installed for that catalog entry",
+            type: "api_conflict_error",
+          },
+        },
+        { status: 409 },
+      );
+    }),
+    http.patch(
+      `${baseUrl}/api/openappa/battery-installs/install-3`,
+      async ({ request }) => {
+        expect(await request.json()).toEqual({ enabled: false });
+        const updated = install({
+          id: "install-3",
+          enabled: false,
+          status: "disabled",
+        });
+        matches = [{ battery: "github", evidence: "host", install: updated }];
+        return HttpResponse.json(updated);
+      },
+    ),
+  );
+  show();
+  fireEvent.click(await screen.findByRole("checkbox", { name: /github/ }));
+  await waitFor(() =>
+    expect(screen.getByRole("checkbox", { name: /github/ })).not.toBeChecked(),
+  );
+});
+
 test("a battery matched by host is on by default before its install exists", async () => {
   matches = [{ battery: "linear", evidence: "host", install: null }];
   show();

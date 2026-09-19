@@ -60,9 +60,51 @@ export const openappaSessionsTable = pgTable(
     root: text().notNull(),
     ...scope(),
     parentId: text("parent_id"),
+    /**
+     * The session this one forks: set when a new session replayed another
+     * session's history. Its root is its own and started from that session's
+     * labels, so this links the two for lineage and logs only.
+     */
+    forkedFrom: text("forked_from"),
     startDecision: jsonb("start_decision").notNull(),
   },
-  (table) => [index("openappa_sessions_root_idx").on(table.root)],
+  (table) => [
+    index("openappa_sessions_root_idx").on(table.root),
+    index("openappa_sessions_forked_from_idx").on(
+      table.organizationId,
+      table.forkedFrom,
+    ),
+  ],
+);
+
+/**
+ * Digests of the lines a session's model wrote. A new session whose history
+ * carries them — a fork taken after the history was compacted to text, or a
+ * summary handed to a session of its own — replays that session's context,
+ * and opens as a fork of it. Digests only: no content is stored.
+ */
+export const openappaContextAnchorsTable = pgTable(
+  "openappa_context_anchors",
+  {
+    organizationId: text("organization_id").notNull(),
+    callerId: text("caller_id").notNull(),
+    digest: text().notNull(),
+    sessionId: text("session_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    primaryKey({
+      name: "openappa_context_anchors_pk",
+      columns: [
+        table.organizationId,
+        table.callerId,
+        table.digest,
+        table.sessionId,
+      ],
+    }),
+  ],
 );
 
 export const openappaOperationsTable = pgTable(

@@ -46,8 +46,6 @@ export type AppaSessionIdentity = {
     | "prompt-cache-key"
     | "metadata-session-id"
     | "conversation"
-    /** The session the history's trajectory stamps name. */
-    | "trajectory-stamp"
     | "none";
 };
 
@@ -194,6 +192,45 @@ export function restoreTrajectoryStamps(params: {
     }
   }
   return found;
+}
+
+/**
+ * The text of every message in this request's history, in order: user and
+ * assistant turns, whatever the part shape. Tool results are left out; they
+ * are the tools' words, not the context a session wrote.
+ */
+export function historyTexts(params: {
+  family: AppaWireFamily;
+  body: unknown;
+}): string[] {
+  const messages =
+    params.family === "openai:responses"
+      ? responsesItems(params.body).filter(
+          (item) => item.type === undefined || item.type === "message",
+        )
+      : (asArray(asRecord(params.body)?.messages) ?? []).flatMap((message) => {
+          const record = asRecord(message);
+          return record ? [record] : [];
+        });
+  return messages.flatMap((message) => partTexts(message.content));
+}
+
+/** The text the model wrote in one provider response, in order. */
+export function responseTexts(params: {
+  family: AppaWireFamily;
+  response: unknown;
+}): string[] {
+  const response = asRecord(params.response);
+  if (params.family === "anthropic:messages")
+    return partTexts(response?.content);
+  if (params.family === "openai:responses")
+    return (asArray(response?.output) ?? []).flatMap((item) => {
+      const record = asRecord(item);
+      return record?.type === "message" ? partTexts(record.content) : [];
+    });
+  return (asArray(response?.choices) ?? []).flatMap((choice) =>
+    partTexts(asRecord(asRecord(choice)?.message)?.content),
+  );
 }
 
 /** Removes tools from every declaration container, by exact wire name. */
@@ -881,6 +918,21 @@ function chatMessages(body: unknown): Record<string, unknown>[] {
     if (record) messages.push(record);
   }
   return messages;
+}
+
+/** Text of a message's content: a string, or the text of its text parts. */
+function partTexts(content: unknown): string[] {
+  if (typeof content === "string") return [content];
+  return (asArray(content) ?? []).flatMap((part) => {
+    const record = asRecord(part);
+    const text = record?.text;
+    return typeof text === "string" &&
+      (record?.type === "text" ||
+        record?.type === "input_text" ||
+        record?.type === "output_text")
+      ? [text]
+      : [];
+  });
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {

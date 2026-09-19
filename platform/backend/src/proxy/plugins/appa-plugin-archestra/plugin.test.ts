@@ -1,3 +1,4 @@
+import { signOfferClaims, unsignedOfferClaims } from "@/openappa/offer-claims";
 import * as appaService from "@/openappa/service";
 import type { LlmProxyRequestContext } from "@/proxy/plugins/registry";
 import { describe, expect, test, vi } from "@/test";
@@ -721,6 +722,59 @@ describe("rendering runtime text for this client", () => {
     } finally {
       evaluateToolCalls.mockRestore();
     }
+  });
+
+  test("a fork's control call carries none of the offers its parent surfaced", async () => {
+    const plugin = new AppaPluginArchestra([]);
+    const context = requestContext({
+      sessionId: "user:user|fork",
+      canonicalizeToolName: (name) => name,
+    });
+    const signed = (sessionId: string, offerId: string) =>
+      signOfferClaims(
+        unsignedOfferClaims({
+          organizationId: "organization",
+          sessionId,
+          callerId: "user:user",
+          offerId,
+        }),
+        "test-offer-signing-secret-32chars",
+      );
+    const trusted = context.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as Record<string, unknown>;
+    trusted.request = {
+      tools: {
+        controlToolName: "archestra__execute_remedy_plan",
+        noticeToolName: "archestra__get_remedy_plans",
+      },
+      spellings: new Map(),
+      customTools: new Set(),
+      namespaces: new Map(),
+      // The fork replays its parent's notices, offers included, beside its own.
+      offerClaims: [
+        signed("user:user|parent", "parent-offer"),
+        signed("user:user|fork", "fork-offer"),
+      ],
+    };
+    await plugin.onSessionInit(context);
+    const outcome = await plugin.onPrepareToolCalls({
+      ...context,
+      toolCalls: ["parent-offer", "fork-offer"].map((offer_id, index) => ({
+        id: `provider-call-${index}`,
+        name: "archestra__execute_remedy_plan",
+        arguments: JSON.stringify({ offer_id }),
+      })),
+    });
+    if (outcome?.decision !== "allow") throw new Error("expected allow");
+    const [parentOffer, forkOffer] = outcome.toolCalls.map((call) =>
+      JSON.parse(call.arguments as string),
+    );
+
+    // Spending the parent's offer would change the parent's labels from
+    // inside the fork: with no signed routing, the gateway knows no such offer.
+    expect(parentOffer.signature).toBeUndefined();
+    expect(forkOffer.signature).toEqual(expect.any(String));
   });
 
   test("strips a client-echoed JWS before stamping", async () => {

@@ -899,7 +899,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
   test.each([
     true,
     false,
-  ])("a summarizer run in a session of its own continues the session its stamped history came from (stream=%s)", async (stream) => {
+  ])("a summarizer run in a session of its own opens as a fork of the session its stamped history came from (stream=%s)", async (stream) => {
     config.openappa = {
       ...config.openappa,
       offerSigningSecret: "test-offer-signing-secret-32chars",
@@ -961,14 +961,17 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     });
 
     expect(compaction.statusCode, compaction.body).toBe(200);
-    // The parent's root, labels and all, as an in-band compaction keeps it.
+    // A root of its own, seeded from the parent's labels: the summarizer's
+    // session forks the parent's, and nothing it does reaches the parent.
     expect(events).toContainEqual(
-      expect.objectContaining({ session_id: `user:${userId}|${parent}` }),
+      expect.objectContaining({
+        event: "session_start",
+        session_id: `user:${userId}|${summarizer}`,
+        fork_of: `user:${userId}|${parent}`,
+      }),
     );
     expect(events).not.toContainEqual(
-      expect.objectContaining({
-        session_id: expect.stringContaining(summarizer),
-      }),
+      expect.objectContaining({ session_id: `user:${userId}|${parent}` }),
     );
     // The provider only ever sees the id it minted.
     const sent = JSON.stringify(providerRequests);
@@ -1045,9 +1048,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         expect.objectContaining({ session_id: `user:${caller}|${replaying}` }),
       );
       expect(events).not.toContainEqual(
-        expect.objectContaining({
-          session_id: expect.stringContaining(parent),
-        }),
+        expect.objectContaining({ fork_of: expect.anything() }),
       );
       // Unverified or not, a stamp never reaches the provider.
       const sent = JSON.stringify(providerRequests);
@@ -1056,7 +1057,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     }
   });
 
-  test("a history carrying two of the caller's sessions is refused before the provider", async () => {
+  test("a history mixing two unrelated sessions of the caller is refused before the provider", async () => {
     config.openappa = {
       ...config.openappa,
       offerSigningSecret: "test-offer-signing-secret-32chars",
@@ -1110,7 +1111,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     });
 
     expect(merged.statusCode, merged.body).toBe(400);
-    expect(merged.body).toContain("more than one session");
+    expect(merged.body).toContain("unrelated sessions");
     expect(providerRequests).toHaveLength(0);
   });
 
@@ -2672,7 +2673,7 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
   test.each([
     true,
     false,
-  ])("a Codex summarizer under a new thread continues the thread its stamped history came from (stream=%s)", async (stream) => {
+  ])("a Codex summarizer under a new thread opens as a fork of the thread its stamped history came from (stream=%s)", async (stream) => {
     config.openappa = {
       ...config.openappa,
       offerSigningSecret: "test-offer-signing-secret-32chars",
@@ -2804,12 +2805,14 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
     expect(compaction.statusCode, compaction.body).toBe(200);
     expect(events).toContainEqual(
       expect.objectContaining({
-        session_id: `user:${userId}|${CODEX_THREAD}`,
+        event: "session_start",
+        session_id: `user:${userId}|${CODEX_FORK_THREAD}`,
+        fork_of: `user:${userId}|${CODEX_THREAD}`,
       }),
     );
     expect(events).not.toContainEqual(
       expect.objectContaining({
-        session_id: `user:${userId}|${CODEX_FORK_THREAD}`,
+        session_id: `user:${userId}|${CODEX_THREAD}`,
       }),
     );
     const sent = JSON.stringify(providerBodies);

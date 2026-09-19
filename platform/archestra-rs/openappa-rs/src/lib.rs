@@ -155,6 +155,11 @@ struct Input {
     session_id: String,
     #[serde(default)]
     parent_id: Option<String>,
+    /// The session this one forks: set on a new session whose history the host traced to
+    /// another session of the same caller. Its first event opens a root of its own that starts
+    /// from that session's labels. Never set together with `parent_id`.
+    #[serde(default)]
+    fork_of: Option<String>,
     event: HookEventKind,
     #[serde(default)]
     operation_id: Option<String>,
@@ -361,6 +366,7 @@ fn validate(input: &Input) -> napi::Result<()> {
     for (name, value) in [
         ("caller", &input.caller_id),
         ("parent", &input.parent_id),
+        ("fork", &input.fork_of),
         ("operation", &input.operation_id),
         ("tool call", &input.tool_call_id),
     ] {
@@ -530,6 +536,7 @@ pub async fn execute_remedy_by_offer(
         caller_id: input.caller_id.clone(),
         session_id: owner.session_id,
         parent_id: owner.parent_id,
+        fork_of: None,
         event: HookEventKind::Remedy,
         operation_id: None,
         tool_call_id: input.tool_call_id,
@@ -612,6 +619,47 @@ fn root_locks() -> &'static Mutex<HashMap<String, Arc<Mutex<()>>>> {
 }
 
 impl State {
+    /// Open this session's root as a fork of `fork_of`, a started session of the same caller and
+    /// organization. The runtime freezes that session's labels, effects and denials into the new
+    /// root's opening; from then on the two share nothing.
+    fn open_fork(
+        &self,
+        pg: &PostgresStore,
+        input: &Input,
+        fork_of: &str,
+        actor_id: &str,
+    ) -> napi::Result<()> {
+        if input.parent_id.is_some() {
+            return Err(error(
+                "an OpenAPPA session cannot both fork a session and be its child",
+            ));
+        }
+        let parent_actor = session_actor(fork_of);
+        let (lookup, organization_id, caller_id) = (
+            parent_actor.clone(),
+            input.organization_id.clone(),
+            input.caller_id.clone(),
+        );
+        let parent_root = pg
+            .with_client(move |client| {
+                Ok(client
+                    .query_opt(
+                        "SELECT root FROM openappa_sessions WHERE actor = $1 AND organization_id = $2 AND caller_id IS NOT DISTINCT FROM $3",
+                        &[&lookup, &organization_id, &caller_id],
+                    )?
+                    .map(|row| row.get::<_, String>(0)))
+            })
+            .map_err(error)?
+            .ok_or_else(|| error("the session this one forks has not started"))?;
+        self.runtime
+            .open_fork(
+                &TrajectoryId(parent_root),
+                &TrajectoryId(parent_actor),
+                &TrajectoryId(actor_id.to_owned()),
+            )
+            .map_err(error)
+    }
+
     async fn dispatch(&self, input: Input) -> napi::Result<Value> {
         let pg = postgres_store(&self.store)?;
         let actor_id = identity(&input);
@@ -661,7 +709,7 @@ impl State {
             .with_client(move |client| {
                 Ok(client
                     .query_opt(
-                        "SELECT root, parent_id, organization_id FROM openappa_sessions WHERE actor = $1",
+                        "SELECT root, parent_id, organization_id, forked_from FROM openappa_sessions WHERE actor = $1",
                         &[&lookup],
                     )?
                     .map(|row| {
@@ -669,18 +717,29 @@ impl State {
                             row.get::<_, String>(0),
                             row.get::<_, Option<String>>(1),
                             row.get::<_, String>(2),
+                            row.get::<_, Option<String>>(3),
                         )
                     }))
             })
             .map_err(error)?;
-        if let Some((saved_root, saved_parent, saved_organization)) = &existing {
+        if let Some((saved_root, saved_parent, saved_organization, saved_fork)) = &existing {
             if *saved_root != root
                 || *saved_parent != input.parent_id
                 || *saved_organization != input.organization_id
             {
                 return Err(error("session identity changed"));
             }
+            // A fork keeps the parent it opened from. A session that opened on a root of its own
+            // governs its own trajectory: history traced to another session never moves it.
+            if input.fork_of.is_some() && *saved_fork != input.fork_of {
+                return Err(error(
+                    "OpenAPPA cannot continue another session's history in a session that governs its own trajectory",
+                ));
+            }
         } else {
+            if let Some(fork_of) = &input.fork_of {
+                self.open_fork(pg, &input, fork_of, &actor_id)?;
+            }
             let start = if let Some(child) = &actor.child {
                 HookEvent::ChildStart {
                     root: actor.root.clone(),
@@ -701,8 +760,8 @@ impl State {
             let start_decision = wire(&decision)?;
             let (id, root, input) = (actor_id.clone(), root.clone(), input.clone());
             pg.with_client(move |client| {
-                client.execute("INSERT INTO openappa_sessions (actor, root, organization_id, caller_id, session_id, parent_id, start_decision) VALUES ($1,$2,$3,$4,$5,$6,$7)",
-                    &[&id, &root, &input.organization_id, &input.caller_id, &input.session_id, &input.parent_id, &start_decision])?;
+                client.execute("INSERT INTO openappa_sessions (actor, root, organization_id, caller_id, session_id, parent_id, forked_from, start_decision) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)",
+                    &[&id, &root, &input.organization_id, &input.caller_id, &input.session_id, &input.parent_id, &input.fork_of, &start_decision])?;
                 Ok(())
             }).map_err(error)?;
         }
@@ -957,7 +1016,10 @@ impl State {
             operation_id: format!("call:{call_id}"),
         };
         let Some(released) = read_completed_operation(pg, &operation)? else {
-            let response = unknown_result_response();
+            // A fork replays the history of the session it forks: a result from before the
+            // fork comes back as that session processed it, never as an unknown call.
+            let response =
+                inherited_result(pg, input, &call_id)?.unwrap_or_else(unknown_result_response);
             let approved = decision_text(&response)?;
             pg.complete_processed_result(key, approved, response.clone())
                 .map_err(error)?;
@@ -1389,6 +1451,46 @@ fn raw_object_value(arguments: Option<&RawValue>, name: &str) -> napi::Result<Va
     } else {
         Err(error(format!("{name} must be a JSON object")))
     }
+}
+
+/// How many forks up the line a result is looked for. A fork of a fork of … deeper than this
+/// sees an older result as unknown, which withholds it: the safe side.
+const MAX_FORK_DEPTH: usize = 32;
+
+/// The decision the session this one forks from processed for `call_id`, looked up the fork
+/// line: the fork replays that history, so its results come back as the parent saw them.
+fn inherited_result(
+    pg: &PostgresStore,
+    input: &Input,
+    call_id: &str,
+) -> napi::Result<Option<Value>> {
+    let (organization_id, mut session, call_id) = (
+        input.organization_id.clone(),
+        input.session_id.clone(),
+        call_id.to_owned(),
+    );
+    pg.with_client(move |client| {
+        for _ in 0..MAX_FORK_DEPTH {
+            let Some(parent) = client
+                .query_opt(
+                    "SELECT forked_from FROM openappa_sessions WHERE actor = $1 AND organization_id = $2",
+                    &[&session_actor(&session), &organization_id],
+                )?
+                .and_then(|row| row.get::<_, Option<String>>(0))
+            else {
+                return Ok(None);
+            };
+            if let Some(row) = client.query_opt(
+                "SELECT decision FROM openappa_processed_results WHERE session_id = $1 AND tool_call_id = $2 AND organization_id = $3 AND status = 'complete'",
+                &[&parent, &call_id, &organization_id],
+            )? {
+                return Ok(row.get::<_, Option<Value>>(0));
+            }
+            session = parent;
+        }
+        Ok(None)
+    })
+    .map_err(error)
 }
 
 fn decision_text(response: &Value) -> napi::Result<String> {

@@ -11,6 +11,7 @@ import {
   useInteraction,
   useInteractionSessions,
   useInteractionSummaries,
+  useSessionLineage,
 } from "@/lib/interactions/interaction.query";
 import SessionDetailPage from "./page.client";
 
@@ -27,6 +28,7 @@ vi.mock("@/lib/interactions/interaction.query", () => ({
   useInteraction: vi.fn(),
   useInteractionSummaries: vi.fn(),
   useInteractionSessions: vi.fn(),
+  useSessionLineage: vi.fn(() => ({ data: undefined })),
   useExportSessionInteractions: vi.fn(() => ({
     mutate: vi.fn(),
     isPending: false,
@@ -115,6 +117,32 @@ describe("SessionDetailPage", () => {
     expect(
       screen.queryByRole("status", { name: "Loading session logs…" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("links a forked session to its parent and a parent to its forks", async () => {
+    vi.mocked(useFeature).mockReturnValue(true);
+    vi.mocked(useInteractionSessions).mockReturnValue({
+      data: { data: [{ sessionId: "test-session" }] },
+    } as unknown as ReturnType<typeof useInteractionSessions>);
+    vi.mocked(useInteractionSummaries).mockReturnValue({
+      data: { data: [], pagination: { total: 0 } },
+      isLoading: false,
+    } as unknown as ReturnType<typeof useInteractionSummaries>);
+    vi.mocked(useSessionLineage).mockReturnValue({
+      data: { forkedFrom: "parent-session", forks: ["fork-a", "fork-b"] },
+    } as unknown as ReturnType<typeof useSessionLineage>);
+
+    renderSessionDetailPage();
+
+    expect(await screen.findByText("Forked from")).toBeVisible();
+    expect(
+      screen.getByRole("link", { name: "parent-session" }),
+    ).toHaveAttribute("href", "/llm/logs/session/parent-session");
+    expect(screen.getByText("Forks")).toBeVisible();
+    expect(screen.getByRole("link", { name: "fork-b" })).toHaveAttribute(
+      "href",
+      "/llm/logs/session/fork-b",
+    );
   });
 
   it("shows cache read/write totals when the session used prompt caching", async () => {

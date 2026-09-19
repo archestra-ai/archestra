@@ -957,6 +957,10 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "OpenAPPA owns content-addressed policy history",
   },
+  openappaContextAnchorsTable: {
+    audited: false,
+    reason: "proxy-written lineage digests of model output",
+  },
   openappaOperationsTable: {
     audited: false,
     reason: "native hook idempotency ledger",

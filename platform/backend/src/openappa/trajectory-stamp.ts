@@ -1,5 +1,4 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { ApiError } from "@/types";
 
 /**
  * A trajectory stamp is the tool-call id the proxy gives a client in place of
@@ -9,11 +8,11 @@ import { ApiError } from "@/types";
  * Clients send a call's id back verbatim wherever its history goes: the same
  * session, a fork, or a summarizer that compacts the context in a session of
  * its own and hands the summary back. A request whose history carries a stamp
- * therefore names the trajectory that context came from, even under a new
- * session id, and the proxy continues that trajectory instead of opening a
- * clean root for context that is not clean. The proxy puts the provider's ids
- * back before anything reads the history, so the provider and the model only
- * ever see their own.
+ * therefore names the session that context came from, even under a new
+ * session id, and the proxy opens that new session as a fork of it rather
+ * than as a clean root for context that is not clean (see `lineage.ts`). The
+ * proxy puts the provider's ids back before anything reads the history, so
+ * the provider and the model only ever see their own.
  *
  * Layout: `appat1`, then base64url(`<session id>\0<provider call id>`), then a
  * 22-character base64url HMAC-SHA256 tag (128 bits). Every character is one a
@@ -69,40 +68,32 @@ export function parseTrajectoryStamp(id: string): TrajectoryStamp | undefined {
 }
 
 /**
- * The one session this caller's verified stamps name, if any. Stamps signed
- * for another caller or organization, or under another secret, name nothing:
- * that context was not this caller's to continue. A history that carries two
- * of this caller's sessions has no single trajectory to continue, and picking
- * one would drop the other's labels, so it is refused.
+ * The sessions this caller's verified stamps name, each once, ordered by where
+ * its calls last appear in the history: the last one made the history's most
+ * recent calls. Stamps signed for another caller or organization, or under
+ * another secret, name nothing: that context was not this caller's to carry.
  */
-export function stampedTrajectory(params: {
+export function stampedSessions(params: {
   stamps: readonly TrajectoryStamp[];
   organizationId: string;
   callerId: string;
   secret: string;
-}): string | undefined {
-  if (params.secret.length === 0) return undefined;
-  const sessions = new Set(
-    params.stamps
-      .filter((stamp) => {
-        const expected = Buffer.from(
-          stampTag({ ...params, payload: stamp.payload }),
-          "utf8",
-        );
-        const actual = Buffer.from(stamp.tag, "utf8");
-        return (
-          actual.length === expected.length && timingSafeEqual(actual, expected)
-        );
-      })
-      .map((stamp) => stamp.sessionId),
-  );
-  if (sessions.size > 1) {
-    throw new ApiError(
-      400,
-      "OpenAPPA cannot continue a history that carries calls from more than one session; resume one of those sessions instead",
+}): string[] {
+  if (params.secret.length === 0) return [];
+  const sessions = new Set<string>();
+  for (const stamp of params.stamps) {
+    const expected = Buffer.from(
+      stampTag({ ...params, payload: stamp.payload }),
+      "utf8",
     );
+    const actual = Buffer.from(stamp.tag, "utf8");
+    if (actual.length !== expected.length || !timingSafeEqual(actual, expected))
+      continue;
+    // Re-inserting moves a session to the end: the order is of last appearance.
+    sessions.delete(stamp.sessionId);
+    sessions.add(stamp.sessionId);
   }
-  return sessions.values().next().value;
+  return [...sessions];
 }
 
 // === Internal helpers ===

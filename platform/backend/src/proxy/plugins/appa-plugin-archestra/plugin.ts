@@ -1,9 +1,11 @@
 import { MCP_SERVER_TOOL_NAME_SEPARATOR } from "@archestra/shared";
 import config from "@/config";
+import { recordResponseAnchors } from "@/openappa/context-anchors";
 import { buildNoticeArguments, type RemedyExecution } from "@/openappa/notice";
 import type { OfferJws } from "@/openappa/offer-claims";
 import {
   offerIdFromJws,
+  offerSessionFromJws,
   signOfferClaims,
   unsignedOfferClaims,
 } from "@/openappa/offer-claims";
@@ -129,9 +131,14 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     let changed = false;
     const toolCalls = context.toolCalls.map((call) => {
       if (call.name !== control) return call;
+      const binding = this.bindings.get(context.resources);
       const stamped = stampControlExecution(
         call,
-        this.bindings.get(context.resources)?.request.offerClaims,
+        binding &&
+          sessionOfferClaims(
+            binding.request.offerClaims,
+            binding.session.session_id,
+          ),
       );
       changed ||= stamped !== call;
       return stamped;
@@ -291,7 +298,16 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     context: LlmProxyModelResponseContext,
   ): Promise<undefined> {
     const binding = this.bindings.get(context.resources);
-    if (!binding?.request.tools || binding.turnOpen) return;
+    if (!binding) return;
+    const family = appaWireFamily(context.interactionType);
+    if (family && tracesLineage(binding)) {
+      await recordResponseAnchors({
+        session: binding.session,
+        family,
+        response: context.response,
+      });
+    }
+    if (!binding.request.tools || binding.turnOpen) return;
     if (!binding.request.turnEndOperationId) return;
     await endTurn(binding.session, binding.request.turnEndOperationId);
     return undefined;
@@ -418,6 +434,20 @@ function signedOffersForDenial(
   );
 }
 
+/**
+ * The offers in the history that this session surfaced. A fork replays its
+ * parent's notices, offers included; spending one would change the parent's
+ * labels from inside the fork, so a fork's control calls carry none of them.
+ */
+function sessionOfferClaims(
+  envelopes: readonly OfferJws[] | undefined,
+  sessionId: string,
+): OfferJws[] | undefined {
+  return envelopes?.filter(
+    (envelope) => offerSessionFromJws(envelope) === sessionId,
+  );
+}
+
 function claimsForOffer(
   offerId: string,
   envelopes: readonly OfferJws[] | undefined,
@@ -525,9 +555,8 @@ function noticeNamespace(request: {
  * Gives every call the client receives a trajectory stamp for its id, so the
  * context this turn adds names its session wherever the client takes it (see
  * `openappa/trajectory-stamp.ts`). Only on a wire family whose history the
- * proxy restores, and only for a root session scoped to its caller: Chat names
- * its conversation itself, a child's lineage is its parent's to carry, and a
- * stamp signed for no caller would bind nobody.
+ * proxy restores, and only for a session scoped to its caller: Chat names its
+ * conversation itself, and a stamp signed for no caller would bind nobody.
  */
 function trajectoryStamper(
   binding: AppaPluginBinding,
@@ -541,12 +570,10 @@ function trajectoryStamper(
   const callerId = session.caller_id;
   const secret = config.openappa.offerSigningSecret;
   if (
-    binding.chat ||
-    secret.length === 0 ||
     !callerId ||
-    session.parent_id ||
+    secret.length === 0 ||
     !appaWireFamily(interactionType) ||
-    !session.session_id.startsWith(`${callerId}|`)
+    !tracesLineage(binding)
   )
     return undefined;
   const sessionId = clientSessionId(session.session_id);
@@ -560,6 +587,19 @@ function trajectoryStamper(
       secret,
     }),
   });
+}
+
+/**
+ * Whether this session's context is traced when it moves to another session:
+ * a session scoped to its caller. Chat names its conversation itself.
+ */
+function tracesLineage(binding: AppaPluginBinding): boolean {
+  const callerId = binding.session.caller_id;
+  return (
+    !binding.chat &&
+    callerId !== undefined &&
+    binding.session.session_id.startsWith(`${callerId}|`)
+  );
 }
 
 function clientSessionId(scopedSessionId: string): string {

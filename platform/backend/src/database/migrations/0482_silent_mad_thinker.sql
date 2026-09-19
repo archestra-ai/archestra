@@ -1,0 +1,2 @@
+ALTER TABLE "openappa_sessions" ADD COLUMN "forked_from" text;--> statement-breakpoint
+CREATE INDEX "openappa_sessions_forked_from_idx" ON "openappa_sessions" USING btree ("organization_id","forked_from");

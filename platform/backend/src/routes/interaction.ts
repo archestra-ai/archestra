@@ -13,6 +13,7 @@ import { userHasPermission } from "@/auth";
 import {
   InteractionModel,
   KnowledgeBaseConnectorModel,
+  OpenAppaSessionModel,
   VirtualApiKeyModel,
 } from "@/models";
 import {
@@ -21,6 +22,7 @@ import {
   createSortingQuerySchema,
   InteractionSummarySchema,
   SelectInteractionSchema,
+  SessionLineageSchema,
   SessionSummarySchema,
   UserInfoSchema,
   UuidIdSchema,
@@ -342,6 +344,35 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
 
       return reply.send(result);
+    },
+  );
+
+  fastify.get(
+    "/api/interactions/sessions/:sessionId/lineage",
+    {
+      schema: {
+        operationId: RouteId.GetInteractionSessionLineage,
+        description:
+          "Get a session's fork lineage: the session it forks and the sessions forked from it. A fork is a new client session that replayed another session's history and started from its guardrail state. `log:read` covers the caller's own sessions. `log:admin` covers every session in the organization.",
+        tags: ["Interaction"],
+        params: z.object({ sessionId: z.string().min(1).max(1024) }),
+        response: constructResponseSchema(SessionLineageSchema),
+      },
+    },
+    async ({ params: { sessionId }, user, organizationId }, reply) => {
+      const canSeeAllLogs = await userHasPermission(
+        user.id,
+        organizationId,
+        "log",
+        "admin",
+      );
+      return reply.send(
+        await OpenAppaSessionModel.lineage({
+          organizationId,
+          clientSessionId: sessionId,
+          ...(canSeeAllLogs ? {} : { callerId: `user:${user.id}` }),
+        }),
+      );
     },
   );
 

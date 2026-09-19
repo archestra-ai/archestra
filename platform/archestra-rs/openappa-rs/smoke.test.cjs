@@ -425,6 +425,55 @@ builtin = "hitl"
     );
   });
 
+  await t.test('a fork starts at its parent\'s labels, replays its results, and continues apart', async () => {
+    const taint = async (session, id) => {
+      const blocked = await call(session, `${id}-proposed`, 'read_untrusted');
+      assert.ok(blocked.offers?.length > 0, JSON.stringify(blocked));
+      await byOffer(session, { tool_call_id: `${id}-accept`, arguments: { offer_id: blocked.offers[0].offer_id } });
+      assert.equal((await call(session, id, 'read_untrusted')).decision, 'allow_call');
+      return result(session, id, 'restricted contents');
+    };
+    const writes = async (session, id) => (await call(session, id, 'write_public')).decision === 'allow_call';
+
+    // A tainted parent: its fork starts tainted and sees the parent's results as
+    // the parent processed them, not as calls it never released.
+    const parent = scope();
+    const processed = await taint(parent, 'taint-run');
+    const fork = { ...scope(), fork_of: parent.session_id };
+    assert.equal(await writes(fork, 'fork-write'), false, 'the fork carries the parent\'s taint');
+    const replayed = await result(fork, 'taint-run', 'restricted contents');
+    assert.equal(replayed.approved_output, processed.approved_output, JSON.stringify(replayed));
+    const { rows } = await client.query('SELECT forked_from, root <> $2 AS own_root FROM openappa_sessions WHERE session_id=$1', [fork.session_id, (await client.query('SELECT root FROM openappa_sessions WHERE session_id=$1', [parent.session_id])).rows[0].root]);
+    assert.deepEqual(rows, [{ forked_from: parent.session_id, own_root: true }]);
+
+    // A clean parent: forks and parent move apart after the fork, both ways.
+    const clean = scope();
+    assert.equal(await writes(clean, 'clean-write'), true);
+    await result(clean, 'clean-write', 'ok');
+    const early = { ...scope(), fork_of: clean.session_id };
+    const sibling = { ...scope(), fork_of: clean.session_id };
+    assert.equal(await writes(early, 'early-write'), true, 'a fork of a clean parent starts clean');
+    await result(early, 'early-write', 'ok');
+    assert.equal(await writes(sibling, 'sibling-write'), true);
+    await result(sibling, 'sibling-write', 'ok');
+    await taint(sibling, 'sibling-taint');
+    assert.equal(await writes(clean, 'clean-after-sibling'), true, 'a fork\'s taint never reaches its parent');
+    await result(clean, 'clean-after-sibling', 'ok');
+    assert.equal(await writes(early, 'early-after-sibling'), true, 'nor a sibling fork');
+    await result(early, 'early-after-sibling', 'ok');
+    await taint(clean, 'clean-taint');
+    assert.equal(await writes(early, 'early-after-parent'), true, 'the parent\'s later taint never reaches a fork');
+
+    // A session that opened on a root of its own never becomes a fork.
+    const own = scope();
+    assert.equal(await writes(own, 'own-write'), true);
+    await result(own, 'own-write', 'ok');
+    await assert.rejects(
+      () => call({ ...own, fork_of: parent.session_id }, 'own-as-fork', 'write_public'),
+      /governs its own trajectory/,
+    );
+  });
+
   await t.test('an offer accepted for a dispatched call retries it through the dispatch tool', async () => {
     const hint = async (dispatch) => {
       const session = scope();

@@ -1,8 +1,7 @@
 import { describe, expect, test } from "@/test";
-import { ApiError } from "@/types";
 import {
   parseTrajectoryStamp,
-  stampedTrajectory,
+  stampedSessions,
   stampToolCallId,
 } from "./trajectory-stamp";
 import { restoreTrajectoryStamps } from "./wire";
@@ -26,9 +25,9 @@ describe("trajectory stamps", () => {
       sessionId: "0d3990dc-ace0-4952-8ac5-2d5281e7261b",
       callId: "toolu_01AbC",
     });
-    expect(stampedTrajectory({ ...owner, stamps: [parsed(id)] })).toBe(
+    expect(stampedSessions({ ...owner, stamps: [parsed(id)] })).toEqual([
       "0d3990dc-ace0-4952-8ac5-2d5281e7261b",
-    );
+    ]);
   });
 
   test("provider ids are not stamps", () => {
@@ -48,9 +47,7 @@ describe("trajectory stamps", () => {
   ] as const)("a stamp names nothing for %s", ([, verifier]) => {
     const genuine = parsed(stamp("session-a", "call_1"));
 
-    expect(
-      stampedTrajectory({ ...verifier, stamps: [genuine] }),
-    ).toBeUndefined();
+    expect(stampedSessions({ ...verifier, stamps: [genuine] })).toEqual([]);
   });
 
   test("a stamp whose session was swapped names nothing", () => {
@@ -60,20 +57,18 @@ describe("trajectory stamps", () => {
     );
 
     expect(forged.sessionId).toBe("session-b");
-    expect(stampedTrajectory({ ...owner, stamps: [forged] })).toBeUndefined();
+    expect(stampedSessions({ ...owner, stamps: [forged] })).toEqual([]);
   });
 
-  test("one history carrying two of the caller's sessions is refused", () => {
+  test("names each session once, the one with the latest calls last", () => {
     const stamps = [
-      parsed(stamp("session-a", "call_1")),
-      parsed(stamp("session-a", "call_2")),
-      parsed(stamp("session-b", "call_3")),
+      parsed(stamp("parent", "call_1")),
+      parsed(stamp("fork", "call_2")),
+      parsed(stamp("parent", "call_3")),
+      parsed(stamp("fork", "call_4")),
     ];
 
-    expect(() => stampedTrajectory({ ...owner, stamps })).toThrow(ApiError);
-    expect(stampedTrajectory({ ...owner, stamps: stamps.slice(0, 2) })).toBe(
-      "session-a",
-    );
+    expect(stampedSessions({ ...owner, stamps })).toEqual(["parent", "fork"]);
   });
 
   test("restores the provider's ids on every wire and reports the stamps", () => {

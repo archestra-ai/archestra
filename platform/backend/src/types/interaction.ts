@@ -784,6 +784,17 @@ export const LAST_USER_MESSAGE_PREVIEW_MAX_LENGTH = 200;
 /**
  * Session summary schema for the sessions endpoint
  */
+/**
+ * A logged session's fork lineage: the session it forks and the sessions
+ * forked from it. A fork is a new client session that replayed another
+ * session's history, such as a client fork or a summarizer run in a session of
+ * its own; it starts from that session's guardrail state and continues apart.
+ */
+export const SessionLineageSchema = z.object({
+  forkedFrom: z.string().nullable(),
+  forks: z.array(z.string()),
+});
+
 export const SessionSummarySchema = z.object({
   sessionId: z.string().nullable(),
   sessionSource: z.string().nullable(),

@@ -60,6 +60,7 @@ import {
   useInteraction,
   useInteractionSessions,
   useInteractionSummaries,
+  useSessionLineage,
 } from "@/lib/interactions/interaction.query";
 import { cn, formatDate } from "@/lib/utils";
 
@@ -99,6 +100,10 @@ export default function SessionDetailPage({
   const interactions = interactionsResponse?.data ?? [];
   const paginationMeta = interactionsResponse?.pagination;
   const sessionData = sessionResponse?.data?.[0];
+  const { data: lineage } = useSessionLineage({
+    sessionId,
+    enabled: openappaEnabled,
+  });
   const latestInteractionId = sessionData?.lastInteractionId ?? undefined;
   const { data: lastMainRequest } = useInteraction({
     interactionId: latestInteractionId,
@@ -246,6 +251,24 @@ export default function SessionDetailPage({
             <span className="font-mono text-xs">
               {sessionData.sessionSource}
             </span>
+          ),
+        }
+      : null,
+    openappaEnabled && lineage?.forkedFrom
+      ? {
+          label: "Forked from",
+          value: <SessionLink sessionId={lineage.forkedFrom} />,
+        }
+      : null,
+    openappaEnabled && lineage && lineage.forks.length > 0
+      ? {
+          label: lineage.forks.length === 1 ? "Fork" : "Forks",
+          value: (
+            <div className="flex flex-col gap-0.5">
+              {lineage.forks.map((fork) => (
+                <SessionLink key={fork} sessionId={fork} />
+              ))}
+            </div>
           ),
         }
       : null,
@@ -535,6 +558,18 @@ export default function SessionDetailPage({
         )}
       </div>
     </PageLayout>
+  );
+}
+
+/** A link to another session's page, by its id. */
+function SessionLink({ sessionId }: { sessionId: string }) {
+  return (
+    <Link
+      href={`/llm/logs/session/${encodeURIComponent(sessionId)}`}
+      className="font-mono text-xs break-all underline-offset-2 hover:underline"
+    >
+      {sessionId}
+    </Link>
   );
 }
 

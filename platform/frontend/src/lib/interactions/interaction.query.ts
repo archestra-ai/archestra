@@ -15,6 +15,7 @@ const {
   getInteraction,
   getInteractionSummaries,
   getInteractions,
+  getInteractionSessionLineage,
   getInteractionSessions,
   getUniqueExternalAgentIds,
   getUniqueUserIds,
@@ -250,6 +251,30 @@ export function useUniqueUserIds() {
       throwOnApiError(response.error);
       return response.data ?? [];
     },
+  });
+}
+
+/**
+ * A session's fork lineage: the session it forks and the sessions forked from
+ * it. Only fetched while OpenAPPA is on, since nothing forks otherwise.
+ */
+export function useSessionLineage({
+  sessionId,
+  enabled,
+}: {
+  sessionId: string;
+  enabled: boolean;
+}) {
+  return useQuery({
+    queryKey: ["interactions", "sessions", sessionId, "lineage"],
+    queryFn: async () => {
+      const response = await getInteractionSessionLineage({
+        path: { sessionId },
+      });
+      throwOnApiError(response.error, { toastOnError: false });
+      return response.data ?? { forkedFrom: null, forks: [] };
+    },
+    enabled,
   });
 }
 

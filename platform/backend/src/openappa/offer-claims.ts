@@ -1,5 +1,6 @@
-import { createHash, createHmac, timingSafeEqual } from "node:crypto";
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
+import { openappaActor } from "./actor";
 
 const OFFER_CLAIMS_VERSION = 1;
 const DEFAULT_KEY_ID = "default";
@@ -38,10 +39,6 @@ export const OfferJwsSchema = z.object({
 
 export type OfferJws = z.infer<typeof OfferJwsSchema>;
 type OfferClaims = z.infer<typeof OfferClaimsSchema>;
-
-function sessionRoot(sessionId: string): string {
-  return `archestra:${createHash("sha256").update(sessionId).digest("hex")}`;
-}
 
 export function signOfferClaims(claims: OfferClaims, secret: string): OfferJws {
   const encodedHeader = base64UrlEncode(
@@ -95,7 +92,7 @@ export function unsignedOfferClaims(params: {
   return {
     v: OFFER_CLAIMS_VERSION,
     organization_id: params.organizationId,
-    root: sessionRoot(params.sessionId),
+    root: openappaActor(params.sessionId),
     session_id: params.sessionId,
     parent_id: params.parentId ?? null,
     caller_id: params.callerId ?? null,
@@ -109,6 +106,12 @@ export function unsignedOfferClaims(params: {
 export function offerIdFromJws(jws: OfferJws): string | undefined {
   const claims = OfferClaimsSchema.safeParse(parseJson(jws.payload));
   return claims.success ? claims.data.offer_id : undefined;
+}
+
+/** The caller-scoped session an offer's claims name. Unverified: routing only. */
+export function offerSessionFromJws(jws: OfferJws): string | undefined {
+  const claims = OfferClaimsSchema.safeParse(parseJson(jws.payload));
+  return claims.success ? claims.data.session_id : undefined;
 }
 
 function signHs256(

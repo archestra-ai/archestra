@@ -79,6 +79,8 @@ import {
   EVENT_GENAI_CONTENT_COMPLETION,
   type SpanTeamInfo,
 } from "@/observability/tracing";
+import { anchoredSessions } from "@/openappa/context-anchors";
+import { forkedSession } from "@/openappa/lineage";
 import { prepareAppaRequest } from "@/openappa/request";
 import {
   APPA_PARENT_HEADER,
@@ -89,7 +91,7 @@ import {
   openappaEnabled,
   sessionFromHeaders,
 } from "@/openappa/service";
-import { stampedTrajectory } from "@/openappa/trajectory-stamp";
+import { stampedSessions } from "@/openappa/trajectory-stamp";
 import {
   type AppaSessionIdentity,
   appaWireFamily,
@@ -1203,8 +1205,8 @@ export async function handleLLMProxy<
               : undefined;
         // Convert client-native session metadata into universal X-Appa-* headers.
         // The matched client adapter reads the client's own trajectory id
-        // (resume reopens the root; a fork's is superseded below by the
-        // trajectory stamps its replayed history carries) before the
+        // (resume reopens the root; a fork's new id opens a root of its own,
+        // seeded below from the session its history came from) before the
         // generic wire fallbacks.
         const incomingAppaSessionHeader =
           headersForExtraction[APPA_SESSION_HEADER.toLowerCase()];
@@ -1217,28 +1219,51 @@ export async function handleLLMProxy<
             })
           : {};
         // Context that carries this caller's trajectory stamps came from the
-        // session that made those calls. A summarizer compacting it in a
-        // session of its own, or a fork, continues that session's trajectory,
-        // labels and all, the way an in-band compaction does. A root the
-        // client names explicitly is its own to manage.
-        const stampedSession =
+        // sessions that made those calls. A new session replaying it — a
+        // fork, or a summarizer compacting it in a session of its own —
+        // opens as a fork of the session that made its latest calls: a root
+        // of its own that starts from that session's labels, after which the
+        // two continue apart. A root the client names explicitly is its own
+        // to manage.
+        const stamped =
           callerId &&
+          appaIdentity.sessionId &&
           !isInternalChat &&
           !incomingAppaSessionHeader &&
           !headersForExtraction[APPA_PARENT_HEADER.toLowerCase()]
-            ? stampedTrajectory({
+            ? stampedSessions({
                 stamps: trajectoryStamps,
                 organizationId: resolvedAgent.organizationId,
                 callerId,
                 secret: config.openappa.offerSigningSecret,
               })
+            : [];
+        // A history compacted to text carries no call ids; the lines its
+        // sessions' models wrote trace it instead.
+        const traced =
+          stamped.length > 0 ||
+          !callerId ||
+          !appaIdentity.sessionId ||
+          !appaFamily ||
+          isInternalChat ||
+          incomingAppaSessionHeader ||
+          headersForExtraction[APPA_PARENT_HEADER.toLowerCase()]
+            ? stamped
+            : await anchoredSessions({
+                organizationId: resolvedAgent.organizationId,
+                callerId,
+                family: appaFamily,
+                body,
+              });
+        const forkOf =
+          callerId && appaIdentity.sessionId && traced.length > 0
+            ? await forkedSession({
+                organizationId: resolvedAgent.organizationId,
+                sessionId: appaIdentity.sessionId,
+                stamped: traced,
+                scope: (session) => `${callerId}|${session}`,
+              })
             : undefined;
-        if (stampedSession && stampedSession !== appaIdentity.sessionId) {
-          appaIdentity = {
-            sessionId: stampedSession,
-            provenance: "trajectory-stamp",
-          };
-        }
         if (
           appaIdentity.sessionId &&
           isWellFormedAppaId(appaIdentity.sessionId) &&
@@ -1283,6 +1308,11 @@ export async function handleLLMProxy<
             400,
             "OpenAPPA requires valid X-Appa-Session-ID and optional X-Appa-Parent-ID headers",
           );
+        if (forkOf && callerId)
+          openappaSession = {
+            ...openappaSession,
+            fork_of: `${callerId}|${forkOf}`,
+          };
         if (
           callerId &&
           openappaSession.session_id === `${callerId}@${resolvedAgent.id}`

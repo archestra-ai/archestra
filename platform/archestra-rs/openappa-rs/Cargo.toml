@@ -10,9 +10,9 @@ crate-type = ["cdylib"]
 
 [dependencies]
 # The embedded reporting helper currently requires upstream's daemon feature.
-appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "1af98955dfe20e460ab6e3f67c26bb22288f1118" }
-appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "1af98955dfe20e460ab6e3f67c26bb22288f1118" }
-appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "1af98955dfe20e460ab6e3f67c26bb22288f1118", features = ["postgres"] }
+appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "5e33b7448cb36c97949aaa080664d4cadf7e61f1" }
+appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "5e33b7448cb36c97949aaa080664d4cadf7e61f1" }
+appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "5e33b7448cb36c97949aaa080664d4cadf7e61f1", features = ["postgres"] }
 napi = { version = "3", features = ["tokio_rt"] }
 napi-derive = "3"
 serde = { version = "1", features = ["derive"] }

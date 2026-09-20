@@ -19,7 +19,6 @@ import {
 } from "fastify-type-provider-zod";
 import { TeamTokenModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test, vi } from "@/test";
-import { clientCapabilityKey } from "./client-capabilities";
 import mcpGatewayRoutes from "./index";
 import { pendingInboundRequests } from "./pending-inbound-requests";
 import { MCP_CLIENT_CAPABILITIES_META_KEY } from "./protocol";
@@ -313,11 +312,7 @@ describe("MCP Gateway - in-band elicitation round trip", () => {
     } as unknown as StreamableHTTPServerTransport;
     const storedToken = await TeamTokenModel.validateToken(token.value);
     if (!storedToken) throw new Error("token was not persisted");
-    const caller = clientCapabilityKey({
-      profileId: agent.id,
-      tokenId: storedToken.id,
-      userAgent: "cancel-test-client",
-    });
+    const caller = `token:${storedToken.id}`;
     const wireId = pendingInboundRequests.register({
       id: 17,
       transport,
@@ -415,7 +410,7 @@ describe("MCP Gateway - in-band elicitation round trip", () => {
     const question = await events.next();
     expect(question.method).toBe("elicitation/create");
 
-    await post("forms-client/1", {
+    await post("forms-client/2", {
       jsonrpc: "2.0",
       id: question.id,
       result: { action: "accept", content: { choice: "Do not accept" } },

@@ -334,7 +334,7 @@ function offerOwnerIsSpender(owner: string | null, spender: string): boolean {
   if (owner.startsWith("user:")) {
     return owner.length > "user:".length && owner === spender;
   }
-  return !["app:", "virtual-key:"].includes(owner);
+  return !owner.startsWith("app:") && !owner.startsWith("virtual-key:");
 }
 
 function buildMultiChoiceSchema(

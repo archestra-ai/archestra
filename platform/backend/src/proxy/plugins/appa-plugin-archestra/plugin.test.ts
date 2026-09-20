@@ -1458,32 +1458,52 @@ describe("rendering runtime text for this client", () => {
       };
       await plugin.onBeforeModel({ ...context, request });
 
-      expect(request.instructions).toBe("Keep existing Codex instructions.");
-      expect(request.input[0]).toEqual({
-        type: "function_call_output",
-        call_id: issuedId,
-        output: "The user accepted the offered remedy.",
-      });
-      expect(request.input[1]).toMatchObject({ role: "developer" });
-      expect(JSON.stringify(request.input[1])).toContain(
+      expect(request.instructions).toContain(
+        "Keep existing Codex instructions.",
+      );
+      expect(request.instructions).toContain(
         "form's accept/submitted status is not by itself agreement",
       );
-      expect(JSON.stringify(request.input[1])).toContain(
+      expect(request.instructions).toContain(
         "do not require a second free-text answer",
       );
-      expect(JSON.stringify(request.input[1])).toContain(
+      expect(request.instructions).toContain(
         "only after the remedy reports successful authorization",
       );
-      expect(JSON.stringify(request.input[1])).toContain(
+      expect(request.instructions).toContain(
         "do not apply new offers or repeat the workflow under the earlier acceptance",
       );
-      expect(JSON.stringify(request.input[1])).toContain(
+      expect(request.input).toEqual([
+        {
+          type: "function_call_output",
+          call_id: issuedId,
+          output: "The user accepted the offered remedy.",
+        },
+      ]);
+      expect(request.instructions).toContain(
         "without repeating options, asking again",
       );
+      const instructionsAfterFirstPass = request.instructions;
       await plugin.onBeforeModel({ ...context, request });
-      expect(request.input).toHaveLength(2);
+      expect(request.instructions).toBe(instructionsAfterFirstPass);
+      expect(request.input).toHaveLength(1);
       expect(request.tool_choice).toBe("auto");
       expect(request.reasoning).toEqual({ summary: "detailed" });
+
+      const inputOnlyRequest = {
+        input: [
+          {
+            type: "function_call_output",
+            call_id: issuedId,
+            output: "The user accepted the offered remedy.",
+          },
+        ],
+      };
+      await plugin.onBeforeModel({ ...context, request: inputOnlyRequest });
+      expect(inputOnlyRequest.input[1]).toMatchObject({ role: "developer" });
+      expect(JSON.stringify(inputOnlyRequest.input[1])).toContain(
+        "form's accept/submitted status is not by itself agreement",
+      );
     } finally {
       processResults.mockRestore();
     }

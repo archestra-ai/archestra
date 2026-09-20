@@ -385,6 +385,14 @@ describe("chat tool execution", () => {
       overrides: { callerId: "user:someone-else" },
     },
     {
+      case: "minted for an app caller",
+      overrides: { callerId: "app:someone-else" },
+    },
+    {
+      case: "minted for a virtual-key caller",
+      overrides: { callerId: "virtual-key:someone-else" },
+    },
+    {
       case: "minted with no owner",
       overrides: { callerId: null },
     },

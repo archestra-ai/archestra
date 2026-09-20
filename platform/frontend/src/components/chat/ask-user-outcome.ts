@@ -58,7 +58,7 @@ function outcomeFromStructured(
             (item): item is string => typeof item === "string",
           )
         : [];
-      return selected.length > 0 ? { status: "answered", selected } : null;
+      return { status: "answered", selected };
     }
     case "decline":
       return { status: "declined" };

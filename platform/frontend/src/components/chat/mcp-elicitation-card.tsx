@@ -21,7 +21,6 @@ import {
   hasChoiceSelection,
   isSingleChoiceForm,
   normalizeValues,
-  validateValues,
 } from "./mcp-elicitation-fields";
 
 /**
@@ -315,7 +314,9 @@ export function McpElicitationCard({
     buildResponse: (question: CardQuestion) => ElicitationResponse,
   ) => {
     cancelAutoAdvance();
-    submissionSnapshotRef.current = questions.map(
+    // Freeze only questions the backend is still waiting on. Already-settled
+    // or acknowledged members stay out so a later dismiss cannot resurrect them.
+    submissionSnapshotRef.current = pendingQuestions.map(
       (question) => question.request,
     );
     setIsSubmitting(true);
@@ -659,8 +660,5 @@ function isQuestionAnswered(
   fields: ElicitationField[],
   values: Record<string, unknown>,
 ) {
-  return (
-    hasChoiceSelection(fields, values) &&
-    Object.keys(validateValues(fields, values)).length === 0
-  );
+  return hasChoiceSelection(fields, values);
 }

@@ -37,7 +37,16 @@ describe("getAskUserOutcome", () => {
     expect(
       outcomeOf({ content: "The user picked: Only me. Act on this choice." }),
     ).toBeNull();
-    expect(outcomeOf({ structuredContent: { action: "accept" } })).toBeNull();
+  });
+
+  it("treats an accepted empty selection as answered", () => {
+    expect(outcomeOf({ structuredContent: { action: "accept" } })).toEqual({
+      status: "answered",
+      selected: [],
+    });
+    expect(
+      outcomeOf({ structuredContent: { action: "accept", selected: [] } }),
+    ).toEqual({ status: "answered", selected: [] });
   });
 });
 

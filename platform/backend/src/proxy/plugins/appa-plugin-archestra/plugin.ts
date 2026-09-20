@@ -915,6 +915,10 @@ function appendQuestionContinuation(params: {
 }): void {
   if (!isRecord(params.request)) return;
   if (params.interactionType === "openai:responses") {
+    if (typeof params.request.instructions === "string") {
+      appendInstruction(params.request, "instructions");
+      return;
+    }
     const input = params.request.input;
     if (!Array.isArray(input)) return;
     if (

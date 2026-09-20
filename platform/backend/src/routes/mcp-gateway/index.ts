@@ -207,9 +207,15 @@ async function handleMcpPostRequest(
 ): Promise<unknown> {
   const { revision } = resolution;
   const body = request.body as Record<string, unknown>;
+  const principal = deriveStatePrincipal({
+    userId: tokenAuthContext?.userId,
+    tokenId: tokenAuthContext?.tokenId,
+    organizationId: tokenAuthContext?.organizationId,
+  });
   // This client of this caller on this gateway: the key for its
-  // initialize-time capabilities and for the server-initiated requests only
-  // it may answer.
+  // initialize-time capabilities. Pending server-initiated requests bind to
+  // the authenticated principal instead, so a User-Agent change cannot lose
+  // the caller's answer.
   const capabilityKey = clientCapabilityKey({
     profileId,
     tokenId: tokenAuthContext?.tokenId,
@@ -232,7 +238,7 @@ async function handleMcpPostRequest(
       const pending = pendingInboundRequests.consume({
         wireId: requestId,
         agentId: profileId,
-        caller: capabilityKey,
+        caller: principal,
       });
       if (pending) {
         pending.transport.onmessage?.({
@@ -256,7 +262,7 @@ async function handleMcpPostRequest(
     const pending = pendingInboundRequests.consume({
       wireId: body.id as string | number,
       agentId: profileId,
-      caller: capabilityKey,
+      caller: principal,
     });
     if (pending) {
       pending.transport.onmessage?.({
@@ -288,11 +294,6 @@ async function handleMcpPostRequest(
   const isInitialize =
     typeof body?.method === "string" && body.method === "initialize";
 
-  const principal = deriveStatePrincipal({
-    userId: tokenAuthContext?.userId,
-    tokenId: tokenAuthContext?.tokenId,
-    organizationId: tokenAuthContext?.organizationId,
-  });
   let capabilitySessionId: string | undefined;
   if (isInitialize) {
     // A legacy client declares its capabilities once, here, and the next
@@ -447,7 +448,7 @@ async function handleMcpPostRequest(
           id: message.id,
           transport,
           agentId: profileId,
-          caller: capabilityKey,
+          caller: principal,
         });
         try {
           return await originalSend({ ...message, id: wireId }, options);
@@ -1156,6 +1157,8 @@ function isServerInitiatedRequestMessage(
     typeof message === "object" &&
     message !== null &&
     "method" in message &&
+    typeof message.method === "string" &&
+    (SERVER_INITIATED_METHODS as readonly string[]).includes(message.method) &&
     "id" in message &&
     message.id !== undefined
   );

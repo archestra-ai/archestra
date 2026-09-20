@@ -2778,6 +2778,68 @@ describe("pending MCP elicitation questions", () => {
     });
     await waitFor(() => expect(mocks.sendMessage).toHaveBeenCalledTimes(1));
   });
+
+  it("ignores a data-mcp-elicitation payload that fails schema validation", async () => {
+    const { latestSessionRef } = renderSession();
+    await waitFor(() => expect(latestSessionRef.current).toBeDefined());
+
+    act(() => {
+      chatOptions?.onData?.({
+        type: "data-mcp-elicitation",
+        data: {
+          conversationId,
+          toolName: "archestra__ask_user",
+          message: "Missing id and mode",
+        },
+      });
+      chatOptions?.onData?.(question("q-1"));
+    });
+
+    await waitFor(() =>
+      expect(pendingIds(latestSessionRef.current)).toEqual(["q-1"]),
+    );
+  });
+
+  it("clears a pending question after repeated submit failures so the queue can drain", async () => {
+    const { latestSessionRef } = renderSession();
+    await waitFor(() => expect(latestSessionRef.current).toBeDefined());
+
+    act(() => {
+      chatOptions?.onData?.(question("q-1"));
+    });
+    await waitFor(() =>
+      expect(pendingIds(latestSessionRef.current)).toEqual(["q-1"]),
+    );
+
+    act(() => {
+      chatMessageQueue.enqueue(conversationId, { text: "and another thing" });
+    });
+    await act(async () => {});
+    expect(mocks.sendMessage).not.toHaveBeenCalled();
+
+    vi.useFakeTimers();
+    try {
+      mocks.mutateAsync.mockResolvedValue("failed");
+      await act(async () => {
+        await latestSessionRef.current?.resolveMcpElicitation({
+          id: "q-1",
+          action: "accept",
+          content: { choice: "Yes" },
+        });
+      });
+      expect(pendingIds(latestSessionRef.current)).toEqual(["q-1"]);
+      expect(mocks.sendMessage).not.toHaveBeenCalled();
+
+      await act(async () => {
+        vi.advanceTimersByTime(30_000);
+      });
+      expect(pendingIds(latestSessionRef.current)).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
+
+    await waitFor(() => expect(mocks.sendMessage).toHaveBeenCalledTimes(1));
+  });
 });
 
 function RegisterChatSession({

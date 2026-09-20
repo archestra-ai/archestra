@@ -1,5 +1,6 @@
 "use client";
 
+import { z } from "zod";
 import { Checkbox } from "@/components/ui/checkbox";
 import { FieldDescription } from "@/components/ui/field-description";
 import { Input } from "@/components/ui/input";
@@ -20,18 +21,22 @@ import { cn } from "@/lib/utils";
  * `data-mcp-elicitation` chunk. `toolCallId` names the tool call that raised
  * it (when known) and `header` is the short tab label `ask_user` may send.
  */
-export type ChatMcpElicitationRequest = {
-  id: string;
-  conversationId: string;
-  toolName: string;
-  message: string;
-  mode: "form" | "url";
-  requestedSchema?: unknown;
-  elicitationId?: string;
-  url?: string;
-  toolCallId?: string;
-  header?: string;
-};
+export const ChatMcpElicitationRequestSchema = z.object({
+  id: z.string().min(1),
+  conversationId: z.string().min(1),
+  toolName: z.string().min(1),
+  message: z.string(),
+  mode: z.enum(["form", "url"]),
+  requestedSchema: z.unknown().optional(),
+  elicitationId: z.string().optional(),
+  url: z.string().optional(),
+  toolCallId: z.string().optional(),
+  header: z.string().optional(),
+});
+
+export type ChatMcpElicitationRequest = z.infer<
+  typeof ChatMcpElicitationRequestSchema
+>;
 
 type ElicitationContentValue = string | number | boolean | string[];
 
@@ -99,21 +104,6 @@ export function isSingleChoiceForm(fields: ElicitationField[]) {
   );
 }
 
-/**
- * Whether a choice form has something picked: single choice needs its option,
- * multi choice at least one checked box.
- */
-export function hasChoiceSelection(
-  fields: ElicitationField[],
-  values: Record<string, unknown>,
-) {
-  return fields.some((field) =>
-    field.schema.type === "boolean"
-      ? values[field.name] === true
-      : String(values[field.name] ?? "") !== "",
-  );
-}
-
 export function getDefaultValues(fields: ElicitationField[]) {
   if (fields.length === 0) {
     return { response: "" };
@@ -172,6 +162,17 @@ export function validateValues(
   }
 
   return errors;
+}
+
+/**
+ * Whether a choice form is complete enough to submit. Required fields must
+ * have a value; an all-optional form is complete even with nothing checked.
+ */
+export function hasChoiceSelection(
+  fields: ElicitationField[],
+  values: Record<string, unknown>,
+) {
+  return Object.keys(validateValues(fields, values)).length === 0;
 }
 
 export function normalizeValues(

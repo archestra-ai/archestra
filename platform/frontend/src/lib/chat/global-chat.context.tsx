@@ -34,6 +34,7 @@ import { filterOptimisticToolCalls } from "@/components/chat/chat-messages.utils
 import { McpElicitationDialog } from "@/components/chat/mcp-elicitation-dialog";
 import {
   type ChatMcpElicitationRequest,
+  ChatMcpElicitationRequestSchema,
   type ElicitationResponse,
   isChoiceElicitationRequest,
 } from "@/components/chat/mcp-elicitation-fields";
@@ -72,6 +73,7 @@ import { useAppName } from "@/lib/hooks/use-app-name";
 const SESSION_CLEANUP_TIMEOUT = 10 * 60 * 1000; // 10 min
 const MAX_AUTO_RETRIES = 2;
 const AUTO_RETRY_DELAY_MS = 1500;
+const MCP_ELICITATION_FAILURE_CLEAR_MS = 30_000;
 
 export type ContextCompactionState = {
   isCompacting: boolean;
@@ -462,14 +464,35 @@ function ChatSessionHook({
   // every question from the start of the turn; this keeps one that was already
   // settled from coming back as a card.
   const settledMcpElicitationIdsRef = useRef(new Set<string>());
-  const settleMcpElicitation = useCallback((id: string) => {
-    settledMcpElicitationIdsRef.current.add(id);
-    setMcpElicitations((current) =>
-      current.some((request) => request.id === id)
-        ? current.filter((request) => request.id !== id)
-        : current,
-    );
+  const elicitationFailureClearTimersRef = useRef(
+    new Map<string, ReturnType<typeof setTimeout>>(),
+  );
+  const clearElicitationFailureTimer = useCallback((id: string) => {
+    const timer = elicitationFailureClearTimersRef.current.get(id);
+    if (timer) {
+      clearTimeout(timer);
+      elicitationFailureClearTimersRef.current.delete(id);
+    }
   }, []);
+  useEffect(() => {
+    const timers = elicitationFailureClearTimersRef.current;
+    return () => {
+      for (const timer of timers.values()) clearTimeout(timer);
+      timers.clear();
+    };
+  }, []);
+  const settleMcpElicitation = useCallback(
+    (id: string) => {
+      clearElicitationFailureTimer(id);
+      settledMcpElicitationIdsRef.current.add(id);
+      setMcpElicitations((current) =>
+        current.some((request) => request.id === id)
+          ? current.filter((request) => request.id !== id)
+          : current,
+      );
+    },
+    [clearElicitationFailureTimer],
+  );
   const [mcpTasks, setMcpTasks] = useState<Record<string, McpTaskPartData>>({});
   const [optimisticToolCalls, setOptimisticToolCalls] = useState<
     Array<{
@@ -1115,12 +1138,15 @@ function ChatSessionHook({
       }
 
       if (customData.type === "data-mcp-elicitation") {
-        const data = customData.data as ChatMcpElicitationRequest | undefined;
+        const parsed = ChatMcpElicitationRequestSchema.safeParse(
+          customData.data,
+        );
         if (
-          data?.id &&
-          data.conversationId === conversationId &&
-          !settledMcpElicitationIdsRef.current.has(data.id)
+          parsed.success &&
+          parsed.data.conversationId === conversationId &&
+          !settledMcpElicitationIdsRef.current.has(parsed.data.id)
         ) {
+          const data = parsed.data;
           setMcpElicitations((current) =>
             current.some((request) => request.id === data.id)
               ? current
@@ -1489,9 +1515,27 @@ function ChatSessionHook({
         content: response.content,
       });
       if (outcome === "failed") {
-        // Already reported; the question stays up for another try.
+        // Already reported; the question stays up for another try, but a
+        // bounded clear prevents a permanently failing submit from blocking
+        // the message queue forever.
+        if (!elicitationFailureClearTimersRef.current.has(response.id)) {
+          elicitationFailureClearTimersRef.current.set(
+            response.id,
+            setTimeout(() => {
+              elicitationFailureClearTimersRef.current.delete(response.id);
+              if (
+                pendingMcpElicitationsRef.current.some(
+                  (request) => request.id === response.id,
+                )
+              ) {
+                settleMcpElicitation(response.id);
+              }
+            }, MCP_ELICITATION_FAILURE_CLEAR_MS),
+          );
+        }
         return false;
       }
+      clearElicitationFailureTimer(response.id);
       // A 409 means the backend is no longer waiting on this question. Only
       // say so when nothing else has retired it yet (no resolved event, no
       // finished tool call) — otherwise the card vanishing explains itself.
@@ -1508,7 +1552,12 @@ function ChatSessionHook({
       }
       return true;
     },
-    [conversationId, resolveMcpElicitationAsync, settleMcpElicitation],
+    [
+      clearElicitationFailureTimer,
+      conversationId,
+      resolveMcpElicitationAsync,
+      settleMcpElicitation,
+    ],
   );
   sessionRef.current = {
     conversationId,

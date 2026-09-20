@@ -88,7 +88,7 @@ describe("McpElicitationCard", () => {
     });
   });
 
-  it("keeps Submit disabled on a multi-choice question until one option is checked", async () => {
+  it("submits an all-optional multi-choice question with nothing checked", async () => {
     const user = userEvent.setup();
     const onRespond = vi.fn().mockResolvedValue(true);
 
@@ -106,15 +106,13 @@ describe("McpElicitationCard", () => {
     );
 
     const submit = screen.getByRole("button", { name: "Submit" });
-    expect(submit).toBeDisabled();
-    await user.click(screen.getByRole("checkbox", { name: "Deploy" }));
     expect(submit).toBeEnabled();
     await user.click(submit);
 
     expect(onRespond).toHaveBeenCalledWith({
       id: "q-1",
       action: "accept",
-      content: { option_0: false, option_1: true },
+      content: { option_0: false, option_1: false },
     });
   });
 
@@ -847,6 +845,75 @@ describe("McpElicitationCard", () => {
       id: "q-2",
       action: "accept",
       content: { choice: "Apple" },
+    });
+  });
+
+  it("does not snapshot an already-submitted question when dismissing the remainder", async () => {
+    const user = userEvent.setup();
+    const first = singleChoice({
+      id: "q-1",
+      toolCallId: "call-1",
+      message: "Pick a color",
+      options: ["Blue", "Green"],
+    });
+    const second = singleChoice({
+      id: "q-2",
+      toolCallId: "call-2",
+      message: "Pick a fruit",
+      options: ["Apple", "Pear"],
+    });
+    const dismissResponse = deferred<boolean>();
+    const onRespond = vi
+      .fn()
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(false)
+      .mockReturnValue(dismissResponse.promise);
+    const { rerender } = render(
+      <McpElicitationCard
+        groupId="assistant-1-ask-user-1"
+        members={[
+          groupMember("call-1", "Pick a color", { status: "waiting" }),
+          groupMember("call-2", "Pick a fruit", { status: "waiting" }),
+        ]}
+        requests={[first, second]}
+        onRespond={onRespond}
+      />,
+    );
+
+    await user.click(screen.getByRole("radio", { name: "Blue" }));
+    await waitFor(() =>
+      expect(screen.getByText("Pick a fruit")).toBeInTheDocument(),
+    );
+    await user.click(screen.getByRole("radio", { name: "Apple" }));
+    await user.click(screen.getByRole("button", { name: "Submit" }));
+    expect(onRespond).toHaveBeenCalledTimes(2);
+
+    rerender(
+      <McpElicitationCard
+        groupId="assistant-1-ask-user-1"
+        members={[
+          groupMember("call-1", "Pick a color", { status: "waiting" }),
+          groupMember("call-2", "Pick a fruit", { status: "waiting" }),
+        ]}
+        requests={[second]}
+        onRespond={onRespond}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Dismiss questions" }));
+    expect(onRespond).toHaveBeenCalledTimes(3);
+    expect(onRespond).toHaveBeenLastCalledWith({
+      id: "q-2",
+      action: "cancel",
+    });
+    expect(
+      screen.queryByRole("radio", { name: "Blue" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "Apple" })).toBeInTheDocument();
+
+    await act(async () => {
+      dismissResponse.resolve(true);
+      await dismissResponse.promise;
     });
   });
 });

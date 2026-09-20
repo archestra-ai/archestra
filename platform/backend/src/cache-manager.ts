@@ -418,9 +418,9 @@ class CacheManager {
     }
 
     try {
-      // Keyv namespaces keys with "keyv:" prefix
-      // Use LIKE with escaped prefix for pattern matching
-      const likePattern = `keyv:${prefix}%`;
+      // Keyv namespaces keys with "keyv:" prefix. Escape LIKE metacharacters
+      // in the caller's prefix before appending the wildcard.
+      const likePattern = `keyv:${prefix.replace(/[\\%_]/g, "\\$&")}%`;
       const result = await db.execute<{ count: string }>(
         sql`WITH deleted AS (
           DELETE FROM keyv_cache

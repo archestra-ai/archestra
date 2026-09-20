@@ -496,6 +496,21 @@ describe("CacheManager", () => {
       expect(deletedCount).toBe(0);
     });
 
+    test("treats LIKE metacharacters in the prefix as literals", async () => {
+      cacheManager.start();
+
+      await insertKeyvEntry("cache_%literal", { keep: false });
+      await insertKeyvEntry("cache_xliteral", { keep: true });
+
+      const deletedCount = await cacheManager.deleteByPrefix(
+        "cache_%" as AllowedCacheKey,
+      );
+
+      expect(deletedCount).toBe(1);
+      expect(await keyvEntryExists("cache_%literal")).toBe(false);
+      expect(await keyvEntryExists("cache_xliteral")).toBe(true);
+    });
+
     test("returns 0 when not started", async () => {
       const deletedCount = await cacheManager.deleteByPrefix(
         "test-prefix" as AllowedCacheKey,

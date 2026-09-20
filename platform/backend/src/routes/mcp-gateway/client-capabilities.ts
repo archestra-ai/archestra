@@ -146,15 +146,15 @@ const MAX_CAPABILITY_SESSION_ID_BYTES = 4 * 1024;
 const CAPABILITY_SESSION_SIGNATURE_LENGTH = 43;
 
 /** Derived from the auth secret, domain-separated like MRTR request state. */
-function capabilitySessionKey(): string | null {
+function capabilitySessionKey(): Buffer | null {
   const secret = config.auth.secret;
   if (!secret) return null;
   return createHmac("sha256", secret)
     .update(CAPABILITY_SESSION_DOMAIN)
-    .digest("hex");
+    .digest();
 }
 
-function signCapabilitySession(key: string, encoded: string): string {
+function signCapabilitySession(key: Buffer, encoded: string): string {
   return createHmac("sha256", key).update(encoded).digest("base64url");
 }
 

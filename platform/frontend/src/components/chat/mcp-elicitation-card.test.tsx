@@ -88,6 +88,31 @@ describe("McpElicitationCard", () => {
     });
   });
 
+  it("dismisses a question with Escape from an option", async () => {
+    const user = userEvent.setup();
+    const onRespond = vi.fn().mockResolvedValue(true);
+    render(
+      <McpElicitationCard
+        requests={[
+          singleChoice({
+            id: "q-1",
+            message: "Who should see the app?",
+            options: ["Only me", "Team"],
+          }),
+        ]}
+        onRespond={onRespond}
+      />,
+    );
+
+    await user.click(screen.getByRole("radio", { name: "Team" }));
+    await user.keyboard("{Escape}");
+
+    expect(onRespond).toHaveBeenCalledExactlyOnceWith({
+      id: "q-1",
+      action: "cancel",
+    });
+  });
+
   it("submits an all-optional multi-choice question with nothing checked", async () => {
     const user = userEvent.setup();
     const onRespond = vi.fn().mockResolvedValue(true);

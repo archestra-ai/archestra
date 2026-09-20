@@ -1,5 +1,5 @@
 import type { AppaClientAdapter, AskUserArguments } from "../types";
-import { readHeader } from "../utils";
+import { questionHeader, readHeader } from "../utils";
 
 // OpenCode labels each question's tab with a header of at most 30 characters,
 // the same bound ask_user declares for it.
@@ -41,7 +41,7 @@ export class AppaOpenCodeAdapter implements AppaClientAdapter {
       questions: [
         {
           question: args.question,
-          header: questionHeader(args.header),
+          header: questionHeader(args.header, QUESTION_HEADER_MAX_LENGTH),
           options: args.options.map((option) => ({
             label: option.label,
             description: option.description ?? option.label,
@@ -51,13 +51,4 @@ export class AppaOpenCodeAdapter implements AppaClientAdapter {
       ],
     }),
   };
-}
-
-// The model's arguments reach the proxy unvalidated, so a missing or blank
-// header falls back to a generic label and an overlong one is cut to fit.
-function questionHeader(header: unknown): string {
-  const trimmed = typeof header === "string" ? header.trim() : "";
-  return trimmed.length > 0
-    ? trimmed.slice(0, QUESTION_HEADER_MAX_LENGTH).trimEnd()
-    : "Question";
 }

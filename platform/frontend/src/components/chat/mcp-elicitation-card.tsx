@@ -7,7 +7,7 @@ import {
   Loader2,
   XIcon,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { type KeyboardEvent, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { AskUserGroupMember } from "./ask-user-outcome";
@@ -353,14 +353,24 @@ export function McpElicitationCard({
     }));
   };
 
-  // Enter on a picked option confirms it, like the click that auto-advances:
-  // move to the next question, or submit from the last one.
-  const handleKeyDown = (event: React.KeyboardEvent<HTMLFormElement>) => {
+  // Enter on a picked option confirms it, like the click that auto-advances.
+  // Escape on an option or tab dismisses the pending questions.
+  const handleKeyDown = (event: KeyboardEvent<HTMLFormElement>) => {
     lastInputRef.current = "keyboard";
     const role =
       event.target instanceof HTMLElement
         ? event.target.getAttribute("role")
         : null;
+    if (
+      event.key === "Escape" &&
+      (role === "radio" || role === "checkbox" || role === "tab") &&
+      !isSubmitting &&
+      pendingQuestions.length > 0
+    ) {
+      event.preventDefault();
+      dismiss();
+      return;
+    }
     if (event.key !== "Enter" || (role !== "radio" && role !== "checkbox")) {
       return;
     }

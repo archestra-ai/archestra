@@ -389,7 +389,7 @@ export function ElicitationFieldInput({
             ))}
           </SelectContent>
         </Select>
-      ) : field.schema.type === "string" && String(value ?? "").length > 120 ? (
+      ) : field.schema.type === "string" ? (
         <Textarea
           id={id}
           value={String(value ?? "")}
@@ -397,7 +397,7 @@ export function ElicitationFieldInput({
           onChange={(event) => onChange(event.target.value)}
           aria-invalid={Boolean(error)}
           aria-describedby={error ? errorId : undefined}
-          className="min-h-24"
+          className={String(value ?? "").length > 120 ? "min-h-24" : "min-h-10"}
         />
       ) : (
         <Input

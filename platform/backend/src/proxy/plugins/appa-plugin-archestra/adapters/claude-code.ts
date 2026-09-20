@@ -1,5 +1,5 @@
 import type { AppaClientAdapter, AskUserArguments } from "../types";
-import { readHeader } from "../utils";
+import { questionHeader, readHeader } from "../utils";
 
 /** Identifies Claude Code Messages requests and normalizes local tool names. */
 export class AppaClaudeCodeAdapter implements AppaClientAdapter {
@@ -10,7 +10,7 @@ export class AppaClaudeCodeAdapter implements AppaClientAdapter {
       questions: [
         {
           question: args.question,
-          header: questionHeader(args.header),
+          header: questionHeader(args.header, 12),
           options: args.options.map((option) => ({
             label: option.label,
             description: option.description ?? option.label,
@@ -45,9 +45,4 @@ export class AppaClaudeCodeAdapter implements AppaClientAdapter {
       ? name.slice("host/claude-code/".length)
       : name;
   }
-}
-
-function questionHeader(header: unknown): string {
-  const trimmed = typeof header === "string" ? header.trim() : "";
-  return trimmed.length > 0 ? trimmed.slice(0, 12).trimEnd() : "Question";
 }

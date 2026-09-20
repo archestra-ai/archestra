@@ -119,6 +119,27 @@ describe("McpElicitationDialog", () => {
     expect(screen.getByText("Quantity is required.")).toBeInTheDocument();
   });
 
+  it("keeps focus in a string field as it grows past the long-text threshold", async () => {
+    const user = userEvent.setup();
+    const onRespond = vi.fn();
+
+    render(
+      <McpElicitationDialog
+        request={request}
+        isSubmitting={false}
+        onRespond={onRespond}
+      />,
+    );
+
+    const recipient = screen.getByRole("textbox", {
+      name: /recipient name/i,
+    });
+    await user.click(recipient);
+    await user.type(recipient, "x".repeat(121));
+
+    expect(document.activeElement).toBe(recipient);
+  });
+
   it("submits normalized content when required fields are provided", async () => {
     const user = userEvent.setup();
     const onRespond = vi.fn().mockResolvedValue(undefined);

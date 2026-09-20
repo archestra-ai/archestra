@@ -1,5 +1,5 @@
 import type { AppaClientAdapter, AskUserArguments } from "../types";
-import { readHeader } from "../utils";
+import { questionHeader, readHeader } from "../utils";
 
 /** Identifies Codex Responses requests and normalizes local tool names. */
 export class AppaCodexAdapter implements AppaClientAdapter {
@@ -10,8 +10,11 @@ export class AppaCodexAdapter implements AppaClientAdapter {
       questions: [
         {
           id: "archestra_question",
-          header: questionHeader(args.header),
+          header: questionHeader(args.header, 12),
           question: args.question,
+          // Codex request_user_input accepts one selection per question; its
+          // result still serializes that selection as an answers array.
+          // Do not invent an unsupported allowMultiple input field.
           options: args.options.map((option) => ({
             label: option.label,
             description: option.description ?? option.label,
@@ -50,9 +53,4 @@ export class AppaCodexAdapter implements AppaClientAdapter {
       ? stripped.slice("builtin:".length)
       : stripped;
   }
-}
-
-function questionHeader(header: unknown): string {
-  const trimmed = typeof header === "string" ? header.trim() : "";
-  return trimmed.length > 0 ? trimmed.slice(0, 12).trimEnd() : "Question";
 }

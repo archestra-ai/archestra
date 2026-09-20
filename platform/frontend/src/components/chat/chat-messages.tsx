@@ -34,6 +34,7 @@ import {
   useState,
 } from "react";
 import { useStickToBottomContext } from "use-stick-to-bottom";
+import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import {
   Conversation,
   ConversationContent,
@@ -836,23 +837,24 @@ export function ChatMessages({
                           ),
                         );
                         return (
-                          <McpElicitationCard
-                            key={askUserGroup.key}
-                            groupId={askUserGroup.key}
-                            members={askUserGroup.members}
-                            terminalIncomplete={
-                              status === "ready" || status === "error"
-                            }
-                            requests={pendingChoiceElicitations.filter(
-                              (request) =>
-                                !!request.toolCallId &&
-                                toolCallIds.has(request.toolCallId),
-                            )}
-                            onRespond={
-                              session?.resolveMcpElicitation ??
-                              (async () => false)
-                            }
-                          />
+                          <ErrorBoundary key={askUserGroup.key}>
+                            <McpElicitationCard
+                              groupId={askUserGroup.key}
+                              members={askUserGroup.members}
+                              terminalIncomplete={
+                                status === "ready" || status === "error"
+                              }
+                              requests={pendingChoiceElicitations.filter(
+                                (request) =>
+                                  !!request.toolCallId &&
+                                  toolCallIds.has(request.toolCallId),
+                              )}
+                              onRespond={
+                                session?.resolveMcpElicitation ??
+                                (async () => false)
+                              }
+                            />
+                          </ErrorBoundary>
                         );
                       }
 

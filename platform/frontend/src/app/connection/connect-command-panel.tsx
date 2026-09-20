@@ -1230,7 +1230,7 @@ export function ConnectCommandPanel({
                 <p className="text-sm leading-relaxed text-muted-foreground">
                   Open in Claude Desktop and confirm Install. Your browser
                   guides you through subscription sign-in and restarting
-                  Desktop. No terminal or developer tools needed.
+                  Desktop.
                 </p>
                 <details className="text-xs text-muted-foreground">
                   <summary className="cursor-pointer">

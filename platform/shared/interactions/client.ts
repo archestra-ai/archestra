@@ -21,6 +21,9 @@ import type { SupportedProvider } from "../model-constants";
  */
 export const CLIENT_MCP_TOOL_NAME_PREFIX = "mcp__";
 
+/** Prefix OpenCode puts on MCP server tool names (`mcp:<server>:<tool>`). */
+export const OPENCODE_MCP_TOOL_NAME_PREFIX = "mcp:";
+
 /** Label for Claude Code, including legacy generic Claude attribution. */
 export const CLAUDE_CLIENT_LABEL = "Claude Code";
 
@@ -32,6 +35,9 @@ export const COPILOT_CLI_CLIENT_LABEL = "Copilot CLI";
 
 /** Human-readable label for the Cursor client id in the UI. */
 export const CURSOR_CLIENT_LABEL = "Cursor";
+
+/** Human-readable label for the OpenCode client id in the UI. */
+export const OPENCODE_CLIENT_LABEL = "OpenCode";
 
 /**
  * `external_agent_id` values for Claude clients:
@@ -69,6 +75,13 @@ export const COPILOT_CLI_CLIENT_ID = "github_copilot_cli";
  * Cursor User-Agent (see {@link isCursorUserAgent}).
  */
 export const CURSOR_CLIENT_ID = "cursor";
+
+/**
+ * `external_agent_id` value for OpenCode. The connection setup writes this value
+ * to proxy provider request headers. Native OpenCode signals provide a fallback
+ * when users configure the proxy manually.
+ */
+export const OPENCODE_CLIENT_ID = "opencode";
 
 /**
  * First-party Codex originators. Codex stamps its client identity on every
@@ -241,6 +254,21 @@ export function isCursorClientAgentId(
   return CURSOR_CLIENT_AGENT_ID_SET.has(externalAgentId.trim().toLowerCase());
 }
 
+/** `external_agent_id` values for OpenCode clients. */
+export const OPENCODE_CLIENT_AGENT_IDS = [OPENCODE_CLIENT_ID] as const;
+
+const OPENCODE_CLIENT_AGENT_ID_SET = new Set<string>(OPENCODE_CLIENT_AGENT_IDS);
+
+/** Whether an `external_agent_id` value denotes OpenCode. */
+export function isOpenCodeClientAgentId(
+  externalAgentId: string | null | undefined,
+): boolean {
+  if (!externalAgentId) {
+    return false;
+  }
+  return OPENCODE_CLIENT_AGENT_ID_SET.has(externalAgentId.trim().toLowerCase());
+}
+
 /**
  * Values used by the `/llm/logs` "Client" filter (URL/query key). Distinct from
  * the stored ids above: the backend expands each to its client's agent-id set
@@ -250,6 +278,7 @@ export const CLAUDE_CLIENT_FILTER = "claude";
 export const CODEX_CLIENT_FILTER = "codex";
 export const COPILOT_CLI_CLIENT_FILTER = "copilot-cli";
 export const CURSOR_CLIENT_FILTER = "cursor";
+export const OPENCODE_CLIENT_FILTER = "opencode";
 
 export const ClientFilterSchema = z.enum([
   CLAUDE_CLIENT_FILTER,
@@ -258,6 +287,7 @@ export const ClientFilterSchema = z.enum([
   CODEX_CLIENT_FILTER,
   COPILOT_CLI_CLIENT_FILTER,
   CURSOR_CLIENT_FILTER,
+  OPENCODE_CLIENT_FILTER,
 ]);
 
 export type ClientFilter = z.infer<typeof ClientFilterSchema>;
@@ -306,20 +336,6 @@ const CLIENT_FAMILIES: ReadonlyArray<ClientFamily> = [
       id?.trim().toLowerCase() === CLAUDE_DESKTOP_CLIENT_ID,
   },
   {
-    filter: CODEX_CLIENT_FILTER,
-    label: CODEX_CLIENT_LABEL,
-    provider: "openai",
-    agentIds: CODEX_CLIENT_AGENT_IDS,
-    isClientAgentId: isCodexClientAgentId,
-  },
-  {
-    filter: COPILOT_CLI_CLIENT_FILTER,
-    label: COPILOT_CLI_CLIENT_LABEL,
-    provider: "github-copilot",
-    agentIds: COPILOT_CLI_CLIENT_AGENT_IDS,
-    isClientAgentId: isCopilotCliClientAgentId,
-  },
-  {
     filter: CURSOR_CLIENT_FILTER,
     label: CURSOR_CLIENT_LABEL,
     // Cursor is not itself a provider; `provider` is only the logo fallback,
@@ -328,6 +344,29 @@ const CLIENT_FAMILIES: ReadonlyArray<ClientFamily> = [
     icon: "/icons/cursor.png",
     agentIds: CURSOR_CLIENT_AGENT_IDS,
     isClientAgentId: isCursorClientAgentId,
+  },
+  {
+    filter: CODEX_CLIENT_FILTER,
+    label: CODEX_CLIENT_LABEL,
+    provider: "openai",
+    agentIds: CODEX_CLIENT_AGENT_IDS,
+    isClientAgentId: isCodexClientAgentId,
+  },
+  {
+    filter: OPENCODE_CLIENT_FILTER,
+    label: OPENCODE_CLIENT_LABEL,
+    // OpenCode routes to many providers; its own mark takes precedence.
+    provider: "openai",
+    icon: "/icons/opencode.png",
+    agentIds: OPENCODE_CLIENT_AGENT_IDS,
+    isClientAgentId: isOpenCodeClientAgentId,
+  },
+  {
+    filter: COPILOT_CLI_CLIENT_FILTER,
+    label: COPILOT_CLI_CLIENT_LABEL,
+    provider: "github-copilot",
+    agentIds: COPILOT_CLI_CLIENT_AGENT_IDS,
+    isClientAgentId: isCopilotCliClientAgentId,
   },
 ];
 

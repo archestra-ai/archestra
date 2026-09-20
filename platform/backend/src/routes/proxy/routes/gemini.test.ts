@@ -21,10 +21,13 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { vi } from "vitest";
+import config from "@/config";
 import { ModelModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { createGeminiTestClient } from "@/test/llm-provider-stubs";
+import { ApiError } from "@/types";
 import { geminiAdapterFactory } from "../adapters/gemini";
+import { virtualKeyRateLimiter } from "../llm-proxy-auth";
 import geminiProxyRoutes from "./gemini";
 
 describe("Gemini streaming format", () => {
@@ -70,6 +73,245 @@ describe("Gemini streaming format", () => {
     const body = response.body;
     expect(body).toContain("data: ");
     expect(body).toContain("data: [DONE]");
+  });
+
+  test("forwards a finish-only terminal chunk before closing the stream", async ({
+    makeAgent,
+  }) => {
+    stubGeminiStreamClient(() => [
+      {
+        candidates: [
+          {
+            content: { role: "model", parts: [{ text: "Hello" }] },
+            index: 0,
+          },
+        ],
+        modelVersion: "gemini-2.5-pro",
+        responseId: "split-finish-response",
+      },
+      {
+        candidates: [{ finishReason: "STOP", index: 0 }],
+        usageMetadata: {
+          promptTokenCount: 10,
+          candidatesTokenCount: 1,
+          totalTokenCount: 11,
+        },
+        modelVersion: "gemini-2.5-pro",
+        responseId: "split-finish-response",
+      },
+    ]);
+    const app = Fastify().withTypeProvider<ZodTypeProvider>();
+    app.setValidatorCompiler(validatorCompiler);
+    app.setSerializerCompiler(serializerCompiler);
+    await app.register(geminiProxyRoutes);
+    const agent = await makeAgent({ name: "Split Finish Stream Agent" });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/gemini/${agent.id}/v1beta/models/gemini-2.5-pro:streamGenerateContent`,
+      headers: geminiTestHeaders(),
+      payload: geminiRequest(),
+    });
+
+    expect(response.statusCode).toBe(200);
+    const payloads = response.body
+      .split("\n")
+      .filter((line) => line.startsWith("data: "))
+      .map((line) => line.slice("data: ".length));
+    expect(payloads.at(-1)).toBe("[DONE]");
+
+    const events = payloads
+      .filter((payload) => payload !== "[DONE]")
+      .map((payload) => JSON.parse(payload));
+    expect(events[0].candidates[0].content.parts).toEqual([{ text: "Hello" }]);
+    expect(events[1]).toMatchObject({
+      candidates: [
+        {
+          content: { role: "model", parts: [] },
+          finishReason: "STOP",
+          index: 0,
+        },
+      ],
+      usageMetadata: {
+        promptTokenCount: 10,
+        candidatesTokenCount: 1,
+        totalTokenCount: 11,
+      },
+    });
+  });
+
+  test("forwards STOP when the terminal chunk has only non-rendered parts", async ({
+    makeAgent,
+  }) => {
+    stubGeminiStreamClient(() => [
+      {
+        candidates: [
+          {
+            content: { role: "model", parts: [{ text: "Hello" }] },
+            index: 0,
+          },
+        ],
+      },
+      {
+        candidates: [
+          {
+            content: { role: "model", parts: [{ text: "" }] },
+            finishReason: "STOP",
+            index: 0,
+          },
+        ],
+        usageMetadata: { totalTokenCount: 11 },
+      },
+    ]);
+    const app = Fastify().withTypeProvider<ZodTypeProvider>();
+    app.setValidatorCompiler(validatorCompiler);
+    app.setSerializerCompiler(serializerCompiler);
+    await app.register(geminiProxyRoutes);
+    const agent = await makeAgent({ name: "Non-rendered Finish Agent" });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/gemini/${agent.id}/v1beta/models/gemini-2.5-pro:streamGenerateContent`,
+      headers: geminiTestHeaders(),
+      payload: geminiRequest(),
+    });
+
+    const events = response.body
+      .split("\n")
+      .filter((line) => line.startsWith("data: ") && line !== "data: [DONE]")
+      .map((line) => JSON.parse(line.slice("data: ".length)));
+    expect(events.at(-1)).toMatchObject({
+      candidates: [{ finishReason: "STOP" }],
+      usageMetadata: { totalTokenCount: 11 },
+    });
+  });
+
+  test("forwards prompt-block metadata without a candidate", async ({
+    makeAgent,
+  }) => {
+    stubGeminiStreamClient(() => [
+      {
+        promptFeedback: { blockReason: "SAFETY" },
+        usageMetadata: { promptTokenCount: 10, totalTokenCount: 10 },
+      },
+    ]);
+    const app = Fastify().withTypeProvider<ZodTypeProvider>();
+    app.setValidatorCompiler(validatorCompiler);
+    app.setSerializerCompiler(serializerCompiler);
+    await app.register(geminiProxyRoutes);
+    const agent = await makeAgent({ name: "Prompt Block Agent" });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/gemini/${agent.id}/v1beta/models/gemini-2.5-pro:streamGenerateContent`,
+      headers: geminiTestHeaders(),
+      payload: geminiRequest(),
+    });
+
+    const events = response.body
+      .split("\n")
+      .filter((line) => line.startsWith("data: ") && line !== "data: [DONE]")
+      .map((line) => JSON.parse(line.slice("data: ".length)));
+    expect(events[0]).toMatchObject({
+      promptFeedback: { blockReason: "SAFETY" },
+      usageMetadata: { promptTokenCount: 10, totalTokenCount: 10 },
+    });
+  });
+});
+
+describe("Gemini OAuth passthrough", () => {
+  let app: FastifyInstance;
+
+  beforeEach(() => {
+    app = createGeminiProxyTestApp();
+    vi.spyOn(geminiAdapterFactory, "createClient").mockImplementation(
+      () => createGeminiTestClient() as never,
+    );
+    vi.spyOn(virtualKeyRateLimiter, "check").mockResolvedValue(undefined);
+    vi.spyOn(virtualKeyRateLimiter, "recordSuccess").mockResolvedValue(
+      undefined,
+    );
+    vi.spyOn(virtualKeyRateLimiter, "recordFailure").mockResolvedValue(
+      undefined,
+    );
+  });
+
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    await app.close();
+  });
+
+  test("attributes a bearer request to its passthrough-key owner", async ({
+    makeAgent,
+    makeMember,
+    makeUser,
+  }) => {
+    const agent = await makeAgent({ name: "Gemini OAuth Passthrough Agent" });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    const { value: passthroughToken, virtualKey } = await (
+      await import("@/models")
+    ).VirtualApiKeyModel.create({
+      organizationId: agent.organizationId,
+      name: "gemini-oauth-passthrough",
+      keyType: "passthrough",
+      scope: "personal",
+      authorId: owner.id,
+    });
+    const createClient = vi.mocked(geminiAdapterFactory.createClient);
+
+    await app.register(geminiProxyRoutes);
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/gemini/${agent.id}/v1beta/models/gemini-2.5-pro:generateContent`,
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer oauth-access-token",
+        "x-goog-api-key": "api-key-that-must-not-win",
+        "x-goog-user-project": "caller-quota-project",
+        "x-archestra-virtual-key": passthroughToken,
+      },
+      payload: geminiRequest(),
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(createClient).toHaveBeenCalledWith(
+      "Bearer:oauth-access-token",
+      expect.objectContaining({ googleUserProject: "caller-quota-project" }),
+    );
+
+    const interactions = await (
+      await import("@/models")
+    ).InteractionModel.getAllInteractionsForProfile(agent.id);
+    expect(interactions).toContainEqual(
+      expect.objectContaining({
+        userId: owner.id,
+        passthroughVirtualKeyId: virtualKey.id,
+        authMethod: "passthrough_virtual_key",
+      }),
+    );
+  });
+
+  test("rejects an invalid passthrough key before creating an OAuth client", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({ name: "Invalid Gemini OAuth Key Agent" });
+    const createClient = vi.mocked(geminiAdapterFactory.createClient);
+
+    await app.register(geminiProxyRoutes);
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/gemini/${agent.id}/v1beta/models/gemini-2.5-pro:generateContent`,
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer oauth-access-token",
+        "x-archestra-virtual-key": "arch_invalid-passthrough-key",
+      },
+      payload: geminiRequest(),
+    });
+
+    expect(response.statusCode, response.body).toBe(401);
+    expect(createClient).not.toHaveBeenCalled();
   });
 });
 
@@ -468,16 +710,23 @@ describe("Gemini proxy routing", () => {
   let app: FastifyInstance;
   let mockUpstream: FastifyInstance;
   let upstreamPort: number;
+  let upstreamHeaders: Record<string, string | string[] | undefined>;
 
   beforeEach(async () => {
     mockUpstream = Fastify();
 
-    mockUpstream.get("/v1/models", async () => ({
-      models: [
-        { name: "models/gemini-2.5-pro", displayName: "Gemini 2.5 Pro" },
-        { name: "models/gemini-2.5-flash", displayName: "Gemini 2.5 Flash" },
-      ],
-    }));
+    mockUpstream.get("/v1/models", async (request) => {
+      upstreamHeaders = request.headers;
+      return {
+        models: [
+          { name: "models/gemini-2.5-pro", displayName: "Gemini 2.5 Pro" },
+          {
+            name: "models/gemini-2.5-flash",
+            displayName: "Gemini 2.5 Flash",
+          },
+        ],
+      };
+    });
 
     mockUpstream.get("/v1/models/:model", async (request) => ({
       name: `models/${(request.params as { model: string }).model}`,
@@ -534,6 +783,32 @@ describe("Gemini proxy routing", () => {
     expect(response.statusCode).toBe(200);
     const body = JSON.parse(response.body);
     expect(body.models).toHaveLength(2);
+  });
+
+  test("strips Archestra control headers before proxying upstream", async () => {
+    const originalBaseUrl = config.llm.gemini.baseUrl;
+    const realApp = createGeminiProxyTestApp();
+    config.llm.gemini.baseUrl = `http://localhost:${upstreamPort}`;
+    try {
+      await realApp.register(geminiProxyRoutes);
+      const response = await realApp.inject({
+        method: "GET",
+        url: "/v1/gemini/v1beta/models",
+        headers: {
+          "x-archestra-virtual-key": "arch_passthrough",
+          "x-archestra-user-id": "untrusted-user-id",
+          "x-goog-api-key": "provider-api-key",
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(upstreamHeaders).not.toHaveProperty("x-archestra-virtual-key");
+      expect(upstreamHeaders).not.toHaveProperty("x-archestra-user-id");
+      expect(upstreamHeaders["x-goog-api-key"]).toBe("provider-api-key");
+    } finally {
+      config.llm.gemini.baseUrl = originalBaseUrl;
+      await realApp.close();
+    }
   });
 
   test("proxies /v1/gemini/v1beta/models/:model", async () => {
@@ -685,6 +960,17 @@ function createGeminiProxyTestApp() {
   const app = Fastify().withTypeProvider<ZodTypeProvider>();
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
+  app.setErrorHandler((error, _request, reply) => {
+    if (error instanceof ApiError) {
+      return reply.status(error.statusCode).send({
+        error: { message: error.message, type: error.type },
+      });
+    }
+    const message = error instanceof Error ? error.message : String(error);
+    return reply.status(500).send({
+      error: { message, type: "api_internal_server_error" },
+    });
+  });
   return app;
 }
 
@@ -725,6 +1011,12 @@ function geminiDispatchRequest(prompt: string) {
         ],
       },
     ],
+  };
+}
+
+function geminiRequest() {
+  return {
+    contents: [{ role: "user", parts: [{ text: "Hello!" }] }],
   };
 }
 

@@ -101,6 +101,7 @@ const SCRIPT_CLIENT_IDS: readonly string[] = [
   "codex",
   "copilot-cli",
   "cursor",
+  "opencode",
 ] satisfies ScriptClientId[];
 
 /** Clients whose whole setup is delivered as a single `curl | bash` command. */
@@ -321,8 +322,7 @@ export function ConnectCommandPanel({
   const needsPerUserConnect =
     !!llmProxyId && providerIsPerUser && !configuredProviders.has(provider);
 
-  // The Copilot CLI refuses to launch a BYOK provider without an explicit
-  // COPILOT_MODEL, so the review step surfaces the model as a reviewable
+  // Clients that persist a model during setup surface it as a reviewable
   // choice instead of hard-wiring a default. null = the provider's default;
   // reset when the provider changes so a model picked for one provider never
   // leaks onto another. Options come from the org's synced model list; with
@@ -355,6 +355,8 @@ export function ConnectCommandPanel({
   const effectiveProxyAuth: ConnectProxyAuth = providerIsPerUser
     ? "virtual-key"
     : proxyAuth;
+  const openCodeProviderPassthrough =
+    client.id === "opencode" && effectiveProxyAuth === "provider-key";
 
   const gateway = mcpGateways?.find((g) => g.id === mcpGatewayId) ?? null;
   // The LLM Proxy may be available without a usable provider (e.g. virtual-key
@@ -438,7 +440,8 @@ export function ConnectCommandPanel({
   // Passthrough setups also get a personal passthrough virtual key wired into the
   // command (best-effort: only when the user can mint one) so requests are
   // attributed to the user. Applies to Claude Code (Anthropic subscription or
-  // the user's own Bedrock credentials) and Codex (the user's own OpenAI key).
+  // the user's own Bedrock credentials), Codex (the user's own OpenAI key), and
+  // OpenCode (its locally authenticated supported providers).
   // Used purely to tailor the passthrough description copy — the backend
   // provisions it automatically; there is no separate UI choice.
   const { data: canAttribute } = useHasPermissions({
@@ -448,7 +451,8 @@ export function ConnectCommandPanel({
     canAttribute === true &&
     (((client.id === "claude-code" || client.id === "claude-desktop") &&
       (provider === "anthropic" || provider === "bedrock")) ||
-      (client.id === "codex" && provider === "openai"));
+      (client.id === "codex" && provider === "openai") ||
+      client.id === "opencode");
 
   const { mutateAsync: createSetup, isPending } = useCreateConnectionSetup();
   // Creating the personal key invalidates the available-keys query, so once the
@@ -664,7 +668,7 @@ export function ConnectCommandPanel({
 
   const proxyEditor = hasProxy ? (
     <div className="grid gap-3">
-      {providers.length > 1 && (
+      {providers.length > 1 && !openCodeProviderPassthrough && (
         <EditorField label="Provider">
           <Select
             value={provider ?? undefined}
@@ -713,6 +717,12 @@ export function ConnectCommandPanel({
                 <span>
                   The installer opens Claude subscription sign-in and configures
                   Desktop. Your token stays on your computer.
+                </span>
+              ) : openCodeProviderPassthrough ? (
+                <span>
+                  Supported OpenCode providers keep their model IDs and local
+                  credentials. Only their base URLs change, and a personal
+                  passthrough key attributes requests to you.
                 </span>
               ) : passthroughAttributes ? (
                 <span>
@@ -789,8 +799,12 @@ export function ConnectCommandPanel({
           )}
         </EditorField>
         <p className="text-xs text-muted-foreground">
-          Applied as COPILOT_MODEL by the setup script — pick a model your{" "}
-          {providerCatalog.label(provider)} access serves.
+          <span>
+            {client.id === "claude-desktop"
+              ? "Selected by default in Claude Desktop after setup"
+              : "Applied as COPILOT_MODEL by the setup script"}
+            {` — pick a model your ${providerCatalog.label(provider)} access serves.`}
+          </span>
         </p>
       </div>
     ) : null;
@@ -958,8 +972,16 @@ export function ConnectCommandPanel({
                     a virtual key
                   </span>
                 </>
+              ) : openCodeProviderPassthrough ? (
+                <span>
+                  Route supported OpenCode providers through{" "}
+                  <span className="font-medium text-foreground">
+                    the LLM Proxy
+                  </span>{" "}
+                  using their existing local credentials
+                </span>
               ) : (
-                <>
+                <span>
                   Passthrough to{" "}
                   <span className="font-medium text-foreground">
                     {providerCatalog.label(provider)}
@@ -974,7 +996,7 @@ export function ConnectCommandPanel({
                       ? "your Claude subscription"
                       : "your provider key"}
                   </span>
-                </>
+                </span>
               )}
             </SetupSummaryRow>
           )}
@@ -988,9 +1010,7 @@ export function ConnectCommandPanel({
               editor={modelEditor}
               changeTestId="connect-change-model"
             >
-              Run{" "}
-              {client.id === "claude-desktop" ? "Claude Desktop" : "Copilot"}{" "}
-              with{" "}
+              Run <span>{client.label}</span> with{" "}
               <span className="font-medium text-foreground">
                 {effectiveModel}
               </span>

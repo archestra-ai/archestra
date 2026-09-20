@@ -10,6 +10,9 @@ import { MessageStream } from "@anthropic-ai/sdk/lib/MessageStream";
 import {
   CHAT_API_KEY_ID_HEADER,
   DUAL_LLM_PROGRESS_CHANNEL_HEADER,
+  EXTERNAL_AGENT_ID_HEADER,
+  OPENCODE_AGENT_HEADER,
+  OPENCODE_CLIENT_ID,
   PROVIDER_BASE_URL_HEADER,
   SESSION_ID_HEADER,
   SOURCE_HEADER,
@@ -600,6 +603,68 @@ describe("LLM Proxy Handler Prometheus Metrics", () => {
         { sessionId, source: "chatops:slack" },
       );
       expect(filtered.pagination.total).toBe(1);
+    });
+
+    test("persists OpenCode main, title, and child-session sources", async () => {
+      const run = (params: {
+        sessionId: string;
+        agent: string;
+        parentSessionId?: string;
+      }) =>
+        app.inject({
+          method: "POST",
+          url: `/v1/openai/${testAgent.id}/chat/completions`,
+          headers: {
+            "content-type": "application/json",
+            authorization: "Bearer test-key",
+            [EXTERNAL_AGENT_ID_HEADER]: OPENCODE_CLIENT_ID,
+            [OPENCODE_AGENT_HEADER]: params.agent,
+            "x-opencode-session": params.sessionId,
+            ...(params.parentSessionId
+              ? { "x-parent-session-id": params.parentSessionId }
+              : {}),
+          },
+          payload: {
+            model: "gpt-4o",
+            messages: [{ role: "user", content: "Hello" }],
+          },
+        });
+
+      expect(
+        (await run({ sessionId: "ses_root_title", agent: "title" })).statusCode,
+      ).toBe(200);
+      expect(
+        (await run({ sessionId: "ses_root_compaction", agent: "compaction" }))
+          .statusCode,
+      ).toBe(200);
+      expect(
+        (await run({ sessionId: "ses_root_main", agent: "build" })).statusCode,
+      ).toBe(200);
+      expect(
+        (
+          await run({
+            sessionId: "ses_child",
+            agent: "explore",
+            parentSessionId: "ses_root_main",
+          })
+        ).statusCode,
+      ).toBe(200);
+
+      const rows = await db
+        .select({
+          sessionId: schema.interactionsTable.sessionId,
+          source: schema.interactionsTable.source,
+        })
+        .from(schema.interactionsTable)
+        .where(eq(schema.interactionsTable.profileId, testAgent.id));
+      expect(new Map(rows.map((row) => [row.sessionId, row.source]))).toEqual(
+        new Map([
+          ["ses_root_title", "opencode:title"],
+          ["ses_root_compaction", "opencode:compaction"],
+          ["ses_root_main", "opencode:main"],
+          ["ses_child", "opencode:subagent"],
+        ]),
+      );
     });
   });
 

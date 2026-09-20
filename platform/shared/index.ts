@@ -46,6 +46,7 @@ export * from "./model-constants";
 export * from "./model-resolution";
 export * from "./oauth";
 export * from "./openai-models";
+export * from "./opencode-provider-routes";
 export * from "./organization-appearance";
 export * from "./pagination";
 export * from "./permission.types";

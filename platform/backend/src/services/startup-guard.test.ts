@@ -312,6 +312,7 @@ describe("buildStartupGuardContext", () => {
         authMode: "provider-key",
         provider: "anthropic",
         providerLabel: "Anthropic",
+        baseUrl: "https://archestra.example.com/v1",
         url: "https://archestra.example.com/v1/anthropic/profile-123",
         proxyName: "default_proxy",
         virtualKey: null,

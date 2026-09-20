@@ -11,7 +11,7 @@ No preinstalled skill or platform credentials are needed to start.
 ## Requirements
 
 The terminal needs Node.js 18 or newer and access to this deployment.
-Supported clients: claude-code, claude-desktop, cursor, codex, copilot-cli.
+Supported clients: claude-code, claude-desktop, cursor, codex, copilot-cli, opencode.
 Supported operating systems: macOS, Linux, Windows.
 Ask which client to configure only if the current client is unknown.
 
@@ -39,9 +39,22 @@ under Settings > Plugins. Verify a fresh message appears in LLM Proxy Logs.
 
 ## Setup
 
-1. Download ${origin}/api/client-connections/installer to a temporary file named connect.cjs.
-2. Inspect it, then run: node /path/to/connect.cjs --url ${origin} --client CLIENT_ID
-3. Keep the process running while the user signs in and approves in their browser.
+1. Run exactly one command below in the terminal. Replace CLIENT_ID with the
+   current client ID.
+   macOS/Linux:
+   p="$(mktemp)"; trap 'rm -f "$p"' EXIT; curl --fail --silent --show-error ${origin}/api/client-connections/installer --output "$p" && node "$p" --url ${origin} --client CLIENT_ID
+   Windows PowerShell:
+   $p=[IO.Path]::GetTempFileName(); try { Invoke-WebRequest -UseBasicParsing -Uri ${origin}/api/client-connections/installer -OutFile $p; node $p --url ${origin} --client CLIENT_ID } finally { Remove-Item $p -Force -ErrorAction SilentlyContinue }
+2. The public bootstrap validates the deployment URL, starts a browser approval,
+   then downloads and applies only the setup the user reviewed. If your security
+   policy requires local source review, summarize the result without pasting the
+   source into the conversation unless the user asks for it.
+3. Keep the command running while the user signs in and approves in their browser.
+   It reports approval, download size, and setup progress. If it fails, report
+   the exact error and stop instead of replacing the flow with manual API calls.
+   OpenCode: run the installer here with a timeout of 600000 ms. Keep that exact
+   process running. Relay its approval URL and code if no browser opens. Do
+   not start a second installer while the first request is pending.
    For Desktop, the separate terminal owns this process; finish the agent task after handoff.
    The browser code must match the code printed in the terminal.
    If no browser opens, show the printed approval URL to the user.
@@ -55,18 +68,26 @@ under Settings > Plugins. Verify a fresh message appears in LLM Proxy Logs.
    Claude Code: in the new session, open /mcp, select the configured server, and authenticate.
    Cursor: use its MCP settings to connect/authenticate the configured server.
    Codex: use codex mcp login SERVER_NAME.
+   OpenCode: run opencode mcp auth SERVER_NAME here with a timeout of 600000 ms.
+   Keep it running while the user completes the browser consent. If no browser
+   opens, relay the printed URL immediately. Explain that this second URL is the
+   gateway's native MCP OAuth consent, not another connection approval. Then run
+   opencode mcp list and confirm the gateway is connected.
    Let the user complete any browser consent or client execution approval.
    Then close with one short, imperative user instruction and nothing else, e.g.:
    "Open a new terminal, then run claude /mcp and select <server> to sign in."
+   OpenCode: "Close every OpenCode process, then start opencode again."
 6. Verify the configured gateway can list tools before reporting a working connection —
    in the new session, after authentication; this session cannot verify anything.
+   OpenCode: opencode mcp list reports connected after the in-session OAuth
+   command completes. Restart OpenCode to load the new tools.
    Configuration applied alone does not prove MCP authentication succeeded.
    Verification is that session's job — never hand it to the user as a step.
 7. For other clients, delete the temporary bootstrap file when finished.
    For Desktop, leave this public temporary file in place and end the task after handoff.
 
 Never ask the user to paste passwords, session cookies, or tokens into this conversation.
-Do not print the polling secret or the downloaded setup script: it may contain credentials.
+Do not print the polling secret, installer source, or approved setup payload.
 The approval request expires after ten minutes. Denial or expiry requires a new run.
 Use --no-open if the terminal cannot open a browser; the URL is still printed.
 The installer changes the selected client's configuration using the existing setup script.

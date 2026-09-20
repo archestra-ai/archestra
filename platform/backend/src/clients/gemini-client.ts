@@ -1,5 +1,6 @@
 import { requiresGlobalVertexEndpoint } from "@archestra/shared";
 import { GoogleGenAI } from "@google/genai";
+import { OAuth2Client } from "google-auth-library";
 import config from "@/config";
 import logger from "@/logging";
 
@@ -25,6 +26,7 @@ export const VERTEX_GLOBAL_LOCATION = "global";
  *   pick the location that actually serves it (see {@link resolveVertexLocation}).
  *   Omitting it keeps the configured location, which is right for
  *   catalog-listing calls that are not about one model.
+ * @param googleUserProject - Optional quota project for a caller-supplied OAuth token.
  * @returns GoogleGenAI client instance
  * @throws Error if Vertex AI is enabled but project is not set
  * @throws Error if API key is not provided when Vertex AI is disabled
@@ -34,6 +36,7 @@ export function createGoogleGenAIClient(
   logPrefix = "[Gemini]",
   baseUrlOverride?: string | null,
   modelId?: string | null,
+  googleUserProject?: string,
 ): GoogleGenAI {
   const { vertexAi } = config.llm.gemini;
 
@@ -49,6 +52,31 @@ export function createGoogleGenAIClient(
       logPrefix,
       modelId,
     );
+  }
+
+  const oauthAccessToken = getOAuthAccessToken(apiKey);
+  if (oauthAccessToken) {
+    const oauthClient = new OAuth2Client();
+    oauthClient.setCredentials({ access_token: oauthAccessToken });
+    oauthClient.quotaProjectId = googleUserProject;
+
+    logger.debug(
+      { baseUrl: baseUrlOverride || config.llm.gemini.baseUrl },
+      `${logPrefix} Initializing GoogleGenAI with OAuth mode`,
+    );
+
+    return new GoogleGenAI({
+      googleAuthOptions: {
+        authClient: oauthClient,
+      },
+      httpOptions: {
+        baseUrl: baseUrlOverride || config.llm.gemini.baseUrl,
+        apiVersion: "v1beta",
+        ...(googleUserProject && {
+          headers: { "x-goog-user-project": googleUserProject },
+        }),
+      },
+    });
   }
 
   // API key mode (default) - requires API key
@@ -166,4 +194,11 @@ export function isVertexModelReachable(modelId: string): boolean {
     return true;
   }
   return !requiresGlobalVertexEndpoint(modelId);
+}
+
+function getOAuthAccessToken(apiKey: string | undefined): string | undefined {
+  if (!apiKey?.startsWith("Bearer:")) {
+    return undefined;
+  }
+  return apiKey.slice("Bearer:".length) || undefined;
 }

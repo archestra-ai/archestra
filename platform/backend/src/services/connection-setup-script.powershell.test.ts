@@ -322,6 +322,7 @@ function claudeProxy(params: {
     authMode: params.virtualKey ? "virtual-key" : "provider-key",
     provider: params.provider,
     providerLabel: params.provider,
+    baseUrl: "https://proxy.example.com/v1",
     url: `https://proxy.example.com/v1/${params.provider}`,
     proxyName: "default_proxy",
     virtualKey: params.virtualKey ?? null,

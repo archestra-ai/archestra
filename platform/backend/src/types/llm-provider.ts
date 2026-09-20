@@ -73,6 +73,8 @@ export interface CreateClientOptions {
   agent?: GatewayAgent;
   /** Default headers to include with every request */
   defaultHeaders?: Record<string, string>;
+  /** Google Cloud quota project for a Gemini OAuth access token. */
+  googleUserProject?: string;
   /** Interaction source for observability metrics (e.g. "api", "chat", "knowledge:embedding") */
   source: InteractionSource;
   /**
@@ -98,6 +100,21 @@ export interface CreateClientOptions {
    * consumes the body. Used for billing signals at the HTTP boundary.
    */
   onResponseHeaders?: (headers: Headers) => void;
+  /**
+   * Ephemeral OpenCode-owned ChatGPT OAuth material for the OpenAI Responses
+   * bridge. It is extracted from one incoming request and must never be
+   * persisted, cached, or used by a non-Responses adapter.
+   */
+  openAiCodexPassthrough?: OpenAiCodexPassthrough;
+}
+
+export interface OpenAiCodexPassthrough {
+  accessToken: string;
+  accountId: string;
+  residency?: string;
+  originator?: string;
+  sessionId?: string;
+  userAgent?: string;
 }
 
 /**

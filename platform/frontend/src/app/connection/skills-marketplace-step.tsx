@@ -190,7 +190,7 @@ function StaticMarketplacePanel({
           <NumberedStep
             index={1}
             title="Point your client at the marketplace"
-            body="Each skill is a plugins/<marketplace>/skills/<name>/SKILL.md directory inside the repository. Register the URL however your client's marketplace or skill-import flow expects. For Claude Code, Codex, Copilot CLI, or Cursor, pick that client at the top of this page for the exact commands."
+            body="Each skill is a plugins/<marketplace>/skills/<name>/SKILL.md directory inside the repository. Register the URL however your client's marketplace or skill-import flow expects. For Claude Code, Codex, Copilot CLI, Cursor, or OpenCode, pick that client at the top of this page for the exact commands."
             code={`git clone ${marketplace.cloneUrl} ~/.archestra/skills/${marketplace.marketplaceName}`}
           />
         ) : (
@@ -634,7 +634,7 @@ function GenericInstallNote({
         <NumberedStep
           index={2}
           title="Follow your client's marketplace docs"
-          body={`Point your client at ${localPath} (or the clone URL above) using whichever local-marketplace / skills-import flow it supports. For Claude Code, Codex, or Cursor, pick that client at the top of this page for the exact commands.`}
+          body={`Point your client at ${localPath} (or the clone URL above) using whichever local-marketplace / skills-import flow it supports. For Claude Code, Codex, Copilot CLI, Cursor, or OpenCode, pick that client at the top of this page for the exact commands.`}
         />
       </ol>
     </section>
@@ -753,6 +753,7 @@ function isClientSupported(client: ConnectClient | null): boolean {
     client.id === "codex" ||
     client.id === "copilot-cli" ||
     client.id === "cursor" ||
+    client.id === "opencode" ||
     client.id === "generic"
   );
 }

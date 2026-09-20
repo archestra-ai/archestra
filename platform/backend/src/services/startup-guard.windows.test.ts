@@ -12,6 +12,7 @@ import {
   CLAUDE_CODE_GUARD_CLIENT,
   CODEX_GUARD_CLIENT,
   COPILOT_GUARD_CLIENT,
+  OPENCODE_GUARD_CLIENT,
 } from "@/services/startup-guard.clients";
 import {
   buildWindowsStartupGuardInstallSection,
@@ -54,6 +55,33 @@ const CTX: StartupGuardContext = {
       "https://archestra.example.com/skill-marketplace/archestra_skl_token123/repo.git",
   },
 };
+
+test("OpenCode provider-key disconnect restores the catalog and removes routing enforcement", () => {
+  if (!CTX.proxy) throw new Error("test proxy missing");
+  const section = buildWindowsStartupGuardInstallSection(
+    {
+      ...CTX,
+      proxy: {
+        ...CTX.proxy,
+        authMode: "provider-key",
+        provider: "openai",
+        url: "https://proxy.example.com/v1/openai",
+        passthroughVirtualKey: "arch_passthroughcafe",
+      },
+    },
+    OPENCODE_GUARD_CLIENT,
+  );
+
+  expect(section).toContain("plugins/archestra-llm-proxy.js");
+  expect(section).toContain("opencode-connection-state.json");
+  expect(section).toContain("opencode-routing-plugin-state.json");
+  expect(section).toContain("contentBase64");
+  expect(section).toContain("opencode.json') + '.archestra-backup'");
+  expect(section).toContain("enabledProvidersPresent");
+  expect(section).toContain("disabledProvidersPresent");
+  expect(section).toContain("moonshotai");
+  expect(section).not.toContain("StartsWith($Name + '/')");
+});
 
 describe("renderStartupGuardPowerShell (Claude Code)", () => {
   test("shows the remotes in pre-loader order with the demo visuals", () => {

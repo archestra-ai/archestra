@@ -1,10 +1,23 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { OpenAiCodexCredential } from "@/services/openai-codex-credentials";
-import { createOpenAiCodexResponsesClient } from "./openai-codex-responses-client";
+import type { OpenAiCodexPassthrough } from "@/types";
+import {
+  createOpenAiCodexPassthroughResponsesClient,
+  createOpenAiCodexResponsesClient,
+} from "./openai-codex-responses-client";
 
 const CREDENTIAL: OpenAiCodexCredential = {
   refreshToken: "rt_secret",
   accountId: "acc_123",
+};
+
+const PASSTHROUGH_CREDENTIAL: OpenAiCodexPassthrough = {
+  accessToken: "at_ephemeral",
+  accountId: "acc_ephemeral",
+  residency: "us",
+  originator: "opencode",
+  sessionId: "session_ephemeral",
+  userAgent: "opencode/test",
 };
 
 /** A Responses-API SSE body the OpenAI SDK's stream parser can consume. */
@@ -143,5 +156,78 @@ describe("createOpenAiCodexResponsesClient", () => {
     })) as { id: string };
 
     expect(response.id).toBe("resp_2");
+  });
+
+  it("forwards only request-local OAuth headers without refreshing or persisting them", async () => {
+    let capturedHeaders: Headers | undefined;
+    const innerFetch = vi.fn(
+      async (_input: string | URL | Request, init?: RequestInit) => {
+        capturedHeaders = new Headers(init?.headers);
+        return sseResponse([
+          {
+            type: "response.completed",
+            response: {
+              id: "resp_passthrough",
+              status: "completed",
+              output: [],
+            },
+          },
+        ]);
+      },
+    );
+    const client = createOpenAiCodexPassthroughResponsesClient({
+      credential: PASSTHROUGH_CREDENTIAL,
+      options: { source: "api" },
+      innerFetch,
+    }) as unknown as CodexResponsesClient;
+
+    const stream = (await client.responses.create({
+      model: "gpt-5.6-sol",
+      input: "hi",
+      stream: true,
+    })) as AsyncIterable<unknown>;
+    for await (const _event of stream) {
+      // drain
+    }
+
+    expect(capturedHeaders).toMatchObject({
+      get: expect.any(Function),
+    });
+    expect(capturedHeaders?.get("authorization")).toBe("Bearer at_ephemeral");
+    expect(capturedHeaders?.get("chatgpt-account-id")).toBe("acc_ephemeral");
+    expect(capturedHeaders?.get("x-openai-internal-codex-residency")).toBe(
+      "us",
+    );
+    expect(capturedHeaders?.get("originator")).toBe("opencode");
+    expect(capturedHeaders?.get("session-id")).toBe("session_ephemeral");
+    expect(capturedHeaders?.get("user-agent")).toBe("opencode/test");
+    expect(capturedHeaders?.get("openai-beta")).toBe("responses=experimental");
+    // The injected request transport is the only fetch path. A bridge request
+    // must never redeem/rotate an OAuth token through the global token endpoint.
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+  });
+
+  it("relays an upstream 401 without retrying the request", async () => {
+    const innerFetch = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ error: { message: "expired" } }), {
+          status: 401,
+          headers: { "content-type": "application/json" },
+        }),
+    );
+    const client = createOpenAiCodexPassthroughResponsesClient({
+      credential: PASSTHROUGH_CREDENTIAL,
+      options: { source: "api" },
+      innerFetch,
+    }) as unknown as CodexResponsesClient;
+
+    await expect(
+      client.responses.create({
+        model: "gpt-5.6-sol",
+        input: "hi",
+        stream: true,
+      }),
+    ).rejects.toMatchObject({ status: 401 });
+    expect(innerFetch).toHaveBeenCalledTimes(1);
   });
 });

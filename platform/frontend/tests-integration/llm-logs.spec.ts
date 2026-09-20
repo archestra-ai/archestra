@@ -9,6 +9,7 @@ import { expect, test } from "./fixtures";
 // src/mocks/handlers.ts (one session per client/session source).
 const CLAUDE_CODE_TITLE = "Claude Code session title";
 const CLAUDE_DESKTOP_TITLE = "Claude Desktop session title";
+const OPENCODE_TITLE = "OpenCode proxy session";
 const API_TITLE = "Plain API session message";
 
 // Build an OpenAI chat-completions interaction with a specific user question
@@ -50,7 +51,7 @@ test.describe("LLM logs — Client filter", () => {
   // frontend that fails to send the param would show all sessions and fail these.
   // Code and Desktop must remain independently selectable.
 
-  test("exposes separate Claude Code and Claude Desktop options", async ({
+  test("exposes distinct coding client options", async ({
     page,
     llmLogsPage,
   }) => {
@@ -65,6 +66,30 @@ test.describe("LLM logs — Client filter", () => {
     await expect(
       page.getByRole("option", { name: "Claude Desktop" }),
     ).toBeVisible();
+    await expect(page.getByRole("option", { name: "OpenCode" })).toBeVisible();
+    await expect(page.getByRole("option")).toHaveText([
+      "All Clients",
+      "Claude Code",
+      "Claude Desktop",
+      "Cursor",
+      "Codex",
+      "OpenCode",
+      "Copilot CLI",
+    ]);
+  });
+
+  test("narrows the list to OpenCode traffic and reflects it in the URL", async ({
+    page,
+    llmLogsPage,
+  }) => {
+    await llmLogsPage.goto();
+
+    await llmLogsPage.selectClient("OpenCode");
+
+    await expect(page).toHaveURL(/client=opencode/);
+    await expect(llmLogsPage.rowForText(OPENCODE_TITLE)).toBeVisible();
+    await expect(llmLogsPage.rowForText(CLAUDE_CODE_TITLE)).toHaveCount(0);
+    await expect(llmLogsPage.rowForText(API_TITLE)).toHaveCount(0);
   });
 
   test("narrows the list to Claude clients and reflects it in the URL, then clears", async ({
@@ -208,6 +233,8 @@ test.describe("LLM logs — session detail inline conversation", () => {
     await expect(page.getByText("Main answer")).toBeVisible();
     // ...and the subagent's assistant answer does not (its thread isn't shown).
     await expect(page.getByText("Subagent answer")).toHaveCount(0);
+    await expect(page.getByText("Sub-agent", { exact: true })).toBeVisible();
+    await expect(page.getByText("Main", { exact: true })).toBeVisible();
   });
 
   test("omits the conversation block and shows the empty state for a session with no interactions", async ({

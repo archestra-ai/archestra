@@ -1,6 +1,10 @@
 import {
   CLAUDE_CODE_PROXY_ENV_KEYS,
   CLAUDE_DESKTOP_CLIENT_ID,
+  EXTERNAL_AGENT_ID_HEADER,
+  OPENCODE_CLIENT_ID,
+  OPENCODE_PASSTHROUGH_PROVIDER_ROUTES,
+  openCodePassthroughBaseUrl,
   type SupportedProvider,
 } from "@archestra/shared";
 
@@ -167,6 +171,11 @@ export interface ConnectClient {
   label: string;
   sub: string;
   svg?: string;
+  /**
+   * Second-tone shape drawn beneath `svg`, for two-tone marks a single path
+   * can't carry (e.g. OpenCode's lighter inner block).
+   */
+  svgAccent?: { path: string; color: string };
   iconColor?: string;
   tileBg?: string;
   iconOverride?: { bg: string; fg: string; glyph: string };
@@ -184,6 +193,10 @@ const N8N_PATH =
   "M21.4737 5.6842c-1.1772 0-2.1663.8051-2.4468 1.8947h-2.8955c-1.235 0-2.289.893-2.492 2.111l-.1038.623a1.263 1.263 0 0 1-1.246 1.0555H11.289c-.2805-1.0896-1.2696-1.8947-2.4468-1.8947s-2.1663.8051-2.4467 1.8947H4.973c-.2805-1.0896-1.2696-1.8947-2.4468-1.8947C1.1311 9.4737 0 10.6047 0 12s1.131 2.5263 2.5263 2.5263c1.1772 0 2.1663-.8051 2.4468-1.8947h1.4223c.2804 1.0896 1.2696 1.8947 2.4467 1.8947 1.1772 0 2.1663-.8051 2.4468-1.8947h1.0008a1.263 1.263 0 0 1 1.2459 1.0555l.1038.623c.203 1.218 1.257 2.111 2.492 2.111h.3692c.2804 1.0895 1.2696 1.8947 2.4468 1.8947 1.3952 0 2.5263-1.131 2.5263-2.5263s-1.131-2.5263-2.5263-2.5263c-1.1772 0-2.1664.805-2.4468 1.8947h-.3692a1.263 1.263 0 0 1-1.246-1.0555l-.1037-.623A2.52 2.52 0 0 0 13.9607 12a2.52 2.52 0 0 0 .821-1.4794l.1038-.623a1.263 1.263 0 0 1 1.2459-1.0555h2.8955c.2805 1.0896 1.2696 1.8947 2.4468 1.8947 1.3952 0 2.5263-1.131 2.5263-2.5263s-1.131-2.5263-2.5263-2.5263m0 1.2632a1.263 1.263 0 0 1 1.2631 1.2631 1.263 1.263 0 0 1-1.2631 1.2632 1.263 1.263 0 0 1-1.2632-1.2632 1.263 1.263 0 0 1 1.2632-1.2631M2.5263 10.7368A1.263 1.263 0 0 1 3.7895 12a1.263 1.263 0 0 1-1.2632 1.2632A1.263 1.263 0 0 1 1.2632 12a1.263 1.263 0 0 1 1.2631-1.2632m6.3158 0A1.263 1.263 0 0 1 10.1053 12a1.263 1.263 0 0 1-1.2632 1.2632A1.263 1.263 0 0 1 7.579 12a1.263 1.263 0 0 1 1.2632-1.2632m10.1053 3.7895a1.263 1.263 0 0 1 1.2631 1.2632 1.263 1.263 0 0 1-1.2631 1.2631 1.263 1.263 0 0 1-1.2632-1.2631 1.263 1.263 0 0 1 1.2632-1.2632";
 const COPILOT_PATH =
   "M19.245 5.364c1.322 1.36 1.877 3.216 2.11 5.817.622 0 1.2.135 1.592.654l.73.964c.21.278.323.61.323.955v2.62c0 .339-.173.669-.453.868C20.239 19.602 16.157 21.5 12 21.5c-4.6 0-9.205-2.583-11.547-4.258-.28-.2-.452-.53-.453-.868v-2.62c0-.345.113-.679.321-.956l.73-.963c.392-.517.974-.654 1.593-.654l.029-.297c.25-2.446.81-4.213 2.082-5.52 2.461-2.54 5.71-2.851 7.146-2.864h.198c1.436.013 4.685.323 7.146 2.864zm-7.244 4.328c-.284 0-.613.016-.962.05-.123.447-.305.85-.57 1.108-1.05 1.023-2.316 1.18-2.994 1.18-.638 0-1.306-.13-1.851-.464-.516.165-1.012.403-1.044.996a65.882 65.882 0 0 0-.063 2.884l-.002.48c-.002.563-.005 1.126-.013 1.69.002.326.204.63.51.765 2.482 1.102 4.83 1.657 6.99 1.657 2.156 0 4.504-.555 6.985-1.657a.854.854 0 0 0 .51-.766c.03-1.682.006-3.372-.076-5.053-.031-.596-.528-.83-1.046-.996-.546.333-1.212.464-1.85.464-.677 0-1.942-.157-2.993-1.18-.266-.258-.447-.661-.57-1.108-.32-.032-.64-.049-.96-.05zm-2.525 4.013c.539 0 .976.426.976.95v1.753c0 .525-.437.95-.976.95a.964.964 0 0 1-.976-.95v-1.752c0-.525.437-.951.976-.951zm5 0c.539 0 .976.426.976.95v1.753c0 .525-.437.95-.976.95a.964.964 0 0 1-.976-.95v-1.752c0-.525.437-.951.976-.951zM7.635 5.087c-1.05.102-1.935.438-2.385.906-.975 1.037-.765 3.668-.21 4.224.405.394 1.17.657 1.995.657h.09c.649-.013 1.785-.176 2.73-1.11.435-.41.705-1.433.675-2.47-.03-.834-.27-1.52-.63-1.813-.39-.336-1.275-.482-2.265-.394zm6.465.394c-.36.292-.6.98-.63 1.813-.03 1.037.24 2.06.675 2.47.968.957 2.136 1.104 2.776 1.11h.044c.825 0 1.59-.263 1.995-.657.555-.556.765-3.187-.21-4.224-.45-.468-1.335-.804-2.385-.906-.99-.088-1.875.058-2.265.394zM12 7.615c-.24 0-.525.015-.84.044.03.16.045.336.06.526l-.001.159a2.94 2.94 0 0 1-.014.25c.225-.022.425-.027.612-.028h.366c.187 0 .387.006.612.028-.015-.146-.015-.277-.015-.409.015-.19.03-.365.06-.526a9.29 9.29 0 0 0-.84-.044z";
+// OpenCode's 240×300 mark scaled into the 24×24 box: the dark frame (its inner
+// cut-out wound the other way so it stays empty) and the lighter lower block.
+const OPENCODE_PATH = "M16.8 4.8H7.2v14.4h9.6ZM21.6 24H2.4V0h19.2Z";
+const OPENCODE_ACCENT_PATH = "M16.8 19.2H7.2V9.6h9.6Z";
 export const CONNECT_CLIENTS: ConnectClient[] = [
   {
     id: "claude-code",
@@ -464,6 +477,118 @@ requires_openai_auth = true`,
           },
         ],
       }),
+    },
+  },
+  {
+    id: "opencode",
+    label: "OpenCode",
+    sub: "Open-source CLI",
+    svg: OPENCODE_PATH,
+    svgAccent: { path: OPENCODE_ACCENT_PATH, color: "#CFCECD" },
+    iconColor: "#211E1E",
+    tileBg: "#f7f7f6",
+    mcp: {
+      kind: "custom",
+      supportedAuth: "both",
+      preferredAuth: "oauth",
+      configFile: "terminal",
+      language: "bash",
+      steps: ({ token }) => {
+        const verifyServer: ClientStep = {
+          title: "Check the connection",
+          body: 'The gateway should be listed as "connected".',
+          terminalTitle: "terminal",
+          buildCommand: () => "opencode mcp list",
+        };
+        if (token) {
+          return [
+            {
+              title: "Add the gateway",
+              body: "Use the static token when you want OpenCode to call the MCP gateway without an OAuth browser flow. Needs OpenCode 1.17 or later.",
+              terminalTitle: "terminal",
+              buildCommand: ({ url, serverName, token }) =>
+                `opencode mcp add ${shellArg(serverName)} --url ${shellArg(url)} --header ${shellArg(`Authorization=Bearer ${token}`)}`,
+            },
+            verifyServer,
+          ];
+        }
+        return [
+          {
+            title: "Add the gateway",
+            body: "Registers the gateway in your global OpenCode config. Needs OpenCode 1.17 or later.",
+            terminalTitle: "terminal",
+            buildCommand: ({ url, serverName }) =>
+              `opencode mcp add ${shellArg(serverName)} --url ${shellArg(url)}`,
+          },
+          {
+            title: "Start the OAuth flow",
+            body: "OpenCode doesn't sign in on its own: until you run this, it lists the gateway as needing authentication.",
+            terminalTitle: "terminal",
+            buildCommand: ({ serverName }) =>
+              `opencode mcp auth ${shellArg(serverName)}`,
+          },
+          {
+            title: FINISH_OAUTH_FLOW_TITLE,
+            body: "OpenCode opens your browser and prints the sign-in link. Sign in and approve the gateway — it grants tool access per user, so its tools stay unavailable until you complete this one-time sign-in.",
+          },
+          verifyServer,
+        ];
+      },
+    },
+    proxy: {
+      kind: "custom",
+      supportedProviders: OPENCODE_PASSTHROUGH_PROVIDER_ROUTES.map(
+        ({ provider }) => provider,
+      ),
+      build: ({ provider, url, appName }) => {
+        const openConfig: ProxyStep = {
+          title: "Open ~/.config/opencode/opencode.json",
+          body: "Create it if it doesn't exist. If you have opencode.jsonc there instead, edit that file.",
+        };
+        const rootUrl = url.replace(new RegExp(`/${provider}$`), "");
+        const selectedRoute = OPENCODE_PASSTHROUGH_PROVIDER_ROUTES.find(
+          (route) => route.provider === provider,
+        );
+        const selectedProviderId =
+          selectedRoute?.openCodeProviderId ?? provider;
+        const selectedBaseUrl = selectedRoute
+          ? openCodePassthroughBaseUrl(rootUrl, selectedRoute)
+          : url;
+        return {
+          kind: "steps",
+          steps: [
+            openConfig,
+            {
+              title: `Route ${selectedProviderId} through ${appName}`,
+              body: "Merge this snippet into the file. It keeps the native provider and model ids and uses the credential already configured for this provider.",
+              language: "json",
+              code: JSON.stringify(
+                {
+                  enabled_providers: [selectedProviderId],
+                  provider: {
+                    [selectedProviderId]: {
+                      options: {
+                        baseURL: selectedBaseUrl,
+                        headers: {
+                          [EXTERNAL_AGENT_ID_HEADER]: OPENCODE_CLIENT_ID,
+                        },
+                      },
+                    },
+                  },
+                },
+                null,
+                2,
+              ),
+            },
+            {
+              title: "Verify the proxy",
+              body: `Pick an existing model under ${selectedProviderId}. The request must appear in the ${appName} LLM logs with an OpenCode badge.`,
+              language: "bash",
+              code: `opencode run -m ${selectedProviderId}/<model-id> "Reply with exactly: opencode-proxy-ok"`,
+            },
+          ],
+        };
+      },
     },
   },
   {

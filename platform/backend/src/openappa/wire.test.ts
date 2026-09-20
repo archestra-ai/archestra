@@ -1954,6 +1954,23 @@ describe("client session identity", () => {
     ).toBe(expected);
   });
 
+  test("uses OpenCode's session header before OpenAI body fallbacks", () => {
+    expect(
+      appaSessionIdentity({
+        family: "openai:chatCompletions",
+        body: {
+          prompt_cache_key: "cache-session",
+          metadata: { session_id: "metadata-session" },
+          conversation: "conversation-session",
+        },
+        headers: { "x-opencode-session": "opencode-session" },
+      }),
+    ).toMatchObject({
+      sessionId: "opencode-session",
+      provenance: "opencode-session",
+    });
+  });
+
   test("an explicit header outranks anything the body says", () => {
     expect(
       appaSessionIdentity({
@@ -1968,6 +1985,22 @@ describe("client session identity", () => {
     ).toMatchObject({
       sessionId: "chat-conversation",
       parentId: "parent-root",
+      provenance: "appa-header",
+    });
+  });
+
+  test("keeps the explicit OpenAPPA session over OpenCode's session header", () => {
+    expect(
+      appaSessionIdentity({
+        family: "openai:responses",
+        body: {},
+        headers: {
+          "x-appa-session-id": "appa-session",
+          "x-opencode-session": "opencode-session",
+        },
+      }),
+    ).toMatchObject({
+      sessionId: "appa-session",
       provenance: "appa-header",
     });
   });

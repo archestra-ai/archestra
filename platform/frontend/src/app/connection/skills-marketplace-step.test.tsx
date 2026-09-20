@@ -86,6 +86,7 @@ function findClient(id: string) {
 const anyClient = findClient("generic");
 const claudeClient = findClient("claude-code");
 const copilotClient = findClient("copilot-cli");
+const openCodeClient = findClient("opencode");
 
 const MARKETPLACE = {
   cloneUrl: "https://archestra.example/skills/marketplace.git",
@@ -276,6 +277,22 @@ describe("SkillsMarketplaceStep", () => {
       );
       expect(panel).toHaveTextContent(
         `copilot plugin marketplace browse ${MARKETPLACE.marketplaceName}`,
+      );
+    });
+
+    it("clones the marketplace into OpenCode's skills folder", async () => {
+      permissionsForMember();
+      renderWithClient(<SkillsMarketplaceStep client={openCodeClient} />);
+
+      // OpenCode has no plugin marketplace; it discovers every SKILL.md under
+      // ~/.config/opencode/skills, so the clone target is the install.
+      const panel = await screen.findByTestId("skills-marketplace-static");
+      // $HOME (not ~) so the same command also works in Windows PowerShell.
+      expect(panel).toHaveTextContent(
+        `git clone ${MARKETPLACE.cloneUrl} "$HOME/.config/opencode/skills/${MARKETPLACE.marketplaceName}"`,
+      );
+      expect(panel).toHaveTextContent(
+        `git -C "$HOME/.config/opencode/skills/${MARKETPLACE.marketplaceName}" pull`,
       );
     });
 

@@ -20,6 +20,7 @@ export const ConnectionSetupClientIdSchema = z.enum([
   "codex",
   "copilot-cli",
   "cursor",
+  "opencode",
 ]);
 
 export type ConnectionSetupClientId = z.infer<

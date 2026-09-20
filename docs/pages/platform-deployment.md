@@ -1040,8 +1040,9 @@ On GKE, custom Sandbox controllers can produce a â€œnot backed by a controllerâ€
 - **`ARCHESTRA_RBAC_RESOURCE_PERMISSIONS_ENABLED`** - Access to one agent, MCP gateway, MCP registry entry, skill, app or model is a grant on that object. The gate is independent of `ARCHESTRA_BETA`, because the master switch must never change who can reach an existing resource.
   - Default: `false`
   - Values: `true`, `false`
-  - While the value is `false`, authorization answers from the retired visibility fields, the permissions screens stay hidden, and grant writes are refused. The upgrade still records grants, so nothing is lost.
-  - Setting the value to `true` makes grants authoritative. Setting it back to `false` returns authorization to the visibility fields, which the upgrade never destroys. A revocation made in the permissions editor is the one change that a later switch back to `true` does not preserve.
+  - While the value is `false`, authorization answers from the retired visibility fields, the permissions screens stay hidden, and grant writes are refused.
+  - Setting the value to `true` converts each resource at the next start, reading the visibility fields as they stand that day. A resource that has already been converted is left alone, so a grant edited or revoked in the permissions editor survives later restarts.
+  - Setting the value back to `false` returns authorization to the visibility fields, which are never destroyed. Sharing changed under the old model while the value is `false` does not reach a resource that was already converted, so use this for recovery rather than routine operation.
 
 - **`ARCHESTRA_AGENT_RUNTIME_ENABLED`** - Enables Agent Runtime. A run can carry the credentials of the person who started it, so this gate is independent of `ARCHESTRA_BETA` and never turns on by implication.
   - Default: `false`

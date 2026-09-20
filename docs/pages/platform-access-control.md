@@ -362,11 +362,13 @@ Agents, MCP gateways, MCP registry entries, skills, apps, and models support gra
 | Agent, MCP gateway, MCP registry entry, or skill detail page | Open the **Permissions** tab |
 | App settings | Open **Permissions** in the settings dialog |
 | Models list | Choose **Permissions** from the model's actions |
-| All objects of a resource type | Open **Settings > Roles > Resource grants** and select the resource type |
+| All objects of a resource type | Open **Settings > Permissions** and select the resource type |
 
 Initial grants are validated before creation and persisted with the resource. Invalid recipients or grants beyond your authority reject the creation. Creation APIs and their matching MCP authoring tools accept an optional `initialGrants` array with the same recipient/action entries used below. Models are discovered from providers, so their permissions are configured after discovery.
 
 Resource grants are an Enterprise feature, available under the small-team allowance described in [Pricing Model](/docs/platform-pricing-model). When that entitlement ends, existing grants continue to be enforced and you can revoke or reduce them; adding or expanding grants requires an active entitlement.
+
+Roles and grants answer different questions. A role says what a principal may do with a type of resource, and the pages that assign roles ask nothing about individual objects. A grant says which objects those actions reach. Assigning a role therefore gives a principal whatever the organization's own grants give that role, and nothing more.
 
 Recipients can be users, teams, service accounts, roles, or everyone in the organization. A service account is an independent recipient; its grants do not depend on the person who created it. Disabled service accounts cannot use their grants. Their assigned roles and organization-wide grants also contribute to access, so removing one direct grant does not necessarily remove all access.
 
@@ -404,11 +406,21 @@ A recipient receives the union of its applicable grants: direct user or service-
 
 The Permissions editor shows direct grants and inherited grants with their source scopes. Removing a direct grant does not remove access supplied by another grant. Change an inherited grant at its source. List views omit personal, team, and organization visibility categories. Built-in origin and labels remain separate filters.
 
-### Migration From Visibility
+### Enabling Resource Permissions
 
-The migration converts existing sharing into resource grants. Organization-wide sharing becomes an organization grant. Personal ownership becomes an explicit full-access grant. Team use shares become read and use grants. Team write shares additionally grant update. Every team member receives those actions, regardless of their membership role.
+`ARCHESTRA_RBAC_RESOURCE_PERMISSIONS_ENABLED` decides whether grants are authoritative. Set it to `true` to enable the model. See [Deployment](/docs/platform-deployment) for the variable itself.
 
-Resource-level `:admin` scopes become `*` grants with their associated actions. Resource-level `:team-admin` scopes become `teams:*` grants. These legacy scope flags are distinct from the team's membership admin role.
+While the value is `false`, the deployment keeps its existing behavior. The conversion described below does not run, and the permissions screens stay hidden.
+
+Setting the value to `true` converts the deployment at the next start. Each resource is converted once. A resource that has already been converted keeps its grants, so a change you make in the permissions editor is not replaced at the next start.
+
+### Conversion Of Existing Sharing
+
+The conversion turns existing sharing into resource grants. Personal ownership becomes an explicit full-access grant. Team use shares become read and use grants. Team write shares additionally grant update. Every team member receives those actions, regardless of their membership role.
+
+Organization-wide sharing becomes a grant to each role that holds that resource's read permission. Access after the conversion is therefore the same as access before it. A member whose role withholds the read permission did not see the resource, and does not see it afterwards. To reach everyone, add the **Everyone in the organization** recipient yourself.
+
+Resource-level `:admin` permissions become `*` grants with their associated actions. Resource-level `:team-admin` permissions become `teams:*` grants. The conversion then removes both from the roles that held them. These permissions are distinct from the team's membership admin role.
 
 Existing explicit grants, including service-account grants, survive migration. Migrated policies replace legacy sharing checks. Revoking a grant cannot restore access through an old ownership or visibility setting. Other applicable grants can still provide access.
 

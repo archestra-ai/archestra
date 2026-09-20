@@ -2394,15 +2394,19 @@ const config = {
      * flipping the ARCHESTRA_BETA master switch must never change who can
      * reach an existing resource by implication.
      *
-     * While this is off the grant rows are inert: the upgrade still writes
-     * them, authorization keeps reading the retired visibility columns, and
-     * the permissions editors stay hidden and refuse writes. Turning it on
-     * re-runs the conversion from the current visibility columns, so legacy
-     * changes made in the meantime are picked up, and grants added by hand
-     * survive because the conversion merges rather than replaces. Turning it
-     * off returns authorization to the visibility columns, which are never
-     * destroyed. A revocation made through the editor is the one change a
-     * later re-enable does not preserve.
+     * While this is off the grant rows are inert: authorization keeps reading
+     * the retired visibility columns, the permissions editors stay hidden and
+     * refuse writes, and nothing is written for a newly created resource.
+     *
+     * Turning it on converts each resource that has not been converted yet,
+     * reading the visibility columns as they stand that day. A resource that
+     * has been converted is left alone, so a grant edited or revoked in the
+     * editor is not undone by the next restart.
+     *
+     * Turning it off returns authorization to the visibility columns, which
+     * are never destroyed. Sharing changed under the old model while the
+     * switch is off does not reach a resource that was already converted, so
+     * going back and forth is for emergencies rather than routine use.
      */
     enabled: process.env.ARCHESTRA_RBAC_RESOURCE_PERMISSIONS_ENABLED === "true",
   },

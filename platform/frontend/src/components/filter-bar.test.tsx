@@ -212,7 +212,7 @@ describe("compact filters", () => {
     await userEvent.click(
       screen.getByRole("combobox", { name: "Filter by action" }),
     );
-    await userEvent.click(screen.getByRole("button", { name: "Create" }));
+    await userEvent.click(screen.getByRole("option", { name: "Create" }));
     expect(screen.queryByText("Deleted entry")).not.toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Filters (active)" }),
@@ -228,7 +228,7 @@ describe("compact filters", () => {
     await userEvent.click(
       screen.getByRole("combobox", { name: "Filter by action" }),
     );
-    await userEvent.click(screen.getByRole("button", { name: "Create" }));
+    await userEvent.click(screen.getByRole("option", { name: "Create" }));
     act(() => {
       compact = false;
       listeners.forEach((listener) => {

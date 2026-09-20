@@ -4,6 +4,7 @@ import { ServerErrorFallback } from "@/components/error-fallback";
 import { PageLayout } from "@/components/page-layout";
 import { getServerApiHeaders } from "@/lib/utils/server";
 import { AppaGithubSyncPanel } from "./_parts/appa-github-sync-panel";
+import { BatteriesPanel } from "./_parts/batteries-panel";
 import { GuardrailsDeploymentToggle } from "./_parts/guardrails-deployment-toggle";
 import { GuardrailsPolicyEditor } from "./guardrails-policy-editor";
 
@@ -30,6 +31,7 @@ export default async function OpenAppaPage() {
         <GuardrailsDeploymentToggle />
         <GuardrailsPolicyEditor />
         <AppaGithubSyncPanel />
+        <BatteriesPanel />
       </div>
     </PageLayout>
   );

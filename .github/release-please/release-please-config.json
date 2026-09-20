@@ -67,7 +67,7 @@
       "component": "platform",
       "release-type": "node",
       "versioning": "prerelease",
-      "prerelease-type": "beta",
+      "prerelease-type": "rc",
       "prerelease": true,
       "initial-version": "0.0.1",
       "draft": true,

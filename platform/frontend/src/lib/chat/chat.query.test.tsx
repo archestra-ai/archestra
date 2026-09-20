@@ -120,6 +120,50 @@ describe("useConversations", () => {
   });
 });
 
+test("polls a scheduled chat until its replay seed arrives, then stops polling", async () => {
+  vi.useFakeTimers();
+  const conversation = {
+    ...makeConversation(),
+    origin: "schedule_trigger" as const,
+  };
+  const seed = {
+    id: "prompt-1",
+    role: "user" as const,
+    parts: [{ type: "text" as const, text: "Run the schedule" }],
+  };
+  const getConversation = vi.mocked(archestraApiSdk.getChatConversation);
+  getConversation.mockReset();
+  getConversation.mockResolvedValueOnce({
+    data: conversation,
+    error: undefined,
+  } as Awaited<ReturnType<typeof getConversation>>);
+  getConversation.mockResolvedValue({
+    data: { ...conversation, messages: [seed] },
+    error: undefined,
+  } as Awaited<ReturnType<typeof getConversation>>);
+  const { result, unmount } = renderHook(
+    () => useConversation(conversation.id),
+    { wrapper: createWrapper() },
+  );
+  try {
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(100);
+    });
+    expect(result.current.data?.messages).toEqual([]);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_100);
+    });
+    expect(result.current.data?.messages).toEqual([seed]);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_000);
+    });
+    expect(getConversation).toHaveBeenCalledTimes(2);
+  } finally {
+    unmount();
+    vi.useRealTimers();
+  }
+});
+
 describe("useConversation error handling", () => {
   beforeEach(() => {
     vi.clearAllMocks();

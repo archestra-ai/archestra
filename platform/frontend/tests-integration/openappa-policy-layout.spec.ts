@@ -46,6 +46,11 @@ for (const viewport of [
         url: "/api/credentials",
         body: [],
       });
+      await mswControl.use({
+        method: "get",
+        url: "/api/openappa/batteries",
+        body: [],
+      });
       const permissions = await (
         await request.get("/internal-test/api/api/user/permissions")
       ).json();

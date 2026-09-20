@@ -1,11 +1,15 @@
 "use client";
 
+import { Settings } from "lucide-react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect } from "react";
 import { LoadingState } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
+import { Button } from "@/components/ui/button";
 import { useDefaultMcpGateway } from "@/lib/agent.query";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { usePageTitle } from "@/lib/hooks/use-page-title";
 import { useLlmProxy } from "@/lib/llm-proxy.query";
 import { useOrganization } from "@/lib/organization.query";
@@ -15,6 +19,9 @@ import { getConnectableProviders } from "./connection-flow.utils";
 
 export default function ConnectionPage() {
   const searchParams = useSearchParams();
+  const { data: canReadConnectionSettings } = useHasPermissions({
+    organizationSettings: ["read"],
+  });
   const isApproval = !!searchParams.get("connectRequest");
   const requestedClient = CONNECT_CLIENTS.find(
     (client) => client.id === searchParams.get("clientId"),
@@ -80,6 +87,16 @@ export default function ConnectionPage() {
           : "Connection"
       }
       maxWidth="wizard"
+      actionButton={
+        canReadConnectionSettings && (
+          <Button variant="outline" asChild>
+            <Link href="/settings/connection">
+              <Settings aria-hidden="true" />
+              <span>Connection settings</span>
+            </Link>
+          </Button>
+        )
+      }
     >
       {organizationQuery.isFetching ||
       !organizationQuery.isFetchedAfterMount ? (

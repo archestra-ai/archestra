@@ -71,6 +71,15 @@ const PERIODIC_TASK_DEFINITIONS: PeriodicTaskDefinition[] = [
     intervalSeconds: 86400,
     payload: {},
   },
+  // Recomposes every organization's effective guardrails policy from its root
+  // and installed batteries. Every edit already recomposes inline; this is the
+  // backstop for a recompose lost to a crash after the edit committed. A no-op
+  // while OpenAPPA is disabled.
+  {
+    taskType: "openappa_effective_policy_recompile",
+    intervalSeconds: 3600,
+    payload: {},
+  },
   // Enterprise content-encryption backfill/rotation sweep. O(1) no-op once
   // complete (and when the feature is disabled); a 10-minute tick keeps a
   // large backlog progressing without a long-lived task.

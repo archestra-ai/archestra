@@ -4,6 +4,7 @@ import { Octokit } from "@octokit/rest";
 import { LRUCacheManager } from "@/cache-manager";
 import logger from "@/logging";
 import type { SkillFileEncoding, SkillFileKind } from "@/types";
+import { GITHUB_DOT_COM_SOURCE, type GithubSkillSource } from "./github-source";
 import {
   deriveSkillFileKind,
   type ParsedSkill,
@@ -19,7 +20,8 @@ import {
  * Per-repo tree state from `discoverSkills` is cached briefly and reused by
  * `importSkills` so a discover → import round-trip from the UI doesn't pay the
  * REST quota cost twice. File contents are fetched from
- * `raw.githubusercontent.com`, which doesn't consume the REST API rate limit.
+ * `raw.githubusercontent.com` for github.com, avoiding its REST quota.
+ * Enterprise files use the configured API with the raw Contents media type.
  */
 
 /**
@@ -37,7 +39,7 @@ export const MAX_SKILL_FILE_CONTENT_CHARS =
 /** Cap on resource files copied per skill. */
 export const MAX_FILES_PER_SKILL = 500;
 /**
- * How many `raw.githubusercontent.com` fetches run at once when discovering or
+ * How many file fetches run at once when discovering or
  * importing a whole library. Conservative: enough to turn a serial whole-repo
  * import from minutes into seconds, low enough to stay well under raw-content
  * rate limits without any retry. Lower this if 429s ever appear in practice.
@@ -92,6 +94,8 @@ interface ImportedSkill {
   skippedFiles: string[];
   /** Provenance string, e.g. `owner/repo@main:skills/pdf`. */
   sourceRef: string;
+  /** Repository web origin; null preserves the legacy github.com source. */
+  sourceOrigin: string | null;
   /** Commit SHA the snapshot was taken at. */
   sourceCommit: string;
   /**
@@ -103,6 +107,7 @@ interface ImportedSkill {
 }
 
 interface RepoLocation {
+  githubSource: GithubSkillSource;
   owner: string;
   repo: string;
   ref: string | null;
@@ -132,9 +137,10 @@ export async function discoverSkills(params: {
   repoUrl: string;
   path?: string;
   githubToken?: string;
+  githubSource?: GithubSkillSource;
 }): Promise<{ repoUrl: string; ref: string; skills: DiscoveredSkill[] }> {
-  const location = parseRepoUrl(params.repoUrl, params.path);
-  const octokit = createOctokit(params.githubToken);
+  const location = parseRepoUrl(params);
+  const octokit = createOctokit(params.githubToken, location.githubSource);
   const snapshot = await loadRepoSnapshot(
     octokit,
     location,
@@ -225,10 +231,11 @@ export async function importSkills(params: {
   repoUrl: string;
   path?: string;
   githubToken?: string;
+  githubSource?: GithubSkillSource;
   skillPaths: string[];
 }): Promise<ImportedSkill[]> {
-  const location = parseRepoUrl(params.repoUrl, params.path);
-  const octokit = createOctokit(params.githubToken);
+  const location = parseRepoUrl(params);
+  const octokit = createOctokit(params.githubToken, location.githubSource);
   const snapshot = await loadRepoSnapshot(
     octokit,
     location,
@@ -338,6 +345,10 @@ export async function importSkills(params: {
       files,
       skippedFiles: plan.skippedFiles,
       sourceRef: `${location.owner}/${location.repo}@${ref}:${plan.skillPath}`,
+      sourceOrigin:
+        location.githubSource.webOrigin === GITHUB_DOT_COM_SOURCE.webOrigin
+          ? null
+          : location.githubSource.webOrigin,
       sourceCommit: snapshot.commitSha,
       requestedRef: location.ref,
     });
@@ -349,7 +360,7 @@ export async function importSkills(params: {
 // ===== Internal helpers =====
 
 /**
- * Per-repo snapshot cache. Keyed by `owner/repo@ref#tokenFingerprint` so
+ * Per-repo snapshot cache. Keyed by API/web origin and `owner/repo@ref#tokenFingerprint` so
  * separate tokens (or no token) never share a cache entry — a token granting
  * access to a private repo doesn't leak its tree paths to a later unauth call.
  */
@@ -358,8 +369,20 @@ const repoCache = new LRUCacheManager<CachedRepo>({
   defaultTtl: REPO_CACHE_TTL_MS,
 });
 
-function createOctokit(token?: string): Octokit {
-  return new Octokit(token ? { auth: token } : {});
+function createOctokit(
+  token: string | undefined,
+  source: GithubSkillSource,
+): Octokit {
+  return new Octokit({
+    auth: token,
+    baseUrl: source.apiBaseUrl,
+    request: {
+      timeout: 30_000,
+      ...(source.apiBaseUrl !== GITHUB_DOT_COM_SOURCE.apiBaseUrl
+        ? { redirect: "error" }
+        : {}),
+    },
+  });
 }
 
 /**
@@ -368,43 +391,72 @@ function createOctokit(token?: string): Octokit {
  * `/tree/<ref>/<subpath>` suffixes. An explicit `pathOverride` wins over a
  * subpath embedded in the URL.
  */
-function parseRepoUrl(repoUrl: string, pathOverride?: string): RepoLocation {
-  const trimmed = repoUrl.trim();
-  if (!trimmed) {
-    throw new SkillImportError("Repository URL is required");
+function parseRepoUrl(params: {
+  repoUrl: string;
+  path?: string;
+  githubSource?: GithubSkillSource;
+}): RepoLocation {
+  const trimmed = params.repoUrl.trim();
+  if (!trimmed) throw new SkillImportError("Repository URL is required");
+  const githubSource = params.githubSource ?? GITHUB_DOT_COM_SOURCE;
+  const expectedOrigin = new URL(githubSource.webOrigin);
+  const firstSegment = trimmed.split("/")[0];
+  const hasProtocol = /^[a-z][a-z\d+.-]*:\/\//i.test(trimmed);
+  const hasHost =
+    firstSegment.includes(".") ||
+    firstSegment.includes(":") ||
+    firstSegment.toLowerCase() === expectedOrigin.host.toLowerCase();
+  let repoPath = trimmed;
+  if (hasProtocol || hasHost) {
+    let url: URL;
+    try {
+      url = new URL(
+        hasProtocol ? trimmed : `${expectedOrigin.protocol}//${trimmed}`,
+      );
+    } catch {
+      throw new SkillImportError("Invalid repository URL");
+    }
+    // Preserve the legacy http://github.com input shorthand; requests still
+    // use the fixed HTTPS API. Enterprise URLs must match their configured origin.
+    const legacyHttp =
+      githubSource.webOrigin === GITHUB_DOT_COM_SOURCE.webOrigin &&
+      url.origin === "http://github.com";
+    if (
+      (!legacyHttp && url.origin !== expectedOrigin.origin) ||
+      url.username ||
+      url.password
+    ) {
+      throw new SkillImportError(
+        params.githubSource
+          ? `Repository URL must belong to ${expectedOrigin.origin}`
+          : "Only github.com repositories are supported, e.g. owner/repo or https://github.com/owner/repo",
+      );
+    }
+    repoPath = url.pathname;
   }
-
-  const withoutProtocol = trimmed
-    .replace(/^https?:\/\//i, "")
-    .replace(/^github\.com\//i, "")
-    .replace(/\.git$/, "");
-  const segments = withoutProtocol.split("/").filter(Boolean);
-
+  const segments = repoPath.split("/").filter(Boolean);
   if (segments.length < 2) {
     throw new SkillImportError(
       "Repository URL must include an owner and repo, e.g. owner/repo",
     );
   }
-
-  const [owner, repo, ...rest] = segments;
-  // GitHub owner names cannot contain dots, so a dotted first segment is a
-  // foreign host (gitlab.com/…, www.github.com/…) that would otherwise be
-  // misread as an owner and fail later with a confusing GitHub 404.
-  if (owner.includes(".")) {
-    throw new SkillImportError(
-      "Only github.com repositories are supported, e.g. owner/repo or https://github.com/owner/repo",
-    );
+  const [owner, rawRepo, ...rest] = segments;
+  const repo = rawRepo.replace(/\.git$/, "");
+  if (!/^[\w-]+$/.test(owner) || !/^[\w.-]+$/.test(repo)) {
+    throw new SkillImportError("Invalid repository owner or name");
   }
   let ref: string | null = null;
   let urlSubpath = "";
-
   if (rest[0] === "tree" && rest.length >= 2) {
-    ref = rest[1];
-    urlSubpath = rest.slice(2).join("/");
+    try {
+      ref = decodeURIComponent(rest[1]);
+      urlSubpath = rest.slice(2).map(decodeURIComponent).join("/");
+    } catch {
+      throw new SkillImportError("Invalid repository URL encoding");
+    }
   }
-
-  const subpath = normalizeSubpath(pathOverride ?? urlSubpath);
-  return { owner, repo, ref, subpath };
+  const subpath = normalizeSubpath(params.path ?? urlSubpath);
+  return { owner, repo, ref, subpath, githubSource };
 }
 
 /**
@@ -472,11 +524,12 @@ function repoCacheKey(
     ? createHash("sha256").update(token).digest("hex").slice(0, 16)
     : "public";
   const ref = location.ref ?? "HEAD";
-  return `${location.owner}/${location.repo}@${ref}#${tokenFingerprint}`;
+  return `${location.githubSource.apiBaseUrl}|${location.githubSource.webOrigin}|${location.owner}/${location.repo}@${ref}#${tokenFingerprint}`;
 }
 
 /**
- * Fetch a file from `raw.githubusercontent.com`. This endpoint serves the
+ * Fetch a file from the configured Enterprise Contents API or, for public
+ * GitHub, `raw.githubusercontent.com`. The latter endpoint serves the
  * same bytes as `repos.getContent` but is not counted against the GitHub REST
  * rate limit, which is the limit that bites users importing many files.
  *
@@ -490,7 +543,12 @@ async function fetchRawFile(
   path: string,
   token: string | undefined,
 ): Promise<{ content: string; encoding: SkillFileEncoding } | null> {
-  const url = `https://raw.githubusercontent.com/${location.owner}/${location.repo}/${commitSha}/${path}`;
+  const enterprise =
+    location.githubSource.apiBaseUrl !== GITHUB_DOT_COM_SOURCE.apiBaseUrl;
+  const encodedPath = path.split("/").map(encodeURIComponent).join("/");
+  const url = enterprise
+    ? `${location.githubSource.apiBaseUrl}/repos/${location.owner}/${location.repo}/contents/${encodedPath}?ref=${encodeURIComponent(commitSha)}`
+    : `https://raw.githubusercontent.com/${location.owner}/${location.repo}/${commitSha}/${encodedPath}`;
   const headers: Record<string, string> = {
     Accept: "application/vnd.github.raw",
   };
@@ -498,7 +556,11 @@ async function fetchRawFile(
 
   let response: Response;
   try {
-    response = await fetch(url, { headers });
+    response = await fetch(url, {
+      headers,
+      signal: AbortSignal.timeout(30_000),
+      ...(enterprise ? { redirect: "error" as const } : {}),
+    });
   } catch (error) {
     logger.warn(
       { path, error: errorMessage(error) },

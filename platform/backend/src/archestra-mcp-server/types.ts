@@ -97,10 +97,13 @@ export interface ArchestraContext {
    */
   taskBridge?: ChatTaskBridge;
   /**
-   * The id of the tool call currently executing. Set on the delegation path so
-   * the child's surfaced tool calls can be attributed to the delegation call
-   * (`agent__<slug>`) that spawned them, and on the `run_tool` path so a task
-   * card attaches to the call the user can actually see.
+   * The host-issued id of the tool call currently executing. Set on the
+   * delegation path so the child's surfaced tool calls can be attributed to
+   * the delegation call (`agent__<slug>`) that spawned them, and on the
+   * `run_tool` path so a task card attaches to the call the user can actually
+   * see. OpenAPPA uses it as a durable remedy-receipt key only when supplied
+   * by Chat's provider call or external MCP's bounded logical-call metadata.
+   * JSON-RPC request ids and ordinary MCP arguments are never valid values.
    */
   currentToolCallId?: string;
   /**

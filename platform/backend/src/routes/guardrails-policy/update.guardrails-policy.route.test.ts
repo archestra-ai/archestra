@@ -132,6 +132,10 @@ describe("guardrails policy authoring", () => {
       "[policy]\nversion = 999",
       `${content}[externals.annotators.x]\ncommand = ["sh"]`,
       `include = ["/secret"]\n${content}`,
+      // The host derives server_aliases from its catalogs and keeps its
+      // helper-bridge bearer to itself.
+      `${content}[server_aliases]\ngithub = ["github"]\n`,
+      `${content}[externals.authorities.review]\nurl = "http://127.0.0.1:9000/api/openappa/helpers/x/y"\ntoken_env = "APPA_ARCHESTRA_BRIDGE_TOKEN"\n`,
     ]) {
       const validation = await app.inject({
         method: "POST",

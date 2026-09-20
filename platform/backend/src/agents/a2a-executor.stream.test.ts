@@ -6,7 +6,7 @@
 // which the mocked-streamText suite in a2a-executor.test.ts can prove.
 
 import { ChatErrorCode } from "@archestra/shared";
-import type { ModelMessage } from "ai";
+import type { ModelMessage, UIMessageChunk } from "ai";
 import { simulateReadableStream, tool } from "ai";
 import { MockLanguageModelV3 } from "ai/test";
 import { vi } from "vitest";
@@ -347,6 +347,7 @@ describe("executeA2AMessage real stream boundary", () => {
     primeAgent(modelEmitting(multiTextChunks("Hello ", "from ", "A2A")));
 
     const deltas: string[] = [];
+    const chunks: UIMessageChunk[] = [];
     const result = await executeA2AMessage({
       agentId: agent.id,
       message: "Handle this",
@@ -354,11 +355,24 @@ describe("executeA2AMessage real stream boundary", () => {
       userId: user.id,
       conversationId: "conv-1",
       onTextDelta: (delta) => deltas.push(delta),
+      onUiMessageChunk: async (chunk) => {
+        chunks.push(chunk);
+      },
     });
 
     // The deltas arrive incrementally and reassemble into the buffered answer.
     expect(deltas).toEqual(["Hello ", "from ", "A2A"]);
     expect(result.text).toBe("Hello from A2A");
+    expect(
+      chunks
+        .filter((chunk) => chunk.type === "text-delta")
+        .map((chunk) => chunk.delta),
+    ).toEqual(deltas);
+    expect(chunks[0]).toEqual({
+      type: "start",
+      messageId: result.responseUiMessage.id,
+    });
+    expect(chunks.at(-1)).toMatchObject({ type: "finish" });
   });
 
   test("a throwing onTextDelta callback does not abort the buffered run", async ({

@@ -22,6 +22,8 @@ import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
 import McpServerModel from "@/models/mcp-server";
 import MemberModel from "@/models/member";
 import ModelModel from "@/models/model";
+import OpenAppaBatteryInstallModel from "@/models/openappa-battery-install";
+import OpenAppaBatteryPackageModel from "@/models/openappa-battery-package";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import OrganizationModel from "@/models/organization";
 import OrganizationRoleModel from "@/models/organization-role";
@@ -949,6 +951,19 @@ export const AUDIT_DECISIONS = {
     model: GuardrailsDeploymentModel,
   },
   openappaGithubSyncTable: { audited: true, model: OpenAppaGithubSyncModel },
+  openappaBatteryInstallsTable: {
+    audited: true,
+    model: OpenAppaBatteryInstallModel,
+  },
+  openappaBatteryPackagesTable: {
+    audited: true,
+    model: OpenAppaBatteryPackageModel,
+  },
+  openappaEffectivePoliciesTable: {
+    audited: false,
+    reason:
+      "derived from the audited root policy and battery installs; recomposed, never edited",
+  },
   openappaEventsTable: {
     audited: false,
     reason: "OpenAPPA owns its immutable policy event history",
@@ -960,6 +975,10 @@ export const AUDIT_DECISIONS = {
   openappaOperationsTable: {
     audited: false,
     reason: "native hook idempotency ledger",
+  },
+  openappaHostKeysTable: {
+    audited: false,
+    reason: "native host-event lookup index",
   },
   openappaProcessedResultsTable: {
     audited: false,

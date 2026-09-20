@@ -420,8 +420,8 @@ describe("RoleMappingForm", () => {
       E2eTestId.IdpRoleMappingDefaultRole,
     ]) {
       await user.click(screen.getByTestId(testId));
-      expect(screen.getByRole("button", { name: /^Member/ })).toBeDisabled();
-      await user.click(screen.getByRole("button", { name: /^Admin/ }));
+      expect(screen.getByRole("option", { name: /^Member/ })).toBeDisabled();
+      await user.click(screen.getByRole("option", { name: /^Admin/ }));
       await user.keyboard("{Escape}");
     }
     await user.click(screen.getByRole("button", { name: "Save" }));

@@ -9,6 +9,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { useListboxNavigation } from "@/lib/hooks/use-listbox-navigation";
 import { matchesSearchTokens } from "@/lib/search-tokens";
 import { cn } from "@/lib/utils";
 
@@ -122,23 +123,38 @@ export function SearchableSelect({
     (item) => item.value === value,
   );
 
+  const selectItem = (nextValue: string) => {
+    onValueChange(nextValue);
+    setOpen(false);
+    setSearchQuery("");
+  };
+  const navigation = useListboxNavigation({
+    open,
+    onOpenChange: setOpen,
+    values: [...(pinnedItems ?? []), ...filteredItems]
+      .filter((item) => !item.disabled)
+      .map((item) => item.value),
+    selectedValue: searchQuery ? undefined : value,
+    onSelect: selectItem,
+  });
+
   const renderOption = (item: SearchableSelectItem) => (
     <button
-      type="button"
       key={item.value}
+      {...navigation.getOptionProps(item.value)}
+      role="option"
+      type="button"
       disabled={item.disabled}
       aria-disabled={item.disabled}
+      aria-selected={value === item.value || !!item.checked}
       onClick={() => {
-        if (item.disabled) {
-          return;
-        }
-        onValueChange(item.value);
-        setOpen(false);
-        setSearchQuery("");
+        if (!item.disabled) selectItem(item.value);
       }}
       className={cn(
-        "relative flex w-full cursor-default select-none items-center justify-between rounded-sm px-2 py-1.5 text-left text-sm outline-none transition-colors hover:bg-accent hover:text-accent-foreground",
+        "relative flex w-full cursor-default select-none items-center justify-between rounded-sm px-2 py-1.5 text-left text-sm outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground",
         value === item.value && "bg-accent/50",
+        navigation.activeValue === item.value &&
+          "bg-accent text-accent-foreground",
         item.disabled &&
           "cursor-not-allowed opacity-60 hover:bg-transparent hover:text-inherit",
       )}
@@ -160,13 +176,29 @@ export function SearchableSelect({
     </button>
   );
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (allowCustom && e.key === "Enter" && searchQuery && open) {
-      e.preventDefault();
-      onValueChange(searchQuery);
-      setOpen(false);
-      setSearchQuery("");
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (
+      event.defaultPrevented ||
+      event.nativeEvent.isComposing ||
+      event.keyCode === 229 ||
+      event.ctrlKey ||
+      event.altKey ||
+      event.metaKey
+    )
+      return;
+    // Free-form model names remain selectable without first navigating a match.
+    if (
+      allowCustom &&
+      event.key === "Enter" &&
+      searchQuery &&
+      open &&
+      navigation.activeValue === null
+    ) {
+      event.preventDefault();
+      selectItem(searchQuery);
+      return;
     }
+    navigation.inputProps.onKeyDown(event);
   };
 
   return (
@@ -182,6 +214,7 @@ export function SearchableSelect({
           aria-invalid={ariaInvalid}
           data-testid={testId}
           disabled={disabled}
+          onKeyDown={navigation.onTriggerKeyDown}
           className={cn(
             multiline
               ? "border-input h-auto min-h-9 w-[200px] justify-between bg-transparent py-2 font-normal shadow-xs hover:bg-transparent hover:text-foreground"
@@ -224,6 +257,7 @@ export function SearchableSelect({
               <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
             )}
             <input
+              {...navigation.inputProps}
               aria-label={searchPlaceholder || "Search options"}
               placeholder={searchPlaceholder}
               value={searchQuery}
@@ -242,6 +276,10 @@ export function SearchableSelect({
           </div>
         )}
         <div
+          {...navigation.listboxProps}
+          role="listbox"
+          aria-label={ariaLabel ?? placeholder}
+          tabIndex={showSearch ? undefined : 0}
           className={cn(
             "max-h-[min(300px,calc(var(--radix-popover-content-available-height)-3rem))] overflow-y-auto p-1",
             listClassName,

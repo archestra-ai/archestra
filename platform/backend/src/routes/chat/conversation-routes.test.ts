@@ -46,6 +46,61 @@ describe("chat conversation and message routes", () => {
     await app.close();
   });
 
+  test("lists scheduled chats with their own run context and leaves normal chats unchanged", async ({
+    makeAgent,
+    makeScheduleTrigger,
+    makeScheduleTriggerRun,
+  }) => {
+    const agent = await makeAgent({ organizationId, authorId: currentUser.id });
+    const trigger = await makeScheduleTrigger({
+      organizationId,
+      actorUserId: currentUser.id,
+      agentId: agent.id,
+    });
+    const normal = await ConversationModel.create({
+      organizationId,
+      userId: currentUser.id,
+      agentId: agent.id,
+    });
+    const expected = [
+      expect.objectContaining({ id: normal.id, scheduledRun: null }),
+    ];
+    for (const runKind of ["manual", "due"] as const) {
+      const run = await makeScheduleTriggerRun(trigger.id, {
+        organizationId,
+        runKind,
+      });
+      const conversation = await ConversationModel.create({
+        organizationId,
+        userId: currentUser.id,
+        agentId: agent.id,
+        origin: "schedule_trigger",
+      });
+      await ScheduleTriggerRunModel.setChatConversationId(
+        run.id,
+        conversation.id,
+      );
+      expected.push(
+        expect.objectContaining({
+          id: conversation.id,
+          scheduledRun: {
+            id: run.id,
+            triggerId: trigger.id,
+            runKind,
+            createdAt: run.createdAt.toISOString(),
+            scheduleName: trigger.name,
+          },
+        }),
+      );
+    }
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/chat/conversations",
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual(expect.arrayContaining(expected));
+  });
+
   test("creates a conversation for an accessible agent", async ({
     makeAgent,
   }) => {

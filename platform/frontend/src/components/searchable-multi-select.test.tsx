@@ -54,7 +54,7 @@ describe("SearchableMultiSelect", () => {
     );
 
     await user.click(screen.getByRole("combobox"));
-    await user.click(screen.getByRole("button", { name: /Item One/i }));
+    await user.click(screen.getByRole("option", { name: /Item One/i }));
 
     expect(onValueChange).toHaveBeenCalledWith(["item-1"]);
   });
@@ -72,7 +72,7 @@ describe("SearchableMultiSelect", () => {
     );
 
     await user.click(screen.getByRole("combobox"));
-    await user.click(screen.getByRole("button", { name: /Item One/i }));
+    await user.click(screen.getByRole("option", { name: /Item One/i }));
 
     expect(onValueChange).toHaveBeenCalledWith([]);
   });
@@ -90,7 +90,7 @@ describe("SearchableMultiSelect", () => {
     );
 
     await user.click(screen.getByRole("combobox"));
-    await user.click(screen.getByRole("button", { name: /Item Two/i }));
+    await user.click(screen.getByRole("option", { name: /Item Two/i }));
 
     expect(onValueChange).toHaveBeenCalledWith(["item-1", "item-2"]);
 
@@ -102,7 +102,7 @@ describe("SearchableMultiSelect", () => {
       />,
     );
 
-    await user.click(screen.getByRole("button", { name: /Item Three/i }));
+    await user.click(screen.getByRole("option", { name: /Item Three/i }));
     expect(onValueChange).toHaveBeenLastCalledWith([
       "item-1",
       "item-2",
@@ -230,7 +230,7 @@ describe("SearchableMultiSelect", () => {
     );
 
     await user.click(screen.getByRole("combobox"));
-    await user.click(screen.getByRole("button", { name: /Item Two/i }));
+    await user.click(screen.getByRole("option", { name: /Item Two/i }));
 
     expect(onValueChange).not.toHaveBeenCalled();
   });
@@ -315,7 +315,7 @@ describe("SearchableMultiSelect", () => {
     );
 
     await user.click(screen.getByRole("combobox"));
-    const disabledButton = screen.getByRole("button", { name: /Item Four/i });
+    const disabledButton = screen.getByRole("option", { name: /Item Four/i });
     expect(disabledButton).toBeDisabled();
 
     await user.click(disabledButton);
@@ -443,12 +443,12 @@ describe("SearchableMultiSelect", () => {
     );
 
     await user.click(screen.getByRole("combobox"));
-    expect(screen.getByRole("button", { name: /Item One/i })).toHaveAttribute(
-      "aria-pressed",
+    expect(screen.getByRole("option", { name: /Item One/i })).toHaveAttribute(
+      "aria-selected",
       "true",
     );
-    expect(screen.getByRole("button", { name: /Item Two/i })).toHaveAttribute(
-      "aria-pressed",
+    expect(screen.getByRole("option", { name: /Item Two/i })).toHaveAttribute(
+      "aria-selected",
       "false",
     );
   });

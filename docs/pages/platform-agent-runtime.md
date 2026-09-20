@@ -3,7 +3,7 @@ title: Agent Runtime (Beta)
 category: Agents
 order: 7
 description: Run coding agents and delegated tasks in isolated containers
-lastUpdated: "2026-09-17"
+lastUpdated: "2026-09-19"
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -23,6 +23,8 @@ Kubernetes is currently the supported runtime backend. Archestra manages task st
 ## Cluster Prerequisites
 
 Your administrator must enable Agent Runtime on a Kubernetes cluster with persistent storage. See [Agent Runtime Deployment](/docs/platform-deployment#agent-runtime) for controller installation, provider requirements, and privileged workloads.
+
+Fargate-only clusters are not supported. See [EKS With Fargate](/docs/platform-deployment#eks-with-fargate) for a hybrid setup with EC2 runtime nodes.
 
 ## Configure Agent Runtime
 
@@ -174,6 +176,14 @@ Custom images should use the proxy and gateway to retain platform controls. Send
 Use environment variables for ordinary configuration and **Secret** for sensitive values. Reusable connections supply credentials to multiple Agents. One-off secrets belong to one Agent.
 
 Administrators manage shared connections; users connect their own personal accounts. See [Credentials](/docs/platform-credentials) for supported scopes and Vault setup.
+
+#### Transfer A Credential From A Connected Client
+
+A client that already holds a credential — a CLI token the local session was using — can hand it to an Agent during a handoff instead of switching to Settings. The Agent must allow client-supplied credential values; the setting is off until an administrator turns it on.
+
+The value is stored personally for the caller. It applies to every run that person starts on the Agent and to nobody else's runs. A key already declared at organization scope is refused rather than widened.
+
+Two limits are worth stating to anyone who uses this. The value passes through the calling model's context and that client's transcript, and some clients display tool arguments when asking for approval; Archestra redacts it from the tool-call log, not from anything before it. A credential that should never enter a model's context belongs in Settings. The value also reaches the workspace on the Agent's next turn — a run already in progress keeps the environment it started with.
 
 ### Run Controls
 

@@ -385,7 +385,7 @@ describe("AuditLogTable", () => {
       await screen.findByRole("combobox", { name: "Filter by resource" }),
     );
     await userEvent.click(
-      await screen.findByRole("button", { name: /context7/i }),
+      await screen.findByRole("option", { name: /context7/i }),
     );
 
     expect(push).toHaveBeenCalled();

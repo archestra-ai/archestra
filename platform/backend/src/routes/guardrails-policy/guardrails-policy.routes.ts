@@ -1,5 +1,6 @@
 import { RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
+import { openappaBatteriesService } from "@/openappa/batteries";
 import { GUARDRAILS_NOOP_ANNOTATOR_PATH } from "@/routes/route-paths";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
 import { constructResponseSchema } from "@/types";
@@ -58,12 +59,17 @@ const routes: FastifyPluginAsyncZod = async (app) => {
         response: constructResponseSchema(GuardrailsPolicySchema),
       },
     },
-    async (request) =>
-      guardrailsPolicyService.update({
+    async (request) => {
+      const saved = await guardrailsPolicyService.update({
         ...request.body,
         organizationId: request.organizationId,
         userId: request.user.id,
-      }),
+      });
+      await openappaBatteriesService.recompileOrganizations([
+        request.organizationId,
+      ]);
+      return saved;
+    },
   );
 };
 export default routes;

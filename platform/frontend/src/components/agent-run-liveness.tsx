@@ -1,6 +1,7 @@
 "use client";
 
 import { AlertTriangle, Clock3, MessageCircleQuestion } from "lucide-react";
+import { NO_MODEL_ACTIVITY_WARNING_MS } from "@/lib/agent-run-activity";
 import type { AgentRun } from "@/lib/agent-runtime.query";
 import {
   formatRuntimeDuration as formatDuration,
@@ -179,5 +180,3 @@ function modelActivityBaseline(
 ): Date {
   return new Date(run.lastModelActivityAt ?? run.startedAt);
 }
-
-const NO_MODEL_ACTIVITY_WARNING_MS = 15 * 60_000;

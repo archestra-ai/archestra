@@ -735,6 +735,11 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DeleteAgentWorkspace]: { agent: ["read"] },
   [RouteId.ReadAgentWorkspaceFile]: { agent: ["read"] },
   [RouteId.WriteAgentWorkspaceFile]: { agent: ["read"] },
+  [RouteId.StartAgentWorkspaceTransfer]: { agent: ["read"] },
+  // The content endpoints carry a transfer ticket instead of a session, so the
+  // authnz layer exempts them. These entries keep the map exhaustive.
+  [RouteId.DownloadAgentWorkspaceTransfer]: { agent: ["read"] },
+  [RouteId.UploadAgentWorkspaceTransfer]: { agent: ["read"] },
   [RouteId.DeleteAgentRun]: { agent: ["read"] },
   [RouteId.GetAgentRunShare]: { agent: ["read"] },
   [RouteId.ShareAgentRun]: { agent: ["read"] },
@@ -1934,6 +1939,17 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetAppaGithubSync]: { toolPolicy: ["read"] },
   [RouteId.ConfigureAppaGithubSync]: { organization: ["update"] },
   [RouteId.UpdateAppaGithubSync]: { organization: ["update"] },
+  [RouteId.GetOpenappaBatteries]: { toolPolicy: ["read"] },
+  [RouteId.GetOpenappaEffectivePolicy]: { toolPolicy: ["read"] },
+  [RouteId.GetOpenappaBatteryMatches]: { toolPolicy: ["read"] },
+  [RouteId.CreateOpenappaBatteryInstall]: { toolPolicy: ["update"] },
+  [RouteId.UpdateOpenappaBatteryInstall]: { toolPolicy: ["update"] },
+  [RouteId.DeleteOpenappaBatteryInstall]: { toolPolicy: ["update"] },
+  [RouteId.UploadOpenappaBatteryPackage]: { toolPolicy: ["update"] },
+  [RouteId.DeleteOpenappaBatteryPackage]: { toolPolicy: ["update"] },
+  // Loopback-only helper bridge for the APPA runtime; authenticated by the
+  // per-process bridge bearer inside the route, not by a session.
+  [RouteId.ConsultOpenappaBatteryHelper]: {},
   [RouteId.UpdateSkillGithubSync]: { skill: ["update"] },
   [RouteId.GetPlugins]: { plugin: ["read"] },
   [RouteId.GetPluginLabelKeys]: { plugin: ["read"] },

@@ -52,9 +52,11 @@ import {
   AgentWorkspaceFileResultSchema,
 } from "@/types/agent-workspace-file";
 import { RenewableCredentialBundleSchema } from "@/types/renewable-credential";
+import { buildAtomicFileWriteCommand } from "./atomic-file-write";
 import {
   AgentRuntimeCommandTransportError,
   execAgentRuntimeCommand,
+  streamAgentRuntimeCommand,
 } from "./exec";
 import {
   AGENT_RUNTIME_CONTAINER_NAME,
@@ -243,17 +245,10 @@ class AgentRuntimeManager {
     request: AgentWorkspaceFileRequest;
   }) {
     const request = AgentWorkspaceFileRequestSchema.parse(params.request);
-    const pod = await this.findPod(params.session);
-    if (pod?.status?.phase !== "Running" || !pod.metadata?.name) {
-      throw new ApiError(
-        409,
-        "Resume this workspace before accessing its files",
-      );
-    }
     const result = await this.execInPod({
       session: params.session,
-      podName: pod.metadata.name,
-      command: ["python3", "/usr/local/bin/archestra-workspace-files"],
+      podName: await this.requireRunningPodName(params.session),
+      command: WORKSPACE_FILES_COMMAND,
       stdin: NodeReadable.from([JSON.stringify(request)]),
     });
     const response = JSON.parse(result);
@@ -263,6 +258,52 @@ class AgentRuntimeManager {
         response.error || "Workspace file operation failed",
       );
     return AgentWorkspaceFileResultSchema.parse(response);
+  }
+
+  /** Run one transfer control operation and return its parsed reply. */
+  async runWorkspaceTransferCommand(params: {
+    session: AgentRunRecord;
+    args: string[];
+    stdin?: Readable;
+    timeoutMs: number;
+  }): Promise<unknown> {
+    const result = await this.execInPod({
+      session: params.session,
+      podName: await this.requireRunningPodName(params.session),
+      command: [...WORKSPACE_FILES_COMMAND, ...params.args],
+      stdin: params.stdin,
+      timeoutMs: params.timeoutMs,
+    });
+    const response = JSON.parse(result);
+    if (response.ok !== true) {
+      throw new ApiError(400, response.error || "Workspace transfer failed");
+    }
+    return response;
+  }
+
+  /** Stream a snapshot's bytes. The reply body is the file, so it never
+   * passes through a string or a tool payload. */
+  async readWorkspaceTransferRange(params: {
+    session: AgentRunRecord;
+    transferId: string;
+    offset: number;
+    length: number;
+    timeoutMs: number;
+  }): Promise<{ stdout: Readable; completed: Promise<void> }> {
+    return streamAgentRuntimeCommand({
+      exec: this.requireClients().exec,
+      namespace: params.session.runtimeScope,
+      podName: await this.requireRunningPodName(params.session),
+      container: AGENT_RUNTIME_CONTAINER_NAME,
+      command: [
+        ...WORKSPACE_FILES_COMMAND,
+        "read-range",
+        params.transferId,
+        String(params.offset),
+        String(params.length),
+      ],
+      timeoutMs: params.timeoutMs,
+    });
   }
 
   /**
@@ -1303,11 +1344,9 @@ class AgentRuntimeManager {
     await this.execInPod({
       session,
       podName: podName ?? pod.metadata.name,
-      command: [
-        "/bin/sh",
-        "-c",
-        "set -eu; umask 077; mkdir -p /var/run/archestra/credentials; cat > /var/run/archestra/credentials/current.json.tmp; mv /var/run/archestra/credentials/current.json.tmp /var/run/archestra/credentials/current.json",
-      ],
+      command: buildAtomicFileWriteCommand(
+        "/var/run/archestra/credentials/current.json",
+      ),
       stdin: NodeReadable.from([
         data ? Buffer.from(data, "base64") : Buffer.from("{}"),
       ]),
@@ -1597,6 +1636,7 @@ done`
     podName: string;
     command: string[];
     stdin?: Readable;
+    timeoutMs?: number;
   }): Promise<string> {
     return execAgentRuntimeCommand({
       exec: this.requireClients().exec,
@@ -1605,7 +1645,22 @@ done`
       container: AGENT_RUNTIME_CONTAINER_NAME,
       command: params.command,
       stdin: params.stdin,
+      timeoutMs: params.timeoutMs,
     });
+  }
+
+  /** Resolve the Pod backing a workspace, or explain that it must be resumed. */
+  private async requireRunningPodName(
+    session: AgentRunRecord,
+  ): Promise<string> {
+    const pod = await this.findPod(session);
+    if (pod?.status?.phase !== "Running" || !pod.metadata?.name) {
+      throw new ApiError(
+        409,
+        "Resume this workspace before accessing its files",
+      );
+    }
+    return pod.metadata.name;
   }
 
   private async waitForRunningPod(params: {
@@ -1781,3 +1836,10 @@ function shellQuote(value: string): string {
 function shellDisplayArgument(value: string): string {
   return /^[A-Za-z0-9_./:=+-]+$/.test(value) ? value : shellQuote(value);
 }
+
+/** The in-Pod helper owns path validation for both the bounded JSON path and
+ * streaming transfers, so every caller reaches the workspace the same way. */
+const WORKSPACE_FILES_COMMAND = [
+  "python3",
+  "/usr/local/bin/archestra-workspace-files",
+];

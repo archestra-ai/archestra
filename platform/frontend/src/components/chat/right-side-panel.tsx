@@ -6,7 +6,14 @@ import {
   validateRecordingBundle,
 } from "@archestra/shared";
 import { useQuery } from "@tanstack/react-query";
-import { AppWindow, ExternalLink, GitPullRequest, Lock } from "lucide-react";
+import {
+  AppWindow,
+  ExternalLink,
+  GitPullRequest,
+  Loader2,
+  Lock,
+  Play,
+} from "lucide-react";
 import { useEffect, useLayoutEffect, useRef } from "react";
 import {
   AppSessionPlayer,
@@ -21,6 +28,9 @@ import { McpAppSection } from "@/components/chat/mcp-app-container";
 import { ResizableRightPanel } from "@/components/chat/resizable-right-panel";
 import { QueryLoadError } from "@/components/query-load-error";
 import { ScheduleRunsList } from "@/components/scheduled-tasks/schedule-runs-list";
+import { useStartScheduleRun } from "@/components/scheduled-tasks/use-start-schedule-run";
+import { Button } from "@/components/ui/button";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import type { ChatReviewContext } from "@/lib/chat/chat-review-context";
 import { getMcpSandboxBaseUrl } from "@/lib/config/config";
 import { useMcpSandboxDomain } from "@/lib/config/config.query";
@@ -448,6 +458,18 @@ function RunsPanel({
   projectId: string | null;
 }) {
   const { data: trigger } = useScheduleTrigger(triggerId);
+  const runNow = useStartScheduleRun(triggerId);
+  const { data: session } = useSession();
+  const { data: canCreateRuns } = useHasPermissions({
+    scheduledTask: ["create"],
+  });
+  const { data: isScheduleAdmin } = useHasPermissions({
+    scheduledTask: ["admin"],
+  });
+  const canRun =
+    canCreateRuns &&
+    trigger &&
+    (trigger.actorUserId === session?.user?.id || isScheduleAdmin);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
   // Restore the saved scroll position whenever the panel (re)mounts OR the
@@ -487,8 +509,29 @@ function RunsPanel({
       }}
       className="flex h-full flex-col overflow-y-auto p-3"
     >
-      <div className="mb-2 px-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-        Runs · {trigger?.name ?? "Schedule"}
+      <div className="mb-2 flex items-center justify-between gap-2 px-1">
+        <span
+          className="min-w-0 truncate text-sm font-medium"
+          title={trigger?.name}
+        >
+          {trigger?.name ?? "Schedule"}
+        </span>
+        {canRun && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="shrink-0"
+            disabled={runNow.isPending}
+            onClick={runNow.start}
+          >
+            {runNow.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Play className="h-4 w-4" />
+            )}
+            <span>Start New Run</span>
+          </Button>
+        )}
       </div>
       <ScheduleRunsList triggerId={triggerId} currentRunId={currentRunId} />
     </div>

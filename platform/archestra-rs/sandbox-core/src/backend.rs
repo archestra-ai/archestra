@@ -5,12 +5,15 @@
 //! every match site to handle it.
 
 use crate::backends::dagger::DaggerBackend;
-use crate::{ArtifactBytes, CommandExecution, EngineFault, Limits, ReplayStep, Result};
+use crate::{
+    ArtifactBytes, CommandExecution, EngineFault, Limits, ReplayStep, Result, SecretEnvVar,
+};
 
 /// a materialise-and-run request handed to a backend. validated at the public
 /// core entry points before it reaches here. skill files and PYTHONPATH are no
 /// longer passed separately — they ride in `replay_steps` as `SkillMount`
 /// events, applied (and PYTHONPATH extended) at their sequence point.
+/// `secret_env` and `stdin` apply to the live `command` only, never to replay.
 #[derive(Clone)]
 pub(crate) struct RunRequest {
     pub replay_steps: Vec<ReplayStep>,
@@ -18,6 +21,8 @@ pub(crate) struct RunRequest {
     pub command: String,
     pub cwd: String,
     pub timeout_seconds: u32,
+    pub secret_env: Vec<SecretEnvVar>,
+    pub stdin: Option<String>,
     pub traceparent: Option<String>,
 }
 

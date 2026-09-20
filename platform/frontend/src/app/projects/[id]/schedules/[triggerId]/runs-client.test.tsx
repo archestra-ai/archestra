@@ -22,6 +22,10 @@ vi.mock("@/lib/projects/projects.query", () => ({
 vi.mock("@/lib/schedule-trigger.query", () => ({
   useRunScheduleTriggerNow: vi.fn(),
   useScheduleTrigger: vi.fn(),
+  useScheduleTriggerRun: vi.fn(() => ({ data: null })),
+}));
+vi.mock("@/components/scheduled-tasks/use-resolve-run-chat", () => ({
+  useResolveRunChat: () => ({ resolve: vi.fn(), isResolving: false }),
 }));
 
 import { useProject } from "@/lib/projects/projects.query";
@@ -76,8 +80,8 @@ describe("ProjectScheduleRunsClient", () => {
       "/projects/project-1",
     );
 
-    await user.click(screen.getByRole("button", { name: "Run now" }));
+    await user.click(screen.getByRole("button", { name: "Start New Run" }));
 
-    expect(runNowMutate).toHaveBeenCalledWith("trigger-1");
+    expect(runNowMutate).toHaveBeenCalledWith("trigger-1", expect.any(Object));
   });
 });

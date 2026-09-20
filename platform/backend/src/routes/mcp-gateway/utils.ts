@@ -15,6 +15,8 @@ import {
   platformExecutedAs,
   TOOL_CANCEL_RUN_SHORT_NAME,
   TOOL_COPY_FILE_SHORT_NAME,
+  TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
+  TOOL_GET_REMEDY_PLANS_SHORT_NAME,
   TOOL_GET_RUN_SHORT_NAME,
   TOOL_LIST_RUNS_SHORT_NAME,
   TOOL_LIST_SKILLS_SHORT_NAME,
@@ -80,6 +82,7 @@ import {
   ATTR_MCP_IS_ERROR_RESULT,
   startActiveMcpSpan,
 } from "@/observability/tracing";
+import { openappaEnabled, openappaYellEnabled } from "@/openappa/service";
 import { skillsSurfaceEnabled } from "@/services/agent-skill-resolution";
 import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
 import { isAppConnectorAudienceRef } from "@/services/apps/app-connector-resource";
@@ -261,13 +264,31 @@ const rawArchestraTokenCache =
     defaultTtl: TOKEN_AUTH_CACHE_TTL_MS,
   });
 
+/** Both APPA tools are served by this endpoint whenever APPA is enabled. */
+const APPA_IMPLICIT_TOOL_SHORT_NAMES: ReadonlySet<string> = new Set([
+  TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
+  TOOL_GET_REMEDY_PLANS_SHORT_NAME,
+]);
+
+/**
+ * The tools the gateway advertises to every OpenAPPA session without an
+ * assignment: the control and notice tools always, and `yell` while agent
+ * reporting is on.
+ */
+function isImplicitOpenAppaTool(shortName: string | null | undefined): boolean {
+  return (
+    APPA_IMPLICIT_TOOL_SHORT_NAMES.has(shortName ?? "") ||
+    (openappaYellEnabled() && shortName === "yell")
+  );
+}
+
 /**
  * Creates an MCP server for the given agent.
  */
-import { openappaEnabled, openappaYellEnabled } from "@/openappa/service";
-
 export async function createAgentServer(params: {
   openappaSession?: import("@/openappa/service").OpenAppaSession;
+  /** External JSON-RPC execution identity, scoped by native remedy receipts. */
+  currentToolCallId?: string;
   agentId: string;
   tokenAuth?: TokenAuthContext;
   runId?: string;
@@ -422,13 +443,12 @@ export async function createAgentServer(params: {
       config.agentRuntime.enabled || hasTaskStarter
         ? getImplicitTaskControlTools()
         : [];
+    // Both notice and remedy tools are required when OpenAPPA is active.
     const implicitOpenAppaTools = (await isGuardrailsV2Active())
-      ? getArchestraMcpTools().filter(
-          (tool) =>
-            archestraMcpBranding.getToolShortName(tool.name) ===
-              "execute_remedy_plan" ||
-            (openappaYellEnabled() &&
-              archestraMcpBranding.getToolShortName(tool.name) === "yell"),
+      ? getArchestraMcpTools().filter((tool) =>
+          isImplicitOpenAppaTool(
+            archestraMcpBranding.getToolShortName(tool.name),
+          ),
         )
       : [];
     const candidateTools = dedupeToolsByName(
@@ -944,6 +964,7 @@ export async function createAgentServer(params: {
             callback: async (span) => {
               const result = await executeArchestraTool(name, args, {
                 openappaSession: params.openappaSession,
+                currentToolCallId: params.currentToolCallId,
                 agent: { id: agent.id, name: agent.name },
                 agentId: agent.id,
                 userId: tokenAuth?.userId,
@@ -2288,10 +2309,9 @@ function filterExposedTools(params: {
     return toolExposureMode === "search_and_run_only"
       ? isArchestraMetaTool(tool.name) ||
           (openappaEnabled() &&
-            archestraMcpBranding.getToolShortName(tool.name) ===
-              "execute_remedy_plan") ||
-          (openappaYellEnabled() &&
-            archestraMcpBranding.getToolShortName(tool.name) === "yell") ||
+            isImplicitOpenAppaTool(
+              archestraMcpBranding.getToolShortName(tool.name),
+            )) ||
           isTaskControlTool(tool.name) ||
           isAlwaysExposedTool(tool.name) ||
           (advertiseUiResourceTools &&

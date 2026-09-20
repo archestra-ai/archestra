@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.4.0-beta.13"
+    "version": "1.4.0-rc.15"
   },
   "components": {
     "schemas": {
@@ -4177,7 +4177,7 @@
           "tools": {
             "type": "array",
             "items": {
-              "oneOf": [
+              "anyOf": [
                 {
                   "type": "object",
                   "properties": {
@@ -4205,7 +4205,8 @@
                   "required": [
                     "name",
                     "input_schema"
-                  ]
+                  ],
+                  "additionalProperties": {}
                 },
                 {
                   "type": "object",
@@ -4229,7 +4230,8 @@
                   "required": [
                     "name",
                     "type"
-                  ]
+                  ],
+                  "additionalProperties": {}
                 },
                 {
                   "type": "object",
@@ -4253,7 +4255,8 @@
                   "required": [
                     "name",
                     "type"
-                  ]
+                  ],
+                  "additionalProperties": {}
                 },
                 {
                   "type": "object",
@@ -4277,7 +4280,8 @@
                   "required": [
                     "name",
                     "type"
-                  ]
+                  ],
+                  "additionalProperties": {}
                 },
                 {
                   "type": "object",
@@ -4305,7 +4309,8 @@
                   "required": [
                     "name",
                     "type"
-                  ]
+                  ],
+                  "additionalProperties": {}
                 },
                 {
                   "type": "object",
@@ -4350,7 +4355,20 @@
                   "required": [
                     "name",
                     "type"
-                  ]
+                  ],
+                  "additionalProperties": {}
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type"
+                  ],
+                  "additionalProperties": {}
                 }
               ]
             }
@@ -24784,7 +24802,7 @@
           "tools": {
             "type": "array",
             "items": {
-              "oneOf": [
+              "anyOf": [
                 {
                   "type": "object",
                   "properties": {
@@ -24813,7 +24831,7 @@
                     "name",
                     "input_schema"
                   ],
-                  "additionalProperties": false
+                  "additionalProperties": {}
                 },
                 {
                   "type": "object",
@@ -24838,7 +24856,7 @@
                     "name",
                     "type"
                   ],
-                  "additionalProperties": false
+                  "additionalProperties": {}
                 },
                 {
                   "type": "object",
@@ -24863,7 +24881,7 @@
                     "name",
                     "type"
                   ],
-                  "additionalProperties": false
+                  "additionalProperties": {}
                 },
                 {
                   "type": "object",
@@ -24888,7 +24906,7 @@
                     "name",
                     "type"
                   ],
-                  "additionalProperties": false
+                  "additionalProperties": {}
                 },
                 {
                   "type": "object",
@@ -24917,7 +24935,7 @@
                     "name",
                     "type"
                   ],
-                  "additionalProperties": false
+                  "additionalProperties": {}
                 },
                 {
                   "type": "object",
@@ -24963,7 +24981,19 @@
                     "name",
                     "type"
                   ],
-                  "additionalProperties": false
+                  "additionalProperties": {}
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type"
+                  ],
+                  "additionalProperties": {}
                 }
               ]
             }
@@ -47700,6 +47730,9 @@
                                           "additionalProperties": false
                                         }
                                       },
+                                      "allowAgentSuppliedCredentialValues": {
+                                        "type": "boolean"
+                                      },
                                       "claudeCode": {
                                         "type": "object",
                                         "properties": {
@@ -49354,6 +49387,9 @@
                                   "additionalProperties": false
                                 }
                               },
+                              "allowAgentSuppliedCredentialValues": {
+                                "type": "boolean"
+                              },
                               "claudeCode": {
                                 "type": "object",
                                 "properties": {
@@ -50430,6 +50466,9 @@
                           ]
                         }
                       },
+                      "allowAgentSuppliedCredentialValues": {
+                        "type": "boolean"
+                      },
                       "claudeCode": {
                         "type": "object",
                         "properties": {
@@ -51143,6 +51182,9 @@
                             ],
                             "additionalProperties": false
                           }
+                        },
+                        "allowAgentSuppliedCredentialValues": {
+                          "type": "boolean"
                         },
                         "claudeCode": {
                           "type": "object",
@@ -52853,6 +52895,9 @@
                               "additionalProperties": false
                             }
                           },
+                          "allowAgentSuppliedCredentialValues": {
+                            "type": "boolean"
+                          },
                           "claudeCode": {
                             "type": "object",
                             "properties": {
@@ -54192,6 +54237,9 @@
                             ],
                             "additionalProperties": false
                           }
+                        },
+                        "allowAgentSuppliedCredentialValues": {
+                          "type": "boolean"
                         },
                         "claudeCode": {
                           "type": "object",
@@ -55602,6 +55650,9 @@
                                 "additionalProperties": false
                               }
                             },
+                            "allowAgentSuppliedCredentialValues": {
+                              "type": "boolean"
+                            },
                             "claudeCode": {
                               "type": "object",
                               "properties": {
@@ -56694,6 +56745,9 @@
                             "additionalProperties": false
                           }
                         },
+                        "allowAgentSuppliedCredentialValues": {
+                          "type": "boolean"
+                        },
                         "claudeCode": {
                           "type": "object",
                           "properties": {
@@ -57716,6 +57770,9 @@
                           ]
                         }
                       },
+                      "allowAgentSuppliedCredentialValues": {
+                        "type": "boolean"
+                      },
                       "claudeCode": {
                         "type": "object",
                         "properties": {
@@ -58246,6 +58303,9 @@
                             ],
                             "additionalProperties": false
                           }
+                        },
+                        "allowAgentSuppliedCredentialValues": {
+                          "type": "boolean"
                         },
                         "claudeCode": {
                           "type": "object",
@@ -60631,6 +60691,9 @@
                             "additionalProperties": false
                           }
                         },
+                        "allowAgentSuppliedCredentialValues": {
+                          "type": "boolean"
+                        },
                         "claudeCode": {
                           "type": "object",
                           "properties": {
@@ -61715,6 +61778,9 @@
                             ],
                             "additionalProperties": false
                           }
+                        },
+                        "allowAgentSuppliedCredentialValues": {
+                          "type": "boolean"
                         },
                         "claudeCode": {
                           "type": "object",
@@ -69630,6 +69696,9 @@
                             ],
                             "additionalProperties": false
                           }
+                        },
+                        "allowAgentSuppliedCredentialValues": {
+                          "type": "boolean"
                         },
                         "claudeCode": {
                           "type": "object",
@@ -79792,6 +79861,684 @@
                   },
                   "required": [
                     "success"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "agent:read"
+          ]
+        }
+      }
+    },
+    "/api/agent-runs/{taskId}/workspace/transfers": {
+      "post": {
+        "operationId": "startAgentWorkspaceTransfer",
+        "tags": [
+          "Agents"
+        ],
+        "description": "Authorize a resumable transfer of one file to or from the caller's retained runtime workspace\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: View and list agents",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "direction": {
+                        "type": "string",
+                        "enum": [
+                          "download"
+                        ]
+                      },
+                      "path": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1024
+                      }
+                    },
+                    "required": [
+                      "direction",
+                      "path"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "direction": {
+                        "type": "string",
+                        "enum": [
+                          "upload"
+                        ]
+                      },
+                      "path": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1024
+                      },
+                      "size": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "sha256": {
+                        "type": "string",
+                        "pattern": "^[0-9a-f]{64}$"
+                      }
+                    },
+                    "required": [
+                      "direction",
+                      "path",
+                      "size",
+                      "sha256"
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "path",
+            "name": "taskId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "transferId": {
+                      "type": "string"
+                    },
+                    "token": {
+                      "type": "string"
+                    },
+                    "contentUrl": {
+                      "type": "string"
+                    },
+                    "path": {
+                      "type": "string"
+                    },
+                    "size": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "sha256": {
+                      "type": "string"
+                    },
+                    "expiresInSeconds": {
+                      "type": "integer",
+                      "exclusiveMinimum": true,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "transferId",
+                    "token",
+                    "contentUrl",
+                    "path",
+                    "size",
+                    "sha256",
+                    "expiresInSeconds"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "agent:read"
+          ]
+        }
+      }
+    },
+    "/api/agent-workspace-transfers/{transferId}/content": {
+      "get": {
+        "operationId": "downloadAgentWorkspaceTransfer",
+        "tags": [
+          "Agents"
+        ],
+        "description": "Stream the pinned contents of an authorized transfer; supports Range for resume\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: View and list agents",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "transferId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "agent:read"
+          ]
+        }
+      },
+      "put": {
+        "operationId": "uploadAgentWorkspaceTransfer",
+        "tags": [
+          "Agents"
+        ],
+        "description": "Stream an authorized upload into the workspace and replace the destination atomically\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: View and list agents",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "transferId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "type": "string"
+                    },
+                    "size": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "sha256": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "path",
+                    "size",
+                    "sha256"
                   ],
                   "additionalProperties": false
                 }
@@ -101976,6 +102723,11 @@
                 "teamToken.rotated",
                 "tool.deleted",
                 "guardrailsPolicy.updated",
+                "openappaBatteryInstall.created",
+                "openappaBatteryInstall.updated",
+                "openappaBatteryInstall.deleted",
+                "openappaBatteryPackage.updated",
+                "openappaBatteryPackage.deleted",
                 "toolInvocationPolicy.created",
                 "toolInvocationPolicy.updated",
                 "toolInvocationPolicy.deleted",
@@ -102309,6 +103061,11 @@
                                   "teamToken.rotated",
                                   "tool.deleted",
                                   "guardrailsPolicy.updated",
+                                  "openappaBatteryInstall.created",
+                                  "openappaBatteryInstall.updated",
+                                  "openappaBatteryInstall.deleted",
+                                  "openappaBatteryPackage.updated",
+                                  "openappaBatteryPackage.deleted",
                                   "toolInvocationPolicy.created",
                                   "toolInvocationPolicy.updated",
                                   "toolInvocationPolicy.deleted",
@@ -102953,6 +103710,11 @@
                             "teamToken.rotated",
                             "tool.deleted",
                             "guardrailsPolicy.updated",
+                            "openappaBatteryInstall.created",
+                            "openappaBatteryInstall.updated",
+                            "openappaBatteryInstall.deleted",
+                            "openappaBatteryPackage.updated",
+                            "openappaBatteryPackage.deleted",
                             "toolInvocationPolicy.created",
                             "toolInvocationPolicy.updated",
                             "toolInvocationPolicy.deleted",
@@ -119974,7 +120736,7 @@
                   "tools": {
                     "type": "array",
                     "items": {
-                      "oneOf": [
+                      "anyOf": [
                         {
                           "type": "object",
                           "properties": {
@@ -120002,7 +120764,8 @@
                           "required": [
                             "name",
                             "input_schema"
-                          ]
+                          ],
+                          "additionalProperties": {}
                         },
                         {
                           "type": "object",
@@ -120026,7 +120789,8 @@
                           "required": [
                             "name",
                             "type"
-                          ]
+                          ],
+                          "additionalProperties": {}
                         },
                         {
                           "type": "object",
@@ -120050,7 +120814,8 @@
                           "required": [
                             "name",
                             "type"
-                          ]
+                          ],
+                          "additionalProperties": {}
                         },
                         {
                           "type": "object",
@@ -120074,7 +120839,8 @@
                           "required": [
                             "name",
                             "type"
-                          ]
+                          ],
+                          "additionalProperties": {}
                         },
                         {
                           "type": "object",
@@ -120102,7 +120868,8 @@
                           "required": [
                             "name",
                             "type"
-                          ]
+                          ],
+                          "additionalProperties": {}
                         },
                         {
                           "type": "object",
@@ -120147,7 +120914,20 @@
                           "required": [
                             "name",
                             "type"
-                          ]
+                          ],
+                          "additionalProperties": {}
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "type"
+                          ],
+                          "additionalProperties": {}
                         }
                       ]
                     }
@@ -121555,7 +122335,7 @@
                   "tools": {
                     "type": "array",
                     "items": {
-                      "oneOf": [
+                      "anyOf": [
                         {
                           "type": "object",
                           "properties": {
@@ -121583,7 +122363,8 @@
                           "required": [
                             "name",
                             "input_schema"
-                          ]
+                          ],
+                          "additionalProperties": {}
                         },
                         {
                           "type": "object",
@@ -121607,7 +122388,8 @@
                           "required": [
                             "name",
                             "type"
-                          ]
+                          ],
+                          "additionalProperties": {}
                         },
                         {
                           "type": "object",
@@ -121631,7 +122413,8 @@
                           "required": [
                             "name",
                             "type"
-                          ]
+                          ],
+                          "additionalProperties": {}
                         },
                         {
                           "type": "object",
@@ -121655,7 +122438,8 @@
                           "required": [
                             "name",
                             "type"
-                          ]
+                          ],
+                          "additionalProperties": {}
                         },
                         {
                           "type": "object",
@@ -121683,7 +122467,8 @@
                           "required": [
                             "name",
                             "type"
-                          ]
+                          ],
+                          "additionalProperties": {}
                         },
                         {
                           "type": "object",
@@ -121728,7 +122513,20 @@
                           "required": [
                             "name",
                             "type"
-                          ]
+                          ],
+                          "additionalProperties": {}
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "type"
+                          ],
+                          "additionalProperties": {}
                         }
                       ]
                     }
@@ -123146,7 +123944,7 @@
                   "tools": {
                     "type": "array",
                     "items": {
-                      "oneOf": [
+                      "anyOf": [
                         {
                           "type": "object",
                           "properties": {
@@ -123174,7 +123972,8 @@
                           "required": [
                             "name",
                             "input_schema"
-                          ]
+                          ],
+                          "additionalProperties": {}
                         },
                         {
                           "type": "object",
@@ -123198,7 +123997,8 @@
                           "required": [
                             "name",
                             "type"
-                          ]
+                          ],
+                          "additionalProperties": {}
                         },
                         {
                           "type": "object",
@@ -123222,7 +124022,8 @@
                           "required": [
                             "name",
                             "type"
-                          ]
+                          ],
+                          "additionalProperties": {}
                         },
                         {
                           "type": "object",
@@ -123246,7 +124047,8 @@
                           "required": [
                             "name",
                             "type"
-                          ]
+                          ],
+                          "additionalProperties": {}
                         },
                         {
                           "type": "object",
@@ -123274,7 +124076,8 @@
                           "required": [
                             "name",
                             "type"
-                          ]
+                          ],
+                          "additionalProperties": {}
                         },
                         {
                           "type": "object",
@@ -123319,7 +124122,20 @@
                           "required": [
                             "name",
                             "type"
-                          ]
+                          ],
+                          "additionalProperties": {}
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "type"
+                          ],
+                          "additionalProperties": {}
                         }
                       ]
                     }
@@ -124492,7 +125308,7 @@
                   "tools": {
                     "type": "array",
                     "items": {
-                      "oneOf": [
+                      "anyOf": [
                         {
                           "type": "object",
                           "properties": {
@@ -124520,7 +125336,8 @@
                           "required": [
                             "name",
                             "input_schema"
-                          ]
+                          ],
+                          "additionalProperties": {}
                         },
                         {
                           "type": "object",
@@ -124544,7 +125361,8 @@
                           "required": [
                             "name",
                             "type"
-                          ]
+                          ],
+                          "additionalProperties": {}
                         },
                         {
                           "type": "object",
@@ -124568,7 +125386,8 @@
                           "required": [
                             "name",
                             "type"
-                          ]
+                          ],
+                          "additionalProperties": {}
                         },
                         {
                           "type": "object",
@@ -124592,7 +125411,8 @@
                           "required": [
                             "name",
                             "type"
-                          ]
+                          ],
+                          "additionalProperties": {}
                         },
                         {
                           "type": "object",
@@ -124620,7 +125440,8 @@
                           "required": [
                             "name",
                             "type"
-                          ]
+                          ],
+                          "additionalProperties": {}
                         },
                         {
                           "type": "object",
@@ -124665,7 +125486,20 @@
                           "required": [
                             "name",
                             "type"
-                          ]
+                          ],
+                          "additionalProperties": {}
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "type"
+                          ],
+                          "additionalProperties": {}
                         }
                       ]
                     }
@@ -127290,6 +128124,44 @@
                           ],
                           "additionalProperties": false
                         }
+                      },
+                      "scheduledRun": {
+                        "nullable": true,
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "triggerId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "runKind": {
+                            "type": "string",
+                            "enum": [
+                              "due",
+                              "manual"
+                            ]
+                          },
+                          "scheduleName": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "triggerId",
+                          "createdAt",
+                          "runKind",
+                          "scheduleName"
+                        ],
+                        "additionalProperties": false
                       }
                     },
                     "required": [
@@ -181857,7 +182729,7 @@
                                       "tools": {
                                         "type": "array",
                                         "items": {
-                                          "oneOf": [
+                                          "anyOf": [
                                             {
                                               "type": "object",
                                               "properties": {
@@ -181886,7 +182758,7 @@
                                                 "name",
                                                 "input_schema"
                                               ],
-                                              "additionalProperties": false
+                                              "additionalProperties": {}
                                             },
                                             {
                                               "type": "object",
@@ -181911,7 +182783,7 @@
                                                 "name",
                                                 "type"
                                               ],
-                                              "additionalProperties": false
+                                              "additionalProperties": {}
                                             },
                                             {
                                               "type": "object",
@@ -181936,7 +182808,7 @@
                                                 "name",
                                                 "type"
                                               ],
-                                              "additionalProperties": false
+                                              "additionalProperties": {}
                                             },
                                             {
                                               "type": "object",
@@ -181961,7 +182833,7 @@
                                                 "name",
                                                 "type"
                                               ],
-                                              "additionalProperties": false
+                                              "additionalProperties": {}
                                             },
                                             {
                                               "type": "object",
@@ -181990,7 +182862,7 @@
                                                 "name",
                                                 "type"
                                               ],
-                                              "additionalProperties": false
+                                              "additionalProperties": {}
                                             },
                                             {
                                               "type": "object",
@@ -182036,7 +182908,19 @@
                                                 "name",
                                                 "type"
                                               ],
-                                              "additionalProperties": false
+                                              "additionalProperties": {}
+                                            },
+                                            {
+                                              "type": "object",
+                                              "properties": {
+                                                "type": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "type"
+                                              ],
+                                              "additionalProperties": {}
                                             }
                                           ]
                                         }
@@ -183216,7 +184100,7 @@
                                       "tools": {
                                         "type": "array",
                                         "items": {
-                                          "oneOf": [
+                                          "anyOf": [
                                             {
                                               "type": "object",
                                               "properties": {
@@ -183245,7 +184129,7 @@
                                                 "name",
                                                 "input_schema"
                                               ],
-                                              "additionalProperties": false
+                                              "additionalProperties": {}
                                             },
                                             {
                                               "type": "object",
@@ -183270,7 +184154,7 @@
                                                 "name",
                                                 "type"
                                               ],
-                                              "additionalProperties": false
+                                              "additionalProperties": {}
                                             },
                                             {
                                               "type": "object",
@@ -183295,7 +184179,7 @@
                                                 "name",
                                                 "type"
                                               ],
-                                              "additionalProperties": false
+                                              "additionalProperties": {}
                                             },
                                             {
                                               "type": "object",
@@ -183320,7 +184204,7 @@
                                                 "name",
                                                 "type"
                                               ],
-                                              "additionalProperties": false
+                                              "additionalProperties": {}
                                             },
                                             {
                                               "type": "object",
@@ -183349,7 +184233,7 @@
                                                 "name",
                                                 "type"
                                               ],
-                                              "additionalProperties": false
+                                              "additionalProperties": {}
                                             },
                                             {
                                               "type": "object",
@@ -183395,7 +184279,19 @@
                                                 "name",
                                                 "type"
                                               ],
-                                              "additionalProperties": false
+                                              "additionalProperties": {}
+                                            },
+                                            {
+                                              "type": "object",
+                                              "properties": {
+                                                "type": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "type"
+                                              ],
+                                              "additionalProperties": {}
                                             }
                                           ]
                                         }
@@ -217053,7 +217949,7 @@
                                 "tools": {
                                   "type": "array",
                                   "items": {
-                                    "oneOf": [
+                                    "anyOf": [
                                       {
                                         "type": "object",
                                         "properties": {
@@ -217082,7 +217978,7 @@
                                           "name",
                                           "input_schema"
                                         ],
-                                        "additionalProperties": false
+                                        "additionalProperties": {}
                                       },
                                       {
                                         "type": "object",
@@ -217107,7 +218003,7 @@
                                           "name",
                                           "type"
                                         ],
-                                        "additionalProperties": false
+                                        "additionalProperties": {}
                                       },
                                       {
                                         "type": "object",
@@ -217132,7 +218028,7 @@
                                           "name",
                                           "type"
                                         ],
-                                        "additionalProperties": false
+                                        "additionalProperties": {}
                                       },
                                       {
                                         "type": "object",
@@ -217157,7 +218053,7 @@
                                           "name",
                                           "type"
                                         ],
-                                        "additionalProperties": false
+                                        "additionalProperties": {}
                                       },
                                       {
                                         "type": "object",
@@ -217186,7 +218082,7 @@
                                           "name",
                                           "type"
                                         ],
-                                        "additionalProperties": false
+                                        "additionalProperties": {}
                                       },
                                       {
                                         "type": "object",
@@ -217232,7 +218128,19 @@
                                           "name",
                                           "type"
                                         ],
-                                        "additionalProperties": false
+                                        "additionalProperties": {}
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "type": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "type"
+                                        ],
+                                        "additionalProperties": {}
                                       }
                                     ]
                                   }
@@ -218412,7 +219320,7 @@
                                 "tools": {
                                   "type": "array",
                                   "items": {
-                                    "oneOf": [
+                                    "anyOf": [
                                       {
                                         "type": "object",
                                         "properties": {
@@ -218441,7 +219349,7 @@
                                           "name",
                                           "input_schema"
                                         ],
-                                        "additionalProperties": false
+                                        "additionalProperties": {}
                                       },
                                       {
                                         "type": "object",
@@ -218466,7 +219374,7 @@
                                           "name",
                                           "type"
                                         ],
-                                        "additionalProperties": false
+                                        "additionalProperties": {}
                                       },
                                       {
                                         "type": "object",
@@ -218491,7 +219399,7 @@
                                           "name",
                                           "type"
                                         ],
-                                        "additionalProperties": false
+                                        "additionalProperties": {}
                                       },
                                       {
                                         "type": "object",
@@ -218516,7 +219424,7 @@
                                           "name",
                                           "type"
                                         ],
-                                        "additionalProperties": false
+                                        "additionalProperties": {}
                                       },
                                       {
                                         "type": "object",
@@ -218545,7 +219453,7 @@
                                           "name",
                                           "type"
                                         ],
-                                        "additionalProperties": false
+                                        "additionalProperties": {}
                                       },
                                       {
                                         "type": "object",
@@ -218591,7 +219499,19 @@
                                           "name",
                                           "type"
                                         ],
-                                        "additionalProperties": false
+                                        "additionalProperties": {}
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "type": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "type"
+                                        ],
+                                        "additionalProperties": {}
                                       }
                                     ]
                                   }
@@ -307880,9 +308800,19 @@
                                   "name": {
                                     "type": "string"
                                   },
+                                  "namespace": {
+                                    "type": "string"
+                                  },
                                   "arguments": {
                                     "type": "object",
                                     "additionalProperties": {}
+                                  },
+                                  "kind": {
+                                    "type": "string",
+                                    "enum": [
+                                      "function",
+                                      "custom"
+                                    ]
                                   }
                                 },
                                 "required": [
@@ -308321,9 +309251,19 @@
                             "name": {
                               "type": "string"
                             },
+                            "namespace": {
+                              "type": "string"
+                            },
                             "arguments": {
                               "type": "object",
                               "additionalProperties": {}
+                            },
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "function",
+                                "custom"
+                              ]
                             }
                           },
                           "required": [
@@ -326830,6 +327770,2712 @@
         }
       }
     },
+    "/api/openappa/batteries": {
+      "get": {
+        "operationId": "getOpenappaBatteries",
+        "tags": [
+          "OpenAPPA"
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "description": {
+                        "type": "string"
+                      },
+                      "source": {
+                        "type": "string",
+                        "enum": [
+                          "bundled",
+                          "organization"
+                        ]
+                      },
+                      "namespaces": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "helpers": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "credentials": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "setup": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "installs": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            "organizationId": {
+                              "type": "string"
+                            },
+                            "batteryName": {
+                              "type": "string"
+                            },
+                            "catalogId": {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            "enabled": {
+                              "type": "boolean"
+                            },
+                            "credentialBindings": {
+                              "type": "object",
+                              "additionalProperties": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 200
+                              }
+                            },
+                            "createdAt": {
+                              "type": "string",
+                              "format": "date-time"
+                            },
+                            "updatedAt": {
+                              "type": "string",
+                              "format": "date-time"
+                            },
+                            "status": {
+                              "type": "string",
+                              "enum": [
+                                "active",
+                                "disabled",
+                                "missing_credentials",
+                                "naming_conflict",
+                                "superseded",
+                                "unavailable"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "organizationId",
+                            "batteryName",
+                            "catalogId",
+                            "enabled",
+                            "credentialBindings",
+                            "createdAt",
+                            "updatedAt",
+                            "status"
+                          ],
+                          "additionalProperties": false
+                        }
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "description",
+                      "source",
+                      "namespaces",
+                      "helpers",
+                      "credentials",
+                      "setup",
+                      "installs"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "toolPolicy:read"
+          ]
+        },
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`toolPolicy:read`: View tools, tool invocation policies, and trusted data policies"
+      }
+    },
+    "/api/openappa/effective-policy": {
+      "get": {
+        "operationId": "getOpenappaEffectivePolicy",
+        "tags": [
+          "OpenAPPA"
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "organizationId": {
+                      "type": "string"
+                    },
+                    "content": {
+                      "type": "string"
+                    },
+                    "contentHash": {
+                      "type": "string"
+                    },
+                    "rootRevision": {
+                      "type": "integer",
+                      "minimum": -2147483648,
+                      "maximum": 2147483647
+                    },
+                    "installFingerprint": {
+                      "type": "string"
+                    },
+                    "compiledAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "lastError": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "lastErrorAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  },
+                  "required": [
+                    "organizationId",
+                    "content",
+                    "contentHash",
+                    "rootRevision",
+                    "installFingerprint",
+                    "compiledAt",
+                    "lastError",
+                    "lastErrorAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "toolPolicy:read"
+          ]
+        },
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`toolPolicy:read`: View tools, tool invocation policies, and trusted data policies"
+      }
+    },
+    "/api/openappa/battery-matches": {
+      "get": {
+        "operationId": "getOpenappaBatteryMatches",
+        "tags": [
+          "OpenAPPA"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "query",
+            "name": "catalogId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "battery": {
+                        "type": "string"
+                      },
+                      "evidence": {
+                        "type": "string",
+                        "enum": [
+                          "host",
+                          "image",
+                          "name"
+                        ]
+                      },
+                      "install": {
+                        "nullable": true,
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "organizationId": {
+                            "type": "string"
+                          },
+                          "batteryName": {
+                            "type": "string"
+                          },
+                          "catalogId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "enabled": {
+                            "type": "boolean"
+                          },
+                          "credentialBindings": {
+                            "type": "object",
+                            "additionalProperties": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200
+                            }
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "updatedAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "active",
+                              "disabled",
+                              "missing_credentials",
+                              "naming_conflict",
+                              "superseded",
+                              "unavailable"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "organizationId",
+                          "batteryName",
+                          "catalogId",
+                          "enabled",
+                          "credentialBindings",
+                          "createdAt",
+                          "updatedAt",
+                          "status"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "battery",
+                      "evidence",
+                      "install"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "toolPolicy:read"
+          ]
+        },
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`toolPolicy:read`: View tools, tool invocation policies, and trusted data policies"
+      }
+    },
+    "/api/openappa/battery-installs": {
+      "post": {
+        "operationId": "createOpenappaBatteryInstall",
+        "tags": [
+          "OpenAPPA"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "batteryName": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  },
+                  "catalogId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "enabled": {
+                    "default": true,
+                    "type": "boolean"
+                  },
+                  "credentialBindings": {
+                    "default": {},
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200
+                    }
+                  }
+                },
+                "required": [
+                  "batteryName",
+                  "catalogId"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "organizationId": {
+                      "type": "string"
+                    },
+                    "batteryName": {
+                      "type": "string"
+                    },
+                    "catalogId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "credentialBindings": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200
+                      }
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "updatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "active",
+                        "disabled",
+                        "missing_credentials",
+                        "naming_conflict",
+                        "superseded",
+                        "unavailable"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "organizationId",
+                    "batteryName",
+                    "catalogId",
+                    "enabled",
+                    "credentialBindings",
+                    "createdAt",
+                    "updatedAt",
+                    "status"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "toolPolicy:update"
+          ]
+        },
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`toolPolicy:update`: Modify tools, tool configuration, and security policies"
+      }
+    },
+    "/api/openappa/battery-installs/{id}": {
+      "patch": {
+        "operationId": "updateOpenappaBatteryInstall",
+        "tags": [
+          "OpenAPPA"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "enabled": {
+                    "type": "boolean"
+                  },
+                  "credentialBindings": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200
+                    }
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "organizationId": {
+                      "type": "string"
+                    },
+                    "batteryName": {
+                      "type": "string"
+                    },
+                    "catalogId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "credentialBindings": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200
+                      }
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "updatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "active",
+                        "disabled",
+                        "missing_credentials",
+                        "naming_conflict",
+                        "superseded",
+                        "unavailable"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "organizationId",
+                    "batteryName",
+                    "catalogId",
+                    "enabled",
+                    "credentialBindings",
+                    "createdAt",
+                    "updatedAt",
+                    "status"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "toolPolicy:update"
+          ]
+        },
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`toolPolicy:update`: Modify tools, tool configuration, and security policies"
+      },
+      "delete": {
+        "operationId": "deleteOpenappaBatteryInstall",
+        "tags": [
+          "OpenAPPA"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    }
+                  },
+                  "required": [
+                    "success"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "toolPolicy:update"
+          ]
+        },
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`toolPolicy:update`: Modify tools, tool configuration, and security policies"
+      }
+    },
+    "/api/openappa/battery-packages/{name}": {
+      "put": {
+        "operationId": "uploadOpenappaBatteryPackage",
+        "tags": [
+          "OpenAPPA"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "files": {
+                    "minItems": 1,
+                    "maxItems": 64,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "path": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 512
+                        },
+                        "text": {
+                          "type": "string",
+                          "maxLength": 1048576
+                        }
+                      },
+                      "required": [
+                        "path",
+                        "text"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "files"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "pattern": "^[a-z0-9][a-z0-9-]*$"
+            },
+            "in": "path",
+            "name": "name",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "description": {
+                      "type": "string"
+                    },
+                    "source": {
+                      "type": "string",
+                      "enum": [
+                        "bundled",
+                        "organization"
+                      ]
+                    },
+                    "namespaces": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "helpers": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "credentials": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "setup": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "installs": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "organizationId": {
+                            "type": "string"
+                          },
+                          "batteryName": {
+                            "type": "string"
+                          },
+                          "catalogId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "enabled": {
+                            "type": "boolean"
+                          },
+                          "credentialBindings": {
+                            "type": "object",
+                            "additionalProperties": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200
+                            }
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "updatedAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "active",
+                              "disabled",
+                              "missing_credentials",
+                              "naming_conflict",
+                              "superseded",
+                              "unavailable"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "organizationId",
+                          "batteryName",
+                          "catalogId",
+                          "enabled",
+                          "credentialBindings",
+                          "createdAt",
+                          "updatedAt",
+                          "status"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "description",
+                    "source",
+                    "namespaces",
+                    "helpers",
+                    "credentials",
+                    "setup",
+                    "installs"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "toolPolicy:update"
+          ]
+        },
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`toolPolicy:update`: Modify tools, tool configuration, and security policies"
+      },
+      "delete": {
+        "operationId": "deleteOpenappaBatteryPackage",
+        "tags": [
+          "OpenAPPA"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "pattern": "^[a-z0-9][a-z0-9-]*$"
+            },
+            "in": "path",
+            "name": "name",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    }
+                  },
+                  "required": [
+                    "success"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "toolPolicy:update"
+          ]
+        },
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`toolPolicy:update`: Modify tools, tool configuration, and security policies"
+      }
+    },
     "/api/openappa/github-sync": {
       "get": {
         "operationId": "getAppaGithubSync",
@@ -328000,6 +331646,295 @@
           ]
         },
         "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organization:update`: No description available"
+      }
+    },
+    "/api/openappa/helpers/{installId}/{externalName}": {
+      "post": {
+        "operationId": "consultOpenappaBatteryHelper",
+        "tags": [
+          "OpenAPPA"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": {}
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "path",
+            "name": "installId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "pattern": "^[A-Za-z0-9._-]+$"
+            },
+            "in": "path",
+            "name": "externalName",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
+        },
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)"
       }
     },
     "/v1/openrouter/chat/completions": {
@@ -330837,6 +334772,13 @@
                     "connectionPluginsEnabled": {
                       "type": "boolean"
                     },
+                    "connectionRuntimeHandoffEnabled": {
+                      "type": "boolean"
+                    },
+                    "connectionRuntimeHandoffInstructions": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "modelProviderOverrides": {
                       "nullable": true,
                       "type": "object",
@@ -331032,6 +334974,8 @@
                     "connectionSkillsEnabled",
                     "connectionLlmProxyEnabled",
                     "connectionPluginsEnabled",
+                    "connectionRuntimeHandoffEnabled",
+                    "connectionRuntimeHandoffInstructions",
                     "modelProviderOverrides",
                     "messagingChannelOverrides",
                     "knowledgeConnectorOverrides",
@@ -331920,6 +335864,13 @@
                     "connectionPluginsEnabled": {
                       "type": "boolean"
                     },
+                    "connectionRuntimeHandoffEnabled": {
+                      "type": "boolean"
+                    },
+                    "connectionRuntimeHandoffInstructions": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "modelProviderOverrides": {
                       "nullable": true,
                       "type": "object",
@@ -332115,6 +336066,8 @@
                     "connectionSkillsEnabled",
                     "connectionLlmProxyEnabled",
                     "connectionPluginsEnabled",
+                    "connectionRuntimeHandoffEnabled",
+                    "connectionRuntimeHandoffInstructions",
                     "modelProviderOverrides",
                     "messagingChannelOverrides",
                     "knowledgeConnectorOverrides",
@@ -333258,6 +337211,13 @@
                     "connectionPluginsEnabled": {
                       "type": "boolean"
                     },
+                    "connectionRuntimeHandoffEnabled": {
+                      "type": "boolean"
+                    },
+                    "connectionRuntimeHandoffInstructions": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "modelProviderOverrides": {
                       "nullable": true,
                       "type": "object",
@@ -333453,6 +337413,8 @@
                     "connectionSkillsEnabled",
                     "connectionLlmProxyEnabled",
                     "connectionPluginsEnabled",
+                    "connectionRuntimeHandoffEnabled",
+                    "connectionRuntimeHandoffInstructions",
                     "modelProviderOverrides",
                     "messagingChannelOverrides",
                     "knowledgeConnectorOverrides",
@@ -334193,6 +338155,13 @@
                     "connectionPluginsEnabled": {
                       "type": "boolean"
                     },
+                    "connectionRuntimeHandoffEnabled": {
+                      "type": "boolean"
+                    },
+                    "connectionRuntimeHandoffInstructions": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "modelProviderOverrides": {
                       "nullable": true,
                       "type": "object",
@@ -334388,6 +338357,8 @@
                     "connectionSkillsEnabled",
                     "connectionLlmProxyEnabled",
                     "connectionPluginsEnabled",
+                    "connectionRuntimeHandoffEnabled",
+                    "connectionRuntimeHandoffInstructions",
                     "modelProviderOverrides",
                     "messagingChannelOverrides",
                     "knowledgeConnectorOverrides",
@@ -335128,6 +339099,13 @@
                     "connectionPluginsEnabled": {
                       "type": "boolean"
                     },
+                    "connectionRuntimeHandoffEnabled": {
+                      "type": "boolean"
+                    },
+                    "connectionRuntimeHandoffInstructions": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "modelProviderOverrides": {
                       "nullable": true,
                       "type": "object",
@@ -335323,6 +339301,8 @@
                     "connectionSkillsEnabled",
                     "connectionLlmProxyEnabled",
                     "connectionPluginsEnabled",
+                    "connectionRuntimeHandoffEnabled",
+                    "connectionRuntimeHandoffInstructions",
                     "modelProviderOverrides",
                     "messagingChannelOverrides",
                     "knowledgeConnectorOverrides",
@@ -336075,6 +340055,13 @@
                     "connectionPluginsEnabled": {
                       "type": "boolean"
                     },
+                    "connectionRuntimeHandoffEnabled": {
+                      "type": "boolean"
+                    },
+                    "connectionRuntimeHandoffInstructions": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "modelProviderOverrides": {
                       "nullable": true,
                       "type": "object",
@@ -336270,6 +340257,8 @@
                     "connectionSkillsEnabled",
                     "connectionLlmProxyEnabled",
                     "connectionPluginsEnabled",
+                    "connectionRuntimeHandoffEnabled",
+                    "connectionRuntimeHandoffInstructions",
                     "modelProviderOverrides",
                     "messagingChannelOverrides",
                     "knowledgeConnectorOverrides",
@@ -336582,6 +340571,15 @@
                   },
                   "connectionPluginsEnabled": {
                     "type": "boolean"
+                  },
+                  "connectionRuntimeHandoffEnabled": {
+                    "type": "boolean"
+                  },
+                  "connectionRuntimeHandoffInstructions": {
+                    "nullable": true,
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 20000
                   },
                   "connectionBaseUrls": {
                     "nullable": true,
@@ -337076,6 +341074,13 @@
                     "connectionPluginsEnabled": {
                       "type": "boolean"
                     },
+                    "connectionRuntimeHandoffEnabled": {
+                      "type": "boolean"
+                    },
+                    "connectionRuntimeHandoffInstructions": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "modelProviderOverrides": {
                       "nullable": true,
                       "type": "object",
@@ -337271,6 +341276,8 @@
                     "connectionSkillsEnabled",
                     "connectionLlmProxyEnabled",
                     "connectionPluginsEnabled",
+                    "connectionRuntimeHandoffEnabled",
+                    "connectionRuntimeHandoffInstructions",
                     "modelProviderOverrides",
                     "messagingChannelOverrides",
                     "knowledgeConnectorOverrides",
@@ -338049,6 +342056,13 @@
                     "connectionPluginsEnabled": {
                       "type": "boolean"
                     },
+                    "connectionRuntimeHandoffEnabled": {
+                      "type": "boolean"
+                    },
+                    "connectionRuntimeHandoffInstructions": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "modelProviderOverrides": {
                       "nullable": true,
                       "type": "object",
@@ -338244,6 +342258,8 @@
                     "connectionSkillsEnabled",
                     "connectionLlmProxyEnabled",
                     "connectionPluginsEnabled",
+                    "connectionRuntimeHandoffEnabled",
+                    "connectionRuntimeHandoffInstructions",
                     "modelProviderOverrides",
                     "messagingChannelOverrides",
                     "knowledgeConnectorOverrides",
@@ -339054,6 +343070,13 @@
                     "connectionPluginsEnabled": {
                       "type": "boolean"
                     },
+                    "connectionRuntimeHandoffEnabled": {
+                      "type": "boolean"
+                    },
+                    "connectionRuntimeHandoffInstructions": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "modelProviderOverrides": {
                       "nullable": true,
                       "type": "object",
@@ -339249,6 +343272,8 @@
                     "connectionSkillsEnabled",
                     "connectionLlmProxyEnabled",
                     "connectionPluginsEnabled",
+                    "connectionRuntimeHandoffEnabled",
+                    "connectionRuntimeHandoffInstructions",
                     "modelProviderOverrides",
                     "messagingChannelOverrides",
                     "knowledgeConnectorOverrides",
@@ -340003,6 +344028,13 @@
                     "connectionPluginsEnabled": {
                       "type": "boolean"
                     },
+                    "connectionRuntimeHandoffEnabled": {
+                      "type": "boolean"
+                    },
+                    "connectionRuntimeHandoffInstructions": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "modelProviderOverrides": {
                       "nullable": true,
                       "type": "object",
@@ -340198,6 +344230,8 @@
                     "connectionSkillsEnabled",
                     "connectionLlmProxyEnabled",
                     "connectionPluginsEnabled",
+                    "connectionRuntimeHandoffEnabled",
+                    "connectionRuntimeHandoffInstructions",
                     "modelProviderOverrides",
                     "messagingChannelOverrides",
                     "knowledgeConnectorOverrides",
@@ -340983,6 +345017,13 @@
                     "connectionPluginsEnabled": {
                       "type": "boolean"
                     },
+                    "connectionRuntimeHandoffEnabled": {
+                      "type": "boolean"
+                    },
+                    "connectionRuntimeHandoffInstructions": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "modelProviderOverrides": {
                       "nullable": true,
                       "type": "object",
@@ -341178,6 +345219,8 @@
                     "connectionSkillsEnabled",
                     "connectionLlmProxyEnabled",
                     "connectionPluginsEnabled",
+                    "connectionRuntimeHandoffEnabled",
+                    "connectionRuntimeHandoffInstructions",
                     "modelProviderOverrides",
                     "messagingChannelOverrides",
                     "knowledgeConnectorOverrides",
@@ -341900,6 +345943,13 @@
                     "connectionPluginsEnabled": {
                       "type": "boolean"
                     },
+                    "connectionRuntimeHandoffEnabled": {
+                      "type": "boolean"
+                    },
+                    "connectionRuntimeHandoffInstructions": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "modelProviderOverrides": {
                       "nullable": true,
                       "type": "object",
@@ -342095,6 +346145,8 @@
                     "connectionSkillsEnabled",
                     "connectionLlmProxyEnabled",
                     "connectionPluginsEnabled",
+                    "connectionRuntimeHandoffEnabled",
+                    "connectionRuntimeHandoffInstructions",
                     "modelProviderOverrides",
                     "messagingChannelOverrides",
                     "knowledgeConnectorOverrides",
@@ -344005,6 +348057,13 @@
                     "connectionPluginsEnabled": {
                       "type": "boolean"
                     },
+                    "connectionRuntimeHandoffEnabled": {
+                      "type": "boolean"
+                    },
+                    "connectionRuntimeHandoffInstructions": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "modelProviderOverrides": {
                       "nullable": true,
                       "type": "object",
@@ -344200,6 +348259,8 @@
                     "connectionSkillsEnabled",
                     "connectionLlmProxyEnabled",
                     "connectionPluginsEnabled",
+                    "connectionRuntimeHandoffEnabled",
+                    "connectionRuntimeHandoffInstructions",
                     "modelProviderOverrides",
                     "messagingChannelOverrides",
                     "knowledgeConnectorOverrides",
@@ -371237,7 +375298,8 @@
                       "enum": [
                         "running",
                         "success",
-                        "failed"
+                        "failed",
+                        "cancelled"
                       ]
                     },
                     "initiatedByUserId": {
@@ -371572,7 +375634,8 @@
               "enum": [
                 "running",
                 "success",
-                "failed"
+                "failed",
+                "cancelled"
               ]
             },
             "in": "query",
@@ -371628,7 +375691,8 @@
                             "enum": [
                               "running",
                               "success",
-                              "failed"
+                              "failed",
+                              "cancelled"
                             ]
                           },
                           "initiatedByUserId": {
@@ -372037,7 +376101,8 @@
                       "enum": [
                         "running",
                         "success",
-                        "failed"
+                        "failed",
+                        "cancelled"
                       ]
                     },
                     "initiatedByUserId": {
@@ -381371,6 +385436,10 @@
                             "nullable": true,
                             "type": "string"
                           },
+                          "sourceOrigin": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "sourceCommit": {
                             "nullable": true,
                             "type": "string"
@@ -381599,6 +385668,7 @@
                           "metadata",
                           "sourceType",
                           "sourceRef",
+                          "sourceOrigin",
                           "sourceCommit",
                           "githubSyncInterval",
                           "githubSyncRef",
@@ -382117,6 +386187,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "sourceOrigin": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "sourceCommit": {
                       "nullable": true,
                       "type": "string"
@@ -382393,6 +386467,7 @@
                     "metadata",
                     "sourceType",
                     "sourceRef",
+                    "sourceOrigin",
                     "sourceCommit",
                     "githubSyncInterval",
                     "githubSyncRef",
@@ -382757,6 +386832,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "sourceOrigin": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "sourceCommit": {
                       "nullable": true,
                       "type": "string"
@@ -383033,6 +387112,7 @@
                     "metadata",
                     "sourceType",
                     "sourceRef",
+                    "sourceOrigin",
                     "sourceCommit",
                     "githubSyncInterval",
                     "githubSyncRef",
@@ -383519,6 +387599,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "sourceOrigin": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "sourceCommit": {
                       "nullable": true,
                       "type": "string"
@@ -383795,6 +387879,7 @@
                     "metadata",
                     "sourceType",
                     "sourceRef",
+                    "sourceOrigin",
                     "sourceCommit",
                     "githubSyncInterval",
                     "githubSyncRef",
@@ -386474,6 +390559,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "sourceOrigin": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "sourceCommit": {
                       "nullable": true,
                       "type": "string"
@@ -386750,6 +390839,7 @@
                     "metadata",
                     "sourceType",
                     "sourceRef",
+                    "sourceOrigin",
                     "sourceCommit",
                     "githubSyncInterval",
                     "githubSyncRef",
@@ -387389,6 +391479,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "sourceOrigin": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "sourceCommit": {
                       "nullable": true,
                       "type": "string"
@@ -387665,6 +391759,7 @@
                     "metadata",
                     "sourceType",
                     "sourceRef",
+                    "sourceOrigin",
                     "sourceCommit",
                     "githubSyncInterval",
                     "githubSyncRef",
@@ -388064,6 +392159,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "sourceOrigin": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "sourceCommit": {
                       "nullable": true,
                       "type": "string"
@@ -388340,6 +392439,7 @@
                     "metadata",
                     "sourceType",
                     "sourceRef",
+                    "sourceOrigin",
                     "sourceCommit",
                     "githubSyncInterval",
                     "githubSyncRef",
@@ -390118,6 +394218,10 @@
                             "nullable": true,
                             "type": "string"
                           },
+                          "sourceOrigin": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "sourceCommit": {
                             "nullable": true,
                             "type": "string"
@@ -390214,6 +394318,7 @@
                           "metadata",
                           "sourceType",
                           "sourceRef",
+                          "sourceOrigin",
                           "sourceCommit",
                           "githubSyncInterval",
                           "githubSyncRef",

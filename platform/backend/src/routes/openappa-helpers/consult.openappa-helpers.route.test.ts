@@ -1,0 +1,283 @@
+import { createHash } from "node:crypto";
+import config from "@/config";
+import OpenAppaBatteryInstallModel from "@/models/openappa-battery-install";
+import RuntimeCredentialConnectionModel from "@/models/runtime-credential-connection";
+import RuntimeCredentialDefinitionModel from "@/models/runtime-credential-definition";
+import { openappaBatteriesService } from "@/openappa/batteries";
+import { openappaHelperBridge } from "@/openappa/helper-bridge";
+import { OPENAPPA_HELPERS_PREFIX } from "@/routes/route-paths";
+import { sandboxRuntimeService } from "@/sandbox-runtime/sandbox-runtime-service";
+import { createFastifyInstance, type FastifyInstanceWithZod } from "@/server";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import routes from "./openappa-helpers.routes";
+
+const envelope = {
+  version: 1,
+  kind: "annotation",
+  annotator: "github.repository-visibility",
+  arguments: { owner: "example", repo: "widgets" },
+};
+
+describe("battery helper bridge", () => {
+  let app: FastifyInstanceWithZod;
+  let organizationId: string;
+  let userId: string;
+  beforeEach(async ({ makeOrganization, makeUser }) => {
+    organizationId = (await makeOrganization()).id;
+    userId = (await makeUser()).id;
+    config.openappa.enabled = true;
+    app = createFastifyInstance();
+    await app.register(routes);
+  });
+  afterEach(async () => {
+    await app.close();
+  });
+
+  const consult = (params: {
+    installId: string;
+    externalName?: string;
+    authorization?: string;
+    remoteAddress?: string;
+  }) =>
+    app.inject({
+      method: "POST",
+      url: `${OPENAPPA_HELPERS_PREFIX}/${params.installId}/${params.externalName ?? "github.repository-visibility"}`,
+      headers:
+        params.authorization === undefined
+          ? {}
+          : { authorization: params.authorization },
+      remoteAddress: params.remoteAddress ?? "127.0.0.1",
+      payload: envelope,
+    });
+  const bridgeBearer = () => `Bearer ${openappaBatteriesService.bridgeToken}`;
+
+  const installGithub = async (
+    catalogId: string,
+    credentialBindings: Record<string, string> = {},
+  ) =>
+    attach({
+      organizationId,
+      batteryName: "github",
+      catalogId,
+      enabled: true,
+      credentialBindings,
+    });
+
+  test("only the runtime's bearer over loopback reaches a helper", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const install = await installGithub(
+      (await makeInternalMcpCatalog({ organizationId })).id,
+    );
+    expect((await consult({ installId: install.id })).statusCode).toBe(401);
+    expect(
+      (
+        await consult({
+          installId: install.id,
+          authorization: "Bearer not-the-bridge-token",
+        })
+      ).statusCode,
+    ).toBe(401);
+    expect(
+      (
+        await consult({
+          installId: install.id,
+          authorization: bridgeBearer(),
+          remoteAddress: "10.0.0.7",
+        })
+      ).statusCode,
+    ).toBe(403);
+  });
+
+  test("an unknown, disabled or helper-less install is not found", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    expect(
+      (
+        await consult({
+          installId: "00000000-0000-0000-0000-000000000000",
+          authorization: bridgeBearer(),
+        })
+      ).statusCode,
+    ).toBe(404);
+    const disabled = await attach({
+      organizationId,
+      batteryName: "github",
+      catalogId: (await makeInternalMcpCatalog({ organizationId })).id,
+      enabled: false,
+      credentialBindings: {},
+    });
+    expect(
+      (await consult({ installId: disabled.id, authorization: bridgeBearer() }))
+        .statusCode,
+    ).toBe(404);
+    const enabled = await installGithub(
+      (await makeInternalMcpCatalog({ organizationId })).id,
+    );
+    expect(
+      (
+        await consult({
+          installId: enabled.id,
+          externalName: "no-such-helper",
+          authorization: bridgeBearer(),
+        })
+      ).statusCode,
+    ).toBe(404);
+  });
+
+  test("a helper whose credential is unbound or unresolvable answers 502, never a denial", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const unbound = await installGithub(
+      (await makeInternalMcpCatalog({ organizationId })).id,
+    );
+    expect(
+      (await consult({ installId: unbound.id, authorization: bridgeBearer() }))
+        .statusCode,
+    ).toBe(502);
+    await RuntimeCredentialDefinitionModel.create({
+      organizationId,
+      createdBy: userId,
+      definition: {
+        key: "github-token",
+        name: "GitHub token",
+        kind: "secret",
+        description: "",
+        icon: null,
+        allowPersonal: false,
+        allowOrganization: true,
+      },
+    });
+    const bound = await installGithub(
+      (await makeInternalMcpCatalog({ organizationId })).id,
+      { APPA_PROVIDER_GITHUB_TOKEN: "github-token" },
+    );
+    // Defined but no organization value stored yet.
+    expect(
+      (await consult({ installId: bound.id, authorization: bridgeBearer() }))
+        .statusCode,
+    ).toBe(502);
+  });
+
+  test("consults beyond half the sandbox pool are refused as busy", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const unbound = await installGithub(
+      (await makeInternalMcpCatalog({ organizationId })).id,
+    );
+    const params = {
+      installId: unbound.id,
+      externalName: "github.repository-visibility",
+      request: JSON.stringify(envelope),
+    };
+    const pool = config.daggerRuntime.maxConcurrent;
+    config.daggerRuntime.maxConcurrent = 1;
+    let outcomes: string[];
+    try {
+      outcomes = (
+        await Promise.all([
+          openappaHelperBridge.consult(params),
+          openappaHelperBridge.consult(params),
+        ])
+      ).map((outcome) => outcome.kind);
+    } finally {
+      config.daggerRuntime.maxConcurrent = pool;
+    }
+    expect(outcomes.sort()).toEqual(["busy", "failed"]);
+    // The share is released once the first consult settled.
+    expect((await openappaHelperBridge.consult(params)).kind).toBe("failed");
+  });
+
+  test.skipIf(!config.daggerRuntime.enabled)(
+    "a bound helper runs in the sandbox with the envelope on stdin and the credential in its environment",
+    async ({ makeInternalMcpCatalog }) => {
+      const files = [
+        {
+          path: "appa-package.toml",
+          text: 'schema = 1\nname = "acme"\ndescription = "Echo helper"\n[battery]\npolicy = "appa.toml"\nhosts = ["archestra"]\nnamespaces = ["acme"]\nhelpers = ["echo.py"]\n',
+        },
+        {
+          path: "appa.toml",
+          text: '[policy]\nversion = 2\n[[policy.annotator]]\nname = "acme.echo"\nranks = ["suspicious"]\naudiences = ["self"]\nmarks = []\n[externals.annotators."acme.echo"]\ncommand = ["python3", "echo.py"]\ntoken_env = "APPA_PROVIDER_ACME_TOKEN"\n[[policy.tool]]\nname = "mcp/acme/list"\ndelta = {}\n',
+        },
+        {
+          path: "echo.py",
+          text: 'import hashlib, json, os, sys\nrequest = json.load(sys.stdin)\ntoken = os.environ["APPA_PROVIDER_ACME_TOKEN"]\nprint(json.dumps({"version": 1, "answer": {"echo": request["arguments"], "token_sha256": hashlib.sha256(token.encode()).hexdigest()}}))\n',
+        },
+      ];
+      await openappaBatteriesService.uploadPackage({
+        userId,
+        organizationId,
+        name: "acme",
+        files,
+      });
+      await RuntimeCredentialDefinitionModel.create({
+        organizationId,
+        createdBy: userId,
+        definition: {
+          key: "acme-token",
+          name: "Acme token",
+          kind: "secret",
+          description: "",
+          icon: null,
+          allowPersonal: false,
+          allowOrganization: true,
+        },
+      });
+      await RuntimeCredentialConnectionModel.upsert({
+        organizationId,
+        scope: "organization",
+        userId: null,
+        credentialId: "acme-token",
+        value: "acme-secret-value",
+      });
+      const install = await attach({
+        organizationId,
+        batteryName: "acme",
+        catalogId: (await makeInternalMcpCatalog({ organizationId })).id,
+        enabled: true,
+        credentialBindings: { APPA_PROVIDER_ACME_TOKEN: "acme-token" },
+      });
+      // Warm the engine session first: the bridge budget covers one consult,
+      // not the CLI download and image pull of a cold session.
+      await sandboxRuntimeService.attach("consult.openappa-helpers.test");
+      const timed = async () => {
+        const startedAt = Date.now();
+        const response = await consult({
+          installId: install.id,
+          externalName: "acme.echo",
+          authorization: bridgeBearer(),
+        });
+        return { response, ms: Date.now() - startedAt };
+      };
+      const first = await timed();
+      const second = await timed();
+      console.info(
+        `[helper wall-clock] first=${first.ms}ms second=${second.ms}ms`,
+      );
+      const response = second.response;
+      expect(first.response.statusCode).toBe(200);
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({
+        version: 1,
+        answer: {
+          echo: envelope.arguments,
+          token_sha256: createHash("sha256")
+            .update("acme-secret-value")
+            .digest("hex"),
+        },
+      });
+    },
+    // A cold engine session downloads the CLI and pulls the base image.
+    180_000,
+  );
+});
+
+/** An install the test relies on; the unique index cannot refuse a fresh catalog. */
+async function attach(
+  params: Parameters<typeof OpenAppaBatteryInstallModel.createIfAbsent>[0],
+) {
+  const install = await OpenAppaBatteryInstallModel.createIfAbsent(params);
+  if (!install) throw new Error("the battery install already existed");
+  return install;
+}

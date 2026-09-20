@@ -362,7 +362,7 @@ class SkillModel {
   }
 
   /**
-   * Distinct `owner/repo` strings across the org's imported skills, derived
+   * Distinct repository identities across the org's imported skills, derived
    * from the `source_ref` provenance column (formatted as
    * `owner/repo@ref:path`).
    *
@@ -378,7 +378,10 @@ class SkillModel {
     accessibleSkillIds?: string[];
   }): Promise<string[]> {
     const rows = await db
-      .selectDistinct({ sourceRef: schema.skillsTable.sourceRef })
+      .selectDistinct({
+        sourceRef: schema.skillsTable.sourceRef,
+        sourceOrigin: schema.skillsTable.sourceOrigin,
+      })
       .from(schema.skillsTable)
       .where(
         and(
@@ -388,12 +391,12 @@ class SkillModel {
       );
 
     const repos = new Set<string>();
-    for (const { sourceRef } of rows) {
+    for (const { sourceRef, sourceOrigin } of rows) {
       if (!sourceRef) continue;
       if (isBuiltInSkillSourceRef(sourceRef)) continue;
       const atIdx = sourceRef.indexOf("@");
       const repo = atIdx === -1 ? sourceRef : sourceRef.slice(0, atIdx);
-      if (repo) repos.add(repo);
+      if (repo) repos.add(sourceOrigin ? `${sourceOrigin}/${repo}` : repo);
     }
     return [...repos].sort();
   }
@@ -1718,6 +1721,7 @@ function buildOrgFilters(params: {
 }) {
   const normalizedSearch = params.search?.trim();
   const normalizedSourceRepo = params.sourceRepo?.trim();
+  const sourceRepo = parseSourceRepoFilter(normalizedSourceRepo);
   return [
     eq(schema.skillsTable.organizationId, params.organizationId),
     // Only the org list/count methods pass `status`; every other caller
@@ -1780,9 +1784,32 @@ function buildOrgFilters(params: {
         ]
       : []),
     ...(normalizedSourceRepo
-      ? [like(schema.skillsTable.sourceRef, `${normalizedSourceRepo}@%`)]
+      ? [
+          like(schema.skillsTable.sourceRef, `${sourceRepo.repo}@%`),
+          sourceRepo.origin
+            ? eq(schema.skillsTable.sourceOrigin, sourceRepo.origin)
+            : isNull(schema.skillsTable.sourceOrigin),
+        ]
       : []),
   ];
+}
+
+function parseSourceRepoFilter(value: string | undefined): {
+  repo: string;
+  origin: string | null;
+} {
+  if (value && /^https?:\/\//i.test(value)) {
+    try {
+      const url = new URL(value);
+      return {
+        repo: url.pathname.replace(/^\/+|\/+$/g, ""),
+        origin: url.origin === "https://github.com" ? null : url.origin,
+      };
+    } catch {
+      // An invalid filter simply matches no stored repository.
+    }
+  }
+  return { repo: value ?? "", origin: null };
 }
 
 type SkillRecordStatus = "active" | "deleted";

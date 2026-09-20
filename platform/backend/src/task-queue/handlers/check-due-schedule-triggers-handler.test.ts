@@ -6,6 +6,8 @@ vi.mock("@/task-queue", () => ({
 }));
 
 import {
+  A2AContextModel,
+  A2ATaskModel,
   ScheduleTriggerModel,
   ScheduleTriggerRunModel,
   TaskModel,
@@ -121,4 +123,40 @@ describe("handleCheckDueScheduleTriggers", () => {
     const run = await ScheduleTriggerRunModel.findById(enqueuedRunId);
     expect(run).not.toBeNull();
   });
+});
+
+test.for([
+  "TASK_STATE_CANCELED",
+  "TASK_STATE_REJECTED",
+  "TASK_STATE_INPUT_REQUIRED",
+] as const)("reconciles a persisted runtime task in %s after the launch job has ended", async (state, {
+  makeScheduleTrigger,
+  makeScheduleTriggerRun,
+}) => {
+  const trigger = await makeScheduleTrigger({ enabled: false });
+  const context = await A2AContextModel.create({
+    actorKind: "user",
+    actorId: trigger.actorUserId,
+  });
+  const task = await A2ATaskModel.create({
+    contextId: context.id,
+    agentId: trigger.agentId,
+    state,
+    statusReason: "Execution interrupted",
+  });
+  const run = await makeScheduleTriggerRun(trigger.id);
+  await ScheduleTriggerRunModel.setRuntimeTaskId({
+    runId: run.id,
+    taskId: task.id,
+  });
+  await handleCheckDueScheduleTriggers();
+  expect(await ScheduleTriggerRunModel.findById(run.id)).toMatchObject(
+    state === "TASK_STATE_INPUT_REQUIRED"
+      ? { status: "running", completedAt: null }
+      : {
+          status: state === "TASK_STATE_CANCELED" ? "cancelled" : "failed",
+          error: "Execution interrupted",
+          completedAt: expect.any(Date),
+        },
+  );
 });

@@ -4,9 +4,42 @@ import {
   ScheduleTriggerRunModel,
   TaskModel,
 } from "@/models";
+import { metrics } from "@/observability";
 import { taskQueueService } from "@/task-queue";
+import { isTerminalA2ATaskState } from "@/types/a2a-task";
 
 export async function handleCheckDueScheduleTriggers(): Promise<void> {
+  const runtimeRuns = await ScheduleTriggerRunModel.findRunningRuntimeTasks();
+  const activeRuntimeTriggerIds = new Set<string>();
+  for (const run of runtimeRuns) {
+    if (run.state && !isTerminalA2ATaskState(run.state)) {
+      activeRuntimeTriggerIds.add(run.triggerId);
+      continue;
+    }
+    const status =
+      run.state === "TASK_STATE_COMPLETED"
+        ? "success"
+        : run.state === "TASK_STATE_CANCELED"
+          ? "cancelled"
+          : "failed";
+    const completed = await ScheduleTriggerRunModel.markCompleted({
+      runId: run.runId,
+      status,
+      error:
+        status === "success"
+          ? null
+          : (run.statusReason ??
+            (run.state
+              ? `Agent runtime task ended in ${run.state}`
+              : "Agent runtime task no longer exists")),
+    });
+    if (completed)
+      metrics.scheduleTrigger.reportScheduleTriggerRun(
+        run.agentName ?? "unknown",
+        status,
+      );
+  }
+
   const now = new Date();
   const dueTriggers = await ScheduleTriggerModel.findDueTriggers(now);
   if (dueTriggers.length === 0) return;
@@ -19,7 +52,10 @@ export async function handleCheckDueScheduleTriggers(): Promise<void> {
 
   for (const trigger of dueTriggers) {
     try {
-      if (activeTriggerIds.has(trigger.id)) {
+      if (
+        activeTriggerIds.has(trigger.id) ||
+        activeRuntimeTriggerIds.has(trigger.id)
+      ) {
         logger.debug(
           { triggerId: trigger.id, triggerName: trigger.name },
           "Skipping due trigger, task already in flight",

@@ -1,3 +1,4 @@
+import type { Readable } from "node:stream";
 import {
   createPaginatedResponseSchema,
   PaginationQuerySchema,
@@ -22,6 +23,7 @@ import {
   ProjectShareModel,
   TeamModel,
 } from "@/models";
+import { AGENT_WORKSPACE_TRANSFER_PREFIX } from "@/routes/route-paths";
 import {
   isAnyAgentRuntimeBackendDriverEnabled,
   resolveAgentRuntimeBackendDriver,
@@ -40,6 +42,10 @@ import {
 } from "@/services/agent-runtime/start-task";
 import { accessAgentWorkspaceFile } from "@/services/agent-runtime/workspace-files";
 import { deleteAgentWorkspace } from "@/services/agent-runtime/workspace-lifecycle";
+import {
+  WORKSPACE_TRANSFER_TICKET_TTL_MS,
+  workspaceTransferTickets,
+} from "@/services/agent-runtime/workspace-transfers";
 import {
   type Agent,
   type AgentRunSession,
@@ -61,6 +67,11 @@ import {
   AgentWorkspaceFileRequestSchema,
   AgentWorkspaceFileResultSchema,
 } from "@/types/agent-workspace-file";
+import {
+  StartedWorkspaceTransferSchema,
+  StartWorkspaceTransferSchema,
+  WorkspaceFinalizeResultSchema,
+} from "@/types/agent-workspace-transfer";
 import {
   ClaudeCodeAccountSchema,
   ClaudeCodeModelsSchema,
@@ -694,7 +705,7 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
                       ).hasRetainedTerminal(owned)
                     : false,
                 connection: ["active", "idle"].includes(workspace.state)
-                  ? resolveAgentRuntimeBackendDriver(
+                  ? await resolveAgentRuntimeBackendDriver(
                       owned.backend,
                     ).getWorkspaceConnection(owned)
                   : null,
@@ -1086,6 +1097,143 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
       return reply.send({ success: true });
     },
   );
+
+  // Transfer bodies are raw bytes bound for a Pod, so they must never be
+  // parsed or buffered into a value.
+  fastify.addContentTypeParser(
+    "application/octet-stream",
+    (_request, payload, done) => done(null, payload),
+  );
+
+  fastify.post(
+    "/api/agent-runs/:taskId/workspace/transfers",
+    {
+      schema: {
+        operationId: RouteId.StartAgentWorkspaceTransfer,
+        tags: ["Agents"],
+        description:
+          "Authorize a resumable transfer of one file to or from the caller's retained runtime workspace",
+        params: z.object({ taskId: z.string().uuid() }),
+        body: StartWorkspaceTransferSchema,
+        response: constructResponseSchema(StartedWorkspaceTransferSchema),
+      },
+    },
+    async (request, reply) => {
+      const actor = {
+        kind: "user" as const,
+        id: request.user.id,
+        organizationId: request.organizationId,
+      };
+      const minted =
+        request.body.direction === "download"
+          ? await workspaceTransferTickets.mintDownload({
+              actor,
+              taskId: request.params.taskId,
+              path: request.body.path,
+            })
+          : await workspaceTransferTickets.mintUpload({
+              actor,
+              taskId: request.params.taskId,
+              path: request.body.path,
+              size: request.body.size,
+              sha256: request.body.sha256,
+            });
+      request.auditAfter = {
+        workspaceTransfer: {
+          path: minted.ticket.path,
+          direction: minted.ticket.direction,
+        },
+      };
+      return reply.send({
+        transferId: minted.ticket.id,
+        token: minted.token,
+        contentUrl: `${AGENT_WORKSPACE_TRANSFER_PREFIX}/${minted.ticket.id}/content`,
+        path: minted.ticket.path,
+        size: minted.ticket.size,
+        sha256: minted.ticket.sha256,
+        expiresInSeconds: WORKSPACE_TRANSFER_TICKET_SECONDS,
+      });
+    },
+  );
+
+  fastify.get(
+    `${AGENT_WORKSPACE_TRANSFER_PREFIX}/:transferId/content`,
+    {
+      schema: {
+        operationId: RouteId.DownloadAgentWorkspaceTransfer,
+        tags: ["Agents"],
+        description:
+          "Stream the pinned contents of an authorized transfer; supports Range for resume",
+        params: z.object({ transferId: z.string() }),
+      },
+    },
+    async (request, reply) => {
+      const ticket = workspaceTransferTickets.resolve(
+        request.params.transferId,
+        bearerToken(request.headers.authorization),
+      );
+      if (ticket.direction !== "download") {
+        throw new ApiError(404, "Transfer not found");
+      }
+      const offset = parseRangeStart(request.headers.range);
+      if (offset > ticket.size) {
+        throw new ApiError(416, "Requested range is beyond the file");
+      }
+      const { stdout, completed } = await workspaceTransferTickets.read({
+        ticket,
+        offset,
+        length: -1,
+      });
+      // A failed exec must end the reply rather than hang the client.
+      completed.catch(() => stdout.destroy());
+      reply
+        .header("Accept-Ranges", "bytes")
+        .header("ETag", `"${ticket.sha256}"`)
+        .header("Content-Type", "application/octet-stream")
+        .header("Content-Length", String(ticket.size - offset));
+      if (offset > 0) {
+        reply
+          .code(206)
+          .header(
+            "Content-Range",
+            `bytes ${offset}-${ticket.size - 1}/${ticket.size}`,
+          );
+      }
+      return reply.send(stdout);
+    },
+  );
+
+  fastify.put(
+    `${AGENT_WORKSPACE_TRANSFER_PREFIX}/:transferId/content`,
+    {
+      bodyLimit: WORKSPACE_TRANSFER_BODY_LIMIT,
+      schema: {
+        operationId: RouteId.UploadAgentWorkspaceTransfer,
+        tags: ["Agents"],
+        description:
+          "Stream an authorized upload into the workspace and replace the destination atomically",
+        params: z.object({ transferId: z.string() }),
+        response: constructResponseSchema(WorkspaceFinalizeResultSchema),
+      },
+    },
+    async (request, reply) => {
+      const ticket = workspaceTransferTickets.resolve(
+        request.params.transferId,
+        bearerToken(request.headers.authorization),
+      );
+      if (ticket.direction !== "upload") {
+        throw new ApiError(404, "Transfer not found");
+      }
+      return reply.send(
+        WorkspaceFinalizeResultSchema.parse(
+          await workspaceTransferTickets.receive({
+            ticket,
+            body: request.body as Readable,
+          }),
+        ),
+      );
+    },
+  );
 };
 
 export default agentRuntimeRoutes;
@@ -1278,3 +1426,23 @@ function requireCredentialDeclaration(
   }
   return declaration;
 }
+
+/** Read a bearer credential without revealing which part was wrong. */
+function bearerToken(header: string | undefined): string {
+  const value = header?.startsWith("Bearer ") ? header.slice(7).trim() : "";
+  if (!value) throw new ApiError(404, "Transfer not found");
+  return value;
+}
+
+/** Accept the single-range form a resuming client sends. Anything else reads
+ * from the start, which is always correct if wasteful. */
+function parseRangeStart(header: string | undefined): number {
+  const match = /^bytes=(\d+)-\d*$/.exec(header?.trim() ?? "");
+  return match ? Number(match[1]) : 0;
+}
+
+const WORKSPACE_TRANSFER_TICKET_SECONDS = Math.floor(
+  WORKSPACE_TRANSFER_TICKET_TTL_MS / 1000,
+);
+/** Fastify still wants a ceiling even though the body is never materialized. */
+const WORKSPACE_TRANSFER_BODY_LIMIT = 64 * 1024 * 1024 * 1024;

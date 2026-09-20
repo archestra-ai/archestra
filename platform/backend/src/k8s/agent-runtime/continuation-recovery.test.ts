@@ -16,6 +16,7 @@ import {
 import type { AgentRunLaunchSpec } from "@/services/agent-runtime/backends";
 import { persistAgentRunInputs } from "@/services/agent-runtime/input-files";
 import { cleanupAgentRun } from "@/services/agent-runtime/pod-run";
+import { AGENT_RUNTIME_CREDENTIALS_SECRET_KEY } from "@/services/agent-runtime/runtime-contract";
 import { agentRunTranscriptStore } from "@/services/agent-runtime/transcript-store";
 import { expect, test, vi } from "@/test";
 import manager from "./manager";
@@ -112,7 +113,13 @@ test.skipIf(process.env.ARCHESTRA_TEST_SANDBOX_CONTEXT !== "orbstack")(
           apiVersion: "v1",
           kind: "Secret",
           metadata: { name: `${name}-env` },
-          stringData: { OPENAI_API_KEY: "revoked-test-key" },
+          stringData: {
+            OPENAI_API_KEY: "revoked-test-key",
+            ARCHESTRA_AGENT_RUNTIME_RENEWABLE_CREDENTIALS: JSON.stringify({
+              taskId: initialTaskId,
+              credentials: {},
+            }),
+          },
         }),
       );
       kubectl(
@@ -142,7 +149,10 @@ test.skipIf(process.env.ARCHESTRA_TEST_SANDBOX_CONTEXT !== "orbstack")(
       expect(
         JSON.parse(kubectl(["get", "secret", `${name}-env`, "-o", "json"]))
           .data,
-      ).toEqual({ OPENAI_API_KEY: "" });
+      ).toEqual({
+        OPENAI_API_KEY: "",
+        [AGENT_RUNTIME_CREDENTIALS_SECRET_KEY]: "",
+      });
       kubectl([
         "patch",
         "sandbox",

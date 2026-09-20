@@ -1,4 +1,5 @@
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
+import { CacheKey } from "@/cache-manager";
 import db, { schema } from "@/database";
 import { McpGatewayTaskModel } from "@/models";
 import { mcpGatewayTaskReaper } from "@/services/mcp-gateway-task-reaper";
@@ -103,6 +104,15 @@ describe("MCP gateway task reaper", () => {
     // Long-dead orphan: past the grace, this sweep removes it entirely.
     const oldOrphan = await makeTask(agent.id, -TTL_MS - 60_000);
 
+    // The cache is created by Keyv in production, outside Drizzle migrations.
+    await db.execute(
+      sql`CREATE TABLE IF NOT EXISTS keyv_cache (key TEXT PRIMARY KEY, value TEXT)`,
+    );
+    const abandonedReply = `keyv:${CacheKey.LegacySseMessages}-orphan`;
+    await db.execute(sql`INSERT INTO keyv_cache (key, value) VALUES (
+      ${abandonedReply}, ${JSON.stringify({ value: [{ id: 1 }], expires: Date.now() - 1_000 })}
+    )`);
+
     const outcome = await mcpGatewayTaskReaper.sweep();
 
     // Both orphans were `working` past expiry, so both are marked failed;
@@ -110,6 +120,10 @@ describe("MCP gateway task reaper", () => {
     expect(outcome).toEqual({ failed: 2, purged: 1 });
     expect((await rowById(freshOrphan.id))?.status).toBe("failed");
     expect(await rowById(oldOrphan.id)).toBeNull();
+    const cached = await db.execute(
+      sql`SELECT key FROM keyv_cache WHERE key = ${abandonedReply}`,
+    );
+    expect(cached.rows).toEqual([]);
   });
 
   test("a concurrent settle beats the reaper, matching the cancellation race rule", async ({

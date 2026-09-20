@@ -598,7 +598,9 @@ function AgentDetails({
       }
     >
       {hasAgentRuntime && !isGone && (
-        <AgentSavedSetupBanner agentId={agent.id} canEditAgent={canEdit} />
+        <div className="mb-4 empty:hidden">
+          <AgentSavedSetupBanner agentId={agent.id} canEditAgent={canEdit} />
+        </div>
       )}
       {transferring && (
         <TransferAgentOwnershipDialog

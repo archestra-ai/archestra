@@ -848,8 +848,9 @@ cli sh -c '[ -t 1 ] && echo TTY-VIA-CLI || echo PIPE-VIA-CLI; cat'`;
     expect(script).not.toContain("marketplace browse");
     // python3 fallback prints a manual snippet rather than failing.
     expect(script).toContain("python3 not found");
-    // Next steps name the exact command and server for the OAuth handshake.
-    expect(script).toContain("claude /mcp");
+    // Next steps name the exact command and server for the OAuth handshake,
+    // in a NEW session — the current one never sees the gateway.
+    expect(script).toContain("Start a new `claude` session, run `/mcp` there");
     expect(script).toContain(`select "${MCP.serverName}"`);
   });
 
@@ -1054,7 +1055,7 @@ cli sh -c '[ -t 1 ] && echo TTY-VIA-CLI || echo PIPE-VIA-CLI; cat'`;
 
   test("claude-code (windows): next steps carry the same OAuth guidance", () => {
     const script = renderSetupScript(fullContext("claude-code", "windows"));
-    expect(script).toContain("claude /mcp");
+    expect(script).toContain("Start a new `claude` session, run `/mcp` there");
     expect(script).toContain(`select "${MCP.serverName}"`);
   });
 

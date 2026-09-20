@@ -105,6 +105,7 @@ test("refreshes the frozen run binding and cannot restore a concurrently revoked
   internals.clusterReachable = true;
   internals.clients = {
     coreApi: {
+      listNamespacedPod: async () => ({ items: [] }),
       readNamespacedSecret: async () => structuredClone(stored),
       patchNamespacedSecret: async ({ body }: { body: V1Secret }) => {
         if (revokeDuringWrite) {

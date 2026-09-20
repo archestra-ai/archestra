@@ -611,6 +611,9 @@ rbac.environmentNamespaces, so both grant exactly the same access (no drift).
 - apiGroups: ["agents.x-k8s.io"]
   resources: ["sandboxes/status"]
   verbs: ["get"]
+- apiGroups: ["extensions.agents.x-k8s.io"]
+  resources: ["sandboxclaims", "sandboxtemplates", "sandboxwarmpools"]
+  verbs: ["get", "list", "create", "patch", "delete"]
 # DaemonSet for the MCP image pre-puller, which keeps every node's image cache
 # warm so a hibernated MCP server wakes without reaching the registry. Narrower
 # than the rule above on purpose: the reconciler only reads and rewrites its own

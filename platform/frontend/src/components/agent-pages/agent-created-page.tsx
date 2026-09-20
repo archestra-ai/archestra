@@ -1,12 +1,13 @@
 "use client";
 
 import { MESSAGING_CHANNEL_LABELS } from "@archestra/shared";
-import { CircleCheck, MessageSquare } from "lucide-react";
+import { CircleCheck, MessageSquare, TerminalSquare } from "lucide-react";
 import Link from "next/link";
 import { useEffect } from "react";
 import { channelDisplayName } from "@/app/settings/messaging-channels/_components/channel-details-dialog";
 import { AgentSavedSetupBanner } from "@/components/agent-saved-setup-banner";
 import { ChannelIcon } from "@/components/channel-icon";
+import { RuntimeCapableIndicator } from "@/components/chat/runtime-capable-indicator";
 import { CopyButton } from "@/components/copy-button";
 import { QueryLoadError } from "@/components/query-load-error";
 import { Button } from "@/components/ui/button";
@@ -16,7 +17,8 @@ import { useAllPermissions } from "@/lib/auth/auth.query";
 import { hasPermissions } from "@/lib/auth/auth.utils";
 import { useAllChatOpsBindings } from "@/lib/chatops/chatops.query";
 import { useAgentEmailAddress } from "@/lib/chatops/incoming-email.query";
-import { useConfig } from "@/lib/config/config.query";
+import { useConfig, useFeature } from "@/lib/config/config.query";
+import { ACTION_LABEL } from "@/lib/design/resource-lexicon";
 import { useMessagingChannelCatalog } from "@/lib/integration-overrides";
 import { agentDetailHref } from "./agent-page-config";
 import { AgentPageShell } from "./agent-page-shell";
@@ -24,6 +26,8 @@ import { useAgentAccess } from "./use-agent-access";
 
 export function AgentCreatedPage({ id }: { id: string }) {
   const { data: agent, isPending, isError, refetch } = useProfile(id);
+  const runtimeEnabled = useFeature("agentRuntime") === true;
+  const startsRun = runtimeEnabled && agent?.runtime != null;
   const {
     data: permissions,
     isPending: permissionsPending,
@@ -68,16 +72,24 @@ export function AgentCreatedPage({ id }: { id: string }) {
           <div className="flex flex-col items-start justify-between gap-4 border-b pb-6 sm:flex-row sm:items-center">
             <div className="min-w-0 flex-1">
               <div className="min-w-0 space-y-1">
-                <h2 className="flex items-center gap-2 text-sm font-medium">
+                <h2 className="flex flex-wrap items-center gap-2 text-sm font-medium">
                   <CircleCheck
                     className="size-4 shrink-0 text-green-600 dark:text-green-400"
                     aria-hidden="true"
                   />
-                  <span className="break-words">{agent.name}</span>
+                  <span className="min-w-0 break-words">{agent.name}</span>
+                  {startsRun && (
+                    <RuntimeCapableIndicator
+                      variant="pill"
+                      runtime={agent.runtime}
+                    />
+                  )}
                 </h2>
                 <p className="text-sm text-muted-foreground">
                   {canChat
-                    ? "Your agent is saved. Open a chat to start a conversation."
+                    ? startsRun
+                      ? "Your agent is saved. Start a run to give it a task."
+                      : "Your agent is saved. Open a chat to start a conversation."
                     : "Your agent is saved."}
                 </p>
               </div>
@@ -86,8 +98,14 @@ export function AgentCreatedPage({ id }: { id: string }) {
               {canChat && (
                 <Button asChild size="sm">
                   <Link href={`/chat?agentId=${encodeURIComponent(agent.id)}`}>
-                    <MessageSquare className="size-4" />
-                    <span>Chat</span>
+                    {startsRun ? (
+                      <TerminalSquare className="size-4" aria-hidden="true" />
+                    ) : (
+                      <MessageSquare className="size-4" aria-hidden="true" />
+                    )}
+                    <span>
+                      {startsRun ? ACTION_LABEL.startRun : ACTION_LABEL.chat}
+                    </span>
                   </Link>
                 </Button>
               )}

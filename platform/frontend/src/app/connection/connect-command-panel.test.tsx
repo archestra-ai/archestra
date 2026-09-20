@@ -321,9 +321,32 @@ describe("ConnectCommandPanel", () => {
     expect(
       await screen.findByRole("link", { name: "Download installer" }),
     ).toHaveAttribute("href", "https://proxy.example/desktop-installer");
+    expect(
+      screen.queryByRole("link", { name: "the LLM Proxy" }),
+    ).not.toBeInTheDocument();
+    const proxySummary = screen
+      .getByText("your Claude subscription")
+      .closest("li");
+    expect(proxySummary).toHaveTextContent(
+      "Passthrough to Anthropic through the LLM Proxy using your Claude subscription",
+    );
+    expect(
+      screen.queryByText("Good for reusing a subscription"),
+    ).not.toBeInTheDocument();
+    await userEvent.click(screen.getByTestId("connect-change-proxy"));
+    expect(
+      screen.getByRole("tab", { name: "Claude subscription" }),
+    ).toHaveAttribute("aria-selected", "true");
+    await userEvent.click(screen.getByRole("button", { name: "Done" }));
+    expect(
+      screen.queryByRole("tab", { name: "Claude subscription" }),
+    ).not.toBeInTheDocument();
     expect(screen.getByText(COMMAND)).not.toBeVisible();
     await userEvent.click(screen.getByText("Advanced: terminal setup"));
     expect(screen.getByText(COMMAND)).toBeVisible();
+    // The Desktop panel sits on a card, so the command must bring its own
+    // terminal surface; without one it inherited the card and was unreadable.
+    expect(screen.getByText(COMMAND).closest(".bg-terminal")).not.toBeNull();
     expect(createKeyMock).not.toHaveBeenCalled();
   });
 

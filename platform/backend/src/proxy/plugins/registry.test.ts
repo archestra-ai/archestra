@@ -4,6 +4,7 @@ import {
   LlmProxyPluginInitializer,
   LlmProxyPluginRegistry,
   type LlmProxyRequestContext,
+  type LlmProxyToolCallsContext,
 } from "./registry";
 
 function requestContext(): LlmProxyRequestContext {
@@ -149,6 +150,209 @@ describe("LlmProxyPluginRegistry", () => {
     expect(attempts).toBe(2);
     await registry.onSessionInit(requestContext());
     expect(events).toEqual(["initialized"]);
+  });
+
+  test("lets a finalizer substitute only the calls it reports as blocked", async () => {
+    // A finalizer may replace a denied call with the platform's notice tool,
+    // and may drop calls, but it may not smuggle in a call the policies never
+    // saw, nor rewrite one without saying so.
+    type Calls = LlmProxyToolCallsContext["toolCalls"];
+    const finalize = async (
+      answer: (toolCalls: Calls) => {
+        toolCalls: Calls;
+        blocked?: readonly { id: string; name: string; reason: string }[];
+      },
+    ) => {
+      const registry = new LlmProxyPluginRegistry();
+      registry.register({
+        id: "finalizer",
+        finalizesToolCalls: true,
+        async onToolCalls({ toolCalls }) {
+          return { decision: "allow", ...answer(toolCalls) };
+        },
+      });
+      const context = requestContext();
+      await registry.onSessionInit(context);
+      return registry.onToolCalls({
+        ...context,
+        toolCalls: [{ id: "call-1", name: "read", arguments: { path: "a" } }],
+      });
+    };
+
+    await expect(
+      finalize((toolCalls) => ({
+        toolCalls: [
+          { id: "call-1", name: "notice", arguments: { ruling: "blocked" } },
+        ],
+        blocked: [{ id: "call-1", name: toolCalls[0].name, reason: "blocked" }],
+      })),
+    ).resolves.toMatchObject({
+      decision: "allow",
+      toolCalls: [{ id: "call-1", name: "notice" }],
+    });
+
+    await expect(
+      finalize(() => ({
+        toolCalls: [{ id: "call-9", name: "read", arguments: {} }],
+      })),
+    ).rejects.toThrow("returned a call the policies never saw");
+
+    // Two finalizers each report what they blocked; the handler's metrics see
+    // both, not only the last one's.
+    const registry = new LlmProxyPluginRegistry();
+    for (const id of ["first", "second"]) {
+      registry.register({
+        id,
+        finalizesToolCalls: true,
+        async onToolCalls({ toolCalls }) {
+          const [call] = toolCalls.filter((c) => c.name !== "notice");
+          if (!call) return { decision: "allow", toolCalls };
+          return {
+            decision: "allow",
+            toolCalls: toolCalls.map((c) =>
+              c.id === call.id
+                ? { ...c, name: "notice", arguments: { ruling: id } }
+                : c,
+            ),
+            blocked: [{ id: call.id, name: call.name, reason: id }],
+          };
+        },
+      });
+    }
+    const context = requestContext();
+    await registry.onSessionInit(context);
+    await expect(
+      registry.onToolCalls({
+        ...context,
+        toolCalls: [
+          { id: "call-1", name: "read", arguments: {} },
+          { id: "call-2", name: "write", arguments: {} },
+        ],
+      }),
+    ).resolves.toMatchObject({
+      blocked: [
+        { id: "call-1", name: "read", reason: "first" },
+        { id: "call-2", name: "write", reason: "second" },
+      ],
+    });
+
+    await expect(
+      finalize(() => ({
+        toolCalls: [{ id: "call-1", name: "read", arguments: { path: "b" } }],
+      })),
+    ).rejects.toThrow("rewrote a call it did not report as blocked");
+
+    // A block report must name a call the policies saw, by its own name.
+    await expect(
+      finalize((toolCalls) => ({
+        toolCalls,
+        blocked: [{ id: "call-9", name: "read", reason: "blocked" }],
+      })),
+    ).rejects.toThrow("reported a block on a call the policies never saw");
+    await expect(
+      finalize((toolCalls) => ({
+        toolCalls,
+        blocked: [{ id: "call-1", name: "delete", reason: "blocked" }],
+      })),
+    ).rejects.toThrow("reported a block on a call the policies never saw");
+
+    // One call, once.
+    await expect(
+      finalize((toolCalls) => ({ toolCalls: [...toolCalls, ...toolCalls] })),
+    ).rejects.toThrow("returned a call the policies never saw");
+
+    // An untouched call re-serialized with its keys in another order is
+    // still untouched.
+    await expect(
+      finalize(() => ({
+        toolCalls: [
+          { id: "call-1", name: "read", arguments: JSON.parse('{"path":"a"}') },
+        ],
+      })),
+    ).resolves.toMatchObject({ decision: "allow" });
+  });
+
+  test("validates prepared transport arguments before a finalizer can reserve calls", async () => {
+    const registry = new LlmProxyPluginRegistry();
+    const phases: string[] = [];
+    registry.register({
+      id: "preparing-finalizer",
+      finalizesToolCalls: true,
+      async onPrepareToolCalls({ toolCalls }) {
+        phases.push("prepare");
+        return {
+          decision: "allow",
+          toolCalls: toolCalls.map((call) => ({
+            ...call,
+            arguments: { path: "a", execution: "transport-record" },
+          })),
+        };
+      },
+      async onToolCalls({ toolCalls }) {
+        phases.push("reserve");
+        expect(toolCalls[0].arguments).toEqual({
+          path: "a",
+          execution: "transport-record",
+        });
+        return undefined;
+      },
+    });
+    const context = requestContext();
+    await registry.onSessionInit(context);
+    const original = [{ id: "call-1", name: "read", arguments: { path: "a" } }];
+    const result = await registry.onToolCalls(
+      { ...context, toolCalls: original },
+      async (calls) => {
+        phases.push("validate");
+        expect(calls[0].arguments).toEqual({
+          path: "a",
+          execution: "transport-record",
+        });
+        return null;
+      },
+    );
+    expect(phases).toEqual(["prepare", "validate", "reserve"]);
+    expect(result).toMatchObject({ decision: "allow" });
+    if (result.decision !== "allow") throw new Error("expected allowed calls");
+    expect(result.toolCalls).not.toBe(original);
+    expect(original[0].arguments).toEqual({ path: "a" });
+  });
+
+  test.each([
+    "arguments",
+    "namespace",
+  ] as const)("rejects in-place finalizer mutation of %s", async (field) => {
+    const registry = new LlmProxyPluginRegistry();
+    registry.register({
+      id: "mutating-finalizer",
+      finalizesToolCalls: true,
+      async onToolCalls({ toolCalls }) {
+        if (field === "namespace") {
+          toolCalls[0].namespace = "unapproved";
+          return { decision: "allow", toolCalls };
+        }
+        const args = toolCalls[0].arguments;
+        if (typeof args === "string")
+          throw new Error("expected argument object");
+        args.path = "unapproved";
+        return undefined;
+      },
+    });
+    const context = requestContext();
+    await registry.onSessionInit(context);
+    await expect(
+      registry.onToolCalls({
+        ...context,
+        toolCalls: [
+          {
+            id: "call-1",
+            name: "read",
+            namespace: "approved",
+            arguments: { path: "a" },
+          },
+        ],
+      }),
+    ).rejects.toThrow("rewrote a call it did not report as blocked");
   });
 
   test("chains tool and response transformations in registration order", async () => {

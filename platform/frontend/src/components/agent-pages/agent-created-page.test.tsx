@@ -81,7 +81,9 @@ beforeEach(() => {
   } as unknown as ReturnType<typeof useOrganization>);
   server.use(
     http.get(CONFIG_URL, () =>
-      HttpResponse.json({ features: { chatopsTelegramEnabled: false } }),
+      HttpResponse.json({
+        features: { chatopsTelegramEnabled: false, agentRuntime: true },
+      }),
     ),
     http.get(PERMISSIONS_URL, () =>
       HttpResponse.json({
@@ -113,6 +115,94 @@ afterAll(() => {
 });
 
 describe("AgentCreatedPage", () => {
+  it.each([
+    { command: "archestra-claude-code", badge: "Claude Code" },
+    { command: "archestra-opencode", badge: "OpenCode" },
+    { command: "custom-agent", badge: "Runtime" },
+  ])("offers a run with the $badge badge for $command", async ({
+    command,
+    badge,
+  }) => {
+    server.use(
+      http.get(`${API_ORIGIN}/api/agents/${AGENT_ID}`, () =>
+        HttpResponse.json({ ...agent, runtime: { command: [command] } }),
+      ),
+    );
+
+    renderPage();
+
+    const startRun = await screen.findByRole("link", { name: "Start run" });
+    expect(startRun).toHaveAttribute("href", `/chat?agentId=${AGENT_ID}`);
+    expect(
+      within(
+        screen.getByRole("heading", {
+          name: new RegExp(`${agent.name}.*${badge}`),
+        }),
+      ).getByText(badge),
+    ).toBeVisible();
+    expect(
+      screen.getByText("Your agent is saved. Start a run to give it a task."),
+    ).toBeVisible();
+    expect(screen.queryByRole("link", { name: "Chat" })).toBeNull();
+    expect(screen.queryByText(/Open a chat to start/)).toBeNull();
+  });
+
+  it("keeps the chat action when a saved runtime is disabled by the deployment", async () => {
+    server.use(
+      http.get(CONFIG_URL, () =>
+        HttpResponse.json({ features: { agentRuntime: false } }),
+      ),
+      http.get(`${API_ORIGIN}/api/agents/${AGENT_ID}`, () =>
+        HttpResponse.json({
+          ...agent,
+          runtime: { command: ["archestra-claude-code"] },
+        }),
+      ),
+    );
+
+    renderPage();
+
+    expect(await screen.findByRole("link", { name: "Chat" })).toHaveAttribute(
+      "href",
+      `/chat?agentId=${AGENT_ID}`,
+    );
+    expect(screen.getByRole("heading", { name: agent.name })).toBeVisible();
+    expect(screen.queryByText("Claude Code")).toBeNull();
+    expect(screen.queryByRole("link", { name: "Start run" })).toBeNull();
+    expect(screen.getByText(/Open a chat to start/)).toBeVisible();
+  });
+
+  it("identifies the runtime without offering a run when chat creation is denied", async () => {
+    server.use(
+      http.get(`${API_ORIGIN}/api/agents/${AGENT_ID}`, () =>
+        HttpResponse.json({
+          ...agent,
+          runtime: { command: ["archestra-claude-code"] },
+        }),
+      ),
+      http.get(PERMISSIONS_URL, () =>
+        HttpResponse.json({ chat: ["read"], agentTrigger: ["read"] }),
+      ),
+    );
+
+    renderPage();
+
+    expect(
+      await screen.findByRole("heading", {
+        name: new RegExp(`${agent.name}.*Claude Code`),
+      }),
+    ).toBeVisible();
+    expect(
+      await screen.findByText(
+        "No messaging channels are configured for this agent.",
+      ),
+    ).toBeVisible();
+    expect(screen.queryByRole("link", { name: "Start run" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Chat" })).toBeNull();
+    expect(screen.getByText("Your agent is saved.")).toBeVisible();
+    expect(screen.getByRole("link", { name: "View agent" })).toBeVisible();
+  });
+
   it("connects Claude from the saved page and resolves setup live", async () => {
     const user = userEvent.setup();
     let connected = false;
@@ -422,6 +512,9 @@ describe("AgentCreatedPage", () => {
       "href",
       `/chat?agentId=${AGENT_ID}`,
     );
+    expect(screen.queryByRole("link", { name: "Start run" })).toBeNull();
+    expect(screen.queryByText("Runtime")).toBeNull();
+    expect(screen.getByText(/Open a chat to start/)).toBeVisible();
     expect(screen.getByRole("link", { name: "View agent" })).toHaveAttribute(
       "href",
       `/agents/${AGENT_ID}`,
@@ -701,10 +794,9 @@ describe("AgentCreatedPage", () => {
         name: "View agent",
       }),
     ).toHaveAttribute("href", `/agents/${AGENT_ID}`);
-    expect(await screen.findByRole("link", { name: "Chat" })).toHaveAttribute(
-      "href",
-      `/chat?agentId=${AGENT_ID}`,
-    );
+    expect(
+      await screen.findByRole("link", { name: "Start run" }),
+    ).toHaveAttribute("href", `/chat?agentId=${AGENT_ID}`);
   });
 
   it.each([

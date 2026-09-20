@@ -124,6 +124,8 @@ export interface SetupScriptContext {
   mcp: SetupScriptMcpSection | null;
   proxy: SetupScriptProxySection | null;
   skills: SetupScriptSkillsSection | null;
+  /** Copied locally by setup, never fetched from the platform at launch. */
+  runtimeHandoffInstructions?: string | null;
 }
 
 /**
@@ -173,9 +175,12 @@ export function copilotAttributionHeadersValue(
  * Claude Code's post-install OAuth step, shared by the bash and PowerShell
  * renderers. Registering the gateway is not enough: it authorizes each user
  * individually, so its tools unlock only after a one-time browser sign-in.
+ * The running session never picks the server up — only a new one reads the
+ * updated config — so the step must send the user to a NEW session; naming
+ * `/mcp` alone strands them in a session where the gateway does not exist.
  */
 export function claudeCodeOAuthNextStep(serverName: string): string {
-  return `Run \`claude /mcp\`, select "${serverName}", and sign in via your browser — the gateway grants tool access per user, so its tools unlock after this one-time approval.`;
+  return `Start a new \`claude\` session, run \`/mcp\` there, select "${serverName}", and sign in via your browser — the gateway grants tool access per user, so its tools unlock after this one-time approval.`;
 }
 
 export function renderSetupScript(rawCtx: SetupScriptContext): string {
@@ -403,6 +408,13 @@ ARCHESTRA_REVOKE`);
 
 function nextStepsFor(ctx: SetupScriptContext): string[] {
   const steps: string[] = [];
+  if (ctx.clientId === "cursor") {
+    steps.push(
+      ctx.mcp && ctx.runtimeHandoffInstructions
+        ? "Runtime handoff needs a manual step: paste the printed handoff instructions into Cursor Customize > Rules > User Rules. Keep your existing rules."
+        : "If you previously added runtime handoff instructions to Cursor User Rules, remove that text to disable them.",
+    );
+  }
   switch (ctx.clientId) {
     case "claude-code":
       if (ctx.mcp) {
@@ -1222,6 +1234,11 @@ print(f"Updated {path}")`;
 
 function cursorSections(ctx: SetupScriptContext): string[] {
   const sections: string[] = [];
+
+  if (ctx.mcp && ctx.runtimeHandoffInstructions) {
+    sections.push(`say ${sh("Runtime handoff instructions — copy into Cursor User Rules")}
+printf '%s\\n' ${sh(ctx.runtimeHandoffInstructions)}`);
+  }
 
   if (ctx.mcp) {
     sections.push(`say ${sh(`Adding MCP gateway "${ctx.mcp.serverName}" to ~/.cursor/mcp.json (OAuth)`)}

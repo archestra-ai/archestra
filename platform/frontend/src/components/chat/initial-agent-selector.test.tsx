@@ -190,6 +190,7 @@ describe("InitialAgentSelector keyboard navigation", () => {
     );
 
     await user.keyboard("{ArrowDown}");
+    expect(search).toHaveFocus();
     expect(search).toHaveAttribute(
       "aria-activedescendant",
       screen.getByRole("option", { name: /Beta Agent/ }).id,
@@ -203,6 +204,28 @@ describe("InitialAgentSelector keyboard navigation", () => {
 
     await user.keyboard("{ArrowUp}{Enter}");
     expect(onAgentChange).toHaveBeenCalledWith("agent-3");
+  });
+
+  it("keeps typing after navigation and selects a newly filtered agent", async () => {
+    const user = userEvent.setup();
+    const onAgentChange = vi.fn();
+    render(
+      <InitialAgentSelector
+        currentAgentId="agent-1"
+        onAgentChange={onAgentChange}
+      />,
+    );
+    await user.click(screen.getByRole("combobox"));
+    await user.keyboard("{ArrowDown}gamma");
+    const search = screen.getByRole("combobox", { name: "Search agents" });
+    expect(search).toHaveFocus();
+    expect(search).toHaveValue("gamma");
+    expect(search).toHaveAttribute(
+      "aria-activedescendant",
+      screen.getByRole("option", { name: /Gamma Agent/ }).id,
+    );
+    await user.keyboard("{Enter}");
+    expect(onAgentChange).toHaveBeenCalledExactlyOnceWith("agent-3");
   });
 
   it("defers management queries until the picker opens", async () => {

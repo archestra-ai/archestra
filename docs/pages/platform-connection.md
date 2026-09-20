@@ -229,13 +229,25 @@ Selecting **Any Client** gives copy-paste instructions instead of a one-command 
 
 ## Configuring the Page
 
-Go to **Settings → Connection** to set what the page offers everyone. **Available clients** is the list of clients it shows setup instructions for — remove a chip to drop that client. "Any client" is always shown.
+Go to **Settings → Connect Page** to set what the page offers everyone. **Available clients** is the list of clients it shows setup instructions for — remove a chip to drop that client. "Any client" is always shown.
 
 You can turn off **LLM Proxy on Connect**, **Skills on Connect**, and **Plugins on Connect**. The page then omits those sections, and new setup commands cannot include them. Plugin management and existing installs keep working.
 
 The same page holds the defaults it pre-selects — an MCP gateway, a client, and the provider key a setup command's virtual key maps to — and the base URLs it hands out.
 
 Which model providers the page offers is not set here. That is one deployment-wide list, under **Settings → LLM → Model providers**.
+
+### Runtime Handoff Instructions
+
+**Suggest runtime handoff** adds configurable instructions to connected clients. It is on by default. Setup must include an MCP gateway with access to Agent Runtime tools. At session start, the agent explains how to move work to Cloud runtime. When you request a transfer, it uses the handoff skill and creates a runtime agent if needed.
+
+- **Claude Code:** the existing shell wrapper passes a local file through `--append-system-prompt-file`. Explicit system-prompt flags take precedence.
+- **Codex:** the wrapper reads effective settings through Codex's local configuration API. It combines existing developer instructions with the handoff text through `-c developer_instructions`. It does not edit `AGENTS.md` or replace the built-in prompt. Profile, directory, remote, and config overrides skip this addition, except model, provider, and reasoning-effort selections. If configuration cannot be read within three seconds, Codex launches unchanged with a warning. This requires Node.js and a Codex version supporting `config/read`.
+- **Copilot CLI:** the wrapper adds a local instruction directory through `COPILOT_CUSTOM_INSTRUCTIONS_DIRS`. Existing instruction directories stay included.
+- **Claude Desktop:** setup adds `organizationInstructions` to its managed profile. This requires Desktop 1.37937.0 or newer. Instructions longer than 3,000 characters fail setup without changing the profile.
+- **Cursor:** setup prints the instruction text. Paste it into **Customize → Rules → User Rules**, keeping your existing rules. Updates and removal remain manual.
+
+After saving edits or disabling the feature, rerun Connect setup. Reload your shell for CLI clients and start a new conversation. Resumed conversations can retain their previous prompt. Disabling removes managed instructions during setup; remove Cursor's rule manually. Instructions guide the model; they do not guarantee an offer or start remote work automatically.
 
 ## Use Case
 

@@ -29,6 +29,18 @@ export const openappaEventsTable = pgTable(
   ],
 );
 
+export const openappaHostKeysTable = pgTable(
+  "openappa_host_keys",
+  {
+    key: text().notNull(),
+    root: text().notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.key, table.root] }),
+    index("openappa_host_keys_root_idx").on(table.root),
+  ],
+);
+
 export const openappaPolicyFilesTable = pgTable("openappa_policy_files", {
   hash: text().primaryKey(),
   bytes: bytea("bytes").notNull(),

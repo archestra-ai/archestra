@@ -8,11 +8,101 @@
 //! accepts. the mirrored test vectors below and in the TS test twin keep the two
 //! implementations from drifting silently.
 
-use crate::{Result, SandboxError};
+use crate::{Result, SandboxError, SecretEnvVar};
 
 pub(crate) const SKILL_SANDBOX_ROOT: &str = "/skills";
 pub(crate) const SKILL_SANDBOX_HOME: &str = "/home/sandbox";
 pub(crate) const SKILL_SANDBOX_USER: &str = "1000:1000";
+
+/// the most secret variables one run may carry; a bound on engine-side secret
+/// registrations per exec, not a product limit.
+const MAX_SECRET_ENV_VARS: usize = 16;
+/// per-value bound on a secret: credentials are small, and every byte is
+/// inlined into a `setSecret` query held in memory across the session queue.
+const MAX_SECRET_VALUE_BYTES: usize = 64 * 1024;
+/// bound on the live command's stdin, which is inlined into the exec query.
+const MAX_STDIN_BYTES: usize = 1024 * 1024;
+
+/// variables the Dagger backend sets on the warm base or during replay
+/// (`build_warm_base` / the skill-mount PYTHONPATH layer). a caller-supplied
+/// secret must not shadow them: overriding PATH or the venv would silently
+/// change which interpreter runs the command.
+const RESERVED_ENV_NAMES: &[&str] = &[
+    "HOME",
+    "PATH",
+    "PYTHONPATH",
+    "VIRTUAL_ENV",
+    "SKILL_SANDBOX_ROOT",
+];
+
+/// validate the caller's secret environment: POSIX-style upper-case names, no
+/// reserved names, no duplicates, bounded count. values are opaque and are
+/// deliberately never inspected or echoed in an error.
+pub(crate) fn validate_secret_env(vars: &[SecretEnvVar]) -> Result<()> {
+    if vars.len() > MAX_SECRET_ENV_VARS {
+        return Err(SandboxError::InvalidInput(format!(
+            "too many secret environment variables: {} (max {MAX_SECRET_ENV_VARS})",
+            vars.len()
+        )));
+    }
+    let mut seen = std::collections::HashSet::with_capacity(vars.len());
+    for var in vars {
+        if !is_env_name(&var.name) {
+            return Err(SandboxError::InvalidInput(format!(
+                "invalid secret environment variable name: {:?}",
+                var.name
+            )));
+        }
+        if RESERVED_ENV_NAMES.contains(&var.name.as_str()) {
+            return Err(SandboxError::InvalidInput(format!(
+                "secret environment variable name is reserved by the sandbox: {}",
+                var.name
+            )));
+        }
+        if !seen.insert(var.name.as_str()) {
+            return Err(SandboxError::InvalidInput(format!(
+                "duplicate secret environment variable name: {}",
+                var.name
+            )));
+        }
+        if var.value.len() > MAX_SECRET_VALUE_BYTES {
+            return Err(SandboxError::InvalidInput(format!(
+                "secret environment variable {} exceeds {MAX_SECRET_VALUE_BYTES} bytes",
+                var.name
+            )));
+        }
+    }
+    Ok(())
+}
+
+pub(crate) fn validate_stdin(stdin: Option<&str>) -> Result<()> {
+    match stdin {
+        Some(bytes) if bytes.len() > MAX_STDIN_BYTES => Err(SandboxError::InvalidInput(format!(
+            "stdin exceeds {MAX_STDIN_BYTES} bytes: {} bytes",
+            bytes.len()
+        ))),
+        _ => Ok(()),
+    }
+}
+
+/// bound on a variable name: names are inlined into engine queries and echoed
+/// in error messages, so they must stay short.
+const MAX_ENV_NAME_BYTES: usize = 128;
+
+/// an upper-case POSIX identifier. the bare `_` is refused because bash
+/// overwrites `$_` on every command, so such a secret would never be readable.
+fn is_env_name(name: &str) -> bool {
+    if name.len() > MAX_ENV_NAME_BYTES || name == "_" {
+        return false;
+    }
+    let mut chars = name.chars();
+    match chars.next() {
+        Some(first) if first.is_ascii_uppercase() || first == '_' => {
+            chars.all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_')
+        }
+        _ => false,
+    }
+}
 
 /// validate a skill-relative snapshot file path. rejects absolute paths and
 /// traversal only — intentionally narrower than [`validate_upload_path`] /
@@ -363,6 +453,92 @@ mod tests {
         );
         std::fs::remove_dir_all(root).ok();
         std::fs::remove_dir_all(target_dir).ok();
+    }
+
+    fn secret(name: &str) -> SecretEnvVar {
+        SecretEnvVar {
+            name: name.to_string(),
+            value: "value".to_string(),
+        }
+    }
+
+    #[test]
+    fn validate_secret_env_accepts_posix_upper_case_names() {
+        let at_limit = "A".repeat(MAX_ENV_NAME_BYTES);
+        let vars = [
+            "TOK",
+            "_LEADING",
+            "__",
+            "GITHUB_TOKEN_2",
+            "A",
+            at_limit.as_str(),
+        ]
+        .map(secret);
+        assert!(validate_secret_env(&vars).is_ok());
+        assert!(validate_secret_env(&[]).is_ok());
+    }
+
+    #[test]
+    fn validate_secret_env_rejects_malformed_names() {
+        let too_long = "A".repeat(MAX_ENV_NAME_BYTES + 1);
+        for bad in [
+            "",
+            "_",
+            "lower",
+            "1LEADING",
+            "WITH-DASH",
+            "WITH SPACE",
+            "A=B",
+            "Ä",
+            "NUL\0",
+            too_long.as_str(),
+        ] {
+            assert!(
+                matches!(
+                    validate_secret_env(&[secret(bad)]),
+                    Err(SandboxError::InvalidInput(_))
+                ),
+                "expected reject for name {bad:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn validate_secret_env_rejects_names_the_sandbox_owns() {
+        for reserved in RESERVED_ENV_NAMES {
+            assert!(
+                validate_secret_env(&[secret(reserved)]).is_err(),
+                "expected reject for reserved name {reserved}"
+            );
+        }
+    }
+
+    #[test]
+    fn validate_secret_env_rejects_duplicates_and_oversized_sets() {
+        assert!(validate_secret_env(&[secret("TOK"), secret("TOK")]).is_err());
+        let too_many: Vec<_> = (0..=MAX_SECRET_ENV_VARS)
+            .map(|i| secret(&format!("VAR_{i}")))
+            .collect();
+        assert!(validate_secret_env(&too_many).is_err());
+        assert!(validate_secret_env(&too_many[..MAX_SECRET_ENV_VARS]).is_ok());
+    }
+
+    #[test]
+    fn validate_secret_env_and_stdin_bound_their_byte_size() {
+        let at_limit = SecretEnvVar {
+            name: "TOK".into(),
+            value: "x".repeat(MAX_SECRET_VALUE_BYTES),
+        };
+        assert!(validate_secret_env(std::slice::from_ref(&at_limit)).is_ok());
+        let over = SecretEnvVar {
+            value: "x".repeat(MAX_SECRET_VALUE_BYTES + 1),
+            ..at_limit
+        };
+        assert!(validate_secret_env(&[over]).is_err());
+
+        assert!(validate_stdin(None).is_ok());
+        assert!(validate_stdin(Some(&"y".repeat(MAX_STDIN_BYTES))).is_ok());
+        assert!(validate_stdin(Some(&"y".repeat(MAX_STDIN_BYTES + 1))).is_err());
     }
 
     #[test]

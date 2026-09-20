@@ -15,15 +15,54 @@ export type CommonMcpToolDefinition = {
   annotations?: Record<string, unknown>;
 };
 
-export const CommonToolCallSchema = z
-  .object({
-    id: z.string(),
-    name: z.string(),
-    arguments: z.record(z.string(), z.unknown()),
+const CommonToolCallBaseSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  /** The namespace the model called the tool in, on a wire that has them. */
+  namespace: z.string().optional(),
+});
+
+const CommonFunctionToolCallSchema = CommonToolCallBaseSchema.extend({
+  arguments: z.record(z.string(), z.unknown()),
+  // Older adapters have only function-style calls and do not carry a kind.
+  kind: z.literal("function").optional(),
+});
+
+const CommonCustomToolCallSchema = CommonToolCallBaseSchema.extend({
+  arguments: z.object({ input: z.string() }),
+  kind: z.literal("custom"),
+});
+
+/**
+ * This stays an object schema because MCP select/insert/response schemas and
+ * redaction consumers require one mutable record shape. The refinement is the
+ * validated conversion boundary: `kind: custom` is accepted only with its
+ * typed `{ input: string }` arguments before that broad shape reaches them.
+ */
+export const CommonToolCallSchema = CommonToolCallBaseSchema.extend({
+  arguments: z.record(z.string(), z.unknown()),
+  kind: z.enum(["function", "custom"]).optional(),
+})
+  .superRefine((call, context) => {
+    if (call.kind !== "custom") return;
+    if (
+      Object.keys(call.arguments).length !== 1 ||
+      typeof call.arguments.input !== "string"
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["arguments", "input"],
+        message: "a custom tool call requires a string input",
+      });
+    }
   })
   .describe("Represents a tool call in a provider-agnostic way");
 
 export type CommonToolCall = z.infer<typeof CommonToolCallSchema>;
+export type CommonFunctionToolCall = z.infer<
+  typeof CommonFunctionToolCallSchema
+>;
+export type CommonCustomToolCall = z.infer<typeof CommonCustomToolCallSchema>;
 
 export type CommonToolResult = {
   id: string;

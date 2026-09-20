@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { userHasPermission } from "@/auth";
 import config from "@/config";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
+import { openappaBatteriesService } from "@/openappa/batteries";
 import { readResponseBodyWithLimit } from "@/plugins/bounded-response";
 import {
   resolveGithubAppInstallationToken,
@@ -115,6 +116,7 @@ export async function syncAppaGithubPolicy(organizationId: string) {
         sourceCommit: commit.sha,
       },
     });
+    await openappaBatteriesService.recompileOrganizations([organizationId]);
   } catch (error) {
     // Never persist raw transport/native diagnostics, which can contain credentials or policy bytes.
     await OpenAppaGithubSyncModel.finish({

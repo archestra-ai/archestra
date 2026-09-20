@@ -3,6 +3,7 @@ import {
   RuntimeCredentialConnectionModel,
   RuntimeCredentialDefinitionModel,
 } from "@/models";
+import { openappaBatteriesService } from "@/openappa/batteries";
 import { isByosEnabled } from "@/secrets-manager";
 import { githubUserConnectionManager } from "@/services/github-user-connection";
 import type {
@@ -144,6 +145,10 @@ export async function deleteRuntimeCredentialDefinition(params: {
     organizationId: params.organizationId,
     credentialId: params.key,
   });
+  // A battery install bound to this definition just lost its activation.
+  await openappaBatteriesService.recompileOrganizations([
+    params.organizationId,
+  ]);
   return deleted;
 }
 
@@ -159,13 +164,19 @@ export async function setRuntimeCredentialConnection(params: {
   assertScopeAllowed({ definition, scope: params.scope });
   if (definition.kind === "github_app_user")
     throw new ApiError(400, "Use Connect GitHub to authorize your account");
-  return RuntimeCredentialConnectionModel.upsert({
+  const connection = await RuntimeCredentialConnectionModel.upsert({
     organizationId: params.organizationId,
     userId: params.scope === "personal" ? params.userId : null,
     credentialId: params.credentialId,
     scope: params.scope,
     value: params.value,
   });
+  // A battery install bound to this credential activates on its organization value.
+  if (params.scope === "organization")
+    await openappaBatteriesService.recompileOrganizations([
+      params.organizationId,
+    ]);
+  return connection;
 }
 
 export async function deleteRuntimeCredentialConnection(params: {
@@ -179,12 +190,17 @@ export async function deleteRuntimeCredentialConnection(params: {
     assertScopeAllowed({ definition, scope: params.scope });
     return githubUserConnectionManager.disconnect(params);
   }
-  return RuntimeCredentialConnectionModel.delete({
+  const deleted = await RuntimeCredentialConnectionModel.delete({
     organizationId: params.organizationId,
     userId: params.scope === "personal" ? params.userId : null,
     credentialId: params.credentialId,
     scope: params.scope,
   });
+  if (deleted && params.scope === "organization")
+    await openappaBatteriesService.recompileOrganizations([
+      params.organizationId,
+    ]);
+  return deleted;
 }
 
 export async function getRuntimeCredentialConnectionAuditSnapshot(params: {

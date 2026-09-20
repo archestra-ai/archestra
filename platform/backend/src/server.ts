@@ -84,6 +84,7 @@ import { enterpriseTier } from "@/enterprise-tier";
 // biome-ignore lint/style/noRestrictedImports: runtime-gated image prefetch
 import { agentImagePrefetcher } from "@/k8s/agent-runtime/image-prefetch.ee";
 // SPDX-SnippetEnd
+import { agentWarmPoolManager } from "@/k8s/agent-runtime/warm-pool";
 import { daggerEnvironmentRuntimeManager } from "@/k8s/dagger-environment-runtime/manager";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import logger from "@/logging";
@@ -1583,6 +1584,7 @@ const startWebServer = async () => {
     // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
     agentImagePrefetcher.start();
     // SPDX-SnippetEnd
+    agentWarmPoolManager.start();
 
     /**
      * Here we don't expose the metrics endpoint on the main API port, but we do collect metrics
@@ -1760,6 +1762,7 @@ function registerWebServerShutdown(
     // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
     agentImagePrefetcher.stop();
     // SPDX-SnippetEnd
+    agentWarmPoolManager.stop();
 
     // Fail this pod's in-flight chat runs first: a long SSE stream keeps Fastify
     // connections open, so waiting for fastify.close() risks SIGKILL before the

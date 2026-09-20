@@ -237,6 +237,11 @@ def main():
         mcp = SETUP['mcp']
         profile['managedMcpServers'] = [{'name': mcp['serverName'], 'transport': 'http',
                                        'url': mcp['url'], 'oauth': {'mode': 'dcr'}}]
+        instructions = SETUP.get('runtimeHandoffInstructions')
+        if instructions:
+            if len(instructions) > 3000:
+                raise RuntimeError('Claude Desktop handoff instructions must be at most 3,000 characters. Shorten them in Connection settings and retry setup.')
+            profile['organizationInstructions'] = instructions
     if SETUP.get('skills'):
         skills = SETUP['skills']
         profile['allowedPluginMarketplaces'] = [{'source': 'git', 'url': skills['cloneUrl'],

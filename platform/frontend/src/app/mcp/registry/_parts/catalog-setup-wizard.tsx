@@ -73,6 +73,7 @@ import {
   useReloadMcpServerTools,
 } from "@/lib/mcp/mcp-server.query";
 import { buildRemoteInstallCredentialPayload } from "@/lib/mcp/remote-install-payload";
+import { batteryMatchesQueryKey } from "@/lib/openappa-batteries.query";
 import {
   prefetchOperators,
   prefetchToolInvocationPolicies,
@@ -93,6 +94,7 @@ import {
   type ToolWithAssignmentsData,
   useToolsWithAssignments,
 } from "@/lib/tools/tool.query";
+import { CatalogBatteryToggles } from "./catalog-battery-toggles";
 import { InstallationProgress } from "./installation-progress";
 import {
   LocalServerInstallDialog,
@@ -474,11 +476,16 @@ export function ToolsAndGuardrailsStep({ item }: { item: CatalogItem }) {
       disabled={reloadTools.isPending || !reloadTarget}
       onClick={() =>
         reloadTarget &&
-        reloadTools.mutate({
-          id: reloadTarget.id,
-          name: item.name,
-          catalogId: item.id,
-        })
+        reloadTools.mutate(
+          { id: reloadTarget.id, name: item.name, catalogId: item.id },
+          {
+            // A sync attaches the batteries the server stands for.
+            onSuccess: () =>
+              queryClient.invalidateQueries({
+                queryKey: batteryMatchesQueryKey(item.id),
+              }),
+          },
+        )
       }
       tooltip={
         reloadTarget
@@ -576,6 +583,7 @@ export function ToolsAndGuardrailsStep({ item }: { item: CatalogItem }) {
         </p>
         {refreshToolsButton}
       </div>
+      <CatalogBatteryToggles catalogId={item.id} />
       {tools.length > 5 && (
         <SearchInput
           placeholder="Filter tools by name"

@@ -25,6 +25,8 @@ import McpOauthClientModel from "@/models/mcp-oauth-client";
 import McpServerModel from "@/models/mcp-server";
 import MemberModel from "@/models/member";
 import ModelModel from "@/models/model";
+import OpenAppaBatteryInstallModel from "@/models/openappa-battery-install";
+import OpenAppaBatteryPackageModel from "@/models/openappa-battery-package";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import OrganizationModel from "@/models/organization";
 import OrganizationRoleModel from "@/models/organization-role";
@@ -789,6 +791,18 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     resourceIdSource: "organizationContext",
     fetchById: (id, orgId) =>
       OpenAppaGithubSyncModel.findByIdForAudit(id, orgId),
+  },
+  "/api/openappa/battery-installs": {
+    resourceType: "openappaBatteryInstall",
+    fetchById: (id, orgId) =>
+      OpenAppaBatteryInstallModel.findByIdForAudit(id, orgId),
+  },
+  "/api/openappa/battery-packages/:name": {
+    resourceType: "openappaBatteryPackage",
+    resourceIdParam: "name",
+    actionByMethod: { PUT: "openappaBatteryPackage.updated" },
+    fetchById: (name, orgId) =>
+      OpenAppaBatteryPackageModel.findByIdForAudit(name, orgId),
   },
   // Bulk import creates multiple skills, so there is no single resourceId and
   // fetchById can't represent the result. The route handler sets

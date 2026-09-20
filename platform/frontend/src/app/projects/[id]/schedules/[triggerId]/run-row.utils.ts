@@ -1,30 +1,33 @@
-export type RunRowKind = "open-chat" | "resolve" | "running";
+export type RunRowKind = "open-chat" | "open-runtime" | "resolve" | "running";
 
-// A run with a chat conversation → "open-chat": a Link straight to that chat (a
-// succeeded run shows its transcript; a failed run shows the prompt + an inline
-// error card with "Try again"). A COMPLETED run WITHOUT a conversation (legacy,
-// predating eager creation) → "resolve": clicking it lazily creates the
-// conversation, then opens it. Anything still in-flight without a conversation
-// yet → "running" (inert).
+// Runtime tasks and chats open their existing session. Completed legacy runs
+// resolve a chat lazily; unlinked runs still being launched remain inert.
 export function runRowKind(run: {
   status: string;
   chatConversationId: string | null;
+  runtimeTaskId?: string | null;
 }): RunRowKind {
+  if (run.runtimeTaskId) return "open-runtime";
   if (run.chatConversationId) {
     return "open-chat";
   }
-  if (run.status === "success" || run.status === "failed") {
+  if (run.status !== "running") {
     return "resolve";
   }
   return "running";
 }
 
-// Chat URL carrying schedule context for a run that already has a conversation;
-// null when the run still needs one resolved first.
-export function runChatHref(params: {
+// Open the runtime directly, or a chat carrying its scheduled-run context.
+export function runHref(params: {
   triggerId: string;
-  run: { id: string; status: string; chatConversationId: string | null };
+  run: {
+    id: string;
+    status: string;
+    chatConversationId: string | null;
+    runtimeTaskId?: string | null;
+  };
 }): string | null {
+  if (params.run.runtimeTaskId) return `/chat/runs/${params.run.runtimeTaskId}`;
   if (runRowKind(params.run) !== "open-chat") {
     return null;
   }

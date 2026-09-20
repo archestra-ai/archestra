@@ -719,6 +719,12 @@ const THREAD_MUTE_MARKER_TTL_MS = CHATOPS_CHANNEL_AUTO_REPLY.ACTIVE_TTL_MS;
 /**
  * Whole-message phrases that mute the bot in a channel thread. Kept short and
  * unambiguous so they don't collide with real requests (see isThreadMuteCommand).
+ *
+ * Includes the colon-wrapped emoji shortcodes (":mute:", ":shushing_face:") so a
+ * message typed with the literal shortcode text — not an emoji reaction — mutes
+ * the thread the same way reacting with 🔇/🤫 does (see isMuteReaction). Neither
+ * provider's mention-cleanup nor normalizeMuteText touches colons, so these must
+ * be listed with their colons intact.
  */
 const THREAD_MUTE_COMMANDS = new Set([
   "mute",
@@ -732,6 +738,8 @@ const THREAD_MUTE_COMMANDS = new Set([
   "be quiet",
   "stay quiet",
   "shut up",
+  ":mute:",
+  ":shushing_face:",
 ]);
 
 /**

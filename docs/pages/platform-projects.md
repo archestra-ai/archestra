@@ -3,7 +3,7 @@ title: Projects
 category: Projects
 order: 1
 description: A shared workspace to organize your work
-lastUpdated: 2026-09-15
+lastUpdated: 2026-09-17
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -44,7 +44,7 @@ Every project has an `instructions.md` file, pinned at the top of the Files pane
 
 ## Scheduled Tasks
 
-A schedule runs an agent for you on a recurring basis. Every run is saved as a chat in the project, so you can always see what the agent did.
+A schedule runs an agent for you on a recurring basis. Agents with a dedicated runtime start an Agent Runtime session in the project. Other agents start a chat. Open a scheduled run to follow its work and review the result. Runtime runs stay in progress until their task finishes.
 
 ![New schedule dialog](/docs/automated_screenshots/platform-projects_schedule-dialog.webp)
 

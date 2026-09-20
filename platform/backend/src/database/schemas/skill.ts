@@ -136,6 +136,8 @@ const skillsTable = softDeletablePgTable(
       .default("manual"),
     /** Provenance for imported skills, e.g. `owner/repo@ref:path`. */
     sourceRef: text("source_ref"),
+    /** Repository web origin; null preserves the legacy github.com source. */
+    sourceOrigin: text("source_origin"),
     /** Commit SHA the skill was imported at, when known. */
     sourceCommit: text("source_commit"),
     /**

@@ -25,6 +25,8 @@ export async function startDetachedAgentTask(params: {
   message: string;
   attachments?: A2AAttachment[];
   systemParams?: A2ASystemParams;
+  /** Persist the caller's durable task association before execution starts. */
+  onTaskCreated?: (taskId: string) => Promise<void>;
 }): Promise<A2ATask> {
   const response = await (await taskManager.get()).sendMessage({
     actor: params.actor,
@@ -41,18 +43,18 @@ export async function startDetachedAgentTask(params: {
     },
     systemParams: params.systemParams,
     taskRun: { createTask: true, detached: true },
-    onDetachedTaskRun:
-      params.attachments && params.attachments.length > 0
-        ? async ({ taskId }) => {
-            await persistAgentRunInputs({
-              taskId,
-              organizationId: params.actor.organizationId,
-              uploadedByUserId:
-                params.actor.kind === "user" ? params.actor.id : null,
-              attachments: params.attachments ?? [],
-            });
-          }
-        : undefined,
+    onDetachedTaskRun: async ({ taskId }) => {
+      await params.onTaskCreated?.(taskId);
+      if (params.attachments && params.attachments.length > 0) {
+        await persistAgentRunInputs({
+          taskId,
+          organizationId: params.actor.organizationId,
+          uploadedByUserId:
+            params.actor.kind === "user" ? params.actor.id : null,
+          attachments: params.attachments,
+        });
+      }
+    },
   });
   if (!response.task) {
     throw new Error("The Agent answered without creating a durable task");

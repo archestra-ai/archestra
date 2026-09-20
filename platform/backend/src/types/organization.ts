@@ -575,6 +575,18 @@ export const UpdateConnectionSettingsSchema = z.object({
   connectionSkillsEnabled: z.boolean().optional(),
   connectionLlmProxyEnabled: z.boolean().optional(),
   connectionPluginsEnabled: z.boolean().optional(),
+  connectionRuntimeHandoffEnabled: z.boolean().optional(),
+  connectionRuntimeHandoffInstructions: z
+    .string()
+    .trim()
+    .min(1)
+    .max(20000)
+    .refine(
+      (value) => !value.includes("\u0000"),
+      "Instructions must not contain NUL characters",
+    )
+    .nullable()
+    .optional(),
   connectionBaseUrls: z
     .array(ConnectionBaseUrlSchema)
     .max(50)

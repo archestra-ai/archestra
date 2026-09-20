@@ -42,10 +42,10 @@ Full access to core resources and settings, but cannot manage users, roles, or i
 
 | Resource | Actions |
 |----------|--------|
-| Agents | `read`, `create`, `update`, `delete`, `deploy-to-restricted` |
-| Skills | `read`, `create`, `update`, `delete`, `deploy-to-restricted` |
+| Agents | `read`, `create`, `update`, `delete`, `team-admin`, `deploy-to-restricted` |
+| Skills | `read`, `create`, `update`, `delete`, `team-admin`, `deploy-to-restricted` |
 | Plugins | `read`, `create`, `update`, `delete` |
-| Apps | `read`, `create`, `update`, `delete`, `deploy-to-restricted` |
+| Apps | `read`, `create`, `update`, `delete`, `team-admin`, `deploy-to-restricted` |
 | Code Sandbox | `execute` |
 | Agent Triggers | `read`, `create`, `update`, `delete` |
 | Scheduled Tasks | `read`, `create`, `update`, `delete` |
@@ -56,10 +56,10 @@ Full access to core resources and settings, but cannot manage users, roles, or i
 | LLM Models | `read`, `update` |
 | LLM Limits | `read`, `create`, `update`, `delete` |
 | LLM Cost Analytics | `read` |
-| MCP Gateways | `read`, `create`, `update`, `delete`, `deploy-to-restricted` |
+| MCP Gateways | `read`, `create`, `update`, `delete`, `team-admin`, `deploy-to-restricted` |
 | MCP OAuth Clients | `read`, `create`, `update`, `delete`, `team-admin` |
 | Tools & Policies | `read`, `create`, `update`, `delete` |
-| MCP Registry | `read`, `create`, `update`, `delete`, `deploy-to-restricted` |
+| MCP Registry | `read`, `create`, `update`, `delete`, `team-admin`, `deploy-to-restricted` |
 | MCP Server Installations | `read`, `create`, `update`, `delete` |
 | Environments | `read`, `create`, `update`, `delete` |
 | Credentials | `read`, `create`, `update`, `delete` |
@@ -166,6 +166,8 @@ The following table lists all available permissions that can be assigned to cust
 | `agent:create` | Create new agents |
 | `agent:update` | Modify agent configuration and settings |
 | `agent:delete` | Delete agents |
+| `agent:team-admin` | Manage team assignments for agents |
+| `agent:admin` | Full administrative control over all agents, bypassing team restrictions |
 | `agent:deploy-to-restricted` | Assign agents to restricted deployment environments |
 | `agentSettings:read` | View agent settings (default model, default agent, default tool guardrails, file uploads, Apps Hackathon recorder) |
 | `agentSettings:update` | Modify agent settings (default model, default agent, default tool guardrails, file uploads, Apps Hackathon recorder) |
@@ -180,6 +182,8 @@ The following table lists all available permissions that can be assigned to cust
 | `app:create` | Create new MCP Apps |
 | `app:update` | Modify MCP Apps and their tools allowed by your resource grants |
 | `app:delete` | Delete MCP Apps |
+| `app:team-admin` | Manage team-scoped MCP Apps, including their team assignments, in teams you belong to |
+| `app:admin` | Full administrative control over all MCP Apps, bypassing team restrictions |
 | `app:deploy-to-restricted` | Assign MCP Apps to restricted deployment environments |
 | `auditLog:read` | View audit log records of your own administrative actions |
 | `auditLog:admin` | View the organization-wide audit log of every member's administrative actions |
@@ -251,6 +255,8 @@ The following table lists all available permissions that can be assigned to cust
 | `mcpGateway:create` | Create new MCP gateways |
 | `mcpGateway:update` | Modify MCP gateway configuration |
 | `mcpGateway:delete` | Delete MCP gateways |
+| `mcpGateway:team-admin` | Manage team assignments for MCP gateways |
+| `mcpGateway:admin` | Full administrative control over all MCP gateways, bypassing team restrictions |
 | `mcpGateway:deploy-to-restricted` | Assign MCP gateways to restricted deployment environments |
 | `mcpOauthClient:read` | View MCP OAuth client registrations |
 | `mcpOauthClient:create` | Create MCP OAuth client registrations |
@@ -263,6 +269,7 @@ The following table lists all available permissions that can be assigned to cust
 | `mcpRegistry:update` | Modify MCP registry entries |
 | `mcpRegistry:delete` | Remove servers from the MCP registry |
 | `mcpRegistry:manage-deleted` | View and restore soft-deleted MCP registry entries |
+| `mcpRegistry:team-admin` | Manage team assignments for MCP registry entries |
 | `mcpRegistry:deploy-to-restricted` | Deploy MCP servers (catalog items) to restricted environments |
 | `mcpServerInstallation:read` | View installed MCP servers and their status |
 | `mcpServerInstallation:create` | Install MCP servers from the registry |
@@ -312,6 +319,8 @@ The following table lists all available permissions that can be assigned to cust
 | `skill:create` | Create new agent skills |
 | `skill:update` | Modify agent skill content allowed by your resource grants |
 | `skill:delete` | Delete agent skills |
+| `skill:team-admin` | Manage team assignments for agent skills |
+| `skill:admin` | Full administrative control over all agent skills, bypassing team restrictions |
 | `skill:deploy-to-restricted` | Assign agent skills to restricted deployment environments |
 | `skillsSettings:read` | View Skills settings (online catalog availability) |
 | `skillsSettings:update` | Modify Skills settings |

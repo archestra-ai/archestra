@@ -28,10 +28,34 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   ...(defaultStatements as unknown as Record<string, Action[]>),
 
   // Agents
-  agent: ["read", "create", "update", "delete", "deploy-to-restricted"],
-  skill: ["read", "create", "update", "delete", "deploy-to-restricted"],
+  agent: [
+    "read",
+    "create",
+    "update",
+    "delete",
+    "team-admin",
+    "admin",
+    "deploy-to-restricted",
+  ],
+  skill: [
+    "read",
+    "create",
+    "update",
+    "delete",
+    "team-admin",
+    "admin",
+    "deploy-to-restricted",
+  ],
   plugin: ["read", "create", "update", "delete", "admin"],
-  app: ["read", "create", "update", "delete", "deploy-to-restricted"],
+  app: [
+    "read",
+    "create",
+    "update",
+    "delete",
+    "team-admin",
+    "admin",
+    "deploy-to-restricted",
+  ],
   sandbox: ["execute"],
   agentTrigger: ["read", "create", "update", "delete"],
   scheduledTask: ["read", "create", "update", "delete", "admin"],
@@ -52,7 +76,15 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   llmCost: ["read"],
 
   // MCP
-  mcpGateway: ["read", "create", "update", "delete", "deploy-to-restricted"],
+  mcpGateway: [
+    "read",
+    "create",
+    "update",
+    "delete",
+    "team-admin",
+    "admin",
+    "deploy-to-restricted",
+  ],
   mcpOauthClient: ["read", "create", "update", "delete", "team-admin", "admin"],
   toolPolicy: ["read", "create", "update", "delete"],
   mcpRegistry: [
@@ -61,6 +93,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
     "update",
     "delete",
     "manage-deleted",
+    "team-admin",
     "deploy-to-restricted",
   ],
   mcpServerInstallation: [
@@ -132,10 +165,31 @@ export const allAvailableActions: Record<Resource, Action[]> = {
 
 export const editorPermissions: Record<Resource, Action[]> = {
   // Agents
-  agent: ["read", "create", "update", "delete", "deploy-to-restricted"],
-  skill: ["read", "create", "update", "delete", "deploy-to-restricted"],
+  agent: [
+    "read",
+    "create",
+    "update",
+    "delete",
+    "team-admin",
+    "deploy-to-restricted",
+  ],
+  skill: [
+    "read",
+    "create",
+    "update",
+    "delete",
+    "team-admin",
+    "deploy-to-restricted",
+  ],
   plugin: ["read", "create", "update", "delete"],
-  app: ["read", "create", "update", "delete", "deploy-to-restricted"],
+  app: [
+    "read",
+    "create",
+    "update",
+    "delete",
+    "team-admin",
+    "deploy-to-restricted",
+  ],
   sandbox: ["execute"],
   agentTrigger: ["read", "create", "update", "delete"],
   scheduledTask: ["read", "create", "update", "delete"],
@@ -150,10 +204,24 @@ export const editorPermissions: Record<Resource, Action[]> = {
   llmCost: ["read"],
 
   // MCP
-  mcpGateway: ["read", "create", "update", "delete", "deploy-to-restricted"],
+  mcpGateway: [
+    "read",
+    "create",
+    "update",
+    "delete",
+    "team-admin",
+    "deploy-to-restricted",
+  ],
   mcpOauthClient: ["read", "create", "update", "delete", "team-admin"],
   toolPolicy: ["read", "create", "update", "delete"],
-  mcpRegistry: ["read", "create", "update", "delete", "deploy-to-restricted"],
+  mcpRegistry: [
+    "read",
+    "create",
+    "update",
+    "delete",
+    "team-admin",
+    "deploy-to-restricted",
+  ],
   mcpServerInstallation: ["read", "create", "update", "delete"],
   environment: ["read", "create", "update", "delete"],
   credential: ["read", "create", "update", "delete"],
@@ -378,6 +446,20 @@ export const predefinedPermissionsMap: Record<PredefinedRoleName, Permissions> =
  * in allAvailableActions has a corresponding entry here.
  */
 export const permissionDescriptions: Record<string, string> = {
+  "agent:team-admin": "Manage team assignments for agents",
+  "agent:admin":
+    "Full administrative control over all agents, bypassing team restrictions",
+  "skill:team-admin": "Manage team assignments for agent skills",
+  "skill:admin":
+    "Full administrative control over all agent skills, bypassing team restrictions",
+  "app:team-admin":
+    "Manage team-scoped MCP Apps, including their team assignments, in teams you belong to",
+  "app:admin":
+    "Full administrative control over all MCP Apps, bypassing team restrictions",
+  "mcpGateway:team-admin": "Manage team assignments for MCP gateways",
+  "mcpGateway:admin":
+    "Full administrative control over all MCP gateways, bypassing team restrictions",
+  "mcpRegistry:team-admin": "Manage team assignments for MCP registry entries",
   // Agents
   "agent:read": "View and list agents",
   "agent:create": "Create new agents",
@@ -2116,6 +2198,105 @@ export function buildForbiddenErrorMessage(params: {
  * Maps frontend routes to their required permissions.
  * Used to control page-level access and UI element visibility.
  */
+/**
+ * What these routes required before access became a grant on the object.
+ *
+ * Each entry names a route whose requirement moved onto the object itself: a
+ * caller now needs a grant on the skill, app, model or agent rather than the
+ * resource-wide action. A deployment that has not switched the model on is
+ * still answering from the retired visibility fields, and those fields never
+ * asked for the action either — the route did. Dropping both at once would
+ * hand every member the write routes.
+ *
+ * So the middleware applies these while the switch is off, and the empty
+ * entries in the map above once it is on. The release that deletes the switch
+ * deletes this map with it.
+ */
+export const legacyEndpointPermissionsMap: Partial<
+  Record<RouteId, Permissions>
+> = {
+  [RouteId.GetAgentRuntimePreflight]: { agent: ["read"] },
+  [RouteId.GetClaudeCodeAccount]: { agent: ["read"] },
+  [RouteId.StartClaudeCodeSignIn]: { agent: ["read"] },
+  [RouteId.CompleteClaudeCodeSignIn]: { agent: ["read"] },
+  [RouteId.DisconnectClaudeCodeAccount]: { agent: ["read"] },
+  [RouteId.GetClaudeCodeModels]: { agent: ["read"] },
+  [RouteId.SetAgentRuntimeCredential]: { agent: ["read"] },
+  [RouteId.DeleteAgentRuntimeCredential]: { agent: ["read"] },
+  [RouteId.GetAgentRuns]: { agent: ["read"] },
+  [RouteId.StartAgentRun]: { agent: ["read"] },
+  [RouteId.GetMyAgentRuns]: { agent: ["read"] },
+  [RouteId.GetMyAgentRun]: { agent: ["read"] },
+  [RouteId.UpdateAgentRun]: { agent: ["read"] },
+  [RouteId.CancelAgentRun]: { agent: ["read"] },
+  [RouteId.ContinueAgentRun]: { agent: ["read"] },
+  [RouteId.DeleteAgentWorkspace]: { agent: ["read"] },
+  [RouteId.ReadAgentWorkspaceFile]: { agent: ["read"] },
+  [RouteId.WriteAgentWorkspaceFile]: { agent: ["read"] },
+  [RouteId.StartAgentWorkspaceTransfer]: { agent: ["read"] },
+  [RouteId.DownloadAgentWorkspaceTransfer]: { agent: ["read"] },
+  [RouteId.UploadAgentWorkspaceTransfer]: { agent: ["read"] },
+  [RouteId.DeleteAgentRun]: { agent: ["read"] },
+  [RouteId.GetAgentRunShare]: { agent: ["read"] },
+  [RouteId.ShareAgentRun]: { agent: ["read"] },
+  [RouteId.UnshareAgentRun]: { agent: ["read"] },
+  [RouteId.GetInternalMcpCatalog]: { mcpRegistry: ["read"] },
+  [RouteId.GetInternalMcpCatalogItem]: { mcpRegistry: ["read"] },
+  [RouteId.GetInternalMcpCatalogTools]: { mcpRegistry: ["read"] },
+  [RouteId.GetInternalMcpCatalogToolsBatch]: { mcpRegistry: ["read"] },
+  [RouteId.UpdateInternalMcpCatalogItem]: { mcpRegistry: ["update"] },
+  [RouteId.ReinstallInternalMcpCatalogItem]: { mcpRegistry: ["update"] },
+  [RouteId.RefreshInternalMcpCatalogImage]: { mcpRegistry: ["update"] },
+  [RouteId.DeleteInternalMcpCatalogItem]: { mcpRegistry: ["delete"] },
+  [RouteId.DeleteInternalMcpCatalogItemByName]: { mcpRegistry: ["delete"] },
+  [RouteId.UpdateTeam]: { team: ["read"] },
+  [RouteId.GetChatAgentMcpTools]: { agent: ["read"] },
+  [RouteId.GetLlmModels]: { llmModel: ["read"] },
+  [RouteId.GetModelsWithApiKeys]: { llmModel: ["read"] },
+  [RouteId.BulkUpdateModels]: { llmModel: ["update"] },
+  [RouteId.UpdateModel]: { llmModel: ["update"] },
+  [RouteId.GetSkills]: { skill: ["read"] },
+  [RouteId.GetSkill]: { skill: ["read"] },
+  [RouteId.UpdateSkill]: { skill: ["update"] },
+  [RouteId.DeleteSkill]: { skill: ["delete"] },
+  [RouteId.BulkDeleteSkills]: { skill: ["delete"] },
+  [RouteId.RestoreSkill]: { skill: ["delete"] },
+  [RouteId.ResetSkill]: { skill: ["update"] },
+  [RouteId.UpdateSkillGithubSync]: { skill: ["update"] },
+  [RouteId.GetSkillUsageStatistics]: { skill: ["read"] },
+  [RouteId.GetSkillVersions]: { skill: ["read"] },
+  [RouteId.GetSkillVersion]: { skill: ["read"] },
+  [RouteId.GetSkillShareLinks]: { skill: ["admin"] },
+  [RouteId.CreateSkillShareLink]: { skill: ["admin"] },
+  [RouteId.RevokeSkillShareLink]: { skill: ["admin"] },
+  [RouteId.RotateSkillShareLink]: { skill: ["admin"] },
+  [RouteId.GetApps]: { app: ["read"] },
+  [RouteId.GetApp]: { app: ["read"] },
+  [RouteId.UpdateApp]: { app: ["update"] },
+  [RouteId.EnableApp]: { app: ["update"] },
+  [RouteId.DisableApp]: { app: ["update"] },
+  [RouteId.LockApp]: { app: ["update"] },
+  [RouteId.UnlockApp]: { app: ["update"] },
+  [RouteId.BulkUpdateApps]: { app: ["update"] },
+  [RouteId.BulkDeleteApps]: { app: ["delete"] },
+  [RouteId.DeleteApp]: { app: ["delete"] },
+  [RouteId.GetAppVersions]: { app: ["read"] },
+  [RouteId.GetAppVersionSummaries]: { app: ["read"] },
+  [RouteId.GetAppVersion]: { app: ["read"] },
+  [RouteId.RestoreAppVersion]: { app: ["update"] },
+  [RouteId.GetAppTools]: { app: ["read"] },
+  [RouteId.AssignToolToApp]: { app: ["update"] },
+  [RouteId.UnassignToolFromApp]: { app: ["update"] },
+  [RouteId.PinApp]: { app: ["read"] },
+  [RouteId.UnpinApp]: { app: ["read"] },
+  [RouteId.PostAppRenderDiagnostics]: { app: ["read"] },
+  [RouteId.PostAppRenderScreenshot]: { app: ["read"] },
+  [RouteId.GetHooks]: { agent: ["read"] },
+  [RouteId.CreateHook]: { agent: ["update"] },
+  [RouteId.UpdateHook]: { agent: ["update"] },
+  [RouteId.DeleteHook]: { agent: ["update"] },
+};
+
 export const requiredPagePermissionsMap: Record<string, Permissions> = {
   // Chat
   "/chat": { chat: ["read"] },

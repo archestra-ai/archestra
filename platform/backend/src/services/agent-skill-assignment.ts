@@ -93,12 +93,11 @@ class AgentSkillAssignmentService {
             (grant.scope === "*" || grant.scope === id),
         ) ||
           applicable.some((policy) =>
-            policy.grants.some(
-              (grant) =>
-                grant.subject.type === "organization" &&
-                grant.subject.id === "*" &&
-                grant.actions.includes("use"),
-            ),
+            ResourcePermissionPolicyModel.isOrganizationWide({
+              policy,
+              scope: id,
+              action: "use",
+            }),
           ),
       );
     }

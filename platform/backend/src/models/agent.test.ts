@@ -129,9 +129,13 @@ describe("AgentModel", () => {
   test("filters paginated agents by configured provider key", async ({
     makeOrganization,
     makeUser,
+    makeMember,
   }) => {
     const organization = await makeOrganization();
     const user = await makeUser();
+    // Organization-wide reach is a grant to the reader's role, so the caller
+    // needs a membership to carry one.
+    await makeMember(user.id, organization.id);
     const selectedKey = await LlmProviderApiKeyModel.create({
       organizationId: organization.id,
       userId: user.id,

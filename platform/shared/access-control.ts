@@ -4,12 +4,14 @@
 
 import { defaultStatements } from "better-auth/plugins/organization/access";
 import type { Action, Permissions, Resource } from "./permission.types";
+import type { ScopedResource } from "./resource-permissions";
 import {
   ADMIN_ROLE_NAME,
   EDITOR_ROLE_NAME,
   MEMBER_ROLE_NAME,
   PLATFORM_ADMIN_ROLE_NAME,
   type PredefinedRoleName,
+  PredefinedRoleNameSchema,
 } from "./roles";
 import { RouteId } from "./routes";
 
@@ -341,6 +343,24 @@ export const platformAdminPermissions: Record<Resource, Action[]> = {
   auditLog: ["read"],
   member: allAvailableActions.member.filter((a) => a !== "impersonate"),
 };
+
+/**
+ * The predefined roles whose permissions carry a resource's read action.
+ *
+ * Legacy visibility was one half of a pair: a resource shared with the whole
+ * organization was still invisible to a member whose role withheld that
+ * resource's read action. Granting "everyone in the organization" would drop
+ * that half, so the upgrade maps organization-wide visibility onto these roles
+ * instead and access stays exactly as it was. Choosing everyone remains
+ * available afterwards as a deliberate act in the permissions editor.
+ */
+export function predefinedRolesWithReadAccess(
+  resource: ScopedResource,
+): PredefinedRoleName[] {
+  return PredefinedRoleNameSchema.options.filter((role) =>
+    predefinedPermissionsMap[role][resource]?.includes("read"),
+  );
+}
 
 export const predefinedPermissionsMap: Record<PredefinedRoleName, Permissions> =
   {

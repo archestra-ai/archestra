@@ -147,12 +147,11 @@ class SkillTeamModel {
       policies.some(
         (policy) =>
           (policy.scope === "*" || policy.scope === skill.id) &&
-          policy.grants.some(
-            (grant) =>
-              grant.subject.type === "organization" &&
-              grant.subject.id === "*" &&
-              grant.actions.includes(params.action ?? "read"),
-          ),
+          ResourcePermissionPolicyModel.isOrganizationWide({
+            policy,
+            scope: skill.id,
+            action: params.action ?? "read",
+          }),
       )
     )
       return true;

@@ -249,14 +249,16 @@ describe("resource sharing grant backfill", () => {
           SELECT grants, legacy_sharing_migrated FROM resource_permission_policies
           WHERE organization_id = ${org.id} AND resource = 'agent' AND scope = ${agent.id}
         `);
+        // Organization visibility lands on the roles that hold `agent:read`,
+        // so a role without it keeps seeing nothing after the upgrade.
         expect(migrated.rows).toEqual([
           {
-            grants: [
-              {
-                subject: { type: "organization", id: "*" },
+            grants: ["admin", "editor", "member", "platform_admin"].map(
+              (id) => ({
+                subject: { type: "role", id },
                 actions: ["read", "use"],
-              },
-            ],
+              }),
+            ),
             legacy_sharing_migrated: true,
           },
         ]);
@@ -356,9 +358,14 @@ describe("resource sharing grant backfill", () => {
       resource: "agent",
       scope: publicAgent.id,
     });
-    expect(publicPolicy?.grants).toEqual([
-      { subject: { type: "organization", id: "*" }, actions: ["read", "use"] },
-    ]);
+    // The organization-wide audience becomes the roles that hold `agent:read`,
+    // so nobody gains access who could not already reach the agent.
+    expect(publicPolicy?.grants).toEqual(
+      ["admin", "editor", "member", "platform_admin"].map((id) => ({
+        subject: { type: "role", id },
+        actions: ["read", "use"],
+      })),
+    );
     const restrictedPolicy = await ResourcePermissionPolicyModel.find({
       organizationId: org.id,
       resource: "mcpGateway",

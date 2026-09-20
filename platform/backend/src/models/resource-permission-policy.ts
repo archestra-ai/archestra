@@ -9,12 +9,43 @@ import {
   ScopedResourceSchema,
   TEAM_RESOURCE_SCOPE,
 } from "@archestra/shared";
+import { predefinedRolesWithReadAccess } from "@archestra/shared/access-control";
 import { and, eq, inArray, or, type SQLWrapper, sql } from "drizzle-orm";
 import db, { schema, type Transaction } from "@/database";
 import RoleCompositionModel from "./role-composition";
 import TeamModel from "./team";
 
 export default class ResourcePermissionPolicyModel {
+  /**
+   * Whether a policy puts an object within reach of the organization at large,
+   * for a principal that carries no role of its own — a shared credential, an
+   * anonymous marketplace reader, or a skill handed to every holder of a
+   * gateway token.
+   *
+   * Two subjects say so. An explicit grant to everyone is one. A grant to a
+   * role on the object's OWN policy is the other: the upgrade writes
+   * organization-wide visibility that way, because a role without the
+   * resource's read action never saw the object. The same subject at `*` scope
+   * is one role's authority over every object of the type, which a role-less
+   * principal does not inherit.
+   *
+   * The SQL form of this rule lives in {@link organizationAccessCondition};
+   * change both together.
+   */
+  static isOrganizationWide(params: {
+    policy: { scope: string; grants: ResourcePermissionGrant[] };
+    scope: string;
+    action: ResourcePermissionAction;
+  }): boolean {
+    return params.policy.grants.some(
+      (grant) =>
+        grant.actions.includes(params.action) &&
+        ((grant.subject.type === "organization" && grant.subject.id === "*") ||
+          (grant.subject.type === "role" &&
+            params.policy.scope === params.scope)),
+    );
+  }
+
   /** Shared credentials represent their organization or team, never a user role. */
   static async sharedCredentialHasAccess(params: {
     organizationId: string;
@@ -36,12 +67,17 @@ export default class ResourcePermissionPolicyModel {
     return policies.some(
       (policy) =>
         (policy.scope === "*" || policy.scope === params.scope) &&
-        policy.grants.some(
-          (grant) =>
-            grant.actions.includes(params.action) &&
-            (grant.subject.type === "organization" ||
-              (grant.subject.type === "team" && teamIds.has(grant.subject.id))),
-        ),
+        (ResourcePermissionPolicyModel.isOrganizationWide({
+          policy,
+          scope: params.scope,
+          action: params.action,
+        }) ||
+          policy.grants.some(
+            (grant) =>
+              grant.actions.includes(params.action) &&
+              grant.subject.type === "team" &&
+              teamIds.has(grant.subject.id),
+          )),
     );
   }
 
@@ -140,7 +176,17 @@ export default class ResourcePermissionPolicyModel {
     )`;
   }
 
-  /** Organization-wide publication and shared credentials need an organization grant. */
+  /**
+   * Organization-wide publication and shared credentials, for principals that
+   * carry no role of their own.
+   *
+   * Two subjects answer for "the organization at large". An explicit grant to
+   * everyone is one. A grant to a role on the object's OWN policy is the
+   * other: the upgrade writes organization-wide visibility that way, because a
+   * role without the resource's read action never saw the object. The same
+   * subject at `*` scope is one role's authority over every object of the
+   * type, which a role-less principal does not inherit.
+   */
   static organizationAccessCondition(params: {
     organizationId: string | SQLWrapper;
     resource: ScopedResource;
@@ -156,8 +202,12 @@ export default class ResourcePermissionPolicyModel {
         WHERE organization_access_policy.organization_id = ${params.organizationId}
           AND organization_access_policy.resource = ${params.resource}
           AND organization_access_policy.scope IN ('*', (${params.scopeColumn})::text)
-          AND organization_grant->'subject'->>'type' = 'organization'
-          AND organization_grant->'subject'->>'id' = '*'
+          AND (
+            (organization_grant->'subject'->>'type' = 'organization'
+              AND organization_grant->'subject'->>'id' = '*')
+            OR (organization_grant->'subject'->>'type' = 'role'
+              AND organization_access_policy.scope = (${params.scopeColumn})::text)
+          )
           AND (organization_grant->'actions') ? ${params.action}
       )
     )`;
@@ -234,10 +284,34 @@ export default class ResourcePermissionPolicyModel {
     const initialGrants: ResourcePermissionGrant[] = params.grants ?? [];
     if (params.grants === undefined) {
       if (params.visibility === "org") {
-        initialGrants.push({
-          subject: { type: "organization", id: "*" },
-          actions: ["read", "use"],
-        });
+        // Organization-wide visibility never reached a member whose role
+        // withheld this resource's read action, so it becomes a grant to the
+        // roles that hold it rather than to everyone. Choosing everyone stays
+        // available as a deliberate act in the permissions editor.
+        const [predefined, custom] = await Promise.all([
+          Promise.resolve(predefinedRolesWithReadAccess(params.resource)),
+          params.tx
+            .select({ id: schema.organizationRolesTable.id })
+            .from(schema.organizationRolesTable)
+            .where(
+              and(
+                eq(
+                  schema.organizationRolesTable.organizationId,
+                  params.organizationId,
+                ),
+                sql`coalesce(${schema.organizationRolesTable.permission}::jsonb -> ${params.resource}, '[]'::jsonb) ? 'read'`,
+              ),
+            ),
+        ]);
+        initialGrants.push(
+          ...[
+            ...predefined,
+            ...custom.map((role: { id: string }) => role.id),
+          ].map((id) => ({
+            subject: { type: "role" as const, id },
+            actions: ["read" as const, "use" as const],
+          })),
+        );
       } else if (params.visibility === "team" && params.teams?.length) {
         const teams = await params.tx
           .select({ id: schema.teamsTable.id })

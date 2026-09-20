@@ -414,7 +414,7 @@ describe("deploy_mcp_server", () => {
     const org = await makeOrganization();
     const callerRole = await makeCustomRole(org.id, {
       permission: {
-        mcpRegistry: ["update"],
+        mcpRegistry: ["read", "update"],
         mcpServerInstallation: ["read", "create"],
       },
     });
@@ -487,7 +487,7 @@ describe("deploy_mcp_server", () => {
     await makeMember(owner.id, org.id, { role: "admin" });
     const editorRole = await makeCustomRole(org.id, {
       permission: {
-        mcpRegistry: ["update"],
+        mcpRegistry: ["read", "update"],
         mcpServerInstallation: ["read", "create", "update"],
       },
     });
@@ -604,7 +604,7 @@ describe("deploy_mcp_server", () => {
     await makeMember(owner.id, org.id, { role: "admin" });
     const callerOnlyRole = await makeCustomRole(org.id, {
       permission: {
-        mcpRegistry: ["update"],
+        mcpRegistry: ["read", "update"],
         mcpServerInstallation: ["read", "create"],
       },
     });
@@ -648,7 +648,7 @@ describe("deploy_mcp_server", () => {
     await makeMember(owner.id, org.id, { role: "admin" });
     const editorRole = await makeCustomRole(org.id, {
       permission: {
-        mcpRegistry: ["update"],
+        mcpRegistry: ["read", "update"],
         mcpServerInstallation: ["read", "create", "update"],
       },
     });
@@ -717,7 +717,7 @@ describe("deploy_mcp_server", () => {
     const org = await makeOrganization();
     const callerRole = await makeCustomRole(org.id, {
       permission: {
-        mcpRegistry: ["update"],
+        mcpRegistry: ["read", "update"],
         mcpServerInstallation: ["read", "create"],
       },
     });

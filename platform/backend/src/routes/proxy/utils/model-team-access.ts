@@ -100,12 +100,11 @@ export async function checkModelTeamAccess(params: {
       : policies.some(
           (entry) =>
             (entry.scope === "*" || entry.scope === model.id) &&
-            entry.grants.some(
-              (grant) =>
-                grant.subject.type === "organization" &&
-                grant.subject.id === "*" &&
-                grant.actions.includes("use"),
-            ),
+            ResourcePermissionPolicyModel.isOrganizationWide({
+              policy: entry,
+              scope: model.id,
+              action: "use",
+            }),
         );
     // SPDX-SnippetEnd
     return allowed

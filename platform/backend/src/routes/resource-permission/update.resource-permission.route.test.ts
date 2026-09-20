@@ -377,14 +377,17 @@ describe("resource permission routes", () => {
     makeAgent,
     makeCustomRole,
   }) => {
+    // The role exists before the agent: organization-wide visibility is stored
+    // as a grant to every role that holds `agent:read`, so a role created
+    // afterwards reaches nothing until someone grants it.
+    const role = await makeCustomRole(organizationId, {
+      role: "agent_reader",
+      permission: { agent: ["read"] },
+    });
     const agent = await makeAgent({
       agentType: "agent",
       organizationId,
       scope: "org",
-    });
-    const role = await makeCustomRole(organizationId, {
-      role: "agent_reader",
-      permission: { agent: ["read"] },
     });
     await MemberModel.updateRole(user.id, organizationId, role.role);
     const url = `/api/resource-permissions/agent/${agent.id}`;

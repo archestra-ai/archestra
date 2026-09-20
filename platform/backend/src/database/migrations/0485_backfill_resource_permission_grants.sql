@@ -26,9 +26,22 @@ WITH targets AS (
     NULL::text, m.id
   FROM models m CROSS JOIN organization o
 ), audience AS (
-  SELECT t.organization_id, t.resource, t.scope, 'organization' AS subject_type, '*' AS subject_id,
+  -- Organization-wide visibility was only half of the old rule: a member whose
+  -- role withheld the resource's read action never saw the object. Granting
+  -- everyone would drop that half, so the audience becomes the roles that hold
+  -- read. Every predefined role holds it for these six resources, so a
+  -- deployment using only built-in roles keeps exactly the reach it had.
+  SELECT t.organization_id, t.resource, t.scope, 'role' AS subject_type, reader.id AS subject_id,
     ARRAY['read', 'use']::text[] AS actions
-  FROM targets t WHERE t.visibility = 'org'
+  FROM targets t
+  JOIN LATERAL (
+    SELECT unnest(ARRAY['admin', 'platform_admin', 'editor', 'member']) AS id
+    UNION
+    SELECT roles.id FROM organization_role roles
+    WHERE roles.organization_id = t.organization_id
+      AND COALESCE(roles.permission::jsonb -> t.resource, '[]'::jsonb) ? 'read'
+  ) reader ON true
+  WHERE t.visibility = 'org'
   UNION ALL
   SELECT t.organization_id, t.resource, t.scope, 'user', t.author_id,
     ARRAY['read', 'use', 'update', 'delete', 'manage-permissions']::text[]

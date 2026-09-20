@@ -315,13 +315,15 @@ describe("POST /api/skills/github/{discover,preview,import}", () => {
         resource: "skill",
         scope: response.json().created[0].id,
       });
+      // An organization-wide import reaches the roles that hold `skill:read`,
+      // so it never becomes visible to a role that withholds it.
       expect(policy?.grants).toEqual(
-        expect.arrayContaining([
-          {
-            subject: { type: "organization", id: "*" },
+        expect.arrayContaining(
+          ["admin", "platform_admin", "editor", "member"].map((id) => ({
+            subject: { type: "role", id },
             actions: ["read", "use"],
-          },
-        ]),
+          })),
+        ),
       );
     });
   });

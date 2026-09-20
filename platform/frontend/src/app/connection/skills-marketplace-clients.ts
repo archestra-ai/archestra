@@ -11,7 +11,7 @@ export interface SkillMarketplaceInstallStep {
 }
 
 export interface SkillMarketplaceClient {
-  id: "claude-code" | "codex" | "cursor" | "copilot-cli";
+  id: "claude-code" | "codex" | "cursor" | "copilot-cli" | "opencode";
   getInstallSteps: (
     params: SkillMarketplaceInstallParams,
   ) => SkillMarketplaceInstallStep[];
@@ -86,6 +86,30 @@ export const SKILL_MARKETPLACE_CLIENTS: SkillMarketplaceClient[] = [
         language: "text",
       },
     ],
+  },
+  {
+    id: "opencode",
+    // OpenCode has no plugin marketplace, but it loads every SKILL.md under
+    // its skills folder recursively, so a plain clone there is the install.
+    // "$HOME" rather than "~": the manual flow has no OS picker, and Windows
+    // PowerShell expands $HOME for git.exe but leaves ~ literal.
+    getInstallSteps: ({ cloneUrl, marketplaceName }) => {
+      const skillsDir = `"$HOME/.config/opencode/skills/${marketplaceName}"`;
+      return [
+        {
+          label: "Clone the marketplace into OpenCode's skills folder",
+          body: "OpenCode loads the shared skills the next time it starts.",
+          code: `git clone ${cloneUrl} ${skillsDir}`,
+          language: "bash",
+        },
+        {
+          label: "Pull updates",
+          body: "Run this whenever the shared skills change.",
+          code: `git -C ${skillsDir} pull`,
+          language: "bash",
+        },
+      ];
+    },
   },
 ];
 

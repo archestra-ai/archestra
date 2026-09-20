@@ -3,6 +3,7 @@ import {
   codexClientMetadataSessionId,
   isCodexClientAgentId,
   isCodexSessionId,
+  isOpenCodeClientAgentId,
   SESSION_ID_HEADER,
 } from "@archestra/shared";
 import { getHeaderValue, parseMetaHeader } from "./meta-header";
@@ -16,6 +17,9 @@ const OPENWEBUI_CHAT_ID_HEADER = "x-openwebui-chat-id";
  * client id — the header name is too generic to trust on its own.
  */
 const CODEX_SESSION_ID_HEADER = "session-id";
+
+/** OpenCode sends its own opaque per-session ID in this request header. */
+const OPENCODE_SESSION_ID_HEADER = "x-opencode-session";
 
 /**
  * Session source indicates where the session ID was extracted from. This is
@@ -36,6 +40,7 @@ export type SessionSource =
   | "appa_header"
   | "meta_header"
   | "openwebui_chat"
+  | "opencode_session"
   | "codex_session"
   | "openai_user"
   | null;
@@ -53,20 +58,22 @@ export interface SessionInfo {
  * 1. Explicit X-Archestra-Session-Id header (source: 'header')
  * 2. X-Archestra-Meta third segment (source: 'meta_header')
  * 3. Open WebUI X-OpenWebUI-Chat-Id header (source: 'openwebui_chat')
- * 4. Codex session id — only when `externalAgentId` is a Codex client id:
+ * 4. OpenCode `x-opencode-session` header — only when `externalAgentId` is an
+ *    OpenCode client id (source: 'opencode_session')
+ * 5. Codex session id — only when `externalAgentId` is a Codex client id:
  *    `client_metadata.session_id` body field first, then the `session-id`
  *    request header (source: 'codex_session')
- * 5. Claude/Anthropic metadata.user_id (source: 'claude_metadata')
- * 6. OpenAI user field (source: 'openai_user')
+ * 6. Claude/Anthropic metadata.user_id (source: 'claude_metadata')
+ * 7. OpenAI user field (source: 'openai_user')
  *
  * @param headers - The request headers object
  * @param body - The request body (may contain metadata.user_id, user, or
  *   client_metadata)
  * @param externalAgentId - The request's resolved client attribution: the
  *   caller-supplied X-Archestra-Agent-Id header or, when absent, client-app
- *   auto-discovery (see {@link ./client-app}). Gates the Codex session signals
- *   so a non-Codex request never gets 'codex_session' provenance, and keeps
- *   client identification in one place.
+ *   auto-discovery (see {@link ./client-app}). Gates client-specific session
+ *   signals so another request never gets OpenCode or Codex provenance, and
+ *   keeps client identification in one place.
  * @returns SessionInfo with sessionId and sessionSource
  */
 export function extractSessionInfo({
@@ -103,7 +110,22 @@ export function extractSessionInfo({
     return { sessionId: openwebuiChatId, sessionSource: "openwebui_chat" };
   }
 
-  // Priority 4: Codex session id, gated on the resolved client attribution —
+  // Priority 4: OpenCode's session header is only valid for OpenCode
+  // requests. Other requests treat it as an untrusted header.
+  if (isOpenCodeClientAgentId(externalAgentId)) {
+    const openCodeSessionId = getHeaderValue(
+      headers,
+      OPENCODE_SESSION_ID_HEADER,
+    );
+    if (openCodeSessionId) {
+      return {
+        sessionId: openCodeSessionId,
+        sessionSource: "opencode_session",
+      };
+    }
+  }
+
+  // Priority 5: Codex session id, gated on the resolved client attribution —
   // the `session-id` header name is generic, so it is never read as a Codex
   // session on its own.
   if (isCodexClientAgentId(externalAgentId)) {
@@ -125,7 +147,7 @@ export function extractSessionInfo({
     }
   }
 
-  // Priority 5: Claude/Anthropic metadata.user_id (any known format)
+  // Priority 6: Claude/Anthropic metadata.user_id (any known format)
   const claudeSessionId = parseClaudeMetadataSessionId(body?.metadata?.user_id);
   if (claudeSessionId) {
     return {
@@ -134,7 +156,7 @@ export function extractSessionInfo({
     };
   }
 
-  // Priority 6: OpenAI user field (some clients use this for session tracking)
+  // Priority 7: OpenAI user field (some clients use this for session tracking)
   const user = body?.user;
   if (user && typeof user === "string" && user.trim().length > 0) {
     return { sessionId: user.trim(), sessionSource: "openai_user" };

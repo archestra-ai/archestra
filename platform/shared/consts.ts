@@ -278,6 +278,13 @@ export const STARTUP_GUARD_INSTALL = {
     markerStart: "# >>> archestra copilot guard >>>",
     markerEnd: "# <<< archestra copilot guard <<<",
   },
+  opencode: {
+    scriptRelpath: ".archestra/opencode-startup-guard.sh",
+    psScriptRelpath: ".archestra/opencode-startup-guard.ps1",
+    skipRelpath: ".archestra/opencode-startup-guard.skip",
+    markerStart: "# >>> archestra opencode guard >>>",
+    markerEnd: "# <<< archestra opencode guard <<<",
+  },
 } as const;
 
 /** Client ids that get a startup guard (keys of {@link STARTUP_GUARD_INSTALL}). */
@@ -307,6 +314,9 @@ export const DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS = `At session start, tell the 
  * Clients can pass this header to associate interactions with their own agent identifiers.
  */
 export const EXTERNAL_AGENT_ID_HEADER = "X-Archestra-Agent-Id";
+
+/** OpenCode's request-local agent name, used only for display classification. */
+export const OPENCODE_AGENT_HEADER = "X-Archestra-OpenCode-Agent";
 
 /**
  * The client session an OpenAPPA root is bound to, and the parent root a child

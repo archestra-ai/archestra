@@ -348,6 +348,7 @@ export const InteractionSummarySchema = BaseSelectInteractionSchema.pick({
 }).extend({
   type: SupportedProvidersDiscriminatorSchema,
   externalAgentIdLabel: z.string().nullable(),
+  requestType: RequestTypeSchema,
 });
 
 /**

@@ -251,7 +251,7 @@ describe("ConnectCommandPanel", () => {
       expect(
         screen.getByRole("heading", { name: "Connect Claude Code" }),
       ).toBeVisible();
-      for (const label of ["Cursor", "Codex", "Copilot CLI"]) {
+      for (const label of ["Cursor", "Codex", "OpenCode", "Copilot CLI"]) {
         await user.click(
           screen.getByRole("button", {
             name: new RegExp(`${label} logo ${label}`),
@@ -1337,7 +1337,7 @@ describe("ConnectCommandPanel", () => {
     ).not.toBeInTheDocument();
   });
 
-  describe("Copilot CLI model choice", () => {
+  describe("script client model choice", () => {
     it("surfaces the model in the review step and sends it with the setup", async () => {
       renderPanel({ client: findClient("copilot-cli") });
 
@@ -1366,6 +1366,29 @@ describe("ConnectCommandPanel", () => {
       await waitFor(() =>
         expect(createSetupMock).toHaveBeenLastCalledWith(
           expect.objectContaining({ model: "o4-mini" }),
+        ),
+      );
+    });
+
+    it("leaves OpenCode provider and model selection unchanged", async () => {
+      renderPanel({ client: findClient("opencode") });
+
+      expect(await screen.findByText(COMMAND)).toBeInTheDocument();
+      expect(
+        screen.queryByTestId("connect-change-model"),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.getByTestId("connect-change-proxy").closest("li"),
+      ).toHaveTextContent(
+        "Route supported OpenCode providers through the LLM Proxy using their existing local credentials",
+      );
+      await waitFor(() =>
+        expect(createSetupMock).toHaveBeenCalledWith(
+          expect.objectContaining({
+            clientId: "opencode",
+            proxyAuth: "provider-key",
+            model: undefined,
+          }),
         ),
       );
     });

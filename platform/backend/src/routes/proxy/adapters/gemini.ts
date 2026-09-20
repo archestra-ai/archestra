@@ -702,12 +702,21 @@ class GeminiStreamAdapter
     }
 
     const candidate = chunk.candidates?.[0];
-    if (!candidate?.content?.parts) {
-      return { sseData: null, isToolCallChunk: false, isFinal: false };
+    if (!candidate) {
+      const hasProtocolMetadata = Boolean(
+        chunk.promptFeedback || chunk.usageMetadata,
+      );
+      return {
+        sseData: hasProtocolMetadata
+          ? `data: ${JSON.stringify(sdkResponseToRestResponse(chunk, this.model))}\n\n`
+          : null,
+        isToolCallChunk: false,
+        isFinal: false,
+      };
     }
 
     // Process parts
-    for (const part of candidate.content.parts) {
+    for (const part of candidate.content?.parts ?? []) {
       // Handle text content
       if (part.text) {
         // Track thought vs output text separately for proper signature preservation.
@@ -767,6 +776,12 @@ class GeminiStreamAdapter
     ) {
       this.state.stopReason = candidate.finishReason;
       isFinal = true;
+
+      // Gemini can send terminal metadata without a renderable content part.
+      if (!sseData && !isToolCallChunk) {
+        const restChunk = sdkResponseToRestResponse(chunk, this.model);
+        sseData = `data: ${JSON.stringify(restChunk)}\n\n`;
+      }
     }
 
     return { sseData, isToolCallChunk, isFinal };
@@ -1334,6 +1349,11 @@ export const geminiAdapterFactory: LLMProvider<
   },
 
   extractApiKey(headers: GeminiHeaders): string | undefined {
+    const authorization = headers.authorization;
+    if (authorization?.startsWith("Bearer ")) {
+      // Keep OAuth distinct from an API key through virtual-key resolution.
+      return `Bearer:${authorization.slice(7)}`;
+    }
     return headers["x-goog-api-key"];
   },
 
@@ -1352,6 +1372,7 @@ export const geminiAdapterFactory: LLMProvider<
       "[GeminiProxyV2]",
       options.baseUrl,
       options.model,
+      options.googleUserProject,
     );
 
     // Wrap with observability for request duration metrics

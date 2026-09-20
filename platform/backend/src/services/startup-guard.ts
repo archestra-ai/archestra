@@ -13,7 +13,10 @@ import {
   ARCHESTRA_MARK_TAGLINE_ROW,
 } from "./archestra-mark";
 import { CODEX_HANDOFF_HELPER } from "./codex-handoff";
-import type { SetupScriptContext } from "./connection-setup-script";
+import type {
+  SetupScriptContext,
+  SetupScriptProxySection,
+} from "./connection-setup-script";
 import { describeMarketplaceContents } from "./marketplace-copy";
 
 /**
@@ -78,6 +81,7 @@ interface StartupGuardMcpSection {
 }
 
 interface StartupGuardProxySection {
+  authMode?: SetupScriptProxySection["authMode"];
   /** The proxied provider — drives the health URL's `/v1/<provider>/` path. */
   provider: SupportedProvider;
   providerLabel: string;
@@ -90,6 +94,7 @@ interface StartupGuardProxySection {
    * strips the `[model_providers.<proxyName>]` block it wrote to config.toml.
    */
   proxyName: string;
+  passthroughVirtualKey?: string | null;
 }
 
 interface StartupGuardSkillsSection {
@@ -279,11 +284,13 @@ export function buildStartupGuardContext(
       : null,
     proxy: ctx.proxy
       ? {
+          authMode: ctx.proxy.authMode,
           provider: ctx.proxy.provider,
           providerLabel: ctx.proxy.providerLabel,
           url: ctx.proxy.url,
           ref: proxyParsed?.ref ?? null,
           proxyName: ctx.proxy.proxyName,
+          passthroughVirtualKey: ctx.proxy.passthroughVirtualKey,
         }
       : null,
     skills: ctx.skills,
@@ -380,7 +387,7 @@ GUARD_UNINSTALLED=0
 uninstall_guard() {
   GUARD_UNINSTALLED=1
   rm -f "$GUARD_PATH" "$SKIP_FILE" 2>/dev/null || true
-  for profile in "$HOME/.zshrc" "$HOME/.bashrc"; do
+  for profile in "$HOME/.zshrc" "$HOME/.bashrc" "$HOME/.bash_profile" "$HOME/.bash_login" "$HOME/.profile"; do
     [ -f "$profile" ] || continue
     awk -v start=${sh(client.markerStart)} -v end=${sh(client.markerEnd)} '
       $0 == start {skip=1; next}
@@ -1170,13 +1177,15 @@ export function buildStartupGuardInstallSection(
     if [ -n "$archestra_prompt_config" ]; then set -- -c "$archestra_prompt_config" "$@"; fi`
       : client.clientId === "copilot-cli"
         ? `archestra_instructions_dir="${guardPath}.instructions"`
-        : `set -- --append-system-prompt-file "${promptPath}" "$@"`;
+        : client.clientId === "opencode"
+          ? `archestra_opencode_handoff="${promptPath}"`
+          : `set -- --append-system-prompt-file "${promptPath}" "$@"`;
   const promptArgs = handoffEnabled
     ? `
   local archestra_add_prompt=1 archestra_arg
-  ${client.clientId === "copilot-cli" ? "local archestra_instructions_dir=''" : ""}
+  ${client.clientId === "copilot-cli" ? "local archestra_instructions_dir=''" : client.clientId === "opencode" ? "local archestra_opencode_handoff=''" : ""}
   case "\${1:-}" in
-    auth|mcp|plugin|plugins|install|uninstall|update|upgrade|doctor|setup-token|completion|completions|config|agents|login|logout|mcp-server|app-server|remote-control|app|sandbox|debug|apply|a|archive|delete|unarchive|cloud|exec-server|features|help) archestra_add_prompt=0 ;;
+    auth|mcp|plugin|plugins|install|uninstall|update|upgrade|doctor|setup-token|completion|completions|config|agents|login|logout|mcp-server|app-server|remote-control|app|sandbox|debug|apply|a|archive|delete|unarchive|cloud|exec-server|features|help${client.clientId === "opencode" ? "|serve|web|acp|models|stats|export|import|github|session|attach|providers|db|pr|agent" : ""}) archestra_add_prompt=0 ;;
   esac
   for archestra_arg in "$@"; do
     case "$archestra_arg" in
@@ -1238,10 +1247,14 @@ ${client.binary}() {
       ? `if [ -n "$archestra_instructions_dir" ]; then
     COPILOT_CUSTOM_INSTRUCTIONS_DIRS="\${COPILOT_CUSTOM_INSTRUCTIONS_DIRS:+$COPILOT_CUSTOM_INSTRUCTIONS_DIRS,}$archestra_instructions_dir" command ${client.binary} "$@"
   else`
-      : ""
+      : handoffEnabled && client.clientId === "opencode"
+        ? `if [ -n "$archestra_opencode_handoff" ] && [ -z "\${OPENCODE_CONFIG_CONTENT:-}" ]; then
+    OPENCODE_CONFIG_CONTENT="{\\"instructions\\":[\\"$archestra_opencode_handoff\\"]}" command ${client.binary} "$@"
+  else`
+        : ""
   }
   command ${client.binary} "$@"
-  ${handoffEnabled && client.clientId === "copilot-cli" ? "fi" : ""}
+  ${handoffEnabled && (client.clientId === "copilot-cli" || client.clientId === "opencode") ? "fi" : ""}
   archestra_client_status=$?
   ${refreshBlock ? `${refreshFunctionName} "$@" || true` : ":"}
   return "$archestra_client_status"
@@ -1265,18 +1278,26 @@ ${GUARD_PROFILE_EOF}
   echo "Updated $1"
 }
 
-# Hook the CURRENT shell's rc first — creating it if needed — so the activation
-# hint below always resolves to a profile that carries the wrapper, then hook the
-# other rc too when it exists (covers users who switch shells). This script runs
-# in a child \`curl | bash\`, which cannot define the wrapper in the interactive
-# shell you launched it from, so the hint is how you arm it without a new terminal.
+# Install both interactive-shell rc files plus the Bash login profile that the
+# user already chose (or .bash_profile when none exists). This script runs in a
+# child \`curl | bash\`, so it cannot define the wrapper in its parent shell; the
+# activation hint remains necessary for the current terminal.
 case "\${SHELL:-}" in
   *zsh*) archestra_guard_profile="$HOME/.zshrc" ;;
   *)     archestra_guard_profile="$HOME/.bashrc" ;;
 esac
-archestra_install_guard_block "$archestra_guard_profile"
-if [ -f "$HOME/.zshrc" ] && [ "$archestra_guard_profile" != "$HOME/.zshrc" ]; then archestra_install_guard_block "$HOME/.zshrc"; fi
-if [ -f "$HOME/.bashrc" ] && [ "$archestra_guard_profile" != "$HOME/.bashrc" ]; then archestra_install_guard_block "$HOME/.bashrc"; fi
+archestra_install_guard_block "$HOME/.bashrc"
+archestra_install_guard_block "$HOME/.zshrc"
+if [ -f "$HOME/.bash_profile" ]; then
+  archestra_bash_login_profile="$HOME/.bash_profile"
+elif [ -f "$HOME/.bash_login" ]; then
+  archestra_bash_login_profile="$HOME/.bash_login"
+elif [ -f "$HOME/.profile" ]; then
+  archestra_bash_login_profile="$HOME/.profile"
+else
+  archestra_bash_login_profile="$HOME/.bash_profile"
+fi
+archestra_install_guard_block "$archestra_bash_login_profile"
 ok "Startup guard installed for ${client.binary}."
 printf '   It runs automatically in new terminals. To arm it in THIS terminal now,\n'
 printf '   reload your shell:  %ssource %s%s   (or just open a new terminal).\n' "$ARCH_C_OK" "$archestra_guard_profile" "$ARCH_C_RESET"`;

@@ -39,6 +39,7 @@ export type AppaSessionIdentity = {
     | "appa-header"
     | "claude-code-header"
     | "claude-metadata"
+    | "opencode-session"
     | "prompt-cache-key"
     | "metadata-session-id"
     | "conversation"
@@ -304,10 +305,11 @@ export function isResultGovernedHostedTool(params: {
  *    repeats the same uuid inside `metadata.user_id` (a JSON blob of
  *    device/account/session). Either is per-session and survives a restart of
  *    the same session.
- *  - openai:responses / chatCompletions — Codex and OpenCode carry no session
- *    header, so fall back to the request fields that are stable across a
- *    conversation: `prompt_cache_key` (OpenAI's own per-conversation cache
- *    partition), then an explicit `metadata.session_id`, then `conversation`.
+ *  - openai:responses / chatCompletions — OpenCode sends `x-opencode-session`.
+ *    Other OpenAI-family requests fall back to request fields that are stable
+ *    across a conversation: `prompt_cache_key` (OpenAI's own per-conversation
+ *    cache partition), then an explicit `metadata.session_id`, then
+ *    `conversation`.
  */
 export function appaSessionIdentity(params: {
   family: AppaWireFamily;
@@ -353,6 +355,15 @@ export function appaSessionIdentity(params: {
       };
     }
     return { parentId, provenance: "none" };
+  }
+
+  const openCodeSession = header("x-opencode-session");
+  if (openCodeSession) {
+    return {
+      sessionId: openCodeSession,
+      parentId,
+      provenance: "opencode-session",
+    };
   }
 
   const cacheKey = field(body?.prompt_cache_key);

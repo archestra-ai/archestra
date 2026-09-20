@@ -1,3 +1,4 @@
+import { OPENCODE_CLIENT_ID } from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import { afterEach } from "vitest";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
@@ -172,6 +173,41 @@ describe("persistTools", () => {
       .from(schema.toolInvocationPoliciesTable)
       .where(eq(schema.toolInvocationPoliciesTable.toolId, tool.id));
     expect(policy.action).toBe("block_when_context_is_untrusted");
+  });
+
+  test("keeps the org default for OpenCode mcp: tools but overrides local tools", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({ name: "OpenCode Agent" });
+
+    await persistTools(
+      [
+        { toolName: "bash", toolParameters: { type: "object" } },
+        {
+          toolName: "mcp:gateway:write_issue",
+          toolParameters: { type: "object" },
+        },
+      ],
+      agent.id,
+      { invocationAction: "block_when_context_is_untrusted" },
+      { externalAgentId: OPENCODE_CLIENT_ID },
+    );
+
+    const localTool = await ToolModel.findByName("bash");
+    const gatewayTool = await ToolModel.findByName("mcp:gateway:write_issue");
+    if (!localTool || !gatewayTool)
+      throw new Error("expected OpenCode tools to be persisted");
+
+    const [localPolicy] = await db
+      .select()
+      .from(schema.toolInvocationPoliciesTable)
+      .where(eq(schema.toolInvocationPoliciesTable.toolId, localTool.id));
+    const [gatewayPolicy] = await db
+      .select()
+      .from(schema.toolInvocationPoliciesTable)
+      .where(eq(schema.toolInvocationPoliciesTable.toolId, gatewayTool.id));
+    expect(localPolicy.action).toBe("allow_when_context_is_untrusted");
+    expect(gatewayPolicy.action).toBe("block_when_context_is_untrusted");
   });
 
   test("handles empty tools array without errors", async ({ makeAgent }) => {

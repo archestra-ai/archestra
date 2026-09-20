@@ -40,7 +40,10 @@ import {
   createStreamAccumulatorState,
   extractCommonToolCallArguments,
 } from "@/types";
-import { createOpenAiCodexResponsesClient } from "./openai-codex-responses-client";
+import {
+  createOpenAiCodexPassthroughResponsesClient,
+  createOpenAiCodexResponsesClient,
+} from "./openai-codex-responses-client";
 import { formatResponsesStreamErrorFrame } from "./responses-stream-error-frame";
 import {
   customToolInput,
@@ -128,6 +131,16 @@ export const openAiResponsesAdapterFactory: LLMProvider<
   ): OpenAIProvider {
     if (!apiKey) {
       throw new ApiError(401, "API key required for OpenAI");
+    }
+
+    // OpenCode owns refresh/rotation for this request's OAuth access token. The
+    // bridge client only forwards the request-local material to Codex; it never
+    // persists or refreshes it.
+    if (options.openAiCodexPassthrough) {
+      return createOpenAiCodexPassthroughResponsesClient({
+        credential: options.openAiCodexPassthrough,
+        options,
+      });
     }
 
     // A ChatGPT-subscription (Codex) credential routes to the ChatGPT Codex

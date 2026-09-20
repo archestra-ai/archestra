@@ -1,6 +1,7 @@
 import {
   CLAUDE_METADATA_SESSION_SOURCE,
   CODEX_CLIENT_ID,
+  OPENCODE_CLIENT_ID,
   SESSION_ID_HEADER,
 } from "@archestra/shared";
 import { describe, expect, test } from "vitest";
@@ -336,6 +337,67 @@ describe("extractSessionInfo", () => {
     });
 
     expect(result).toEqual({ sessionId: null, sessionSource: null });
+  });
+
+  test("extracts OpenCode's x-opencode-session only for OpenCode attribution", () => {
+    expect(
+      extractSessionInfo({
+        headers: { "x-opencode-session": "ses_opencode" },
+        body: undefined,
+        externalAgentId: OPENCODE_CLIENT_ID,
+      }),
+    ).toEqual({
+      sessionId: "ses_opencode",
+      sessionSource: "opencode_session",
+    });
+
+    expect(
+      extractSessionInfo({
+        headers: { "x-opencode-session": "ses_opencode" },
+        body: { user: "fallback-user" },
+        externalAgentId: undefined,
+      }),
+    ).toEqual({
+      sessionId: "fallback-user",
+      sessionSource: "openai_user",
+    });
+  });
+
+  test("keeps explicit Archestra, meta, and Open WebUI sessions over OpenCode", () => {
+    const base = {
+      "x-opencode-session": "ses_opencode",
+      [sessionHeaderKey]: "archestra-session",
+      "x-archestra-meta": "agent/run/meta-session",
+      "x-openwebui-chat-id": "openwebui-session",
+    };
+    expect(
+      extractSessionInfo({
+        headers: base,
+        body: undefined,
+        externalAgentId: OPENCODE_CLIENT_ID,
+      }),
+    ).toEqual({ sessionId: "archestra-session", sessionSource: "header" });
+
+    const { [sessionHeaderKey]: _, ...withoutHeader } = base;
+    expect(
+      extractSessionInfo({
+        headers: withoutHeader,
+        body: undefined,
+        externalAgentId: OPENCODE_CLIENT_ID,
+      }),
+    ).toEqual({ sessionId: "meta-session", sessionSource: "meta_header" });
+
+    const { "x-archestra-meta": __, ...withoutMeta } = withoutHeader;
+    expect(
+      extractSessionInfo({
+        headers: withoutMeta,
+        body: undefined,
+        externalAgentId: OPENCODE_CLIENT_ID,
+      }),
+    ).toEqual({
+      sessionId: "openwebui-session",
+      sessionSource: "openwebui_chat",
+    });
   });
 
   test("Codex signals are ignored when the request is attributed to another client", () => {

@@ -958,13 +958,16 @@ export function buildWindowsStartupGuardInstallSection(
       } catch { Write-Warning 'Runtime handoff instructions skipped: could not read Codex configuration.' }`
       : client.clientId === "copilot-cli"
         ? `$archInstructionsDir = $archGuard + '.instructions'`
-        : `$archLaunchArgs = @('--append-system-prompt-file', $archPromptPath) + $archLaunchArgs`;
+        : client.clientId === "opencode"
+          ? `$archOpencodeHandoff = $archPromptPath`
+          : `$archLaunchArgs = @('--append-system-prompt-file', $archPromptPath) + $archLaunchArgs`;
   const promptArgs = handoffEnabled
     ? `
     $archLaunchArgs = @($args)
     $archInstructionsDir = $null
+    $archOpencodeHandoff = $null
     $archAddPrompt = $true
-    if ($args.Count -gt 0 -and $args[0] -in @('auth', 'mcp', 'plugin', 'plugins', 'install', 'uninstall', 'update', 'upgrade', 'doctor', 'setup-token', 'completion', 'completions', 'config', 'agents', 'login', 'logout', 'mcp-server', 'app-server', 'remote-control', 'app', 'sandbox', 'debug', 'apply', 'a', 'archive', 'delete', 'unarchive', 'cloud', 'exec-server', 'features', 'help')) { $archAddPrompt = $false }
+    if ($args.Count -gt 0 -and $args[0] -in @('auth', 'mcp', 'plugin', 'plugins', 'install', 'uninstall', 'update', 'upgrade', 'doctor', 'setup-token', 'completion', 'completions', 'config', 'agents', 'login', 'logout', 'mcp-server', 'app-server', 'remote-control', 'app', 'sandbox', 'debug', 'apply', 'a', 'archive', 'delete', 'unarchive', 'cloud', 'exec-server', 'features', 'help'${client.clientId === "opencode" ? ", 'serve', 'web', 'acp', 'models', 'stats', 'export', 'import', 'github', 'session', 'attach', 'providers', 'db', 'pr', 'agent'" : ""})) { $archAddPrompt = $false }
     foreach ($archArg in $args) {
       if ($archArg -eq '--') { break }
       if ($archArg -match '^--(system-prompt|system-prompt-file|append-system-prompt|append-system-prompt-file)(=|$)' -or $archArg -in @('--help', '-h', '--version', '-v')) { $archAddPrompt = $false }
@@ -1024,10 +1027,14 @@ function ${client.binary} {
         ? `$archPreviousDirs = $env:COPILOT_CUSTOM_INSTRUCTIONS_DIRS
     try {
       if ($archInstructionsDir) { $env:COPILOT_CUSTOM_INSTRUCTIONS_DIRS = (@($archPreviousDirs, $archInstructionsDir) | Where-Object { $_ }) -join ',' }`
-        : ""
+        : handoffEnabled && client.clientId === "opencode"
+          ? `$archPreviousConfigContent = $env:OPENCODE_CONFIG_CONTENT
+    try {
+      if ($archOpencodeHandoff -and -not $archPreviousConfigContent) { $env:OPENCODE_CONFIG_CONTENT = (@{ instructions = @($archOpencodeHandoff) } | ConvertTo-Json -Compress) }`
+          : ""
     }
     & $archReal.Source ${handoffEnabled ? "@archLaunchArgs" : "@args"}
-    ${handoffEnabled && client.clientId === "copilot-cli" ? `} finally { $env:COPILOT_CUSTOM_INSTRUCTIONS_DIRS = $archPreviousDirs }` : ""}
+    ${handoffEnabled && client.clientId === "copilot-cli" ? `} finally { $env:COPILOT_CUSTOM_INSTRUCTIONS_DIRS = $archPreviousDirs }` : handoffEnabled && client.clientId === "opencode" ? `} finally { $env:OPENCODE_CONFIG_CONTENT = $archPreviousConfigContent }` : ""}
     ${refreshCall}
   }
   else { Write-Error "${client.binary} executable not found on PATH" }

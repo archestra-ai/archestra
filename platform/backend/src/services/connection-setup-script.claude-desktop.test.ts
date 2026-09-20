@@ -38,6 +38,7 @@ test.each([
             authMode: auth,
             provider: "anthropic",
             providerLabel: "Anthropic",
+            baseUrl: "https://proxy.example/v1",
             url: "https://proxy.example/v1/anthropic",
             proxyName: "default",
             virtualKey: auth === "virtual-key" ? "archestra-test-key" : null,

@@ -3,7 +3,7 @@ title: Sharing Skills
 category: Agents
 order: 5
 description: Share Archestra skills into Claude Code, Codex CLI, Copilot CLI, and Cursor through native plugin marketplaces
-lastUpdated: 2026-08-25
+lastUpdated: 2026-09-19
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -12,7 +12,7 @@ Archestra skills can be installed into your local Claude Code, Codex CLI, Copilo
 
 Every shared skill is bundled into a single plugin so the user installs one thing instead of one-per-skill. The plugin name is the marketplace name (e.g. `archestra-acme-corp-skills`), and each skill lives at `plugins/<marketplace-name>/skills/<slug>/SKILL.md` in the repository. The slug is also written as the SKILL.md frontmatter `name`, per the Agent Skills spec, so the skill's slash command is well-formed (a skill named "Build App" installs as `/build-app`). Anthropic's official marketplaces follow the same one-plugin-per-toolkit convention.
 
-Skills live on the **Connect** page, alongside the MCP Gateway and LLM Proxy connection flows. For Claude Code, Codex, Copilot CLI, and Cursor the skills install is part of the one-command setup: the generated `curl | bash` command registers the marketplace for you. Anyone who can read skills gets that command — you do not need to be an admin to install the skills shared with you.
+Skills live on the **Connect** page, alongside the MCP Gateway and LLM Proxy connection flows. Claude Code, Codex, Copilot CLI, Cursor, and OpenCode install skills through the one-command setup. OpenCode clones the shared repository into its skills folder. The other clients register a marketplace. Anyone who can read skills gets that command.
 
 ![The Connect page with Claude Code selected, the review step listing the two shared skills to install](/docs/automated_screenshots/platform-agent-skills-sharing_connection-setup.webp)
 
@@ -30,7 +30,7 @@ Registering the URL by hand instead, `git` asks for a username and password on t
 
 What the clone contains depends on who cloned it: the org-wide skills, the skills of the teams you belong to, your own skills, and anything shared with you by name. Two people installing the same URL can end up with different skills, and neither sees skills they could not already see in Archestra.
 
-The same URL works for Claude Code, Codex, Copilot, and Cursor; only the install command differs:
+The same URL works for Claude Code, Codex, Copilot, Cursor, and OpenCode; only the install command differs:
 
 **Claude Code**
 
@@ -57,6 +57,14 @@ copilot plugin marketplace browse <marketplace-name>
 
 ```
 /add-plugin <marketplace-url>
+```
+
+**OpenCode**
+
+OpenCode has no plugin marketplace. It loads every skill in a clone under its skills folder.
+
+```
+git clone <marketplace-url> "$HOME/.config/opencode/skills/<marketplace-name>"
 ```
 
 ### Anonymous Access

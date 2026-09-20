@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { OPENCODE_CLIENT_ID } from "@archestra/shared";
 import { vi } from "vitest";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { hasPermission } from "@/auth";
@@ -981,6 +982,32 @@ describe("GET /api/statistics/me/breakdown", () => {
     // unsessioned request, so "these sessions were N% of your usage" is honest.
     expect(body.totalCost).toBeCloseTo(9.5, 10);
     expect(body.unsessionedRequests).toBe(1);
+  });
+
+  test("labels OpenCode-attributed usage and sessions", async ({
+    makeAgent,
+    makeInteraction,
+  }) => {
+    const agent = await makeAgent({ organizationId, authorId: currentUser.id });
+    await makeInteraction(agent.id, {
+      userId: currentUser.id,
+      sessionId: "opencode-session",
+      externalAgentId: OPENCODE_CLIENT_ID,
+      inputTokens: 100,
+      outputTokens: 20,
+      cost: "1.0000000000",
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/statistics/me/breakdown?timeframe=24h",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      clients: [{ client: "OpenCode", requests: 1 }],
+      topSessions: [{ sessionId: "opencode-session", client: "OpenCode" }],
+    });
   });
 
   test("resolves internal agent ids instead of exposing opaque client labels", async ({

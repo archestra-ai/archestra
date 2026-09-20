@@ -29,6 +29,7 @@ function setupCtx(
       authMode: "virtual-key",
       provider: "anthropic",
       providerLabel: "Anthropic",
+      baseUrl: "https://acme.example.com/v1",
       url: "https://acme.example.com/v1/anthropic/acme-proxy",
       proxyName: "acme_proxy",
       virtualKey: "vk",

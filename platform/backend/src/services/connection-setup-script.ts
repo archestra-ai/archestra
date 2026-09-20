@@ -10,6 +10,9 @@ import {
   DEFAULT_MODELS,
   EXTERNAL_AGENT_ID_HEADER,
   isDefaultBrandedAppName,
+  OPENCODE_CLIENT_ID,
+  OPENCODE_PASSTHROUGH_PROVIDER_ROUTES,
+  openCodePassthroughBaseUrl,
   type SupportedProvider,
   VIRTUAL_KEY_HEADER,
 } from "@archestra/shared";
@@ -22,6 +25,7 @@ import { archestraMarkWithText } from "./archestra-mark";
 import { renderClaudeDesktopSetupScript } from "./connection-setup-script.claude-desktop";
 import { renderWindowsSetupScript } from "./connection-setup-script.windows";
 import { describeMarketplaceContents } from "./marketplace-copy";
+import { renderOpenCodeRoutingPlugin } from "./opencode-routing-plugin";
 import {
   buildStartupGuardContext,
   buildStartupGuardInstallSection,
@@ -32,6 +36,7 @@ import {
   CLAUDE_CODE_GUARD_CLIENT,
   CODEX_GUARD_CLIENT,
   COPILOT_GUARD_CLIENT,
+  OPENCODE_GUARD_CLIENT,
 } from "./startup-guard.clients";
 
 /**
@@ -66,6 +71,8 @@ export interface SetupScriptProxySection {
   authMode: ConnectionSetupProxyAuth;
   provider: SupportedProvider;
   providerLabel: string;
+  /** Browser-facing LLM proxy root before the provider path. */
+  baseUrl: string;
   /** Proxy URL, e.g. https://host/v1/anthropic/<profile-id>. */
   url: string;
   /** Slug of the LLM proxy name — provider id in client configs. */
@@ -83,10 +90,8 @@ export interface SetupScriptProxySection {
    */
   passthroughVirtualKey: string | null;
   /**
-   * Model the wizard's review step selected for the Copilot CLI (applied as
-   * COPILOT_MODEL — the CLI refuses to launch a BYOK provider without one).
-   * Null: the script falls back to the provider default only when the
-   * machine has no COPILOT_MODEL set.
+   * Model the wizard's review step selected for clients that require or persist
+   * one. Null leaves model selection to the client/provider.
    */
   model: string | null;
   /**
@@ -183,6 +188,17 @@ export function claudeCodeOAuthNextStep(serverName: string): string {
   return `Start a new \`claude\` session, run \`/mcp\` there, select "${serverName}", and sign in via your browser — the gateway grants tool access per user, so its tools unlock after this one-time approval.`;
 }
 
+/**
+ * OpenCode's post-install OAuth step, shared by the bash and PowerShell
+ * renderers. Unlike Claude Code's in-session `/mcp`, `opencode mcp auth` is its
+ * own process that reads the updated config, so the connection agent can run it
+ * before restarting. The running OpenCode session still never reloads its
+ * config, so the renderers close with a restart step.
+ */
+export function opencodeOAuthNextStep(serverName: string): string {
+  return `Run \`opencode mcp auth ${serverName}\` now and keep it running while the user completes browser sign-in — this second browser approval is the gateway's native OAuth flow, not a repeat of connection setup. If no browser opens, relay the URL printed by the command. OpenCode does not start this sign-in on its own.`;
+}
+
 export function renderSetupScript(rawCtx: SetupScriptContext): string {
   if (rawCtx.clientId === "claude-desktop") {
     return renderClaudeDesktopSetupScript(rawCtx);
@@ -215,6 +231,9 @@ export function renderSetupScript(rawCtx: SetupScriptContext): string {
     case "cursor":
       sections.push(...cursorSections(ctx));
       break;
+    case "opencode":
+      sections.push(...opencodeSections(ctx));
+      break;
   }
 
   sections.push(footer(ctx));
@@ -231,12 +250,14 @@ const CLIENT_LABELS: Record<ConnectionSetupClientId, string> = {
   codex: "Codex",
   "copilot-cli": "Copilot CLI",
   cursor: "Cursor",
+  opencode: "OpenCode",
 };
 
 const CLIENT_BINARIES: Partial<Record<ConnectionSetupClientId, string>> = {
   "claude-code": "claude",
   codex: "codex",
   "copilot-cli": "copilot",
+  opencode: "opencode",
 };
 
 /** Single-quote a value for bash; safe for arbitrary content. */
@@ -481,6 +502,28 @@ function nextStepsFor(ctx: SetupScriptContext): string[] {
       }
       if (ctx.skills?.pluginNames?.length) {
         steps.push("The plugins are installed and enabled.");
+      }
+      break;
+    case "opencode":
+      if (ctx.mcp) {
+        steps.push(opencodeOAuthNextStep(ctx.mcp.serverName));
+      }
+      if (ctx.proxy) {
+        if (ctx.proxy.authMode === "provider-key") {
+          steps.push(
+            "Keep using OpenCode's existing provider and model picker. Providers with compatible local credentials now route through the LLM proxy without moving credentials out of OpenCode.",
+          );
+        } else {
+          const target = opencodeProviderTarget(ctx);
+          steps.push(
+            `Select ${target.id}/${target.model} in OpenCode to use the virtual key-backed proxy provider.`,
+          );
+        }
+      }
+      if (ctx.mcp || ctx.proxy || ctx.skills) {
+        steps.push(
+          "Close every running OpenCode process. Then open a new terminal (or source your shell profile) and start `opencode`. The startup guard checks these remotes before every launch.",
+        );
       }
       break;
     case "cursor":
@@ -800,6 +843,105 @@ if append_headers:
     env["${CLAUDE_CODE_CUSTOM_HEADERS_ENV_KEY}"] = "\\n".join(lines)
 path.write_text(json.dumps(settings, indent=2) + "\\n")
 print(f"Updated {path}")`;
+
+const OPENCODE_OWNED_MERGE_NODE = `const fs = require("fs");
+const os = require("os");
+const path = require("path");
+const configPath = process.env.ARCHESTRA_OC_CONFIG_PATH;
+const raw = fs.existsSync(configPath) ? fs.readFileSync(configPath, "utf8") : "";
+const cfg = raw.trim() ? JSON.parse(raw) : {};
+const backupPath = configPath + ".archestra-backup";
+if (fs.existsSync(configPath) && !fs.existsSync(backupPath)) fs.copyFileSync(configPath, backupPath);
+cfg.$schema ??= "https://opencode.ai/config.json";
+if (process.env.ARCHESTRA_OC_MCP_NAME) {
+  cfg.mcp ??= {};
+  cfg.mcp[process.env.ARCHESTRA_OC_MCP_NAME] = { type: "remote", url: process.env.ARCHESTRA_OC_MCP_URL };
+}
+const managedHeaders = JSON.parse(process.env.ARCHESTRA_OC_HEADERS || "{}");
+const routes = JSON.parse(process.env.ARCHESTRA_OC_PROVIDER_ROUTES || "{}");
+const runtimeRouting = process.env.ARCHESTRA_OC_RUNTIME_ROUTING === "1";
+const providers = cfg.provider && typeof cfg.provider === "object" ? cfg.provider : {};
+const statePath = path.join(process.env.HOME || os.homedir(), ".archestra", "opencode-connection-state.json");
+if (runtimeRouting) {
+  if (fs.existsSync(statePath)) {
+    const state = JSON.parse(fs.readFileSync(statePath, "utf8"));
+    for (const [providerId, previous] of Object.entries(state.providerState || {})) {
+      if (previous === null) delete providers[providerId];
+      else providers[providerId] = previous;
+    }
+    if (state.enabledProvidersPresent) cfg.enabled_providers = state.enabledProviders;
+    else delete cfg.enabled_providers;
+    if (state.disabledProvidersPresent) cfg.disabled_providers = state.disabledProviders;
+    else delete cfg.disabled_providers;
+    fs.rmSync(statePath, { force: true });
+  } else {
+    for (const [providerId, expectedUrl] of Object.entries(routes)) {
+      const entry = providers[providerId];
+      const options = entry?.options;
+      if (!options || typeof options !== "object") continue;
+      if (options.baseURL === expectedUrl) delete options.baseURL;
+      if (options.headers && typeof options.headers === "object") {
+        for (const [name, value] of Object.entries(managedHeaders)) {
+          if (options.headers[name] === value) delete options.headers[name];
+        }
+        if (Object.keys(options.headers).length === 0) delete options.headers;
+      }
+      if (Object.keys(options).length === 0) delete entry.options;
+      if (Object.keys(entry).length === 0) delete providers[providerId];
+    }
+  }
+  if (Object.keys(providers).length > 0) cfg.provider = providers;
+  else delete cfg.provider;
+}
+const legacyModel = process.env.ARCHESTRA_OC_LEGACY_MODEL;
+if (legacyModel && cfg.model === legacyModel) delete cfg.model;
+const providerId = process.env.ARCHESTRA_OC_PROVIDER_ID;
+const routeIds = Object.keys(routes);
+const enabledProviderIds = runtimeRouting ? [] : routeIds.length > 0 ? routeIds : providerId ? [providerId] : [];
+if (enabledProviderIds.length > 0) {
+  if (!fs.existsSync(statePath)) {
+    fs.mkdirSync(path.dirname(statePath), { recursive: true });
+    fs.writeFileSync(statePath, JSON.stringify({
+      enabledProvidersPresent: Object.hasOwn(cfg, "enabled_providers"),
+      enabledProviders: cfg.enabled_providers,
+      disabledProvidersPresent: Object.hasOwn(cfg, "disabled_providers"),
+      disabledProviders: cfg.disabled_providers,
+      providerState: Object.fromEntries(enabledProviderIds.map((id) => [id, providers[id] ?? null])),
+    }, null, 2) + "\\n", { mode: 0o600 });
+  }
+  cfg.enabled_providers = enabledProviderIds;
+  const disabled = (cfg.disabled_providers || []).filter((id) => !enabledProviderIds.includes(id));
+  if (disabled.length > 0) cfg.disabled_providers = disabled;
+  else delete cfg.disabled_providers;
+}
+if (!runtimeRouting) {
+  for (const [id, baseURL] of Object.entries(routes)) {
+    const entry = providers[id] && typeof providers[id] === "object" ? providers[id] : {};
+    const options = entry.options && typeof entry.options === "object" ? entry.options : {};
+    options.baseURL = baseURL;
+    options.headers = { ...(options.headers || {}), ...managedHeaders };
+    entry.options = options;
+    providers[id] = entry;
+  }
+}
+if (providerId) {
+  const entry = providers[providerId] && typeof providers[providerId] === "object" ? providers[providerId] : {};
+  if (process.env.ARCHESTRA_OC_NPM) {
+    entry.npm = process.env.ARCHESTRA_OC_NPM;
+    entry.name = process.env.ARCHESTRA_OC_NAME;
+    entry.models = { [process.env.ARCHESTRA_OC_MODEL]: {} };
+  }
+  const options = entry.options && typeof entry.options === "object" ? entry.options : {};
+  options.baseURL = process.env.ARCHESTRA_OC_BASE_URL;
+  options.headers = { ...(options.headers || {}), ...managedHeaders };
+  if (process.env.ARCHESTRA_OC_API_KEY_REF) options.apiKey = process.env.ARCHESTRA_OC_API_KEY_REF;
+  entry.options = options;
+  providers[providerId] = entry;
+  cfg.provider = providers;
+}
+fs.mkdirSync(path.dirname(configPath), { recursive: true });
+fs.writeFileSync(configPath, JSON.stringify(cfg, null, 2) + "\\n");
+console.log("Updated " + configPath);`;
 
 /**
  * Custom headers Claude Code sends on every proxied request (Anthropic and
@@ -1285,4 +1427,347 @@ ARCHESTRA_CURSOR_SKILLS`);
   }
 
   return sections;
+}
+
+// ===================================================================
+// Internal helpers — OpenCode (spike)
+// ===================================================================
+
+interface OpencodeProviderTarget {
+  id: string;
+  baseUrl: string;
+  model: string;
+}
+
+/** Resolve the native OpenCode provider id and matching Archestra wire URL. */
+export function opencodeProviderTarget(
+  ctx: SetupScriptContext,
+): OpencodeProviderTarget {
+  const proxy = ctx.proxy as SetupScriptProxySection;
+  const route = OPENCODE_PASSTHROUGH_PROVIDER_ROUTES.find(
+    (candidate) => candidate.provider === proxy.provider,
+  );
+  if (!route) {
+    throw new Error(
+      `OpenCode does not support ${proxy.provider} through local credential passthrough`,
+    );
+  }
+  return {
+    id: route.openCodeProviderId,
+    baseUrl: openCodePassthroughBaseUrl(proxy.baseUrl, route),
+    model: proxy.model ?? DEFAULT_MODELS[proxy.provider],
+  };
+}
+
+/** Headers OpenCode sends on every proxied request (attribution). */
+export function opencodeProxyHeaders(
+  proxy: SetupScriptProxySection,
+): Record<string, string> {
+  const headers: Record<string, string> = {
+    [EXTERNAL_AGENT_ID_HEADER]: OPENCODE_CLIENT_ID,
+  };
+  if (proxy.passthroughVirtualKey) {
+    headers[VIRTUAL_KEY_HEADER] = proxy.passthroughVirtualKey;
+  }
+  return headers;
+}
+
+// Key-scoped merge into OpenCode's documented global config. Authentication is
+// stored separately by OpenCode, so existing local keys and subscriptions stay
+// on the machine; only provider routes change.
+// Values arrive via env.
+const OPENCODE_OWNED_MERGE_PY = `import json, os, pathlib, shutil
+path = pathlib.Path(os.environ["ARCHESTRA_OC_CONFIG_PATH"])
+raw = path.read_text() if path.exists() else ""
+cfg = json.loads(raw) if raw.strip() else {}
+backup = path.with_name(path.name + ".archestra-backup")
+if path.exists() and not backup.exists():
+    shutil.copy2(path, backup)
+cfg.setdefault("$schema", "https://opencode.ai/config.json")
+if os.environ.get("ARCHESTRA_OC_MCP_NAME"):
+    cfg.setdefault("mcp", {})[os.environ["ARCHESTRA_OC_MCP_NAME"]] = {"type": "remote", "url": os.environ["ARCHESTRA_OC_MCP_URL"]}
+managed_headers = json.loads(os.environ.get("ARCHESTRA_OC_HEADERS", "{}"))
+routes = json.loads(os.environ.get("ARCHESTRA_OC_PROVIDER_ROUTES", "{}"))
+runtime_routing = os.environ.get("ARCHESTRA_OC_RUNTIME_ROUTING") == "1"
+providers = cfg.get("provider") if isinstance(cfg.get("provider"), dict) else {}
+state_path = pathlib.Path(os.path.expanduser("~/.archestra/opencode-connection-state.json"))
+if runtime_routing:
+    if state_path.exists():
+        state = json.loads(state_path.read_text())
+        for provider_id, previous in (state.get("providerState") or {}).items():
+            if previous is None: providers.pop(provider_id, None)
+            else: providers[provider_id] = previous
+        if state.get("enabledProvidersPresent"): cfg["enabled_providers"] = state.get("enabledProviders")
+        else: cfg.pop("enabled_providers", None)
+        if state.get("disabledProvidersPresent"): cfg["disabled_providers"] = state.get("disabledProviders")
+        else: cfg.pop("disabled_providers", None)
+        state_path.unlink()
+    else:
+        for provider_id, expected_url in routes.items():
+            entry = providers.get(provider_id)
+            if not isinstance(entry, dict): continue
+            options = entry.get("options")
+            if not isinstance(options, dict): continue
+            if options.get("baseURL") == expected_url: options.pop("baseURL", None)
+            headers = options.get("headers")
+            if isinstance(headers, dict):
+                for name, value in managed_headers.items():
+                    if headers.get(name) == value: headers.pop(name, None)
+                if not headers: options.pop("headers", None)
+            if not options: entry.pop("options", None)
+            if not entry: providers.pop(provider_id, None)
+    if providers: cfg["provider"] = providers
+    else: cfg.pop("provider", None)
+else:
+    cfg["provider"] = providers
+legacy_model = os.environ.get("ARCHESTRA_OC_LEGACY_MODEL")
+if legacy_model and cfg.get("model") == legacy_model:
+    cfg.pop("model", None)
+enabled_provider_ids = [] if runtime_routing else (list(routes) or ([os.environ["ARCHESTRA_OC_PROVIDER_ID"]] if os.environ.get("ARCHESTRA_OC_PROVIDER_ID") else []))
+if enabled_provider_ids:
+    if not state_path.exists():
+        state_path.parent.mkdir(parents=True, exist_ok=True)
+        state_path.write_text(json.dumps({
+            "enabledProvidersPresent": "enabled_providers" in cfg,
+            "enabledProviders": cfg.get("enabled_providers"),
+            "disabledProvidersPresent": "disabled_providers" in cfg,
+            "disabledProviders": cfg.get("disabled_providers"),
+            "providerState": {provider_id: providers.get(provider_id) for provider_id in enabled_provider_ids},
+        }, indent=2) + "\\n")
+        state_path.chmod(0o600)
+    cfg["enabled_providers"] = enabled_provider_ids
+    disabled = [provider_id for provider_id in (cfg.get("disabled_providers") or []) if provider_id not in enabled_provider_ids]
+    if disabled: cfg["disabled_providers"] = disabled
+    else: cfg.pop("disabled_providers", None)
+if not runtime_routing:
+    for provider_id, base_url in routes.items():
+        entry = providers.get(provider_id) if isinstance(providers.get(provider_id), dict) else {}
+        options = entry.get("options") if isinstance(entry.get("options"), dict) else {}
+        headers = options.get("headers") if isinstance(options.get("headers"), dict) else {}
+        options["baseURL"] = base_url
+        options["headers"] = {**headers, **managed_headers}
+        entry["options"] = options
+        providers[provider_id] = entry
+if os.environ.get("ARCHESTRA_OC_PROVIDER_ID"):
+    provider_id = os.environ["ARCHESTRA_OC_PROVIDER_ID"]
+    entry = providers.get(provider_id) if isinstance(providers.get(provider_id), dict) else {}
+    if os.environ.get("ARCHESTRA_OC_NPM"):
+        entry["npm"] = os.environ["ARCHESTRA_OC_NPM"]
+        entry["name"] = os.environ["ARCHESTRA_OC_NAME"]
+        entry["models"] = {os.environ["ARCHESTRA_OC_MODEL"]: {}}
+    options = entry.get("options") if isinstance(entry.get("options"), dict) else {}
+    headers = options.get("headers") if isinstance(options.get("headers"), dict) else {}
+    options["baseURL"] = os.environ["ARCHESTRA_OC_BASE_URL"]
+    options["headers"] = {**headers, **managed_headers}
+    if os.environ.get("ARCHESTRA_OC_API_KEY_REF"):
+        options["apiKey"] = os.environ["ARCHESTRA_OC_API_KEY_REF"]
+    entry["options"] = options
+    providers[provider_id] = entry
+path.parent.mkdir(parents=True, exist_ok=True)
+path.write_text(json.dumps(cfg, indent=2) + "\\n")
+print(f"Updated {path}")`;
+
+const OPENCODE_EFFECTIVE_BASE_URL_PY = `import json, os, sys
+try:
+    d = json.load(sys.stdin)
+    print(d.get("provider", {}).get(os.environ["ARCHESTRA_OC_PROVIDER_ID"], {}).get("options", {}).get("baseURL", ""))
+except Exception:
+    print("")`;
+
+const OPENCODE_EFFECTIVE_ROUTES_PY = `import json, os, sys
+try:
+    cfg = json.load(sys.stdin)
+    expected = json.loads(os.environ["ARCHESTRA_OC_PROVIDER_ROUTES"])
+    providers = cfg.get("provider", {})
+    enabled = set(cfg.get("enabled_providers") or [])
+    for provider_id, base_url in expected.items():
+        if provider_id not in enabled: continue
+        actual = providers.get(provider_id, {}).get("options", {}).get("baseURL")
+        if actual != base_url:
+            print(f"{provider_id}={actual or 'unset'}")
+except Exception as error:
+    print(str(error))`;
+
+function opencodeOwnedMerge(
+  env: Record<string, string>,
+  manual: string,
+): string {
+  const exports = Object.entries(env)
+    .map(([key, value]) => `  export ${key}=${sh(value)}`)
+    .join("\n");
+  return `if command -v node >/dev/null 2>&1; then
+  export ARCHESTRA_OC_CONFIG_PATH="$ARCHESTRA_OPENCODE_CONFIG"
+${exports}
+  node -e ${sh(OPENCODE_OWNED_MERGE_NODE)}
+elif command -v python3 >/dev/null 2>&1; then
+  export ARCHESTRA_OC_CONFIG_PATH="$ARCHESTRA_OPENCODE_CONFIG"
+${exports}
+  python3 - <<'ARCHESTRA_PY'
+${OPENCODE_OWNED_MERGE_PY}
+ARCHESTRA_PY
+else
+  warn "python3 not found — add this to $ARCHESTRA_OPENCODE_CONFIG yourself:"
+  cat <<'ARCHESTRA_MANUAL'
+${manual}
+ARCHESTRA_MANUAL
+fi`;
+}
+
+function opencodeSections(ctx: SetupScriptContext): string[] {
+  const sections: string[] = [
+    `ARCHESTRA_OPENCODE_CONFIG="\${XDG_CONFIG_HOME:-$HOME/.config}/opencode/opencode.json"`,
+  ];
+
+  if (ctx.mcp) {
+    sections.push(`say ${sh(`Registering MCP gateway "${ctx.mcp.serverName}" (OAuth)`)}
+${opencodeOwnedMerge(
+  {
+    ARCHESTRA_OC_MCP_NAME: ctx.mcp.serverName,
+    ARCHESTRA_OC_MCP_URL: ctx.mcp.url,
+    ARCHESTRA_OC_PROVIDER_ID: "",
+  },
+  JSON.stringify(
+    { mcp: { [ctx.mcp.serverName]: { type: "remote", url: ctx.mcp.url } } },
+    null,
+    2,
+  ),
+)}`);
+  }
+
+  if (ctx.proxy) {
+    if (ctx.proxy.authMode === "provider-key") {
+      const routes = Object.fromEntries(
+        OPENCODE_PASSTHROUGH_PROVIDER_ROUTES.map((route) => [
+          route.openCodeProviderId,
+          openCodePassthroughBaseUrl(ctx.proxy?.baseUrl ?? "", route),
+        ]),
+      );
+      const headers = opencodeProxyHeaders(ctx.proxy);
+      const legacyTarget = opencodeProviderTarget(ctx);
+      const manual =
+        "The routing plugin is installed. Node.js or Python is required to remove provider settings left by an older connection.";
+      sections.push(`say "Routing supported OpenCode providers through the LLM proxy"
+${opencodeRoutingPluginSection({ routes, headers })}
+${opencodeOwnedMerge(
+  {
+    ARCHESTRA_OC_MCP_NAME: "",
+    ARCHESTRA_OC_PROVIDER_ID: "",
+    ARCHESTRA_OC_PROVIDER_ROUTES: JSON.stringify(routes),
+    ARCHESTRA_OC_RUNTIME_ROUTING: "1",
+    ARCHESTRA_OC_LEGACY_MODEL: `${legacyTarget.id}/${legacyTarget.model}`,
+    ARCHESTRA_OC_HEADERS: JSON.stringify(headers),
+  },
+  manual,
+)}
+if command -v python3 >/dev/null 2>&1; then
+  EFFECTIVE_CONFIG=$(cd "$HOME" && opencode debug config 2>/dev/null || true)
+  ROUTE_MISMATCHES=$(printf '%s' "$EFFECTIVE_CONFIG" | ARCHESTRA_OC_PROVIDER_ROUTES=${sh(JSON.stringify(routes))} python3 -c ${sh(OPENCODE_EFFECTIVE_ROUTES_PY)} || true)
+  if [ -z "$ROUTE_MISMATCHES" ]; then
+    ok "OpenCode's credentialed native providers resolve through the LLM proxy"
+  else
+    warn "Another OpenCode config overrides these provider routes: $ROUTE_MISMATCHES"
+  fi
+fi`);
+    } else {
+      const target = opencodeProviderTarget(ctx);
+      const apiKeyRef = ctx.proxy.virtualKey
+        ? `{file:~/.archestra/opencode-${target.id}.key}`
+        : "";
+      const writeKey = ctx.proxy.virtualKey
+        ? `
+ARCHESTRA_VIRTUAL_KEY=${sh(ctx.proxy.virtualKey)}
+mkdir -p "$HOME/.archestra"
+( umask 077; printf '%s' "$ARCHESTRA_VIRTUAL_KEY" > "$HOME/.archestra/opencode-${target.id}.key" )
+echo "Stored the virtual key in $HOME/.archestra/opencode-${target.id}.key"`
+        : "";
+      sections.push(`say ${sh(`Routing OpenCode's "${target.id}" provider through the LLM proxy`)}${writeKey}
+${opencodeRoutingPluginSection({
+  routes: { [target.id]: target.baseUrl },
+  headers: opencodeProxyHeaders(ctx.proxy),
+})}
+${opencodeOwnedMerge(
+  {
+    ARCHESTRA_OC_MCP_NAME: "",
+    ARCHESTRA_OC_PROVIDER_ID: target.id,
+    ARCHESTRA_OC_BASE_URL: target.baseUrl,
+    ARCHESTRA_OC_NPM: "",
+    ARCHESTRA_OC_NAME: "",
+    ARCHESTRA_OC_MODEL: "",
+    ARCHESTRA_OC_HEADERS: JSON.stringify(opencodeProxyHeaders(ctx.proxy)),
+    ARCHESTRA_OC_API_KEY_REF: apiKeyRef,
+  },
+  JSON.stringify(
+    {
+      enabled_providers: [target.id],
+      provider: { [target.id]: { options: { baseURL: target.baseUrl } } },
+    },
+    null,
+    2,
+  ),
+)}
+if command -v python3 >/dev/null 2>&1; then
+  EFFECTIVE_CONFIG=$(cd "$HOME" && opencode debug config 2>/dev/null || true)
+  EFFECTIVE_BASE_URL=$(printf '%s' "$EFFECTIVE_CONFIG" | ARCHESTRA_OC_PROVIDER_ID=${sh(target.id)} python3 -c ${sh(OPENCODE_EFFECTIVE_BASE_URL_PY)} || true)
+  if [ "$EFFECTIVE_BASE_URL" = ${sh(target.baseUrl)} ]; then
+    ok ${sh(`OpenCode resolves "${target.id}" through the LLM proxy`)}
+  else
+    warn "Another OpenCode config overrides provider.${target.id}.options.baseURL (resolved: \${EFFECTIVE_BASE_URL:-unset}). Remove that override to use the proxy."
+  fi
+fi`);
+    }
+  }
+
+  if (ctx.skills) {
+    sections.push(`say ${sh(`Installing the "${ctx.skills.marketplaceName}" skills`)}
+SKILLS_DIR="\${XDG_CONFIG_HOME:-$HOME/.config}/opencode/skills/${ctx.skills.marketplaceName}"
+if ! command -v git >/dev/null 2>&1; then
+  warn "git not found — clone the marketplace into $SKILLS_DIR yourself."
+elif [ -d "$SKILLS_DIR/.git" ]; then
+  git -C "$SKILLS_DIR" remote set-url origin ${sh(ctx.skills.cloneUrl)}
+  git -C "$SKILLS_DIR" pull --ff-only -q || warn "Could not update $SKILLS_DIR."
+else
+  mkdir -p "$(dirname "$SKILLS_DIR")"
+  git clone -q ${sh(ctx.skills.cloneUrl)} "$SKILLS_DIR" || warn "Could not clone the marketplace into $SKILLS_DIR."
+fi
+echo "Skills folder: $SKILLS_DIR"`);
+  }
+
+  if (ctx.mcp) {
+    sections.push(`say "OpenCode MCP servers"
+cli opencode mcp list || true`);
+  }
+  return withStartupGuard(ctx, OPENCODE_GUARD_CLIENT, sections);
+}
+
+function opencodeRoutingPluginSection(params: {
+  routes: Record<string, string>;
+  headers: Record<string, string>;
+}): string {
+  const encoded = Buffer.from(
+    renderOpenCodeRoutingPlugin(params),
+    "utf8",
+  ).toString("base64");
+  const python = `import base64, json, pathlib, sys
+plugin, state = map(pathlib.Path, sys.argv[1:3])
+content = sys.argv[3]
+if not state.exists():
+    existed = plugin.exists()
+    previous = base64.b64encode(plugin.read_bytes()).decode() if existed else None
+    state.write_text(json.dumps({"existed": existed, "contentBase64": previous}) + "\\n")
+    state.chmod(0o600)
+plugin.write_bytes(base64.b64decode(content))
+plugin.chmod(0o600)`;
+  return `ARCHESTRA_OC_PLUGIN="$(dirname "$ARCHESTRA_OPENCODE_CONFIG")/plugins/archestra-llm-proxy.js"
+ARCHESTRA_OC_PLUGIN_STATE="$HOME/.archestra/opencode-routing-plugin-state.json"
+mkdir -p "$(dirname "$ARCHESTRA_OC_PLUGIN")"
+mkdir -p "$(dirname "$ARCHESTRA_OC_PLUGIN_STATE")"
+if command -v node >/dev/null 2>&1; then
+  node -e 'const fs=require("node:fs"); const [plugin,state,content]=process.argv.slice(1); if(!fs.existsSync(state)){const existed=fs.existsSync(plugin); const previous=existed?fs.readFileSync(plugin).toString("base64"):null; fs.writeFileSync(state,JSON.stringify({existed,contentBase64:previous})+"\\n",{mode:0o600});} fs.writeFileSync(plugin,Buffer.from(content,"base64"),{mode:0o600});' "$ARCHESTRA_OC_PLUGIN" "$ARCHESTRA_OC_PLUGIN_STATE" ${sh(encoded)}
+elif command -v python3 >/dev/null 2>&1; then
+  python3 -c ${sh(python)} "$ARCHESTRA_OC_PLUGIN" "$ARCHESTRA_OC_PLUGIN_STATE" ${sh(encoded)}
+else
+  err "Node.js or python3 is required to install the OpenCode routing guard"
+  exit 1
+fi
+ok "Installed the OpenCode LLM proxy routing guard"`;
 }

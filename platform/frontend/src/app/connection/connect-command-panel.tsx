@@ -2,10 +2,11 @@
 
 import {
   DEFAULT_MODELS,
+  DocsPage,
   providerRequiresPerUserCredential,
   type SupportedProvider,
 } from "@archestra/shared";
-import { Download, KeyRound, RotateCcw } from "lucide-react";
+import { Download, KeyRound, RotateCcw, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
@@ -22,11 +23,13 @@ import {
 } from "@/components/agent-selector";
 import { CreditWarningNotice } from "@/components/connection/credit-warning-notice";
 import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
+import { ExternalDocsLink } from "@/components/external-docs-link";
 import { GithubCopilotSignIn } from "@/components/github-copilot-sign-in";
 import { PROVIDER_CONFIG } from "@/components/llm-provider-api-key-form";
 import { LlmProviderSelectItems } from "@/components/llm-provider-select-items";
 import { ProviderIcon } from "@/components/provider-icon";
 import { TerminalCard } from "@/components/terminal-surface";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -46,6 +49,7 @@ import {
   type CreateConnectionSetupResult,
   useCreateConnectionSetup,
 } from "@/lib/connection-setup.query";
+import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import { useLlmModelsByProvider } from "@/lib/llm-models.query";
@@ -414,6 +418,7 @@ export function ConnectCommandPanel({
     client.id === "claude-code" &&
     !!gateway &&
     !virtualKeyUnbacked;
+  const showDesktopGatewayStep = client.id === "claude-desktop" && !!gateway;
   // The script installs skills itself for everyone who can read them, so the
   // wizard never grows an extra step here. The marketplace step appears only
   // when there is no script to carry them: nothing to connect at all (below),
@@ -421,6 +426,10 @@ export function ConnectCommandPanel({
   const marketplaceVisible = useSkillsMarketplaceVisible(client);
   const skillsStepAvailable = skillsEnabled && marketplaceVisible;
   const appName = useAppName();
+  const desktopRevertDocsUrl = getFrontendDocsUrl(
+    DocsPage.PlatformClaudeDesktopExample,
+    "revert",
+  );
   // The exact name the script registers the gateway under — referenced in the
   // OAuth step so the user can find it in the `claude /mcp` list.
   const oauthServerName = deriveMcpServerName({
@@ -1132,7 +1141,7 @@ export function ConnectCommandPanel({
               ? "Install the connection"
               : "Run the setup script"
         }
-        last={!showOAuthStep}
+        last={!showOAuthStep && !showDesktopGatewayStep}
       >
         <div className="flex flex-col gap-3">
           {client.id === "claude-desktop" && (
@@ -1140,6 +1149,40 @@ export function ConnectCommandPanel({
               Only Claude Desktop is needed. Finish active Desktop tasks before
               setup restarts the app.
             </p>
+          )}
+          {client.id === "claude-desktop" && proxyActive && (
+            <Alert variant="warning">
+              <TriangleAlert />
+              <AlertTitle>
+                Claude Desktop uses separate conversation history
+              </AlertTitle>
+              <AlertDescription>
+                <p>
+                  Connecting the LLM Proxy switches Desktop to third-party mode.
+                  Your existing Claude conversations won&apos;t appear in that
+                  mode. The installer does not delete them.
+                </p>
+                {desktopRevertDocsUrl ? (
+                  <ExternalDocsLink href={desktopRevertDocsUrl}>
+                    How to return to standard Claude Desktop
+                  </ExternalDocsLink>
+                ) : (
+                  <p>
+                    To return to standard Claude Desktop, choose Anthropic
+                    sign-in on Desktop&apos;s sign-in screen and use your
+                    original Claude account. If that option is hidden, contact
+                    your administrator. See{" "}
+                    <ExternalDocsLink
+                      href="https://claude.com/docs/third-party/claude-desktop/installation#single-machine-setup"
+                      showIcon={false}
+                    >
+                      Claude&apos;s setup instructions
+                    </ExternalDocsLink>
+                    .
+                  </p>
+                )}
+              </AlertDescription>
+            </Alert>
           )}
           <output
             className="sr-only"
@@ -1217,10 +1260,10 @@ export function ConnectCommandPanel({
                     <span>Download installer</span>
                   </a>
                 </Button>
-                <p className="max-w-xl text-sm leading-relaxed text-muted-foreground">
+                <p className="text-sm leading-relaxed text-muted-foreground">
                   Open in Claude Desktop and confirm Install. Your browser
                   guides you through subscription sign-in and restarting
-                  Desktop. No terminal or developer tools needed.
+                  Desktop.
                 </p>
                 <details className="text-xs text-muted-foreground">
                   <summary className="cursor-pointer">
@@ -1288,6 +1331,33 @@ export function ConnectCommandPanel({
           )}
         </div>
       </ConnectionSection>
+
+      {showDesktopGatewayStep && (
+        <WizardStep n={4} title="Enable your gateway in Claude Desktop" last>
+          <div className="space-y-3 text-sm text-muted-foreground">
+            <p>
+              The installer registers your gateway. Claude Desktop does not let
+              installers enable connectors automatically, so you need to enable
+              the gateway in your conversation.
+            </p>
+            <ol className="list-decimal space-y-3 pl-5">
+              <li>
+                After Desktop restarts, open{" "}
+                <strong>Settings → Connectors</strong>. Select{" "}
+                <strong>{oauthServerName}</strong> and connect it if needed.
+                Complete sign-in and approve access in your browser.
+              </li>
+              <li>
+                In your conversation, open <strong>+ → Connectors</strong> and
+                enable <strong>{oauthServerName}</strong> if it is off. A
+                connected checkmark in Settings does not confirm it is enabled
+                for that conversation.
+              </li>
+              <li>Ask Claude to list the tools available from your gateway.</li>
+            </ol>
+          </div>
+        </WizardStep>
+      )}
 
       {showOAuthStep && (
         <WizardStep n={4} title={FINISH_OAUTH_FLOW_TITLE} last>

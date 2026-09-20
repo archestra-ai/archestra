@@ -123,6 +123,27 @@ test("downloads and executes the approved script without logging polling credent
   expect(result.output).not.toContain("A".repeat(43));
 });
 
+function installerPlatform() {
+  switch (process.platform) {
+    case "darwin":
+      return "macos";
+    case "linux":
+      return "linux";
+    case "win32":
+      return "windows";
+    default:
+      throw new Error("Unsupported test platform");
+  }
+}
+
+function connectionLockPath(url: string, clientId: string) {
+  const digest = createHash("sha256")
+    .update(`${url}\n${clientId}\n${installerPlatform()}`)
+    .digest("hex")
+    .slice(0, 24);
+  return join(tmpdir(), `archestra-connect-${digest}.lock`);
+}
+
 test("a concurrent installer cannot create a second approval request", async () => {
   status = "pending";
   const first = spawn(process.execPath, [
@@ -152,6 +173,59 @@ test("a concurrent installer cannot create a second approval request", async () 
   const retry = await run(origin, "opencode");
   expect(retry.code).toBe(0);
   expect(starts).toBe(2);
+});
+
+test("reclaims a lock whose owner process has already exited", async () => {
+  const child = spawn(process.execPath, ["-e", "process.exit(0)"]);
+  await once(child, "close");
+  const lockPath = connectionLockPath(origin, "opencode");
+  await writeFile(
+    lockPath,
+    JSON.stringify({ pid: child.pid, createdAt: Date.now() }),
+  );
+  try {
+    const result = await run(origin, "opencode");
+    expect(result.code).toBe(0);
+    expect(starts).toBe(1);
+  } finally {
+    await rm(lockPath, { force: true });
+  }
+});
+
+test("reclaims a lock older than the installer lifetime even if the pid is still running", async () => {
+  const lockPath = connectionLockPath(origin, "opencode");
+  await writeFile(
+    lockPath,
+    JSON.stringify({
+      pid: process.pid,
+      createdAt: Date.now() - 16 * 60 * 1000,
+    }),
+  );
+  try {
+    const result = await run(origin, "opencode");
+    expect(result.code).toBe(0);
+    expect(starts).toBe(1);
+  } finally {
+    await rm(lockPath, { force: true });
+  }
+});
+
+test("keeps a live lock that is still within the installer lifetime", async () => {
+  const lockPath = connectionLockPath(origin, "opencode");
+  await writeFile(
+    lockPath,
+    JSON.stringify({ pid: process.pid, createdAt: Date.now() }),
+  );
+  try {
+    const result = await run(origin, "opencode");
+    expect(result.code).toBe(1);
+    expect(result.output).toContain(
+      "Another connection installer is already running",
+    );
+    expect(starts).toBe(0);
+  } finally {
+    await rm(lockPath, { force: true });
+  }
 });
 
 test("Desktop downloads and executes its approved setup through the same protocol", async () => {

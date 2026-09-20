@@ -185,6 +185,22 @@ ${buildStartupGuardInstallSection(CTX, OPENCODE_GUARD_CLIENT)}`,
 });
 
 describe("OpenCode provider passthrough disconnect", () => {
+  test("builds routes from the full proxy URL when the provider suffix is absent", () => {
+    if (!CTX.proxy) throw new Error("test proxy missing");
+    const script = OPENCODE_GUARD_CLIENT.renderProxyDisconnect({
+      ...CTX,
+      proxy: {
+        ...CTX.proxy,
+        authMode: "provider-key",
+        provider: "openai",
+        url: "https://archestra.example.com/llm",
+        passthroughVirtualKey: "arch_passthroughcafe",
+      },
+    });
+    expect(script).toContain("https://archestra.example.com/llm/openai");
+    expect(script).not.toContain("https://archestra.example.com/openai");
+  });
+
   test("removes only managed routes and restores prior provider constraints", async () => {
     if (!CTX.proxy) throw new Error("test proxy missing");
     const home = await mkdtemp(path.join(tmpdir(), "opencode disconnect "));

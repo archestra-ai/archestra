@@ -88,6 +88,7 @@ async function runConnection({ args, clientId, networkOrigin, origin, platform }
 async function acquireConnectionLock({ origin, clientId, platform }) {
   const digest = createHash('sha256').update(origin + '\n' + clientId + '\n' + platform).digest('hex').slice(0, 24);
   const lockPath = join(tmpdir(), 'archestra-connect-' + digest + '.lock');
+  const staleAfterMs = 15 * 60 * 1000;
   let handle;
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
@@ -97,9 +98,12 @@ async function acquireConnectionLock({ origin, clientId, platform }) {
       if (error.code !== 'EEXIST') throw error;
       let owner;
       try { owner = JSON.parse(await readFile(lockPath, 'utf8')); } catch {}
-      if (Number.isSafeInteger(owner?.pid) && processIsRunning(owner.pid)) {
+      const createdAt = Number(owner?.createdAt);
+      const stale = !Number.isFinite(createdAt) || Date.now() - createdAt > staleAfterMs;
+      if (!stale && Number.isSafeInteger(owner?.pid) && processIsRunning(owner.pid)) {
         throw new Error('Another connection installer is already running for this deployment and client. Keep its approval URL open. Do not start a second installer.');
       }
+      if (attempt === 1) break;
       await rm(lockPath, { force: true });
     }
   }

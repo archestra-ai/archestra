@@ -1,0 +1,278 @@
+{
+  "name": "agent-toolkit__remote-mcp",
+  "display_name": "Baizhi Agent Toolkit",
+  "description": "Hosted MCP tools for web search, webpage scraping and extraction, image and media tasks, and other agent workflows. Requires a Baizhi account and a user-supplied API key; usage is billed by the service.",
+  "long_description": "Baizhi Agent Toolkit is a remote tool service, not an LLM provider. The tool list reflects the tools advertised by the endpoint; availability and usage charges are controlled by the service. This entry does not include a self-hosted server implementation.",
+  "author": {
+    "name": "Baizhi Cloud",
+    "url": "https://baizhi.cloud/"
+  },
+  "homepage": "https://agent-toolkit.app.baizhi.cloud/",
+  "instructions": "Create your own Baizhi account, obtain an API key and check the current service pricing and available credits before use. Enter the raw API key in Access Token without the Bearer prefix; Archestra adds Authorization: Bearer when connecting over Streamable HTTP. This service uses static Bearer authentication, not an OAuth authorization flow. Tool inputs are sent to Baizhi. Some tools can create content or execute tasks and consume credits; enable only the tools needed for your workflow. Connection from the Archestra application has not been independently verified for this entry.",
+  "tools": [
+    {
+      "name": "get_cutout_detail",
+      "description": "查询智能抠图任务状态和结果图。调用 remove_background_by_url 获得 task_id 后，应使用本工具查询完成状态；如果任务仍在 processing 或 running，本次调用会等待最多 10 秒并持续检查，期间完成或失败会立即返回，否则返回 10 秒后的最新状态。建议每 5 到 15 秒查询一次。status 可能为 processing、running、completed 或 failed。任务未 completed 时不要向用户展示 result_url；只有 completed 后才展示结果图。"
+    },
+    {
+      "name": "image_generate_edit_image",
+      "description": "创建图生图异步任务。适用于用户提供参考图 URL、上传后的 image_url，或要求基于图片进行重绘、风格转换、背景替换、产品图优化、局部改写、视觉延展等场景。必须传 image_urls 数组，单张参考图也必须用数组；本地图片或聊天附件应先用 image_generate_upload_url 上传，并把返回的 image_url 放入 image_urls，不要传 upload_url 或 reference_image_id。prompt 应明确说明要保留什么、改变什么以及目标风格/用途。工具只返回 task_id 和 status，不会立即返回最终图片；通常需要 1 到 5 分钟完成，后续每 10 到 30 秒调用 image_generate_query_task 查询，只有 completed 后才展示 image_urls。"
+    },
+    {
+      "name": "image_generate_query_task",
+      "description": "查询图片生成任务状态和最终图片 URL。调用 image_generate_text_to_image、image_generate_edit_image 或 image_generate_retry_task 获得 task_id 后，应使用本工具轮询结果；如果任务仍在 processing 或 running，本次调用会等待最多 10 秒并持续检查，期间完成或失败会立即返回，否则返回 10 秒后的最新状态。建议根据任务复杂度每 10 到 30 秒查询一次，通常 1 到 5 分钟完成。status 可能为 processing（已入队等待执行）、running（正在生成）、completed（已完成）、failed（失败）。任务未 completed 时 image_urls 固定为空数组；只有 completed 时才向用户展示 image_urls。如果 failed，向用户说明失败信息并可建议调用 image_generate_retry_task；如果 completed 但图片数量少于预期，也可调用 retry 补齐。"
+    },
+    {
+      "name": "image_generate_retry_task",
+      "description": "重试图片生成任务。适用于原任务 failed，或任务 completed 但只生成了部分图片、需要补齐缺失图片的场景；部分成功任务会尽量只补缺失结果，不应重复展示已有图片为新结果。调用后返回当前任务 status，仍然不会立即返回最终图片；随后继续每 10 到 30 秒调用 image_generate_query_task 查询，直到 completed 或 failed。不要对正在 processing/running 的任务重复调用本工具。"
+    },
+    {
+      "name": "image_generate_text_to_image",
+      "description": "创建文生图异步任务。适用于用户没有参考图、希望根据文字描述生成图片的场景，例如海报、插画、产品概念图、营销素材、角色/场景视觉草案等。prompt 应尽量包含主体、场景、风格、构图、光影、色彩、比例和细节要求；如果用户提供了参考图或要求基于某张图修改，应改用 image_generate_edit_image。工具只返回 task_id 和 status，不会立即返回最终图片；通常需要 1 到 5 分钟完成，后续每 10 到 30 秒调用 image_generate_query_task 查询，只有 completed 后才展示 image_urls。"
+    },
+    {
+      "name": "image_generate_upload_url",
+      "description": "为本地参考图申请一次性上传凭证。仅当用户提供本地图片、聊天附件或需要把 Agent 本地生成/下载的图片作为图生图参考或智能抠图输入时使用；如果用户已经提供可公网访问的图片 URL，则直接调用 image_generate_edit_image 或 remove_background_by_url。工具返回 upload_url、image_url、method、headers 和过期时间；调用方必须按返回的 method/headers 将原始图片二进制上传到 upload_url，上传完成后只把 image_url 放入 image_generate_edit_image 的 image_urls，或传给 remove_background_by_url。upload_url 只用于上传，不要作为参考图或抠图 URL，也不要展示给终端用户。"
+    },
+    {
+      "name": "remove_background_by_url",
+      "description": "智能抠图，10 积分/次。根据 image_generate_upload_url 返回的 image_url 或可公开访问的 HTTP/HTTPS 图片 URL，以及自然语言 prompt 创建异步智能抠图任务，并返回 task_id 和当前状态。完成状态请调用 get_cutout_detail 查询。适用于去背景、透明背景、主体抠出、替换为纯白背景等场景。本地图片或聊天附件必须先调用 image_generate_upload_url 上传，再把返回的 image_url 传入本工具，不要传 upload_url。prompt 可说明保留主体、边缘处理和背景要求；不传时使用默认抠图提示。工具只返回 task_id 和 status，不会立即返回最终图片。"
+    },
+    {
+      "name": "image_analysis_create_task",
+      "description": "当用户请求分析、理解、识别、OCR、提取、描述、总结、比较、审查、还原或基于任意图片开展后续工作时，应优先使用本工具创建异步图片理解任务。适用于已经有模型服务可公网访问、真实域名的 http/https 图片 URL，或已通过 image_analysis_upload_url 上传得到 url 的图片。不要把 file://、localhost、裸 IP、内网地址、需要登录/VPN 的地址、相对路径或工作区路径传给本工具；这些图片必须先调用 image_analysis_upload_url 上传。工具会快速返回 task_id；随后调用 image_analysis_get_result 查询结果。"
+    },
+    {
+      "name": "image_analysis_get_result",
+      "description": "查询异步图片理解任务结果。传入 image_analysis_create_task 返回的 task_id。如果返回 done=false 或 status 为 pending/running，说明任务尚未完成，应根据任务复杂度动态决定下次查询时间：简单 OCR/短描述通常 5-20 秒，普通产品截图或页面布局分析通常 20-60 秒，复杂设计稿、大图或非常详细的结构化分析可能 60-120 秒或更久。在任务未失败前，不要自行读取图片附件或使用其他视觉能力替代。如果 status=succeeded，text 字段是图片理解结果；如果 status=failed，查看 error_message。"
+    },
+    {
+      "name": "image_analysis_upload_url",
+      "description": "处理本地图片、聊天附件或工作区图片时的首选准备工具。只要用户要求分析、识别、OCR、描述、审查、还原或基于本地图片开展工作，Agent 应先调用本工具获取临时 upload_url，再使用 curl 或 HTTP 客户端按返回的 method 和 headers 上传图片二进制，最后把返回的 url 传给 image_analysis_create_task。MCP 服务本身不接收图片文件本身，只能接受图片 url。"
+    },
+    {
+      "name": "websearch_aisearch",
+      "description": "基于公开网页来源生成综合回答。适用于需要总结、归纳和多来源综合的联网问答；不适用于本地代码分析、内部系统查询或纯推理任务。"
+    },
+    {
+      "name": "websearch_image_search_by_image",
+      "description": "提交图搜图或查询结果。提交时只填参数 image_url；查询时只填参数 request_id，值为提交返回的数字编号。request_id 是本工具的数字参数，不要写进 image_url。填了 request_id 就只查询、忽略 image_url。image_url 必须来自 websearch_prepare_image_upload。任务成功完成时消耗 1000 quota，即 10 积分。"
+    },
+    {
+      "name": "websearch_image_search_by_text",
+      "description": "根据关键词执行文搜图，返回图片结果及尺寸元数据。每次成功调用消耗 250 quota，即 2.5 积分。"
+    },
+    {
+      "name": "websearch_newssearch",
+      "description": "实时新闻垂直搜索工具。适用于最新新闻、近期媒体报道、突发事件、新闻来源核验和舆情线索；不适用于通用网页、代码、图片或内部系统查询。"
+    },
+    {
+      "name": "websearch_prepare_image_upload",
+      "description": "申请图搜图输入图的 OSS 预签名上传地址和下载地址。用 HTTP PUT 把原始图片字节传到 upload_url（最大 10 MB），再把返回的 image_url 传给 websearch_image_search_by_image。本工具不消耗积分。"
+    },
+    {
+      "name": "websearch_search",
+      "description": "搜索公开网页并返回原始网页结果。适用于最新资讯、来源核验、官网或文档查询，以及多站点事实对比；不适用于本地代码分析、内部系统查询或纯推理任务。"
+    },
+    {
+      "name": "web_scrape",
+      "description": "打开一个网页，返回整页正文。用户贴了链接并要看内容、总结、检查页面时用这个。一次只处理一个网址。默认返回 Markdown。"
+    },
+    {
+      "name": "web_extract",
+      "description": "从一个网页里抽出指定信息，例如标题、价格、题目。不要用它读整页正文（那是 web_scrape）。不知道字段名时先调 web_suggest_fields，或把用户原话放进 instruction。"
+    },
+    {
+      "name": "web_suggest_fields",
+      "description": "还不知道该抽哪些字段时先调用。根据用户要求和可选网址，返回一份字段名和类型建议，再拿去调 web_extract 或 web_organize。"
+    },
+    {
+      "name": "web_organize",
+      "description": "一次处理多个网页：先按字段提取，再默认写成一篇整理稿。用户要汇总、对比、整理多页时用这个。只要各页表格或 JSON、不要成稿时把 organize 设为 false。"
+    },
+    {
+      "name": "docparse_get_doc_upload_url",
+      "description": "文档转 Markdown / OCR 的本地文件上传准备工具。仅当输入是本地 PDF、图片、Word、Excel、本地附件、聊天附件或工作区文件时，先调用本工具申请 10 分钟有效的 upload_url，再用 HTTP PUT 上传原始文件；上传完成后，把返回的 url 传给 docparse_parse。单个文档最多 200 页，超过会被拒绝。不要跳过上传流程直接手工整理内容；远程 HTTP(S) 文件不要调用本工具，直接调用 docparse_parse。"
+    },
+    {
+      "name": "docparse_get_parse_result",
+      "description": "根据 document_id 查询解析状态，这是文档转 Markdown / OCR 流程的必经步骤。若已完成，会返回短时 result_url；若未完成，只返回当前状态。响应始终包含 page_count（文档页数）。结果未就绪时继续查询，不要自行编写 Markdown，也不要根据截图、零散 OCR 片段或主观猜测跳过结果查询。"
+    },
+    {
+      "name": "docparse_parse",
+      "description": "文档转 Markdown / OCR 的默认首选工具。只要用户要求把 PDF、图片、Word、Excel 等文档转为 Markdown，或要求 OCR、提取正文、解析附件，默认先调用本工具而不是手工编写 Markdown。远程 HTTP(S) 文件直接传 url；本地文件先调用 docparse_get_doc_upload_url 上传，再把返回的 url 传给本工具。单个文档最多 200 页，超过会被拒绝。返回 document_id、filename、page_count（文档页数）和 status，后续必须用 docparse_get_parse_result 查询进度。"
+    },
+    {
+      "name": "resolve-library-id",
+      "description": "服务下线提醒：当前开发文档检索服务将于 2026 年 9 月 16 日下线。后续如有开发文档检索需求，可前往 Agent 工具包（https://agent-toolkit.app.baizhi.cloud/services）使用开发文档检索服务。\n\n根据软件包或产品名称解析出兼容 Context7 的文档库 ID，并返回匹配的文档库。\n\n调用“查询文档”工具前，必须先调用本工具取得有效的 Context7 文档库 ID；但如果用户已在问题中明确提供“/org/project”或“/org/project/version”格式的文档库 ID，则无需调用。\n\n每条结果包含：\n- 文档库 ID：兼容 Context7 的标识符，格式为 /org/project\n- 名称：文档库或软件包名称\n- 描述：简短摘要\n- 代码片段：可用代码示例的数量\n- 来源信誉：权威程度指标（高、中、低或未知）\n- 基准得分：质量指标，最高为 100 分\n- 版本：可用版本列表。如果用户在问题中指定了版本，应使用列表中的对应版本，格式为 /org/project/version。\n\n为获得最佳结果，请综合名称匹配度、来源信誉、代码片段覆盖率、基准得分以及与当前使用场景的相关性选择文档库。\n\n选择流程：\n1. 分析问题，判断用户要查找的文档库或软件包\n2. 根据以下条件返回最相关的匹配项：\n- 与查询名称的相似度，优先精确匹配\n- 描述与查询意图的相关性\n- 文档覆盖率，优先选择代码片段数量更多的文档库\n- 来源信誉，优先考虑信誉为高或中的权威文档库\n- 基准得分，最高为 100 分\n\n响应格式：\n- 在清晰标记的区域中返回选中的文档库 ID\n- 简要说明选择该文档库的原因\n- 如果存在多个合适的匹配项，应说明这一点，但仍需选出最相关的一项继续处理\n- 如果没有合适的匹配项，应明确说明并建议如何优化查询\n\n如果查询存在歧义，应先请求用户澄清，再进行推测性选择。\n\n重要：每个问题调用本工具不得超过 3 次。如果调用 3 次后仍未找到所需内容，请使用当前获得的最佳结果。"
+    },
+    {
+      "name": "query-docs",
+      "description": "服务下线提醒：当前开发文档检索服务将于 2026 年 9 月 16 日下线。后续如有开发文档检索需求，可前往 Agent 工具包（https://agent-toolkit.app.baizhi.cloud/services）使用开发文档检索服务。\n\n从 Context7 检索并查询任意编程库或框架的最新文档与代码示例。\n\n使用本工具前，必须先调用“解析 Context7 文档库 ID”工具，以获得本工具所需的准确 Context7 文档库 ID；但如果用户已在问题中明确提供“/org/project”或“/org/project/version”格式的文档库 ID，则无需调用。\n\n每个问题调用本工具不得超过 3 次。"
+    },
+    {
+      "name": "city_search",
+      "description": "按城市名称或 IATA 城市代码模糊搜索城市。该工具免费且只读，用于确定航班中转和行程价格查询所需的城市代码。"
+    },
+    {
+      "name": "airport_search",
+      "description": "按城市名称、机场名称或 IATA 机场代码模糊搜索机场代码。该工具免费且只读，适合在调用航空查询前确定机场。"
+    },
+    {
+      "name": "flight_status",
+      "description": "查询指定航班在出发日期的实时动态、机场、时刻与运行信息。每次成功查询扣除 20 积分。"
+    },
+    {
+      "name": "route_flights",
+      "description": "查询指定日期出发地到目的地的航班列表。机场和城市字段各组选填且必须恰好提供一个。每次成功查询扣除 20 积分。"
+    },
+    {
+      "name": "flight_transfers",
+      "description": "查询指定日期两个城市之间的航班中转方案与有序航段。每次成功查询扣除 10 积分。"
+    },
+    {
+      "name": "flight_comfort",
+      "description": "查询指定航班在出发日期的机型、座椅、服务与准点舒适度信息。每次成功查询扣除 10 积分。"
+    },
+    {
+      "name": "aircraft_location",
+      "description": "查询指定飞机注册号的实时经纬度、高度、速度与航向。每次成功查询扣除 5 积分。"
+    },
+    {
+      "name": "airport_weather",
+      "description": "查询指定 IATA 机场代码的未来天气预报。每次成功查询扣除 5 积分。"
+    },
+    {
+      "name": "flight_prices",
+      "description": "查询指定日期两个城市之间的航班价格、最低价与最短行程推荐。每次成功查询扣除 20 积分。"
+    },
+    {
+      "name": "health_check",
+      "description": "检查当前应用 MCP 服务是否可用。该工具不修改任何数据，适合 agent 在连接后验证连通性。"
+    },
+    {
+      "name": "list_company_information_tools",
+      "description": "列出一个已确认企业在指定数据分类下可直接查询的工具。选择查询分类后必须先调用本工具，再从返回结果中选择一个 tool_name。此调用不消耗积分。"
+    },
+    {
+      "name": "query_company_information",
+      "description": "使用选定的单个工具查询一个已确认企业的数据。必须先选择分类并调用 list_company_information_tools，再传入返回列表中的一个 tool_name。调用成功消耗 3 积分。"
+    },
+    {
+      "name": "query_company_tool_page",
+      "description": "基于已完成的分类查询，获取指定工具的下一页数据。仅在用户要求查看更多且工具返回可翻页信息时调用；调用成功消耗 3 积分。"
+    },
+    {
+      "name": "search_companies",
+      "description": "按企业名称、简称、品牌或线索搜索中国企业候选。调用成功消耗 3 积分；必须先让用户确认候选企业，再查询分类数据。"
+    },
+    {
+      "name": "canonicalized-code",
+      "description": "查询股票代码目录，根据股票代码或名称返回规范的股票详情，包含规范代码、市场、当前名称和活跃状态。支持沪深京 A 股、港股和美股；查询港股或美股时必须提供 market。"
+    },
+    {
+      "name": "query-board-snapshot",
+      "description": "查询行业板块或概念板块的每日收盘快照，包含收盘点位、涨跌幅、涨跌额、总市值、换手率和涨跌家数。支持按板块代码精确查询、按板块名称模糊查询和按日期范围筛选。"
+    },
+    {
+      "name": "query-capital",
+      "description": "查询股本结构信息。返回总股本、流通A股、限售股、前十大股东等股本结构数据。"
+    },
+    {
+      "name": "query-company",
+      "description": "查询公司概况信息。返回公司名称、行业、注册资本、上市日期、员工人数等基本信息。"
+    },
+    {
+      "name": "query-events",
+      "description": "查询股票事件数据。可按事件类型筛选，返回分红、配股、解禁、送股等事件信息。"
+    },
+    {
+      "name": "query-financial-data",
+      "description": "查询财务报表数据。可按报告类型和日期筛选，返回利润表、资产负债表、现金流量表等财务指标。"
+    },
+    {
+      "name": "query-financial-pdf-url",
+      "description": "查询 A 股指定年份的财报相关 PDF 链接，返回报告日期、标准化类型、原始标题和 URL。"
+    },
+    {
+      "name": "query-fundamentals",
+      "description": "查询基本面指标。返回市盈率(PE)、市净率(PB)、净资产收益率(ROE)、每股收益(EPS)、总市值等核心估值指标。"
+    },
+    {
+      "name": "query-kline",
+      "description": "查询股票 K线数据。返回指定市场和代码的 K线行情，包含开盘价、收盘价、最高价、最低价、成交量、成交额。"
+    },
+    {
+      "name": "query-quote",
+      "description": "查询股票实时行情。返回价格、开高低、昨收、成交量、成交额，以及服务成功获取有效报价时记录的 Unix observation time；该时间不是交易所时间或行情缓存时间。"
+    },
+    {
+      "name": "query-sectors",
+      "description": "查询股票所属板块信息。返回该股票所属的行业板块、概念板块等分类信息。"
+    },
+    {
+      "name": "search_papers",
+      "description": "按论文标题搜索，返回论文 ID、作者、发表年份、会议或期刊、DOI 和被引档位。当前论文搜索服务将于 2026 年 9 月 16 日下线。后续如有论文搜索需求，请前往 Agent 工具包（https://agent-toolkit.app.baizhi.cloud/services）使用论文搜索服务。"
+    },
+    {
+      "name": "get_paper_detail",
+      "description": "使用搜索结果中的论文 ID 获取标题、作者、摘要、年份、会议或期刊和卷号。当前论文搜索服务将于 2026 年 9 月 16 日下线。后续如有论文搜索需求，请前往 Agent 工具包（https://agent-toolkit.app.baizhi.cloud/services）使用论文搜索服务。"
+    },
+    {
+      "name": "huskbox_create_sandbox",
+      "description": "创建一台可复用的短租沙箱。后续命令通过 huskbox_sandbox_exec 在同一 sandbox_id 上执行。"
+    },
+    {
+      "name": "huskbox_execute_task",
+      "description": "在已认证用户或团队授权范围内执行一个隔离任务，并返回退出状态、输出、工作区结果和 billing 结算信息。适合必须安全运行命令、脚本或文件处理的场景；普通信息查询不应调用。调用按所选运行规格收取固定配额和已完成整分钟配额，不足一分钟不收时长配额。"
+    },
+    {
+      "name": "huskbox_get_sandbox",
+      "description": "查询本租户沙箱会话状态与到期时间。已销毁会话可能包含 output_workspace_url。创建失败或工作区导出失败时看 error.code 与 error.message。"
+    },
+    {
+      "name": "huskbox_kill_sandbox",
+      "description": "销毁短租沙箱并释放占用。成功时返回会话终态与 output_workspace_url（整个 /workspace 的临时下载链接）。存储故障等非大小限制的导出失败仍会销毁，此时没有下载链接但会带 error。工作区过大时返回 WORKSPACE_TOO_LARGE 且不销毁，可删文件后重试。"
+    },
+    {
+      "name": "huskbox_list_sandboxes",
+      "description": "列出当前身份可见的短租沙箱。默认只返回存活会话，用于找回丢失的 id；日常执行仍应保存 create 返回的 id。status=all 可查看历史。"
+    },
+    {
+      "name": "huskbox_sandbox_exec",
+      "description": "在已创建的沙箱中执行一条命令并返回最终输出。不会销毁沙箱。"
+    },
+    {
+      "name": "huskbox_set_sandbox_timeout",
+      "description": "延长沙箱 deadline（从当前时刻重算）。只能延长不能缩短；提前结束请 kill。延长覆盖窗口会先补冻；余额不足则失败且保持旧 deadline。命令执行中可以续期。无幂等键，结果未知时重试可能暂时多冻，销毁时退回。"
+    }
+  ],
+  "prompts": [],
+  "keywords": ["baizhi", "agent tools", "web search", "web scraping", "structured extraction", "streamable http"],
+  "user_config": {
+    "access_token": {
+      "type": "string",
+      "title": "Access Token",
+      "description": "Your Baizhi Agent Toolkit API key, without the Bearer prefix. Requires your own account and service credits.",
+      "required": true,
+      "sensitive": true
+    }
+  },
+  "readme": null,
+  "category": "AI Tools",
+  "archestra_config": {
+    "client_config_permutations": null,
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "server": {
+    "type": "remote",
+    "url": "https://agent-toolkit.app.baizhi.cloud/mcp",
+    "docs_url": "https://agent-toolkit.app.baizhi.cloud/"
+  },
+  "github_info": null,
+  "programming_language": null
+}

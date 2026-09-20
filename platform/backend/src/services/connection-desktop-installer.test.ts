@@ -17,6 +17,22 @@ test.each([
     quotaFailure: false,
     insecureMcp: false,
     invalidMarketplace: false,
+    withProxy: false,
+    withMcp: true,
+  },
+  {
+    targetOs: "darwin",
+    quotaFailure: false,
+    insecureMcp: false,
+    invalidMarketplace: false,
+    withProxy: true,
+    withMcp: false,
+  },
+  {
+    targetOs: "darwin",
+    quotaFailure: false,
+    insecureMcp: false,
+    invalidMarketplace: false,
   },
   {
     targetOs: "darwin",
@@ -47,6 +63,8 @@ test.each([
   quotaFailure,
   insecureMcp,
   invalidMarketplace,
+  withProxy = true,
+  withMcp = true,
 }) => {
   const home = await mkdtemp(join(tmpdir(), "desktop-browser-setup-"));
   const opened: string[] = [];
@@ -62,17 +80,21 @@ test.each([
       return Response.json({
         clientId: "claude-desktop",
         appName: "Test Platform",
-        proxy: {
-          url: "https://proxy.example/v1/anthropic",
-          authMode: "provider-key",
-          passthroughVirtualKey: "test-user-key",
-        },
-        mcp: {
-          serverName: "Test gateway",
-          url: insecureMcp
-            ? "http://localhost:9000/v1/mcp/test"
-            : "https://proxy.example/v1/mcp/test",
-        },
+        proxy: withProxy
+          ? {
+              url: "https://proxy.example/v1/anthropic",
+              authMode: "provider-key",
+              passthroughVirtualKey: "test-user-key",
+            }
+          : undefined,
+        mcp: withMcp
+          ? {
+              serverName: "Test gateway",
+              url: insecureMcp
+                ? "http://localhost:9000/v1/mcp/test"
+                : "https://proxy.example/v1/mcp/test",
+            }
+          : undefined,
         skills: {
           cloneUrl: "https://proxy.example/marketplace.git",
           marketplaceName: "shared",
@@ -180,42 +202,47 @@ test.each([
       expect(opened).toHaveLength(1);
       return;
     }
-    expect((await status()).phase).toBe("signin");
-    expect(
-      (await fetch(page)).headers.get("content-security-policy"),
-    ).toContain("frame-ancestors 'none'");
-    expect(
-      (
-        await fetch(`${page}/continue`, {
-          method: "POST",
-          headers: { Origin: "https://untrusted.example" },
-        })
-      ).status,
-    ).toBe(404);
-    expect(opened).toHaveLength(1);
-    await fetch(`${page}/continue`, {
-      method: "POST",
-      headers: { Origin: origin },
-    });
-    await expect.poll(() => opened.length).toBe(2);
-    const oauth = new URL(opened[1]);
-    expect(oauth.origin).toBe("https://claude.ai");
-    expect(oauth.searchParams.get("scope")).toBe("user:inference");
-    challenge = oauth.searchParams.get("code_challenge");
-    const callback = new URL(oauth.searchParams.get("redirect_uri") ?? "");
-    callback.search = new URLSearchParams({
-      state: "wrong-state",
-      code: "test-code",
-    }).toString();
-    expect((await fetch(callback)).status).toBe(400);
-    expect(verifier).toBeUndefined();
-    callback.searchParams.set("state", oauth.searchParams.get("state") ?? "");
-    expect((await fetch(callback, { redirect: "manual" })).status).toBe(303);
-    await expect
-      .poll(async () => (await status()).phase)
-      .toBe(quotaFailure || invalidMarketplace ? "error" : "ready");
-    expect(JSON.stringify(await status())).not.toContain(token);
-    expect((await fetch(callback)).status).toBe(400);
+    expect((await status()).thirdPartyInference).toBe(withProxy);
+    if (withProxy) {
+      expect((await status()).phase).toBe("signin");
+      expect(
+        (await fetch(page)).headers.get("content-security-policy"),
+      ).toContain("frame-ancestors 'none'");
+      expect(
+        (
+          await fetch(`${page}/continue`, {
+            method: "POST",
+            headers: { Origin: "https://untrusted.example" },
+          })
+        ).status,
+      ).toBe(404);
+      expect(opened).toHaveLength(1);
+      await fetch(`${page}/continue`, {
+        method: "POST",
+        headers: { Origin: origin },
+      });
+      await expect.poll(() => opened.length).toBe(2);
+      const oauth = new URL(opened[1]);
+      expect(oauth.origin).toBe("https://claude.ai");
+      expect(oauth.searchParams.get("scope")).toBe("user:inference");
+      challenge = oauth.searchParams.get("code_challenge");
+      const callback = new URL(oauth.searchParams.get("redirect_uri") ?? "");
+      callback.search = new URLSearchParams({
+        state: "wrong-state",
+        code: "test-code",
+      }).toString();
+      expect((await fetch(callback)).status).toBe(400);
+      expect(verifier).toBeUndefined();
+      callback.searchParams.set("state", oauth.searchParams.get("state") ?? "");
+      expect((await fetch(callback, { redirect: "manual" })).status).toBe(303);
+      await expect
+        .poll(async () => (await status()).phase)
+        .toBe(quotaFailure || invalidMarketplace ? "error" : "ready");
+      expect(JSON.stringify(await status())).not.toContain(token);
+      expect((await fetch(callback)).status).toBe(400);
+    } else {
+      expect((await status()).phase).toBe("ready");
+    }
     const library = join(
       home,
       targetOs === "win32"
@@ -239,11 +266,15 @@ test.each([
       );
       const profileFile = join(library, `${metadata.appliedId}.json`);
       const profile = JSON.parse(await readFile(profileFile, "utf8"));
-      expect(profile.inferenceGatewayApiKey).toBe(token);
-      expect(profile.inferenceGatewayBaseUrl).toBe(
-        "https://proxy.example/v1/anthropic",
+      expect(profile.inferenceGatewayApiKey).toBe(
+        withProxy ? token : undefined,
       );
-      expect(profile.managedMcpServers[0].oauth).toEqual({ mode: "dcr" });
+      expect(profile.inferenceGatewayBaseUrl).toBe(
+        withProxy ? "https://proxy.example/v1/anthropic" : undefined,
+      );
+      expect(profile.managedMcpServers?.[0]?.oauth).toEqual(
+        withMcp ? { mode: "dcr" } : undefined,
+      );
       expect(profile.allowedPluginMarketplaces[0]).toMatchObject({
         expectedName: "shared",
         ref: "a".repeat(40),
@@ -260,6 +291,20 @@ test.each([
             : command.startsWith("/usr/bin/") || command === "/bin/sh",
         ),
       ).toBe(true);
+      const completionDir = (await readdir(home)).find((name) =>
+        name.startsWith("desktop-connection-result-"),
+      );
+      expect(completionDir).toBeDefined();
+      for (const file of ["connected.html", "restart-needed.html"]) {
+        const html = await readFile(
+          join(home, completionDir ?? "", file),
+          "utf8",
+        );
+        expect(html.includes("+ → Connectors")).toBe(withMcp);
+        expect(html.includes("Ask Claude to list the tools")).toBe(withMcp);
+        expect(html.includes("Anthropic sign-in")).toBe(withProxy);
+        if (!withProxy) expect(html).not.toContain("LLM Proxy Logs");
+      }
       // A rerun reuses a verified subscription without a second browser sign-in.
       const repeated = new Installer({
         origin: "https://proxy.example",

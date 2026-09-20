@@ -3,7 +3,7 @@ title: Using Claude Desktop (Cowork)
 category: Examples
 order: 9
 description: Route Claude Desktop's inference and tools through Archestra
-lastUpdated: 2026-09-11
+lastUpdated: 2026-09-19
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -23,6 +23,8 @@ Install Claude Desktop. The downloadable installer uses Desktop’s built-in run
 MCP sign-in requires HTTPS, including local deployments. Use a trusted local HTTPS reverse proxy for development. Inference alone supports HTTP on localhost and loopback IP addresses. The Anthropic proxy must forward to Anthropic, without a Vertex AI endpoint override.
 
 ## Setup
+
+Connecting the LLM Proxy switches Desktop to third-party inference mode. Existing Claude conversations do not appear in that mode. The installer does not delete them or migrate them. Third-party conversations stay on your device, separate from standard Claude history. See [Revert](#revert) before switching. Tools-only setup does not require third-party inference.
 
 Open **Connect** and select **Claude Desktop**. Review your authentication, model, gateway, and platform. The platform defaults to your detected operating system and remains editable. Finish active Desktop tasks before installing. Download the installer and open the `.mcpb` file in normal Claude Desktop. Confirm installation in Desktop’s native dialog. The setup helper opens your browser for sign-in and restart confirmation. You can remove the helper from Desktop’s Extensions settings afterward.
 
@@ -46,11 +48,17 @@ Choose **API key** in the review step's authentication settings. Archestra provi
 
 ## Tools And Skills
 
-MCP connectors require separate browser authorization in Desktop's **Settings → Connectors**. The skills selected on Connect install automatically after Desktop restarts. Setup pins the selected snapshot; rerun Connect to install an updated snapshot.
+Installing the gateway does not complete its authentication or enable it for every conversation. Follow the **Enable your gateway in Claude Desktop** step on Connect after restarting. A connected checkmark in Settings confirms the connection, not its selection for your conversation. Ask Claude to list the gateway's tools to verify availability.
+
+The skills selected on Connect install automatically after Desktop restarts. Setup pins the selected snapshot; rerun Connect to install an updated snapshot.
 
 ## Revert
 
-Select a manually created profile in **Configure Third-Party Inference** and restart Desktop. To return to another deployment, run its installer again. The installer also keeps `.before-archestra` backups of existing files it changes.
+To return to standard Claude Desktop, choose Anthropic sign-in on Desktop's sign-in screen. Sign in with your original Claude account to access its conversations. This is [Anthropic's documented return path](https://claude.com/docs/third-party/claude-desktop/installation#single-machine-setup). If your Desktop version does not expose that option, contact your administrator or Anthropic support. Organization policy can hide Claude sign-in.
+
+Keep the `Claude-3p` application data directory. Deleting it can remove conversations created in third-party mode. Removing the setup extension alone does not revert your inference settings.
+
+To use another third-party profile, select it in **Configure Third-Party Inference** and restart Desktop. To return to another deployment, run its installer again. The installer keeps `.before-archestra` backups of existing configuration files it changes. These backups do not include conversation history.
 
 See [Connect Your Agents](/docs/platform-connection) for other clients.
 

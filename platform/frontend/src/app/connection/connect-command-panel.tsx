@@ -2,10 +2,12 @@
 
 import {
   DEFAULT_MODELS,
+  DocsPage,
+  getDocsUrl,
   providerRequiresPerUserCredential,
   type SupportedProvider,
 } from "@archestra/shared";
-import { Download, KeyRound, RotateCcw } from "lucide-react";
+import { Download, KeyRound, RotateCcw, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
@@ -26,6 +28,7 @@ import { GithubCopilotSignIn } from "@/components/github-copilot-sign-in";
 import { PROVIDER_CONFIG } from "@/components/llm-provider-api-key-form";
 import { LlmProviderSelectItems } from "@/components/llm-provider-select-items";
 import { ProviderIcon } from "@/components/provider-icon";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -411,6 +414,7 @@ export function ConnectCommandPanel({
     client.id === "claude-code" &&
     !!gateway &&
     !virtualKeyUnbacked;
+  const showDesktopGatewayStep = client.id === "claude-desktop" && !!gateway;
   // The script installs skills itself for everyone who can read them, so the
   // wizard never grows an extra step here. The marketplace step appears only
   // when there is no script to carry them: nothing to connect at all (below),
@@ -1112,7 +1116,7 @@ export function ConnectCommandPanel({
               ? "Install the connection"
               : "Run the setup script"
         }
-        last={!showOAuthStep}
+        last={!showOAuthStep && !showDesktopGatewayStep}
       >
         <div className="flex flex-col gap-3">
           {client.id === "claude-desktop" && (
@@ -1120,6 +1124,32 @@ export function ConnectCommandPanel({
               Only Claude Desktop is needed. Finish active Desktop tasks before
               setup restarts the app.
             </p>
+          )}
+          {client.id === "claude-desktop" && proxyActive && (
+            <Alert variant="warning">
+              <TriangleAlert />
+              <AlertTitle>
+                Claude Desktop uses separate conversation history
+              </AlertTitle>
+              <AlertDescription>
+                <p>
+                  Connecting the LLM Proxy switches Desktop to third-party mode.
+                  Your existing Claude conversations won&apos;t appear in that
+                  mode. The installer does not delete them.
+                </p>
+                <a
+                  href={getDocsUrl(
+                    DocsPage.PlatformClaudeDesktopExample,
+                    "revert",
+                  )}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline underline-offset-4"
+                >
+                  How to return to standard Claude Desktop
+                </a>
+              </AlertDescription>
+            </Alert>
           )}
           <output
             className="sr-only"
@@ -1266,6 +1296,32 @@ export function ConnectCommandPanel({
           )}
         </div>
       </ConnectionSection>
+
+      {showDesktopGatewayStep && (
+        <WizardStep n={4} title="Enable your gateway in Claude Desktop" last>
+          <div className="space-y-3 text-sm text-muted-foreground">
+            <p>
+              The installer registers your gateway. Connecting your account and
+              enabling it in a conversation are separate steps.
+            </p>
+            <ol className="list-decimal space-y-3 pl-5">
+              <li>
+                After Desktop restarts, open{" "}
+                <strong>Settings → Connectors</strong>. Select{" "}
+                <strong>{oauthServerName}</strong> and connect it if needed.
+                Complete sign-in and approve access in your browser.
+              </li>
+              <li>
+                In your conversation, open <strong>+ → Connectors</strong> and
+                enable <strong>{oauthServerName}</strong> if it is off. A
+                connected checkmark in Settings does not confirm it is enabled
+                for that conversation.
+              </li>
+              <li>Ask Claude to list the tools available from your gateway.</li>
+            </ol>
+          </div>
+        </WizardStep>
+      )}
 
       {showOAuthStep && (
         <WizardStep n={4} title={FINISH_OAUTH_FLOW_TITLE} last>

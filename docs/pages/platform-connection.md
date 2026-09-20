@@ -3,7 +3,7 @@ title: Connect Your Agents
 category: Archestra Platform
 order: 8
 description: How the one-command setup script connects your AI tools, and how to audit or undo it
-lastUpdated: 2026-09-15
+lastUpdated: 2026-09-19
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -206,9 +206,13 @@ The `copilot` CLI must be on your `PATH`.
 
 Download the setup helper and open it in normal Claude Desktop. Confirm its native installation prompt to start the reviewed setup. For an existing third-party profile, use the terminal option. The setup script supports macOS, Windows, and Linux. Choose subscription authentication or an API key in the review step. The script checks inference, saves a gateway profile, and restarts Desktop. It preserves manually created profiles and backs up changed files. Rerunning setup replaces the managed connection; a different deployment takes precedence over the previous one.
 
-Subscription setup obtains a token locally through the official Claude Code CLI. API-key setup uses a personal virtual key backed by your configured Anthropic key. The download requires Node.js 18+ and Python 3.9 or newer.
+Connecting the LLM Proxy switches Desktop to third-party mode with separate conversation history. Existing Claude conversations do not appear there. The installer does not delete or migrate them. Tools-only setup does not require this mode switch.
 
-Authorize the MCP connector in Desktop's **Settings → Connectors**. The selected shared skills install automatically after restart. Rerun Connect to install an updated snapshot. To switch back, rerun the previous deployment’s installer or select a manually created inference profile.
+Subscription setup opens Claude sign-in through the helper's browser flow. API-key setup uses a personal virtual key backed by your configured Anthropic key. The download uses Desktop's built-in runtime. Only the terminal option requires Python and Claude Code for subscription sign-in.
+
+Follow the gateway completion step on Connect after Desktop restarts. Authentication and enabling the gateway for a conversation are separate actions. The selected shared skills install automatically after restart. Rerun Connect to install an updated snapshot.
+
+To return to standard Claude, choose Anthropic sign-in on Desktop's sign-in screen. See [Revert](/docs/platform-claude-desktop-example#revert) for recovery guidance. Keep third-party application data to preserve conversations created there.
 
 See [Using Claude Desktop (Cowork)](/docs/platform-claude-desktop-example) for requirements and authentication details.
 ### n8n

@@ -24,7 +24,12 @@ import {
   type OpenAiCodexCredential,
 } from "@/services/openai-codex-credentials";
 import { createOpenAiCodexFetch } from "@/services/openai-codex-token";
-import { ApiError, type CreateClientOptions, type OpenAi } from "@/types";
+import {
+  ApiError,
+  type CreateClientOptions,
+  type OpenAi,
+  type OpenAiCodexPassthrough,
+} from "@/types";
 import { PROXY_SDK_MAX_RETRIES } from "./sdk-retry-policy";
 
 type ResponsesRequest = OpenAi.Types.ResponsesRequest;
@@ -41,6 +46,21 @@ export function createOpenAiCodexResponsesClient(params: {
   innerFetch?: FetchLike;
 }): OpenAIProvider {
   return new OpenAiCodexResponsesClient(params) as unknown as OpenAIProvider;
+}
+
+/**
+ * Builds a Codex Responses client for OpenCode's request-local OAuth bridge.
+ * Unlike the stored credential client above, this never calls the token manager
+ * and deliberately makes no retry after an upstream 401.
+ */
+export function createOpenAiCodexPassthroughResponsesClient(params: {
+  credential: OpenAiCodexPassthrough;
+  options: CreateClientOptions;
+  innerFetch?: FetchLike;
+}): OpenAIProvider {
+  return new OpenAiCodexPassthroughResponsesClient(
+    params,
+  ) as unknown as OpenAIProvider;
 }
 
 // ===== Internal helpers =====
@@ -98,6 +118,48 @@ class OpenAiCodexResponsesClient {
       return upstream;
     }
     return foldCodexResponsesStream(upstream);
+  }
+}
+
+class OpenAiCodexPassthroughResponsesClient {
+  responses = {
+    create: (
+      request: ResponsesRequest & { stream?: boolean },
+    ): Promise<ResponsesResponse | AsyncIterable<ResponseStreamEvent>> =>
+      this.create(request),
+  };
+
+  private openai: OpenAIProvider;
+
+  constructor(params: {
+    credential: OpenAiCodexPassthrough;
+    options: CreateClientOptions;
+    innerFetch?: FetchLike;
+  }) {
+    const { credential, options, innerFetch } = params;
+    this.openai = new OpenAIProvider({
+      // The bridge must relay an expired OAuth access token to OpenCode, which
+      // owns refresh and token rotation. Do not retry 401s or call any token API.
+      maxRetries: 0,
+      apiKey: "chatgpt-oauth",
+      baseURL: config.llm.openai.codex.apiBaseUrl,
+      fetch: createOpenAiCodexPassthroughFetch({
+        credential,
+        innerFetch,
+        onResponseHeaders: options.onResponseHeaders,
+      }),
+    });
+  }
+
+  private async create(
+    request: ResponsesRequest & { stream?: boolean },
+  ): Promise<ResponsesResponse | AsyncIterable<ResponseStreamEvent>> {
+    const wantsStream = request.stream === true;
+    const upstream = (await this.openai.responses.create(
+      applyCodexResponsesTransforms(request),
+    )) as unknown as AsyncIterable<ResponseStreamEvent>;
+
+    return wantsStream ? upstream : foldCodexResponsesStream(upstream);
   }
 }
 
@@ -166,4 +228,30 @@ async function foldCodexResponsesStream(
     );
   }
   return final;
+}
+
+function createOpenAiCodexPassthroughFetch(params: {
+  credential: OpenAiCodexPassthrough;
+  innerFetch?: FetchLike;
+  onResponseHeaders?: (headers: Headers) => void;
+}): FetchLike {
+  const { credential, innerFetch, onResponseHeaders } = params;
+  const baseFetch = innerFetch ?? fetch;
+
+  return async (input, init) => {
+    const headers = new Headers(init?.headers);
+    headers.set("authorization", `Bearer ${credential.accessToken}`);
+    headers.set("chatgpt-account-id", credential.accountId);
+    headers.set("OpenAI-Beta", "responses=experimental");
+    if (credential.residency) {
+      headers.set("x-openai-internal-codex-residency", credential.residency);
+    }
+    if (credential.originator) headers.set("originator", credential.originator);
+    if (credential.sessionId) headers.set("session-id", credential.sessionId);
+    if (credential.userAgent) headers.set("User-Agent", credential.userAgent);
+
+    const response = await baseFetch(input, { ...init, headers });
+    if (response.ok) onResponseHeaders?.(response.headers);
+    return response;
+  };
 }

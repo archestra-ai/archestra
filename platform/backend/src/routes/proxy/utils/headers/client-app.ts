@@ -6,6 +6,7 @@ import {
   isCodexOriginator,
   isCodexUserAgent,
   isCursorUserAgent,
+  OPENCODE_CLIENT_ID,
 } from "@archestra/shared";
 import { getHeaderValue } from "./meta-header";
 import { isClaudeMetadataUserId } from "./session-id";
@@ -16,9 +17,10 @@ import { isClaudeMetadataUserId } from "./session-id";
  * When the caller does NOT supply an explicit `X-Archestra-Agent-Id` header,
  * we best-effort attribute the request to a known client app and persist that
  * id in `interactions.external_agent_id`. Identification is per-app; recording
- * is uniform. Two client families are recognized, each recorded as its generic
- * id: Claude clients ({@link detectClaudeClientId} → {@link CLAUDE_CLIENT_ID})
- * and Codex clients ({@link detectCodexClientId} → {@link CODEX_CLIENT_ID}). The
+ * is uniform. Known client families are recorded as generic ids: Claude clients
+ * ({@link detectClaudeClientId} → {@link CLAUDE_CLIENT_ID}), Codex clients
+ * ({@link detectCodexClientId} → {@link CODEX_CLIENT_ID}), and OpenCode
+ * ({@link detectOpenCodeClientId} → {@link OPENCODE_CLIENT_ID}). The
  * finer split (Claude Code vs Desktop) is only knowable when the caller sets
  * `X-Archestra-Agent-Id` itself (the setup scripts do this), never from the
  * request alone.
@@ -74,6 +76,28 @@ export function detectCodexClientId(
     isCodexUserAgent(getHeaderValue(headers, "user-agent"))
   ) {
     return CODEX_CLIENT_ID;
+  }
+  return undefined;
+}
+
+/**
+ * Auto-discovers OpenCode clients from request headers.
+ * OpenCode identifies itself through the User-Agent header, originator header,
+ * or x-opencode-session header.
+ */
+export function detectOpenCodeClientId(
+  headers: Record<string, string | string[] | undefined>,
+): typeof OPENCODE_CLIENT_ID | undefined {
+  const userAgent = getHeaderValue(headers, "user-agent")?.toLowerCase();
+  const originator = getHeaderValue(headers, "originator")?.toLowerCase();
+  if (
+    userAgent === "opencode" ||
+    userAgent?.startsWith("opencode/") ||
+    userAgent?.startsWith("opencode ") ||
+    originator === "opencode" ||
+    getHeaderValue(headers, "x-opencode-session") !== undefined
+  ) {
+    return OPENCODE_CLIENT_ID;
   }
   return undefined;
 }

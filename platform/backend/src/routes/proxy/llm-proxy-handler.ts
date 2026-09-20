@@ -19,6 +19,8 @@ import {
   type InteractionSource,
   InteractionSourceSchema,
   isProviderApiKeyOptional,
+  OPENCODE_AGENT_HEADER,
+  OPENCODE_CLIENT_ID,
   PROVIDER_BASE_URL_HEADER,
   providerDisplayNames,
   providerRequiresPerUserCredential,
@@ -115,6 +117,7 @@ import {
   type InteractionResponse,
   type LLMProvider,
   type LLMStreamAdapter,
+  type OpenAiCodexPassthrough,
   type ToolCallBlock,
   UNSAFE_CONTEXT_BOUNDARY_REASON,
   type UnsafeContextBoundary,
@@ -275,10 +278,90 @@ function getProviderMessagesCount(messages: unknown): number | null {
   return null;
 }
 
+function resolveOpenAiCodexPassthrough(params: {
+  provider: Pick<
+    LLMProvider<unknown, unknown, unknown, unknown, unknown>,
+    "provider" | "interactionType"
+  >;
+  headers: Record<string, string | string[] | undefined>;
+}): OpenAiCodexPassthrough | undefined {
+  const { provider, headers } = params;
+  if (
+    provider.provider !== "openai" ||
+    provider.interactionType !== "openai:responses" ||
+    readSingleHeader(headers, "x-archestra-opencode-oauth-bridge") !== "true"
+  ) {
+    return undefined;
+  }
+
+  const authorization = readSingleHeader(headers, "authorization");
+  const accessToken = authorization?.match(/^Bearer\s+([^\s]+)$/i)?.[1];
+  const accountId = readSingleHeader(headers, "chatgpt-account-id");
+  if (
+    !accessToken ||
+    accessToken.length > 16_384 ||
+    !isBoundedHeaderValue(accountId, 256)
+  ) {
+    throw new ApiError(
+      400,
+      "OpenCode OAuth bridge requests require a bearer token and ChatGPT account ID.",
+    );
+  }
+
+  return {
+    accessToken,
+    accountId,
+    residency: optionalBoundedHeader(
+      headers,
+      "x-openai-internal-codex-residency",
+      64,
+    ),
+    originator: optionalBoundedHeader(headers, "originator", 128),
+    sessionId: optionalBoundedHeader(headers, "session-id", 256),
+    userAgent: optionalBoundedHeader(headers, "user-agent", 1024),
+  };
+}
+
+function optionalBoundedHeader(
+  headers: Record<string, string | string[] | undefined>,
+  name: string,
+  maxLength: number,
+): string | undefined {
+  const value = readSingleHeader(headers, name);
+  if (value === undefined) return undefined;
+  if (!isBoundedHeaderValue(value, maxLength)) {
+    throw new ApiError(400, `Invalid OpenCode OAuth bridge ${name} header.`);
+  }
+  return value;
+}
+
+function readSingleHeader(
+  headers: Record<string, string | string[] | undefined>,
+  name: string,
+): string | undefined {
+  const value = headers[name];
+  if (typeof value === "string") return value;
+  if (Array.isArray(value) && typeof value[0] === "string") return value[0];
+  return undefined;
+}
+
+function isBoundedHeaderValue(
+  value: string | undefined,
+  maxLength: number,
+): value is string {
+  return (
+    typeof value === "string" &&
+    value.length > 0 &&
+    value.length <= maxLength &&
+    !/[\r\n]/.test(value)
+  );
+}
+
 /**
  * The subset of a proxied request body we read for session-id and client-app
  * extraction. Each consumer only touches its own fields (`detectClaudeClientId`
  * → `system`/`metadata`; `detectCodexClientId` → `client_metadata`;
+ * `detectOpenCodeClientId` → client identity headers;
  * `extractSessionInfo` → `metadata`/`user`/`client_metadata`), so one shared
  * view keeps the cast in a single place.
  */
@@ -326,7 +409,8 @@ export async function handleLLMProxy<
   // app from the request and record it (Claude clients → "anthropic_claude"
   // from the request body; Codex clients → "openai_codex" from the
   // client_metadata body shape or the originator/User-Agent headers the Codex
-  // CLI stamps on every request; Cursor → "cursor" from its User-Agent).
+  // CLI stamps on every request; OpenCode → "opencode" from its equivalent
+  // identity headers; Cursor → "cursor" from its User-Agent).
   const externalAgentId =
     utils.headers.externalAgentId.getExternalAgentId(headersForExtraction) ??
     utils.headers.clientApp.detectClaudeClientId(bodyForExtraction) ??
@@ -334,6 +418,7 @@ export async function handleLLMProxy<
       headersForExtraction,
       bodyForExtraction,
     ) ??
+    utils.headers.clientApp.detectOpenCodeClientId(headersForExtraction) ??
     utils.headers.clientApp.detectCursorClientId(headersForExtraction);
   const runId = utils.headers.runId.getRunId(headersForExtraction);
   const authOverride = (
@@ -363,6 +448,24 @@ export async function handleLLMProxy<
     SOURCE_HEADER,
   );
   const parsedSource = InteractionSourceSchema.safeParse(rawSource).data;
+  const openCodeAgent = utils.headers.metaHeader.getHeaderValue(
+    headersForExtraction,
+    OPENCODE_AGENT_HEADER,
+  );
+  const openCodeParentSession = utils.headers.metaHeader.getHeaderValue(
+    headersForExtraction,
+    "x-parent-session-id",
+  );
+  const openCodeSource: InteractionSource | undefined =
+    externalAgentId === OPENCODE_CLIENT_ID
+      ? openCodeParentSession
+        ? "opencode:subagent"
+        : openCodeAgent === "title"
+          ? "opencode:title"
+          : openCodeAgent === "compaction"
+            ? "opencode:compaction"
+            : "opencode:main"
+      : undefined;
   const untrustedAppaChatSource =
     isAppaChatSource(parsedSource) && !isLoopbackRequest(request);
   // `model_router` is assigned by the route auth override, not accepted from
@@ -370,13 +473,14 @@ export async function handleLLMProxy<
   // loopback-only trust boundary.
   const source: InteractionSource =
     authOverride?.source ??
+    openCodeSource ??
     (parsedSource === "model_router" || untrustedAppaChatSource
       ? "api"
       : parsedSource) ??
     "api";
 
   // Session extraction reuses the resolved client attribution above to gate
-  // the Codex-specific signals, so client identification lives in one place.
+  // OpenCode- and Codex-specific signals, so client identification lives in one place.
   // An external client's explicit OpenAPPA session names the runtime's root
   // for this request, under the credential's scope, and the proxy log follows
   // the id as the client sent it, so the two records join by that id under
@@ -492,6 +596,16 @@ export async function handleLLMProxy<
     }
   }
 
+  // OpenCode owns refresh and rotation for this access token. Keep the bridge
+  // credential in request-local client options; never resolve or persist it as
+  // an Archestra-managed provider credential.
+  const openAiCodexPassthrough = passthroughVirtualKeyId
+    ? resolveOpenAiCodexPassthrough({
+        provider,
+        headers: request.raw.headers,
+      })
+    : undefined;
+
   // Authenticate and resolve API key (JWKS → virtual key → header extraction → keyless check)
   let apiKey: string | undefined;
   let perKeyBaseUrl: string | undefined;
@@ -574,6 +688,7 @@ export async function handleLLMProxy<
   if (
     !wasJwksAuthenticated &&
     !authOverride &&
+    !openAiCodexPassthrough &&
     rawApiKey &&
     !hasArchestraTokenPrefix(rawApiKey)
   ) {
@@ -1437,7 +1552,8 @@ export async function handleLLMProxy<
     // can refine this after the upstream response identifies paid overage.
     let billingMode = utils.resolveInteractionBillingMode({
       isSubscriptionCredential:
-        provider.isSubscriptionCredential?.(apiKey) ?? false,
+        openAiCodexPassthrough !== undefined ||
+        provider.isSubscriptionCredential?.(apiKey) === true,
       autodetectEnabled: config.llmCost.subscriptionAutodetect,
     });
 
@@ -1463,6 +1579,11 @@ export async function handleLLMProxy<
           });
         }
       },
+      openAiCodexPassthrough,
+      ...(providerName === "gemini" &&
+      typeof headersForExtraction["x-goog-user-project"] === "string"
+        ? { googleUserProject: headersForExtraction["x-goog-user-project"] }
+        : {}),
     });
 
     if (pluginContext) {

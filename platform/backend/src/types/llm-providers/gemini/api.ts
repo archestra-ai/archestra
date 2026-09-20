@@ -306,11 +306,23 @@ https://ai.google.dev/api/generate-content#v1beta.GenerateContentResponse
 `);
 
 export const GenerateContentHeadersSchema = z.object({
+  authorization: z
+    .string()
+    .optional()
+    .describe("OAuth access token as a Bearer credential."),
   "user-agent": z.string().optional().describe("The user agent of the client"),
+  "x-archestra-virtual-key": z
+    .string()
+    .optional()
+    .describe("Passthrough virtual key used for proxy authentication."),
   "x-goog-api-key": z
     .string()
     .optional()
     .describe(
       "API key for Google Gemini. Required for Google AI Studio mode, optional for Vertex AI mode (uses ADC).",
     ),
+  "x-goog-user-project": z
+    .string()
+    .optional()
+    .describe("Google Cloud quota project for OAuth-authenticated requests."),
 });

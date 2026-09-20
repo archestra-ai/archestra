@@ -39,6 +39,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     prefix: `${API_PREFIX}/v1beta`,
     rewritePrefix: "/v1",
     preHandler: createGeminiProxyPreHandler(),
+    replyOptions: { rewriteRequestHeaders: stripArchestraHeaders },
   });
 
   await fastify.register(fastifyHttpProxy, {
@@ -46,6 +47,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     prefix: `${API_PREFIX}/:agentId/v1beta`,
     rewritePrefix: "/v1",
     preHandler: createGeminiProxyPreHandler(),
+    replyOptions: { rewriteRequestHeaders: stripArchestraHeaders },
   });
 
   const EMBEDDINGS_SUFFIX = "/embeddings";
@@ -369,4 +371,15 @@ async function resolveGeminiVirtualQueryKey(request: FastifyRequest) {
     );
     throw error;
   }
+}
+
+function stripArchestraHeaders(
+  _request: unknown,
+  headers: Record<string, string | string[] | undefined>,
+): Record<string, string | string[] | undefined> {
+  return Object.fromEntries(
+    Object.entries(headers).filter(
+      ([name]) => !name.toLowerCase().startsWith("x-archestra-"),
+    ),
+  );
 }

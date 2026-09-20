@@ -8,6 +8,7 @@ import {
   CLAUDE_CODE_CLIENT_ID,
   CLAUDE_DESKTOP_CLIENT_ID,
   CODEX_CLIENT_ID,
+  OPENCODE_CLIENT_ID,
 } from "@archestra/shared/interactions/client";
 
 type SessionSummary =
@@ -132,7 +133,7 @@ export function makeInteraction(
 // `externalAgentIds`; the "Client" filter sends `client=claude`/`client=codex`
 // and the query-aware handler matches those rows. Two Claude sessions
 // (header-set `claude code` and auto-discovered `claude`), one Codex session,
-// plus a plain API session.
+// one OpenCode session, plus a plain API session.
 export const llmLogsSessionsSeed = [
   makeSessionSummary({
     sessionId: "cc-session",
@@ -153,6 +154,12 @@ export const llmLogsSessionsSeed = [
     source: "chat",
     sources: ["chat"],
     claudeCodeTitle: "Claude Desktop session title",
+  }),
+  makeSessionSummary({
+    sessionId: "opencode-session",
+    sessionSource: "opencode_session",
+    externalAgentIds: [OPENCODE_CLIENT_ID],
+    lastUserMessagePreview: "OpenCode proxy session",
   }),
   makeSessionSummary({
     sessionId: "api-session",

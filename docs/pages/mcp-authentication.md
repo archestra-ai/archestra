@@ -3,14 +3,14 @@ title: "Authentication"
 category: MCP
 order: 4
 description: "How authentication works for MCP clients and upstream MCP servers"
-lastUpdated: 2026-08-25
+lastUpdated: 2026-09-19
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
 MCP authentication in Archestra has two separate layers: the client-facing gateway layer and the upstream MCP server layer.
 
-This separation is important because the MCP client usually should not know how every upstream system is authenticated. Cursor, Claude Desktop, Copilot CLI, Open WebUI, or a custom agent authenticates once to an MCP Gateway. Archestra then decides which installed MCP server connection and which upstream credential should be used for each tool call.
+This separation is important because the MCP client usually should not know how every upstream system is authenticated. Cursor, Claude Desktop, Copilot CLI, OpenCode, Open WebUI, or a custom agent authenticates once to an MCP Gateway. Archestra then decides which installed MCP server connection and which upstream credential should be used for each tool call.
 
 That means one gateway can expose tools backed by different credential models. A GitHub tool might use a user's OAuth token, a Jira tool might use an enterprise IdP token exchange, and an internal self-hosted tool might require no external credential at all. The client still talks to the same gateway.
 
@@ -29,7 +29,7 @@ The MCP Gateway supports six client authentication methods. Choose based on who 
 
 | Method | Most relevant for | Acting user | Notes |
 | --- | --- | --- | --- |
-| OAuth 2.1 | Interactive MCP clients — Claude Desktop, Cursor, Copilot CLI, Open WebUI | Yes | Client self-registers (DCR/CIMD); public + PKCE; automatic endpoint discovery. |
+| OAuth 2.1 | Interactive MCP clients — Claude Desktop, Cursor, Copilot CLI, OpenCode, Open WebUI | Yes | Client self-registers (DCR/CIMD); public + PKCE; automatic endpoint discovery. |
 | OAuth client credentials | Applications and machine-to-machine callers — backend services, automation jobs, bots | No | Pre-registered in **Settings > OAuth Clients**, scoped to an explicit gateway list. |
 | OAuth authorization code (manually registered) | A pre-approved server app acting for whoever is signed in — e.g. an agentic chat backend | Yes | Confidential client (secret + PKCE); enables per-user resolution. |
 | Bearer token | Direct API integrations and scripts | Personal tokens only | Static platform token (`arch_<token>`); team and org tokens don't identify one user. |
@@ -44,7 +44,7 @@ These do not all present the same token to `POST /v1/mcp/<gateway-id>`:
 
 ### OAuth 2.1
 
-MCP-native clients such as Claude Desktop, Cursor, Copilot CLI, and Open WebUI authenticate automatically using the [MCP Authorization spec](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization). The gateway acts as both the resource server and the authorization server.
+MCP-native clients such as Claude Desktop, Cursor, Copilot CLI, OpenCode, and Open WebUI authenticate automatically using the [MCP Authorization spec](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization). The gateway acts as both the resource server and the authorization server.
 
 The gateway supports the following OAuth flows and client registration methods:
 

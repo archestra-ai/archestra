@@ -1,9 +1,15 @@
+import { vi } from "vitest";
 import {
+  createGoogleGenAIClient,
   isVertexModelReachable,
   resolveVertexLocation,
 } from "@/clients/gemini-client";
 import config from "@/config";
 import { beforeEach, describe, expect, test } from "@/test";
+
+const mockGoogleGenAI = vi.hoisted(() => vi.fn());
+
+vi.mock("@google/genai", () => ({ GoogleGenAI: mockGoogleGenAI }));
 
 /**
  * A single Vertex location cannot serve the whole Gemini catalog — the 3.x
@@ -78,5 +84,52 @@ describe("Vertex AI location resolution", () => {
 
     config.llm.gemini.vertexAi.allowGlobalEndpoint = true;
     expect(resolveVertexLocation()).toBe("us-central1");
+  });
+});
+
+describe("GoogleGenAI credential configuration", () => {
+  beforeEach(() => {
+    mockGoogleGenAI.mockClear();
+    config.llm.gemini.vertexAi.enabled = false;
+  });
+
+  test("configures a bearer credential as Google OAuth with its quota project", () => {
+    createGoogleGenAIClient(
+      "Bearer:oauth-access-token",
+      "[GeminiOAuthTest]",
+      "https://gemini.example.test",
+      "gemini-2.5-pro",
+      "caller-quota-project",
+    );
+
+    expect(mockGoogleGenAI).toHaveBeenCalledWith({
+      googleAuthOptions: expect.objectContaining({
+        authClient: expect.objectContaining({
+          credentials: { access_token: "oauth-access-token" },
+          quotaProjectId: "caller-quota-project",
+        }),
+      }),
+      httpOptions: {
+        baseUrl: "https://gemini.example.test",
+        apiVersion: "v1beta",
+        headers: { "x-goog-user-project": "caller-quota-project" },
+      },
+    });
+  });
+
+  test("keeps API-key client configuration unchanged", () => {
+    createGoogleGenAIClient(
+      "gemini-api-key",
+      "[GeminiApiKeyTest]",
+      "https://gemini.example.test",
+    );
+
+    expect(mockGoogleGenAI).toHaveBeenCalledWith({
+      apiKey: "gemini-api-key",
+      httpOptions: {
+        baseUrl: "https://gemini.example.test",
+        apiVersion: "v1beta",
+      },
+    });
   });
 });

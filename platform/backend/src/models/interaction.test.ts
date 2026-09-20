@@ -1861,6 +1861,140 @@ describe("InteractionModel", () => {
         "subagent",
       );
     });
+
+    test("classifies OpenCode title and tool-spawning requests across native provider formats", async ({
+      makeAdmin,
+    }) => {
+      const admin = await makeAdmin();
+      const agent = await AgentModel.create({
+        name: "Agent",
+        teams: [],
+        scope: "org",
+      });
+      const sessionId = "opencode-request-types";
+      const geminiResponse = {
+        candidates: [
+          {
+            content: { role: "model", parts: [{ text: "Response" }] },
+            finishReason: "STOP",
+            index: 0,
+          },
+        ],
+        modelVersion: "gemini-model",
+      } as unknown as InsertInteraction["response"];
+      const responsesResponse = {
+        id: "response-id",
+        object: "response",
+        created: Date.now(),
+        model: "responses-model",
+      } as unknown as InsertInteraction["response"];
+
+      const geminiTitle = await InteractionModel.create({
+        profileId: agent.id,
+        sessionId,
+        sessionSource: "opencode_session",
+        source: "opencode:title",
+        type: "gemini:generateContent",
+        request: {
+          contents: [{ role: "user", parts: [{ text: "Title this" }] }],
+          systemInstruction: {
+            parts: [{ text: "You are a title generator." }],
+          },
+        },
+        response: geminiResponse,
+      });
+      const geminiMain = await InteractionModel.create({
+        profileId: agent.id,
+        sessionId,
+        sessionSource: "opencode_session",
+        source: "opencode:main",
+        type: "gemini:generateContent",
+        request: {
+          contents: [{ role: "user", parts: [{ text: "Do the work" }] }],
+          systemInstruction: {
+            parts: [{ text: "You are a coding agent." }],
+          },
+          tools: [{ functionDeclarations: [{ name: "task" }] }],
+        } as unknown as InsertInteraction["request"],
+        response: geminiResponse,
+      });
+      const responsesTitle = await InteractionModel.create({
+        profileId: agent.id,
+        sessionId,
+        sessionSource: "opencode_session",
+        source: "opencode:compaction",
+        type: "openai:responses",
+        request: {
+          model: "responses-model",
+          instructions: "You are a title generator.",
+          input: [{ role: "user", content: "Title this" }],
+        } as unknown as InsertInteraction["request"],
+        response: responsesResponse,
+      });
+      const responsesMain = await InteractionModel.create({
+        profileId: agent.id,
+        sessionId,
+        sessionSource: "opencode_session",
+        source: "opencode:subagent",
+        type: "openai:responses",
+        request: {
+          model: "responses-model",
+          instructions: "You are a coding agent.",
+          input: [{ role: "user", content: "Do the work" }],
+          tools: [{ type: "function", name: "task" }],
+        } as unknown as InsertInteraction["request"],
+        response: responsesResponse,
+      });
+
+      const result = await InteractionModel.findAllPaginated(
+        { limit: 100, offset: 0 },
+        undefined,
+        admin.id,
+        true,
+        { sessionId },
+      );
+      const bySource = new Map(
+        result.data.map((interaction) => [
+          interaction.source,
+          (interaction as unknown as { requestType: string }).requestType,
+        ]),
+      );
+      expect(bySource).toEqual(
+        new Map([
+          ["opencode:title", "subagent"],
+          ["opencode:main", "main"],
+          ["opencode:compaction", "subagent"],
+          ["opencode:subagent", "subagent"],
+        ]),
+      );
+
+      const summaries = await InteractionModel.findSummariesPaginated({
+        pagination: { limit: 100, offset: 0 },
+        filters: { sessionId },
+      });
+      const summaryTypes = new Map(
+        summaries.data.map((interaction) => [
+          interaction.id,
+          interaction.requestType,
+        ]),
+      );
+      expect(summaryTypes).toEqual(
+        new Map([
+          [geminiTitle.id, "subagent"],
+          [geminiMain.id, "main"],
+          [responsesTitle.id, "subagent"],
+          [responsesMain.id, "subagent"],
+        ]),
+      );
+
+      const sessions = await InteractionModel.getSessions(
+        { limit: 100, offset: 0 },
+        admin.id,
+        true,
+        { sessionId },
+      );
+      expect(sessions.data[0]?.lastInteractionId).toBe(geminiMain.id);
+    });
   });
 
   describe("getSessions auth attribution", () => {

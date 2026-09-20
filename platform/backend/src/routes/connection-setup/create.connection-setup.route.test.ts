@@ -453,6 +453,8 @@ describe("POST /api/connection-setups", () => {
     ["claude-desktop", "macos"],
     ["claude-desktop", "windows"],
     ["claude-desktop", "linux"],
+    ["opencode", "macos"],
+    ["opencode", "windows"],
   ] as const) {
     test(`${clientId} ${platform} anthropic passthrough provisions an attribution key by default`, async ({
       makeAgent,
@@ -582,6 +584,28 @@ describe("POST /api/connection-setups", () => {
     });
     expect(wrongClient.statusCode).toBe(400);
     expect(wrongClient.json().error.message).toContain("copilot-cli");
+  });
+
+  test("rejects OpenCode providers without a verified passthrough wire", async ({
+    makeAgent,
+  }) => {
+    const proxy = await makeAgent({ organizationId, agentType: "llm_proxy" });
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/connection-setups",
+      payload: {
+        clientId: "opencode",
+        baseUrl: "http://localhost:9000/v1",
+        llmProxyId: proxy.id,
+        provider: "azure",
+        proxyAuth: "provider-key",
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toContain(
+      "not supported by OpenCode local-credential passthrough",
+    );
   });
 
   test("codex openai virtual-key provisions only a personal standard key (no passthrough key)", async ({

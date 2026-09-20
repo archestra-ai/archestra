@@ -42,3 +42,37 @@ test.each([
     expect(new Set(urls.map((url) => url.origin))).toEqual(new Set([origin]));
   }
 });
+
+test("the connection guide keeps installer source out of the conversation", async () => {
+  const response = connect(
+    new Request("http://localhost:3005/connect.md", {
+      headers: { host: "localhost:3005" },
+    }),
+  );
+  const body = await response.text();
+
+  expect(body).toContain("curl --fail --silent --show-error");
+  expect(body).toContain("Invoke-WebRequest");
+  expect(body).toContain("summarize the result without pasting");
+  expect(body).toContain(
+    "stop instead of replacing the flow with manual API calls",
+  );
+});
+
+test("the connection guide automates both OpenCode browser approvals without duplicate installers", async () => {
+  const response = connect(
+    new Request("http://localhost:3005/connect.md", {
+      headers: { host: "localhost:3005" },
+    }),
+  );
+  const body = await response.text();
+
+  expect(body).toContain("run the installer here with a timeout of 600000 ms");
+  expect(body).toContain(
+    "not start a second installer while the first request is pending",
+  );
+  expect(body).toContain("opencode mcp auth SERVER_NAME");
+  expect(body).toContain("this second URL is the");
+  expect(body).toContain("not another connection approval");
+  expect(body).not.toContain("so do the sign-in from here");
+});

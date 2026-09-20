@@ -7,6 +7,10 @@ import { z } from "zod";
 export const InteractionSourceSchema = z.enum([
   "api",
   "model_router",
+  "opencode:main",
+  "opencode:subagent",
+  "opencode:title",
+  "opencode:compaction",
   "chat",
   "chat:compaction",
   "a2a:compaction",
@@ -42,6 +46,10 @@ export const INTERACTION_SOURCE_DISPLAY: Record<
 > = {
   api: { label: "API" },
   model_router: { label: "Model Router" },
+  "opencode:main": { label: "OpenCode Main" },
+  "opencode:subagent": { label: "OpenCode Sub-agent" },
+  "opencode:title": { label: "OpenCode Title" },
+  "opencode:compaction": { label: "OpenCode Compaction" },
   chat: { label: "Chat" },
   "chat:compaction": { label: "Chat Compaction" },
   "a2a:compaction": { label: "Agent Context Compaction" },

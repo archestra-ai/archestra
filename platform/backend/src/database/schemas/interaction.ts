@@ -41,7 +41,8 @@ const interactionsTable = pgTable(
     /**
      * Client-app / external agent attribution. Set from the caller-supplied
      * X-Archestra-Agent-Id header (or X-Archestra-Meta segment 0) when present;
-     * otherwise auto-discovered for known client apps (Claude → "anthropic_claude").
+     * otherwise auto-discovered for known client apps (Claude → "anthropic_claude",
+     * OpenCode → "opencode").
      * Lets clients associate interactions with their own agent identifiers.
      */
     externalAgentId: varchar("external_agent_id"),
@@ -128,6 +129,8 @@ const interactionsTable = pgTable(
      * Session ID to group related LLM requests together.
      * Can be extracted from:
      * - X-Archestra-Session-Id header (explicit)
+     * - OpenCode `x-opencode-session` request header (only on requests
+     *   identified as OpenCode)
      * - Codex `client_metadata.session_id` body field / `session-id` request
      *   header (only on requests identified as Codex)
      * - Claude/Anthropic metadata.user_id field
@@ -137,7 +140,7 @@ const interactionsTable = pgTable(
     /**
      * Provenance of the session ID (NOT the client app — that is
      * external_agent_id). Values: 'claude_metadata', 'header', 'meta_header',
-     * 'openwebui_chat', 'codex_session', 'openai_user', null. Legacy rows may
+     * 'openwebui_chat', 'opencode_session', 'codex_session', 'openai_user', null. Legacy rows may
      * carry 'claude_code' / 'claude_desktop'.
      */
     sessionSource: varchar("session_source"),

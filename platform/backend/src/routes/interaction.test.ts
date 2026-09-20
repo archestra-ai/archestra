@@ -5,6 +5,8 @@ import {
   CLAUDE_DESKTOP_CLIENT_ID,
   CODEX_CLIENT_FILTER,
   CODEX_CLIENT_ID,
+  OPENCODE_CLIENT_FILTER,
+  OPENCODE_CLIENT_ID,
 } from "@archestra/shared";
 import ConversationModel from "@/models/conversation";
 import ConversationChatErrorModel from "@/models/conversation-chat-error";
@@ -612,6 +614,7 @@ describe("interaction routes", () => {
     await make("auto", CLAUDE_CLIENT_ID);
     await make("desktop", CLAUDE_DESKTOP_CLIENT_ID);
     await make("codex", CODEX_CLIENT_ID);
+    await make("opencode", OPENCODE_CLIENT_ID);
     await make("customer", "my-custom-agent");
 
     // Legacy Claude URLs and explicit Code filters exclude Desktop traffic.
@@ -638,13 +641,23 @@ describe("interaction routes", () => {
     expect(codex.json().data).toHaveLength(1);
     expect(codex.json().data[0].externalAgentIds).toEqual([CODEX_CLIENT_ID]);
 
-    // No filter → all four sessions.
+    const opencode = await app.inject({
+      method: "GET",
+      url: `/api/interactions/sessions?limit=50&client=${OPENCODE_CLIENT_FILTER}`,
+    });
+    expect(opencode.statusCode).toBe(200);
+    expect(opencode.json().data).toHaveLength(1);
+    expect(opencode.json().data[0].externalAgentIds).toEqual([
+      OPENCODE_CLIENT_ID,
+    ]);
+
+    // No filter → all five sessions.
     const all = await app.inject({
       method: "GET",
       url: "/api/interactions/sessions?limit=50",
     });
     expect(all.statusCode).toBe(200);
-    expect(all.json().data).toHaveLength(4);
+    expect(all.json().data).toHaveLength(5);
   });
 
   test("cursor-paginates distinct sessions plus sessionless interactions", async ({

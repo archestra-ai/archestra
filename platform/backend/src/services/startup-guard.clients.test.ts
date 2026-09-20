@@ -12,6 +12,12 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
+import {
+  EXTERNAL_AGENT_ID_HEADER,
+  OPENCODE_PASSTHROUGH_PROVIDER_ROUTES,
+  openCodePassthroughBaseUrl,
+  VIRTUAL_KEY_HEADER,
+} from "@archestra/shared";
 import { describe, expect, test } from "vitest";
 import {
   buildStartupGuardInstallSection,
@@ -24,6 +30,7 @@ import {
   CLAUDE_CODE_GUARD_CLIENT,
   CODEX_GUARD_CLIENT,
   COPILOT_GUARD_CLIENT,
+  OPENCODE_GUARD_CLIENT,
 } from "@/services/startup-guard.clients";
 import { renderStartupGuardPowerShell } from "@/services/startup-guard.windows";
 
@@ -103,17 +110,18 @@ describe.each([
     expect(script).not.toContain("Claude may fail to reach");
   });
 
-  test("install hooks the current shell's rc and tells the user how to arm it in this terminal", () => {
+  test("install hooks interactive and Bash login profiles and prints the current-shell activation", () => {
     const install = buildStartupGuardInstallSection(CTX, client);
-    // The current shell's rc is chosen from $SHELL and hooked unconditionally
-    // (created if missing) so the source hint always lands on a hooked profile —
-    // a child `curl | bash` can't define the wrapper in the interactive shell.
     expect(install).toContain('archestra_guard_profile="$HOME/.zshrc"');
     expect(install).toContain('archestra_guard_profile="$HOME/.bashrc"');
+    expect(install).toContain('archestra_install_guard_block "$HOME/.zshrc"');
+    expect(install).toContain('archestra_install_guard_block "$HOME/.bashrc"');
     expect(install).toContain(
-      'archestra_install_guard_block "$archestra_guard_profile"',
+      'archestra_bash_login_profile="$HOME/.bash_profile"',
     );
-    // …and the user is told to reload that exact profile (or open a new terminal).
+    expect(install).toContain(
+      'archestra_install_guard_block "$archestra_bash_login_profile"',
+    );
     expect(install).toContain("source %s");
     expect(install).toContain('"$archestra_guard_profile"');
     expect(install).toContain("or just open a new terminal");
@@ -135,6 +143,194 @@ describe.each([
     expect(unshadow).not.toContain(client.markerStart);
     expect(unshadow).not.toContain("awk");
     await expectValidBash(`set -euo pipefail\n${unshadow}`);
+  });
+});
+
+test("OpenCode startup guard is active in a fresh Bash login shell", async () => {
+  const home = await mkdtemp(path.join(tmpdir(), "opencode-login-guard-"));
+  const installPath = path.join(home, "install.sh");
+  try {
+    await writeFile(path.join(home, ".hushlogin"), "", "utf8");
+    await writeFile(
+      installPath,
+      `set -euo pipefail
+say() { :; }
+ok() { :; }
+warn() { :; }
+ARCH_C_OK=''
+ARCH_C_RESET=''
+${buildStartupGuardInstallSection(CTX, OPENCODE_GUARD_CLIENT)}`,
+      "utf8",
+    );
+    await execFileAsync("bash", [installPath], {
+      env: { ...process.env, HOME: home, SHELL: "/bin/bash" },
+    });
+
+    const { stdout } = await execFileAsync(
+      "bash",
+      [
+        "--noprofile",
+        "--norc",
+        "-ic",
+        '. "$HOME/.bash_profile"; type -t opencode',
+      ],
+      {
+        env: { ...process.env, HOME: home, SHELL: "/bin/bash" },
+      },
+    );
+    expect(stdout.trim().split("\n").at(-1)).toBe("function");
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+});
+
+describe("OpenCode provider passthrough disconnect", () => {
+  test("removes only managed routes and restores prior provider constraints", async () => {
+    if (!CTX.proxy) throw new Error("test proxy missing");
+    const home = await mkdtemp(path.join(tmpdir(), "opencode disconnect "));
+    const configDir = path.join(home, ".config", "opencode");
+    const configPath = path.join(configDir, "opencode.json");
+    const statePath = path.join(
+      home,
+      ".archestra",
+      "opencode-connection-state.json",
+    );
+    const pluginPath = path.join(
+      configDir,
+      "plugins",
+      "archestra-llm-proxy.js",
+    );
+    const pluginStatePath = path.join(
+      home,
+      ".archestra",
+      "opencode-routing-plugin-state.json",
+    );
+    const configBackupPath = `${configPath}.archestra-backup`;
+    const ctx: StartupGuardContext = {
+      ...CTX,
+      proxy: {
+        ...CTX.proxy,
+        authMode: "provider-key",
+        provider: "openai",
+        url: "https://archestra.example.com/v1/openai",
+        passthroughVirtualKey: "arch_passthroughcafe",
+      },
+      mcp: null,
+      skills: null,
+    };
+    const routes = Object.fromEntries(
+      OPENCODE_PASSTHROUGH_PROVIDER_ROUTES.map((route) => [
+        route.openCodeProviderId,
+        openCodePassthroughBaseUrl("https://archestra.example.com/v1", route),
+      ]),
+    );
+    const managedHeaders = {
+      [EXTERNAL_AGENT_ID_HEADER]: "opencode",
+      [VIRTUAL_KEY_HEADER]: "arch_passthroughcafe",
+    };
+
+    try {
+      await mkdir(path.dirname(statePath), { recursive: true });
+      await mkdir(path.dirname(pluginPath), { recursive: true });
+      await writeFile(
+        configPath,
+        JSON.stringify({
+          enabled_providers: Object.keys(routes),
+          disabled_providers: ["legacy"],
+          provider: {
+            google: {
+              options: {
+                apiVersion: "v1beta",
+                baseURL: routes.google,
+                headers: { "X-Local": "kept", ...managedHeaders },
+              },
+            },
+            anthropic: {
+              options: {
+                baseURL: routes.anthropic,
+                headers: managedHeaders,
+              },
+            },
+          },
+        }),
+      );
+      await writeFile(
+        statePath,
+        JSON.stringify({
+          enabledProvidersPresent: true,
+          enabledProviders: ["local-provider"],
+          disabledProvidersPresent: true,
+          disabledProviders: ["google", "legacy"],
+          providerState: {
+            google: {
+              options: {
+                apiVersion: "v1beta",
+                baseURL: "https://previous.example/v1beta",
+                headers: {
+                  "X-Local": "kept",
+                  [EXTERNAL_AGENT_ID_HEADER]: "previous-value",
+                },
+              },
+            },
+            anthropic: null,
+          },
+        }),
+      );
+      await writeFile(configBackupPath, "old backup");
+      await writeFile(pluginPath, "export const ManagedPlugin = true;");
+      await writeFile(
+        pluginStatePath,
+        JSON.stringify({
+          existed: true,
+          contentBase64: Buffer.from(
+            "export const ExistingPlugin = true;",
+          ).toString("base64"),
+        }),
+      );
+      const scriptPath = path.join(home, "disconnect.sh");
+      await writeFile(
+        scriptPath,
+        `set -eu
+${OPENCODE_GUARD_CLIENT.renderProxyDisconnect(ctx)}
+disconnect_proxy
+`,
+      );
+      await execFileAsync("bash", [scriptPath], {
+        env: { ...process.env, HOME: home, XDG_CONFIG_HOME: "" },
+      });
+
+      const config = JSON.parse(await readFile(configPath, "utf8"));
+      expect(config.enabled_providers).toEqual(["local-provider"]);
+      expect(config.disabled_providers).toEqual(["google", "legacy"]);
+      expect(config.provider.google.options).toEqual({
+        apiVersion: "v1beta",
+        baseURL: "https://previous.example/v1beta",
+        headers: {
+          "X-Local": "kept",
+          [EXTERNAL_AGENT_ID_HEADER]: "previous-value",
+        },
+      });
+      expect(config.provider).not.toHaveProperty("anthropic");
+      await expect(readFile(statePath)).rejects.toThrow();
+      expect(await readFile(pluginPath, "utf8")).toBe(
+        "export const ExistingPlugin = true;",
+      );
+      await expect(readFile(pluginStatePath)).rejects.toThrow();
+      await expect(readFile(configBackupPath)).rejects.toThrow();
+
+      await writeFile(pluginPath, "export const ManagedPlugin = true;");
+      await writeFile(
+        pluginStatePath,
+        JSON.stringify({ existed: false, contentBase64: null }),
+      );
+      await execFileAsync("bash", [scriptPath], {
+        env: { ...process.env, HOME: home, XDG_CONFIG_HOME: "" },
+      });
+      await expect(readFile(pluginPath)).rejects.toThrow();
+      await expect(readFile(pluginStatePath)).rejects.toThrow();
+    } finally {
+      await rm(home, { recursive: true, force: true });
+    }
   });
 });
 
@@ -240,6 +436,10 @@ async function runGuardSnippet(params: {
         // `${VAR:-default}` to the default, exactly like unset.
         CLAUDE_CONFIG_DIR: "",
         CODEX_HOME: "",
+        XDG_CACHE_HOME: "",
+        XDG_CONFIG_HOME: "",
+        XDG_DATA_HOME: "",
+        XDG_STATE_HOME: "",
         PATH: `${bin}:${process.env.PATH ?? ""}`,
         ...overlay,
       },

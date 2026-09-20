@@ -2,6 +2,8 @@ import {
   CLIENT_MCP_TOOL_NAME_PREFIX,
   clientForExternalAgentIds,
   isAgentTool,
+  isOpenCodeClientAgentId,
+  OPENCODE_MCP_TOOL_NAME_PREFIX,
 } from "@archestra/shared";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import logger from "@/logging";
@@ -110,17 +112,22 @@ export const persistTools = async (
     // "Allow always" regardless of the org's discovered-tool call policy: a
     // strict default would block them on the first sensitive tool result and
     // make the CLI unusable — which drives users to disconnect the proxy and
-    // lose every guardrail. The client namespaces its MCP-server tools with
-    // the mcp__ prefix, so those (and everything else) keep the org default,
-    // and the override is a visible per-tool policy an admin can tighten.
+    // lose every guardrail. Claude and Codex namespace their MCP-server tools
+    // with `mcp__`; OpenCode uses `mcp:`. Those gateway tools (and everything
+    // else) keep the org default, and the override is a visible per-tool policy
+    // an admin can tighten.
     const observerClientFamily = clientForExternalAgentIds([
       observer?.externalAgentId,
     ]);
+    const isOpenCodeClient = isOpenCodeClientAgentId(observer?.externalAgentId);
     const nativeClientToolOverride = (toolName: string) =>
-      observerClientFamily && !toolName.startsWith(CLIENT_MCP_TOOL_NAME_PREFIX)
+      (observerClientFamily || isOpenCodeClient) &&
+      !(isOpenCodeClient
+        ? toolName.startsWith(OPENCODE_MCP_TOOL_NAME_PREFIX)
+        : toolName.startsWith(CLIENT_MCP_TOOL_NAME_PREFIX))
         ? {
             action: "allow_when_context_is_untrusted" as const,
-            reason: `Native ${observerClientFamily.label} client tool, allowed by default so the client keeps working in sensitive context`,
+            reason: `Native ${observerClientFamily?.label ?? "OpenCode"} client tool, allowed by default so the client keeps working in sensitive context`,
           }
         : undefined;
 

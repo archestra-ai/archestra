@@ -147534,7 +147534,8 @@
                       "claude-desktop",
                       "codex",
                       "copilot-cli",
-                      "cursor"
+                      "cursor",
+                      "opencode"
                     ]
                   },
                   "platform": {
@@ -148151,7 +148152,8 @@
                         "claude-desktop",
                         "codex",
                         "copilot-cli",
-                        "cursor"
+                        "cursor",
+                        "opencode"
                       ]
                     },
                     "platform": {
@@ -148501,7 +148503,8 @@
                         "claude-desktop",
                         "codex",
                         "copilot-cli",
-                        "cursor"
+                        "cursor",
+                        "opencode"
                       ]
                     },
                     "platform": {
@@ -150186,7 +150189,8 @@
                       "claude-desktop",
                       "codex",
                       "copilot-cli",
-                      "cursor"
+                      "cursor",
+                      "opencode"
                     ]
                   },
                   "platform": {
@@ -150371,7 +150375,8 @@
                               "claude-desktop",
                               "codex",
                               "copilot-cli",
-                              "cursor"
+                              "cursor",
+                              "opencode"
                             ]
                           }
                         },
@@ -158016,6 +158021,15 @@
               "type": "string"
             },
             "in": "header",
+            "name": "authorization",
+            "required": false,
+            "description": "OAuth access token as a Bearer credential."
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
             "name": "user-agent",
             "required": false,
             "description": "The user agent of the client"
@@ -158025,9 +158039,27 @@
               "type": "string"
             },
             "in": "header",
+            "name": "x-archestra-virtual-key",
+            "required": false,
+            "description": "Passthrough virtual key used for proxy authentication."
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
             "name": "x-goog-api-key",
             "required": false,
             "description": "API key for Google Gemini. Required for Google AI Studio mode, optional for Vertex AI mode (uses ADC)."
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "x-goog-user-project",
+            "required": false,
+            "description": "Google Cloud quota project for OAuth-authenticated requests."
           }
         ],
         "responses": {
@@ -158304,6 +158336,15 @@
               "type": "string"
             },
             "in": "header",
+            "name": "authorization",
+            "required": false,
+            "description": "OAuth access token as a Bearer credential."
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
             "name": "user-agent",
             "required": false,
             "description": "The user agent of the client"
@@ -158313,9 +158354,27 @@
               "type": "string"
             },
             "in": "header",
+            "name": "x-archestra-virtual-key",
+            "required": false,
+            "description": "Passthrough virtual key used for proxy authentication."
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
             "name": "x-goog-api-key",
             "required": false,
             "description": "API key for Google Gemini. Required for Google AI Studio mode, optional for Vertex AI mode (uses ADC)."
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "x-goog-user-project",
+            "required": false,
+            "description": "Google Cloud quota project for OAuth-authenticated requests."
           }
         ],
         "responses": {
@@ -158592,6 +158651,15 @@
               "type": "string"
             },
             "in": "header",
+            "name": "authorization",
+            "required": false,
+            "description": "OAuth access token as a Bearer credential."
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
             "name": "user-agent",
             "required": false,
             "description": "The user agent of the client"
@@ -158601,9 +158669,27 @@
               "type": "string"
             },
             "in": "header",
+            "name": "x-archestra-virtual-key",
+            "required": false,
+            "description": "Passthrough virtual key used for proxy authentication."
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
             "name": "x-goog-api-key",
             "required": false,
             "description": "API key for Google Gemini. Required for Google AI Studio mode, optional for Vertex AI mode (uses ADC)."
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "x-goog-user-project",
+            "required": false,
+            "description": "Google Cloud quota project for OAuth-authenticated requests."
           }
         ],
         "responses": {
@@ -158890,6 +158976,15 @@
               "type": "string"
             },
             "in": "header",
+            "name": "authorization",
+            "required": false,
+            "description": "OAuth access token as a Bearer credential."
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
             "name": "user-agent",
             "required": false,
             "description": "The user agent of the client"
@@ -158899,9 +158994,27 @@
               "type": "string"
             },
             "in": "header",
+            "name": "x-archestra-virtual-key",
+            "required": false,
+            "description": "Passthrough virtual key used for proxy authentication."
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
             "name": "x-goog-api-key",
             "required": false,
             "description": "API key for Google Gemini. Required for Google AI Studio mode, optional for Vertex AI mode (uses ADC)."
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "x-goog-user-project",
+            "required": false,
+            "description": "Google Cloud quota project for OAuth-authenticated requests."
           }
         ],
         "responses": {
@@ -172937,6 +173050,10 @@
                                 "enum": [
                                   "api",
                                   "model_router",
+                                  "opencode:main",
+                                  "opencode:subagent",
+                                  "opencode:title",
+                                  "opencode:compaction",
                                   "chat",
                                   "chat:compaction",
                                   "a2a:compaction",
@@ -173564,6 +173681,10 @@
                                 "enum": [
                                   "api",
                                   "model_router",
+                                  "opencode:main",
+                                  "opencode:subagent",
+                                  "opencode:title",
+                                  "opencode:compaction",
                                   "chat",
                                   "chat:compaction",
                                   "a2a:compaction",
@@ -174612,6 +174733,10 @@
                                 "enum": [
                                   "api",
                                   "model_router",
+                                  "opencode:main",
+                                  "opencode:subagent",
+                                  "opencode:title",
+                                  "opencode:compaction",
                                   "chat",
                                   "chat:compaction",
                                   "a2a:compaction",
@@ -175359,6 +175484,10 @@
                                 "enum": [
                                   "api",
                                   "model_router",
+                                  "opencode:main",
+                                  "opencode:subagent",
+                                  "opencode:title",
+                                  "opencode:compaction",
                                   "chat",
                                   "chat:compaction",
                                   "a2a:compaction",
@@ -176106,6 +176235,10 @@
                                 "enum": [
                                   "api",
                                   "model_router",
+                                  "opencode:main",
+                                  "opencode:subagent",
+                                  "opencode:title",
+                                  "opencode:compaction",
                                   "chat",
                                   "chat:compaction",
                                   "a2a:compaction",
@@ -176853,6 +176986,10 @@
                                 "enum": [
                                   "api",
                                   "model_router",
+                                  "opencode:main",
+                                  "opencode:subagent",
+                                  "opencode:title",
+                                  "opencode:compaction",
                                   "chat",
                                   "chat:compaction",
                                   "a2a:compaction",
@@ -177600,6 +177737,10 @@
                                 "enum": [
                                   "api",
                                   "model_router",
+                                  "opencode:main",
+                                  "opencode:subagent",
+                                  "opencode:title",
+                                  "opencode:compaction",
                                   "chat",
                                   "chat:compaction",
                                   "a2a:compaction",
@@ -178227,6 +178368,10 @@
                                 "enum": [
                                   "api",
                                   "model_router",
+                                  "opencode:main",
+                                  "opencode:subagent",
+                                  "opencode:title",
+                                  "opencode:compaction",
                                   "chat",
                                   "chat:compaction",
                                   "a2a:compaction",
@@ -178854,6 +178999,10 @@
                                 "enum": [
                                   "api",
                                   "model_router",
+                                  "opencode:main",
+                                  "opencode:subagent",
+                                  "opencode:title",
+                                  "opencode:compaction",
                                   "chat",
                                   "chat:compaction",
                                   "a2a:compaction",
@@ -181535,6 +181684,10 @@
                                 "enum": [
                                   "api",
                                   "model_router",
+                                  "opencode:main",
+                                  "opencode:subagent",
+                                  "opencode:title",
+                                  "opencode:compaction",
                                   "chat",
                                   "chat:compaction",
                                   "a2a:compaction",
@@ -184880,6 +185033,10 @@
                                 "enum": [
                                   "api",
                                   "model_router",
+                                  "opencode:main",
+                                  "opencode:subagent",
+                                  "opencode:title",
+                                  "opencode:compaction",
                                   "chat",
                                   "chat:compaction",
                                   "a2a:compaction",
@@ -185507,6 +185664,10 @@
                                 "enum": [
                                   "api",
                                   "model_router",
+                                  "opencode:main",
+                                  "opencode:subagent",
+                                  "opencode:title",
+                                  "opencode:compaction",
                                   "chat",
                                   "chat:compaction",
                                   "a2a:compaction",
@@ -186134,6 +186295,10 @@
                                 "enum": [
                                   "api",
                                   "model_router",
+                                  "opencode:main",
+                                  "opencode:subagent",
+                                  "opencode:title",
+                                  "opencode:compaction",
                                   "chat",
                                   "chat:compaction",
                                   "a2a:compaction",
@@ -186761,6 +186926,10 @@
                                 "enum": [
                                   "api",
                                   "model_router",
+                                  "opencode:main",
+                                  "opencode:subagent",
+                                  "opencode:title",
+                                  "opencode:compaction",
                                   "chat",
                                   "chat:compaction",
                                   "a2a:compaction",
@@ -187388,6 +187557,10 @@
                                 "enum": [
                                   "api",
                                   "model_router",
+                                  "opencode:main",
+                                  "opencode:subagent",
+                                  "opencode:title",
+                                  "opencode:compaction",
                                   "chat",
                                   "chat:compaction",
                                   "a2a:compaction",
@@ -188015,6 +188188,10 @@
                                 "enum": [
                                   "api",
                                   "model_router",
+                                  "opencode:main",
+                                  "opencode:subagent",
+                                  "opencode:title",
+                                  "opencode:compaction",
                                   "chat",
                                   "chat:compaction",
                                   "a2a:compaction",
@@ -188642,6 +188819,10 @@
                                 "enum": [
                                   "api",
                                   "model_router",
+                                  "opencode:main",
+                                  "opencode:subagent",
+                                  "opencode:title",
+                                  "opencode:compaction",
                                   "chat",
                                   "chat:compaction",
                                   "a2a:compaction",
@@ -189258,6 +189439,10 @@
                                 "enum": [
                                   "api",
                                   "model_router",
+                                  "opencode:main",
+                                  "opencode:subagent",
+                                  "opencode:title",
+                                  "opencode:compaction",
                                   "chat",
                                   "chat:compaction",
                                   "a2a:compaction",
@@ -189874,6 +190059,10 @@
                                 "enum": [
                                   "api",
                                   "model_router",
+                                  "opencode:main",
+                                  "opencode:subagent",
+                                  "opencode:title",
+                                  "opencode:compaction",
                                   "chat",
                                   "chat:compaction",
                                   "a2a:compaction",
@@ -190490,6 +190679,10 @@
                                 "enum": [
                                   "api",
                                   "model_router",
+                                  "opencode:main",
+                                  "opencode:subagent",
+                                  "opencode:title",
+                                  "opencode:compaction",
                                   "chat",
                                   "chat:compaction",
                                   "a2a:compaction",
@@ -191117,6 +191310,10 @@
                                 "enum": [
                                   "api",
                                   "model_router",
+                                  "opencode:main",
+                                  "opencode:subagent",
+                                  "opencode:title",
+                                  "opencode:compaction",
                                   "chat",
                                   "chat:compaction",
                                   "a2a:compaction",
@@ -191744,6 +191941,10 @@
                                 "enum": [
                                   "api",
                                   "model_router",
+                                  "opencode:main",
+                                  "opencode:subagent",
+                                  "opencode:title",
+                                  "opencode:compaction",
                                   "chat",
                                   "chat:compaction",
                                   "a2a:compaction",
@@ -192371,6 +192572,10 @@
                                 "enum": [
                                   "api",
                                   "model_router",
+                                  "opencode:main",
+                                  "opencode:subagent",
+                                  "opencode:title",
+                                  "opencode:compaction",
                                   "chat",
                                   "chat:compaction",
                                   "a2a:compaction",
@@ -195398,6 +195603,10 @@
                                 "enum": [
                                   "api",
                                   "model_router",
+                                  "opencode:main",
+                                  "opencode:subagent",
+                                  "opencode:title",
+                                  "opencode:compaction",
                                   "chat",
                                   "chat:compaction",
                                   "a2a:compaction",
@@ -198420,6 +198629,10 @@
                                 "enum": [
                                   "api",
                                   "model_router",
+                                  "opencode:main",
+                                  "opencode:subagent",
+                                  "opencode:title",
+                                  "opencode:compaction",
                                   "chat",
                                   "chat:compaction",
                                   "a2a:compaction",
@@ -201447,6 +201660,10 @@
                                 "enum": [
                                   "api",
                                   "model_router",
+                                  "opencode:main",
+                                  "opencode:subagent",
+                                  "opencode:title",
+                                  "opencode:compaction",
                                   "chat",
                                   "chat:compaction",
                                   "a2a:compaction",
@@ -202074,6 +202291,10 @@
                                 "enum": [
                                   "api",
                                   "model_router",
+                                  "opencode:main",
+                                  "opencode:subagent",
+                                  "opencode:title",
+                                  "opencode:compaction",
                                   "chat",
                                   "chat:compaction",
                                   "a2a:compaction",
@@ -202937,6 +203158,10 @@
                                 "enum": [
                                   "api",
                                   "model_router",
+                                  "opencode:main",
+                                  "opencode:subagent",
+                                  "opencode:title",
+                                  "opencode:compaction",
                                   "chat",
                                   "chat:compaction",
                                   "a2a:compaction",
@@ -203985,6 +204210,10 @@
                                 "enum": [
                                   "api",
                                   "model_router",
+                                  "opencode:main",
+                                  "opencode:subagent",
+                                  "opencode:title",
+                                  "opencode:compaction",
                                   "chat",
                                   "chat:compaction",
                                   "a2a:compaction",
@@ -205033,6 +205262,10 @@
                                 "enum": [
                                   "api",
                                   "model_router",
+                                  "opencode:main",
+                                  "opencode:subagent",
+                                  "opencode:title",
+                                  "opencode:compaction",
                                   "chat",
                                   "chat:compaction",
                                   "a2a:compaction",
@@ -206529,6 +206762,13 @@
                           "externalAgentIdLabel": {
                             "nullable": true,
                             "type": "string"
+                          },
+                          "requestType": {
+                            "type": "string",
+                            "enum": [
+                              "main",
+                              "subagent"
+                            ]
                           }
                         },
                         "required": [
@@ -206547,7 +206787,8 @@
                           "baselineCost",
                           "createdAt",
                           "type",
-                          "externalAgentIdLabel"
+                          "externalAgentIdLabel",
+                          "requestType"
                         ],
                         "additionalProperties": false
                       }
@@ -206874,6 +207115,10 @@
               "enum": [
                 "api",
                 "model_router",
+                "opencode:main",
+                "opencode:subagent",
+                "opencode:title",
+                "opencode:compaction",
                 "chat",
                 "chat:compaction",
                 "a2a:compaction",
@@ -206910,7 +207155,8 @@
                 "claude-desktop",
                 "codex",
                 "copilot-cli",
-                "cursor"
+                "cursor",
+                "opencode"
               ]
             },
             "in": "query",
@@ -206996,6 +207242,10 @@
                             "enum": [
                               "api",
                               "model_router",
+                              "opencode:main",
+                              "opencode:subagent",
+                              "opencode:title",
+                              "opencode:compaction",
                               "chat",
                               "chat:compaction",
                               "a2a:compaction",
@@ -207025,6 +207275,10 @@
                               "enum": [
                                 "api",
                                 "model_router",
+                                "opencode:main",
+                                "opencode:subagent",
+                                "opencode:title",
+                                "opencode:compaction",
                                 "chat",
                                 "chat:compaction",
                                 "a2a:compaction",
@@ -208157,6 +208411,10 @@
                           "enum": [
                             "api",
                             "model_router",
+                            "opencode:main",
+                            "opencode:subagent",
+                            "opencode:title",
+                            "opencode:compaction",
                             "chat",
                             "chat:compaction",
                             "a2a:compaction",
@@ -208784,6 +209042,10 @@
                           "enum": [
                             "api",
                             "model_router",
+                            "opencode:main",
+                            "opencode:subagent",
+                            "opencode:title",
+                            "opencode:compaction",
                             "chat",
                             "chat:compaction",
                             "a2a:compaction",
@@ -209832,6 +210094,10 @@
                           "enum": [
                             "api",
                             "model_router",
+                            "opencode:main",
+                            "opencode:subagent",
+                            "opencode:title",
+                            "opencode:compaction",
                             "chat",
                             "chat:compaction",
                             "a2a:compaction",
@@ -210579,6 +210845,10 @@
                           "enum": [
                             "api",
                             "model_router",
+                            "opencode:main",
+                            "opencode:subagent",
+                            "opencode:title",
+                            "opencode:compaction",
                             "chat",
                             "chat:compaction",
                             "a2a:compaction",
@@ -211326,6 +211596,10 @@
                           "enum": [
                             "api",
                             "model_router",
+                            "opencode:main",
+                            "opencode:subagent",
+                            "opencode:title",
+                            "opencode:compaction",
                             "chat",
                             "chat:compaction",
                             "a2a:compaction",
@@ -212073,6 +212347,10 @@
                           "enum": [
                             "api",
                             "model_router",
+                            "opencode:main",
+                            "opencode:subagent",
+                            "opencode:title",
+                            "opencode:compaction",
                             "chat",
                             "chat:compaction",
                             "a2a:compaction",
@@ -212820,6 +213098,10 @@
                           "enum": [
                             "api",
                             "model_router",
+                            "opencode:main",
+                            "opencode:subagent",
+                            "opencode:title",
+                            "opencode:compaction",
                             "chat",
                             "chat:compaction",
                             "a2a:compaction",
@@ -213447,6 +213729,10 @@
                           "enum": [
                             "api",
                             "model_router",
+                            "opencode:main",
+                            "opencode:subagent",
+                            "opencode:title",
+                            "opencode:compaction",
                             "chat",
                             "chat:compaction",
                             "a2a:compaction",
@@ -214074,6 +214360,10 @@
                           "enum": [
                             "api",
                             "model_router",
+                            "opencode:main",
+                            "opencode:subagent",
+                            "opencode:title",
+                            "opencode:compaction",
                             "chat",
                             "chat:compaction",
                             "a2a:compaction",
@@ -216755,6 +217045,10 @@
                           "enum": [
                             "api",
                             "model_router",
+                            "opencode:main",
+                            "opencode:subagent",
+                            "opencode:title",
+                            "opencode:compaction",
                             "chat",
                             "chat:compaction",
                             "a2a:compaction",
@@ -220100,6 +220394,10 @@
                           "enum": [
                             "api",
                             "model_router",
+                            "opencode:main",
+                            "opencode:subagent",
+                            "opencode:title",
+                            "opencode:compaction",
                             "chat",
                             "chat:compaction",
                             "a2a:compaction",
@@ -220727,6 +221025,10 @@
                           "enum": [
                             "api",
                             "model_router",
+                            "opencode:main",
+                            "opencode:subagent",
+                            "opencode:title",
+                            "opencode:compaction",
                             "chat",
                             "chat:compaction",
                             "a2a:compaction",
@@ -221354,6 +221656,10 @@
                           "enum": [
                             "api",
                             "model_router",
+                            "opencode:main",
+                            "opencode:subagent",
+                            "opencode:title",
+                            "opencode:compaction",
                             "chat",
                             "chat:compaction",
                             "a2a:compaction",
@@ -221981,6 +222287,10 @@
                           "enum": [
                             "api",
                             "model_router",
+                            "opencode:main",
+                            "opencode:subagent",
+                            "opencode:title",
+                            "opencode:compaction",
                             "chat",
                             "chat:compaction",
                             "a2a:compaction",
@@ -222608,6 +222918,10 @@
                           "enum": [
                             "api",
                             "model_router",
+                            "opencode:main",
+                            "opencode:subagent",
+                            "opencode:title",
+                            "opencode:compaction",
                             "chat",
                             "chat:compaction",
                             "a2a:compaction",
@@ -223235,6 +223549,10 @@
                           "enum": [
                             "api",
                             "model_router",
+                            "opencode:main",
+                            "opencode:subagent",
+                            "opencode:title",
+                            "opencode:compaction",
                             "chat",
                             "chat:compaction",
                             "a2a:compaction",
@@ -223862,6 +224180,10 @@
                           "enum": [
                             "api",
                             "model_router",
+                            "opencode:main",
+                            "opencode:subagent",
+                            "opencode:title",
+                            "opencode:compaction",
                             "chat",
                             "chat:compaction",
                             "a2a:compaction",
@@ -224478,6 +224800,10 @@
                           "enum": [
                             "api",
                             "model_router",
+                            "opencode:main",
+                            "opencode:subagent",
+                            "opencode:title",
+                            "opencode:compaction",
                             "chat",
                             "chat:compaction",
                             "a2a:compaction",
@@ -225094,6 +225420,10 @@
                           "enum": [
                             "api",
                             "model_router",
+                            "opencode:main",
+                            "opencode:subagent",
+                            "opencode:title",
+                            "opencode:compaction",
                             "chat",
                             "chat:compaction",
                             "a2a:compaction",
@@ -225710,6 +226040,10 @@
                           "enum": [
                             "api",
                             "model_router",
+                            "opencode:main",
+                            "opencode:subagent",
+                            "opencode:title",
+                            "opencode:compaction",
                             "chat",
                             "chat:compaction",
                             "a2a:compaction",
@@ -226337,6 +226671,10 @@
                           "enum": [
                             "api",
                             "model_router",
+                            "opencode:main",
+                            "opencode:subagent",
+                            "opencode:title",
+                            "opencode:compaction",
                             "chat",
                             "chat:compaction",
                             "a2a:compaction",
@@ -226964,6 +227302,10 @@
                           "enum": [
                             "api",
                             "model_router",
+                            "opencode:main",
+                            "opencode:subagent",
+                            "opencode:title",
+                            "opencode:compaction",
                             "chat",
                             "chat:compaction",
                             "a2a:compaction",
@@ -227591,6 +227933,10 @@
                           "enum": [
                             "api",
                             "model_router",
+                            "opencode:main",
+                            "opencode:subagent",
+                            "opencode:title",
+                            "opencode:compaction",
                             "chat",
                             "chat:compaction",
                             "a2a:compaction",
@@ -230618,6 +230964,10 @@
                           "enum": [
                             "api",
                             "model_router",
+                            "opencode:main",
+                            "opencode:subagent",
+                            "opencode:title",
+                            "opencode:compaction",
                             "chat",
                             "chat:compaction",
                             "a2a:compaction",
@@ -233640,6 +233990,10 @@
                           "enum": [
                             "api",
                             "model_router",
+                            "opencode:main",
+                            "opencode:subagent",
+                            "opencode:title",
+                            "opencode:compaction",
                             "chat",
                             "chat:compaction",
                             "a2a:compaction",
@@ -236667,6 +237021,10 @@
                           "enum": [
                             "api",
                             "model_router",
+                            "opencode:main",
+                            "opencode:subagent",
+                            "opencode:title",
+                            "opencode:compaction",
                             "chat",
                             "chat:compaction",
                             "a2a:compaction",
@@ -237294,6 +237652,10 @@
                           "enum": [
                             "api",
                             "model_router",
+                            "opencode:main",
+                            "opencode:subagent",
+                            "opencode:title",
+                            "opencode:compaction",
                             "chat",
                             "chat:compaction",
                             "a2a:compaction",
@@ -238157,6 +238519,10 @@
                           "enum": [
                             "api",
                             "model_router",
+                            "opencode:main",
+                            "opencode:subagent",
+                            "opencode:title",
+                            "opencode:compaction",
                             "chat",
                             "chat:compaction",
                             "a2a:compaction",
@@ -239205,6 +239571,10 @@
                           "enum": [
                             "api",
                             "model_router",
+                            "opencode:main",
+                            "opencode:subagent",
+                            "opencode:title",
+                            "opencode:compaction",
                             "chat",
                             "chat:compaction",
                             "a2a:compaction",
@@ -240253,6 +240623,10 @@
                           "enum": [
                             "api",
                             "model_router",
+                            "opencode:main",
+                            "opencode:subagent",
+                            "opencode:title",
+                            "opencode:compaction",
                             "chat",
                             "chat:compaction",
                             "a2a:compaction",
@@ -408395,7 +408769,8 @@
                 "claude-desktop",
                 "codex",
                 "copilot-cli",
-                "cursor"
+                "cursor",
+                "opencode"
               ]
             },
             "in": "query",
@@ -408950,7 +409325,8 @@
                           "claude-desktop",
                           "codex",
                           "copilot-cli",
-                          "cursor"
+                          "cursor",
+                          "opencode"
                         ]
                       }
                     }

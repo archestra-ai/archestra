@@ -395,12 +395,11 @@ export default function SessionDetailPage({
                   </TableRow>
                 ) : (
                   interactions.map((interaction) => {
-                    const externalAgentIdLabel =
-                      interaction.externalAgentIdLabel ?? undefined;
-                    const typeLabel =
-                      externalAgentIdLabel ||
-                      interaction.externalAgentId ||
-                      "Main";
+                    const typeLabel = sessionRequestAgentLabel({
+                      requestType: interaction.requestType,
+                      externalAgentIdLabel: interaction.externalAgentIdLabel,
+                      externalAgentId: interaction.externalAgentId,
+                    });
 
                     return (
                       <TableRow
@@ -418,7 +417,7 @@ export default function SessionDetailPage({
                             variant="outline"
                             className="text-xs max-w-full inline-flex truncate"
                           >
-                            {externalAgentIdLabel && (
+                            {typeLabel !== "Main" && (
                               <Bot className="h-3 w-3 mr-1 shrink-0" />
                             )}
                             <span className="truncate">{typeLabel}</span>
@@ -483,5 +482,16 @@ export default function SessionDetailPage({
         )}
       </div>
     </PageLayout>
+  );
+}
+
+function sessionRequestAgentLabel(interaction: {
+  requestType?: "main" | "subagent";
+  externalAgentIdLabel?: string | null;
+  externalAgentId?: string | null;
+}): string {
+  if (interaction.requestType === "subagent") return "Sub-agent";
+  return (
+    interaction.externalAgentIdLabel || interaction.externalAgentId || "Main"
   );
 }

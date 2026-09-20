@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import {
   DEFAULT_APP_NAME,
   DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS,
+  OPENCODE_PASSTHROUGH_PROVIDER_ROUTES,
   providerDisplayNames,
   RouteId,
   STARTUP_GUARD_FORMAT_VERSION,
@@ -92,6 +93,19 @@ const CLIENT_SUPPORTED_PROVIDERS: Record<
     "xai",
     "cerebras",
     "github-copilot",
+  ],
+  opencode: [
+    "anthropic",
+    "openai",
+    "azure",
+    "openrouter",
+    "vllm",
+    "ollama",
+    "groq",
+    "mistral",
+    "deepseek",
+    "xai",
+    "cerebras",
   ],
 };
 
@@ -334,7 +348,8 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const endpoint = new URL(baseUrl);
         if (
           endpoint.protocol !== "https:" &&
-          !["localhost", "127.0.0.1", "[::1]"].includes(endpoint.hostname)
+          !["localhost", "127.0.0.1", "[::1]"].includes(endpoint.hostname) &&
+          !endpoint.hostname.endsWith(".localhost")
         ) {
           throw new ApiError(
             400,
@@ -350,6 +365,18 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(
           400,
           "model is only supported for copilot-cli and claude-desktop setups",
+        );
+      }
+      if (
+        clientId === "opencode" &&
+        provider &&
+        !OPENCODE_PASSTHROUGH_PROVIDER_ROUTES.some(
+          (route) => route.provider === provider,
+        )
+      ) {
+        throw new ApiError(
+          400,
+          `${provider} is not supported by OpenCode local-credential passthrough`,
         );
       }
 
@@ -427,7 +454,8 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
           (((clientId === "claude-code" || clientId === "claude-desktop") &&
             (provider === "anthropic" || provider === "bedrock")) ||
             (clientId === "codex" && provider === "openai") ||
-            (clientId === "copilot-cli" && provider === "github-copilot"))
+            (clientId === "copilot-cli" && provider === "github-copilot") ||
+            clientId === "opencode")
         ) {
           const canCreateVirtualKey = await userHasPermission(
             user.id,
@@ -508,6 +536,7 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       } else if (
         clientId !== "claude-desktop" &&
+        clientId !== "opencode" &&
         config.plugins.enabled &&
         organization.connectionPluginsEnabled
       ) {
@@ -932,7 +961,10 @@ interface MarketplaceRenderContext {
   skillIds: string[];
   pluginIds: string[];
   pluginNames: string[];
-  pluginClientType: Exclude<ConnectionSetupClientId, "claude-desktop"> | null;
+  pluginClientType: Exclude<
+    ConnectionSetupClientId,
+    "claude-desktop" | "opencode"
+  > | null;
   pluginPlatform: PluginPlatform | null;
   marketplaceName: string;
 }
@@ -1012,6 +1044,7 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
       authMode: setup.proxyAuth,
       provider: setup.provider,
       providerLabel: providerDisplayNames[setup.provider] ?? setup.provider,
+      baseUrl: setup.baseUrl,
       url: `${setup.baseUrl}/${setup.provider}`,
       proxyName: toProxyName(proxyAgent.name),
       virtualKey: virtualKeyValue,
@@ -1110,7 +1143,9 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
       pluginIds,
       pluginNames,
       pluginClientType:
-        pluginIds.length > 0 && setup.clientId !== "claude-desktop"
+        pluginIds.length > 0 &&
+        setup.clientId !== "claude-desktop" &&
+        setup.clientId !== "opencode"
           ? setup.clientId
           : null,
       pluginPlatform:

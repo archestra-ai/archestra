@@ -2,6 +2,7 @@ import {
   CLAUDE_CLIENT_ID,
   CLAUDE_CODE_CLIENT_ID,
   CLAUDE_DESKTOP_CLIENT_ID,
+  OPENCODE_CLIENT_ID,
 } from "@archestra/shared";
 import { render, screen, waitFor } from "@testing-library/react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -142,7 +143,8 @@ describe("SessionDetailPage", () => {
     [CLAUDE_CLIENT_ID, "Claude Code"],
     [CLAUDE_CODE_CLIENT_ID, "Claude Code"],
     [CLAUDE_DESKTOP_CLIENT_ID, "Claude Desktop"],
-  ])("renders the Claude badge for client id '%s'", async (externalAgentId, label) => {
+    [OPENCODE_CLIENT_ID, "OpenCode"],
+  ])("renders the client badge for id '%s'", async (externalAgentId, label) => {
     vi.mocked(useInteractionSessions).mockReturnValue({
       data: { data: [{ externalAgentIds: [externalAgentId] }] },
     } as unknown as ReturnType<typeof useInteractionSessions>);
@@ -171,6 +173,47 @@ describe("SessionDetailPage", () => {
       await screen.findByText("No interactions found for this session"),
     ).toBeVisible();
     expect(screen.queryByText(/^Claude/)).not.toBeInTheDocument();
+  });
+
+  it("labels OpenCode side turns as sub-agent requests", async () => {
+    vi.mocked(useInteractionSessions).mockReturnValue({
+      data: { data: [{ externalAgentIds: [OPENCODE_CLIENT_ID] }] },
+    } as unknown as ReturnType<typeof useInteractionSessions>);
+    vi.mocked(useInteractionSummaries).mockReturnValue({
+      data: {
+        data: [
+          {
+            id: "title-request",
+            createdAt: "2026-09-19T22:42:41.000Z",
+            externalAgentId: OPENCODE_CLIENT_ID,
+            requestType: "subagent",
+            model: "title-model",
+            inputTokens: 10,
+            outputTokens: 2,
+            cost: "0",
+            billingMode: "metered",
+          },
+          {
+            id: "main-request",
+            createdAt: "2026-09-19T22:42:45.000Z",
+            externalAgentId: OPENCODE_CLIENT_ID,
+            requestType: "main",
+            model: "main-model",
+            inputTokens: 20,
+            outputTokens: 4,
+            cost: "0",
+            billingMode: "metered",
+          },
+        ],
+        pagination: { total: 2 },
+      },
+      isLoading: false,
+    } as unknown as ReturnType<typeof useInteractionSummaries>);
+
+    renderSessionDetailPage();
+
+    expect(await screen.findByText("Sub-agent", { exact: true })).toBeVisible();
+    expect(screen.getByText(OPENCODE_CLIENT_ID, { exact: true })).toBeVisible();
   });
 
   it("renders the rows-per-page selector when the session has interactions", async () => {

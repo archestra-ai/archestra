@@ -98,6 +98,10 @@ function getSourceIcon({
   const sourceIcon: Record<Exclude<InteractionSource, "chat">, ReactNode> = {
     api: <Globe className="h-3 w-3 shrink-0" />,
     model_router: <Route className="h-3 w-3 shrink-0" />,
+    "opencode:main": <Route className="h-3 w-3 shrink-0" />,
+    "opencode:subagent": <Sparkles className="h-3 w-3 shrink-0" />,
+    "opencode:title": <Type className="h-3 w-3 shrink-0" />,
+    "opencode:compaction": <Minimize2 className="h-3 w-3 shrink-0" />,
     "chat:compaction": <Minimize2 className="h-3 w-3 shrink-0" />,
     "a2a:compaction": <Minimize2 className="h-3 w-3 shrink-0" />,
     "chat:title_generation": <Type className="h-3 w-3 shrink-0" />,

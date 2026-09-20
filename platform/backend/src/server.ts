@@ -129,6 +129,7 @@ import { mcpActiveUseTracker } from "@/services/mcp-active-use.ee";
 import { mcpGatewayTaskReaper } from "@/services/mcp-gateway-task-reaper";
 import { mcpToolsRefreshManager } from "@/services/mcp-tools-refresh";
 import { initializeManagedPlaywrightRuntime } from "@/services/playwright-runtime";
+import { runScopedResourcePermissionCutover } from "@/services/resource-permissions-cutover";
 import { systemKeyManager } from "@/services/system-key-manager";
 import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
 import { taskQueueService } from "@/task-queue";
@@ -1444,6 +1445,15 @@ const startWebServer = async () => {
     // Start the enterprise tier service so it has a fresh user count
     // before the first request hits a license-gated route.
     await enterpriseTier.start();
+
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    // Convert visibility fields into grants where the model is switched on.
+    // Idempotent, so it re-reads the visibility fields every start and picks
+    // up anything changed while the switch was off.
+    await runScopedResourcePermissionCutover();
+    // SPDX-SnippetEnd
 
     // Initialize metrics with keys of custom agent labels
     // Set OpenMetrics content type to enable exemplar support on histograms

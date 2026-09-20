@@ -89,8 +89,11 @@ describe("POST /api/mcp_server/:id/reload-tools", () => {
     });
   }
 
-  for (const canManageAllTeams of [true, false]) {
-    test(`after team deletion, reload ${canManageAllTeams ? "allows global team managers" : "denies former team admins"}`, async ({
+  // Deleting a team clears the connection's team link but keeps the
+  // connection. Managing it then belongs to installation admins: team
+  // membership is gone, so nothing team-shaped can answer for it.
+  for (const isInstallationAdmin of [true, false]) {
+    test(`after team deletion, reload ${isInstallationAdmin ? "allows installation admins" : "denies everyone else"}`, async ({
       makeTeam,
       makeInternalMcpCatalog,
       makeMcpServer,
@@ -113,7 +116,9 @@ describe("POST /api/mcp_server/:id/reload-tools", () => {
         teamId: null,
       });
       hasPermissionMock.mockImplementation(async (permissions) => ({
-        success: permissions.team ? canManageAllTeams : true,
+        success: permissions.mcpServerInstallation?.includes("admin")
+          ? isInstallationAdmin
+          : true,
         error: null,
       }));
       const getTools = vi
@@ -131,8 +136,8 @@ describe("POST /api/mcp_server/:id/reload-tools", () => {
         url: `/api/mcp_server/${server.id}/reload-tools`,
       });
 
-      expect(response.statusCode).toBe(canManageAllTeams ? 200 : 403);
-      if (canManageAllTeams) {
+      expect(response.statusCode).toBe(isInstallationAdmin ? 200 : 403);
+      if (isInstallationAdmin) {
         expect(response.json()).toEqual({
           created: 1,
           updated: 0,

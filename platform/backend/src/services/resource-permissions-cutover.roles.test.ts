@@ -1,21 +1,15 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-import fs from "node:fs";
-import path from "node:path";
 import { eq, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { describe, expect, test } from "@/test";
+import { ROLE_RETIREMENT_STATEMENTS } from "./resource-permissions-cutover";
 
-const migration = fs.readFileSync(
-  path.join(__dirname, "0486_complete_scoped_rbac_cutover.sql"),
-  "utf8",
-);
-
+/** Only the role half, so the fixtures stay about roles. */
 async function runMigration() {
   await db.transaction(async (tx) => {
-    for (const statement of migration.split("--> statement-breakpoint")) {
-      await tx.execute(sql.raw(statement));
-    }
+    for (const statement of ROLE_RETIREMENT_STATEMENTS)
+      await tx.execute(statement);
   });
 }
 
@@ -121,12 +115,13 @@ describe("scoped RBAC final cutover", () => {
     const before = await ResourcePermissionPolicyModel.find(key);
     await expect(
       db.transaction(async (tx) => {
-        await tx.execute(
-          sql.raw(migration.split("--> statement-breakpoint")[0]),
-        );
-        throw new Error("simulated later migration failure");
+        // The whole conversion runs in one transaction, so a later failure
+        // must leave the earlier statements with nothing written.
+        for (const statement of ROLE_RETIREMENT_STATEMENTS)
+          await tx.execute(statement);
+        throw new Error("simulated later cutover failure");
       }),
-    ).rejects.toThrow("simulated later migration failure");
+    ).rejects.toThrow("simulated later cutover failure");
     expect(await ResourcePermissionPolicyModel.find(key)).toEqual(before);
     await runMigration();
     expect((await ResourcePermissionPolicyModel.find(key))?.grants).toEqual([

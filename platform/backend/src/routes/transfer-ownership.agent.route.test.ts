@@ -1,6 +1,7 @@
 import { ADMIN_ROLE_NAME, MEMBER_ROLE_NAME } from "@archestra/shared";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import { AgentModel, AuditLogModel } from "@/models";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { createFastifyInstance, type FastifyInstanceWithZod } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
@@ -191,28 +192,52 @@ describe("POST /api/agents/:id/transfer-ownership", () => {
       authorId: user.id,
     });
   });
-  test("rejects recipients who cannot manage the resource's visibility", async ({
+  test("hands the creator's grant to the new owner rather than checking their visibility", async ({
     makeInternalAgent,
   }) => {
+    // Access is the object's grant, so there is no visibility the recipient
+    // has to be able to manage: they simply receive what the creator held.
     const agent = await makeInternalAgent({
       organizationId,
       authorId: user.id,
       scope: "org",
     });
-    expect((await transfer(agent.id)).statusCode).toBe(400);
+    expect((await transfer(agent.id)).statusCode).toBe(200);
     expect(await AgentModel.findById(agent.id, undefined, true)).toMatchObject({
-      authorId: user.id,
+      authorId: recipient.id,
     });
+    const policy = await ResourcePermissionPolicyModel.find({
+      organizationId,
+      resource: "agent",
+      scope: agent.id,
+    });
+    expect(policy?.grants).toEqual(
+      expect.arrayContaining([
+        {
+          subject: { type: "user", id: recipient.id },
+          actions: ["delete", "manage-permissions", "read", "update", "use"],
+        },
+      ]),
+    );
+    expect(policy?.grants).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ subject: { type: "user", id: user.id } }),
+      ]),
+    );
   });
 
-  test("requires update permission even for the owner", async ({
+  test("refuses an owner whose grant on the agent has been revoked", async ({
     makeUser,
     makeMember,
     makeCustomRole,
     makeInternalAgent,
   }) => {
+    // A role's update action is authority over the resource type, not over one
+    // object, so it is the object's grant that decides. Creating the agent
+    // hands its creator that grant; taking it away ends the authority, even
+    // though the row still names them as author.
     const role = await makeCustomRole(organizationId, {
-      permission: { agent: ["read"] },
+      permission: { agent: ["read", "update"] },
     });
     user = await makeUser();
     await makeMember(user.id, organizationId, { role: role.role });
@@ -220,6 +245,17 @@ describe("POST /api/agents/:id/transfer-ownership", () => {
       organizationId,
       authorId: user.id,
       scope: "personal",
+    });
+    const key = {
+      organizationId,
+      resource: "agent" as const,
+      scope: agent.id,
+    };
+    const policy = await ResourcePermissionPolicyModel.find(key);
+    await ResourcePermissionPolicyModel.replace({
+      ...key,
+      revision: policy?.revision ?? 0,
+      grants: [],
     });
     expect((await transfer(agent.id)).statusCode).toBe(403);
   });

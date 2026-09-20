@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-import fs from "node:fs";
-import path from "node:path";
 import { sql } from "drizzle-orm";
 import db from "@/database";
 import AgentModel from "@/models/agent";
@@ -20,11 +18,7 @@ import TeamModel from "@/models/team";
 import { checkModelTeamAccess } from "@/routes/proxy/utils/model-team-access";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { describe, expect, test } from "@/test";
-
-const migration = fs.readFileSync(
-  path.join(__dirname, "0485_backfill_resource_permission_grants.sql"),
-  "utf8",
-);
+import { runScopedResourcePermissionCutover } from "./resource-permissions-cutover";
 
 describe("resource sharing grant backfill", () => {
   test("a missing object policy never reactivates legacy visibility after organization migration", async ({
@@ -240,11 +234,9 @@ describe("resource sharing grant backfill", () => {
     const failure = new Error("Simulated failure after backfill");
     await expect(
       db.transaction(async (tx) => {
-        // 0484 already created the policy table with its marker column, so the
-        // backfill runs against the schema exactly as a deployment would see it.
-        for (const statement of migration.split("--> statement-breakpoint")) {
-          await tx.execute(sql.raw(statement));
-        }
+        // Joins the caller's transaction so the failure below rolls the whole
+        // conversion back, which is what a crashed start must leave behind.
+        await runScopedResourcePermissionCutover(tx);
         const migrated = await tx.execute(sql`
           SELECT grants, legacy_sharing_migrated FROM resource_permission_policies
           WHERE organization_id = ${org.id} AND resource = 'agent' AND scope = ${agent.id}
@@ -876,7 +868,5 @@ describe("resource sharing grant backfill", () => {
 });
 
 async function runMigration() {
-  for (const statement of migration.split("--> statement-breakpoint")) {
-    if (statement.includes("WITH ")) await db.execute(sql.raw(statement));
-  }
+  await runScopedResourcePermissionCutover();
 }

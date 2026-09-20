@@ -759,23 +759,37 @@ class ModelModel {
     modelId: string,
     provider: SupportedProvider,
   ): Promise<Model | null> {
-    // RETURNING yields a row only when this call did the insert, which is what
-    // tells the caller a model was seen for the first time and still needs its
-    // registry data. On conflict it yields nothing, so a repeat sighting costs
-    // one statement and leaves the existing row untouched.
-    const [inserted] = await db
-      .insert(schema.modelsTable)
-      .values({
-        externalId: `${provider}/${modelId}`,
-        provider,
-        modelId,
-        discoveredViaLlmProxy: true,
-        lastSyncedAt: new Date(),
-      })
-      .onConflictDoNothing()
-      .returning();
+    return withDbTransaction(async (tx) => {
+      // RETURNING yields a row only when this call did the insert, which is what
+      // tells the caller a model was seen for the first time and still needs its
+      // registry data. On conflict it yields nothing, so a repeat sighting costs
+      // one statement and leaves the existing row untouched.
+      const [inserted] = await tx
+        .insert(schema.modelsTable)
+        .values({
+          externalId: `${provider}/${modelId}`,
+          provider,
+          modelId,
+          discoveredViaLlmProxy: true,
+          lastSyncedAt: new Date(),
+        })
+        .onConflictDoNothing()
+        .returning();
 
-    return inserted ?? null;
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      // A model the proxy meets mid-request needs its default policy in the
+      // same breath: the request's own access check runs right after this, and
+      // a catalogued model with no policy of its own is reachable by nobody.
+      if (inserted)
+        await ResourcePermissionPolicyModel.initializeModels({
+          tx,
+          modelIds: [inserted.id],
+        });
+      // SPDX-SnippetEnd
+      return inserted ?? null;
+    });
   }
 
   /**

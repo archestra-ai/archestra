@@ -202,4 +202,43 @@ describe("checkModelTeamAccess", () => {
     });
     expect(result).toEqual({ allowed: true });
   });
+
+  test("a member with no model grant keeps every model an unscoped deployment let them use", async ({
+    makeOrganization,
+    makeMember,
+    makeUser,
+  }) => {
+    // Scoped permissions add flexibility, never reach: a plain member holds no
+    // llmModel grant of their own, so these two cases are exactly the access
+    // that must survive the cutover.
+    const org = await makeOrganization();
+    const member = await makeUser();
+    await makeMember(member.id, org.id);
+    const context = {
+      provider: "openai" as const,
+      organizationId: org.id,
+      authenticatedUserId: member.id,
+      userTeamIds: [],
+    };
+
+    // An id no catalog lists carries no restriction to enforce.
+    expect(
+      await checkModelTeamAccess({ ...context, modelId: "never-catalogued" }),
+    ).toEqual({ allowed: true });
+
+    // A model the proxy catalogues on first sighting is published to the
+    // organization as it is written, so the request that discovered it — and
+    // every later one — still goes through.
+    const discovered = await ModelModel.ensureModelExists(
+      "discovered-by-proxy",
+      "openai",
+    );
+    expect(discovered).not.toBeNull();
+    expect(
+      await checkModelTeamAccess({
+        ...context,
+        modelId: "discovered-by-proxy",
+      }),
+    ).toEqual({ allowed: true });
+  });
 });

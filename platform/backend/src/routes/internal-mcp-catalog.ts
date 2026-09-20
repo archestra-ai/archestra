@@ -737,7 +737,10 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         InternalMcpCatalogModel.create(restBody, {
           organizationId: request.organizationId,
           authorId: request.user.id,
-          initialPermissionGrants: initialGrants,
+          initialPermissionGrants: ResourcePermissions.grantsForCreation({
+            grants: initialGrants,
+            visibility: restBody.scope,
+          }),
         }),
       );
       return reply.send(catalogItem);

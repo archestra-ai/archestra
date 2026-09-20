@@ -67,7 +67,14 @@ export const SHARING_CONVERSION_STATEMENTS = [
 -- deliberately absent: a team's grant applies to every member of that team.
 -- Existing explicit grants are merged, not replaced. Deleted resources are
 -- included so restoring a resource cannot discard its access policy.
-WITH targets AS (
+--
+-- Each object converts exactly once. A legacy_sharing_migrated flag on the
+-- object's own policy is the statement "this object is governed by grants
+-- now", so a later run leaves it alone: re-deriving from the retired columns
+-- would undo every editor change, handing back access revoked there on the
+-- next start. The organization-level statements below keep merging, because
+-- they carry role authority rather than any one object's audience.
+WITH candidates AS (
   SELECT a.organization_id, CASE WHEN a.agent_type = 'mcp_gateway' THEN 'mcpGateway' ELSE 'agent' END AS resource,
     a.id::text AS scope, a.scope::text AS visibility, a.author_id, a.id AS source_id
   FROM agents a WHERE a.agent_type IN ('agent', 'profile', 'mcp_gateway')
@@ -89,6 +96,13 @@ WITH targets AS (
     CASE WHEN EXISTS (SELECT 1 FROM model_team mt WHERE mt.model_id = m.id) THEN 'team' ELSE 'org' END,
     NULL::text, m.id
   FROM models m CROSS JOIN organization o
+), targets AS (
+  SELECT c.* FROM candidates c
+  WHERE NOT EXISTS (
+    SELECT 1 FROM resource_permission_policies p
+    WHERE p.organization_id = c.organization_id AND p.resource = c.resource
+      AND p.scope = c.scope AND p.legacy_sharing_migrated
+  )
 ), audience AS (
   -- Organization-wide visibility was only half of the old rule: a member whose
   -- role withheld the resource's read action never saw the object. Granting
@@ -106,6 +120,15 @@ WITH targets AS (
       AND COALESCE(roles.permission::jsonb -> t.resource, '[]'::jsonb) ? 'read'
   ) reader ON true
   WHERE t.visibility = 'org'
+  UNION ALL
+  -- The other half of that rule: seeing an object was role-gated, acting on
+  -- one was not. Chatting with an agent, calling a gateway and invoking an
+  -- unrestricted model all went through the object's own reach, never the
+  -- caller's role, so a role shaped for chat and nothing else kept working.
+  -- Granting only the readers here would end that on upgrade.
+  SELECT t.organization_id, t.resource, t.scope, 'organization', '*', ARRAY['use']::text[]
+  FROM targets t
+  WHERE t.visibility = 'org' AND t.resource IN ('agent', 'mcpGateway', 'llmModel')
   UNION ALL
   SELECT t.organization_id, t.resource, t.scope, 'user', t.author_id,
     ARRAY['read', 'use', 'update', 'delete', 'manage-permissions']::text[]

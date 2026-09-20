@@ -142,7 +142,10 @@ const a2aRemoteAgentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
       });
       try {
-        checker.require(agent.agentType, "update");
+        checker.require(agent.agentType, {
+          action: "update",
+          scope: agent.id,
+        });
       } catch {
         throw new ApiError(404, "Agent not found");
       }
@@ -150,6 +153,8 @@ const a2aRemoteAgentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ? await TeamModel.getUserTeamIds(user.id)
         : [];
       requireAgentModifyPermission({
+        agentId: agent.id,
+        action: "update",
         checker,
         agentType: agent.agentType,
         agentScope: agent.scope,

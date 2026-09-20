@@ -18,6 +18,7 @@ import {
   getPermissionsForUserContext,
   SERVICE_ACCOUNT_USER_ID_PREFIX,
 } from "@/auth/utils";
+import config from "@/config";
 import { enterpriseTier } from "@/enterprise-tier";
 import MemberModel from "@/models/member";
 import OrganizationRoleModel from "@/models/organization-role";
@@ -91,6 +92,16 @@ export class ResourcePermissions {
       Awaited<ReturnType<typeof ResourcePermissionTargetModel.find>>
     >;
   }): Promise<void> {
+    // Refused rather than dropped. `createInitial` writes nothing while the
+    // model is off, so storing these would either lose them silently at the
+    // next start or, worse, mark the object converted and leave the sharing it
+    // still carries in its visibility fields unread when the switch goes on.
+    if (params.grants.length && !config.resourcePermissions.enabled) {
+      throw new ApiError(
+        400,
+        "Resource permissions are not enabled on this deployment. Share this resource through its visibility settings instead.",
+      );
+    }
     if (params.grants.length && !enterpriseTier.isCoreActive()) {
       throw new ApiError(
         403,
@@ -108,6 +119,32 @@ export class ResourcePermissions {
       );
     }
     await ResourcePermissions.validateRecipients(params);
+  }
+
+  /**
+   * The grants a request-driven creation starts with.
+   *
+   * Publishing to the whole organization is a delegation act, and
+   * {@link canDelegateScopedPermissions} has to bound it. The audience
+   * `ResourcePermissionPolicyModel.createInitial` derives from the retired
+   * `scope` field skips that check, so a caller holding no authority to grant
+   * anything could publish a new resource organization-wide simply by posting
+   * the field. Explicit grants were validated, implicit ones were not, and that
+   * asymmetry is the hole: a route or tool asking for organization visibility
+   * starts the resource with the creator alone.
+   *
+   * Only that audience is suppressed. Team and named-user sharing reach
+   * recipients the create paths already validate, and creation is the one path
+   * that still honours those fields, so they keep deriving — passing a blanket
+   * empty list instead would silently drop named sharing for every client that
+   * is not the UI.
+   */
+  static grantsForCreation(params: {
+    grants?: ResourcePermissionGrant[];
+    visibility?: string | null;
+  }): ResourcePermissionGrant[] | undefined {
+    if (params.grants !== undefined) return params.grants;
+    return params.visibility === "org" ? [] : undefined;
   }
 
   /** Load scoped capabilities once for a request that touches several targets. */

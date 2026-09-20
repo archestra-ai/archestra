@@ -2,7 +2,7 @@ import { ADMIN_ROLE_NAME } from "@archestra/shared";
 import { and, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { AgentPinModel } from "@/models";
-import AgentUserModel from "@/models/agent-user";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { createA2aRemoteAgent } from "@/services/a2a-outbound-registry";
 import { describe, expect, test, useRouteTestApp } from "@/test";
 import { makeAgentCard } from "../a2a-remote-agent/a2a-remote-agent.test-helpers";
@@ -274,7 +274,26 @@ describe("GET /api/agent-catalog", () => {
       scope: "personal",
       authorId: otherUser.id,
     });
-    await AgentUserModel.syncAgentUsers(sharedRegularAgent.id, [ctx.user.id]);
+    // Sharing an agent by name is a grant on its policy now; the legacy
+    // agent_users junction no longer confers access once the policy is
+    // migrated, which it is for every agent created in this organization.
+    const policyKey = {
+      organizationId: ctx.organizationId,
+      resource: "agent" as const,
+      scope: sharedRegularAgent.id,
+    };
+    const policy = await ResourcePermissionPolicyModel.find(policyKey);
+    await ResourcePermissionPolicyModel.replace({
+      ...policyKey,
+      revision: policy?.revision ?? 0,
+      grants: [
+        ...(policy?.grants ?? []),
+        {
+          subject: { type: "user", id: ctx.user.id },
+          actions: ["read", "use"],
+        },
+      ],
+    });
 
     const ownAgent = await createA2aRemoteAgent({
       organizationId: ctx.organizationId,

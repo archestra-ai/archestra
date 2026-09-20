@@ -479,11 +479,17 @@ describe("Resource creation with service-account authentication", () => {
     expect(agents).toHaveLength(0);
   });
 
-  test("preserves role restrictions for a service account without org-admin permission", async () => {
+  // The requested scope no longer decides who may create: visibility comes
+  // from the grants a creator sets on what they just created, so org scope is
+  // not an admin-only act any more. The role restriction that survives is the
+  // base one — a role without `agent:create` still cannot create at all.
+  test("preserves role restrictions for a service account without agent-create permission", async ({
+    makeCustomRole,
+  }) => {
     await ServiceAccountModel.update(serviceAccountId, organizationId, {
       role: "member",
     });
-    const response = await app.inject({
+    const allowed = await app.inject({
       method: "POST",
       url: "/api/agents",
       headers: { authorization },
@@ -494,7 +500,32 @@ describe("Resource creation with service-account authentication", () => {
         teams: [],
       },
     });
-    expect(response.statusCode).toBe(403);
+    expect(allowed.statusCode, allowed.body).toBe(200);
+
+    const readOnly = await makeCustomRole(organizationId, {
+      permission: { agent: ["read"] },
+    });
+    await ServiceAccountModel.update(serviceAccountId, organizationId, {
+      role: readOnly.role,
+    });
+    const refused = await app.inject({
+      method: "POST",
+      url: "/api/agents",
+      headers: { authorization },
+      payload: {
+        name: "Refused automation",
+        agentType: "agent",
+        scope: "org",
+        teams: [],
+      },
+    });
+    expect(refused.statusCode).toBe(403);
+    expect(
+      await db
+        .select()
+        .from(schema.agentsTable)
+        .where(eq(schema.agentsTable.name, "Refused automation")),
+    ).toHaveLength(0);
   });
 
   test("creates a team-scoped gateway without a synthetic user foreign key", async ({

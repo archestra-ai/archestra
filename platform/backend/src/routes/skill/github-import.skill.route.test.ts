@@ -307,6 +307,15 @@ describe("POST /api/skills/github/{discover,preview,import}", () => {
           repoUrl: "route-org-grants/skills",
           skillPaths: ["pdf"],
           scope: "org",
+          // Choosing the audience is now an explicit act: the retired `scope`
+          // field no longer derives one, because that derivation skipped the
+          // delegation check every explicit grant goes through.
+          initialGrants: ["admin", "platform_admin", "editor", "member"].map(
+            (id) => ({
+              subject: { type: "role", id },
+              actions: ["read", "use"],
+            }),
+          ),
         },
       });
       expect(response.statusCode, response.body).toBe(200);
@@ -315,8 +324,8 @@ describe("POST /api/skills/github/{discover,preview,import}", () => {
         resource: "skill",
         scope: response.json().created[0].id,
       });
-      // An organization-wide import reaches the roles that hold `skill:read`,
-      // so it never becomes visible to a role that withholds it.
+      // The chosen audience is stored as given, so the skill never becomes
+      // visible to a role the creator did not name.
       expect(policy?.grants).toEqual(
         expect.arrayContaining(
           ["admin", "platform_admin", "editor", "member"].map((id) => ({

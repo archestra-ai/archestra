@@ -44,35 +44,12 @@ export async function checkModelTeamAccess(params: {
 
   const model = await ModelModel.findByProviderAndModelId(provider, modelId);
   if (!model) {
-    const key = { organizationId, resource: "llmModel" as const, scope: "*" };
-    // SPDX-SnippetBegin
-    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-    const policy = await ResourcePermissionPolicyModel.find(key);
-    // SPDX-SnippetEnd
-    if (!policy?.legacySharingMigrated) return { allowed: true };
-    // SPDX-SnippetBegin
-    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-    const allowed = authenticatedUserId
-      ? await ResourcePermissions.allows({
-          ...key,
-          userId: authenticatedUserId,
-          action: "use",
-        })
-      : policy.grants.some(
-          (grant) =>
-            grant.subject.type === "organization" &&
-            grant.actions.includes("use"),
-        );
-    // SPDX-SnippetEnd
-    return allowed
-      ? { allowed: true }
-      : {
-          allowed: false,
-          message:
-            "An uncatalogued model requires permission to use all models.",
-        };
+    // Unknown models cannot carry a restriction (nothing to reference), and
+    // grants are per model, so there is no policy to read either. Demanding
+    // authority over every model instead would take away an id an ordinary
+    // caller could always reach — the proxy catalogues a first sighting a few
+    // statements before this check, so the grant for it is written by then.
+    return { allowed: true };
   }
 
   const key = {

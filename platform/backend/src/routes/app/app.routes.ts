@@ -619,7 +619,10 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Names are unique per author and slugs per org; a duplicate of either
       // fails this insert before any backing is created.
       const created = await AppModel.create({
-        initialPermissionGrants: body.initialGrants,
+        initialPermissionGrants: ResourcePermissions.grantsForCreation({
+          grants: body.initialGrants,
+          visibility: scope,
+        }),
         initialVisibility: { scope, teamIds },
         app: {
           organizationId,

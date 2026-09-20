@@ -1170,6 +1170,48 @@ describe("OpenAI Responses proxy", () => {
     });
   });
 
+  test("an ordinary member's own credential reaches a model the catalog has not seen", async ({
+    makeAgent,
+    makeMember,
+    makeUser,
+  }) => {
+    const app = createOpenAiRouteTestApp();
+    await app.register(openAiProxyRoutes);
+    const agent = await makeAgent({ name: "Unlisted model caller" });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    const { value: passthroughToken } = await VirtualApiKeyModel.create({
+      organizationId: agent.organizationId,
+      name: "unlisted-model-key",
+      keyType: "passthrough",
+      scope: "personal",
+      authorId: owner.id,
+    });
+    const model = "gpt-5.7-unlisted";
+
+    const call = () =>
+      app.inject({
+        method: "POST",
+        url: `/v1/openai/${agent.id}/responses`,
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer access-token",
+          "x-archestra-virtual-key": passthroughToken,
+        },
+        payload: { model, input: "Hello!" },
+      });
+
+    // Twice on purpose: the first sighting catalogues the model, and the
+    // second is the request that reads the policy written for it. A member
+    // with no model grant of their own could reach an unlisted model before
+    // scoped permissions existed, and must still reach it after.
+    expect((await call()).statusCode).toBe(200);
+    expect((await call()).statusCode).toBe(200);
+    expect(
+      await ModelModel.findByProviderAndModelId("openai", model),
+    ).not.toBeNull();
+  });
+
   test("rejects a signaled bridge request without a ChatGPT account ID before upstream creation", async ({
     makeAgent,
     makeMember,

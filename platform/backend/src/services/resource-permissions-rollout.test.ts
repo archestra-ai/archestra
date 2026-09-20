@@ -20,6 +20,40 @@ describe("scoped resource permission rollout", () => {
     config.resourcePermissions.enabled = true;
   });
 
+  test("creating with explicit grants while the switch is off is refused, not dropped", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const creator = await makeUser();
+    const recipient = await makeUser();
+    await makeMember(creator.id, org.id, { role: "admin" });
+    await makeMember(recipient.id, org.id);
+    config.resourcePermissions.enabled = false;
+    await expect(
+      ResourcePermissions.validateInitialGrants({
+        organizationId: org.id,
+        userId: creator.id,
+        resource: "agent",
+        grants: [
+          {
+            subject: { type: "user", id: recipient.id },
+            actions: ["read", "use"],
+          },
+        ],
+        target: {
+          id: crypto.randomUUID(),
+          name: "Refused at the door",
+          authorId: creator.id,
+          scope: "personal",
+          teams: [],
+          users: [],
+        },
+      }),
+    ).rejects.toMatchObject({ statusCode: 400 });
+  });
+
   test("grants stay inert while the switch is off and take effect once it is on", async ({
     makeOrganization,
     makeUser,

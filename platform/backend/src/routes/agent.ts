@@ -793,7 +793,10 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const agent = await AgentModel.create(createData, user.id, {
         defaultExcludedSubagentIds,
         deferInitialVersionFork: body.activationSkillPolicy !== undefined,
-        initialPermissionGrants: initialGrants,
+        initialPermissionGrants: ResourcePermissions.grantsForCreation({
+          grants: initialGrants,
+          visibility: body.scope,
+        }),
       });
       if (body.activationSkillPolicy) {
         try {

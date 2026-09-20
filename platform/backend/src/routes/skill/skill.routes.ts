@@ -772,7 +772,10 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       const skill = await withTeamFkErrorMapped(() =>
         SkillModel.createWithFiles({
-          initialPermissionGrants: body.initialGrants,
+          initialPermissionGrants: ResourcePermissions.grantsForCreation({
+            grants: body.initialGrants,
+            visibility: scope,
+          }),
           skill: {
             ...toSkillInsertFields(parsed),
             organizationId,
@@ -2036,7 +2039,10 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
             files: item.files,
             teamIds,
             userIds,
-            initialPermissionGrants: body.initialGrants,
+            initialPermissionGrants: ResourcePermissions.grantsForCreation({
+              grants: body.initialGrants,
+              visibility: scope,
+            }),
             // version 1 is exactly what the repo held at this commit.
             versionSourceCommit: item.sourceCommit,
           }),

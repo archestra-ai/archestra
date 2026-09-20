@@ -1281,7 +1281,10 @@ async function handleCreateMcpServer(
     const created = await InternalMcpCatalogModel.create(validatedParams, {
       organizationId,
       authorId: context.userId,
-      initialPermissionGrants: args.initialGrants,
+      initialPermissionGrants: ResourcePermissions.grantsForCreation({
+        grants: args.initialGrants,
+        visibility: validatedParams.scope,
+      }),
     });
 
     const lines = [

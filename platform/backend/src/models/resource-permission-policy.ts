@@ -278,6 +278,11 @@ export default class ResourcePermissionPolicyModel {
     teams?: { id: string; level?: "use" | "write" }[];
     users?: string[];
   }) {
+    // While the switch is off an object gets no policy at all. The conversion
+    // converts each object exactly once, from whatever its legacy fields say
+    // when it runs; a policy written now would make it skip this object and
+    // leave it governed by grants that never matched its visibility.
+    if (!config.resourcePermissions.enabled) return;
     if (params.grants === undefined) {
       const [migrated] = await params.tx
         .select({ scope: schema.resourcePermissionPoliciesTable.scope })
@@ -305,10 +310,23 @@ export default class ResourcePermissionPolicyModel {
     const initialGrants: ResourcePermissionGrant[] = params.grants ?? [];
     if (params.grants === undefined) {
       if (params.visibility === "org") {
-        // Organization-wide visibility never reached a member whose role
-        // withheld this resource's read action, so it becomes a grant to the
-        // roles that hold it rather than to everyone. Choosing everyone stays
-        // available as a deliberate act in the permissions editor.
+        // Organization-wide visibility was two rules, not one, and the halves
+        // were gated differently. Finding the object went through a route that
+        // asked for this resource's read action, so a role which withheld it
+        // never saw the object; that half becomes a grant to the roles which
+        // hold read. Working with the object asked for no such thing — chatting
+        // went through chat permissions, and an unrestricted model through
+        // nothing at all — so for the three resources that have a "work with
+        // it" path, use goes to the organization at large. Granting only the
+        // readers would take chat from a role built for exactly that.
+        //
+        // Request-driven creation reaches neither half. Publishing to the
+        // organization is a delegation act and `canDelegateScopedPermissions`
+        // has to bound it, so the routes send an empty list for this
+        // visibility through `ResourcePermissions.grantsForCreation` — for
+        // this visibility only, because team and named-user sharing at create
+        // names recipients those routes already validate. This branch serves
+        // the callers that speak for the system rather than for a person.
         const [predefined, custom] = await Promise.all([
           Promise.resolve(predefinedRolesWithReadAccess(params.resource)),
           params.tx
@@ -332,6 +350,14 @@ export default class ResourcePermissionPolicyModel {
             subject: { type: "role" as const, id },
             actions: ["read" as const, "use" as const],
           })),
+          ...(USE_UNGATED_BY_ROLE.has(params.resource)
+            ? [
+                {
+                  subject: { type: "organization" as const, id: "*" as const },
+                  actions: ["use" as const],
+                },
+              ]
+            : []),
         );
       } else if (params.visibility === "team" && params.teams?.length) {
         const teams = await params.tx
@@ -619,3 +645,16 @@ function policyCondition(params: PolicyKey) {
     eq(table.scope, params.scope),
   );
 }
+
+/**
+ * The resources whose "work with it" path never consulted the read action, so
+ * organization-wide visibility reached every member for `use` regardless of
+ * role. The matching clause lives in the conversion SQL's audience CTE
+ * (`services/resource-permissions-cutover.ts`); change both together, or a
+ * resource created after the conversion behaves unlike one converted by it.
+ */
+const USE_UNGATED_BY_ROLE = new Set<ScopedResource>([
+  "agent",
+  "mcpGateway",
+  "llmModel",
+]);

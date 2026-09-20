@@ -590,7 +590,9 @@ describe("agent activation-skill policy routes", () => {
     const clone = await app.inject({
       method: "POST",
       url: `/api/agents/${source.id}/clone`,
-      payload: { scope: "personal" },
+      // Clones are personal by default; the retired `scope` field is now
+      // rejected outright, and the scope is incidental to this test anyway.
+      payload: {},
     });
     expect(clone.statusCode, clone.body).toBe(200);
     const policy = await app.inject({

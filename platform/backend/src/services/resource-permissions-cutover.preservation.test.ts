@@ -179,9 +179,11 @@ describe("upgrade access preservation", () => {
         const reachable = async (
           resource: "agent" | "skill" | "app" | "mcpRegistry",
           allowed: boolean,
+          gate: "read" | "none" = "read",
         ) =>
           allowed &&
-          (config.resourcePermissions.enabled ||
+          (gate === "none" ||
+            config.resourcePermissions.enabled ||
             (await userHasPermission(principal.id, org.id, resource, "read")));
         for (const [what, agent] of Object.entries(agents)) {
           for (const action of ["read", "use"] as const) {
@@ -193,6 +195,11 @@ describe("upgrade access preservation", () => {
                 isAgentAdmin: await isAdminFor("agent"),
                 action,
               }),
+              // Finding an agent went through a route that asked for the read
+              // action. Working with one did not: chatting asked for chat
+              // permissions, so a role built for chat and nothing else could
+              // use an organization-wide agent it could not list.
+              action === "use" ? "none" : "read",
             );
           }
         }

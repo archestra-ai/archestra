@@ -242,15 +242,18 @@ describe("resource sharing grant backfill", () => {
           WHERE organization_id = ${org.id} AND resource = 'agent' AND scope = ${agent.id}
         `);
         // Organization visibility lands on the roles that hold `agent:read`,
-        // so a role without it keeps seeing nothing after the upgrade.
+        // so a role without it keeps seeing nothing after the upgrade, while
+        // `use` stays organization-wide because chatting never asked for that
+        // read in the first place.
         expect(migrated.rows).toEqual([
           {
-            grants: ["admin", "editor", "member", "platform_admin"].map(
-              (id) => ({
+            grants: [
+              { subject: { type: "organization", id: "*" }, actions: ["use"] },
+              ...["admin", "editor", "member", "platform_admin"].map((id) => ({
                 subject: { type: "role", id },
                 actions: ["read", "use"],
-              }),
-            ),
+              })),
+            ],
             legacy_sharing_migrated: true,
           },
         ]);
@@ -350,14 +353,17 @@ describe("resource sharing grant backfill", () => {
       resource: "agent",
       scope: publicAgent.id,
     });
-    // The organization-wide audience becomes the roles that hold `agent:read`,
-    // so nobody gains access who could not already reach the agent.
-    expect(publicPolicy?.grants).toEqual(
-      ["admin", "editor", "member", "platform_admin"].map((id) => ({
+    // Finding the agent becomes the roles that hold `agent:read`, so nobody
+    // gains a listing they did not have. Chatting with it never consulted the
+    // caller's role, so `use` stays with the organization at large — a role
+    // shaped for chat alone would otherwise lose the agent on upgrade.
+    expect(publicPolicy?.grants).toEqual([
+      { subject: { type: "organization", id: "*" }, actions: ["use"] },
+      ...["admin", "editor", "member", "platform_admin"].map((id) => ({
         subject: { type: "role", id },
         actions: ["read", "use"],
       })),
-    );
+    ]);
     const restrictedPolicy = await ResourcePermissionPolicyModel.find({
       organizationId: org.id,
       resource: "mcpGateway",
@@ -864,6 +870,66 @@ describe("resource sharing grant backfill", () => {
         userTeamIds: [team.id],
       }),
     ).toMatchObject({ allowed: false });
+  });
+
+  test("a role holding neither agent nor model read keeps the agent and models it could always use", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeCustomRole,
+    makeAgent,
+  }) => {
+    // Chatting and invoking a model asked only whether the object was open to
+    // the organization, never what the caller's role could read. A role built
+    // for chat alone is the shape that proves the two halves stayed apart.
+    const org = await makeOrganization({ legacyPermissions: true });
+    const role = await makeCustomRole(org.id, {
+      permission: { chat: ["read", "create"] },
+    });
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: role.role });
+    const agent = await makeAgent({
+      organizationId: org.id,
+      agentType: "agent",
+      scope: "org",
+    });
+    const model = await ModelModel.create({
+      externalId: "openai/open-model",
+      provider: "openai",
+      modelId: "open-model",
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      lastSyncedAt: new Date(),
+    });
+    await runMigration();
+
+    const context = { organizationId: org.id, userId: user.id };
+    expect(
+      await ResourcePermissions.allows({
+        ...context,
+        resource: "agent",
+        scope: agent.id,
+        action: "use",
+      }),
+    ).toBe(true);
+    expect(
+      await checkModelTeamAccess({
+        provider: "openai",
+        modelId: model.modelId,
+        organizationId: org.id,
+        authenticatedUserId: user.id,
+        userTeamIds: [],
+      }),
+    ).toEqual({ allowed: true });
+    // Reading the lists stays where it was: this role never saw them.
+    expect(
+      await ResourcePermissions.allows({
+        ...context,
+        resource: "agent",
+        scope: agent.id,
+        action: "read",
+      }),
+    ).toBe(false);
   });
 });
 

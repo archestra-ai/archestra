@@ -633,7 +633,10 @@ const registry = defineArchestraTools([
       let created: Awaited<ReturnType<typeof AppModel.create>>;
       try {
         created = await AppModel.create({
-          initialPermissionGrants: args.initialGrants,
+          initialPermissionGrants: ResourcePermissions.grantsForCreation({
+            grants: args.initialGrants,
+            visibility: scope,
+          }),
           initialVisibility: { scope, teamIds: [] },
           app: {
             organizationId,

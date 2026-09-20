@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import {
   credentialRequiresPerUserScope,
   LLM_PROXY_OAUTH_SCOPE,
+  MEMBER_ROLE_NAME,
   SOURCE_HEADER,
   type SupportedProvider,
   type SupportedProviderEndpoint,
@@ -145,6 +146,18 @@ async function createModelRouterVirtualKey(params: {
   const owner = needsOwner ? await params.makeUser?.() : undefined;
   if (needsOwner && !owner) {
     throw new Error("Per-user Model Router fixtures require makeUser");
+  }
+  if (owner) {
+    // A personal credential's owner is a member of its organization. Scoped
+    // permissions resolve no subjects at all for a non-member, so a stray
+    // user would be denied every model rather than exercising the route.
+    await db.insert(schema.membersTable).values({
+      id: crypto.randomUUID(),
+      userId: owner.id,
+      organizationId: params.organizationId,
+      role: MEMBER_ROLE_NAME,
+      createdAt: new Date(),
+    });
   }
   const chatApiKey = await params.makeLlmProviderApiKey(
     params.organizationId,

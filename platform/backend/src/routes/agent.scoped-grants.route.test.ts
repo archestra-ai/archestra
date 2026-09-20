@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 
 import { vi } from "vitest";
+import config from "@/config";
 import db from "@/database";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import AgentModel from "@/models/agent";
@@ -10,6 +11,7 @@ import MemberModel from "@/models/member";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import ServiceAccountModel from "@/models/service-account";
 import { createFastifyInstance, type FastifyInstanceWithZod } from "@/server";
+import { runScopedResourcePermissionCutover } from "@/services/resource-permissions-cutover";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 import routes from "./agent";
@@ -38,6 +40,9 @@ describe("agent object grants", () => {
     },
   );
   afterEach(async () => {
+    // One test below turns the model off; restore it here rather than leave
+    // the rest of the file running against a switch it never set.
+    config.resourcePermissions.enabled = true;
     await app.close();
   });
 
@@ -333,6 +338,173 @@ describe("agent object grants", () => {
         action: "use",
       }),
     ).toBe(false);
+  });
+
+  // Explicit grants are bounded by what the creator can delegate; the
+  // visibility-derived fallback was not, so posting the retired `scope` field
+  // was a way to publish organization-wide without holding the authority to
+  // grant it. Creation derives no audience from that field any more.
+  test("a retired org scope on create reaches nobody but the creator", async ({
+    makeMember,
+    makeUser,
+  }) => {
+    await MemberModel.updateRole(user.id, organizationId, "member");
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/agents",
+      payload: {
+        name: "Posted with a retired org scope",
+        agentType: "agent",
+        scope: "org",
+      },
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    const id = response.json().id;
+    const policy = await ResourcePermissionPolicyModel.find({
+      organizationId,
+      resource: "agent",
+      scope: id,
+    });
+    expect(policy?.grants).toEqual([
+      {
+        subject: { type: "user", id: user.id },
+        actions: ["read", "use", "update", "delete", "manage-permissions"],
+      },
+    ]);
+
+    const colleague = await makeUser();
+    await makeMember(colleague.id, organizationId, { role: "member" });
+    expect(
+      await AgentTeamModel.userHasAgentAccess({
+        userId: colleague.id,
+        agentId: id,
+        isAgentAdmin: false,
+      }),
+    ).toBe(false);
+  });
+
+  // The conversion runs on every start, so anything it re-derives from the
+  // retired columns is not really stored — it is recomputed. Converting each
+  // object once is what lets the two models diverge.
+  test("a second conversion run leaves a converted policy untouched", async () => {
+    await MemberModel.updateRole(user.id, organizationId, "member");
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/agents",
+      payload: {
+        name: "Converted once",
+        agentType: "agent",
+        scope: "org",
+      },
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    const key = {
+      organizationId,
+      resource: "agent" as const,
+      scope: response.json().id,
+    };
+    const before = await ResourcePermissionPolicyModel.find(key);
+    expect(before?.grants).toEqual([
+      {
+        subject: { type: "user", id: user.id },
+        actions: ["read", "use", "update", "delete", "manage-permissions"],
+      },
+    ]);
+
+    await db.transaction((tx) => runScopedResourcePermissionCutover(tx));
+
+    expect(await ResourcePermissionPolicyModel.find(key)).toEqual(before);
+  });
+
+  test("a grant revoked in the editor stays revoked across a conversion run", async ({
+    makeAgent,
+    makeTeam,
+    makeUser,
+  }) => {
+    const author = await makeUser();
+    const team = await makeTeam(organizationId, author.id);
+    const agent = await makeAgent({
+      organizationId,
+      agentType: "agent",
+      authorId: author.id,
+      scope: "team",
+      teams: [team.id],
+    });
+    const key = { organizationId, resource: "agent" as const, scope: agent.id };
+    const shared = await ResourcePermissionPolicyModel.find(key);
+    expect(shared?.grants).toContainEqual({
+      subject: { type: "team", id: team.id },
+      actions: ["read", "use"],
+    });
+
+    // Revoke the team's access the way the permissions editor does. The agent
+    // row still carries `scope: "team"` and its team junction, so a conversion
+    // that re-derived would hand the access straight back.
+    const revoked = await replacePolicy({
+      ...key,
+      revision: shared?.revision ?? 0,
+      grants: (shared?.grants ?? []).filter(
+        (grant) => grant.subject.type !== "team",
+      ),
+    });
+
+    await db.transaction((tx) => runScopedResourcePermissionCutover(tx));
+
+    const after = await ResourcePermissionPolicyModel.find(key);
+    expect(after?.grants).toEqual(revoked?.grants);
+    expect(after?.grants.some((grant) => grant.subject.type === "team")).toBe(
+      false,
+    );
+  });
+
+  // While the switch is off `createInitial` writes no policy, so storing these
+  // is not an option and dropping them is the worst one: the loss would only
+  // surface when someone turned the switch on and found the sharing gone. The
+  // off state refuses grant writes everywhere else, and creation is no
+  // different.
+  test("initial grants are refused, not dropped, while the switch is off", async ({
+    makeMember,
+    makeUser,
+  }) => {
+    await MemberModel.updateRole(user.id, organizationId, "member");
+    const recipient = await makeUser();
+    await makeMember(recipient.id, organizationId);
+    const payload = {
+      name: "Shared while the switch is off",
+      agentType: "agent",
+      scope: "personal",
+      initialGrants: [
+        {
+          subject: { type: "user", id: recipient.id },
+          actions: ["read"],
+        },
+      ],
+    };
+    // The control: this exact request is accepted while the model is on, so
+    // the refusal below is the switch and not something else in the payload.
+    const accepted = await app.inject({
+      method: "POST",
+      url: "/api/agents",
+      payload: { ...payload, name: "Shared while the switch is on" },
+    });
+    expect(accepted.statusCode, accepted.body).toBe(200);
+
+    const before = await AgentModel.findAll();
+    config.resourcePermissions.enabled = false;
+
+    const rejected = await app.inject({
+      method: "POST",
+      url: "/api/agents",
+      payload,
+    });
+    expect(rejected.statusCode, rejected.body).toBe(400);
+    expect(rejected.json().error.message).toContain(
+      "Resource permissions are not enabled",
+    );
+    const after = await AgentModel.findAll();
+    expect(after.map((item) => item.id).sort()).toEqual(
+      before.map((item) => item.id).sort(),
+    );
   });
 
   test("an invalid initial recipient rejects creation before the resource is inserted", async () => {

@@ -754,8 +754,11 @@ describe("read_app / edit_app", () => {
     const member = await makeUser();
     await makeMember(member.id, organizationId, { role: "member" });
     const memberCtx: ArchestraContext = { ...context, userId: member.id };
+    // Creation derives no audience from the retired `scope` field, so org
+    // reach is stated as a grant — the same one publish_app writes.
+    await shareOrgWide(organizationId, appId);
 
-    // visible (org scope) ...
+    // visible (shared org-wide) ...
     expect((await readApp(appId)).isError).toBe(false);
     const read = await executeArchestraTool(
       getArchestraToolFullName(TOOL_READ_APP_SHORT_NAME),
@@ -925,6 +928,9 @@ describe("read_app / edit_app", () => {
     }) => {
       const created = await scaffold({ name: "Org Wide", scope: "org" });
       const appId = structured(created).id as string;
+      // The retired `scope` field grants nobody at creation; the reach this
+      // test needs as a precondition is an explicit organization grant.
+      await shareOrgWide(organizationId, appId);
 
       const member = await makeUser();
       await makeMember(member.id, organizationId, { role: "member" });
@@ -941,14 +947,14 @@ describe("read_app / edit_app", () => {
         return structured(listed).apps.map((a: any) => a.id) as string[];
       };
 
-      // Enabled: the org scope reaches both of them.
+      // Enabled: the organization grant reaches both of them.
       expect(await listAs(member.id)).toContain(appId);
       expect(await listAs(otherAdmin.id)).toContain(appId);
 
       await AppModel.setEnabled(appId, false);
 
-      // Disabled: gone from chat listings for everyone — scope, the app:admin
-      // bypass, and authorship all lose to the lifecycle state.
+      // Disabled: gone from chat listings for everyone — the grant, the
+      // app:admin bypass, and authorship all lose to the lifecycle state.
       expect(await listAs(member.id)).not.toContain(appId);
       expect(await listAs(otherAdmin.id)).not.toContain(appId);
       expect(await listAs(context.userId as string)).not.toContain(appId);
@@ -4974,3 +4980,21 @@ describe("scaffold_app environment binding", () => {
     expect(app?.environmentId).toBeNull();
   });
 });
+
+/**
+ * Give every member of the organization read access to an app, the way
+ * publish_app does. Creation no longer derives an audience from the retired
+ * `scope` field, so a test that needs org-wide reach states it as a grant.
+ */
+async function shareOrgWide(organizationId: string, appId: string) {
+  const key = { organizationId, resource: "app" as const, scope: appId };
+  const policy = await ResourcePermissionPolicyModel.find(key);
+  await ResourcePermissionPolicyModel.replace({
+    ...key,
+    revision: policy?.revision ?? 0,
+    grants: [
+      ...(policy?.grants ?? []),
+      { subject: { type: "organization", id: "*" }, actions: ["read", "use"] },
+    ],
+  });
+}

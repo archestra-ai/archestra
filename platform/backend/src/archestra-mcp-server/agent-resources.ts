@@ -417,7 +417,10 @@ export async function handleCreateResource<
     }
     const created = await AgentModel.create(createParams, context.userId, {
       defaultExcludedSubagentIds,
-      initialPermissionGrants: args.initialGrants,
+      initialPermissionGrants: ResourcePermissions.grantsForCreation({
+        grants: args.initialGrants,
+        visibility: scope,
+      }),
     });
 
     const toolAssignmentResults =

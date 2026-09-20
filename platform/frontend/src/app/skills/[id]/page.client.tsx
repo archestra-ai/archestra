@@ -36,6 +36,7 @@ import {
 import { useResourceOwnershipTransfer } from "@/components/use-resource-ownership-transfer";
 import { WizardFooter } from "@/components/wizard-footer";
 import { formatPermissionConstraint } from "@/lib/auth/auth.utils";
+import { useFeature } from "@/lib/config/config.query";
 import {
   backToListLabel,
   notYoursToChange,
@@ -204,6 +205,12 @@ function SkillDetailView({
     version: skill.latestVersion,
   });
   const labelsRef = useRef<ProfileLabelsRef>(null);
+  const permissionsEnabled = useFeature("resourcePermissions") === true;
+  // The tab disappears with the model it edits; its content stays reachable
+  // only through a section the tabs no longer offer.
+  const visibleSections = SKILL_DETAIL_SECTIONS.filter(
+    (entry) => entry !== "permissions" || permissionsEnabled,
+  );
   const [permissionsDirty, setPermissionsDirty] = useState(false);
   const isDirty = isSkillDraftDirty(draft, base.draft) || permissionsDirty;
   const ownership = useResourceOwnershipTransfer({
@@ -338,7 +345,7 @@ function SkillDetailView({
       maxWidth="wizard"
       contentOverflowX="clip"
       minWidth="phone"
-      tabs={SKILL_DETAIL_SECTIONS.map((entry) => ({
+      tabs={visibleSections.map((entry) => ({
         label: SKILL_SECTION_LABELS[entry],
         href: skillDetailHref(skill.id, entry),
         testId: `${E2eTestId.SkillDetailSection}-${entry}`,
@@ -346,7 +353,7 @@ function SkillDetailView({
       }))}
       // Every section is a tab, so the mobile row keeps them all rather than
       // folding the last one into an overflow popover.
-      mobileVisibleCount={SKILL_DETAIL_SECTIONS.length}
+      mobileVisibleCount={visibleSections.length}
       actionButton={
         // Editing is the page itself now, so the header carries only what the
         // page cannot: chatting with the skill, and the actions that act on it

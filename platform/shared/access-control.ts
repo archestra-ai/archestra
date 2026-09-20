@@ -2205,6 +2205,9 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/settings/users": { member: ["read"] },
   "/settings/teams": { team: ["read"] },
   "/settings/roles": { ac: ["read"] },
+  // Type-wide grants are an access decision, not a role definition, so the
+  // page answers to the same permission that opens the roles screen.
+  "/settings/permissions": { ac: ["read"] },
   "/settings/identity-providers": { identityProvider: ["read"] },
   "/settings/secrets": { secret: ["read"] },
   "/settings/credentials": { credential: ["read"] },

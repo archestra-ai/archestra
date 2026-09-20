@@ -2384,6 +2384,28 @@ const config = {
       process.env.ARCHESTRA_SKILL_MARKETPLACE_CACHE_DIR?.trim() ||
       path.join(homedir(), ".archestra", "skill-marketplace-cache"),
   },
+  resourcePermissions: {
+    /**
+     * Scoped resource permissions: access to an agent, gateway, registry
+     * entry, skill, app or model is a grant on that object rather than a
+     * visibility column plus a role action.
+     *
+     * An independent switch rather than `betaFeatureEnabled`, because
+     * flipping the ARCHESTRA_BETA master switch must never change who can
+     * reach an existing resource by implication.
+     *
+     * While this is off the grant rows are inert: the upgrade still writes
+     * them, authorization keeps reading the retired visibility columns, and
+     * the permissions editors stay hidden and refuse writes. Turning it on
+     * re-runs the conversion from the current visibility columns, so legacy
+     * changes made in the meantime are picked up, and grants added by hand
+     * survive because the conversion merges rather than replaces. Turning it
+     * off returns authorization to the visibility columns, which are never
+     * destroyed. A revocation made through the editor is the one change a
+     * later re-enable does not preserve.
+     */
+    enabled: process.env.ARCHESTRA_RBAC_RESOURCE_PERMISSIONS_ENABLED === "true",
+  },
   agentRuntime: {
     /**
      * Agent Runtime: delegated Agent tasks run in one Kubernetes pod

@@ -35,6 +35,7 @@ export function makeConfig(
       mcpIdleHibernationBetaEnabled: false,
       mcpServerAlertingEnabled: false,
       sandbox: false,
+      resourcePermissions: true,
       agentRuntime: false,
       agentRuntimeBaseImage:
         "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/agent-archestra:latest",

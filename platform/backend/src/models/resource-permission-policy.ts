@@ -11,11 +11,29 @@ import {
 } from "@archestra/shared";
 import { predefinedRolesWithReadAccess } from "@archestra/shared/access-control";
 import { and, eq, inArray, or, type SQLWrapper, sql } from "drizzle-orm";
+import config from "@/config";
 import db, { schema, type Transaction } from "@/database";
 import RoleCompositionModel from "./role-composition";
 import TeamModel from "./team";
 
 export default class ResourcePermissionPolicyModel {
+  /**
+   * Grants are written by the upgrade whether or not the deployment reads
+   * them, so one place decides whether they are authoritative yet. While the
+   * switch is off every policy reads as unmigrated and carries no grants, and
+   * each caller falls back to the retired visibility columns on its own.
+   */
+  private static inert<T extends { legacySharingMigrated: boolean }>(
+    policies: T[],
+  ): T[] {
+    if (config.resourcePermissions.enabled) return policies;
+    return policies.map((policy) => ({
+      ...policy,
+      legacySharingMigrated: false,
+      grants: [],
+    }));
+  }
+
   /**
    * Whether a policy puts an object within reach of the organization at large,
    * for a principal that carries no role of its own — a shared credential, an
@@ -167,6 +185,8 @@ export default class ResourcePermissionPolicyModel {
     resource: ScopedResource;
     scopeColumn: SQLWrapper;
   }) {
+    // Every list falls back to the visibility columns while the switch is off.
+    if (!config.resourcePermissions.enabled) return sql`true`;
     return sql`NOT EXISTS (
       SELECT 1 FROM resource_permission_policies migrated_policy
       WHERE migrated_policy.organization_id = ${params.organizationId}
@@ -194,6 +214,7 @@ export default class ResourcePermissionPolicyModel {
     action: ResourcePermissionAction;
     legacyCondition: SQLWrapper;
   }) {
+    if (!config.resourcePermissions.enabled) return params.legacyCondition;
     return sql`(
       (${ResourcePermissionPolicyModel.legacySharingCondition(params)} AND ${params.legacyCondition})
       OR EXISTS (
@@ -378,6 +399,7 @@ export default class ResourcePermissionPolicyModel {
     subjects: PermissionSubject[];
   }) {
     if (params.subjects.length === 0) return [];
+    if (!config.resourcePermissions.enabled) return [];
     const table = schema.resourcePermissionPoliciesTable;
     return db
       .select()
@@ -403,6 +425,8 @@ export default class ResourcePermissionPolicyModel {
     scopeColumn: SQLWrapper;
     action: ResourcePermissionAction;
   }) {
+    // No grant answers for anyone until the deployment reads grants at all.
+    if (!config.resourcePermissions.enabled) return sql`false`;
     const serviceAccountId = params.userId.startsWith("service-account:")
       ? params.userId.slice("service-account:".length)
       : null;
@@ -467,10 +491,12 @@ export default class ResourcePermissionPolicyModel {
       : { resource: resource.data, scope, grants: [] };
   }
   static async find(params: PolicyKey) {
-    const [policy] = await db
-      .select()
-      .from(schema.resourcePermissionPoliciesTable)
-      .where(policyCondition(params));
+    const [policy] = ResourcePermissionPolicyModel.inert(
+      await db
+        .select()
+        .from(schema.resourcePermissionPoliciesTable)
+        .where(policyCondition(params)),
+    );
     return policy ?? null;
   }
 
@@ -487,16 +513,18 @@ export default class ResourcePermissionPolicyModel {
     scopes: string[];
   }) {
     const table = schema.resourcePermissionPoliciesTable;
-    return db
-      .select()
-      .from(table)
-      .where(
-        and(
-          eq(table.organizationId, params.organizationId),
-          eq(table.resource, params.resource),
-          inArray(table.scope, [...params.scopes, "*", TEAM_RESOURCE_SCOPE]),
+    return ResourcePermissionPolicyModel.inert(
+      await db
+        .select()
+        .from(table)
+        .where(
+          and(
+            eq(table.organizationId, params.organizationId),
+            eq(table.resource, params.resource),
+            inArray(table.scope, [...params.scopes, "*", TEAM_RESOURCE_SCOPE]),
+          ),
         ),
-      );
+    );
   }
 
   /** revision=0 creates a policy; stale writers never overwrite newer revocations. */

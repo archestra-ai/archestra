@@ -245,6 +245,7 @@ function AgentDetails({
     isPending: isAccessPending,
   } = useAgentAccess(agent, kind);
   const runtimeEnabled = useFeature("agentRuntime") === true;
+  const permissionsEnabled = useFeature("resourcePermissions") === true;
   const actionModel = getAgentActionModel({
     kind,
     agent,
@@ -317,7 +318,7 @@ function AgentDetails({
         ]),
     ...(showConnect && !connectFirst ? (["connect"] as const) : []),
     ...(hasAgentRuntime ? (["runs"] as const) : []),
-    ...(!isBuiltIn ? (["permissions"] as const) : []),
+    ...(!isBuiltIn && permissionsEnabled ? (["permissions"] as const) : []),
   ];
   const sectionParam = searchParams.get("section");
   const section = resolveAgentDetailSection(sections, sectionParam);

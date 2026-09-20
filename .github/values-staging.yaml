@@ -88,6 +88,10 @@ archestra:
     ARCHESTRA_MCP_SERVER_ALERTING_ENABLED: "true"
     ARCHESTRA_DYNAMIC_TOOL_ACCESS_ENABLED: "true"
     ARCHESTRA_MCP_SKILLS_ENABLED: "true"
+    # Scoped resource permissions replace the retired visibility columns.
+    # Independent of ARCHESTRA_BETA so the master switch never changes who can
+    # reach an existing resource. Staging dogfoods the model first.
+    ARCHESTRA_RBAC_RESOURCE_PERMISSIONS_ENABLED: "true"
     # Agent Runtime is intentionally independent of ARCHESTRA_BETA.
     # Enable it only on staging while the capability is being rolled out.
     ARCHESTRA_AGENT_RUNTIME_ENABLED: "true"

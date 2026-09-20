@@ -25,13 +25,6 @@ const RolesListEnterprise = dynamic(() =>
   })),
 );
 
-const ResourceTypeGrants = dynamic(() =>
-  // biome-ignore lint/style/noRestrictedImports: dual-licensed at request time
-  import("@/components/roles/resource-type-grants.ee").then((m) => ({
-    default: m.ResourceTypeGrants,
-  })),
-);
-
 /**
  * Compact dialog entry point for the role debugger, sitting opposite the roles
  * search field rather than in a full-width callout, so the page leads with the
@@ -128,14 +121,7 @@ export default function RolesSettingsPage() {
     <ErrorBoundary>
       <SmallTeamTierBanner featureName="RBAC" />
       <DisabledEnterpriseSection disabled={!enterpriseCoreActive}>
-        <RolesListEnterprise
-          headerAction={
-            <div className="flex items-center gap-2">
-              <ResourceTypeGrants />
-              <RoleDebuggerDialog />
-            </div>
-          }
-        />
+        <RolesListEnterprise headerAction={<RoleDebuggerDialog />} />
       </DisabledEnterpriseSection>
     </ErrorBoundary>
   );

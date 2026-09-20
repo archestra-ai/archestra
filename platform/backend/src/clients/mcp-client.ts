@@ -4901,7 +4901,9 @@ class McpClient {
     for (const [catalogId, tool] of toolsByCatalogId) {
       try {
         const catalogItem = catalogItems.get(catalogId);
-        if (!catalogItem) continue;
+        // Hosted apps serve their launch tools and UI resources in-process.
+        // They have no upstream transport or deployment to list.
+        if (!catalogItem || catalogItem.serverType === "app") continue;
 
         const targetResult =
           await this.determineTargetMcpServerIdForCatalogItem({

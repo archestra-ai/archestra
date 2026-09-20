@@ -3,7 +3,6 @@
 import {
   DEFAULT_MODELS,
   DocsPage,
-  getDocsUrl,
   providerRequiresPerUserCredential,
   type SupportedProvider,
 } from "@archestra/shared";
@@ -24,6 +23,7 @@ import {
 } from "@/components/agent-selector";
 import { CreditWarningNotice } from "@/components/connection/credit-warning-notice";
 import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
+import { ExternalDocsLink } from "@/components/external-docs-link";
 import { GithubCopilotSignIn } from "@/components/github-copilot-sign-in";
 import { PROVIDER_CONFIG } from "@/components/llm-provider-api-key-form";
 import { LlmProviderSelectItems } from "@/components/llm-provider-select-items";
@@ -49,6 +49,7 @@ import {
   type CreateConnectionSetupResult,
   useCreateConnectionSetup,
 } from "@/lib/connection-setup.query";
+import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import { useLlmModelsByProvider } from "@/lib/llm-models.query";
@@ -423,6 +424,10 @@ export function ConnectCommandPanel({
   const marketplaceVisible = useSkillsMarketplaceVisible(client);
   const skillsStepAvailable = skillsEnabled && marketplaceVisible;
   const appName = useAppName();
+  const desktopRevertDocsUrl = getFrontendDocsUrl(
+    DocsPage.PlatformClaudeDesktopExample,
+    "revert",
+  );
   // The exact name the script registers the gateway under — referenced in the
   // OAuth step so the user can find it in the `claude /mcp` list.
   const oauthServerName = deriveMcpServerName({
@@ -1137,17 +1142,25 @@ export function ConnectCommandPanel({
                   Your existing Claude conversations won&apos;t appear in that
                   mode. The installer does not delete them.
                 </p>
-                <a
-                  href={getDocsUrl(
-                    DocsPage.PlatformClaudeDesktopExample,
-                    "revert",
-                  )}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="underline underline-offset-4"
-                >
-                  How to return to standard Claude Desktop
-                </a>
+                {desktopRevertDocsUrl ? (
+                  <ExternalDocsLink href={desktopRevertDocsUrl}>
+                    How to return to standard Claude Desktop
+                  </ExternalDocsLink>
+                ) : (
+                  <p>
+                    To return to standard Claude Desktop, choose Anthropic
+                    sign-in on Desktop&apos;s sign-in screen and use your
+                    original Claude account. If that option is hidden, contact
+                    your administrator. See{" "}
+                    <ExternalDocsLink
+                      href="https://claude.com/docs/third-party/claude-desktop/installation#single-machine-setup"
+                      showIcon={false}
+                    >
+                      Claude&apos;s setup instructions
+                    </ExternalDocsLink>
+                    .
+                  </p>
+                )}
               </AlertDescription>
             </Alert>
           )}
@@ -1303,8 +1316,9 @@ export function ConnectCommandPanel({
         <WizardStep n={4} title="Enable your gateway in Claude Desktop" last>
           <div className="space-y-3 text-sm text-muted-foreground">
             <p>
-              The installer registers your gateway. Connecting your account and
-              enabling it in a conversation are separate steps.
+              The installer registers your gateway. Claude Desktop does not let
+              installers enable connectors automatically, so you need to enable
+              the gateway in your conversation.
             </p>
             <ol className="list-decimal space-y-3 pl-5">
               <li>

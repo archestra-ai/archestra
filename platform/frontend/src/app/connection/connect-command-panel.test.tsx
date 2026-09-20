@@ -16,6 +16,7 @@ vi.mock("next/navigation");
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import appConfig from "@/lib/config/config";
 import { useConfig, useFeature } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useOrganization } from "@/lib/organization.query";
@@ -385,6 +386,40 @@ describe("ConnectCommandPanel", () => {
   });
 
   it.each([
+    false,
+    true,
+  ])("keeps Desktop return guidance available with white-labeling=%s", async (whiteLabeling) => {
+    const branding = vi
+      .spyOn(appConfig.enterpriseFeatures, "fullWhiteLabeling", "get")
+      .mockReturnValue(whiteLabeling);
+    try {
+      renderPanel({ client: findClient("claude-desktop") });
+      await screen.findByText(COMMAND);
+      const docsLink = screen.queryByRole("link", {
+        name: /How to return to standard Claude Desktop/,
+      });
+      const inlineInstructions = screen.queryByText(
+        /choose Anthropic sign-in on Desktop/,
+      );
+      if (whiteLabeling) {
+        expect(docsLink).not.toBeInTheDocument();
+        expect(inlineInstructions).toBeVisible();
+        expect(
+          screen.getByRole("link", { name: /Claude's setup instructions/ }),
+        ).toHaveAttribute(
+          "href",
+          "https://claude.com/docs/third-party/claude-desktop/installation#single-machine-setup",
+        );
+      } else {
+        expect(docsLink).toBeVisible();
+        expect(inlineInstructions).not.toBeInTheDocument();
+      }
+    } finally {
+      branding.mockRestore();
+    }
+  });
+
+  it.each([
     { clientId: "claude-desktop", proxy: true, gateway: true },
     { clientId: "claude-desktop", proxy: false, gateway: true },
     { clientId: "claude-desktop", proxy: true, gateway: false },
@@ -406,7 +441,7 @@ describe("ConnectCommandPanel", () => {
     await screen.findByText(COMMAND);
 
     const revertLink = screen.queryByRole("link", {
-      name: "How to return to standard Claude Desktop",
+      name: /How to return to standard Claude Desktop/,
     });
     if (clientId === "claude-desktop" && proxy) {
       expect(revertLink).toBeVisible();

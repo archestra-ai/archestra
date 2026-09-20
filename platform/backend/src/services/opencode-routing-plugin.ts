@@ -5,7 +5,12 @@ interface RenderOpenCodeRoutingPluginParams {
   headers: Record<string, string>;
 }
 
-/** Renders the global OpenCode plugin that configures and validates managed routes. */
+/**
+ * Renders the global OpenCode plugin that configures and validates managed routes.
+ *
+ * Inject values only with JSON.stringify. The return value is JavaScript source.
+ * Unescaped template interpolation can inject code into the generated plugin.
+ */
 export function renderOpenCodeRoutingPlugin(
   params: RenderOpenCodeRoutingPluginParams,
 ): string {

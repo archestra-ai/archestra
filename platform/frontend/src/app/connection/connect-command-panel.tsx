@@ -1227,7 +1227,7 @@ export function ConnectCommandPanel({
                     <span>Download installer</span>
                   </a>
                 </Button>
-                <p className="max-w-xl text-sm leading-relaxed text-muted-foreground">
+                <p className="text-sm leading-relaxed text-muted-foreground">
                   Open in Claude Desktop and confirm Install. Your browser
                   guides you through subscription sign-in and restarting
                   Desktop. No terminal or developer tools needed.

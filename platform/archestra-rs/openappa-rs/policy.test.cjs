@@ -15,6 +15,38 @@ test('validates policy semantics and refuses container access', async () => {
   }
 });
 
+test('derives external client local tools into governed Archestra host identities', { skip: !databaseUrl }, async () => {
+  const policy = `[policy]
+version = 2
+[[policy.tool]]
+name = "host/archestra/exec_command"
+delta = {}
+[[policy.tool]]
+name = "host/archestra/read_file"
+delta = {}
+[[policy.tool]]
+name = "host/archestra/Bash"
+delta = {}
+`;
+  await native.initializeOpenappa(databaseUrl, 2, policy);
+  const session = { organization_id: 'native-tool-identities', caller_id: 'user:test', session_id: randomUUID() };
+  const hook = async event => JSON.parse(await native.dispatchHook(JSON.stringify({ ...session, ...event }), policy));
+  assert.equal((await hook({ event: 'session_start' })).decision, 'ack');
+  for (const tool of ['exec_command', 'read_file', 'Bash']) {
+    assert.equal(
+      (await hook({ event: 'tool_call', operation_id: `call:${tool}`, tool, arguments: {} })).decision,
+      'allow_call',
+      `${tool} must be governed through its host/archestra identity`,
+    );
+    await hook({ event: 'tool_result', tool_call_id: tool, output: 'completed', outcome: 'success' });
+  }
+  assert.notEqual(
+    (await hook({ event: 'tool_call', operation_id: 'call:unknown_local', tool: 'unknown_local', arguments: {} })).decision,
+    'allow_call',
+    'an unknown local tool must stay governed',
+  );
+});
+
 test('saved text changes enforcement for new sessions and preserves existing sessions', { skip: !databaseUrl }, async () => {
   await native.initializeOpenappa(databaseUrl, 2, allow);
   const scope = () => ({ organization_id: 'policy-test', caller_id: 'user:test', session_id: randomUUID() });

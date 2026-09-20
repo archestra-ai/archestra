@@ -1,5 +1,9 @@
-import type { AppaClientAdapter } from "../types";
+import type { AppaClientAdapter, AskUserArguments } from "../types";
 import { readHeader } from "../utils";
+
+// OpenCode labels each question's tab with a header of at most 30 characters,
+// the same bound ask_user declares for it.
+const QUESTION_HEADER_MAX_LENGTH = 30;
 
 /** Identifies OpenCode Chat Completions requests and normalizes local tool names. */
 export class AppaOpenCodeAdapter implements AppaClientAdapter {
@@ -24,8 +28,36 @@ export class AppaOpenCodeAdapter implements AppaClientAdapter {
   }
 
   normalizeLocalToolName(name: string): string {
-    return name.startsWith("builtin:") || name.startsWith("host/")
-      ? name
-      : `builtin:${name}`;
+    // `builtin:` is OpenCode's local-tool decoration. The embedded runtime
+    // derives the bare spelling to host/archestra/<name> itself.
+    return name.startsWith("builtin:") ? name.slice("builtin:".length) : name;
   }
+
+  // OpenCode shows no MCP forms (its client declares no elicitation), but its
+  // own `question` tool renders one.
+  readonly nativeQuestion = {
+    toolName: "question",
+    fromAskUser: (args: AskUserArguments) => ({
+      questions: [
+        {
+          question: args.question,
+          header: questionHeader(args.header),
+          options: args.options.map((option) => ({
+            label: option.label,
+            description: option.description ?? option.label,
+          })),
+          multiple: args.allowMultiple === true,
+        },
+      ],
+    }),
+  };
+}
+
+// The model's arguments reach the proxy unvalidated, so a missing or blank
+// header falls back to a generic label and an overlong one is cut to fit.
+function questionHeader(header: unknown): string {
+  const trimmed = typeof header === "string" ? header.trim() : "";
+  return trimmed.length > 0
+    ? trimmed.slice(0, QUESTION_HEADER_MAX_LENGTH).trimEnd()
+    : "Question";
 }

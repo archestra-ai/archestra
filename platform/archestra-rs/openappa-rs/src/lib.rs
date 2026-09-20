@@ -1540,8 +1540,12 @@ fn render_released_call(status: &str, call: &ProposedCall, owner: Option<&OfferO
     let tool = owner
         .and_then(|owner| owner.spelling.clone())
         .unwrap_or_else(|| spelled_tool(&call.tool));
+    // A model that just ran a remedy moves straight on to the retry and never
+    // mentions it; the user must still learn which plan changed their session.
+    // The user may have accepted the plan through ask_user, so the text does
+    // not credit the model with the choice.
     format!(
-        "[appa] {status}. Call the {tool} tool again with exactly these arguments: {}",
+        "[appa] {status}. Tell the user in your reply which plan was accepted. Call the {tool} tool again with exactly these arguments: {}",
         call.arguments.get()
     )
 }
@@ -1650,12 +1654,21 @@ fn authoritative_unexecuted_response(decision: Value) -> napi::Result<Value> {
         .unwrap_or("OpenAPPA blocked this tool call");
     with_approved_output(
         &decision,
-        format!(
-            "{feedback}\n\nThe tool was not executed. Use an offered remedy if appropriate before retrying; otherwise explain the ruling."
-        ),
+        format!("{feedback}\n\n{UNEXECUTED_CALL_HINT}"),
         OutputSource::Runtime,
     )
 }
+
+/// Appended to every ruling a model reads in place of a blocked call's result,
+/// in Chat and in every proxied client alike, so it is the one place to state
+/// what to do after a block. The ruling counts readers rather than naming
+/// them, and a model left to fill the gap invents who they are. Clients spell
+/// tool names differently, so tools are named generically, ask_user by the
+/// short name every spelling keeps. Which question tool to use follows
+/// ask_user's own description: the client's own first. A plan is carried out
+/// by the call the ruling shows for it, which is not always the remedy tool (a
+/// redispatch plan names another tool to run first).
+const UNEXECUTED_CALL_HINT: &str = "The tool was not executed. If the ruling offers a plan, choose one yourself and make the call it shows now, exactly as shown. If only the user can make this choice, ask them with a question tool (the client's own if it has one, otherwise ask_user), never as a plain-text question. In questions and replies, describe the block and any plan only in the ruling's own words; never guess who the readers are or how access would change. If no plan is offered, explain the ruling.";
 
 fn unknown_result_response() -> Value {
     let approved_output =
@@ -1931,7 +1944,10 @@ mod root_lock_tests {
 
 #[cfg(test)]
 mod typed_tests {
-    use super::{OfferId, RemedyPresentation, owner_can_be_spent_by, presentation_offer_ids};
+    use super::{
+        OfferId, OfferOwner, RemedyPresentation, authoritative_unexecuted_response,
+        owner_can_be_spent_by, presentation_offer_ids, render_released_call,
+    };
     use appa_runtime_api::OfferedRemedy;
 
     #[test]
@@ -2012,6 +2028,57 @@ mod typed_tests {
         ));
         assert!(!owner_can_be_spent_by(Some("virtual-key:credential"), None));
         assert!(matches!(credential, super::Principal::VirtualKey(_)));
+    }
+
+    #[test]
+    fn released_call_uses_saved_spelling_and_reports_the_accepted_plan() {
+        let owner = OfferOwner {
+            organization_id: "organization".to_owned(),
+            caller_id: Some("user:owner".to_owned()),
+            session_id: "session".to_owned(),
+            parent_id: None,
+            root: "root".to_owned(),
+            arguments: Some(r#"{ "value": 1 }"#.to_owned()),
+            tool: Some("canonical_tool".to_owned()),
+            spelling: Some("client_tool".to_owned()),
+        };
+        let call = appa_runtime_api::ProposedCall {
+            tool: "canonical_tool".to_owned(),
+            arguments: serde_json::value::to_raw_value(&serde_json::json!({ "value": 1 })).unwrap(),
+        };
+
+        // The user may have accepted the plan through ask_user, so the model
+        // reports the plan without claiming the choice.
+        let released = render_released_call("Authorized", &call, Some(&owner));
+        assert!(released.contains("client_tool"));
+        assert!(released.contains("Tell the user in your reply which plan was accepted."));
+        assert!(!released.contains("you accepted"));
+    }
+
+    #[test]
+    fn a_blocked_result_repeats_the_ruling_and_steers_the_model() {
+        let ruling = "[appa] Blocked: this call cannot run yet.\n\nWhy:\n  - allowed readers would narrow: public -> 1 reader";
+        let response = authoritative_unexecuted_response(serde_json::json!({
+            "decision": "deny_call",
+            "feedback": ruling,
+        }))
+        .unwrap();
+
+        assert_eq!(response["decision"], "deny_call");
+        assert_eq!(response["output_source"], "runtime");
+        let text = response["approved_output"].as_str().unwrap();
+        // The ruling stays verbatim and first: it is the only account of the
+        // block the model has.
+        assert!(text.starts_with(&format!("{ruling}\n\nThe tool was not executed.")));
+        // A plan is carried out by the call the ruling shows, which for a
+        // redispatch plan is another tool rather than the remedy tool.
+        assert!(text.contains("choose one yourself and make the call it shows now"));
+        assert!(!text.contains("remedy tool"));
+        // The same order of question tools as ask_user's own description.
+        assert!(text.contains("the client's own if it has one, otherwise ask_user"));
+        assert!(text.contains("never as a plain-text question"));
+        assert!(text.contains("only in the ruling's own words"));
+        assert!(text.contains("never guess who the readers are"));
     }
 
     #[test]

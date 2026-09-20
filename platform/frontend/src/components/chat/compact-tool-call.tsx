@@ -47,6 +47,7 @@ import {
   McpTaskStatusRow,
   useElapsedSince,
 } from "./mcp-task-status";
+import { withoutProxyTransportArguments } from "./proxy-transport-arguments";
 import { getSkillPillDisplay, SkillPill } from "./skill-pill";
 import { ToolErrorLogsButton } from "./tool-error-logs-button";
 import { ToolStatusRow } from "./tool-status-row";
@@ -602,10 +603,14 @@ function ExpandedToolCard({
     isCancelling: isCancellingTask,
   } = useMcpTaskFor(part.toolCallId);
   const hasInput = part.input && Object.keys(part.input).length > 0;
-  const input =
-    getToolShortName(toolName) === TOOL_GET_REMEDY_PLANS_SHORT_NAME
-      ? withParsedArguments(part.input)
-      : part.input;
+  const toolShortName = getToolShortName(toolName);
+  const input = withoutProxyTransportArguments({
+    shortName: toolShortName,
+    input:
+      toolShortName === TOOL_GET_REMEDY_PLANS_SHORT_NAME
+        ? withParsedArguments(part.input)
+        : part.input,
+  });
   const isApprovalRequested = part.state === "approval-requested";
   // Whose credential the gateway used against the upstream server.
   const executedAs = extractMcpExecutedAs(

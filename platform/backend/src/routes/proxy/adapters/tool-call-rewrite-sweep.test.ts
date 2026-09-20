@@ -160,6 +160,67 @@ describe.each([
     expect(persisted.output[0].name).toBe("archestra__run_tool");
   });
 
+  test.each([
+    ["the completed envelope", true],
+    ["what was streamed", false],
+  ] as const)("re-emits a namespaced call under its namespace, known from %s", (_source, withEnvelope) => {
+    // Codex declares its MCP servers' tools in namespaces and routes a call by
+    // the namespace the streamed item names; without it the call reaches no
+    // tool ("unsupported call").
+    const adapter = factory.createStreamAdapter();
+    const upstreamCall = {
+      id: "fc_orig",
+      call_id: "call_0",
+      type: "function_call",
+      name: "archestra__execute_remedy_plan",
+      arguments: '{"offer_id":"offer-1"}',
+      namespace: "mcp__my_gateway",
+    };
+    adapter.processChunk({
+      type: "response.output_item.added",
+      output_index: 0,
+      sequence_number: 1,
+      item: { ...upstreamCall, arguments: "", status: "in_progress" },
+    } as never);
+    if (withEnvelope) {
+      adapter.processChunk({
+        type: "response.completed",
+        sequence_number: 2,
+        response: {
+          id: "resp_1",
+          object: "response",
+          created_at: 0,
+          model: "gpt-x",
+          status: "completed",
+          output: [{ ...upstreamCall, status: "completed" }],
+        },
+      } as never);
+    }
+    const rewritten = [
+      {
+        id: "call_0",
+        name: "archestra__execute_remedy_plan",
+        arguments: '{"offer_id":"offer-1","execution":{"v":1}}',
+      },
+    ];
+
+    const events = sseData<ResponsesFrame & { item?: { namespace?: string } }>(
+      adapter.formatToolCallsSSE?.(rewritten) ?? [],
+    );
+
+    const items = events.filter((event) => event.item);
+    expect(items.map((event) => event.type)).toEqual([
+      "response.output_item.added",
+      "response.output_item.done",
+    ]);
+    for (const event of items) {
+      expect(event.item).toMatchObject({
+        call_id: "call_0",
+        namespace: "mcp__my_gateway",
+      });
+    }
+  });
+
   test("non-streaming: rewrites the function_call item in place by call_id", () => {
     const adapter = factory.createResponseAdapter({
       id: "resp_1",

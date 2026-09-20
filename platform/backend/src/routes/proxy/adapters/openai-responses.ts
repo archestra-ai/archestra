@@ -51,6 +51,7 @@ import {
   formatResponsesFunctionCallFrames,
   holdResponsesHostedOutput,
   namespaceOf,
+  namespacesByCallId,
   responsesHostedToolCalls,
   rewriteResponsesOutput,
   toSse,
@@ -863,6 +864,11 @@ class OpenAiResponsesStreamAdapter
         firstOutputIndex,
         nextSequenceNumber: () => sequence++,
         itemIdByCallId,
+        // Codex routes a namespaced call by the namespace its item names.
+        namespaceByCallId: namespacesByCallId({
+          items: callItems,
+          streamed: this.toolCallsByItemId.values(),
+        }),
         customCallIds,
       }),
     );

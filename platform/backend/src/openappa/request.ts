@@ -1,10 +1,13 @@
 /**
  * Prepares an OpenAPPA request before provider dispatch:
  * 1. Restores denial notices in history back to original calls and rulings.
- * 2. Resolves session remedy tools and validates client declarations.
+ * 2. Removes the proxy's transport arguments from history and declarations.
+ * 3. Resolves session remedy tools and validates client declarations.
  */
 import {
   type ArchestraToolShortName,
+  PROXY_STAMPED_TOOL_ARGUMENTS,
+  TOOL_ASK_USER_SHORT_NAME,
   TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
   TOOL_GET_REMEDY_PLANS_SHORT_NAME,
 } from "@archestra/shared";
@@ -25,6 +28,8 @@ import {
   restoreAppaNotices,
   restoreAppaRemedyExecutions,
   stripAppaTools,
+  stripDeclaredParameters,
+  stripProxyArguments,
 } from "./wire";
 
 export type AppaRequestTools = {
@@ -47,10 +52,17 @@ export type AppaPreparedRequest = {
   namespaces: ReadonlyMap<string, string>;
   /** Canonical tool name to declared spelling mapping. */
   spellings: ReadonlyMap<string, string>;
+  /** Client spellings whose user answers may bypass runtime result governance. */
+  platformToolNames?: ReadonlySet<string>;
   promptOperationId?: string;
   turnEndOperationId?: string;
   /** Signed offer routing collected from notices before restoration. */
   offerClaims?: OfferJws[];
+  /**
+   * The offers from this turn's notices alone: the ones an ask_user call may
+   * still decide. An earlier turn's offer was spent or released with it.
+   */
+  askUserOfferClaims?: OfferJws[];
 };
 
 /**
@@ -62,6 +74,8 @@ export function prepareAppaRequest(params: {
   /** This client's session identity, as `appaSessionIdentity` read it. */
   session?: AppaSessionIdentity;
   canonicalizeToolName: (name: string) => string;
+  /** Internal Chat calls use platform tools without a client decoration. */
+  trustBarePlatformTools?: boolean;
 }): AppaPreparedRequest {
   // A wire family this proxy cannot restore notices on — Gemini, Bedrock,
   // Cohere, native Ollama — is governed in part rather than refused: calls
@@ -77,6 +91,7 @@ export function prepareAppaRequest(params: {
   }
   let historicalControlToolName: string | undefined;
   let offerClaims: OfferJws[] | undefined;
+  let askUserOfferClaims: OfferJws[] | undefined;
   const session = params.session ?? {
     provenance: "none" as const,
   };
@@ -93,6 +108,13 @@ export function prepareAppaRequest(params: {
       ...noticeMatch,
     });
     if (collected.length > 0) offerClaims = collected;
+    const thisTurn = collectSignedOfferClaims({
+      family,
+      body: params.body,
+      ...noticeMatch,
+      currentTurnOnly: true,
+    });
+    if (thisTurn.length > 0) askUserOfferClaims = thisTurn;
     historicalControlToolName = restoreAppaRemedyExecutions({
       family,
       body: params.body,
@@ -108,6 +130,16 @@ export function prepareAppaRequest(params: {
       body: params.body,
       ...noticeMatch,
     });
+    // The control calls came back whole from their receipts above; ask_user
+    // calls carry the offers the proxy stamped for the tool alone.
+    stripProxyArguments({
+      family,
+      body: params.body,
+      isStampedTool: (name) =>
+        shortToolName(params.canonicalizeToolName(name)) ===
+        TOOL_ASK_USER_SHORT_NAME,
+      names: ASK_USER_PROXY_ARGUMENTS,
+    });
   }
 
   // No declared tools, no root: nothing can be proposed, so nothing is gated.
@@ -117,9 +149,11 @@ export function prepareAppaRequest(params: {
       ...(historicalControlToolName ? { historicalControlToolName } : {}),
       session,
       spellings: new Map(),
+      platformToolNames: new Set(),
       customTools: new Set(),
       namespaces: new Map(),
       ...(offerClaims ? { offerClaims } : {}),
+      ...(askUserOfferClaims ? { askUserOfferClaims } : {}),
     };
   }
   if (family) refuseCodexCodeMode({ family, declared, body: params.body });
@@ -128,7 +162,9 @@ export function prepareAppaRequest(params: {
 
   const found = new Map<string, string>();
   const spellings = new Map<string, string>();
+  const platformToolNames = new Set<string>();
   const customTools = new Set<string>();
+  const namespaces = declaredToolNamespaces(params.body);
   for (const tool of declared) {
     // The provider runs it, so the client never names or calls it: its calls
     // are ruled on from the response, not matched against a declared spelling.
@@ -149,10 +185,25 @@ export function prepareAppaRequest(params: {
     // organization's gateways. A lookalike under any other label stays a
     // foreign tool, which is what keeps a hostile MCP server from naming a
     // tool of its own into the control tool.
-    const short =
-      shortToolName(canonical) ??
-      anchoredLabelShort(name, params.canonicalizeToolName);
-    if (short) spellings.set(archestraMcpBranding.getToolName(short), name);
+    const short = recognizedPlatformShortName({
+      name,
+      canonical,
+      namespace: namespaces.get(name),
+      canonicalize: params.canonicalizeToolName,
+    });
+    if (short) {
+      spellings.set(archestraMcpBranding.getToolName(short), name);
+      if (
+        short === TOOL_ASK_USER_SHORT_NAME &&
+        params.trustBarePlatformTools === true
+      ) {
+        platformToolNames.add(name);
+      }
+    }
+    // The tool still takes them from the proxy; the model is never offered them.
+    const proxyArguments = short ? PROXY_ARGUMENTS.get(short) : undefined;
+    if (proxyArguments)
+      stripDeclaredParameters({ tool, names: proxyArguments });
     if (
       short === TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME ||
       short === TOOL_GET_REMEDY_PLANS_SHORT_NAME
@@ -195,14 +246,32 @@ export function prepareAppaRequest(params: {
     tools: { controlToolName, noticeToolName },
     session,
     spellings,
+    platformToolNames,
     customTools,
-    namespaces: declaredToolNamespaces(params.body),
+    namespaces,
     ...(family ? appaTurnBoundaries({ family, body: params.body }) : {}),
     ...(offerClaims ? { offerClaims } : {}),
+    ...(askUserOfferClaims ? { askUserOfferClaims } : {}),
   };
 }
 
 // === Internal helpers ===
+
+/** The offers the proxy stamps onto the model's ask_user calls. */
+const ASK_USER_PROXY_ARGUMENTS: ReadonlySet<string> = new Set(
+  PROXY_STAMPED_TOOL_ARGUMENTS[TOOL_ASK_USER_SHORT_NAME],
+);
+
+/** Per tool, the arguments the proxy writes onto the model's calls. */
+const PROXY_ARGUMENTS: ReadonlyMap<
+  ArchestraToolShortName,
+  ReadonlySet<string>
+> = new Map(
+  Object.entries(PROXY_STAMPED_TOOL_ARGUMENTS).map(([tool, names]) => [
+    tool as ArchestraToolShortName,
+    new Set<string>(names),
+  ]),
+);
 
 /** A name that ends in the notice tool's short name, under any client label. */
 const NOTICE_TOOL_SPELLING = new RegExp(
@@ -213,12 +282,32 @@ function shortToolName(name: string): ArchestraToolShortName | null {
   return archestraMcpBranding.getToolShortName(name);
 }
 
+function recognizedPlatformShortName(params: {
+  name: string;
+  canonical: string;
+  namespace: string | undefined;
+  canonicalize: (name: string) => string;
+}): ArchestraToolShortName | null {
+  const direct = shortToolName(params.canonical);
+  if (direct) return direct;
+  if (params.namespace) {
+    const namespaced = `${params.namespace}__${params.name}`;
+    const canonical = params.canonicalize(namespaced);
+    if (canonical !== namespaced) {
+      const short = shortToolName(canonical);
+      if (short) return short;
+    }
+  }
+  return anchoredLabelShort(params.name, params.canonicalize);
+}
+
 /** Resolves OpenCode tool names formatted as <label>_<branded_name>. */
 function anchoredLabelShort(
   name: string,
   canonicalize: (name: string) => string,
 ): ArchestraToolShortName | null {
   for (const short of [
+    TOOL_ASK_USER_SHORT_NAME,
     TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
     TOOL_GET_REMEDY_PLANS_SHORT_NAME,
   ] as const) {

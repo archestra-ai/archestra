@@ -5,6 +5,7 @@ import {
   MCP_OAUTH_CLIENT_CREDENTIALS_EXTENSION_ID,
   SKILL_TOOL_PREFIX,
   slugify,
+  TOOL_ASK_USER_FULL_NAME,
   TOOL_CANCEL_RUN_FULL_NAME,
   TOOL_DELETE_FILE_FULL_NAME,
   TOOL_DOWNLOAD_FILE_FULL_NAME,
@@ -951,7 +952,11 @@ describe("MCP Gateway (stateless mode)", () => {
       .result.tools.map((tool: { name: string }) => tool.name)
       .sort();
     expect(names).toEqual(
-      [TOOL_RUN_TOOL_FULL_NAME, TOOL_SEARCH_TOOLS_FULL_NAME].sort(),
+      [
+        TOOL_ASK_USER_FULL_NAME,
+        TOOL_RUN_TOOL_FULL_NAME,
+        TOOL_SEARCH_TOOLS_FULL_NAME,
+      ].sort(),
     );
   });
 
@@ -1647,6 +1652,7 @@ describe("MCP Gateway (stateless mode)", () => {
       .result.tools.map((tool: { name: string }) => tool.name);
     expect(toolNames.sort()).toEqual(
       [
+        TOOL_ASK_USER_FULL_NAME,
         TOOL_LIST_SKILLS_FULL_NAME,
         TOOL_LOAD_SKILL_FULL_NAME,
         TOOL_RUN_TOOL_FULL_NAME,
@@ -1720,6 +1726,7 @@ describe("MCP Gateway (stateless mode)", () => {
       // lifecycle controls stay top-level because delegated work is durable.
       expect(toolNames.sort()).toEqual(
         [
+          TOOL_ASK_USER_FULL_NAME,
           TOOL_CANCEL_RUN_FULL_NAME,
           TOOL_DELETE_FILE_FULL_NAME,
           TOOL_DOWNLOAD_FILE_FULL_NAME,

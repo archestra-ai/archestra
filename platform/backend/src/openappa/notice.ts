@@ -9,6 +9,10 @@
  * and injects the ruling as their result.
  */
 import { isDeepStrictEqual } from "node:util";
+import {
+  PROXY_STAMPED_TOOL_ARGUMENTS,
+  TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
+} from "@archestra/shared";
 import { z } from "zod";
 import { type OfferJws, OfferJwsSchema } from "./offer-claims";
 
@@ -193,10 +197,13 @@ export function readRemedyExecution(params: {
     return null;
   const parsedOriginalArguments = parseJson(parsed.data.original_arguments);
   if (!isRecord(parsedOriginalArguments)) return null;
-  const { execution: _receipt, ...visibleArguments } = argumentsValue;
-  const { execution: _previousReceipt, ...originalArguments } =
-    parsedOriginalArguments;
-  if (!isDeepStrictEqual(visibleArguments, originalArguments)) return null;
+  if (
+    !isDeepStrictEqual(
+      withoutProxyMembers(argumentsValue),
+      parsedOriginalArguments,
+    )
+  )
+    return null;
   return {
     ...parsed.data,
     parsedOriginalArguments,
@@ -207,6 +214,21 @@ export function readRemedyExecution(params: {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
+ * A remedy call's arguments without what the proxy writes beside them: the
+ * receipt and the matched offer's flattened JWS. The proxy drops an echoed
+ * JWS before stamping, so the model's own copy is left out too.
+ */
+function withoutProxyMembers(
+  args: Record<string, unknown>,
+): Record<string, unknown> {
+  const stamped: readonly string[] =
+    PROXY_STAMPED_TOOL_ARGUMENTS[TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME];
+  return Object.fromEntries(
+    Object.entries(args).filter(([name]) => !stamped.includes(name)),
+  );
 }
 
 /** Normalizes notice arguments into a typed function call or custom tool call. */

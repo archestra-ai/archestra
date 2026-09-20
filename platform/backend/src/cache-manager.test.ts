@@ -173,6 +173,26 @@ describe("CacheManager", () => {
 
       expect(result).toBeUndefined();
     });
+
+    test("distinguishes a failed strict read from a cache miss", async () => {
+      cacheManager.start();
+      mockKeyv.get.mockRejectedValueOnce(new Error("Connection failed"));
+
+      await expect(
+        cacheManager.get("test-key" as AllowedCacheKey, { throwOnError: true }),
+      ).rejects.toThrow("Connection failed");
+
+      mockKeyv.get.mockResolvedValueOnce(undefined);
+      await expect(
+        cacheManager.get("test-key" as AllowedCacheKey, { throwOnError: true }),
+      ).resolves.toBeUndefined();
+    });
+
+    test("rejects strict reads before startup", async () => {
+      await expect(
+        cacheManager.get("test-key" as AllowedCacheKey, { throwOnError: true }),
+      ).rejects.toThrow("CacheManager: Not started");
+    });
   });
 
   describe("set", () => {
@@ -235,6 +255,17 @@ describe("CacheManager", () => {
       const result = await cacheManager.delete("test-key" as AllowedCacheKey);
 
       expect(result).toBe(false);
+    });
+
+    test("throws on error when cleanup must fail closed", async () => {
+      cacheManager.start();
+      mockKeyv.delete.mockRejectedValue(new Error("Delete failed"));
+
+      await expect(
+        cacheManager.delete("test-key" as AllowedCacheKey, {
+          throwOnError: true,
+        }),
+      ).rejects.toThrow("Delete failed");
     });
   });
 
@@ -306,6 +337,40 @@ describe("CacheManager", () => {
       );
 
       expect(result).toBeUndefined();
+    });
+
+    test("keeps a failed strict claim retryable instead of reporting a miss", async () => {
+      cacheManager.start();
+      const key = `${CacheKey.ChatMcpElicitationPending}-retry` as const;
+      await insertKeyvEntry(key, { conversationId: "conversation" });
+      await db.execute(
+        sql`ALTER TABLE keyv_cache RENAME TO keyv_cache_unavailable`,
+      );
+      try {
+        await expect(
+          cacheManager.getAndDelete(key, { throwOnError: true }),
+        ).rejects.toThrow();
+        await expect(cacheManager.getAndDelete(key)).resolves.toBeUndefined();
+      } finally {
+        await db.execute(
+          sql`ALTER TABLE keyv_cache_unavailable RENAME TO keyv_cache`,
+        );
+      }
+
+      await expect(
+        cacheManager.getAndDelete(key, { throwOnError: true }),
+      ).resolves.toEqual({ conversationId: "conversation" });
+      await expect(
+        cacheManager.getAndDelete(key, { throwOnError: true }),
+      ).resolves.toBeUndefined();
+    });
+
+    test("rejects strict claims before startup", async () => {
+      await expect(
+        cacheManager.getAndDelete("test-key" as AllowedCacheKey, {
+          throwOnError: true,
+        }),
+      ).rejects.toThrow("CacheManager: Not started");
     });
   });
 

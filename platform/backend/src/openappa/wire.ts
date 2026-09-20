@@ -56,19 +56,21 @@ export function appaWireFamily(
 }
 
 /**
- * Restores notice tool calls in request history back to original calls and rulings.
- * Updates model-visible history in place.
+ * Collects the signed offers the notice calls in request history carry.
+ * With `currentTurnOnly`, only notices issued since the last message the user
+ * wrote count: an offer from an earlier turn was spent or released with it.
  */
 export function collectSignedOfferClaims(params: {
   family: AppaWireFamily;
   body: unknown;
   isNoticeTool: (name: string) => boolean;
   mayBeNoticeTool: (name: string) => boolean;
+  currentTurnOnly?: boolean;
 }): OfferJws[] {
   const claims: OfferJws[] = [];
   const calls = toolCallSites({
     family: params.family,
-    body: params.body,
+    body: params.currentTurnOnly ? currentTurnBody(params) : params.body,
     match: (name) => params.isNoticeTool(name) || params.mayBeNoticeTool(name),
   });
   for (const call of calls) {
@@ -79,6 +81,10 @@ export function collectSignedOfferClaims(params: {
   return claims;
 }
 
+/**
+ * Restores notice tool calls in request history back to original calls and rulings.
+ * Updates model-visible history in place.
+ */
 export function restoreAppaNotices(params: {
   family: AppaWireFamily;
   body: unknown;
@@ -146,6 +152,67 @@ export function restoreAppaRemedyExecutions(params: {
     });
   }
   return historicalControlToolName;
+}
+
+/**
+ * Removes arguments the proxy stamped onto the model's calls on their way to
+ * the client from those calls in provider history, so the provider gets each
+ * call back as the model made it. Only function calls carry them.
+ */
+export function stripProxyArguments(params: {
+  family: AppaWireFamily;
+  body: unknown;
+  /** Resolved to a tool whose calls the proxy stamps. */
+  isStampedTool: (name: string) => boolean;
+  names: ReadonlySet<string>;
+}): void {
+  const calls = toolCallSites({
+    family: params.family,
+    body: params.body,
+    match: params.isStampedTool,
+  });
+  for (const call of calls) {
+    if (call.kind !== "function") continue;
+    const argumentsValue = asRecord(
+      typeof call.arguments === "string"
+        ? parseJson(call.arguments)
+        : call.arguments,
+    );
+    if (!argumentsValue) continue;
+    const kept = Object.entries(argumentsValue).filter(
+      ([name]) => !params.names.has(name),
+    );
+    if (kept.length === Object.keys(argumentsValue).length) continue;
+    call.restoreFunctionArguments({
+      kind: "function",
+      arguments: Object.fromEntries(kept),
+    });
+  }
+}
+
+/**
+ * Removes parameters from a declared tool's input schema, wherever its wire
+ * keeps it: Anthropic's `input_schema`, the Responses and Gemini `parameters`,
+ * Gemini's `parametersJsonSchema`, Chat Completions' `function.parameters`,
+ * Bedrock Converse's `toolSpec.inputSchema.json`.
+ */
+export function stripDeclaredParameters(params: {
+  tool: unknown;
+  names: ReadonlySet<string>;
+}): void {
+  const schema = declaredInputSchema(params.tool);
+  const properties = asRecord(schema?.properties);
+  if (!schema || !properties) return;
+  const kept = Object.entries(properties).filter(
+    ([name]) => !params.names.has(name),
+  );
+  if (kept.length === Object.keys(properties).length) return;
+  schema.properties = Object.fromEntries(kept);
+  // Strict function schemas list every property as required.
+  if (Array.isArray(schema.required))
+    schema.required = schema.required.filter(
+      (name) => typeof name !== "string" || !params.names.has(name),
+    );
 }
 
 /** Removes tools from every declaration container, by exact wire name. */
@@ -492,6 +559,20 @@ const ITEM_ID_PREFIXES = {
   custom_tool_call_output: "ctco_",
 } as const;
 
+function declaredInputSchema(
+  tool: unknown,
+): Record<string, unknown> | undefined {
+  const record = asRecord(tool);
+  if (!record) return undefined;
+  return (
+    asRecord(record.input_schema) ??
+    asRecord(record.parameters) ??
+    asRecord(record.parametersJsonSchema) ??
+    asRecord(asRecord(record.function)?.parameters) ??
+    asRecord(asRecord(asRecord(record.toolSpec)?.inputSchema)?.json)
+  );
+}
+
 /** Extracts member tools declared inside a Codex namespace declaration. */
 function namespaceMembers(tool: unknown): unknown[] | undefined {
   const record = asRecord(tool);
@@ -505,25 +586,61 @@ function endsWithUserTurn(params: {
   family: AppaWireFamily;
   body: unknown;
 }): boolean {
-  if (params.family === "openai:responses") {
-    const input = asArray(asRecord(params.body)?.input);
-    if (!input) return typeof asRecord(params.body)?.input === "string";
-    const last = asRecord(input.at(-1));
-    if (!last) return false;
+  const history = historyEntries(params);
+  if (!history) {
     return (
-      last.role === "user" &&
-      last.type !== "function_call_output" &&
-      last.type !== "custom_tool_call_output"
+      params.family === "openai:responses" &&
+      typeof asRecord(params.body)?.input === "string"
     );
   }
-  const messages = asArray(asRecord(params.body)?.messages);
-  const last = asRecord(messages?.at(-1));
-  if (!last || last.role !== "user") return false;
-  if (params.family === "openai:chatCompletions") return true;
-  const content = asArray(last.content);
+  return isUserAuthored(params.family, history.at(-1));
+}
+
+/**
+ * The body cut down to the current turn: the history after the last message
+ * the user wrote. A shallow copy, for reading; the request is left untouched.
+ */
+function currentTurnBody(params: {
+  family: AppaWireFamily;
+  body: unknown;
+}): unknown {
+  const history = historyEntries(params);
+  if (!history) return params.body;
+  const lastUserMessage = history.findLastIndex((entry) =>
+    isUserAuthored(params.family, entry),
+  );
+  return {
+    ...asRecord(params.body),
+    [historyKey(params.family)]: history.slice(lastUserMessage + 1),
+  };
+}
+
+function historyKey(family: AppaWireFamily): "input" | "messages" {
+  return family === "openai:responses" ? "input" : "messages";
+}
+
+function historyEntries(params: {
+  family: AppaWireFamily;
+  body: unknown;
+}): unknown[] | undefined {
+  return asArray(asRecord(params.body)?.[historyKey(params.family)]);
+}
+
+/** A user message is a tool-result turn only when every content block is a result. */
+function isUserAuthored(family: AppaWireFamily, entry: unknown): boolean {
+  const record = asRecord(entry);
+  if (!record || record.role !== "user") return false;
+  if (family === "openai:responses")
+    return (
+      record.type !== "function_call_output" &&
+      record.type !== "custom_tool_call_output"
+    );
+  if (family === "openai:chatCompletions") return true;
+  const content = asArray(record.content);
   return (
     content === undefined ||
-    !content.some((block) => asRecord(block)?.type === "tool_result")
+    content.length === 0 ||
+    content.some((block) => asRecord(block)?.type !== "tool_result")
   );
 }
 
@@ -934,6 +1051,14 @@ export function canonicalJson(
 
 function asArray(value: unknown): unknown[] | undefined {
   return Array.isArray(value) ? value : undefined;
+}
+
+function parseJson(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return undefined;
+  }
 }
 
 /** Non-cryptographic fingerprint digest for retry idempotency. */

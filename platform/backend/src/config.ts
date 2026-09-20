@@ -2053,7 +2053,7 @@ export function parseOpenAppaConfig(
   const isEnabled = enabled === "true";
   if (isEnabled && secret.length === 0) {
     logger.warn(
-      "OpenAPPA is enabled without a signing key: set ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET or an auth secret, or denials that carry remedy offers will fail closed (503)",
+      "OpenAPPA is enabled without a signing key: set ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET or an auth secret, or signed remedy and native-question flows will fail closed (503)",
     );
   }
   return {

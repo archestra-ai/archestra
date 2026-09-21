@@ -1939,6 +1939,11 @@ const startWorker = async () => {
       includeAgentRunMetrics: false,
     });
 
+    // The periodic recompile is one of the handlers registered below, and it
+    // deletes every install row the policy text does not declare: the worker
+    // carries the legacy rows into the text first, exactly as `start` does.
+    await declareOpenappaInstalls();
+
     registerTaskHandlers(taskQueueService);
     await taskQueueService.seedPeriodicTasks();
     taskQueueService.startWorker();

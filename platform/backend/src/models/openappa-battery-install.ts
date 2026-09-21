@@ -1,7 +1,6 @@
 import { and, asc, eq, notInArray } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type {
-  BatteryCredentialBindings,
   BatteryInstall,
   BatteryInstallRow,
 } from "@/types/openappa-batteries";
@@ -55,6 +54,24 @@ class OpenAppaBatteryInstallModel {
     });
   }
 
+  /**
+   * A composition the runtime refused governs nothing, so every row of the
+   * organization carries the refusal until a composition succeeds.
+   */
+  static async markRefused(params: {
+    organizationId: string;
+    lastError: string;
+  }): Promise<void> {
+    await db
+      .update(table)
+      .set({
+        status: "refused",
+        lastError: params.lastError,
+        updatedAt: new Date(),
+      })
+      .where(eq(table.organizationId, params.organizationId));
+  }
+
   static async list(organizationId: string): Promise<BatteryInstall[]> {
     return db
       .select()
@@ -83,75 +100,6 @@ class OpenAppaBatteryInstallModel {
   static async findById(id: string): Promise<BatteryInstall | null> {
     const [row] = await db.select().from(table).where(eq(table.id, id));
     return row ?? null;
-  }
-
-  static async organizationIdsForCatalog(catalogId: string) {
-    const rows = await db
-      .selectDistinct({ organizationId: table.organizationId })
-      .from(table)
-      .where(eq(table.catalogId, catalogId));
-    return rows.map((row) => row.organizationId);
-  }
-
-  static async existsForBattery(params: {
-    organizationId: string;
-    batteryName: string;
-  }) {
-    const [row] = await db
-      .select({ id: table.id })
-      .from(table)
-      .where(
-        and(
-          eq(table.organizationId, params.organizationId),
-          eq(table.batteryName, params.batteryName),
-        ),
-      )
-      .limit(1);
-    return row !== undefined;
-  }
-
-  /** Insert unless the (organization, catalog, battery) install already exists. */
-  static async createIfAbsent(params: {
-    organizationId: string;
-    batteryName: string;
-    catalogId: string;
-    enabled: boolean;
-    credentialBindings: BatteryCredentialBindings;
-  }): Promise<BatteryInstall | null> {
-    const [row] = await db
-      .insert(table)
-      .values(params)
-      .onConflictDoNothing()
-      .returning();
-    return row ?? null;
-  }
-
-  static async update(params: {
-    id: string;
-    organizationId: string;
-    enabled?: boolean;
-    credentialBindings?: BatteryCredentialBindings;
-  }): Promise<BatteryInstall | null> {
-    const { id, organizationId, ...changes } = params;
-    const [row] = await db
-      .update(table)
-      .set({ ...changes, updatedAt: new Date() })
-      .where(and(eq(table.id, id), eq(table.organizationId, organizationId)))
-      .returning();
-    return row ?? null;
-  }
-
-  static async delete(params: { id: string; organizationId: string }) {
-    const rows = await db
-      .delete(table)
-      .where(
-        and(
-          eq(table.id, params.id),
-          eq(table.organizationId, params.organizationId),
-        ),
-      )
-      .returning({ id: table.id });
-    return rows.length > 0;
   }
 
   static async findByIdForAudit(

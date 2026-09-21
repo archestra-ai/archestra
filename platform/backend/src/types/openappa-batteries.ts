@@ -5,6 +5,7 @@ import {
   openappaBatteryPackagesTable,
   openappaEffectivePoliciesTable,
 } from "@/database/schemas/openappa-batteries";
+import { HeldPullReasonSchema } from "@/types/openappa-github-sync";
 
 export const BatteryPackageFileSchema = z.strictObject({
   path: z.string().min(1).max(512),
@@ -75,7 +76,8 @@ export const EffectivePolicySchema = createSelectSchema(
 });
 export type EffectivePolicy = z.infer<typeof EffectivePolicySchema>;
 
-export const BatterySourceSchema = z.enum(["bundled", "organization"]);
+/** Where an include entry's bytes come from: the pinned bundle or a stored upload. */
+export const BatterySourceSchema = z.enum(["bundled", "upload"]);
 export type BatterySource = z.infer<typeof BatterySourceSchema>;
 
 export const BatteryInstallViewSchema = BatteryInstallSchema.extend({
@@ -99,6 +101,8 @@ export const BatterySummarySchema = z.object({
   name: z.string(),
   description: z.string(),
   source: BatterySourceSchema,
+  /** The bytes the newest stored package of this name holds; null when bundled. */
+  contentHash: z.string().nullable(),
   namespaces: z.array(z.string()),
   helpers: z.array(z.string()),
   credentials: z.array(z.string()),
@@ -107,11 +111,83 @@ export const BatterySummarySchema = z.object({
 });
 export type BatterySummary = z.infer<typeof BatterySummarySchema>;
 
+/** One `[server_aliases]` target beside the catalog it resolves to, if any does. */
+const BatteryServerViewSchema = z.object({
+  target: z.string(),
+  catalogId: z.string().nullable(),
+});
+
+/** One credential variable a battery reads, with its key and every other reader. */
+const BatteryCredentialViewSchema = z.object({
+  variable: z.string(),
+  key: z.string().nullable(),
+  readers: z.array(z.string()),
+});
+
+/** One include entry as the panel shows it: what it spells and what came of it. */
+export const PolicyBatteryViewSchema = z.object({
+  entry: z.string(),
+  name: z.string(),
+  source: BatterySourceSchema,
+  packageHash: z.string().nullable(),
+  status: BatteryInstallStatusSchema,
+  line: z.number(),
+  servers: z.array(BatteryServerViewSchema),
+  credentials: z.array(BatteryCredentialViewSchema),
+  helpers: z.array(z.string()),
+});
+export type PolicyBatteryView = z.infer<typeof PolicyBatteryViewSchema>;
+
+/** An alias whose namespace no included battery declares: inert, not refused. */
+const UnusedAliasViewSchema = z.object({
+  namespace: z.string(),
+  servers: z.array(z.string()),
+  line: z.number(),
+});
+
+/** A pulled document the sync fetched and did not publish. */
+const HeldPullViewSchema = z.object({
+  contentHash: z.string(),
+  sourceCommit: z.string(),
+  reasons: z.array(HeldPullReasonSchema),
+});
+
+export const PolicyDeclarationsViewSchema = z.object({
+  batteries: z.array(PolicyBatteryViewSchema),
+  unusedAliases: z.array(UnusedAliasViewSchema),
+  rootRevision: z.number(),
+  lastError: z.string().nullable(),
+  managedInGithub: z.boolean(),
+  heldPull: HeldPullViewSchema.nullable(),
+});
+export type PolicyDeclarationsView = z.infer<
+  typeof PolicyDeclarationsViewSchema
+>;
+
+/** What an upload answers: the stored bytes and the entry that spells them. */
+export const UploadedBatteryPackageSchema = z.object({
+  name: z.string(),
+  description: z.string(),
+  contentHash: z.string(),
+  entry: z.string(),
+  namespaces: z.array(z.string()),
+  helpers: z.array(z.string()),
+  credentials: z.array(z.string()),
+  setup: z.string().nullable(),
+});
+export type UploadedBatteryPackage = z.infer<
+  typeof UploadedBatteryPackageSchema
+>;
+
 export const CreateBatteryInstallSchema = z.strictObject({
   batteryName: z.string().min(1).max(100),
   catalogId: z.string().uuid(),
-  enabled: z.boolean().default(true),
-  credentialBindings: BatteryCredentialBindingsSchema.default({}),
+  /** The stored package to include; absent spells the bundled battery. */
+  packageHash: z
+    .string()
+    .regex(/^[0-9a-f]{64}$/)
+    .nullable()
+    .default(null),
 });
 export type CreateBatteryInstall = z.infer<typeof CreateBatteryInstallSchema>;
 

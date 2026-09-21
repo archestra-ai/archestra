@@ -11,6 +11,7 @@ import { resolveCredentialValue } from "@/services/credentials";
 import { skillRootPath } from "@/skills-sandbox/runtime-image";
 import { shellQuote } from "@/utils/shell-quote";
 import { openappaBatteriesService } from "./batteries";
+import { openappaDeclarations } from "./declarations";
 
 type HelperConsultOutcome =
   | { kind: "answered"; answer: Record<string, unknown> }
@@ -100,11 +101,13 @@ class OpenAppaHelperBridge {
     const install = await OpenAppaBatteryInstallModel.findById(
       params.installId,
     );
-    if (!install?.enabled) return { kind: "not_found" };
-    const battery = await openappaBatteriesService.resolveBattery(
-      install.organizationId,
-      install.batteryName,
-    );
+    // A row the recompose deleted takes its helper endpoint with it.
+    if (!install) return { kind: "not_found" };
+    const battery = await openappaDeclarations.resolveInstalled({
+      organizationId: install.organizationId,
+      name: install.batteryName,
+      packageHash: install.packageHash,
+    });
     const external = battery?.externals.find(
       (candidate) => candidate.name === params.externalName,
     );

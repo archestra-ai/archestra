@@ -6,6 +6,7 @@ import {
   type ProfileLabelsRef,
 } from "@/components/agent-labels";
 import { GithubAuthConfigFields } from "@/components/github-auth-config-fields";
+import { ResourceAccessSection } from "@/components/resource-access-section";
 import { FieldDescription } from "@/components/ui/field-description";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -50,6 +51,7 @@ export function PluginForm({
   isGithubPlugin = false,
   githubAppConfigs,
   isCreate = false,
+  pluginId,
 }: {
   draft: PluginDraft;
   onChange: (patch: Partial<PluginDraft>) => void;
@@ -66,6 +68,14 @@ export function PluginForm({
   githubAppConfigs?: { id: string; name: string }[];
   /** Client type is part of a plugin's identity, so it is set once, at create. */
   isCreate?: boolean;
+  /**
+   * The saved plugin whose access policy this form edits.
+   *
+   * Access is a grant now. A saved plugin answers "who can reach this" from
+   * its own policy, so the form shows that policy rather than the retired
+   * visibility fields, which nothing reads once the plugin has converted.
+   */
+  pluginId?: string;
 }) {
   return (
     <div className="flex flex-col gap-4">
@@ -109,14 +119,18 @@ export function PluginForm({
       {/* No heading: the visibility control names the section itself. */}
       <FormPanel>
         <fieldset disabled={readOnly} className="contents">
-          <PluginScopeSelector
-            scope={draft.scope}
-            onScopeChange={(scope) => onChange({ scope })}
-            teamIds={draft.teamIds}
-            onTeamIdsChange={(teamIds) => onChange({ teamIds })}
-            userIds={draft.userIds}
-            onUserIdsChange={(userIds) => onChange({ userIds })}
-          />
+          {pluginId ? (
+            <ResourceAccessSection resource="plugin" id={pluginId} />
+          ) : (
+            <PluginScopeSelector
+              scope={draft.scope}
+              onScopeChange={(scope) => onChange({ scope })}
+              teamIds={draft.teamIds}
+              onTeamIdsChange={(teamIds) => onChange({ teamIds })}
+              userIds={draft.userIds}
+              onUserIdsChange={(userIds) => onChange({ userIds })}
+            />
+          )}
           <ProfileLabels
             ref={labelsRef}
             labels={draft.labels}

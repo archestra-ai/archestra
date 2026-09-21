@@ -11,6 +11,21 @@ vi.mock("@/lib/github-pat.query");
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/organization.query");
 vi.mock("@/components/editor");
+vi.mock("@/components/resource-access-section", () => ({
+  ResourceAccessSection: ({
+    resource,
+    id,
+  }: {
+    resource: string;
+    id?: string;
+  }) => (
+    <div
+      data-testid="plugin-permissions"
+      data-resource={resource}
+      data-id={id}
+    />
+  ),
+}));
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
@@ -175,8 +190,14 @@ describe("PluginDetailPage", () => {
     expect(file).toHaveValue("{}");
     expect(file).not.toHaveAttribute("readonly");
 
-    // Who can discover it is the end of the same page, not a second route.
-    expect(screen.getByText("Who can discover this plugin")).toBeVisible();
+    // Who can reach it is the end of the same page, not a second route. A
+    // saved plugin answers that from its own grants, so the page shows the
+    // permission editor rather than the retired visibility selector, whose
+    // columns no read path consults once the plugin has converted.
+    expect(screen.getByTestId("plugin-permissions")).toBeVisible();
+    expect(
+      screen.queryByText("Who can discover this plugin"),
+    ).not.toBeInTheDocument();
 
     // Nothing sends the reader anywhere to edit: this is where editing happens.
     expect(

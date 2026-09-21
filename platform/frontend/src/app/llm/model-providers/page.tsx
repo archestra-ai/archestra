@@ -820,7 +820,7 @@ export default function ApiKeysPage() {
             if (!open) closeEditDialog();
           }}
           title="Edit API Key"
-          description="Update the name, API key value, or scope"
+          description="Update the name, the API key value, or who can reach it"
           size="small"
           className="sm:max-w-xl"
           isDirty={

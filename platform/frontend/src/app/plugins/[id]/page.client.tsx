@@ -514,6 +514,7 @@ function PluginDetailView({
           labelsRef={labelsRef}
           readOnly={isReadOnly}
           pluginSlug={plugin.pluginSlug}
+          pluginId={plugin.id}
           isGithubPlugin={isGithubPlugin}
           githubAppConfigs={githubAppConfigOptions}
         />

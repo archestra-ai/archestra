@@ -34,6 +34,7 @@ import {
 } from "@/components/agent-labels";
 import { createdByFact } from "@/components/created-by-cell";
 import { DetailFacts } from "@/components/detail-facts";
+import { ResourceAccessSection } from "@/components/resource-access-section";
 import { SCOPE_META, scopeLabel } from "@/components/scope-vocabulary";
 import { SubscriptionSignIn } from "@/components/subscription-sign-in";
 import { FieldDescription } from "@/components/ui/field-description";
@@ -1534,7 +1535,17 @@ export function LlmProviderApiKeyForm({
           </div>
         )}
 
-        {!hideScopeAndPrimary && !isSubscriptionFlow && (
+        {/* A saved key answers "who can reach this" from its own grant policy.
+            The scope field it used to carry is no longer read once the key has
+            converted, so editing one shows the policy instead. */}
+        {!hideScopeAndPrimary && !isSubscriptionFlow && existingKey?.id && (
+          <ResourceAccessSection
+            resource="llmProviderApiKey"
+            id={existingKey.id}
+          />
+        )}
+
+        {!hideScopeAndPrimary && !isSubscriptionFlow && !existingKey?.id && (
           <VisibilitySelector
             label="Scope"
             value={scope}

@@ -590,6 +590,91 @@ describe("EditConnectorDialog - Notion auto-sync limitation note", () => {
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+describe("EditConnectorDialog - permission sync capability", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(useTeams).mockReturnValue({ data: [] } as unknown as ReturnType<
+      typeof useTeams
+    >);
+    mockMutateAsync.mockResolvedValue({ id: "conn-jira-1" });
+  });
+
+  function makeJiraConnector(
+    visibility: ConnectorFixture["visibility"],
+    teamIds: string[] = [],
+  ): ConnectorFixture {
+    return {
+      id: "conn-jira-1",
+      name: "Engineering Jira",
+      description: "",
+      visibility,
+      teamIds,
+      connectorType: "jira",
+      environmentId: null,
+      config: {
+        type: "jira",
+        jiraBaseUrl: "https://test.atlassian.net",
+        isCloud: true,
+        projectKey: "TEST",
+      },
+      schedule: "0 */6 * * *",
+      ftsLanguage: "english",
+      permissionSyncIntervalSeconds: 1800,
+      enabled: true,
+    } as ConnectorFixture;
+  }
+
+  it("keeps permission sync on when an unrelated field is saved", async () => {
+    const user = userEvent.setup();
+    renderDialog(makeJiraConnector("auto-sync-permissions"));
+
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+
+    await waitFor(() => expect(mockMutateAsync).toHaveBeenCalledTimes(1));
+    const { body } = mockMutateAsync.mock.calls[0][0];
+    expect(body.visibility).toBe("auto-sync-permissions");
+    expect(body.permissionSyncIntervalSeconds).toBe(1800);
+  });
+
+  it("stops syncing permissions when the capability is switched off", async () => {
+    const user = userEvent.setup();
+    renderDialog(makeJiraConnector("auto-sync-permissions"));
+
+    await user.click(
+      screen.getByRole("switch", { name: /Sync permissions from the source/ }),
+    );
+    // The fields that only exist for a permission-syncing connector go with it.
+    expect(
+      screen.queryByLabelText(/Organization admin API key/),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+
+    await waitFor(() => expect(mockMutateAsync).toHaveBeenCalledTimes(1));
+    const { body } = mockMutateAsync.mock.calls[0][0];
+    expect(body.visibility).toBe("org-wide");
+    expect(body).not.toHaveProperty("permissionSyncIntervalSeconds");
+  });
+
+  it("leaves a connector's stored sharing value alone on an ordinary save", async () => {
+    const user = userEvent.setup();
+    renderDialog(makeJiraConnector("team-scoped", ["engineering"]));
+
+    // Sharing moved to grants, so the dialog no longer offers this choice —
+    // and must not quietly rewrite the column it no longer shows.
+    expect(
+      screen.queryByRole("button", { name: /Teams Share/ }),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+
+    await waitFor(() => expect(mockMutateAsync).toHaveBeenCalledTimes(1));
+    const { body } = mockMutateAsync.mock.calls[0][0];
+    expect(body.visibility).toBe("team-scoped");
+    expect(body.teamIds).toEqual(["engineering"]);
+  });
+});
+
 describe("EditConnectorDialog - SharePoint publication status", () => {
   beforeEach(() => {
     vi.clearAllMocks();

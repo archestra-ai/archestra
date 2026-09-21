@@ -7,7 +7,7 @@ import {
 } from "@archestra/shared";
 import { useEffect, useRef, useState } from "react";
 import { type Path, useForm } from "react-hook-form";
-import { KnowledgeSourceVisibilitySelector } from "@/app/knowledge/_parts/knowledge-source-visibility-selector";
+import { AutoSyncPermissionsToggle } from "@/app/knowledge/_parts/auto-sync-permissions-toggle";
 import {
   type ProfileLabel,
   ProfileLabels,
@@ -15,6 +15,7 @@ import {
 } from "@/components/agent-labels";
 import { EnvironmentSelector } from "@/components/environment-selector";
 import { ExternalDocsLink } from "@/components/external-docs-link";
+import { ResourceAccessSection } from "@/components/resource-access-section";
 import { TabbedDialogShell } from "@/components/tabbed-dialog-shell";
 import { Button } from "@/components/ui/button";
 import {
@@ -109,13 +110,14 @@ export function EditConnectorDialog({
   const updateConnector = useUpdateConnector();
   // Perforce permission sync needs the K8s orchestrator (in-cluster p4 pod).
   const orchestratorK8sRuntime = useFeature("orchestratorK8sRuntime") ?? false;
-  const [visibility, setVisibility] = useState(connector.visibility);
-  const [teamIds, setTeamIds] = useState<string[]>(connector.teamIds);
+  const [autoSyncPermissions, setAutoSyncPermissions] = useState(
+    connector.visibility === "auto-sync-permissions",
+  );
   const [labels, setLabels] = useState<ProfileLabel[]>(connector.labels ?? []);
   const labelsRef = useRef<ProfileLabelsRef>(null);
-  const [activeSection, setActiveSection] = useState<"general" | "advanced">(
-    "general",
-  );
+  const [activeSection, setActiveSection] = useState<
+    "general" | "permissions" | "advanced"
+  >("general");
 
   const form = useForm<EditConnectorFormValues>({
     defaultValues: {
@@ -136,8 +138,7 @@ export function EditConnectorDialog({
   useEffect(() => {
     if (open) {
       setActiveSection("general");
-      setVisibility(connector.visibility);
-      setTeamIds(connector.teamIds);
+      setAutoSyncPermissions(connector.visibility === "auto-sync-permissions");
       setLabels(connector.labels ?? []);
       form.reset({
         name: connector.name,
@@ -179,12 +180,11 @@ export function EditConnectorDialog({
     authMethod !== undefined;
   const urlConfig = usesGithubApp ? null : getConnectorUrlConfig(connectorType);
   const emailRequired = needsEmail && isCloud !== false;
-  // Only the auto-sync visibility mirrors the source's access control, so the
-  // upstream-permission requirement is noise on any other visibility.
-  const autoSyncRequirement =
-    visibility === "auto-sync-permissions" ? (
-      <AutoSyncCredentialRequirement type={connectorType} />
-    ) : undefined;
+  // Only a permission-syncing connector reads the source's access control, so
+  // the upstream-permission requirement is noise with the capability off.
+  const autoSyncRequirement = autoSyncPermissions ? (
+    <AutoSyncCredentialRequirement type={connectorType} />
+  ) : undefined;
   // Sources whose credential is minted inside the customer's own workspace
   // link to that workspace, taken from the URL field above.
   const connectorInstanceUrl = form.watch("config.outlineUrl") as
@@ -218,6 +218,16 @@ export function EditConnectorDialog({
     instanceUrl: connectorInstanceUrl,
   });
 
+  // `visibility` still carries the permission-sync capability, which is real
+  // behaviour: the sync pass, the container ACLs and the group snapshots all
+  // key off `auto-sync-permissions`. Its other values are the retired sharing
+  // modes, so turning the capability off falls back to the plainest of them.
+  const nextVisibility = autoSyncPermissions
+    ? ("auto-sync-permissions" as const)
+    : connector.visibility === "auto-sync-permissions"
+      ? ("org-wide" as const)
+      : connector.visibility;
+
   const handleSubmit = async (values: EditConnectorFormValues) => {
     const finalLabels = labelsRef.current?.saveUnsavedLabel() ?? labels;
     // Any single credential field can be updated alone — the backend merges
@@ -233,8 +243,10 @@ export function EditConnectorDialog({
       body: {
         name: values.name,
         description: values.description || null,
-        visibility,
-        teamIds: visibility === "team-scoped" ? teamIds : [],
+        visibility: nextVisibility,
+        // Nothing reads the legacy sharing columns any more, so leave whatever
+        // the row already carries alone rather than rewriting it on every save.
+        teamIds: nextVisibility === "team-scoped" ? connector.teamIds : [],
         enabled: values.enabled,
         config: transformConfigArrayFields(
           values.config,
@@ -242,7 +254,7 @@ export function EditConnectorDialog({
         environmentId: values.environmentId,
         schedule: values.schedule,
         ftsLanguage: values.ftsLanguage,
-        ...(visibility === "auto-sync-permissions" && {
+        ...(autoSyncPermissions && {
           permissionSyncIntervalSeconds: values.permissionSyncIntervalSeconds,
         }),
         ...(hasCredentials && {
@@ -274,6 +286,7 @@ export function EditConnectorDialog({
       activeSection={activeSection}
       navItems={[
         { id: "general", label: "General" },
+        { id: "permissions", label: "Permissions" },
         { id: "advanced", label: "Advanced" },
       ]}
       onActiveSectionChange={setActiveSection}
@@ -374,21 +387,19 @@ export function EditConnectorDialog({
           )}
         />
 
-        <KnowledgeSourceVisibilitySelector
-          visibility={visibility}
-          onVisibilityChange={setVisibility}
-          teamIds={teamIds}
-          onTeamIdsChange={setTeamIds}
-          showTeamRequired
-          supportsAutoSync={connectorSupportsAutoSync(
+        <AutoSyncPermissionsToggle
+          enabled={autoSyncPermissions}
+          onEnabledChange={setAutoSyncPermissions}
+          supported={connectorSupportsAutoSync(
             connectorType,
             orchestratorK8sRuntime,
           )}
-          autoSyncPermissionAction="update"
+          permissionAction="update"
         />
 
-        {visibility === "auto-sync-permissions" &&
-          connectorType === "notion" && <NotionAutoSyncPermissionsNote />}
+        {autoSyncPermissions && connectorType === "notion" && (
+          <NotionAutoSyncPermissionsNote />
+        )}
 
         <div className="border-t" />
 
@@ -453,38 +464,42 @@ export function EditConnectorDialog({
           />
         )}
 
-        {visibility === "auto-sync-permissions" &&
-          connectorSupportsAdminApiKey(connectorType) && (
-            <FormField
-              control={form.control}
-              name="adminApiKey"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Organization admin API key (optional)</FormLabel>
-                  <FormDescription>
-                    <AdminApiKeyDescription type={connectorType} /> Leave empty
-                    to keep the existing key.
-                  </FormDescription>
-                  <FormControl>
-                    <SecretInput
-                      placeholder="Atlassian organization admin API key"
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          )}
+        {autoSyncPermissions && connectorSupportsAdminApiKey(connectorType) && (
+          <FormField
+            control={form.control}
+            name="adminApiKey"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Organization admin API key (optional)</FormLabel>
+                <FormDescription>
+                  <AdminApiKeyDescription type={connectorType} /> Leave empty to
+                  keep the existing key.
+                </FormDescription>
+                <FormControl>
+                  <SecretInput
+                    placeholder="Atlassian organization admin API key"
+                    {...field}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        )}
 
-        {visibility === "auto-sync-permissions" &&
-          connectorType === "perforce" && (
-            <PerforcePermissionSyncFields
-              form={form}
-              mode="edit"
-              adminCredentialDescription={permissionSyncRequirement}
-            />
-          )}
+        {autoSyncPermissions && connectorType === "perforce" && (
+          <PerforcePermissionSyncFields
+            form={form}
+            mode="edit"
+            adminCredentialDescription={permissionSyncRequirement}
+          />
+        )}
+      </div>
+      <div hidden={activeSection !== "permissions"}>
+        <ResourceAccessSection
+          resource="knowledgeConnector"
+          id={connector.id}
+        />
       </div>
       <div hidden={activeSection !== "advanced"} className="space-y-4">
         <SchedulePicker
@@ -492,7 +507,7 @@ export function EditConnectorDialog({
           name="schedule"
           connectorTypeLabel={typeLabel}
         />
-        {visibility === "auto-sync-permissions" && (
+        {autoSyncPermissions && (
           <PermissionSyncIntervalPicker
             form={form}
             name="permissionSyncIntervalSeconds"

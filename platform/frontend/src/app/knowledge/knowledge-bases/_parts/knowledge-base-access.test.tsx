@@ -109,30 +109,61 @@ it("requires a team and submits both selected teams through the real mutation", 
   await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
 });
 
-it("loads existing sharing and clears the team audience when changed to organization-wide", async () => {
+it("edits access through the knowledge base's own policy, not its sharing columns", async () => {
   const user = userEvent.setup();
+  server.use(
+    http.get(`${origin}/api/resource-permissions/knowledgeBase/kb-1`, () =>
+      HttpResponse.json({
+        resource: "knowledgeBase",
+        scope: "kb-1",
+        name: "Handbook",
+        revision: 3,
+        grants: [
+          {
+            subject: { type: "team", id: "engineering" },
+            actions: ["read", "use"],
+            name: "Engineering",
+          },
+        ],
+        inheritedGrants: [],
+        legacyAccess: [],
+        effectiveActions: [
+          "read",
+          "use",
+          "update",
+          "delete",
+          "manage-permissions",
+        ],
+      }),
+    ),
+  );
+
   render(
     <EditKnowledgeBaseDialog
       open
       onOpenChange={vi.fn()}
-      knowledgeBase={{
-        id: "kb-1",
-        name: "Handbook",
-        description: null,
-        visibility: "team-scoped",
-        teamIds: ["engineering", "support"],
-      }}
+      knowledgeBase={{ id: "kb-1", name: "Handbook", description: null }}
     />,
     { wrapper },
   );
+
+  // Who can reach this knowledge base comes from the policy, so the reader
+  // sees the real recipients rather than a stale visibility enum.
   expect(await screen.findByText("Engineering")).toBeVisible();
-  expect(await screen.findByText("Support")).toBeVisible();
-  await user.click(screen.getByRole("button", { name: /Teams Share/ }));
-  await user.click(screen.getByRole("button", { name: /Organization Anyone/ }));
+  expect(
+    screen.queryByRole("button", { name: /Teams Share/ }),
+  ).not.toBeInTheDocument();
+
+  // Saving the rest of the form must not send sharing columns nothing reads —
+  // that is what made the old control look like it changed access.
+  await user.clear(screen.getByLabelText("Name"));
+  await user.type(screen.getByLabelText("Name"), "Company handbook");
   await user.click(screen.getByRole("button", { name: "Save Changes" }));
   await waitFor(() =>
-    expect(submitted).toMatchObject({ visibility: "org-wide", teamIds: [] }),
+    expect(submitted).toMatchObject({ name: "Company handbook" }),
   );
+  expect(submitted).not.toHaveProperty("visibility");
+  expect(submitted).not.toHaveProperty("teamIds");
 });
 
 it("creates a personal knowledge base without requiring a team", async () => {

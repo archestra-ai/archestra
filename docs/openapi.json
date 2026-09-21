@@ -47663,6 +47663,7 @@
                                         "additionalProperties": false
                                       },
                                       "ports": {
+                                        "maxItems": 20,
                                         "type": "array",
                                         "items": {
                                           "type": "integer",
@@ -49328,6 +49329,7 @@
                                 "additionalProperties": false
                               },
                               "ports": {
+                                "maxItems": 20,
                                 "type": "array",
                                 "items": {
                                   "type": "integer",
@@ -50417,6 +50419,7 @@
                         }
                       },
                       "ports": {
+                        "maxItems": 20,
                         "type": "array",
                         "items": {
                           "type": "integer",
@@ -51140,6 +51143,7 @@
                           "additionalProperties": false
                         },
                         "ports": {
+                          "maxItems": 20,
                           "type": "array",
                           "items": {
                             "type": "integer",
@@ -52860,6 +52864,7 @@
                             "additionalProperties": false
                           },
                           "ports": {
+                            "maxItems": 20,
                             "type": "array",
                             "items": {
                               "type": "integer",
@@ -54211,6 +54216,7 @@
                           "additionalProperties": false
                         },
                         "ports": {
+                          "maxItems": 20,
                           "type": "array",
                           "items": {
                             "type": "integer",
@@ -55631,6 +55637,7 @@
                               "additionalProperties": false
                             },
                             "ports": {
+                              "maxItems": 20,
                               "type": "array",
                               "items": {
                                 "type": "integer",
@@ -56734,6 +56741,7 @@
                           "additionalProperties": false
                         },
                         "ports": {
+                          "maxItems": 20,
                           "type": "array",
                           "items": {
                             "type": "integer",
@@ -57769,6 +57777,7 @@
                         }
                       },
                       "ports": {
+                        "maxItems": 20,
                         "type": "array",
                         "items": {
                           "type": "integer",
@@ -58309,6 +58318,7 @@
                           "additionalProperties": false
                         },
                         "ports": {
+                          "maxItems": 20,
                           "type": "array",
                           "items": {
                             "type": "integer",
@@ -60704,6 +60714,7 @@
                           "additionalProperties": false
                         },
                         "ports": {
+                          "maxItems": 20,
                           "type": "array",
                           "items": {
                             "type": "integer",
@@ -61800,6 +61811,7 @@
                           "additionalProperties": false
                         },
                         "ports": {
+                          "maxItems": 20,
                           "type": "array",
                           "items": {
                             "type": "integer",
@@ -69726,6 +69738,7 @@
                           "additionalProperties": false
                         },
                         "ports": {
+                          "maxItems": 20,
                           "type": "array",
                           "items": {
                             "type": "integer",

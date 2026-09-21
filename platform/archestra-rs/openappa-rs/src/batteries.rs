@@ -46,7 +46,8 @@ pub(crate) fn bundled() -> &'static [BatteryInfo] {
                     .is_some_and(|package| match &package.role {
                         Role::Battery(declared) => battery
                             .file(declared.policy.as_str())
-                            .is_some_and(governs_mcp_tools),
+                            .and_then(|policy| toml::from_str::<toml::Table>(policy).ok())
+                            .is_some_and(|document| governs_mcp_tools(&document)),
                         Role::Plugin(_) => false,
                     })
             })
@@ -111,7 +112,8 @@ pub(crate) fn inspect(files: &[BatteryFile]) -> Result<BatteryInfo, String> {
                 package.name
             )
         })?;
-    if !governs_mcp_tools(&policy) {
+    let document: toml::Table = toml::from_str(&policy).map_err(|error| error.to_string())?;
+    if !governs_mcp_tools(&document) {
         return Err(format!(
             "battery {} names no MCP tool, and MCP tools are the tools this host serves",
             package.name
@@ -121,7 +123,7 @@ pub(crate) fn inspect(files: &[BatteryFile]) -> Result<BatteryInfo, String> {
         name: package.name.to_string(),
         description: package.description.clone(),
         namespaces: battery.namespaces.iter().map(ToString::to_string).collect(),
-        externals: helper_externals(&policy)?,
+        externals: helper_externals(&document)?,
         policy,
         helpers: battery.helpers.iter().map(ToString::to_string).collect(),
         credentials: battery.credentials.clone(),
@@ -133,10 +135,7 @@ pub(crate) fn inspect(files: &[BatteryFile]) -> Result<BatteryInfo, String> {
 /// Whether a battery has anything to say under this host: it names at least one MCP
 /// tool, the only kind of tool Archestra serves. A battery written for another host's
 /// own tools composes but never matches here, so it is not offered.
-fn governs_mcp_tools(policy: &str) -> bool {
-    let Ok(document) = toml::from_str::<toml::Table>(policy) else {
-        return false;
-    };
+fn governs_mcp_tools(document: &toml::Table) -> bool {
     document
         .get("policy")
         .and_then(toml::Value::as_table)
@@ -151,12 +150,11 @@ fn governs_mcp_tools(policy: &str) -> bool {
         })
 }
 
-fn helper_externals(policy: &str) -> Result<Vec<HelperExternal>, String> {
-    let document: toml::Table = toml::from_str(policy).map_err(|error| error.to_string())?;
-    crate::policy::refuse_host_variables(&document)?;
-    crate::policy::refuse_url_externals(&document)?;
+fn helper_externals(document: &toml::Table) -> Result<Vec<HelperExternal>, String> {
+    crate::policy::refuse_host_variables(document)?;
+    crate::policy::refuse_url_externals(document)?;
     let mut externals: Vec<HelperExternal> = Vec::new();
-    for (kind, name, entry) in crate::policy::external_bindings(&document) {
+    for (kind, name, entry) in crate::policy::external_bindings(document) {
         let Some(command) = entry.get("command").and_then(toml::Value::as_array) else {
             continue;
         };

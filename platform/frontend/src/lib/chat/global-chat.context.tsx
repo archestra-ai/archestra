@@ -147,9 +147,9 @@ interface ChatSession {
     typeof useChat
   >["addToolApprovalResponse"];
   /**
-   * Questions the backend is waiting on in this conversation, oldest first.
-   * Choice questions render together as one inline card (a tab each); any
-   * other request opens the modal form, one at a time.
+   * Pending questions in this conversation, oldest first.
+   * Multiple-choice questions render together in one inline card with tabs.
+   * Other requests open the modal dialog form one at a time.
    */
   pendingMcpElicitations: ChatMcpElicitationRequest[];
   resolveMcpElicitation: (response: ElicitationResponse) => Promise<boolean>;
@@ -459,10 +459,9 @@ function ChatSessionHook({
   const [mcpElicitations, setMcpElicitations] = useState<
     ChatMcpElicitationRequest[]
   >([]);
-  // Ids the backend is known to be done with: answered here, reported
-  // resolved, or refused as no longer waiting. An active-run replay re-streams
-  // every question from the start of the turn; this keeps one that was already
-  // settled from coming back as a card.
+  // IDs the backend has resolved, answered, or expired.
+  // Replays re-stream questions from the turn start; this set prevents settled
+  // questions from returning to the card view.
   const settledMcpElicitationIdsRef = useRef(new Set<string>());
   const elicitationFailureClearTimersRef = useRef(
     new Map<string, ReturnType<typeof setTimeout>>(),
@@ -1536,9 +1535,8 @@ function ChatSessionHook({
         return false;
       }
       clearElicitationFailureTimer(response.id);
-      // A 409 means the backend is no longer waiting on this question. Only
-      // say so when nothing else has retired it yet (no resolved event, no
-      // finished tool call) — otherwise the card vanishing explains itself.
+      // A 409 means the backend is no longer waiting on this question.
+      // Only notify when no earlier event or completed tool call retired it.
       const unexplained =
         outcome === "stale" &&
         pendingMcpElicitationsRef.current.some(

@@ -54,9 +54,9 @@ export type ElicitationField = {
 };
 
 /**
- * A request every field of which is a pick (an enum or a boolean): the
- * multiple-choice questions `ask_user` sends. Those render inline in the chat
- * as a card; anything else gets the modal form.
+ * A request where every field is a choice (enum or boolean).
+ * Multiple-choice questions render inline as a card in Chat.
+ * Other requests open the modal dialog form.
  */
 export function isChoiceElicitationRequest(request: ChatMcpElicitationRequest) {
   return isChoiceForm(getElicitationFields(request.requestedSchema));
@@ -165,8 +165,8 @@ export function validateValues(
 }
 
 /**
- * Whether a choice form is complete enough to submit. Required fields must
- * have a value; an all-optional form is complete even with nothing checked.
+ * Checks whether a choice form has required selections before submitting.
+ * Required fields must have a value. An all-optional form is complete even with nothing selected.
  */
 export function hasChoiceSelection(
   fields: ElicitationField[],
@@ -438,9 +438,9 @@ type FieldSchema = {
 };
 
 /**
- * One pickable option. The whole row is the control's label, so a click
- * anywhere on the row picks it. Selected and hover states share the muted
- * background; the border only shows once the row is picked.
+ * One selectable option row. Clicking anywhere on the row selects it.
+ * Selected and hover states share the muted background.
+ * The border appears only when the row is selected.
  */
 function OptionRow({
   htmlFor,

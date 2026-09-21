@@ -59,8 +59,8 @@ export type AppaPreparedRequest = {
   /** Signed offer routing collected from notices before restoration. */
   offerClaims?: OfferJws[];
   /**
-   * The offers from this turn's notices alone: the ones an ask_user call may
-   * still decide. An earlier turn's offer was spent or released with it.
+   * Offer claims from current-turn notices only. Earlier offers have expired
+   * or already executed.
    */
   askUserOfferClaims?: OfferJws[];
 };

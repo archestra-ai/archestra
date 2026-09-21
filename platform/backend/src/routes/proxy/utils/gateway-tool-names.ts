@@ -29,8 +29,8 @@ export type ToolNameCanonicalizer = (toolName: string) => string;
  * The decoration is stripped when the label segment matches the client server
  * name of one of the organization's gateway-capable agents
  * (`toMcpClientServerName` of its configured name). This is an identity hint,
- * not authentication: a client controls its local server labels. Callers must
- * not grant a user-input or other security exemption solely because this
+ * not authentication. Clients control their local server labels. Callers must
+ * not grant user-input or security exemptions solely because this
  * function produced a built-in name.
  *
  * A bare built-in short name left after stripping (a client that decorates

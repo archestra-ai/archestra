@@ -4,10 +4,9 @@ import {
 } from "@archestra/shared";
 
 /**
- * A tool call's input without the arguments the proxy stamps on for its own
- * bookkeeping (signed remedy offers and their JWS envelope). They are
- * signature bytes and retry records, meaningless to the person reading the
- * card. Returns `input` itself when there is nothing to hide.
+ * Returns tool call input without proxy transport arguments such as signed
+ * remedy offers and JWS envelopes. Returns `input` unchanged when no transport
+ * arguments exist.
  */
 export function withoutProxyTransportArguments<T>({
   shortName,

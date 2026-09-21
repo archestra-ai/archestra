@@ -389,10 +389,9 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
   // === Internal helpers ===
 
   /**
-   * The model's ask_user call, handed to a client that cannot show it as a
-   * form as a call to the client's own question tool, under the same call id.
-   * Anything else, and any client without such a tool on this request, keeps
-   * the call as the model made it.
+   * Converts an ask_user call to the client's native question tool when the
+   * client cannot show MCP choice forms. Preserves the original tool call ID.
+   * Leaves the call unchanged for clients without native question tools.
    */
   private asNativeQuestion(
     binding: AppaPluginBinding,
@@ -577,9 +576,8 @@ function stampControlExecution(
   )
     return call;
   const argumentRecord = argumentsValue as Record<string, unknown>;
-  // The proxy is the sole writer of the receipt and the JWS members. A model
-  // echoing a previous remedy call would otherwise resend a stale,
-  // still-valid signature the proxy never minted for this turn.
+  // The proxy alone writes the receipt and JWS members. This prevents
+  // replaying stale signatures from previous remedy calls.
   const clientArguments = withoutStampedArguments({
     tool: TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
     args: argumentRecord,
@@ -612,10 +610,9 @@ function stampControlExecution(
 }
 
 /**
- * Attaches the offer envelopes from this turn's notices to an ask_user call,
- * so the tool can carry a verified remedy continuation in its result — the
- * same stateless signed-payload pattern the remedy control call uses. The
- * proxy is the sole writer of this key; a client-echoed copy is stripped first.
+ * Attaches signed offer envelopes from this turn's notices to an ask_user call.
+ * This lets the tool include a verified remedy continuation in its result.
+ * The proxy is the sole writer of this field; client-supplied copies are stripped first.
  */
 function stampAskUserOffers(
   call: LlmProxyToolCallsContext["toolCalls"][number],
@@ -708,7 +705,7 @@ const QUESTION_CONTINUATION_GUIDANCE = [
   "Retry the blocked call once only after the remedy reports successful authorization.",
   "If the remedy fails, its result is withheld, or the retry is blocked again, stop and report that failure; do not apply new offers or repeat the workflow under the earlier acceptance.",
   "For a tool discovered through search_tools that is not directly declared, execute that retry using the same gateway's declared run_tool: put the discovered tool name in tool_name and the original arguments in tool_args.",
-  "Resource listing is not tool execution; do not substitute list_mcp_resources for that retry.",
+  "Resource listing is not tool execution. Do not substitute list_mcp_resources for that retry.",
   "Never invent a plan, treat an error or missing answer as consent, or repeat a completed remedy or retry.",
   "If a question is declined, dismissed, cancelled, or unanswered, do not proceed with its dependent action.",
   "State briefly that it will not proceed, then stop that action without repeating options, asking again, or adding a follow-up question or invitation (including 'let me know').",

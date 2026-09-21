@@ -2045,15 +2045,13 @@ export function parseOpenAppaConfig(
       `ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET must be at least ${MIN_OPENAPPA_OFFER_SIGNING_SECRET_LENGTH} characters`,
     );
   }
-  // Same pattern as MRTR request state: derive from the session-signing
-  // secret when no dedicated key is set, so an existing deployment gains
-  // offer signing without new configuration. Domain-separated, so the
-  // derived key never collides with the session or MRTR keys.
+  // Derives from the session authentication secret when no dedicated key is set.
+  // Uses a domain-separated HMAC so the key never collides with session or MRTR keys.
   const secret = dedicated || deriveOfferSigningSecret(authSecret);
   const isEnabled = enabled === "true";
   if (isEnabled && secret.length === 0) {
     logger.warn(
-      "OpenAPPA is enabled without a signing key: set ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET or an auth secret, or signed remedy and native-question flows will fail closed (503)",
+      "OpenAPPA is enabled without a signing key. Set ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET or configure an auth secret, or signed remedy and native-question requests will fail closed (503).",
     );
   }
   return {

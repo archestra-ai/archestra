@@ -30,14 +30,14 @@ import {
 const AUTO_ADVANCE_DELAY_MS = 300;
 
 /**
- * Every multiple-choice question the assistant is waiting on, in one inline
- * card with one tab per question. Picking an option on a single-choice tab
- * answers it and moves on to the next tab; multi-choice tabs move on with
- * Next. The footer of every tab but the last holds navigation only; Submit
- * lives on the last tab and sends one answer per question once every tab has
- * one. Dismissing is the header's close button. A question that arrives while
- * the card is open is appended as a new tab; picks and the active tab survive
- * it. One that leaves while it is shown hands its place to its neighbour.
+ * Displays pending multiple-choice questions in one inline card with one tab per question.
+ * Selecting an option on a single-choice tab answers it and advances to the next tab.
+ * Multiple-choice tabs advance when the user clicks Next.
+ * Navigation buttons appear in the footer of each tab.
+ * The Submit button on the final tab sends all answers when every question is answered.
+ * The close button in the header dismisses the questions.
+ * New questions append as tabs without resetting selections.
+ * If a displayed question leaves, the card switches to an adjacent tab.
  */
 export function McpElicitationCard({
   requests,
@@ -70,21 +70,16 @@ export function McpElicitationCard({
     null,
   );
   const advanceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Read by the delayed auto-advance, which must see the tabs as they are when
-  // it fires (a question may have been appended or answered meanwhile).
+  // Read by delayed auto-advance to inspect current tabs when the timer fires.
   const questionIdsRef = useRef<string[]>([]);
-  // Set when a navigation should move focus into the newly shown question, so
-  // keyboard users are not left on a control that just unmounted.
+  // Move focus to the active question so keyboard users stay focused after tab changes.
   const focusPanelOnChangeRef = useRef(false);
-  // Clicking an option answers a single-choice tab and advances; moving
-  // between options with the arrow keys also selects (radio semantics) but
-  // must not advance, or the user could never reach the second option.
+  // Clicking an option answers a single-choice tab and advances. Moving
+  // between options with arrow keys selects the option without advancing.
   const lastInputRef = useRef<"pointer" | "keyboard">("pointer");
-  // Whether focus was last inside the card. A focused control that unmounts
-  // (its question left) fires no blur, so this still reads true afterwards.
+  // Tracks if focus was inside the card, even if a focused control unmounts.
   const focusWithinRef = useRef(false);
-  // The tab shown in the previous render, where a question that leaves while
-  // it is shown hands over to the tab now in its place.
+  // Index of the tab displayed in the previous render.
   const shownIndexRef = useRef(0);
 
   useEffect(() => {

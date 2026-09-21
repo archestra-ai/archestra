@@ -7,17 +7,13 @@ const MAX_ENTRIES = 1_000;
 const MAX_RETAINED_BYTES = 1024 * 1024;
 
 /**
- * Stateless mode builds a fresh Server per POST, so capabilities a client
- * declared at `initialize` are gone by the next request. A 2026-07-28 client
- * re-declares them on every request under `_meta`; a legacy client (Claude
- * Code over streamable HTTP, and similar) declares them once at initialize.
- * This store remembers the initialize declaration per profile, token and
- * client (User-Agent) so a later `tools/call` can still tell whether the
- * client answers a server-initiated request.
+ * Stores initialize-time client capabilities in memory for stateless MCP requests.
+ * Modern clients include capabilities in `_meta` on each request.
+ * Legacy clients declare capabilities once at initialize.
+ * This store retains capabilities by profile, token, and user agent so later
+ * `tools/call` requests know whether the client supports server-initiated requests.
  *
- * In-memory on purpose: in-band elicitation answers are routed in-process
- * anyway (see pending-inbound-requests.ts), so cross-replica persistence
- * would promise more than the delivery path can keep.
+ * In-memory storage matches in-process routing for in-band elicitation responses.
  */
 class ClientCapabilityStore {
   private readonly entries = new LRUCacheManager<unknown>({
@@ -52,14 +48,12 @@ export function clientCapabilityKey(params: {
 }
 
 /**
- * A legacy client's initialize-time capabilities, carried in the
- * `Mcp-Session-Id` it echoes on every later request.
+ * Encodes initialize-time capabilities into a signed `Mcp-Session-Id` header.
  *
- * The gateway keeps no session behind the id: it is a signed record of what
- * the client declared, bound to this gateway and this caller, so it survives
- * a restart and reaches every replica, where the in-memory store above does
- * neither. The bearer token still authenticates every request; the id grants
- * nothing, and an id that fails to verify is ignored rather than refused.
+ * The gateway maintains no session state behind the ID. The ID is a signed
+ * payload bound to this gateway and caller, allowing it to survive restarts
+ * and reach other replicas. The bearer token still authenticates every request.
+ * Invalid session IDs are ignored.
  */
 export function encodeCapabilitySession(params: {
   profileId: string;

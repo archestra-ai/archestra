@@ -14,10 +14,10 @@ export type AskUserGroup = {
 };
 
 /**
- * Reconstructs the stable transcript slot for related ask_user calls. Tool
- * results may arrive apart from their inputs, so pair them by toolCallId rather
- * than adjacency. Step boundaries are the durable batch marker; old messages
- * without them only group inputs that precede their shared result phase.
+ * Reconstructs the stable transcript slot for related ask_user calls.
+ * Pairs tool results by toolCallId rather than adjacency.
+ * Step boundaries serve as the batch marker. Earlier messages without step
+ * boundaries group inputs preceding their shared result phase.
  */
 export function identifyAskUserGroups({
   messageId,

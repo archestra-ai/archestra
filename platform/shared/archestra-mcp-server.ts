@@ -1037,12 +1037,10 @@ export function isAlwaysExposedArchestraToolShortName(
 }
 
 /**
- * Per tool, the arguments the OpenAPPA proxy writes onto the model's calls on
- * their way to the client: ask_user's signed remedy offers, and a remedy
- * call's execution receipt beside its offer's flattened JWS. The model never
- * writes them. The one list the proxy strips from declarations and provider
- * history, reads remedy receipts past, and the chat card hides — kept in one
- * place so none of them drifts from the stamping.
+ * Maps tools to arguments stamped by the OpenAPPA proxy before dispatching to the client.
+ * Includes signed remedy offers on `ask_user` and execution receipts on `execute_remedy_plan`.
+ * The model never writes these arguments. The proxy strips them from provider history
+ * and tool declarations to keep provider state clean.
  */
 export const PROXY_STAMPED_TOOL_ARGUMENTS = {
   [TOOL_ASK_USER_SHORT_NAME]: ["remedy_offers"],

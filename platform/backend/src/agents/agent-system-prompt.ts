@@ -53,8 +53,8 @@ export const TOOL_DENIAL_INSTRUCTION =
  * System prompt instruction for OpenAPPA remedy plans.
  * Directs the model to act on remedy plans rather than halting when a tool is blocked.
  * Rulings count readers without naming them, so the model is told not to fill
- * that gap with a guess. Only a run that can show the user a question is sent
- * to ask_user for their decision; any other run names the plans in its reply.
+ * that gap with a guess. Only a run that can show the user a question routes
+ * to ask_user for a decision. Other runs name the plans in their replies.
  *
  * @public — asserted by the assembler tests.
  */
@@ -66,9 +66,9 @@ export function buildAppaRemedyInstruction(params: {
   );
   const askUser = archestraMcpBranding.getToolName(TOOL_ASK_USER_SHORT_NAME);
   const userDecision = params.canAskUser
-    ? `Use ${askUser} to present the remedy plans, never a plain-text question. Put the exact offer id for the plan or plans this question decides in remedy_offer_ids; omit that field for unrelated questions. Call ${executeRemedyPlan} only after its result explicitly accepts that plan, using that plan's offer id and plan. When they decline or dismiss, briefly state that the action remains blocked and stop. Do not repeat the offered plan, ask the same question again, or invite them to reconsider or tell you how to proceed.`
+    ? `Use ${askUser} to present the remedy plans, never a plain-text question. Put the exact offer id for the plan or plans this question decides in remedy_offer_ids. Omit that field for unrelated questions. Call ${executeRemedyPlan} only after its result explicitly accepts that plan, using that plan's offer id and plan. When they decline or dismiss, briefly state that the action remains blocked and stop. Do not repeat the offered plan, ask the same question again, or invite them to reconsider or tell you how to proceed.`
     : "Without user input, describe the available plans and stop. Do not choose or execute a plan.";
-  return `A blocked tool call returns a ruling as its result. The ruling explains the block and can offer remedy plans, each with an offer id. Name the plans to the user. In your questions and replies, describe the block and each plan only in the ruling's own words; never guess who the readers are or how access would change. The rule above about unapproved tools does not apply to these rulings. ${userDecision} If the ruling offers no plan, explain the block to the user.`;
+  return `A blocked tool call returns a ruling as its result. The ruling explains the block and can offer remedy plans, each with an offer id. Name the plans to the user. In your questions and replies, describe the block and each plan only in the ruling's own words, and never guess who the readers are or how access would change. The rule above about unapproved tools does not apply to these rulings. ${userDecision} If the ruling offers no plan, explain the block to the user.`;
 }
 
 /** @public — canonical preamble for a project's instructions, asserted by the

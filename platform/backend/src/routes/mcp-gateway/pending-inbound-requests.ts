@@ -18,20 +18,15 @@ type PendingInbound = {
 };
 
 /**
- * Server-initiated requests (elicitation/create, sampling, ...) sent mid-call
- * are answered by the client with a separate POST. The gateway builds a fresh
- * Server per POST (stateless mode), so that answer would land on a Server
- * that has no pending request with the elicitation id. This registry maps the
- * id of every outbound server-initiated request to the transport that sent
- * it, so the answer POST can be fed back into the Server still waiting on it.
+ * Maps outbound server-initiated requests (elicitation, sampling) to active transports.
+ * In stateless mode, clients answer server-initiated requests with a separate POST.
+ * Because each POST creates a fresh server, this registry routes the answer
+ * to the original transport waiting for it.
  *
- * Every fresh Server numbers its requests from 0, so the request goes out
- * under a random wire id instead: concurrent calls never collide, and an
- * answer is accepted only from the caller that was asked, on the gateway that
- * asked it.
+ * Each request receives a unique wire ID to prevent collisions across concurrent calls.
+ * Answers are accepted only from the caller that received the request on this gateway.
  *
- * In-memory on purpose: the value is a live transport. Cross-replica
- * elicitation answers are not routed; that requires a real session.
+ * This registry is in-memory because it holds references to live transports.
  */
 class PendingInboundRequests {
   private readonly entries = new Map<string, PendingInbound>();

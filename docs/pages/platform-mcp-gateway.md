@@ -198,17 +198,17 @@ Header passthrough applies to remote MCP servers and local MCP servers using str
 
 MCP servers behind a gateway can use MCP elicitation to ask the connected client for more information during a tool call. Archestra passes these requests through only when the caller supports elicitation, so non-interactive clients are not asked to complete forms.
 
-The built-in [`ask_user`](/docs/platform-archestra-mcp-server#ask_user) tool asks the user to pick from a short list of options. Supported interactive clients present the question through their own UI:
+The built-in [`ask_user`](/docs/platform-archestra-mcp-server#ask_user) tool asks the user to select from a list of options. Supported interactive clients show the question in their own interface:
 
-- Claude Code and Codex show their own MCP form.
-- OpenCode has no MCP forms, so Archestra hands the question to OpenCode's own question tool.
-- Archestra Chat shows the options as a card in the conversation. Questions asked together share one card, with a tab for each.
+- Claude Code and Codex show their native MCP form.
+- OpenCode does not support MCP forms. Archestra routes the question to OpenCode's native question tool.
+- Archestra Chat displays questions as an inline card in the conversation. Multiple questions share one card with tabs.
 
-Headless sessions cannot show a form. They receive guidance to list the options in their reply instead.
+Headless sessions cannot show forms. Models receive guidance to list options in their text replies instead.
 
-Codex declines every form while its approval policy is `never` — use `on-request` to answer them.
+Codex declines forms when its approval policy is `never`. Set the policy to `on-request` to answer forms.
 
-The model still decides whether to ask with a form. Client models sometimes ask in plain text instead — Codex, for example, asks permission questions in plain text by design.
+The model decides whether to use a form. Some client models ask permission questions in plain text.
 
 ## Version History
 

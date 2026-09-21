@@ -12,21 +12,16 @@ import logger from "@/logging";
 import { ApiError, UuidIdSchema } from "@/types";
 
 const INITIAL_ELICITATION_POLL_INTERVAL_MS = 250;
-// An answer posted to this process wakes its waiter at once; this ceiling only
-// bounds how long an answer posted to another replica waits in the shared
-// cache before the poll finds it.
+// An answer posted to this process wakes its waiter immediately. This ceiling
+// limits how long an answer on another replica waits in the shared cache.
 const MAX_ELICITATION_POLL_INTERVAL_MS = 1_000;
-// The pending marker outlives the wait, so an answer that races the deadline
-// still finds it, and the waiter can tell that the answer was claimed.
+// The pending marker outlives the wait so late-racing answers still find it.
 const PENDING_ELICITATION_SLACK_MS = TimeInMs.Minute;
-// After the deadline, an answer the route already claimed gets this long to
-// land before the question counts as unanswered.
+// Grace period after deadline for claimed answers to arrive.
 const CLAIMED_ANSWER_GRACE_MS = 5_000;
 
 /**
- * How long a question waits for a person to answer it, in Chat and over the
- * MCP gateway alike. A person reading a form takes longer than a protocol
- * round trip, so this is minutes, not the MCP SDK's 60-second default.
+ * Timeout for human answer responses in Chat and over the MCP gateway.
  */
 export const ELICITATION_ANSWER_TIMEOUT_MS = 10 * TimeInMs.Minute;
 
@@ -414,10 +409,9 @@ async function pollForChatMcpElicitationResponse({
 }
 
 /**
- * Wakes a waiting question as soon as its answer is stored by the answer route
- * in this same process, instead of at the waiter's next poll. Answers posted
- * to another replica still arrive through the shared-cache poll. A registry of
- * live waiters, not a cache: an entry lives exactly as long as its wait.
+ * Wakes waiting questions immediately when their answer is stored in-process.
+ * Answers posted to another replica arrive via shared-cache polling.
+ * Entries live only for the duration of the wait.
  */
 class ElicitationAnswerSignals {
   private readonly waiters = new Map<

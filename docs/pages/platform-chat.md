@@ -55,9 +55,9 @@ While a response streams, the send button becomes Stop. Clicking it or pressing 
 
 Some MCP tools can ask for additional information while they run. Chat shows these requests as a modal form, validates required fields, and resumes the tool call after you continue. If the request points to an external URL, Chat only opens HTTP or HTTPS links.
 
-Multiple-choice questions appear directly in the conversation. When the agent asks several at once, each question gets its own tab. Clicking a single-choice option moves you to the next tab. For multi-choice questions or keyboard selections, use Next to move between tabs. Submit on the last tab sends every answer.
+Multiple-choice questions appear directly in the conversation. When an agent asks several questions at once, each question appears in its own tab. Selecting an option in a single-choice question moves you to the next tab. For multiple-choice questions, select Next to change tabs. Submit on the last tab sends all answers.
 
-Submitted answers stay together in one summary. If a save fails, retry without choosing again.
+Submitted answers collapse into one summary. If saving fails, you can retry without selecting answers again.
 
 ### Browser (Playwright)
 

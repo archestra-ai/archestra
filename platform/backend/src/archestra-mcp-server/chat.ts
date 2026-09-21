@@ -55,16 +55,14 @@ const AskUserOptionSchema = z
 const AskUserOutputSchema = z.object({
   action: z
     .enum(["accept", "decline", "cancel"])
-    .describe("Whether the user submitted, declined, or cancelled."),
+    .describe("Whether the user submitted, declined, or canceled."),
   selected: z
     .array(z.string())
-    .describe(
-      "The labels the user selected. Empty when they declined or cancelled.",
-    ),
+    .describe("The labels the user selected. Empty when declined or canceled."),
   timedOut: z
     .boolean()
     .optional()
-    .describe("True when nobody answered before the question expired."),
+    .describe("True when the question expired without an answer."),
 });
 
 const AskUserSchema = z
@@ -273,12 +271,9 @@ function optionKey(index: number) {
 }
 
 /**
- * Verified offer ids from the envelopes the proxy stamped onto this call.
- * Anything unsigned, minted with a different secret, or signed for another
- * organization, OpenAPPA session, or caller is dropped — the binding
- * execute_remedy_plan applies when it spends an offer — so an envelope
- * replayed from another session's history, or minted for another user, is
- * never repeated as live.
+ * Extracts verified offer IDs from the signed envelopes stamped on this call.
+ * Envelopes that are unsigned, forged, expired, or signed for a different
+ * organization, session, or caller are ignored.
  */
 function verifiedOfferIds(
   envelopes: unknown,
@@ -306,8 +301,8 @@ function verifiedOfferIds(
 }
 
 /**
- * This call's OpenAPPA session, resolved the way the other OpenAPPA tools
- * resolve it: the gateway's header-named session, else Chat's conversation.
+ * Resolves the OpenAPPA session for this call: either the gateway session
+ * from the request header or the Chat conversation ID.
  */
 function callOpenAppaSession(
   context: ArchestraContext,
@@ -322,10 +317,10 @@ function callOpenAppaSession(
 }
 
 /**
- * Whether `spender` may act on an offer minted by `owner`, as the runtime
- * decides it when execute_remedy_plan spends one: a user's offer belongs to
- * that user alone; an app's or key's offer is organization-scoped; an offer
- * with no owner belongs to no one.
+ * Checks if `spender` can use an offer minted by `owner`.
+ * User offers belong exclusively to that user.
+ * App and virtual-key offers are organization-scoped.
+ * Offers without an owner cannot be used.
  */
 function offerOwnerIsSpender(owner: string | null, spender: string): boolean {
   if (!owner) {

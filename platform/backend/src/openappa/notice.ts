@@ -217,9 +217,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * A remedy call's arguments without what the proxy writes beside them: the
- * receipt and the matched offer's flattened JWS. The proxy drops an echoed
- * JWS before stamping, so the model's own copy is left out too.
+ * Returns remedy call arguments without proxy-stamped receipt and JWS fields.
  */
 function withoutProxyMembers(
   args: Record<string, unknown>,

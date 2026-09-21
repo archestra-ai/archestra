@@ -251,13 +251,10 @@ async function handleMcpPostRequest(
     }
   }
 
-  // A bare JSON-RPC response/error (no method) answers a server-initiated
-  // request (elicitation/create, sampling, ...) sent mid-call on an earlier
-  // POST. Each POST builds a fresh Server, so the answer must be routed back
-  // to the transport that still holds the pending request rather than a new
-  // one, under the id that Server issued. Unknown ids, and answers from any
-  // caller but the one asked, fall through to ordinary handling, which
-  // ignores them.
+  // A JSON-RPC response or error without a method answers a server-initiated
+  // request sent during an earlier POST call. Because each POST creates a fresh
+  // server, route the answer back to the active transport waiting for it.
+  // Unknown IDs or answers from other callers fall through to default handling.
   if (body.method === undefined && body.id !== undefined && body.id !== null) {
     const pending = pendingInboundRequests.consume({
       wireId: body.id as string | number,
@@ -296,10 +293,9 @@ async function handleMcpPostRequest(
 
   let capabilitySessionId: string | undefined;
   if (isInitialize) {
-    // A legacy client declares its capabilities once, here, and the next
-    // POST builds a fresh Server that no longer knows them. Remember them so
-    // a later call can still tell whether this client answers a
-    // server-initiated request (elicitation, sampling, ...).
+    // A legacy client declares capabilities once at initialize.
+    // Store capabilities so later tool calls know if the client supports
+    // server-initiated requests (elicitation, sampling).
     const capabilities = (
       body?.params as { capabilities?: unknown } | undefined
     )?.capabilities;

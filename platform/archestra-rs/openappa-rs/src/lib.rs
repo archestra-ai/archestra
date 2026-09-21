@@ -1668,7 +1668,7 @@ fn authoritative_unexecuted_response(decision: Value) -> napi::Result<Value> {
 /// ask_user's own description: the client's own first. A plan is carried out
 /// by the call the ruling shows for it, which is not always the remedy tool (a
 /// redispatch plan names another tool to run first).
-const UNEXECUTED_CALL_HINT: &str = "The tool was not executed. If the ruling offers a plan, choose one yourself and make the call it shows now, exactly as shown. If only the user can make this choice, ask them with a question tool (the client's own if it has one, otherwise ask_user), never as a plain-text question. In questions and replies, describe the block and any plan only in the ruling's own words; never guess who the readers are or how access would change. If no plan is offered, explain the ruling.";
+const UNEXECUTED_CALL_HINT: &str = "The tool was not executed. If the ruling offers a plan, choose one yourself and make the call it shows now, exactly as shown. If only the user can make this choice, ask them with a question tool (the client's own if it has one, otherwise ask_user), never as a plain-text question. In questions and replies, describe the block and any plan only in the ruling's own words, and never guess who the readers are or how access would change. If no plan is offered, explain the ruling.";
 
 fn unknown_result_response() -> Value {
     let approved_output =

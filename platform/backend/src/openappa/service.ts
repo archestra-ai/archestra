@@ -436,7 +436,7 @@ export async function processProxyResults(params: {
   session: OpenAppaSession;
   results: CommonToolResult[];
   canonicalize: (name: string) => string;
-  /** The proxy verifies that this exact result belongs to a question it emitted. */
+  /** The proxy verifies that this exact result belongs to an issued question. */
   isUserQuestion?: (result: CommonToolResult) => boolean;
   controlToolName?: string;
   trustedChat?: boolean;
@@ -805,9 +805,8 @@ function nativePresentation(controlToolName?: string): {
 }
 
 /**
- * The platform's question tool is a conversation primitive. Native question
- * exemptions are supplied by the client adapter, not inferred from bare names
- * that an unrelated MCP server could also declare.
+ * Checks whether a tool is the platform question tool (`ask_user`).
+ * Client adapters supply native question exemptions separately.
  */
 function isPlatformUserQuestion(
   name: string,

@@ -285,7 +285,7 @@ class OpenAppaBatteriesService {
           organizationId,
           content: latest.content,
         });
-        const prefixes = await this.catalogPrefixes(organizationId);
+        const prefixes = await catalogToolPrefixes(organizationId);
         const targets = prefixes.byCatalog.get(catalog.id) ?? new Set<string>();
         return [
           { kind: "addInclude", entry },
@@ -326,7 +326,7 @@ class OpenAppaBatteriesService {
           content: latest.content,
         });
         const namespaces = battery?.namespaces ?? [];
-        const prefixes = await this.catalogPrefixes(organizationId);
+        const prefixes = await catalogToolPrefixes(organizationId);
         const targets =
           prefixes.byCatalog.get(existing.catalogId) ?? new Set<string>();
         const edits: PolicyEditInput[] = [];
@@ -385,7 +385,7 @@ class OpenAppaBatteriesService {
         );
         if (!included) return [];
         const namespaces = battery?.namespaces ?? [];
-        const prefixes = await this.catalogPrefixes(organizationId);
+        const prefixes = await catalogToolPrefixes(organizationId);
         const targets =
           prefixes.byCatalog.get(existing.catalogId) ?? new Set<string>();
         const remaining = namespaces.some(
@@ -702,7 +702,7 @@ class OpenAppaBatteriesService {
       content: root.content,
     });
     const [prefixes, bindable] = await Promise.all([
-      this.catalogPrefixes(organizationId),
+      catalogToolPrefixes(organizationId),
       this.bindableKeys(organizationId),
     ]);
     const aliases = new Map(
@@ -781,43 +781,6 @@ class OpenAppaBatteriesService {
         (alias) => !declared.has(alias.namespace),
       ),
     };
-  }
-
-  /**
-   * Every tool prefix the organization's catalogs carry: which catalog carries a
-   * prefix, and which catalogs a composed alias could not tell apart.
-   */
-  private async catalogPrefixes(
-    organizationId: string,
-  ): Promise<CatalogPrefixes> {
-    const catalogIds =
-      await InternalMcpCatalogModel.findIdsVisibleToOrganization(
-        organizationId,
-      );
-    const toolNames = await ToolModel.getToolNamesByCatalogIds(catalogIds);
-    const byCatalog = new Map<string, Set<string>>();
-    const byPrefix = new Map<string, Set<string>>();
-    const conflicting = new Set<string>();
-    for (const tool of toolNames) {
-      const { serverName } = parseFullToolName(tool.name);
-      if (serverName === null) continue;
-      // The adapter splits a spelled name at its last `__`; a namespace holding
-      // one is no connection identity the runtime accepts as an alias target, so
-      // it is never bound and the catalog carrying it is refused.
-      if (serverName.includes("__")) {
-        conflicting.add(tool.catalogId);
-        continue;
-      }
-      byCatalog.set(
-        tool.catalogId,
-        (byCatalog.get(tool.catalogId) ?? new Set()).add(serverName),
-      );
-      byPrefix.set(
-        serverName,
-        (byPrefix.get(serverName) ?? new Set()).add(tool.catalogId),
-      );
-    }
-    return { byCatalog, byPrefix, conflicting };
   }
 
   /** Keys of the organization's credential definitions holding an organization value. */
@@ -1052,6 +1015,41 @@ class OpenAppaBatteriesService {
 }
 
 export const openappaBatteriesService = new OpenAppaBatteriesService();
+
+/**
+ * Every tool prefix the organization's catalogs carry: which catalog carries a
+ * prefix, and which catalogs a composed alias could not tell apart.
+ */
+export async function catalogToolPrefixes(
+  organizationId: string,
+): Promise<CatalogPrefixes> {
+  const catalogIds =
+    await InternalMcpCatalogModel.findIdsVisibleToOrganization(organizationId);
+  const toolNames = await ToolModel.getToolNamesByCatalogIds(catalogIds);
+  const byCatalog = new Map<string, Set<string>>();
+  const byPrefix = new Map<string, Set<string>>();
+  const conflicting = new Set<string>();
+  for (const tool of toolNames) {
+    const { serverName } = parseFullToolName(tool.name);
+    if (serverName === null) continue;
+    // The adapter splits a spelled name at its last `__`; a namespace holding
+    // one is no connection identity the runtime accepts as an alias target, so
+    // it is never bound and the catalog carrying it is refused.
+    if (serverName.includes("__")) {
+      conflicting.add(tool.catalogId);
+      continue;
+    }
+    byCatalog.set(
+      tool.catalogId,
+      (byCatalog.get(tool.catalogId) ?? new Set()).add(serverName),
+    );
+    byPrefix.set(
+      serverName,
+      (byPrefix.get(serverName) ?? new Set()).add(tool.catalogId),
+    );
+  }
+  return { byCatalog, byPrefix, conflicting };
+}
 
 type AvailableBatteries = Map<
   string,

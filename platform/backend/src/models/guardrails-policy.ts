@@ -22,10 +22,7 @@ class GuardrailsPolicyModel {
     expectedRevision: number;
   }): Promise<GuardrailsPolicy | null> {
     return db.transaction(async (tx) => {
-      // Serialize the initial insert too: there is no policy row to lock yet.
-      await tx.execute(
-        sql`select pg_advisory_xact_lock(hashtextextended(${`guardrails-policy:${params.organizationId}`}, 0))`,
-      );
+      await lockPolicy(tx, params.organizationId);
       const [source] = await tx
         .select()
         .from(schema.openappaGithubSyncTable)
@@ -36,19 +33,30 @@ class GuardrailsPolicyModel {
           ),
         );
       if (source?.interval) return null;
-      const [current] = await tx
-        .select()
-        .from(table)
-        .where(eq(table.organizationId, params.organizationId))
-        .orderBy(desc(table.revision))
-        .limit(1);
-      if ((current?.revision ?? 0) !== params.expectedRevision) return null;
       const { expectedRevision, ...values } = params;
-      const [saved] = await tx
-        .insert(table)
-        .values({ ...values, revision: expectedRevision + 1 })
-        .returning();
-      return saved;
+      return insertRevision(tx, { ...values, expectedRevision });
+    });
+  }
+
+  /**
+   * Insert the revision the install-declaration migration authors, with no user
+   * behind it. Same advisory lock and same `expectedRevision` check as `save`,
+   * and unlike `save` it writes while the organization's GitHub sync is on: the
+   * declarations it carries are the legacy install rows, which the repository
+   * text does not hold yet and which the first recompose after the deploy would
+   * otherwise delete. It is the migration's own path — every user-driven write
+   * goes through `guardrailsPolicyService.update`, which authorizes the grants
+   * it adds; this one authors none that the install rows did not already serve.
+   */
+  static async saveDeclarationMigration(params: {
+    organizationId: string;
+    content: string;
+    contentHash: string;
+    expectedRevision: number;
+  }): Promise<GuardrailsPolicy | null> {
+    return db.transaction(async (tx) => {
+      await lockPolicy(tx, params.organizationId);
+      return insertRevision(tx, { ...params, updatedBy: null });
     });
   }
 
@@ -69,3 +77,38 @@ class GuardrailsPolicyModel {
   }
 }
 export default GuardrailsPolicyModel;
+
+type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/** Serialize the initial insert too: there is no policy row to lock yet. */
+async function lockPolicy(tx: Transaction, organizationId: string) {
+  await tx.execute(
+    sql`select pg_advisory_xact_lock(hashtextextended(${`guardrails-policy:${organizationId}`}, 0))`,
+  );
+}
+
+/** The revision after `expectedRevision`, or nothing when that race was lost. */
+async function insertRevision(
+  tx: Transaction,
+  values: {
+    organizationId: string;
+    content: string;
+    contentHash: string;
+    updatedBy: string | null;
+    expectedRevision: number;
+  },
+): Promise<GuardrailsPolicy | null> {
+  const { expectedRevision, ...revision } = values;
+  const [current] = await tx
+    .select()
+    .from(table)
+    .where(eq(table.organizationId, values.organizationId))
+    .orderBy(desc(table.revision))
+    .limit(1);
+  if ((current?.revision ?? 0) !== expectedRevision) return null;
+  const [saved] = await tx
+    .insert(table)
+    .values({ ...revision, revision: expectedRevision + 1 })
+    .returning();
+  return saved;
+}

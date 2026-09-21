@@ -158,7 +158,8 @@ function hash(content: string) {
   return createHash("sha256").update(content).digest("hex");
 }
 
-const INITIAL_POLICY = `[policy]
+/** The text an organization that never saved a revision is read as. */
+export const INITIAL_POLICY = `[policy]
 version = 2
 
 [[policy.annotator]]

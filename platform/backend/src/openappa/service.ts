@@ -16,6 +16,7 @@ import config from "@/config";
 import { getDatabaseConnectionString } from "@/database";
 import logger from "@/logging";
 import { openappaBatteriesService } from "@/openappa/batteries";
+import { declareExistingInstalls } from "@/openappa/declare-installs";
 import { normalizeToolCallsForPolicy } from "@/routes/proxy/llm-proxy-helpers";
 import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
 import { ApiError, type CommonToolResult } from "@/types";
@@ -149,6 +150,30 @@ export function openappaYellEnabled(): boolean {
 
 export function openappaEnabled(): boolean {
   return config.openappa.enabled;
+}
+
+/**
+ * Carry the legacy `openappa_battery_installs` rows into the policy text every
+ * composition now reads from. Runs before the runtime opens and before the
+ * periodic recompile is registered, because a recompose rewrites the rows from
+ * the text and deletes every row the text does not declare.
+ *
+ * Idempotent on every boot, and a per-organization failure never stops the
+ * others. A failure of the whole step does not stop the server either: the
+ * installs of an organization the step did not reach are still readable in the
+ * log it wrote, and the operator can run `pnpm db:openappa-declare-installs`.
+ */
+export async function declareOpenappaInstalls(): Promise<void> {
+  if (!openappaEnabled()) return;
+  try {
+    const summary = await declareExistingInstalls();
+    logger.info(summary, "Declared the legacy OpenAPPA battery installs");
+  } catch (error) {
+    logger.error(
+      { err: error },
+      "Declaring the legacy OpenAPPA battery installs failed; the periodic recompile will delete every install row the policy text does not declare",
+    );
+  }
 }
 
 export async function executeYell(params: {

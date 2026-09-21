@@ -41,7 +41,7 @@ export function ProjectScheduleRunsClient() {
           <>
             {trigger.agent?.name ?? "Default agent"} ·{" "}
             {trigger.enabled === false
-              ? "Manual — never runs automatically"
+              ? "Paused — runs only when started manually"
               : `${formatCronSchedule(trigger.cronExpression)} · ${trigger.timezone}`}
           </>
         ) : undefined

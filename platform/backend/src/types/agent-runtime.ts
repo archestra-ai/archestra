@@ -201,7 +201,7 @@ export const AgentRuntimeSchema = z.object({
   privileged: z.boolean(),
   resources: AgentRuntimeResourcesSchema.nullable(),
   /** Container ports users can forward from an active workspace. */
-  ports: z.array(z.number().int().min(1).max(65_535)).optional(),
+  ports: z.array(z.number().int().min(1).max(65_535)).max(20).optional(),
   environment: z.array(AgentRuntimeEnvironmentEntrySchema).nullable(),
   credentials: z.array(AgentRuntimeCredentialDeclarationSchema).nullable(),
   /**

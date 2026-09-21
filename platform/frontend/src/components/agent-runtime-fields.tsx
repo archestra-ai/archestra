@@ -534,16 +534,18 @@ function RuntimePortsField({
   }, [value]);
   const parts = draft.trim() ? draft.split(/[\s,]+/).filter(Boolean) : [];
   const ports = parts.map(Number);
-  const valid = ports.every(
-    (port) => Number.isInteger(port) && port >= 1 && port <= 65_535,
-  );
+  const valid =
+    ports.length <= 20 &&
+    ports.every(
+      (port) => Number.isInteger(port) && port >= 1 && port <= 65_535,
+    );
 
   return (
     <div className="space-y-2">
       <Label htmlFor="agent-runtime-ports">Ports to forward</Label>
       <FieldDescription>
-        Optional container ports, separated by commas. These appear in the
-        run&apos;s connection details.
+        Optional container ports, separated by commas (up to 20). These appear
+        in the run&apos;s connection details.
       </FieldDescription>
       <Input
         id="agent-runtime-ports"
@@ -561,17 +563,21 @@ function RuntimePortsField({
                 .map(Number)
             : [];
           if (
+            parsed.length <= 20 &&
             parsed.every(
               (port) => Number.isInteger(port) && port >= 1 && port <= 65_535,
             )
           ) {
-            lastEmitted.current = parsed.join(", ");
-            onChange(parsed);
+            const unique = [...new Set(parsed)];
+            lastEmitted.current = unique.join(", ");
+            onChange(unique);
           }
         }}
       />
       {!valid && (
-        <FieldDescription>Use port numbers from 1 to 65535.</FieldDescription>
+        <FieldDescription>
+          Use up to 20 port numbers from 1 to 65535.
+        </FieldDescription>
       )}
     </div>
   );

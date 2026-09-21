@@ -1224,7 +1224,7 @@ describe("Agent Runtime routes", () => {
       authorId: user.id,
       agentType: "agent",
       scope: "org",
-      runtime: { ...agent.runtime, ports: [3000, 9000] },
+      runtime: { ...agent.runtime, ports: [3000, 3000, 9000] },
     });
     const task = await createTask(agent.id);
     const run = await createRun({ taskId: task.id, actorUserId: user.id });

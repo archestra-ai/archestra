@@ -724,7 +724,7 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
           terminalRetained,
           portForwardCommand:
             connection && ports.length
-              ? `kubectl port-forward -n ${owned.runtimeScope} pod/${connection.hostname.split(".")[0]} ${ports.map((port) => `:${port}`).join(" ")}`
+              ? `kubectl port-forward -n ${owned.runtimeScope} pod/${connection.hostname.split(".")[0]} ${[...new Set(ports)].map((port) => `:${port}`).join(" ")}`
               : null,
           workspace: workspace
             ? {

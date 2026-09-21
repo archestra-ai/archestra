@@ -79,7 +79,7 @@ pub(crate) struct Composed {
 pub(crate) fn compose(root: &str, batteries: &[ResolvedBattery]) -> Result<Composed, String> {
     let document: toml::Table =
         toml::from_str(root).map_err(|error| format!("root policy: {error}"))?;
-    refuse_host_keys(&document)?;
+    refuse_host_variables(&document)?;
     let policies = batteries
         .iter()
         .map(bind_helpers)
@@ -174,12 +174,6 @@ fn bind_helpers(battery: &ResolvedBattery) -> Result<String, String> {
     toml::to_string(&document).map_err(|error| error.to_string())
 }
 
-/// What only the host may write into a root document: its own variables. The alias
-/// table is the root's declaration now, so nothing else here is the host's.
-fn refuse_host_keys(document: &toml::Table) -> Result<(), String> {
-    refuse_host_variables(document)
-}
-
 /// A battery reaches out only through the host's helper bridge: a url external
 /// would leave the API host with none of the bridge's guards.
 pub(crate) fn refuse_url_externals(document: &toml::Table) -> Result<(), String> {
@@ -224,8 +218,11 @@ pub(crate) fn external_bindings(document: &toml::Table) -> Vec<(&str, &str, &tom
         .collect()
 }
 
+/// A name that stays one path segment under the helper endpoint: `.` and `..`
+/// would resolve to another route.
 fn is_url_segment(name: &str) -> bool {
     !name.is_empty()
+        && name.chars().any(|character| character != '.')
         && name.chars().all(|character| {
             character.is_ascii_alphanumeric() || matches!(character, '.' | '_' | '-')
         })
@@ -612,6 +609,30 @@ token_env = "APPA_PROVIDER_GITHUB_TOKEN"
     }
 
     /// The alias table is the root's own declaration now, not the host's insertion.
+    #[test]
+    fn a_helper_named_after_a_path_step_is_not_addressable() {
+        // SAFETY: as above.
+        unsafe { std::env::set_var(BRIDGE_TOKEN_ENV, "bridge-token") };
+        let root = format!(
+            "include = [\"{GITHUB_ENTRY}\"]\n[server_aliases]\ngithub = [\"github_prod\"]\n[policy]\nversion = 2\n"
+        );
+        for name in ["..", "."] {
+            let battery = ResolvedBattery {
+                entry: GITHUB_ENTRY.into(),
+                name: "github".into(),
+                policy: format!(
+                    "[policy]\nversion = 2\n[[policy.annotator]]\nname = \"{name}\"\nranks = [\"suspicious\"]\naudiences = [\"internal\"]\nmarks = []\n[[policy.tool]]\nname = \"mcp/github/get_file_contents\"\nannotator = \"{name}\"\n[externals.annotators.\"{name}\"]\ncommand = [\"python3\", \"helper.py\"]\n"
+                ),
+                helpers: Some(HelperBinding {
+                    url_base: "http://127.0.0.1:9000/api/openappa/helpers/install-1".into(),
+                    token_env: BRIDGE_TOKEN_ENV.into(),
+                }),
+            };
+            let error = compose(&root, &[battery]).unwrap_err();
+            assert!(error.contains(&format!("{name:?}")), "{error}");
+        }
+    }
+
     #[test]
     fn the_root_may_author_its_alias_table() {
         assert!(

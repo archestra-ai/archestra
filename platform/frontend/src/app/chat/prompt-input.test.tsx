@@ -897,6 +897,58 @@ describe("ArchestraPromptInput", () => {
       ).not.toBeInTheDocument();
     });
 
+    it("previews a hovered suggestion's full prompt in place of the placeholder", () => {
+      mockUseChatPlaceholder.mockReturnValue({
+        placeholder: "Let's build something nice!",
+        isAnimating: false,
+      });
+
+      const { rerender } = render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          placeholderPreview="Generate an epic gif of a lobster shipping code"
+        />,
+      );
+
+      expect(
+        screen.getByPlaceholderText(
+          "Generate an epic gif of a lobster shipping code",
+        ),
+      ).toBeInTheDocument();
+
+      rerender(
+        <ArchestraPromptInput {...defaultProps} placeholderPreview={null} />,
+      );
+
+      expect(
+        screen.getByPlaceholderText("Let's build something nice!"),
+      ).toBeInTheDocument();
+    });
+
+    it("keeps the default placeholder while a draft is typed", () => {
+      mockControllerState.value = "my own question";
+      mockUseChatPlaceholder.mockReturnValue({
+        placeholder: "Let's build something nice!",
+        isAnimating: false,
+      });
+
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          placeholderPreview="Generate an epic gif of a lobster shipping code"
+        />,
+      );
+
+      expect(
+        screen.getByPlaceholderText("Let's build something nice!"),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByPlaceholderText(
+          "Generate an epic gif of a lobster shipping code",
+        ),
+      ).not.toBeInTheDocument();
+    });
+
     it("should reset slash command selection when the menu reopens", () => {
       const onCompactConversation = vi.fn();
       mockControllerState.value = "/";

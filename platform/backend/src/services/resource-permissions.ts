@@ -19,7 +19,6 @@ import {
   getPermissionsForUserContext,
   SERVICE_ACCOUNT_USER_ID_PREFIX,
 } from "@/auth/utils";
-import config from "@/config";
 import { enterpriseTier } from "@/enterprise-tier";
 import MemberModel from "@/models/member";
 import OrganizationRoleModel from "@/models/organization-role";
@@ -457,6 +456,17 @@ export class ResourcePermissions {
       }),
     };
   }
+  /**
+   * Whether the stored grants allow this action. Reads policies ONLY.
+   *
+   * A deployment that has not run the conversion yet has no policy for the
+   * resource, and this answers "no" for everyone — including administrators.
+   * A gate written on `allows` therefore fails closed for the whole
+   * pre-cutover window, which is silent and looks like a permissions bug.
+   * `getEffective` is the one that also consults the compatibility layer, so
+   * prefer it for anything guarding a user-facing action, and keep `allows`
+   * for checks that are meaningful only once grants are authoritative.
+   */
   static async allows(
     params: PermissionContext & { action: ResourcePermissionAction },
   ): Promise<boolean> {

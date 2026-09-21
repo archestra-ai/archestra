@@ -76,9 +76,18 @@ describe("resource list origin filters", () => {
       screen.queryByRole("option", { name: "Organization" }),
     ).not.toBeInTheDocument();
     await user.click(screen.getByRole("option", { name: "Built-in" }));
-    expect(push).toHaveBeenCalledWith("/agents?name=example&scope=built_in", {
-      scroll: false,
+    // Assert the parameters, not the order they happen to serialize in. What
+    // matters is that the retired sharing filters are dropped, the page resets
+    // and the search survives.
+    expect(push).toHaveBeenCalledTimes(1);
+    const [href, options] = push.mock.calls[0] as [string, unknown];
+    const [path, query] = href.split("?");
+    expect(path).toBe("/agents");
+    expect(Object.fromEntries(new URLSearchParams(query))).toEqual({
+      name: "example",
+      scope: "built_in",
     });
+    expect(options).toEqual({ scroll: false });
   });
   it("reads and writes the built-in origin through a namespaced query adapter", async () => {
     setQuery("scope=team&page=7&externalScope=built_in&externalPage=3");

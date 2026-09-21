@@ -440,7 +440,10 @@ describe("OwnedAppCard", () => {
     expect(screen.getByText("Owned by Grace Hopper")).toBeInTheDocument();
   });
 
-  it("labels a personal app shared directly with users as shared", () => {
+  it("does not present a named user as the resource’s only audience", () => {
+    // Access is a grant now, and a card cannot summarise one honestly: the
+    // named user is one grant among several, and the card would be claiming
+    // an audience it has not read. The Permissions tab answers this instead.
     render(
       <AppCard
         app={{
@@ -452,8 +455,10 @@ describe("OwnedAppCard", () => {
       />,
     );
 
-    expect(screen.getByLabelText("Shared with: Grace Hopper")).toBeVisible();
-    expect(screen.getByText("Shared")).toBeVisible();
+    expect(
+      screen.queryByLabelText("Shared with: Grace Hopper"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Shared")).not.toBeInTheDocument();
     expect(screen.queryByText("Personal")).not.toBeInTheDocument();
   });
 

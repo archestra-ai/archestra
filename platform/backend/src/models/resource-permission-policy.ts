@@ -11,7 +11,6 @@ import {
 } from "@archestra/shared";
 import { predefinedRolesWithReadAccess } from "@archestra/shared/access-control";
 import { and, eq, inArray, or, type SQLWrapper, sql } from "drizzle-orm";
-import config from "@/config";
 import db, { schema, type Transaction } from "@/database";
 import RoleCompositionModel from "./role-composition";
 import TeamModel from "./team";
@@ -132,6 +131,17 @@ export default class ResourcePermissionPolicyModel {
                       "update",
                       "manage-permissions",
                     ] as ResourcePermissionAction[],
+                  },
+                ]
+              : []),
+            // Editors could always deploy into a restricted environment, back
+            // when that was a `deploy-to-restricted` action on each kind of
+            // thing deployed. `use` on every environment is that same reach.
+            ...(resource === "environment"
+              ? [
+                  {
+                    subject: { type: "role" as const, id: "editor" },
+                    actions: ["read", "use"] as ResourcePermissionAction[],
                   },
                 ]
               : []),

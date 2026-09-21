@@ -1,6 +1,9 @@
 "use client";
 
-import { getAgentRuntimeAllowedProtocols } from "@archestra/shared";
+import {
+  getAgentRuntimeAllowedProtocols,
+  TOOL_TRANSFER_CREDENTIAL_SHORT_NAME,
+} from "@archestra/shared";
 import Link from "next/link";
 import { useId } from "react";
 import { ContainerDeploymentFields } from "@/components/container-deployment-fields";
@@ -290,12 +293,10 @@ export function AgentRuntimeEnvironmentFields({
             Accept credentials from a connected client
           </Label>
           <FieldDescription>
-            Lets a signed-in client store a credential on this Agent for your
-            own runs, so a handed-over task can reuse the authentication that
-            client already had. The value reaches this Agent through the calling
-            model&apos;s context and that client&apos;s transcript. Turn it off
-            for an Agent whose credentials must only ever be set on the
-            Credentials page.
+            Lets a client store a credential on this Agent with{" "}
+            <code>{TOOL_TRANSFER_CREDENTIAL_SHORT_NAME}</code>, for your runs
+            only. The model sees the value, and the client keeps it in its chat
+            history. Turn it off to require the Credentials page.
           </FieldDescription>
         </div>
         <Switch

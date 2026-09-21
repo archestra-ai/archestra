@@ -82,6 +82,33 @@ const markdownComponents: Components = {
       {...props}
     />
   ),
+  ul: (props) => <ul className="my-2 list-disc space-y-1 pl-5" {...props} />,
+  ol: (props) => <ol className="my-2 list-decimal space-y-1 pl-5" {...props} />,
+  li: (props) => <li className="text-muted-foreground" {...props} />,
+  h1: (props) => (
+    <h1
+      className="mt-3 mb-1 font-semibold text-foreground text-sm"
+      {...props}
+    />
+  ),
+  h2: (props) => (
+    <h2
+      className="mt-3 mb-1 font-semibold text-foreground text-sm"
+      {...props}
+    />
+  ),
+  h3: (props) => (
+    <h3
+      className="mt-3 mb-1 font-semibold text-foreground text-sm"
+      {...props}
+    />
+  ),
+  h4: (props) => (
+    <h4
+      className="mt-3 mb-1 font-semibold text-foreground text-sm"
+      {...props}
+    />
+  ),
 };
 
 export interface LocalServerInstallResult {
@@ -528,7 +555,7 @@ export function LocalServerInstallDialog({
       }
       description={
         catalogItem?.instructions ? (
-          <div className="prose prose-sm max-w-none text-sm text-muted-foreground">
+          <div className="text-sm text-muted-foreground">
             <ReactMarkdown
               remarkPlugins={[remarkGfm, remarkBreaks]}
               components={markdownComponents}
@@ -681,7 +708,7 @@ export function LocalServerInstallDialog({
                     </Label>
                   )}
                   {env.description && (
-                    <div className="text-xs text-muted-foreground prose prose-sm max-w-none">
+                    <div className="text-xs text-muted-foreground">
                       <ReactMarkdown
                         remarkPlugins={[remarkGfm, remarkBreaks]}
                         components={markdownComponents}
@@ -756,7 +783,7 @@ export function LocalServerInstallDialog({
                           )}
                         </Label>
                         {env.description && (
-                          <div className="text-xs text-muted-foreground prose prose-sm max-w-none">
+                          <div className="text-xs text-muted-foreground">
                             <ReactMarkdown
                               remarkPlugins={[remarkGfm, remarkBreaks]}
                               components={markdownComponents}
@@ -831,7 +858,7 @@ export function LocalServerInstallDialog({
                           )}
                         </Label>
                         {env.description && (
-                          <div className="text-xs text-muted-foreground prose prose-sm max-w-none">
+                          <div className="text-xs text-muted-foreground">
                             <ReactMarkdown
                               remarkPlugins={[remarkGfm, remarkBreaks]}
                               components={markdownComponents}
@@ -915,7 +942,7 @@ export function LocalServerInstallDialog({
                         )}
                       </Label>
                       {fieldConfig.description && (
-                        <div className="text-xs text-muted-foreground prose prose-sm max-w-none">
+                        <div className="text-xs text-muted-foreground">
                           <ReactMarkdown
                             remarkPlugins={[remarkGfm, remarkBreaks]}
                             components={markdownComponents}

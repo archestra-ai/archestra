@@ -18,13 +18,12 @@ import {
   type ProfileLabelsRef,
 } from "@/components/agent-labels";
 import { CopyableCode } from "@/components/copyable-code";
-import { createdByFact } from "@/components/created-by-cell";
+import { CreatedByCell } from "@/components/created-by-cell";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ExpirationDateTimeField } from "@/components/expiration-date-time-field";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { FormDialog } from "@/components/form-dialog";
 import { LoadingWrapper } from "@/components/loading";
-import { OverviewSummary } from "@/components/overview-summary";
 import { PageBackLink } from "@/components/page-back-link";
 import { QueryLoadError } from "@/components/query-load-error";
 import {
@@ -38,7 +37,6 @@ import {
 } from "@/components/settings/settings-block";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { BulkActions } from "@/components/ui/bulk-actions-bar";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { Button } from "@/components/ui/button";
@@ -58,6 +56,7 @@ import { reportBulkOutcome } from "@/lib/bulk-action";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useBulkSelection } from "@/lib/hooks/use-bulk-selection";
 import {
+  type ServiceAccountDetail,
   type ServiceAccountToken,
   useBulkServiceAccountTokenAction,
   useCreateServiceAccountToken,
@@ -77,7 +76,6 @@ import {
   formatRelativeTime,
   formatRelativeTimeFromNow,
 } from "@/lib/utils/date-time";
-import { formatRoleName } from "@/lib/utils/role";
 import { useSetSettingsAction, useSetSettingsPageHeader } from "../../layout";
 
 type TokenFormValues = {
@@ -209,6 +207,7 @@ export default function ServiceAccountDetailPage({
     setPageHeader({
       title: serviceAccount.name,
       documentTitle: serviceAccount.name,
+      description: <Provenance account={serviceAccount} />,
       status: <AccountHealthBadge health={health} />,
       backLink: (
         <PageBackLink href="/settings/service-accounts">
@@ -275,10 +274,12 @@ export default function ServiceAccountDetailPage({
           // The prefix is the only part of a key that is ever shown again, and
           // it is how you match a key here against one in a CI secret store,
           // so it needs to be copyable rather than selectable-by-hand.
+          // `whitespace-nowrap` because a prefix broken across two lines is
+          // both unreadable and enough to double the height of every row.
           <CopyableCode
             value={row.original.tokenStart}
             toastMessage="Key prefix copied"
-            className="w-fit gap-1 px-2 py-1 text-xs"
+            className="w-fit gap-1 whitespace-nowrap px-2 py-1 text-xs"
           />
         ),
       },
@@ -290,9 +291,12 @@ export default function ServiceAccountDetailPage({
         // than when it started.
         accessorKey: "disabled",
         header: "Status",
-        size: 150,
+        size: 168,
         cell: ({ row }) => (
-          <div className="space-y-0.5">
+          // One line, not two. Stacked, the reason made every row twice as
+          // tall to carry four words, which is what made a four-key table
+          // read as a wall.
+          <div className="flex items-baseline gap-2">
             <KeyStatusBadge status={getKeyStatus(row.original)} />
             <ExpiryNote token={row.original} />
           </div>
@@ -314,11 +318,16 @@ export default function ServiceAccountDetailPage({
             {
               id: "actions",
               header: "Actions",
-              size: 96,
+              size: 76,
               cell: ({ row }) => (
+                // In a menu rather than as a row of icon buttons. Inline, the
+                // revoke button put a destructive red glyph on every row, so
+                // the loudest thing in the table was an action nobody came
+                // here to take.
                 <TableRowActions
                   itemName={row.original.name}
-                  actions={[
+                  actions={[]}
+                  dropdownActions={[
                     {
                       icon: row.original.disabled ? (
                         <Power className="h-4 w-4" />
@@ -457,50 +466,18 @@ export default function ServiceAccountDetailPage({
             </Alert>
           )}
 
-          <OverviewSummary
-            headingId="service-account-overview"
-            facts={[
-              {
-                label: "Role",
-                value: (
-                  <Badge variant="secondary">
-                    {formatRoleName(serviceAccount.role)}
-                  </Badge>
-                ),
-              },
-              {
-                label: "API keys",
-                value:
-                  serviceAccount.tokenCount === 0
-                    ? "None"
-                    : serviceAccount.activeTokenCount ===
-                        serviceAccount.tokenCount
-                      ? `${serviceAccount.tokenCount} usable`
-                      : `${serviceAccount.activeTokenCount} of ${serviceAccount.tokenCount} usable`,
-              },
-              {
-                label: "Last used",
-                value: serviceAccount.lastUsedAt
-                  ? formatRelativeTimeFromNow(serviceAccount.lastUsedAt)
-                  : "Never used",
-              },
-              {
-                label: "Created",
-                value: formatRelativeTimeFromNow(serviceAccount.createdAt),
-              },
-              createdByFact(serviceAccount.createdBy),
-            ]}
-          />
-
-          <section aria-labelledby="service-account-keys" className="space-y-3">
-            <div className="space-y-1">
-              <h2
-                id="service-account-keys"
-                className="text-base font-semibold tracking-tight text-foreground"
-              >
-                API keys
-              </h2>
-              <p className="text-sm text-muted-foreground">
+          {/* Three sections, one heading system. The page used to open with a
+              bordered Overview card under a heavier heading than the sections
+              below it, and four of its five facts were already on screen: the
+              role in the Roles field, the key count in the table, and the
+              health in the badge beside the title. What was left - who made
+              this and when it last worked - is provenance, so it rides in the
+              header with the title rather than as a box of its own. */}
+          <SettingsBlock
+            id="service-account-keys"
+            title="API keys"
+            description={
+              <>
                 Keys that let scripts and integrations call the{" "}
                 {apiDocsUrl ? (
                   <ExternalDocsLink
@@ -514,9 +491,10 @@ export default function ServiceAccountDetailPage({
                   <span>platform API</span>
                 )}{" "}
                 as this service account.
-              </p>
-            </div>
-
+              </>
+            }
+            contentClassName="space-y-3"
+          >
             {canUpdateServiceAccounts && (
               <BulkActions
                 count={selectedTokens.length}
@@ -586,7 +564,7 @@ export default function ServiceAccountDetailPage({
             />
 
             {canAuthenticate(health) && (
-              <div className="space-y-2">
+              <div className="space-y-2 pt-1">
                 <p className="text-xs font-medium text-muted-foreground">
                   Authenticate a request as this service account
                 </p>
@@ -597,12 +575,11 @@ export default function ServiceAccountDetailPage({
                 />
               </div>
             )}
-          </section>
+          </SettingsBlock>
 
           <SettingsBlock
             title="Account settings"
             description="The display name shown across the platform, and the roles every request made with this account's keys is authorized against."
-            contentClassName="space-y-6"
           >
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
@@ -626,10 +603,20 @@ export default function ServiceAccountDetailPage({
                 />
               </div>
             </div>
+          </SettingsBlock>
+
+          <SettingsBlock
+            title="Labels"
+            description="Key-value labels to organize and filter this service account."
+          >
+            {/* The component carries its own heading and helper text, which
+                would repeat this block's. */}
             <ProfileLabels
               ref={labelsRef}
               labels={labels}
               onLabelsChange={setLabels}
+              showLabel={false}
+              showDescription={false}
             />
           </SettingsBlock>
 
@@ -689,9 +676,40 @@ export default function ServiceAccountDetailPage({
 // === Internal helpers
 
 /**
- * The reason under a key's status badge: when it lapses, or when it did. Says
+ * Who made this service account and when it last worked, on the header line
+ * under its name. Provenance rather than configuration: it is what a reader
+ * checks once on arrival and never edits, so it belongs beside the title
+ * instead of in a card competing with the sections that do take input.
+ */
+function Provenance({ account }: { account: ServiceAccountDetail }) {
+  return (
+    <span className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
+      <span>Created {formatRelativeTimeFromNow(account.createdAt)}</span>
+      {account.createdBy && (
+        <>
+          <span>by</span>
+          <CreatedByCell createdBy={account.createdBy} />
+        </>
+      )}
+      <span aria-hidden>&middot;</span>
+      <span>
+        {account.lastUsedAt
+          ? `Last used ${formatRelativeTimeFromNow(account.lastUsedAt)}`
+          : "Never used"}
+      </span>
+    </span>
+  );
+}
+
+/**
+ * The date beside a key's status badge: when it lapses, or when it did. Says
  * nothing at all for an open-ended key, because "Never expires" on every row
  * is noise that makes the rows that do expire harder to spot.
+ *
+ * It states only the date. The badge beside it already names the state, and
+ * saying it twice ("Expiring" next to "Expires in 14 days") in two colours was
+ * most of what made this column loud. Colour stays on the badge alone, which
+ * is where the rest of the app rations it.
  */
 function ExpiryNote({ token }: { token: ServiceAccountToken }) {
   if (!token.expiresAt) return null;
@@ -699,23 +717,17 @@ function ExpiryNote({ token }: { token: ServiceAccountToken }) {
   const status = getKeyStatus(token);
   if (status === "expired") {
     return (
-      <p className="text-xs text-muted-foreground">
-        Expired {formatRelativeTimeFromNow(token.expiresAt)}
-      </p>
+      <span className="truncate text-xs text-muted-foreground">
+        {formatRelativeTimeFromNow(token.expiresAt)}
+      </span>
     );
   }
 
   const days = daysUntil(token.expiresAt);
   return (
-    <p
-      className={
-        status === "expiring"
-          ? "text-xs text-amber-700 dark:text-amber-400"
-          : "text-xs text-muted-foreground"
-      }
-    >
-      Expires in {days} {days === 1 ? "day" : "days"}
-    </p>
+    <span className="truncate text-xs text-muted-foreground">
+      in {days} {days === 1 ? "day" : "days"}
+    </span>
   );
 }
 

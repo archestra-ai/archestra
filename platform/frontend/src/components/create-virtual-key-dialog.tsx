@@ -3,9 +3,13 @@
 import { type archestraApiTypes, E2eTestId } from "@archestra/shared";
 import { Globe, Key, Loader2, User, Users } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  resolveAdminDefaultBaseUrl,
+  resolveCandidateBaseUrls,
+} from "@/app/connection/connection-flow.utils";
+import { TerminalBlock } from "@/app/connection/terminal-block";
 import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
 import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
-import { CopyableCode } from "@/components/copyable-code";
 import { ExpirationDateTimeField } from "@/components/expiration-date-time-field";
 import { FormDialog } from "@/components/form-dialog";
 import type { LlmProviderApiKeyResponse } from "@/components/llm-provider-api-key-form";
@@ -34,8 +38,10 @@ import {
   VisibilitySelector,
 } from "@/components/visibility-selector";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import config from "@/lib/config/config";
 import { useFeature } from "@/lib/config/config.query";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
+import { useOrganization } from "@/lib/organization.query";
 import { useTeams } from "@/lib/teams/team.query";
 import { formatRelativeTime } from "@/lib/utils/date-time";
 import {
@@ -67,6 +73,7 @@ export function CreateVirtualKeyDialogWithData({
 }) {
   const { data: apiKeys = [] } = useLlmProviderApiKeys({ enabled: open });
   const { data: session } = useSession();
+  const connectionBaseUrl = useConnectionBaseUrl();
   const { data: existingKeys } = useAllVirtualApiKeys({
     keyType,
     limit: 100,
@@ -99,6 +106,7 @@ export function CreateVirtualKeyDialogWithData({
       onOpenChange={onOpenChange}
       keyType={keyType}
       parentableKeys={apiKeys}
+      connectionBaseUrl={connectionBaseUrl}
       defaultExpirationSeconds={defaultExpirationSeconds ?? null}
       visibilityOptions={visibilityOptions}
       teams={teams}
@@ -122,6 +130,7 @@ export function CreateVirtualKeyDialog({
   onOpenChange,
   keyType,
   parentableKeys,
+  connectionBaseUrl,
   defaultExpirationSeconds,
   visibilityOptions,
   teams,
@@ -134,6 +143,7 @@ export function CreateVirtualKeyDialog({
   onOpenChange: (open: boolean) => void;
   keyType: VirtualKeyType;
   parentableKeys: LlmProviderApiKeyResponse[];
+  connectionBaseUrl: string;
   defaultExpirationSeconds: number | null;
   visibilityOptions: VisibilityOption<VirtualKeyScope>[];
   teams: Array<{ id: string; name: string }>;
@@ -344,13 +354,19 @@ export function CreateVirtualKeyDialog({
           data-testid={E2eTestId.VirtualKeyCreateDialog}
         >
           {createdKeyValue ? (
-            <div className="space-y-3">
-              <div className="flex items-center gap-2 text-sm font-medium">
-                <Key className="h-4 w-4" />
-                Copy this key now. It won&apos;t be shown again.
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <h3 className="text-sm font-semibold">Endpoint</h3>
+                <TerminalBlock code={`${connectionBaseUrl}/model-router`} />
               </div>
-              <div data-testid={E2eTestId.VirtualKeyValue}>
-                <CopyableCode value={createdKeyValue} />
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 text-sm font-semibold">
+                  <Key className="h-4 w-4" />
+                  Copy this key now. It won&apos;t be shown again.
+                </div>
+                <div data-testid={E2eTestId.VirtualKeyValue}>
+                  <TerminalBlock code={createdKeyValue} />
+                </div>
               </div>
               <div className="text-sm text-muted-foreground">
                 <span className="font-medium text-foreground">Expires:</span>{" "}
@@ -580,4 +596,21 @@ export function getVirtualKeyVisibilityOptions(params: {
         : undefined,
     },
   ];
+}
+
+/** Same base-URL resolution as the /connection and /llm/proxy pages. */
+function useConnectionBaseUrl(): string {
+  const { data: organization } = useOrganization();
+  const connectionBaseUrls = organization?.connectionBaseUrls ?? null;
+  return useMemo(() => {
+    const candidates = resolveCandidateBaseUrls({
+      externalProxyUrls: config.api.externalProxyUrls,
+      internalProxyUrl: config.api.internalProxyUrl,
+      metadata: connectionBaseUrls,
+    });
+    const adminDefault = resolveAdminDefaultBaseUrl(connectionBaseUrls);
+    return adminDefault && candidates.includes(adminDefault)
+      ? adminDefault
+      : candidates[0];
+  }, [connectionBaseUrls]);
 }

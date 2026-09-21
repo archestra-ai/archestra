@@ -187,10 +187,10 @@ function PolicyForm({
       {checked && (
         <InlineNotice variant={checked.valid ? "neutral" : "error"}>
           {checked.valid && <Check />}
-          <InlineNoticeText
-            className="whitespace-pre-wrap font-mono"
-            role="status"
-          >
+          {/* No role here: the InlineNotice around it is already role="alert",
+              and a polite "status" nested inside an assertive "alert" does
+              nothing but confuse a screen reader. */}
+          <InlineNoticeText className="whitespace-pre-wrap font-mono">
             {checked.valid ? "Policy is valid." : checked.errors.join("\n")}
           </InlineNoticeText>
         </InlineNotice>

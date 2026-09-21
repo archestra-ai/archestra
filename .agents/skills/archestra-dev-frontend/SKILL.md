@@ -68,7 +68,8 @@ colour, border, radius, or padding classes.
   variants are `warning` (the default), `error`, `info`, and `neutral`.
   Compose it in this order: the icon, a `<span className="font-medium">`
   title, an `<InlineNoticeText>` explanation, then an optional action with
-  `className="ml-auto"`.
+  `className="ml-auto"`. Add the `floating` prop when the notice sits over
+  content that scrolls under it.
 - `Alert` (`components/ui/alert.tsx`) is a page-level banner. It is the
   content of its own row. Its body can hold several sentences, lists, or
   links. Its padding is too large inside a form or a dialog. Use

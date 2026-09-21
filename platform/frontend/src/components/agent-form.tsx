@@ -4628,7 +4628,7 @@ export function AgentForm({
       {/* Environment warnings appear above the form, below the page tabs. */}
       <PageHeaderBanner>
         {!readOnly && environmentConflicts.conflicts.length > 0 && (
-          <InlineNotice className="flex-nowrap items-start gap-x-3 bg-amber-50/90 shadow-sm backdrop-blur-md dark:bg-amber-950/60">
+          <InlineNotice floating className="flex-nowrap items-start gap-x-3">
             <AlertTriangle className="mt-0.5" />
             <div className="min-w-0 flex-1">
               <span className="block font-medium">
@@ -4661,10 +4661,10 @@ export function AgentForm({
         {!readOnly &&
           environmentConflicts.blocksSave &&
           environmentConflicts.conflicts.length === 0 && (
-            <InlineNotice className="flex-nowrap items-start gap-x-3 bg-amber-50/90 shadow-sm backdrop-blur-md dark:bg-amber-950/60">
+            <InlineNotice floating className="flex-nowrap items-start gap-x-3">
               <AlertTriangle className="mt-0.5" />
               <div className="min-w-0 flex-1">
-                <InlineNoticeText className="text-amber-900 dark:text-amber-200">
+                <InlineNoticeText>
                   {environmentConflicts.isVerifying
                     ? "Checking which of this agent's tools work in the new environment…"
                     : "Could not check which of this agent's tools work in the new environment, so the change cannot be saved yet."}
@@ -4673,7 +4673,7 @@ export function AgentForm({
             </InlineNotice>
           )}
         {!readOnly && mcpEnvConflicts.length > 0 && (
-          <InlineNotice className="flex-nowrap items-start gap-x-3 bg-amber-50/90 shadow-sm backdrop-blur-md dark:bg-amber-950/60">
+          <InlineNotice floating className="flex-nowrap items-start gap-x-3">
             <AlertTriangle className="mt-0.5" />
             <div className="min-w-0 flex-1">
               <span className="block font-medium">

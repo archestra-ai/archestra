@@ -36,9 +36,35 @@ const inlineNoticeVariants = cva(
         neutral:
           "bg-muted/40 text-foreground [&>svg]:text-muted-foreground *:data-[slot=inline-notice-text]:text-muted-foreground",
       },
+      /**
+       * The notice sits over content that scrolls under it, such as a sticky
+       * form footer. It needs a backdrop of its own so the page does not read
+       * through it. Here rather than at the call site: a screen that needs
+       * this would otherwise paste its own `bg-amber-50/90`, and the next
+       * palette change would move the variant and leave the copy behind.
+       */
+      floating: {
+        true: "shadow-sm backdrop-blur-md",
+        false: "",
+      },
     },
+    compoundVariants: [
+      {
+        variant: "warning",
+        floating: true,
+        class: "bg-amber-50/90 dark:bg-amber-950/60",
+      },
+      { variant: "error", floating: true, class: "bg-destructive/10" },
+      {
+        variant: "info",
+        floating: true,
+        class: "bg-blue-50/90 dark:bg-blue-950/60",
+      },
+      { variant: "neutral", floating: true, class: "bg-muted/80" },
+    ],
     defaultVariants: {
       variant: "warning",
+      floating: false,
     },
   },
 );

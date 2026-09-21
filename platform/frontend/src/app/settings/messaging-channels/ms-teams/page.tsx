@@ -102,8 +102,7 @@ export default function MsTeamsPage() {
                 POST {`${publicBaseUrl}/api/webhooks/chatops/ms-teams`}
               </code>{" "}
               must be publicly accessible so {channelLabel} can deliver messages
-              to
-              {configuredAppName}
+              to {configuredAppName}
             </InlineNoticeText>
           </InlineNotice>
         )}

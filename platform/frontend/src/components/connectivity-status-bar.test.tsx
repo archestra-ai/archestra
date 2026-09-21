@@ -57,6 +57,21 @@ describe("ConnectivityStatusBar", () => {
     );
   });
 
+  it("explains what to check when the database is unavailable", () => {
+    render(
+      <ConnectivityStatusBar
+        state={{ kind: "database-unavailable" }}
+        onRetry={vi.fn()}
+        appName="Acme"
+      />,
+    );
+
+    expect(screen.getByRole("alert")).toHaveTextContent("Database unavailable");
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "check the database service, connection settings, and capacity",
+    );
+  });
+
   it("calls onRetry when the retry button is clicked", async () => {
     const onRetry = vi.fn();
     render(

@@ -152,6 +152,7 @@ const MCP_UNREACHABLE_ERROR_NAMES = new Set([
   "McpServerConnectionTimeoutError",
   "McpServerUnreachableError",
   "McpServerDeploymentFailedError",
+  "McpServerReadinessTimeoutError",
 ]);
 
 function isNonActionableError(error: unknown): boolean {

@@ -140,8 +140,9 @@ export class Authnz {
     method,
     headers,
   }: FastifyRequest): Promise<boolean> => {
-    // Skip CORS preflight and HEAD requests globally
-    if (method === "OPTIONS" || method === "HEAD") {
+    // Skip CORS preflight. Fastify can route HEAD to a GET handler, so HEAD
+    // must pass through the same authentication and authorization checks.
+    if (method === "OPTIONS") {
       // marketplace and connection-setup URLs embed a raw token — omit from
       // trace to avoid leaking it
       const safeUrl =
@@ -151,10 +152,11 @@ export class Authnz {
           : url;
       logger.trace(
         { url: safeUrl, method },
-        "[Authnz] Skipping auth for preflight/HEAD request",
+        "[Authnz] Skipping auth for preflight request",
       );
       return true;
     }
+    const isGetOrHead = method === "GET" || method === "HEAD";
     // Check if URL matches any LLM proxy route (e.g., /v1/openai, /v1/anthropic, /v1/vllm)
     const isLlmProxyRoute = SupportedProviders.some((provider) =>
       url.startsWith(`/v1/${provider}`),
@@ -190,17 +192,16 @@ export class Authnz {
       url === SKILL_MARKETPLACE_STATIC_PATH ||
       url.startsWith(`${SKILL_MARKETPLACE_STATIC_PATH}/`) ||
       // Public bootstrap endpoints have their own rate limits and polling proof.
-      (method === "GET" && url === "/api/client-connections/installer") ||
+      (isGetOrHead && url === "/api/client-connections/installer") ||
       (method === "POST" &&
         (url === "/api/client-connections" ||
           url === "/api/client-connections/poll")) ||
       // Public connection-setup script endpoint: one-time token in URL, no session
-      (method === "GET" &&
-        url.startsWith(`${CONNECTION_SETUP_SCRIPT_PREFIX}/`)) ||
+      (isGetOrHead && url.startsWith(`${CONNECTION_SETUP_SCRIPT_PREFIX}/`)) ||
       // Public Archestra VAF Add On install bootstrap and package proxy:
       // parameterless, credential-free, fetched by irm without a session
-      (method === "GET" && url === MFILES_VAF_ADD_ON_SCRIPT_PATH) ||
-      (method === "GET" && url === MFILES_VAF_ADD_ON_PACKAGE_PATH) ||
+      (isGetOrHead && url === MFILES_VAF_ADD_ON_SCRIPT_PATH) ||
+      (isGetOrHead && url === MFILES_VAF_ADD_ON_PACKAGE_PATH) ||
       // A2A routes use token auth handled in route, similar to MCP Gateway
       url.startsWith(config.a2aGateway.endpoint) ||
       url.startsWith(config.a2aV2Gateway.endpoint) ||
@@ -218,7 +219,7 @@ export class Authnz {
       // cookies because the iframe has an opaque origin and won't send them.
       url.startsWith("/_sandbox/") ||
       // Allow fetching public SSO providers list for login page (minimal info, no secrets)
-      (method === "GET" && url === "/api/identity-providers/public") ||
+      (isGetOrHead && url === "/api/identity-providers/public") ||
       // The APPA runtime has no browser session. This exact endpoint only
       // returns a constant empty annotation; it reads and writes no user data.
       (method === "POST" && url === GUARDRAILS_NOOP_ANNOTATOR_PATH) ||
@@ -226,18 +227,18 @@ export class Authnz {
       // bearer over loopback; the route checks both before doing anything.
       (method === "POST" && url.startsWith(`${OPENAPPA_HELPERS_PREFIX}/`)) ||
       // Allow fetching public config for login and invitation UI
-      (method === "GET" && url === PUBLIC_CONFIG_PATH) ||
+      (isGetOrHead && url === PUBLIC_CONFIG_PATH) ||
       // Explicit even though the /api/auth prefix check below already covers
       // this path — the exemption is intentional here and must survive a
       // rename of either path.
-      (method === "GET" && url === AUTH_STATE_PATH) ||
+      (isGetOrHead && url === AUTH_STATE_PATH) ||
       // Public existence check for connected remotes (Claude Code startup
       // guard) — the querystring rides along on request.url
-      (method === "GET" &&
+      (isGetOrHead &&
         (url === CONNECTION_HEALTH_PATH ||
           url.startsWith(`${CONNECTION_HEALTH_PATH}?`))) ||
       // Allow fetching public appearance settings for login page (theme, logo, font)
-      (method === "GET" && url === ORGANIZATION_APPEARANCE_SETTINGS_PATH) ||
+      (isGetOrHead && url === ORGANIZATION_APPEARANCE_SETTINGS_PATH) ||
       // Incoming email webhooks - Microsoft Graph calls these directly
       // Only allow the exact webhook path (with optional query params), not sub-paths like /setup
       url === INCOMING_EMAIL_WEBHOOK_PREFIX ||

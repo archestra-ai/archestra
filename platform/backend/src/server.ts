@@ -75,7 +75,11 @@ import {
   dropContentTrgmIndexesUnderEncryption,
   dropLegacyPayloadTrgmIndexes,
 } from "@/database/index-maintenance";
-import { getTransientDbErrorCode } from "@/database/retry";
+import {
+  getDbResourceExhaustionErrorCode,
+  getTransientDbErrorCode,
+  isDbStatementTimeoutError,
+} from "@/database/retry";
 import { seedRequiredStartingData } from "@/database/seed";
 import { enterpriseTier } from "@/enterprise-tier";
 // SPDX-SnippetBegin
@@ -757,9 +761,42 @@ export const createFastifyInstance = () =>
 
         return reply.status(503).send({
           error: {
-            message: "Database temporarily unavailable, please retry",
+            message:
+              "Cannot reach the database. Retry shortly; if it continues, ask an administrator to check the database service and connection settings.",
             type: "api_service_unavailable_error",
           },
+        });
+      }
+
+      const resourceExhaustionCode = getDbResourceExhaustionErrorCode(error);
+      const isStatementTimeout = isDbStatementTimeoutError(error);
+      if (resourceExhaustionCode || isStatementTimeout) {
+        const message = resourceExhaustionCode
+          ? resourceExhaustionCode === "disk_full"
+            ? "Database storage is full. Ask an administrator to free or expand it."
+            : resourceExhaustionCode === "too_many_connections"
+              ? "Database connection limit reached. Ask an administrator to check database capacity."
+              : "Database resources are exhausted. Ask an administrator to check database capacity."
+          : "Database query timed out. Retry; if it continues, ask an administrator to check database load.";
+
+        this.log.error(
+          {
+            ...requestContext,
+            error: error.message,
+            statusCode: 503,
+            dbErrorCode: resourceExhaustionCode ?? "statement_timeout",
+          },
+          "HTTP 503 database unavailable",
+        );
+        captureServerException(request, error, {
+          error_type: resourceExhaustionCode
+            ? "db_resource_exhaustion"
+            : "db_statement_timeout",
+          db_error_code: resourceExhaustionCode ?? "57014",
+          status_code: 503,
+        });
+        return reply.status(503).send({
+          error: { message, type: "api_service_unavailable_error" },
         });
       }
 

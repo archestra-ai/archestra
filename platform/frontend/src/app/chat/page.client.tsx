@@ -254,6 +254,8 @@ function offlineSubmitMessage(
       return "You're offline — your message wasn't sent. Try again once you're back online.";
     case "backend-unreachable":
       return "Can't reach the server — your message wasn't sent. Try again in a moment.";
+    case "database-unavailable":
+      return "The database is unavailable — your message wasn't sent. Try again after the connection is restored.";
   }
 }
 

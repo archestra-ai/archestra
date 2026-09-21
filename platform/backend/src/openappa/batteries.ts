@@ -58,11 +58,21 @@ class OpenAppaBatteriesService {
     defaultTtl: 0,
   });
 
-  constructor() {
-    // The native runtime resolves url `token_env` variables from the process
-    // environment when it compiles a policy, so the value must exist before
-    // the first composed document is opened.
+  /**
+   * Publishes the bridge bearer where the runtime reads it, and answers the
+   * variable a composition must name for it.
+   *
+   * Upstream contract: `Config::hosted`/`Config::hosted_composed` resolve every
+   * `token_env` a hosted document names with `std::env::var` on this process,
+   * and refuse the document when the variable is unset. The addon therefore
+   * reads the bearer from the environment both when it composes a policy and
+   * when it opens one, and every caller that is about to cross into it
+   * publishes the value first instead of relying on this module having been
+   * imported earlier.
+   */
+  publishBridgeToken(): string {
     process.env[OPENAPPA_BRIDGE_TOKEN_ENV] = this.bridgeToken;
+    return OPENAPPA_BRIDGE_TOKEN_ENV;
   }
 
   /** Every battery this organization can install, bundled and uploaded, with its installs. */
@@ -510,9 +520,20 @@ class OpenAppaBatteriesService {
         expected,
       });
       if (policy) return { policy, installs: plan.installs };
+      // Another composition stored its result between this attempt's read and
+      // its write. Reading again at once tends to lose the same race, so wait
+      // first, jittered so simultaneous losers do not line up again. The last
+      // attempt waits for nothing: the caller, and the follow-up queued behind
+      // it, would only sit out the delay before the refusal.
+      if (attempt + 1 < RECOMPILE_ATTEMPTS)
+        await sleep(recomposeBackoffMs(attempt));
     }
-    throw new Error(
-      "the effective policy kept changing while it was being recomposed",
+    // Exhaustion is contention, not a fault: the inputs are fine and the next
+    // call composes them. Callers relay this as "retry later", the way every
+    // other saturated OpenAPPA path does.
+    throw new ApiError(
+      503,
+      "The effective policy is being recomposed; retry shortly",
     );
   }
 
@@ -528,13 +549,18 @@ class OpenAppaBatteriesService {
       serverAliases: plan.serverAliases,
       batteries: plan.composed,
     });
-    const content = composed.content ?? root.content;
+    // A refused composition carries no document. napi renders that absence as
+    // `undefined`, not the `null` the generated typing spells, so normalize it
+    // before deciding whether the runtime refused: an identity test against
+    // `null` alone silently stores a refusal as a clean composition.
+    const accepted = composed.content ?? null;
+    const content = accepted ?? root.content;
     return {
       content,
       contentHash: hash(content),
       rootRevision: root.revision,
       installFingerprint,
-      error: composed.content === null ? composed.errors.join("\n") : null,
+      error: accepted === null ? composed.errors.join("\n") : null,
     };
   }
 
@@ -598,6 +624,9 @@ class OpenAppaBatteriesService {
     // Batteries may share a namespace; its alias then targets all their catalogs.
     const targetsByAlias = new Map<string, Set<string>>();
     const composed: ComposeBatteryInput[] = [];
+    // The value must already be in the environment the addon reads by the time
+    // it composes this plan; naming it and publishing it are the same step.
+    const tokenEnv = this.publishBridgeToken();
     for (const [name, { package: battery }] of [...batteries].sort(([a], [b]) =>
       a.localeCompare(b),
     )) {
@@ -619,7 +648,7 @@ class OpenAppaBatteriesService {
         helpers: owner
           ? {
               urlBase: `http://127.0.0.1:${config.api.port}${OPENAPPA_HELPERS_PREFIX}/${owner.id}`,
-              tokenEnv: OPENAPPA_BRIDGE_TOKEN_ENV,
+              tokenEnv,
             }
           : undefined,
       });
@@ -852,6 +881,17 @@ const loadNative = () => import("@archestra/openappa-rs");
 
 const RECOMPILE_ATTEMPTS = 3;
 const RECOMPILE_CONCURRENCY = 4;
+/** Base wait after a lost store, doubled per attempt and jittered on top. */
+const RECOMPILE_BACKOFF_MS = 25;
+
+function recomposeBackoffMs(attempt: number): number {
+  const delay = RECOMPILE_BACKOFF_MS * 2 ** attempt;
+  return delay + Math.random() * delay;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 /** An install's status on its own; ownership among active installs is settled by the plan. */
 function installStatus(params: {

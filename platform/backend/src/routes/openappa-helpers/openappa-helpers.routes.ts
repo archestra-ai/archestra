@@ -33,19 +33,31 @@ const routes: FastifyPluginAsyncZod = async (app) => {
         body: ConsultSchema,
         response: constructResponseSchema(ConsultSchema),
       },
+      /**
+       * Earliest point in Fastify's lifecycle that sees the socket and the
+       * headers: a caller that is not the local runtime is turned away before
+       * its body is read or validated, so an unauthenticated request can never
+       * answer with a schema complaint about what it sent. Where the request
+       * came from is settled before what it presented, so a remote caller
+       * learns nothing by guessing bearers.
+       */
+      onRequest: async (request) => {
+        if (!openappaEnabled())
+          throw new ApiError(404, "Guardrails v2 is disabled");
+        if (!isLoopbackRequest(request.raw))
+          throw new ApiError(
+            403,
+            "The helper bridge serves the local runtime only",
+          );
+        if (
+          !openappaHelperBridge.presentsBridgeToken(
+            request.headers.authorization,
+          )
+        )
+          throw new ApiError(401, "Unauthorized");
+      },
     },
     async (request) => {
-      if (!openappaEnabled())
-        throw new ApiError(404, "Guardrails v2 is disabled");
-      if (
-        !openappaHelperBridge.presentsBridgeToken(request.headers.authorization)
-      )
-        throw new ApiError(401, "Unauthorized");
-      if (!isLoopbackRequest(request.raw))
-        throw new ApiError(
-          403,
-          "The helper bridge serves the local runtime only",
-        );
       const outcome = await openappaHelperBridge.consult({
         installId: request.params.installId,
         externalName: request.params.externalName,

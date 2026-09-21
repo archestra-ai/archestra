@@ -324,13 +324,17 @@ export type AgentRunStartupProgress = z.infer<
 >;
 
 /** A single run session plus the viewer's relationship to it. */
-export const GetAgentRunResponseSchema = SelectAgentRunSessionSchema.extend({
+/** A run session plus whether its completed turn's CLI is still attachable. */
+export const AgentRunSessionResponseSchema = SelectAgentRunSessionSchema.extend(
+  { terminalRetained: z.boolean() },
+);
+
+export const GetAgentRunResponseSchema = AgentRunSessionResponseSchema.extend({
   workspace: z
     .object({
       state: AgentWorkspaceStateSchema,
       expiresAt: z.date(),
       idleAt: z.date().nullable(),
-      terminalAvailable: z.boolean().optional(),
       connection: z
         .object({ hostname: z.string(), shellCommand: z.string() })
         .nullable(),

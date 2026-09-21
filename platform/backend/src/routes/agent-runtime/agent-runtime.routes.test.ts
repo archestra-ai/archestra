@@ -20,6 +20,7 @@ import {
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { claudeCodeAccountManager } from "@/services/agent-runtime/claude-code-account";
+import { agentRunReconciler } from "@/services/agent-runtime/reconciler";
 import { createRuntimeCredentialDefinition } from "@/services/agent-runtime/runtime-credentials";
 import {
   cancelDetachedAgentTask,
@@ -1650,6 +1651,46 @@ describe("Agent Runtime routes", () => {
       ).statusCode,
     ).toBe(404);
     expect(fileAccess).toHaveBeenCalledTimes(1);
+  });
+
+  test("reports a retained terminal from the reconciler's probe until the CLI exits", async () => {
+    const task = await createTask(agent.id);
+    const run = await createRun({ taskId: task.id, actorUserId: user.id });
+    await AgentRunModel.close({ id: run.id });
+    await AgentWorkspaceModel.create({
+      organizationId,
+      agentId: agent.id,
+      actorKind: "user",
+      actorId: user.id,
+      backend: "kubernetes",
+      runtimeScope: run.runtimeScope,
+      workloadName: run.workloadName,
+      state: "idle",
+      lastTaskId: task.id,
+      expiresAt: new Date(Date.now() + 3600_000),
+    });
+    const retained = vi
+      .spyOn(agentRuntimeManager, "hasRetainedTerminal")
+      .mockResolvedValue(true);
+    vi.spyOn(agentRuntimeManager, "refreshCredentials").mockResolvedValue();
+    const listed = async () =>
+      (await app.inject({ method: "GET", url: "/api/agent-runs" }))
+        .json()
+        .data.find((row: { taskId: string }) => row.taskId === task.id)
+        .terminalRetained as boolean;
+    const detail = async () =>
+      (
+        await app.inject({ method: "GET", url: `/api/agent-runs/${task.id}` })
+      ).json().terminalRetained as boolean;
+
+    expect(await listed()).toBe(false);
+    await agentRunReconciler.reconcile();
+    expect(await listed()).toBe(true);
+    expect(await detail()).toBe(true);
+
+    retained.mockResolvedValue(false);
+    expect(await detail()).toBe(false);
+    expect(await listed()).toBe(false);
   });
 
   test("workspace deletion is owner-only, retries failures, preserves transcripts, and audits the state change", async ({

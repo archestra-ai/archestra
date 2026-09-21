@@ -86,7 +86,7 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
   const availableConnectionCommand = live
     ? connectionCommand
     : run?.workspace?.connection?.shellCommand;
-  const canReattach = Boolean(isOwner && run?.workspace?.terminalAvailable);
+  const canReattach = Boolean(isOwner && run?.terminalRetained);
   const showLiveTerminal =
     (!run && query.isPending) ||
     (isOwner && !showHistory && (live || (reattached && canReattach)));
@@ -96,6 +96,9 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
     run?.workspace &&
     ["idle", "suspended"].includes(run.workspace.state) &&
     new Date(run.workspace.expiresAt).getTime() > now;
+  const workspaceNotice = run?.workspace
+    ? workspaceNoticeFor(run.workspace.state, canReattach)
+    : null;
 
   return (
     <main className="flex h-full min-h-0 flex-col bg-background">
@@ -119,10 +122,14 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
                   <h1 className="truncate text-sm font-medium">{run.title}</h1>
                   <AgentRunState
                     state={run.state}
+                    attentionState={run.attentionState}
                     statusReason={run.statusReason}
                     lastModelActivityAt={run.lastModelActivityAt}
                     startedAt={run.startedAt}
                     endedAt={run.endedAt}
+                    hardDeadlineAt={run.hardDeadlineAt}
+                    terminalRetained={run.terminalRetained}
+                    workspace={run.workspace}
                     compact
                   />
                 </div>
@@ -227,20 +234,17 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
         {run && live && <AgentRunLiveness run={run} />}
         {isOwner && !live && run?.workspace && (
           <output className="flex shrink-0 flex-col gap-2 rounded-md border bg-muted/20 px-3 py-2.5 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex min-w-0 items-start gap-2 sm:items-center">
-              <Info aria-hidden className="mt-0.5 size-3.5 shrink-0 sm:mt-0" />
-              <span className="font-medium text-foreground">
-                {run.workspace.state === "suspended"
-                  ? "Workspace suspended; saved files are retained."
-                  : run.workspace.state === "idle"
-                    ? canReattach
-                      ? "Session running; Continue reopens its terminal."
-                      : "Session ended; resume the saved conversation."
-                    : run.workspace.state === "deleted"
-                      ? "Workspace removed. Run history remains available."
-                      : "Workspace is in use or changing state."}
-              </span>
-            </div>
+            {workspaceNotice && (
+              <div className="flex min-w-0 items-start gap-2 sm:items-center">
+                <Info
+                  aria-hidden
+                  className="mt-0.5 size-3.5 shrink-0 sm:mt-0"
+                />
+                <span className="font-medium text-foreground">
+                  {workspaceNotice}
+                </span>
+              </div>
+            )}
             {run.workspace.state !== "deleted" && (
               <WorkspaceRetention expiresAt={run.workspace.expiresAt} />
             )}
@@ -358,4 +362,22 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
       </StandardDialog>
     </main>
   );
+}
+
+function workspaceNoticeFor(
+  state: string,
+  canReattach: boolean,
+): string | null {
+  switch (state) {
+    case "suspended":
+      return "Workspace suspended; saved files are retained.";
+    case "idle":
+      return canReattach
+        ? null
+        : "Session ended; resume the saved conversation.";
+    case "deleted":
+      return "Workspace removed. Run history remains available.";
+    default:
+      return "Workspace is in use or changing state.";
+  }
 }

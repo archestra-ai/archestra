@@ -24,6 +24,7 @@ import { cleanupAgentRun } from "./pod-run";
 class AgentRunReconciler {
   private readonly a2aManager = new A2AManager({ taskMode: "full" });
   private readonly inFlight = new Set<string>();
+  private retainedTerminals = new Set<string>();
   private timer: NodeJS.Timeout | null = null;
   private isReconciling = false;
 
@@ -41,6 +42,15 @@ class AgentRunReconciler {
     if (!this.timer) return;
     clearInterval(this.timer);
     this.timer = null;
+  }
+
+  hasRetainedTerminal(taskId: string): boolean {
+    return this.retainedTerminals.has(taskId);
+  }
+
+  recordRetainedTerminal(taskId: string, retained: boolean): void {
+    if (retained) this.retainedTerminals.add(taskId);
+    else this.retainedTerminals.delete(taskId);
   }
 
   async reconcile(): Promise<void> {
@@ -66,6 +76,14 @@ class AgentRunReconciler {
           );
         }
       }
+      const retainedTerminals = new Set<string>();
+      for (const session of retained) {
+        const alive = await resolveAgentRuntimeBackendDriver(session.backend)
+          .hasRetainedTerminal(session)
+          .catch(() => false);
+        if (alive) retainedTerminals.add(session.taskId);
+      }
+      this.retainedTerminals = retainedTerminals;
       for (const session of sessions) {
         if (this.inFlight.has(session.id)) continue;
         void this.reconcileSession(session);

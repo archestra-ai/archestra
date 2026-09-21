@@ -103,9 +103,11 @@ export function AgentRuns({ agentId }: { agentId: string }) {
                       </span>
                       <AgentRunState
                         state={run.state}
+                        attentionState={run.attentionState}
                         lastModelActivityAt={run.lastModelActivityAt}
                         startedAt={run.startedAt}
                         endedAt={run.endedAt}
+                        hardDeadlineAt={run.hardDeadlineAt}
                         compact
                         iconOnly
                       />
@@ -167,10 +169,12 @@ function RunDetails({
             <h2 className="truncate text-sm font-medium">{run.title}</h2>
             <AgentRunState
               state={run.state}
+              attentionState={run.attentionState}
               statusReason={run.statusReason}
               lastModelActivityAt={run.lastModelActivityAt}
               startedAt={run.startedAt}
               endedAt={run.endedAt}
+              hardDeadlineAt={run.hardDeadlineAt}
               compact
             />
           </div>

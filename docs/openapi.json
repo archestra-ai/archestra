@@ -76852,6 +76852,9 @@
                           "projectIcon": {
                             "nullable": true,
                             "type": "string"
+                          },
+                          "terminalRetained": {
+                            "type": "boolean"
                           }
                         },
                         "required": [
@@ -76881,7 +76884,8 @@
                           "prompt",
                           "agent",
                           "projectName",
-                          "projectIcon"
+                          "projectIcon",
+                          "terminalRetained"
                         ],
                         "additionalProperties": false
                       }
@@ -77364,6 +77368,9 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "terminalRetained": {
+                      "type": "boolean"
+                    },
                     "workspace": {
                       "nullable": true,
                       "type": "object",
@@ -77388,9 +77395,6 @@
                           "nullable": true,
                           "type": "string",
                           "format": "date-time"
-                        },
-                        "terminalAvailable": {
-                          "type": "boolean"
                         },
                         "connection": {
                           "nullable": true,
@@ -77488,6 +77492,7 @@
                     "agent",
                     "projectName",
                     "projectIcon",
+                    "terminalRetained",
                     "viewerRole"
                   ],
                   "additionalProperties": false
@@ -368800,6 +368805,9 @@
                         "nullable": true,
                         "type": "string"
                       },
+                      "terminalRetained": {
+                        "type": "boolean"
+                      },
                       "workspace": {
                         "nullable": true,
                         "type": "object",
@@ -368824,9 +368832,6 @@
                             "nullable": true,
                             "type": "string",
                             "format": "date-time"
-                          },
-                          "terminalAvailable": {
-                            "type": "boolean"
                           },
                           "connection": {
                             "nullable": true,
@@ -368924,6 +368929,7 @@
                       "agent",
                       "projectName",
                       "projectIcon",
+                      "terminalRetained",
                       "viewerRole"
                     ],
                     "additionalProperties": false

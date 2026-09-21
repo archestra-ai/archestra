@@ -21731,6 +21731,7 @@ export type GetMyAgentRunsResponses = {
             };
             projectName: string | null;
             projectIcon: string | null;
+            terminalRetained: boolean;
         }>;
         pagination: {
             currentPage: number;
@@ -21940,11 +21941,11 @@ export type GetMyAgentRunResponses = {
         };
         projectName: string | null;
         projectIcon: string | null;
+        terminalRetained: boolean;
         workspace?: {
             state: 'active' | 'idle' | 'suspending' | 'suspended' | 'resuming' | 'deleting' | 'deleted';
             expiresAt: string;
             idleAt: string | null;
-            terminalAvailable?: boolean;
             connection: {
                 hostname: string;
                 shellCommand: string;
@@ -95428,11 +95429,11 @@ export type GetProjectRunsResponses = {
         };
         projectName: string | null;
         projectIcon: string | null;
+        terminalRetained: boolean;
         workspace?: {
             state: 'active' | 'idle' | 'suspending' | 'suspended' | 'resuming' | 'deleting' | 'deleted';
             expiresAt: string;
             idleAt: string | null;
-            terminalAvailable?: boolean;
             connection: {
                 hostname: string;
                 shellCommand: string;

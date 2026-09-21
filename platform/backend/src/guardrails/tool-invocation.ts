@@ -20,6 +20,7 @@ import {
 import logger from "@/logging";
 import { AgentTeamModel, ToolInvocationPolicyModel, ToolModel } from "@/models";
 import type { PolicyEvaluationContext } from "@/models/tool-invocation-policy";
+import type { ToolInvocation } from "@/types";
 
 /**
  * Result returned when tool invocation policies block a tool call.
@@ -197,6 +198,12 @@ export const evaluatePolicies = async (
      * the gateway enforces the target's own availability at dispatch time.
      */
     isRunToolDispatchTarget?: boolean;
+    /**
+     * The default action to rule by when no tool row carries this name, as
+     * for a tool the proxy never persists a row under. Unset, such a call is
+     * allowed.
+     */
+    actionWithoutToolRow?: ToolInvocation.ToolInvocationPolicyAction;
   }>,
   agentId: string,
   context: PolicyEvaluationContext,
@@ -301,6 +308,7 @@ export const evaluatePolicies = async (
     return {
       toolCallName: toolCall.toolCallName,
       toolInput: JSON.parse(toolCall.toolCallArgs),
+      actionWithoutToolRow: toolCall.actionWithoutToolRow,
     };
   });
 

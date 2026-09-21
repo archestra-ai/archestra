@@ -74,10 +74,62 @@ const registry = defineArchestraTools([
 export const toolEntries = registry.toolEntries;
 export const tools = registry.tools;
 
-/** @public — exported for testability */
-export const __test = {
-  repairEnvelopedToolArgs,
-};
+/**
+ * Deterministic repair for the wrapper anti-patterns weak models produce when
+ * calling run_tool: a scalar/array param wrapped in a single-key object — the key
+ * can be anything, from a known envelope word (`{"value": …}`, `{"$text": …}`) to
+ * the param's own name (`{"appId": {"appId": …}}`) to an arbitrary string the
+ * model fixates on (`{"my-app": "my-app"}`) — or as the Anthropic text content
+ * block `{"type":"text","text": …}` (exactly two keys) leaked from message content.
+ * A top-level tool_args entry is unwrapped only when ALL hold:
+ *  - the tool's schema literally declares the param's `type` as
+ *    string/number/integer/boolean/array (no type arrays, no
+ *    $ref/anyOf/oneOf/allOf composition);
+ *  - the supplied value is a plain object of a recognized wrapper shape (see
+ *    envelopeInnerValue);
+ *  - the inner value already matches the declared type (see
+ *    innerMatchesDeclaredType) — the repair never retypes a value.
+ * The guard is on the declared *type* only — it deliberately does not check
+ * `enum`/`const`/`items`/tuple/`additionalProperties`; the target tool applies its
+ * complete schema at dispatch, so an inner value that satisfies the type but
+ * violates a non-type constraint is rejected downstream exactly as the wrapper
+ * object would be. The unwrapped value is the model's own inner value, never a
+ * fabricated one, so repair delivers the model's intended `param = X` call. Under
+ * those conditions the as-sent value (an object) is provably invalid against the
+ * declared scalar/array type, so the repair can never rewrite a call the schema
+ * could accept. Anything else — object-typed params, loose/absent types,
+ * unrecognized multi-key objects — is left untouched, and a call with nothing to
+ * repair passes through as the same object.
+ */
+export function repairEnvelopedToolArgs(params: {
+  toolArgs: Record<string, unknown>;
+  schema: unknown;
+}): { toolArgs: Record<string, unknown>; repairedParams: string[] } {
+  const { schema, toolArgs } = params;
+  const properties =
+    isRecord(schema) && isRecord(schema.properties) ? schema.properties : null;
+  if (!properties) {
+    return { toolArgs, repairedParams: [] };
+  }
+
+  const repairedParams: string[] = [];
+  const repaired: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(toolArgs)) {
+    const unwrapped = unwrapEnvelope({
+      value,
+      propertySchema: properties[key],
+    });
+    if (unwrapped) {
+      repairedParams.push(key);
+      repaired[key] = unwrapped.inner;
+    } else {
+      repaired[key] = value;
+    }
+  }
+  return repairedParams.length === 0
+    ? { toolArgs, repairedParams }
+    : { toolArgs: repaired, repairedParams };
+}
 
 // ===== Internal helpers =====
 
@@ -724,63 +776,6 @@ type RepairableDeclaredType =
   | "integer"
   | "boolean"
   | "array";
-
-/**
- * Deterministic repair for the wrapper anti-patterns weak models produce when
- * calling run_tool: a scalar/array param wrapped in a single-key object — the key
- * can be anything, from a known envelope word (`{"value": …}`, `{"$text": …}`) to
- * the param's own name (`{"appId": {"appId": …}}`) to an arbitrary string the
- * model fixates on (`{"my-app": "my-app"}`) — or as the Anthropic text content
- * block `{"type":"text","text": …}` (exactly two keys) leaked from message content.
- * A top-level tool_args entry is unwrapped only when ALL hold:
- *  - the tool's schema literally declares the param's `type` as
- *    string/number/integer/boolean/array (no type arrays, no
- *    $ref/anyOf/oneOf/allOf composition);
- *  - the supplied value is a plain object of a recognized wrapper shape (see
- *    envelopeInnerValue);
- *  - the inner value already matches the declared type (see
- *    innerMatchesDeclaredType) — the repair never retypes a value.
- * The guard is on the declared *type* only — it deliberately does not check
- * `enum`/`const`/`items`/tuple/`additionalProperties`; the target tool applies its
- * complete schema at dispatch, so an inner value that satisfies the type but
- * violates a non-type constraint is rejected downstream exactly as the wrapper
- * object would be. The unwrapped value is the model's own inner value, never a
- * fabricated one, so repair delivers the model's intended `param = X` call. Under
- * those conditions the as-sent value (an object) is provably invalid against the
- * declared scalar/array type, so the repair can never rewrite a call the schema
- * could accept. Anything else — object-typed params, loose/absent types,
- * unrecognized multi-key objects — is left untouched, and a call with nothing to
- * repair passes through as the same object.
- */
-function repairEnvelopedToolArgs(params: {
-  toolArgs: Record<string, unknown>;
-  schema: unknown;
-}): { toolArgs: Record<string, unknown>; repairedParams: string[] } {
-  const { schema, toolArgs } = params;
-  const properties =
-    isRecord(schema) && isRecord(schema.properties) ? schema.properties : null;
-  if (!properties) {
-    return { toolArgs, repairedParams: [] };
-  }
-
-  const repairedParams: string[] = [];
-  const repaired: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(toolArgs)) {
-    const unwrapped = unwrapEnvelope({
-      value,
-      propertySchema: properties[key],
-    });
-    if (unwrapped) {
-      repairedParams.push(key);
-      repaired[key] = unwrapped.inner;
-    } else {
-      repaired[key] = value;
-    }
-  }
-  return repairedParams.length === 0
-    ? { toolArgs, repairedParams }
-    : { toolArgs: repaired, repairedParams };
-}
 
 /** The unwrapped inner value, or null when the entry does not qualify. */
 function unwrapEnvelope(params: {

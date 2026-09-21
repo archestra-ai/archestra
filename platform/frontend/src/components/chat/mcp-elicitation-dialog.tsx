@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
   type ChatMcpElicitationRequest,
+  type ElicitationField,
   ElicitationFieldInput,
   type ElicitationResponse,
   getDefaultValues,
@@ -20,6 +21,9 @@ import {
  * (free text, numbers, a URL to open). Multiple-choice questions render inline
  * in the chat instead, see `McpElicitationCard`.
  */
+type ElicitationAction = "accept" | "decline" | "cancel";
+type ElicitationResponder = (response: ElicitationResponse) => Promise<boolean>;
+
 export function McpElicitationDialog({
   request,
   isSubmitting,
@@ -27,7 +31,7 @@ export function McpElicitationDialog({
 }: {
   request: ChatMcpElicitationRequest | null;
   isSubmitting: boolean;
-  onRespond: (response: ElicitationResponse) => Promise<boolean>;
+  onRespond: ElicitationResponder;
 }) {
   const fields = useMemo(
     () => getElicitationFields(request?.requestedSchema),
@@ -43,6 +47,18 @@ export function McpElicitationDialog({
 
   if (!request) {
     return null;
+  }
+
+  // Only the platform marks a request as a review, so a third-party server
+  // can never render approval controls, whatever its tool is named.
+  if (request.kind === "openappa_review") {
+    return (
+      <RemedyReviewDialog
+        request={request}
+        isSubmitting={isSubmitting}
+        onRespond={onRespond}
+      />
+    );
   }
 
   const submit = async () => {
@@ -156,6 +172,78 @@ export function McpElicitationDialog({
       </div>
     </StandardFormDialog>
   );
+}
+
+/**
+ * The viewer's ruling on a call the guardrails policy held for review. The
+ * review text names the tool and its exact arguments over several lines, so it
+ * is shown as written. The three buttons are the whole answer: there is no
+ * form field that could contradict them.
+ */
+function RemedyReviewDialog({
+  request,
+  isSubmitting,
+  onRespond,
+}: {
+  request: ChatMcpElicitationRequest;
+  isSubmitting: boolean;
+  onRespond: ElicitationResponder;
+}) {
+  const respond = (action: ElicitationAction) =>
+    onRespond(
+      action === "accept"
+        ? { id: request.id, action, content: { action: "approve" } }
+        : { id: request.id, action },
+    );
+
+  return (
+    <StandardFormDialog
+      open={true}
+      onOpenChange={(open) => {
+        if (!open && !isSubmitting) void respond("cancel");
+      }}
+      title="Approval Required"
+      description="Review this tool call before it can run."
+      size="medium"
+      preventCloseOnInteractOutside
+      onSubmit={() => void respond("accept")}
+      footer={
+        <>
+          <Button
+            type="button"
+            variant="ghost"
+            disabled={isSubmitting}
+            onClick={() => void respond("decline")}
+          >
+            <XIcon />
+            Decline
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={isSubmitting}
+            onClick={() => void respond("cancel")}
+          >
+            Cancel
+          </Button>
+          <Button type="submit" disabled={isSubmitting}>
+            <CheckIcon />
+            Approve
+          </Button>
+        </>
+      }
+    >
+      <pre className="max-h-[55vh] overflow-auto whitespace-pre-wrap break-words rounded-md border bg-muted/40 p-3 font-mono text-xs">
+        {request.message}
+      </pre>
+    </StandardFormDialog>
+  );
+}
+
+function titleize(value: string) {
+  return value
+    .replace(/[_-]+/g, " ")
+    .replace(/\b\w/g, (character) => character.toUpperCase());
 }
 
 function isHttpUrl(value: string | undefined) {

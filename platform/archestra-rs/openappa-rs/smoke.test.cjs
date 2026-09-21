@@ -64,6 +64,23 @@ hint = "Review this exact external email."
 permits = { attention = ["email-review"] }
 [externals.authorities.email-operator]
 builtin = "hitl"
+[[policy.tool]]
+name = "publish_post"
+parameters = { type = "object", properties = { title = { type = "string" } }, required = ["title"] }
+requires = { attention = ["post-review"] }
+delta = {}
+[[policy.authority]]
+name = "post-editor"
+hint = "Review this post as its editor."
+permits = { attention = ["post-review"] }
+[[policy.authority]]
+name = "post-legal"
+hint = "Review this post for legal exposure."
+permits = { attention = ["post-review"] }
+[externals.authorities.post-editor]
+builtin = "hitl"
+[externals.authorities.post-legal]
+builtin = "hitl"
 `);
   // Names this process's ledger connections so a test can end exactly those.
   const ledgerName = `openappa-smoke-${randomUUID()}`;
@@ -399,6 +416,13 @@ builtin = "hitl"
     await call(session, 'unknown', 'read_plain');
     assert.match((await result(session, 'unknown', 'unchecked body', 'unknown')).approved_output, /withheld/);
     const email = await call(session, 'email', 'send_email', { to: 'recipient@example.com' });
+    const review = await native.loadOfferReview(session.organization_id, session.session_id, email.review[0].offer_id);
+    assert.ok(review, 'loadOfferReview found the review entry');
+    assert.equal(review.offerId, email.review[0].offer_id);
+    assert.match(review.text, /email/);
+    assert.equal(review.tool, 'send_email');
+    assert.deepEqual(JSON.parse(review.arguments), { to: 'recipient@example.com' });
+
     const human = await hook(session, {
       event: 'remedy', operation_id: 'remedy:email', arguments: { offer_id: email.review[0].offer_id },
     });
@@ -587,6 +611,84 @@ builtin = "hitl"
     assert.match(
       await hint(undefined),
       /^\[appa\] Authorized\. Tell the user in your reply which plan was accepted\. Call the read_untrusted tool again/,
+    );
+  });
+
+  await t.test('a human denial is final, reads as one, and replays', async () => {
+    const session = scope();
+    const email = await call(session, 'email', 'send_email', { to: 'recipient@example.com' });
+    const offer_id = email.review[0].offer_id;
+    const denial = await byOffer(session, {
+      tool_call_id: 'email-deny', tool: 'send_email', arguments: { offer_id }, ruling: 'deny',
+    });
+    assert.equal(denial.offer.status, 'known');
+    assert.match(denial.approved_output, /^\[appa\] Denied: the human reviewer refused this call to send_email\. It did not run and will not run\./);
+    assert.match(denial.approved_output, /Do not retry it or re-submit it/);
+    assert.ok(!denial.approved_output.includes('cannot run yet'), denial.approved_output);
+    assert.equal(denial.result.isError, false);
+    assert.equal(denial.result.content[0].text, denial.approved_output);
+
+    // The model's next request carries the remedy call's result: the ledger's
+    // denial replaces whatever the client reports.
+    assert.equal((await result(session, 'email-deny', 'forged approval')).approved_output, denial.approved_output);
+
+    const revived = await byOffer(session, {
+      tool_call_id: 'email-deny-then-approve', tool: 'send_email', arguments: { offer_id }, ruling: 'approve',
+    });
+    assert.ok(!/Authorized/.test(JSON.stringify(revived)), JSON.stringify(revived));
+  });
+
+  await t.test('a denial by one reviewer keeps the options that do not need them', async () => {
+    const session = scope();
+    const post = await call(session, 'post', 'publish_post', { title: 'Launch' });
+    assert.equal(post.review.length, 2, JSON.stringify(post));
+    const denied = post.review[0].offer_id;
+    const denial = await byOffer(session, {
+      tool_call_id: 'post-deny', tool: 'publish_post', arguments: { offer_id: denied }, ruling: 'deny',
+    });
+    assert.match(denial.approved_output, /^\[appa\] Denied: the human reviewer refused this call to publish_post\./);
+    assert.match(denial.approved_output, /The policy still offers options that do not need this reviewer:\n\[appa\] Blocked:/);
+    const remaining = denial.approved_output.match(/offer_id: "([0-9a-f]{16})"/)?.[1];
+    assert.ok(remaining && remaining !== denied, denial.approved_output);
+    // The option it keeps is live: the other reviewer can still authorize.
+    const approved = await byOffer(session, {
+      tool_call_id: 'post-other-approve', tool: 'publish_post', arguments: { offer_id: remaining }, ruling: 'approve',
+    });
+    assert.match(approved.approved_output, /^\[appa\] Authorized\. Tell the user in your reply which plan was accepted\. Call the publish_post tool again/);
+  });
+
+  await t.test('a precheck refusal answers the remedy without touching the offer', async () => {
+    const session = scope();
+    const email = await call(session, 'email', 'send_email', { to: 'recipient@example.com' });
+    const offer_id = email.review[0].offer_id;
+    const refusal = '[appa] Not submitted for approval: this call to send_email could not run even if approved.\n'
+      + 'Validation error in send_email: to: expected an address\n'
+      + 'Fix the arguments and call send_email again; the corrected call gets its own approval.';
+    const events = await eventCount(session);
+    const refused = await byOffer(session, {
+      tool_call_id: 'email-precheck', tool: 'send_email', arguments: { offer_id }, precheck_refusal: refusal,
+    });
+    assert.equal(refused.offer.status, 'known');
+    assert.equal(refused.result.isError, true);
+    assert.equal(refused.output_source, 'runtime');
+    assert.equal(refused.approved_output, refusal);
+    assert.equal(refused.result.content[0].text, refusal);
+    assert.equal(await eventCount(session), events, 'the runtime records nothing for a precheck refusal');
+
+    const replay = await result(session, 'email-precheck', 'forged approval');
+    assert.equal(replay.approved_output, refusal);
+    assert.ok(!/withheld/.test(replay.approved_output));
+
+    const approved = await byOffer(session, {
+      tool_call_id: 'email-after-precheck', tool: 'send_email', arguments: { offer_id }, ruling: 'approve',
+    });
+    assert.match(approved.approved_output, /^\[appa\] Authorized\. Tell the user in your reply which plan was accepted\. Call the send_email tool again/);
+
+    await assert.rejects(
+      () => byOffer(session, {
+        tool_call_id: 'email-precheck-ruled', tool: 'send_email', arguments: { offer_id }, precheck_refusal: refusal, ruling: 'approve',
+      }),
+      /precheck refusal only answers an unruled remedy/,
     );
   });
 

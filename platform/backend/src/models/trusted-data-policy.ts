@@ -3,6 +3,7 @@ import {
   CONTEXT_TEAM_IDS,
   isAgentTool,
   isSkillTool,
+  MCP_SERVER_TOOL_NAME_SEPARATOR,
 } from "@archestra/shared";
 import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
 import { get } from "lodash-es";
@@ -598,14 +599,19 @@ class TrustedDataPolicyModel {
           ? !knownToolIds.has(resolvedToolId)
           : !knownTools.has(toolName)
       ) {
-        // A run_tool dispatch target with no tool row anywhere cannot have
-        // produced upstream data: run_tool refuses dispatches to names it
-        // cannot resolve, so the result is the platform's own refusal text —
-        // it must not poison the session over a hallucinated name. Delegation
-        // surfaces (agent/skill tools) execute without needing a matching row
-        // here, so they stay on the fail-closed path below.
+        // A `<server>__<tool>` run_tool dispatch target with no tool row
+        // anywhere cannot have produced upstream data: run_tool refuses
+        // dispatches to such names it cannot resolve, so the result is the
+        // platform's own refusal text — it must not poison the session over a
+        // hallucinated name. A bare short name is different: run_tool
+        // recovers it to the one real third-party tool it suffixes, so its
+        // output can be real upstream data and it takes the normal
+        // "not found → untrusted" path below. Delegation surfaces (agent/skill
+        // tools) execute without needing a matching row here, so they stay on
+        // that fail-closed path too.
         if (
           toolCalls[i].isRunToolDispatchTarget &&
+          toolName.includes(MCP_SERVER_TOOL_NAME_SEPARATOR) &&
           !isDelegationSurfaceName(toolName)
         ) {
           results.set(i.toString(), {

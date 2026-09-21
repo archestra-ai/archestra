@@ -194,6 +194,44 @@ describe("OpenAiResponsesRequestAdapter.getMessages", () => {
     });
   });
 
+  // Codex calls a namespaced tool by its bare name and names the namespace
+  // beside it; the pair is the tool's identity, so trusted-data evaluation
+  // and the plugins must see both.
+  test("carries the namespace a paired history call named", () => {
+    const request = {
+      model: "gpt-5.5",
+      input: [
+        {
+          type: "function_call",
+          call_id: "call_gw",
+          name: "archestra__search_tools",
+          namespace: "mcp__gw",
+          arguments: '{"query":"issues"}',
+        },
+        {
+          type: "function_call_output",
+          call_id: "call_gw",
+          output: "matching tools",
+        },
+      ],
+    } as unknown as OpenAi.Types.ResponsesRequest;
+
+    const adapter = openAiResponsesAdapterFactory.createRequestAdapter(request);
+    const expected = {
+      id: "call_gw",
+      name: "archestra__search_tools",
+      namespace: "mcp__gw",
+      arguments: { query: "issues" },
+      content: "matching tools",
+      isError: false,
+    };
+
+    expect(adapter.getToolResults()).toEqual([expected]);
+    expect(adapter.getMessages()).toEqual([
+      { role: "tool", content: "matching tools", toolCalls: [expected] },
+    ]);
+  });
+
   test("keeps an orphaned function_call_output visible under the unknown name", () => {
     const request = {
       model: "gpt-5.6-sol",

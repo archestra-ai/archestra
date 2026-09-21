@@ -40,6 +40,14 @@ export const ChatMcpElicitationResponseSchema = z.object({
     .optional(),
 });
 
+/**
+ * A built-in elicitation the chat renders with its own controls instead of a
+ * generic form. `openappa_review` asks a person to rule on a call the
+ * guardrails policy held for review. Only built-in tools set a kind; requests
+ * from third-party MCP servers never carry one.
+ */
+type ChatMcpElicitationKind = "openappa_review";
+
 type ChatMcpElicitationStreamData = {
   id: string;
   conversationId: string;
@@ -53,6 +61,9 @@ type ChatMcpElicitationStreamData = {
   toolCallId?: string;
   /** Short label for the question's tab (ask_user's `header`). */
   header?: string;
+  kind?: ChatMcpElicitationKind;
+  reviewedTool?: string;
+  reviewedArguments?: string;
 };
 
 /** Why the backend stopped waiting for a question's answer. */
@@ -95,6 +106,9 @@ export type ChatMcpElicitationBridge = {
     requestedSchema?: unknown;
     toolCallId?: string;
     header?: string;
+    kind?: ChatMcpElicitationKind;
+    reviewedTool?: string;
+    reviewedArguments?: string;
   }) => Promise<ArchestraElicitationOutcome>;
 };
 
@@ -132,6 +146,9 @@ export function createChatMcpElicitationBridge({
     url?: string;
     toolCallId?: string;
     header?: string;
+    kind?: ChatMcpElicitationKind;
+    reviewedTool?: string;
+    reviewedArguments?: string;
     signal: AbortSignal | undefined;
   }): Promise<ElicitResult> {
     const streamWriter = writer;
@@ -169,6 +186,9 @@ export function createChatMcpElicitationBridge({
           url: req.url,
           toolCallId: req.toolCallId,
           header: req.header,
+          kind: req.kind,
+          reviewedTool: req.reviewedTool,
+          reviewedArguments: req.reviewedArguments,
         } satisfies ChatMcpElicitationStreamData,
       });
 
@@ -239,12 +259,24 @@ export function createChatMcpElicitationBridge({
           elicitationId:
             "elicitationId" in params ? params.elicitationId : undefined,
           url: "url" in params ? params.url : undefined,
+          // A third-party server naming the built-in kind never earns it:
+          // only this bridge's own elicit() carries a rendering kind.
+          kind: undefined,
           signal: signals.length > 1 ? AbortSignal.any(signals) : signals[0],
         });
       };
     },
 
-    async elicit({ toolName, message, requestedSchema, toolCallId, header }) {
+    async elicit({
+      toolName,
+      message,
+      requestedSchema,
+      toolCallId,
+      header,
+      kind,
+      reviewedTool,
+      reviewedArguments,
+    }) {
       if (!writer) {
         return { status: "no_viewer" };
       }
@@ -256,6 +288,9 @@ export function createChatMcpElicitationBridge({
           requestedSchema,
           toolCallId,
           header,
+          kind,
+          reviewedTool,
+          reviewedArguments,
           signal: abortSignal,
         });
         return { status: "answered", result };

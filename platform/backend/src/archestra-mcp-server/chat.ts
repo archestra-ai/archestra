@@ -6,6 +6,11 @@ import {
 import { z } from "zod";
 import config from "@/config";
 import logger from "@/logging";
+import {
+  getHitlAskUserArguments,
+  hitlRulingFromLabels,
+  recordHitlRuling,
+} from "@/openappa/hitl-review";
 import { OfferJwsSchema, verifyOfferClaims } from "@/openappa/offer-claims";
 import { chatOpenAppaSession, type OpenAppaSession } from "@/openappa/service";
 import { archestraMcpBranding } from "./branding";
@@ -117,6 +122,9 @@ const NO_CHOICE_FORM_MESSAGE =
 const NO_VIEWER_MESSAGE =
   "No one can answer a choice form in this session. Ask the question in your reply instead, and list the options.";
 
+const HITL_NO_VIEWER_MESSAGE =
+  "This client cannot show the HITL review. Keep the tool call blocked. Do not ask for approval in plain text and do not retry it.";
+
 const registry = defineArchestraTools([
   defineArchestraTool({
     shortName: TOOL_TODO_WRITE_SHORT_NAME,
@@ -157,28 +165,43 @@ const registry = defineArchestraTools([
     publicSchema: AskUserSchema,
     outputSchema: AskUserOutputSchema,
     async handler({ args, context, toolName }) {
-      const labels = args.options.map((option) => option.label);
+      const liveOffers = verifiedOfferIds(args.remedy_offers, context);
+      const session = callOpenAppaSession(context);
+      const hitlArgs = session
+        ? await getHitlAskUserArguments({
+            session,
+            offerIds: liveOffers,
+          })
+        : undefined;
+      // A staged HITL review owns its copy and fixed choices. The model can
+      // route the offer to ask_user, but it cannot soften or replace the review.
+      const effectiveArgs = hitlArgs ?? args;
+      const labels = effectiveArgs.options.map((option) => option.label);
       if (new Set(labels).size !== labels.length) {
         return errorResult("Give each option a different label.");
       }
 
       const elicitation = context.elicitation;
       if (!elicitation) {
-        return errorResult(NO_VIEWER_MESSAGE);
+        return errorResult(
+          hitlArgs ? HITL_NO_VIEWER_MESSAGE : NO_VIEWER_MESSAGE,
+        );
       }
 
       const outcome = await elicitation.elicit({
         toolName,
-        message: args.question,
-        requestedSchema: args.allowMultiple
-          ? buildMultiChoiceSchema(args.options)
-          : buildSingleChoiceSchema(args.options),
+        message: effectiveArgs.question,
+        requestedSchema: effectiveArgs.allowMultiple
+          ? buildMultiChoiceSchema(effectiveArgs.options)
+          : buildSingleChoiceSchema(effectiveArgs.options),
         toolCallId: context.currentToolCallId,
-        header: args.header,
+        header: effectiveArgs.header,
       });
 
       if (outcome.status === "no_viewer") {
-        return errorResult(NO_CHOICE_FORM_MESSAGE);
+        return errorResult(
+          hitlArgs ? HITL_NO_VIEWER_MESSAGE : NO_CHOICE_FORM_MESSAGE,
+        );
       }
 
       // No answer in time reads as a dismissal: nothing was accepted.
@@ -186,9 +209,15 @@ const registry = defineArchestraTools([
         outcome.status === "answered"
           ? outcome.result
           : { action: "cancel" as const };
-      const liveOffers = verifiedOfferIds(args.remedy_offers, context);
       if (result.action !== "accept") {
         const action = result.action === "decline" ? "decline" : "cancel";
+        if (hitlArgs && session) {
+          await recordHitlRuling({
+            session,
+            offerId: hitlArgs.remedy_offer_ids[0],
+            ruling: action === "decline" ? "deny" : "none",
+          });
+        }
         return structuredSuccessResult(
           {
             action,
@@ -213,25 +242,38 @@ const registry = defineArchestraTools([
 
       const selected = selectedLabels({
         content: result.content,
-        options: args.options,
-        allowMultiple: args.allowMultiple === true,
+        options: effectiveArgs.options,
+        allowMultiple: effectiveArgs.allowMultiple === true,
       });
       if (selected.length === 0) {
         return errorResult("The user sent the form with no option selected.");
       }
-      if (!args.allowMultiple && selected.length !== 1) {
+      if (!effectiveArgs.allowMultiple && selected.length !== 1) {
         return errorResult("The user selected more than one option.");
+      }
+      const hitlRuling = hitlArgs ? hitlRulingFromLabels(selected) : undefined;
+      if (hitlArgs && !hitlRuling) {
+        return errorResult("The HITL review returned an invalid choice.");
+      }
+      if (hitlArgs && hitlRuling && session) {
+        await recordHitlRuling({
+          session,
+          offerId: hitlArgs.remedy_offer_ids[0],
+          ruling: hitlRuling,
+        });
       }
 
       return structuredSuccessResult(
         { action: "accept", selected },
         [
           `The user picked: ${selected.join(", ")}. Act on this choice.`,
-          liveOffers.length > 0
-            ? `Live remedy offers: ${liveOffers.join(", ")}. If the pick accepts a remedy, continue now exactly as the ruling says — call ${archestraMcpBranding.getToolName(
-                TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
-              )} with the offer_id and the plan from the ruling, then retry the blocked call. Do not ask the user again.`
-            : "",
+          hitlRuling === "deny"
+            ? "The user denied the remedy. Keep the blocked call blocked. Do not ask again and do not call execute_remedy_plan."
+            : liveOffers.length > 0
+              ? `Live remedy offers: ${liveOffers.join(", ")}. If the pick accepts a remedy, continue now exactly as the ruling says — call ${archestraMcpBranding.getToolName(
+                  TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
+                )} with the offer_id and the plan from the ruling, then retry the blocked call. Do not ask the user again.`
+              : "",
         ]
           .filter((part) => part.length > 0)
           .join(" "),

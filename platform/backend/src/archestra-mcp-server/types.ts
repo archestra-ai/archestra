@@ -98,6 +98,15 @@ export interface ArchestraContext {
    */
   taskBridge?: ChatTaskBridge;
   /**
+   * MRTR context for multi-round tool requests (human-in-the-loop elicitation).
+   */
+  mrtr?: {
+    enabled: boolean;
+    inputResponses?: Record<string, unknown>;
+    clientCapabilities?: unknown;
+    round?: number;
+  };
+  /**
    * The host-issued id of the tool call currently executing. Set on the
    * delegation path so the child's surfaced tool calls can be attributed to
    * the delegation call (`agent__<slug>`) that spawned them, and on the

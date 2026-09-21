@@ -200,7 +200,11 @@ behavior, not exactly-once execution of arbitrary external services.
 
 Personal offers require their original user. Organization offers allow any caller in that organization. Unknown, unauthorized, or spent offers return terminal feedback without executing.
 
-The embedded API returns typed remedy outcomes, refusal reasons, and offer descriptions. Interactive human approval is not implemented. Calls requiring human approval stay blocked.
+The embedded API returns typed remedy outcomes, refusal reasons, and offer descriptions.
+
+An offer that needs a human reviewer carries a review entry. `loadOfferReview` returns the review text together with the reviewed call's tool and arguments. The gateway asks the person, then passes their ruling with the remedy. A denial is final: the runtime retires the offer, and the model is told that the reviewer refused the call and that it must not retry the call in another form. Any options that do not need that reviewer are listed after the denial.
+
+When the host can tell that the reviewed call would fail even if approved, it sends `precheck_refusal` instead of asking. The binding records that text as the remedy's result without involving the runtime, so the offer stays live and no approval is spent.
 
 The proxy replaces a denied call with `archestra__get_remedy_plans`. The notice preserves the original call position and provider call ID. It carries the blocked tool, its arguments, and the policy ruling in plain text. Other allowed calls in the same response run normally. On later requests, the proxy restores each notice to the original tool call and injects the ruling as its result.
 
@@ -231,7 +235,7 @@ ARCHESTRA_OPENAPPA_TEST_DATABASE_URL=postgresql://... pnpm test
 The native tests use real hooks, a real PostgreSQL database, two Node processes,
 and a local HTTP sanitizer. They cover changed resends, concurrent duplicates,
 session isolation, parallel identical calls, reverse-order results after restart,
-canceled-batch replay, remedy acceptance, restriction persistence without model
+canceled-batch replay, remedy acceptance, human review denials and precheck refusals, restriction persistence without model
 history, one-time sanitizer execution, unknown outcomes, and injected receipt
 commit failure with event rollback. The storage test in the OpenAPPA tree is:
 
@@ -246,7 +250,7 @@ availability. Chat tests verify that ordinary tools
 execute and return their original output without APPA callbacks in either mode.
 
 The pinned OpenAPPA revision includes the companion PostgreSQL and embedded-remedy
-changes. Archestra uses embedded remedies without a human approval context.
+changes.
 Previous demo/browser results do not qualify this proxy-only refactor; validation
 for this change is reported separately in the PR.
 

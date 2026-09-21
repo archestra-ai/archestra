@@ -14,6 +14,15 @@ export interface OpenAiStubOptions {
   throwAtChunk?: number;
   /** Stream a `get_weather` tool call, closing the turn as `tool_calls`. */
   includeToolCalls?: boolean;
+  /**
+   * Return these tool calls (instead of the fixed `list_files` one) from the
+   * buffered (non-streaming) response.
+   */
+  nonStreamingToolCalls?: Array<{
+    id: string;
+    name: string;
+    arguments: string;
+  }>;
 }
 
 export interface AnthropicStubOptions {
@@ -78,7 +87,13 @@ export function createOpenAiTestClient(options: OpenAiStubOptions = {}) {
                   role: "assistant",
                   content: null,
                   refusal: null,
-                  tool_calls: [
+                  tool_calls: options.nonStreamingToolCalls?.map(
+                    ({ id, name, arguments: args }) => ({
+                      id,
+                      type: "function" as const,
+                      function: { name, arguments: args },
+                    }),
+                  ) ?? [
                     {
                       id: "call_list_files",
                       type: "function",

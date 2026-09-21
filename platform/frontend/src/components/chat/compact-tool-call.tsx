@@ -29,6 +29,7 @@ import {
 import { useSession } from "@/lib/auth/auth.query";
 import {
   getCompactToolState,
+  getHumanRulingDisplay,
   getToolHeaderState,
 } from "@/lib/chat/chat-tools-display.utils";
 import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
@@ -112,6 +113,7 @@ function CompactCircle({
   toolName,
   toolCallId,
   state,
+  stateLabel,
   isExpanded,
   isExpandable = true,
   onClick,
@@ -121,6 +123,8 @@ function CompactCircle({
   toolName: string;
   toolCallId?: string;
   state: "running" | "completed" | "error" | "denied";
+  /** Says more than the state alone, e.g. whose ruling denied the call. */
+  stateLabel?: string;
   isExpanded: boolean;
   isExpandable?: boolean;
   onClick: () => void;
@@ -138,13 +142,15 @@ function CompactCircle({
   const elapsed = useElapsedSince(task?.startedAt ?? 0, Boolean(isBackground));
   const stateSuffix = isBackground
     ? " (running in the background)"
-    : state === "running"
-      ? " (running)"
-      : state === "error"
-        ? " (error)"
-        : state === "denied"
-          ? " (denied)"
-          : "";
+    : stateLabel
+      ? ` (${stateLabel.toLowerCase()})`
+      : state === "running"
+        ? " (running)"
+        : state === "error"
+          ? " (error)"
+          : state === "denied"
+            ? " (denied)"
+            : "";
   const accessibleName = `${parseFullToolName(toolName).toolName.replace(/_/g, " ")}${stateSuffix}`;
 
   return (
@@ -194,6 +200,8 @@ function CompactCircle({
             <span>{" (cancelled)"}</span>
           ) : isBackground ? (
             <span>{` (running in the background · ${formatElapsed(elapsed)})`}</span>
+          ) : stateLabel ? (
+            <span>{` (${stateLabel.toLowerCase()})`}</span>
           ) : state === "running" ? (
             <span>{" (running)"}</span>
           ) : state === "error" ? (
@@ -515,6 +523,12 @@ export function CompactToolGroup({
               toolName={displayToolName}
               toolCallId={entry.part.toolCallId}
               state={state}
+              stateLabel={
+                getHumanRulingDisplay({
+                  part: entry.part,
+                  toolResultPart: entry.toolResultPart,
+                })?.label
+              }
               isExpanded={expandedKey === entry.key}
               isExpandable={canExpandToolCalls}
               onClick={() => handleToggle(entry.key)}
@@ -620,20 +634,24 @@ function ExpandedToolCard({
   const logsButton = errorText ? (
     <ToolErrorLogsButton toolName={toolName} />
   ) : null;
+  const humanRuling = getHumanRulingDisplay({ part, toolResultPart });
   const headerState =
     task?.status === "cancelled"
       ? ("output-cancelled" as const)
-      : getToolHeaderState({
-          state: part.state || "input-available",
-          toolResultPart,
-          errorText,
-        });
+      : humanRuling?.ruling === "deny"
+        ? ("output-denied" as const)
+        : getToolHeaderState({
+            state: part.state || "input-available",
+            toolResultPart,
+            errorText,
+          });
 
   return (
     <Tool open>
       <ToolHeader
         type={`tool-${toolName}`}
         state={headerState}
+        statusLabel={humanRuling?.label}
         isCollapsible={false}
         actionButton={logsButton}
         identityBadge={

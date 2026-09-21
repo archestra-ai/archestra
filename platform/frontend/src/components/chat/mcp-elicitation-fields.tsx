@@ -32,6 +32,16 @@ export const ChatMcpElicitationRequestSchema = z.object({
   url: z.string().optional(),
   toolCallId: z.string().optional(),
   header: z.string().optional(),
+  /**
+   * Set by the platform on built-in requests it renders with its own controls.
+   * `openappa_review` asks the viewer to rule on a call the guardrails policy
+   * held for review. Third-party MCP server requests never carry a kind.
+   */
+  kind: z.literal("openappa_review").optional(),
+  /** Reviewed call's tool name, when the platform loaded an offer review. */
+  reviewedTool: z.string().optional(),
+  /** Reviewed call's arguments as JSON text. */
+  reviewedArguments: z.string().optional(),
 });
 
 export type ChatMcpElicitationRequest = z.infer<

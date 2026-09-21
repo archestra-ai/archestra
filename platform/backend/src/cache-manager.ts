@@ -44,6 +44,10 @@ export const CacheKey = {
   ChatMcpElicitationPending: "chat-mcp-elicitation-pending",
   /** Native OpenAPPA questions issued by this proxy and not answered yet */
   OpenAppaNativeQuestion: "openappa-native-question",
+  /** OpenAPPA reviews waiting for a native client question */
+  OpenAppaHitlReview: "openappa-hitl-review",
+  /** One-use rulings returned by a native client question */
+  OpenAppaHitlRuling: "openappa-hitl-ruling",
   /** OpenAI credentials that cannot generate reasoning summaries (unverified org) */
   OpenaiReasoningSummaryUnsupported: "openai-reasoning-summary-unsupported",
   /** Channel discovery TTL per workspace */

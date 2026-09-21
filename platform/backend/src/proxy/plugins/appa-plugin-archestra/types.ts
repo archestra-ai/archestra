@@ -1,6 +1,8 @@
+import type { IncomingHttpHeaders } from "node:http";
 import type { AppaPreparedRequest } from "@/openappa/request";
 import type { AppaChatSource, OpenAppaSession } from "@/openappa/service";
 import type { AppaSessionIdentity } from "@/openappa/wire";
+import type { GatewayToolIdentity } from "@/routes/proxy/utils/gateway-tool-names";
 
 export const APPA_PLUGIN_TRUSTED_CONTEXT: unique symbol = Symbol(
   "archestra.appa.trusted-context",
@@ -10,7 +12,11 @@ export type AppaTrustedContext = {
   /** Established by the proxy after authentication and session-root validation. */
   session: OpenAppaSession;
   profileId: string;
-  canonicalizeToolName: (name: string) => string;
+  /** Which of the request's tools are this platform's gateway tools, and as what. */
+  toolIdentity: Pick<
+    GatewayToolIdentity,
+    "canonicalize" | "attestationOf" | "looseRunToolDispatch"
+  >;
   /** What the proxy prepared for this request before any adapter saw it. */
   request: AppaPreparedRequest;
   /** Present only for the proxy's loopback Chat call path. */
@@ -25,7 +31,8 @@ export type AppaClientAdapter = {
     requestBody: unknown;
     trustedContext?: AppaTrustedContext;
   }): boolean;
-  classifyToolName(name: string): "gateway" | "local";
+  /** `namespace` is the tool group the request declared the name under, if any. */
+  classifyToolName(name: string, namespace?: string): "gateway" | "local";
   normalizeLocalToolName(name: string): string;
   /**
    * The client's own question tool. Its results need the same decision
@@ -34,7 +41,10 @@ export type AppaClientAdapter = {
    */
   nativeQuestion?: {
     toolName: string;
+    isAvailable?(headers: IncomingHttpHeaders): boolean;
+    supportsMultiple?: boolean;
     fromAskUser?(args: AskUserArguments): Record<string, unknown>;
+    rulingFromResult?(result: NativeQuestionResult): NativeQuestionRuling;
   };
   /**
    * Reads the trajectory identity the client itself puts on the wire: the id
@@ -62,3 +72,10 @@ export type AskUserArguments = {
   allowMultiple?: boolean;
   remedy_offer_ids?: string[];
 };
+
+export type NativeQuestionResult = {
+  content: string;
+  isError?: boolean;
+};
+
+export type NativeQuestionRuling = "approve" | "deny" | "none";

@@ -51,6 +51,42 @@ const request = {
   },
 };
 
+// The runtime's review text, as the backend streams it for a held call.
+const reviewText = [
+  'APPA asks you to rule as the authority "operator".',
+  "",
+  "Tool: archestra__todo_write",
+  "Arguments:",
+  "{",
+  '  "todos": [',
+  '    { "id": 1, "content": "qa-hitl", "status": "pending" }',
+  "  ]",
+  "}",
+  "",
+  "What this ruling would cover:",
+  "  (none)",
+].join("\n");
+
+const reviewRequest = {
+  id: "00000000-0000-4000-8000-000000000003",
+  conversationId: "00000000-0000-4000-8000-000000000002",
+  toolName: "execute_remedy_plan",
+  message: reviewText,
+  mode: "form" as const,
+  requestedSchema: {
+    type: "object",
+    properties: {
+      action: {
+        type: "string",
+        enum: ["approve", "deny"],
+        description: "Approve or deny this remedy plan",
+      },
+    },
+    required: ["action"],
+  },
+  kind: "openappa_review" as const,
+};
+
 describe("McpElicitationDialog", () => {
   it("keeps typed enums out of the string-only inline choice card", () => {
     expect(
@@ -207,5 +243,80 @@ describe("McpElicitationDialog", () => {
     expect(
       screen.queryByRole("link", { name: "Open request" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("shows a review's tool and arguments as written, with no form to contradict the buttons", () => {
+    render(
+      <McpElicitationDialog
+        request={reviewRequest}
+        isSubmitting={false}
+        onRespond={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.getByRole("heading", { name: "Approval Required" }),
+    ).toBeInTheDocument();
+    // Line breaks survive, so the tool and each argument read on their own lines.
+    expect(
+      screen.getByText(
+        (_, element) =>
+          element?.tagName === "PRE" && element.textContent === reviewText,
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
+    expect(screen.queryByText("Action")).not.toBeInTheDocument();
+  });
+
+  it.each([
+    {
+      button: /approve/i,
+      response: { action: "accept", content: { action: "approve" } },
+    },
+    { button: /decline/i, response: { action: "decline" } },
+    { button: /^cancel$/i, response: { action: "cancel" } },
+  ])("answers a review with the button pressed ($response.action)", async ({
+    button,
+    response,
+  }) => {
+    const user = userEvent.setup();
+    const onRespond = vi.fn().mockResolvedValue(undefined);
+
+    render(
+      <McpElicitationDialog
+        request={reviewRequest}
+        isSubmitting={false}
+        onRespond={onRespond}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: button }));
+
+    expect(onRespond).toHaveBeenCalledTimes(1);
+    expect(onRespond).toHaveBeenCalledWith({
+      id: reviewRequest.id,
+      ...response,
+    });
+  });
+
+  it("renders a third-party request as a plain form even when its tool is named like the review tool", () => {
+    render(
+      <McpElicitationDialog
+        request={{
+          ...reviewRequest,
+          toolName: "example__execute_remedy_plan",
+          kind: undefined,
+        }}
+        isSubmitting={false}
+        onRespond={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.getByRole("heading", { name: "Additional Information" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /approve/i }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("combobox")).toBeInTheDocument();
   });
 });

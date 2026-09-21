@@ -18,6 +18,7 @@ const native = vi.hoisted(() => ({
   initializeOpenappa: vi.fn(),
   dispatchHook: vi.fn(),
   executeRemedyByOffer: vi.fn(),
+  loadOfferReview: vi.fn(async () => null),
   // No batteries installed: the composed policy is the root alone.
   listBundledOpenappaBatteries: vi.fn(async () => []),
   composeOpenappaPolicy: vi.fn(async (input: { root: string }) => ({

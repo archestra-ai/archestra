@@ -110,9 +110,9 @@ segment in `/v1/mcp/:profileId`, and accepts a UUID **or** the gateway's slug.
 export ARCHESTRA_GATEWAY_ID=<uuid-or-slug>
 ```
 
-Also note the **label** the client registers that server under. The runners
-default to `my_gateway` and take `ARCHESTRA_GATEWAY_LABEL` to override it. See
-"Client configuration" below for why the label matters.
+The runners register that server under the label `gw` and take
+`ARCHESTRA_GATEWAY_LABEL` to override it. Any label works; "Client
+configuration" below says why.
 
 ### Step 4 — a gateway bearer token
 
@@ -439,10 +439,17 @@ qualification in the way noted.
 | Claude Code | prompt on **stdin**, not as a positional argument | `--allowed-tools` is variadic and would swallow a positional prompt as one more tool name. |
 | Claude Code | `--strict-mcp-config --mcp-config <file>` | Pins the run to this harness's gateway registration and ignores the developer's own `~/.claude` MCP servers. |
 | Claude Code | `MAX_THINKING_TOKENS=0` | Keeps transcripts readable and the runs cheap; thinking blocks are irrelevant to what is being qualified (restoration preserves them either way). |
-| all three | the MCP server registered under a label that **matches a real gateway** (and, for OpenCode, one that no other server's label is a prefix of) | The proxy canonicalizes a client-decorated name (`mcp__<label>__archestra__get_remedy_plans`, OpenCode's `<label>_<tool>`) back to the built-in short name **only** when the label segment is the client server name of one of this organization's own gateways. That anchoring is a security property: it is what stops a hostile MCP server from naming its tools to look like platform built-ins. A label that matches no gateway leaves the APPA tools foreign, and APPA refuses the session because it declares no control tool. |
+| all three | the MCP server registered under **any** label (`gw` by default) | The gateway signs each tool it lists, in the tool's description, and the proxy verifies and strips that signature before anything else reads the request. A signed tool resolves to the name the gateway advertised whatever the client calls it — `mcp__<label>__archestra__get_remedy_plans`, OpenCode's `<label>_<tool>`, or a member of Codex's `mcp__<label>` namespace — so the label plays no part. A server that copies the names carries no valid signature, and its tools stay foreign. |
 | all three | `X-Appa-Session-ID` on the provider traffic | It names the OpenAPPA root, which the proxy scopes to the credential. The gateway resolves a remedy from the offer id, so a header there is optional. |
 
 ---
+
+## Troubleshooting OpenAPPA 400 Responses
+
+| Response | Cause | Fix |
+| --- | --- | --- |
+| `OpenAPPA cannot verify the … tools this session declares. Reconnect …` | The gateway tools carry signatures that do not verify: the client fetched its tool list before a deploy or a secret rotation, or from another deployment. | Reconnect the MCP server to the client (Claude Code: `/mcp`), then start a new session. |
+| `OpenAPPA needs exactly one declaration of …` | The session declares a remedy tool twice: the same gateway registered under two labels, two gateways of this platform in one client, or a server replaying the gateway's tool. The message names both spellings. | Register one gateway of this platform per client, under one label. |
 
 ## Troubleshooting Anthropic 401 Responses
 
@@ -464,9 +471,10 @@ Requests to `/anthropic/v1/messages` without the `/v1` prefix return `401 Unauth
   `openappa` project). The rest is not, and cannot cheaply be: it needs live
   provider credentials and three third-party CLIs whose flags change between
   releases. The proxy-side unit and route tests
-  (`platform/backend/src/openappa/`, `platform/backend/src/routes/proxy/llm-proxy-openappa.test.ts`)
-  are what pin the behavior; this harness proves the stock clients actually
-  drive it.
+  (`platform/backend/src/openappa/`, `platform/backend/src/routes/proxy/llm-proxy-openappa.test.ts`,
+  and `platform/backend/src/routes/proxy/llm-proxy-gateway-attestation.test.ts`
+  for every client form under any label) are what pin the behavior; this
+  harness proves the stock clients actually drive it.
 - **Real authorities and real sanitizers.** The fixture stands in for both. A
   deployment's own HTTP authority is not exercised beyond the envelope shape.
 - **Providers beyond Anthropic Messages and OpenAI Responses/Chat Completions.**

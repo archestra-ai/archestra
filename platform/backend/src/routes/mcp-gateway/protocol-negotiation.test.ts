@@ -150,6 +150,7 @@ describe("MCP Gateway - protocol revision negotiation", () => {
       STATELESS_MCP_PROTOCOL_REVISION,
       LEGACY_MCP_PROTOCOL_REVISION,
     ]);
+    expect(body.result.protocolVersions).toEqual(body.result.supportedVersions);
     expect(body.result.serverInfo.name).toBe(`archestra-agent-${agent.id}`);
     expect(body.result._meta["io.modelcontextprotocol/serverInfo"].name).toBe(
       `archestra-agent-${agent.id}`,

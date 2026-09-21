@@ -21,7 +21,7 @@ use appa_runtime::{
     hooks,
 };
 use appa_runtime_api::{
-    Actor, CanonicalTool, HookDecision, HookEvent, OutcomeBody, ProposedCall, SpawnRef,
+    Actor, CanonicalTool, HookDecision, HookEvent, OutcomeBody, ProposedCall, Ruling, SpawnRef,
     ToolOutcome, TrajectoryId, WireDecision,
 };
 use futures_util::FutureExt;
@@ -136,6 +136,13 @@ impl Principal {
     }
 }
 
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum RulingInput {
+    Approve,
+    Deny,
+}
+
 /// Request payload to execute a remedy by offer ID.
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -164,6 +171,12 @@ struct OfferInput {
     /// Original argument JSON string before execution metadata stripping.
     original_arguments: String,
     presentation: PresentationInput,
+    #[serde(default)]
+    ruling: Option<RulingInput>,
+    /// Why the host declined to ask a human about this offer: the target call
+    /// would fail even if approved. Recorded as the remedy's result.
+    #[serde(default)]
+    precheck_refusal: Option<String>,
 }
 
 #[derive(Clone, Copy, Deserialize, PartialEq, Eq)]
@@ -214,7 +227,15 @@ struct Input {
     dispatch: Option<String>,
     #[serde(default)]
     presentation: Option<PresentationInput>,
+    #[serde(default)]
+    ruling: Option<RulingInput>,
+    #[serde(default)]
+    precheck_refusal: Option<String>,
 }
+
+/// Bounds the host's precheck refusal text, which is recorded and replayed
+/// verbatim as the remedy's result.
+const MAX_PRECHECK_REFUSAL_BYTES: usize = 64 * 1024;
 
 #[derive(Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -606,6 +627,16 @@ fn validate(input: &Input) -> napi::Result<()> {
             return Err(error(format!("invalid {name}")));
         }
     }
+    if let Some(refusal) = &input.precheck_refusal {
+        // A refusal answers a remedy no human ruled on, so a ruling beside
+        // it would be silently dropped.
+        if input.event != HookEventKind::Remedy || input.ruling.is_some() {
+            return Err(error("a precheck refusal only answers an unruled remedy"));
+        }
+        if refusal.trim().is_empty() || refusal.len() > MAX_PRECHECK_REFUSAL_BYTES {
+            return Err(error("invalid precheck refusal"));
+        }
+    }
     // Reject malformed host requests before writing an interrupted-operation
     // receipt. A typo is not evidence that an external consult may have run.
     match input.event {
@@ -775,11 +806,93 @@ pub async fn execute_remedy_by_offer(
         spelling: owner.spelling,
         dispatch: owner.dispatch,
         presentation: Some(input.presentation),
+        ruling: input.ruling,
+        precheck_refusal: input.precheck_refusal,
     };
     validate(&input)?;
     let response: Value =
         serde_json::from_str(&run(input, policy_content).await?).map_err(error)?;
     Ok(with_offer_status(response, OfferStatusKind::Known)?.to_string())
+}
+
+#[napi(object)]
+#[derive(Serialize)]
+pub struct OfferReviewOutput {
+    pub offer_id: String,
+    pub text: String,
+    pub session_id: String,
+    /// The reviewed call's tool, as the host proposed it.
+    pub tool: Option<String>,
+    /// The reviewed call's arguments as JSON text. The ledger keeps them as
+    /// JSONB, so key order and spacing can differ from the proposal; the
+    /// values cannot.
+    pub arguments: Option<String>,
+}
+
+/// Loads the review entry for an offer from the retained DenyCall in PostgreSQL.
+/// Session routing comes from the verified offer claims; no offer-owner lookup.
+#[napi(js_name = "loadOfferReview")]
+pub async fn load_offer_review(
+    organization_id: String,
+    session_id: String,
+    offer_id: String,
+) -> napi::Result<Option<OfferReviewOutput>> {
+    let session_id_for_output = session_id.clone();
+    // Mirror execute_remedy_by_offer: clone state, drop the mutex, then lease
+    // a connection before host SQL so review loads never contend with
+    // dispatches on the runtime state mutex.
+    let state = {
+        let slot = state_mutex().lock().await;
+        slot.as_ref()
+            .ok_or_else(|| error("OpenAPPA is not initialized"))?
+            .clone()
+    };
+    let leased = state.lease().await?;
+    let pg = postgres_store(&leased.state.store)?;
+    // The SQL closure needs its own offer id copy because it must be 'static.
+    let target_offer_id = offer_id.clone();
+    let review = pg
+        .with_client(move |client| {
+            // session_id is the leading PK column of openappa_operations, and
+            // organization_id is an additional tenancy guard. The JSONB match
+            // is pushed into SQL so only the matching entry's text crosses the
+            // boundary instead of every reviewed decision. The lateral join
+            // scans each reviewed decision's entries linearly, which is
+            // bounded by the handful of review entries a policy's DenyCall
+            // carries; it is not sized for unbounded per-decision reviews.
+            // The reviewed call is the one this receipt admitted or blocked:
+            // its host context, or the semantic input of a receipt that
+            // predates context.
+            let row = client.query_opt(
+                "SELECT entry->>'text' AS text, \
+                 COALESCE(o.input->'context'->>'tool', o.input->'semantic'->>'tool') AS tool, \
+                 COALESCE(o.input->'context'->'arguments', o.input->'semantic'->'arguments')::text AS arguments \
+                 FROM openappa_operations o \
+                 CROSS JOIN LATERAL jsonb_array_elements(o.decision->'review') AS entry \
+                 WHERE o.organization_id=$1 AND o.session_id=$2 AND o.status='complete' \
+                 AND o.decision->'review' IS NOT NULL \
+                 AND entry->>'offer_id' = $3 \
+                 ORDER BY o.created_at DESC \
+                 LIMIT 1",
+                &[&organization_id, &session_id, &target_offer_id],
+            )?;
+            Ok(row.map(|row| {
+                (
+                    row.get::<_, String>("text"),
+                    row.get::<_, Option<String>>("tool"),
+                    row.get::<_, Option<String>>("arguments"),
+                )
+            }))
+        })
+        .map_err(error)?;
+
+    Ok(review.map(|(text, tool, arguments)| OfferReviewOutput {
+        offer_id,
+        text,
+        session_id: session_id_for_output,
+        tool,
+        arguments,
+    }))
 }
 
 struct SessionLock {
@@ -1131,8 +1244,17 @@ impl State {
                     ProcessedResultClaim::Complete { decision, .. } => return Ok(decision),
                 }
             }
+            if let Some(refusal) = &input.precheck_refusal {
+                // The host found the target call would fail even if approved,
+                // so no human was asked. The runtime never sees this act: the
+                // offer is neither vouched nor spent, and a corrected call
+                // earns its own review.
+                let response = runtime_refusal(refusal.clone())?;
+                return finish_remedy(pg, &input, &operation, result_key, response);
+            }
             let args: ExecuteRemedyPlanArgs =
                 serde_json::from_str(required_arguments(&input)?).map_err(error)?;
+            let offer_id = args.offer_id.clone();
             let call = ProposedCall {
                 tool: appa_runtime_api::CONTROL_TOOL.into(),
                 arguments: input
@@ -1140,6 +1262,10 @@ impl State {
                     .clone()
                     .ok_or_else(|| error("missing remedy arguments"))?,
             };
+            let ruling = input.ruling.as_ref().map(|r| match r {
+                RulingInput::Approve => Ruling::Approve,
+                RulingInput::Deny => Ruling::Deny,
+            });
             let gate = hooks::handle(
                 &self.runtime,
                 HookEvent::ToolCall {
@@ -1147,7 +1273,7 @@ impl State {
                     call,
                     call_id: None,
                     spawn: false,
-                    ruling: None,
+                    ruling,
                 },
             )
             .await;
@@ -1158,24 +1284,8 @@ impl State {
                     HookDecision::Refuse { detail } => detail,
                     _ => return Err(error("unexpected remedy control decision")),
                 };
-                let response = serde_json::to_value(HostMcpResult {
-                    decision: "mcp_result",
-                    approved_output: text.clone(),
-                    output_source: OutputSource::Runtime,
-                    reason: None,
-                    result: HostToolResult {
-                        is_error: true,
-                        content: vec![HostText { kind: "text", text }],
-                    },
-                })
-                .map_err(error)?;
-                finish_operation(pg, &input, &operation, &response, ReceiptBinding::Caller)?;
-                if let Some(result_key) = result_key {
-                    let approved = decision_text(&response)?;
-                    pg.complete_processed_result(result_key, approved, response.clone())
-                        .map_err(error)?;
-                }
-                return Ok(response);
+                let response = runtime_refusal(text)?;
+                return finish_remedy(pg, &input, &operation, result_key, response);
             }
             let outcome = self
                 .runtime
@@ -1192,14 +1302,15 @@ impl State {
                 spelling: input.spelling.clone(),
                 dispatch: input.dispatch.clone(),
             };
-            let response = render_remedy_outcome(outcome, Some(&owner))?;
-            finish_operation(pg, &input, &operation, &response, ReceiptBinding::Caller)?;
-            if let Some(result_key) = result_key {
-                let approved = decision_text(&response)?;
-                pg.complete_processed_result(result_key, approved, response.clone())
-                    .map_err(error)?;
-            }
-            return Ok(response);
+            let response = render_remedy_outcome(
+                outcome,
+                &RemedyAct {
+                    owner: &owner,
+                    offer_id: &offer_id,
+                    ruling: input.ruling,
+                },
+            )?;
+            return finish_remedy(pg, &input, &operation, result_key, response);
         }
 
         let operation = input
@@ -1567,6 +1678,22 @@ fn render_unknown_offer() -> napi::Result<Value> {
     .map_err(error)
 }
 
+/// A remedy answer the runtime's engine never produced: a control-gate refusal
+/// or the host's precheck refusal. Neither grants anything.
+fn runtime_refusal(text: String) -> napi::Result<Value> {
+    serde_json::to_value(HostMcpResult {
+        decision: "mcp_result",
+        approved_output: text.clone(),
+        output_source: OutputSource::Runtime,
+        reason: None,
+        result: HostToolResult {
+            is_error: true,
+            content: vec![HostText { kind: "text", text }],
+        },
+    })
+    .map_err(error)
+}
+
 fn with_offer_status(response: Value, status: OfferStatusKind) -> napi::Result<Value> {
     serde_json::to_value(OfferStatusResponse {
         response: &response,
@@ -1610,10 +1737,16 @@ fn presentation_offer_ids(presentation: Option<&RemedyPresentation>) -> Vec<Offe
         .unwrap_or_default()
 }
 
-fn render_remedy_outcome(
-    outcome: RemedyOutcome,
-    owner: Option<&OfferOwner>,
-) -> napi::Result<Value> {
+/// The remedy act a runtime outcome answers: whose offer it spent, which offer
+/// the control call quoted, and the ruling the host collected from a human.
+struct RemedyAct<'a> {
+    owner: &'a OfferOwner,
+    offer_id: &'a str,
+    ruling: Option<RulingInput>,
+}
+
+fn render_remedy_outcome(outcome: RemedyOutcome, act: &RemedyAct) -> napi::Result<Value> {
+    let owner = Some(act.owner);
     let (output_source, reason, is_error, text) = match outcome {
         RemedyOutcome::Authorized { call } => (
             OutputSource::Runtime,
@@ -1622,9 +1755,12 @@ fn render_remedy_outcome(
             render_released_call("Authorized", &call, owner),
         ),
         RemedyOutcome::Returned { value } => (OutputSource::Tool, None, false, value),
-        RemedyOutcome::Declined { presentation } => {
-            (OutputSource::Runtime, None, false, presentation.feedback)
-        }
+        RemedyOutcome::Declined { presentation } => (
+            OutputSource::Runtime,
+            None,
+            false,
+            render_human_denial(&presentation, act).unwrap_or(presentation.feedback),
+        ),
         RemedyOutcome::NoAnswer { feedback } => (OutputSource::Runtime, None, false, feedback),
         RemedyOutcome::Refused { reason } => (
             OutputSource::Runtime,
@@ -1644,6 +1780,43 @@ fn render_remedy_outcome(
         },
     })
     .map_err(error)
+}
+
+/// Tells a human reviewer's refusal as one. The runtime records the denial and
+/// retires the offer, then answers with the call's ordinary block, which reads
+/// as a call still waiting for signoff. The rewrite needs all three signs: the
+/// host collected a deny ruling, the runtime answered with a block, and the
+/// quoted offer is gone from it. Anything else keeps the runtime's own text, so
+/// a changed upstream header falls back to it rather than to a false denial.
+fn render_human_denial(presentation: &RemedyPresentation, act: &RemedyAct) -> Option<String> {
+    let denied = act.ruling == Some(RulingInput::Deny)
+        && presentation.feedback.starts_with("[appa] Blocked:")
+        && !presentation
+            .offers
+            .iter()
+            .any(|offer| offer.id == act.offer_id);
+    if !denied {
+        return None;
+    }
+    let target = act
+        .owner
+        .spelling
+        .as_deref()
+        .or(act.owner.tool.as_deref())
+        .map_or_else(
+            || "this call".to_owned(),
+            |tool| format!("this call to {tool}"),
+        );
+    let mut text = format!(
+        "[appa] Denied: the human reviewer refused {target}. It did not run and will not run. \
+         Do not retry it or re-submit it with changed arguments or encoding to get another \
+         approval; tell the user it was denied."
+    );
+    if !presentation.offers.is_empty() {
+        text.push_str("\n\nThe policy still offers options that do not need this reviewer:\n");
+        text.push_str(&presentation.feedback);
+    }
+    Some(text)
 }
 
 fn unknown_control_reason(reason: &RemedyRefusal) -> Option<&'static str> {
@@ -2031,6 +2204,25 @@ fn claim_operation(
         OperationClaim::Complete { decision } => Ok(Some(decision)),
     }
 }
+
+/// Completes a remedy's operation receipt and, for a tracked call, its
+/// processed result, so a retry of either replays this response.
+fn finish_remedy(
+    pg: &PostgresStore,
+    input: &Input,
+    operation: &str,
+    result_key: Option<ProcessedResultKey>,
+    response: Value,
+) -> napi::Result<Value> {
+    finish_operation(pg, input, operation, &response, ReceiptBinding::Caller)?;
+    if let Some(result_key) = result_key {
+        let approved = decision_text(&response)?;
+        pg.complete_processed_result(result_key, approved, response.clone())
+            .map_err(error)?;
+    }
+    Ok(response)
+}
+
 fn finish_operation(
     pg: &PostgresStore,
     input: &Input,
@@ -2119,8 +2311,9 @@ mod root_lock_tests {
 #[cfg(test)]
 mod typed_tests {
     use super::{
-        OfferId, OfferOwner, RemedyOutcome, RemedyPresentation, authoritative_unexecuted_response,
-        owner_can_be_spent_by, presentation_offer_ids, render_released_call, render_remedy_outcome,
+        OfferId, OfferOwner, RemedyAct, RemedyOutcome, RemedyPresentation,
+        authoritative_unexecuted_response, owner_can_be_spent_by, presentation_offer_ids,
+        render_released_call, render_remedy_outcome,
     };
     use appa_runtime_api::OfferedRemedy;
     use serde_json::Value;
@@ -2275,8 +2468,15 @@ mod typed_tests {
             arguments: serde_json::value::to_raw_value(&serde_json::json!({ "value": 2 })).unwrap(),
         };
 
-        let result =
-            render_remedy_outcome(RemedyOutcome::Authorized { call }, Some(&owner)).unwrap();
+        let result = render_remedy_outcome(
+            RemedyOutcome::Authorized { call },
+            &RemedyAct {
+                owner: &owner,
+                offer_id: "offer-1",
+                ruling: None,
+            },
+        )
+        .unwrap();
         let text = result["result"]["content"][0]["text"].as_str().unwrap();
         let (prefix, arguments) = text.split_once("exactly these arguments: ").unwrap();
         assert_eq!(
@@ -2347,5 +2547,189 @@ mod typed_tests {
     #[test]
     fn legacy_presentation_fallback_never_advertises_delegation() {
         assert!(!super::native_presentation_options().supports_delegation);
+    }
+}
+
+#[cfg(test)]
+mod remedy_tests {
+    use super::{
+        HookEventKind, Input, MAX_PRECHECK_REFUSAL_BYTES, OfferOwner, RemedyAct, RemedyOutcome,
+        RemedyPresentation, RulingInput, render_remedy_outcome, validate,
+    };
+    use appa_runtime_api::OfferedRemedy;
+    use serde_json::{Value, json};
+
+    const QUOTED: &str = "0123456789abcdef";
+    const OTHER: &str = "fedcba9876543210";
+    // The runtime's re-rendered block after a denial: the operator plan is
+    // filtered out, so no Continue section remains.
+    const DENIED_BLOCK: &str =
+        "[appa] Blocked: this call cannot run yet.\n\nWhy:\n  - requires attention: signoff";
+
+    fn owner(spelling: Option<&str>) -> OfferOwner {
+        OfferOwner {
+            organization_id: "organization".to_owned(),
+            caller_id: Some("user:owner".to_owned()),
+            session_id: "session".to_owned(),
+            parent_id: None,
+            root: "root".to_owned(),
+            arguments: None,
+            tool: Some("archestra__todo_write".to_owned()),
+            spelling: spelling.map(str::to_owned),
+            dispatch: None,
+        }
+    }
+
+    fn declined(feedback: &str, offers: &[&str]) -> RemedyOutcome {
+        RemedyOutcome::Declined {
+            presentation: RemedyPresentation {
+                feedback: feedback.to_owned(),
+                offers: offers
+                    .iter()
+                    .map(|id| OfferedRemedy {
+                        id: (*id).to_owned(),
+                        returns: None,
+                        input_sanitizer: None,
+                    })
+                    .collect(),
+                review: Vec::new(),
+                display: Vec::new(),
+            },
+        }
+    }
+
+    fn render(outcome: RemedyOutcome, owner: &OfferOwner, ruling: Option<RulingInput>) -> Value {
+        render_remedy_outcome(
+            outcome,
+            &RemedyAct {
+                owner,
+                offer_id: QUOTED,
+                ruling,
+            },
+        )
+        .unwrap()
+    }
+
+    fn text(response: &Value) -> &str {
+        response["approved_output"].as_str().unwrap()
+    }
+
+    #[test]
+    fn a_human_denial_reads_as_final_under_the_name_the_model_called() {
+        let owner = owner(Some("mcp__archestra__todo_write"));
+        let response = render(declined(DENIED_BLOCK, &[]), &owner, Some(RulingInput::Deny));
+
+        let text = text(&response);
+        assert!(text.starts_with("[appa] Denied:"), "{text}");
+        assert!(text.contains("this call to mcp__archestra__todo_write"));
+        assert!(text.contains("will not run"));
+        assert!(text.contains("Do not retry it"));
+        assert!(!text.contains("cannot run yet"));
+        assert_eq!(response["result"]["content"][0]["text"], text);
+        assert_eq!(response["result"]["isError"], false);
+        assert_eq!(response["output_source"], "runtime");
+    }
+
+    #[test]
+    fn a_human_denial_names_the_canonical_tool_without_a_client_spelling() {
+        let response = render(
+            declined(DENIED_BLOCK, &[]),
+            &owner(None),
+            Some(RulingInput::Deny),
+        );
+
+        assert!(text(&response).contains("this call to archestra__todo_write."));
+    }
+
+    #[test]
+    fn a_block_without_a_deny_ruling_keeps_the_runtime_text() {
+        for ruling in [None, Some(RulingInput::Approve)] {
+            let response = render(declined(DENIED_BLOCK, &[]), &owner(None), ruling);
+            assert_eq!(text(&response), DENIED_BLOCK);
+        }
+    }
+
+    #[test]
+    fn a_deny_ruling_on_a_non_block_decline_keeps_the_runtime_text() {
+        let invalidated =
+            "[appa] the state changed and this offer no longer applies; re-propose the call";
+        let response = render(
+            declined(invalidated, &[]),
+            &owner(None),
+            Some(RulingInput::Deny),
+        );
+
+        assert_eq!(text(&response), invalidated);
+    }
+
+    #[test]
+    fn a_block_that_still_offers_the_quoted_offer_is_not_a_denial() {
+        let response = render(
+            declined(DENIED_BLOCK, &[QUOTED]),
+            &owner(None),
+            Some(RulingInput::Deny),
+        );
+
+        assert_eq!(text(&response), DENIED_BLOCK);
+    }
+
+    #[test]
+    fn a_denial_keeps_the_options_that_do_not_need_the_reviewer() {
+        let remaining =
+            format!("{DENIED_BLOCK}\n\nContinue:\n  - execute_remedy_plan(offer_id: \"{OTHER}\")");
+        let response = render(
+            declined(&remaining, &[OTHER]),
+            &owner(None),
+            Some(RulingInput::Deny),
+        );
+
+        let text = text(&response);
+        assert!(text.starts_with("[appa] Denied:"), "{text}");
+        assert!(text.contains("The policy still offers options that do not need this reviewer:"));
+        assert!(text.ends_with(&remaining));
+    }
+
+    fn remedy_input(extra: Value) -> Input {
+        let mut input = json!({
+            "organization_id": "organization",
+            "session_id": "session",
+            "event": "remedy",
+            "tool_call_id": "provider-call",
+            "arguments": { "offer_id": QUOTED },
+        });
+        input
+            .as_object_mut()
+            .unwrap()
+            .extend(extra.as_object().unwrap().clone());
+        serde_json::from_value(input).unwrap()
+    }
+
+    #[test]
+    fn a_precheck_refusal_is_accepted_only_on_an_unruled_remedy() {
+        assert!(
+            validate(&remedy_input(
+                json!({ "precheck_refusal": "[appa] Not submitted" })
+            ))
+            .is_ok()
+        );
+        assert!(
+            validate(&remedy_input(
+                json!({ "precheck_refusal": "[appa] Not submitted", "ruling": "approve" })
+            ))
+            .is_err()
+        );
+        let mut result = remedy_input(json!({ "precheck_refusal": "[appa] Not submitted" }));
+        result.event = HookEventKind::ToolResult;
+        result.output = Some("output".to_owned());
+        assert!(validate(&result).is_err());
+    }
+
+    #[test]
+    fn a_precheck_refusal_must_carry_bounded_text() {
+        assert!(validate(&remedy_input(json!({ "precheck_refusal": " \n " }))).is_err());
+        let oversized = "x".repeat(MAX_PRECHECK_REFUSAL_BYTES + 1);
+        assert!(validate(&remedy_input(json!({ "precheck_refusal": oversized }))).is_err());
+        let largest = "x".repeat(MAX_PRECHECK_REFUSAL_BYTES);
+        assert!(validate(&remedy_input(json!({ "precheck_refusal": largest }))).is_ok());
     }
 }

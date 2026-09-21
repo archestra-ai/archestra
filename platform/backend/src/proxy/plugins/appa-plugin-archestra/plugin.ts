@@ -799,10 +799,21 @@ function isGatewayAskUser(binding: AppaPluginBinding, name: string): boolean {
         TOOL_ASK_USER_SHORT_NAME
     );
   }
+  const labeled = underscoreLabeledPlatformToolName(
+    name,
+    binding.canonicalizeToolName,
+  );
+  if (labeled) {
+    return (
+      archestraMcpBranding.getToolShortName(labeled) ===
+      TOOL_ASK_USER_SHORT_NAME
+    );
+  }
+  const canonical = binding.canonicalizeToolName(name);
   return (
-    archestraMcpBranding.getToolShortName(
-      binding.canonicalizeToolName(name),
-    ) === TOOL_ASK_USER_SHORT_NAME
+    canonical !== name &&
+    archestraMcpBranding.getToolShortName(canonical) ===
+      TOOL_ASK_USER_SHORT_NAME
   );
 }
 

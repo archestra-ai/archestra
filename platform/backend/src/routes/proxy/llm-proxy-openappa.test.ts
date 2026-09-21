@@ -1879,7 +1879,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
 
   test.for([
     ["my_gateway_archestra__whoami", "archestra__whoami"],
-    ["lookalike_archestra__whoami", "builtin:lookalike_archestra__whoami"],
+    ["lookalike_archestra__whoami", "lookalike_archestra__whoami"],
   ] as const)("rules OpenCode's %s by whether its label is one of our gateways", async ([
     called,
     expectedTool,

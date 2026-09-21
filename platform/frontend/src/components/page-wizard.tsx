@@ -48,15 +48,13 @@ export function PageWizard<Id extends string>({
       backLink={backLink}
       actionButton={
         showStepper ? (
-          <div className="hidden sm:block">
-            <WizardStepper
-              compact
-              steps={steps}
-              activeStep={activeStep}
-              onStepClick={onStepClick}
-              stepTestIdPrefix={stepTestIdPrefix}
-            />
-          </div>
+          <WizardStepper
+            compact
+            steps={steps}
+            activeStep={activeStep}
+            onStepClick={onStepClick}
+            stepTestIdPrefix={stepTestIdPrefix}
+          />
         ) : undefined
       }
     >

@@ -19,7 +19,12 @@ describe("WizardStepper", () => {
       />,
     );
 
-    expect(screen.getByText("Tools & Knowledge")).toBeVisible();
+    expect(
+      screen.getByRole("button", {
+        name: "Step 2 of 3: Tools & Knowledge, current",
+      }),
+    ).toHaveAttribute("aria-current", "step");
+    expect(screen.getAllByRole("button")).toHaveLength(3);
     expect(
       screen.getByRole("button", {
         name: "Step 1 of 3: Configuration, complete",

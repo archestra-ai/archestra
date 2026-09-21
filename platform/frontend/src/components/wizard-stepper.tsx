@@ -30,80 +30,99 @@ export function WizardStepper<Id extends string>({
   compact?: boolean;
 }) {
   const activeIndex = steps.findIndex((s) => s.id === activeStep);
+  const activeTitle = steps[activeIndex]?.title;
   return (
-    <ol
-      className={cn("flex items-center", compact ? "gap-2" : "flex-wrap gap-3")}
-    >
-      {steps.map((step, index) => {
-        const isActive = index === activeIndex;
-        const isComplete = index < activeIndex;
-        const state = isActive
-          ? "current"
-          : isComplete
-            ? "complete"
-            : "upcoming";
-        return (
-          <li
-            key={step.id}
-            className={cn("flex items-center", compact ? "gap-2" : "gap-3")}
-          >
-            <button
-              type="button"
+    <div className={cn(compact && "flex flex-col gap-1")}>
+      <ol
+        className={cn(
+          "flex items-center",
+          compact ? "gap-1 sm:gap-2" : "flex-wrap gap-3",
+        )}
+      >
+        {steps.map((step, index) => {
+          const isActive = index === activeIndex;
+          const isComplete = index < activeIndex;
+          const state = isActive
+            ? "current"
+            : isComplete
+              ? "complete"
+              : "upcoming";
+          return (
+            <li
+              key={step.id}
               className={cn(
-                "flex items-center gap-2",
-                onStepClick ? "cursor-pointer" : "cursor-default",
+                "flex items-center",
+                compact ? "gap-1 sm:gap-2" : "gap-3",
               )}
-              aria-label={`Step ${index + 1} of ${steps.length}: ${step.title}, ${state}`}
-              title={step.title}
-              aria-current={isActive ? "step" : undefined}
-              data-testid={
-                stepTestIdPrefix ? `${stepTestIdPrefix}-${step.id}` : undefined
-              }
-              onClick={() => onStepClick?.(step.id)}
             >
-              <span
+              <button
+                type="button"
                 className={cn(
-                  "flex items-center justify-center rounded-full border text-xs font-medium",
-                  compact ? "h-9 w-9 sm:h-6 sm:w-6" : "h-6 w-6",
-                  isActive &&
-                    "border-primary bg-primary text-primary-foreground",
-                  isComplete && "border-primary bg-primary/10 text-primary",
-                  !isActive && !isComplete && "text-muted-foreground",
+                  "flex items-center gap-2",
+                  onStepClick ? "cursor-pointer" : "cursor-default",
                 )}
+                aria-label={`Step ${index + 1} of ${steps.length}: ${step.title}, ${state}`}
+                title={step.title}
+                aria-current={isActive ? "step" : undefined}
+                data-testid={
+                  stepTestIdPrefix
+                    ? `${stepTestIdPrefix}-${step.id}`
+                    : undefined
+                }
+                onClick={() => onStepClick?.(step.id)}
               >
-                {isComplete ? <Check className="h-3.5 w-3.5" /> : index + 1}
-              </span>
-              <span
-                className={cn(
-                  "text-sm",
-                  compact && !isActive && "hidden xl:inline",
-                  isActive ? "font-medium" : "text-muted-foreground",
-                )}
-              >
-                {step.title}
-              </span>
-            </button>
-            {index < steps.length - 1 && (
-              <span
-                data-step-connector-state={isComplete ? "complete" : "upcoming"}
-                className={cn(
-                  "relative h-px transition-colors",
-                  isComplete ? "bg-primary" : "bg-border",
-                  compact ? "w-4 xl:w-8" : "w-8",
-                )}
-                aria-hidden="true"
-              >
-                <ChevronRight
+                <span
                   className={cn(
-                    "absolute -right-1.5 top-1/2 size-3 -translate-y-1/2 stroke-[2.5]",
-                    isComplete ? "text-primary" : "text-muted-foreground",
+                    "flex items-center justify-center rounded-full border text-xs font-medium",
+                    compact ? "h-9 w-9 sm:h-6 sm:w-6" : "h-6 w-6",
+                    isActive &&
+                      "border-primary bg-primary text-primary-foreground",
+                    isComplete && "border-primary bg-primary/10 text-primary",
+                    !isActive && !isComplete && "text-muted-foreground",
                   )}
-                />
-              </span>
-            )}
-          </li>
-        );
-      })}
-    </ol>
+                >
+                  {isComplete ? <Check className="h-3.5 w-3.5" /> : index + 1}
+                </span>
+                <span
+                  className={cn(
+                    "text-sm",
+                    compact &&
+                      (isActive ? "hidden sm:inline" : "hidden xl:inline"),
+                    isActive ? "font-medium" : "text-muted-foreground",
+                  )}
+                >
+                  {step.title}
+                </span>
+              </button>
+              {index < steps.length - 1 && (
+                <span
+                  data-step-connector-state={
+                    isComplete ? "complete" : "upcoming"
+                  }
+                  className={cn(
+                    "relative h-px transition-colors",
+                    isComplete ? "bg-primary" : "bg-border",
+                    compact ? "w-3 sm:w-4 xl:w-8" : "w-8",
+                  )}
+                  aria-hidden="true"
+                >
+                  <ChevronRight
+                    className={cn(
+                      "absolute -right-1.5 top-1/2 size-3 -translate-y-1/2 stroke-[2.5]",
+                      isComplete ? "text-primary" : "text-muted-foreground",
+                    )}
+                  />
+                </span>
+              )}
+            </li>
+          );
+        })}
+      </ol>
+      {compact && activeTitle ? (
+        <p className="text-sm font-medium sm:hidden">
+          Step {activeIndex + 1} of {steps.length}: {activeTitle}
+        </p>
+      ) : null}
+    </div>
   );
 }

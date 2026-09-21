@@ -10,6 +10,8 @@ linked implementation pieces needed for the current change.
 - Use `PageWizard` for one or multiple steps. It owns the `PageLayout` width,
   header/back-link placement, scrolling, and optional compact `WizardStepper`.
   A single step or the source chooser renders without a stepper.
+- Keep multi-step progress and earlier-step navigation visible on narrow screens.
+  Use a compact row of step targets with the current label wrapping below it.
 - Use `SettingsSectionGroup` and `SettingsSection`: subject/explanation on the
   left, controls on the right, separators between sections, stacked on mobile.
   Rich editors may take the full content width where they need it.
@@ -79,8 +81,9 @@ Exercise one-step and multi-step cases where affected: no unnecessary stepper,
 Back/Next retains input, validation blocks progression, Enter cannot submit
 early, failed saves preserve input, discard keeps/takes the intended destination,
 and success neither prompts nor submits twice. Check desktop and narrow layouts
-for labelled sections and a reachable footer. Test behavior at the cheapest
-level that exercises it; do not assert copies of utility classes or props.
+for visible steps, labelled sections, and a reachable footer. Test behavior at
+the cheapest level that exercises it; do not assert copies of utility classes
+or props.
 
 ## Focused implementation references
 

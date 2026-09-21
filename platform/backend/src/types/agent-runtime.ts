@@ -204,9 +204,17 @@ export const AgentRuntimeSchema = z.object({
   credentials: z.array(AgentRuntimeCredentialDeclarationSchema).nullable(),
   /**
    * Whether a connected client may hand this Agent a credential VALUE through
-   * the transfer_credential tool. Off unless an operator turns it on: the value
-   * passes through the calling model's context and that client's transcript, so
-   * it is a deliberate trade rather than a default.
+   * the transfer_credential tool. On unless an operator turns it off, so an
+   * Agent stored before this field existed reads as enabled. Only an explicit
+   * `false` refuses: `resolveAgentRuntime` spreads the stored JSON without
+   * re-parsing it, so a schema-level default would never reach those rows.
+   *
+   * This gates STORAGE, not exposure. transfer_credential is one global tool
+   * that takes the Agent as an argument, so the model has already sent the
+   * value by the time the handler reads this. Turning it off stops the value
+   * being persisted and injected into runs. It cannot unsee what the calling
+   * client's transcript already holds — a credential that must never enter a
+   * model's context belongs in Settings instead.
    */
   allowAgentSuppliedCredentialValues: z.boolean().optional(),
   /** Native Claude account authentication and its CLI-published model alias. */

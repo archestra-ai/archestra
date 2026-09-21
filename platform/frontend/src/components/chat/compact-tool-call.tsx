@@ -123,7 +123,7 @@ function CompactCircle({
   toolName: string;
   toolCallId?: string;
   state: "running" | "completed" | "error" | "denied";
-  /** Says more than the state alone, e.g. whose ruling denied the call. */
+  /** Displays specific status text, such as a user review decision. */
   stateLabel?: string;
   isExpanded: boolean;
   isExpandable?: boolean;

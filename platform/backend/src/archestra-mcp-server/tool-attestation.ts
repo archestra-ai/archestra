@@ -3,34 +3,25 @@ import config from "@/config";
 import { isUuid } from "@/utils/uuid";
 
 /**
- * Gateway tool attestation: proof, carried in a tool's own description, that
- * this platform's MCP gateway served the tool under a given name.
+ * Gateway tool attestation: cryptographic proof that the platform MCP gateway
+ * served a tool under a specific name.
  *
- * The gateway puts an opaque marker, `[[gwa1.<payload>.<mac>]]`, in front of
- * every description it serves in tools/list. The description is the only
- * field that Claude Code 2.1.x, Codex 0.154 and OpenCode 1.18 all forward
- * verbatim: names are relabeled per client (`mcp__<label>__`, `<label>_`, a
- * Codex namespace), schemas lose unknown keywords, and title, annotations and
- * _meta never leave the client. The LLM proxy reads the marker back, verifies
- * it and strips it. It carries no brand string, because a client that talks
- * to the gateway without the proxy shows it to its model and in its UI as-is,
- * and a white-labeled deployment must not leak a product name there.
+ * The gateway adds an opaque marker, `[[gwa1.<payload>.<mac>]]`, to each tool
+ * description in tools/list. Third-party clients (Claude Code, Codex, OpenCode)
+ * modify tool names and schemas but forward descriptions unchanged.
+ * The LLM proxy verifies the marker and removes it before routing.
+ * The marker contains no brand text to prevent leaking product names in
+ * white-labeled deployments.
  *
- * payload = key version (1) ‖ gateway agent UUID (16 bytes) ‖ kind ‖ UTF-8
- * advertised name. Kind "b" is a platform built-in by catalog provenance, "t"
- * anything else. mac = the first 16 bytes of HMAC-SHA256(K_org, "gwa1\0" ‖
- * payload), with K_org = HMAC-SHA256(HMAC-SHA256(auth secret, KEY_DOMAIN),
- * organizationId): derived from the session-signing secret so no new
- * configuration is needed (as the Google Drive OAuth state does),
- * domain-separated from every other HMAC that secret protects, and bound to
- * the organization. Without an auth secret nothing is minted and nothing
- * verifies.
+ * payload = version (1) || gateway UUID (16 bytes) || kind || UTF-8 advertised name.
+ * Kind "b" represents a built-in platform tool; kind "t" represents any other tool.
+ * mac = first 16 bytes of HMAC-SHA256(K_org, "gwa1\0" || payload).
+ * K_org is derived from the auth secret and bound to the organization ID.
+ * When the auth secret is not configured, the gateway mints and verifies no tokens.
  *
- * Residual: a marker carries no epoch and no user. One that leaks from a
- * client session that bypasses the proxy therefore stays valid org-wide until
- * the auth secret rotates. A hostile server that replays it next to the real
- * gateway is demoted by the proxy's conflict rule (same gateway and name under
- * two spellings); with the real gateway absent, the replay is accepted.
+ * Security note: markers omit timestamps and user IDs. A leaked marker remains
+ * valid within the organization until secret rotation. If an untrusted server
+ * replays a marker alongside the real gateway, conflict rules demote both declarations.
  */
 
 export type ToolAttestationKind = "b" | "t";

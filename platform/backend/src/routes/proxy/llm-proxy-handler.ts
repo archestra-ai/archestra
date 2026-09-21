@@ -639,8 +639,8 @@ export async function handleLLMProxy<
     request.headers,
   );
 
-  // Takes the gateway's tool attestation markers out of the body in place,
-  // before any adapter, log, provider request or persisted row can see them.
+  // Removes gateway tool attestation markers from the body in place
+  // before adapters, logs, provider requests, or database records access them.
   const gatewayToolDeclarations =
     utils.gatewayToolDeclarations.extractGatewayToolDeclarations(body);
   // When OpenAPPA is enabled, the proxy issues stamped tool-call IDs.
@@ -1003,12 +1003,10 @@ export async function handleLLMProxy<
     oauthUserId ??
     regularVirtualKeyUserId;
 
-  // Chat's own requests arrive over loopback and bring no credential of
-  // this platform that proves nobody: the stored provider secret goes to
-  // the provider. A request that brings an organization credential and
-  // names a Chat source is a client's, whatever its headers say, and is
-  // governed as one: its session scoped to that credential, never bound
-  // to a conversation.
+  // Internal Chat requests arrive over loopback without platform credentials.
+  // Requests that include organization credentials and name a Chat source
+  // are treated as client requests. Their sessions scope to the credential
+  // rather than a conversation.
   const isInternalChat =
     isAppaChatSource(source) &&
     isLoopbackRequest(request) &&
@@ -1120,19 +1118,17 @@ export async function handleLLMProxy<
       `[${providerName}Proxy] Limit check passed`,
     );
 
-    // Chat's own requests arrive over loopback and bring no credential of
-    // this platform that proves nobody: the stored provider secret goes to
-    // the provider. A request that brings an organization credential and
-    // names a Chat source is a client's, whatever its headers say, and is
-    // governed as one: its session scoped to that credential, never bound
-    // to a conversation.
+    // Internal Chat requests arrive over loopback without platform credentials.
+    // Requests that include organization credentials and name a Chat source
+    // are treated as client requests. Their sessions scope to the credential
+    // rather than a conversation.
     const isInternalChat =
       isAppaChatSource(source) &&
       isLoopbackRequest(request) &&
       !((authenticatedApp || virtualKeyId) && !authenticatedUserId);
 
-    // Which declared tools this platform's gateway served, and as what, once
-    // the organization whose key verifies their attestations is known.
+    // Identifies which declared tools the platform gateway served after
+    // verifying attestations with the organization key.
     const toolIdentity =
       await utils.gatewayToolNames.resolveGatewayToolIdentity({
         organizationId: resolvedAgent.organizationId,
@@ -1161,9 +1157,9 @@ export async function handleLLMProxy<
             toolName: t.name,
             toolParameters: t.inputSchema,
             toolDescription: t.description,
-            // With attestations, exactly the tools the gateway served are
-            // its own, whatever the client called them; an unattested
-            // lookalike is discovered like any other foreign tool.
+            // With attestations, tools served by the gateway are identified
+            // regardless of client labels. Unattested lookalikes are discovered
+            // as foreign tools.
             ...(toolIdentity.mode === "attested" && !isInternalChat
               ? {
                   servedByGateway:
@@ -1310,11 +1306,10 @@ export async function handleLLMProxy<
       `[${providerName}Proxy] Evaluating trusted data policies`,
     );
 
-    // Map client-decorated gateway tool names (e.g. Claude Code's
-    // `mcp__<label>__archestra__run_tool`) back to the platform's own names
-    // before any guardrail evaluation — trusted-data and tool-invocation
-    // lookups otherwise miss the real tool behind the decoration and the
-    // dispatch wrapper.
+    // Map client-decorated gateway tool names (such as Claude Code
+    // `mcp__<label>__archestra__run_tool`) to platform canonical names
+    // before guardrail evaluation. This ensures policy lookups evaluate
+    // the actual tool instead of the client prefix or dispatch wrapper.
     const commonMessages = canonicalizeCommonMessageToolNames(
       requestAdapter.getMessages(),
       toolIdentity.canonicalize,
@@ -1887,9 +1882,8 @@ export async function handleLLMProxy<
     // them, and leaves the client — which is the one executing them — as the
     // boundary that governs them.
     //
-    // Codex namespace members count too, each resolved in the namespace it
-    // was declared in. Read after the OpenAPPA notice tool was stripped from
-    // the body, so it stays out.
+    // Includes Codex namespace members resolved within their declared namespaces.
+    // Evaluated after removing the OpenAPPA notice tool from the request body.
     const enabledToolNames = new Set(
       utils
         .collectDeclaredToolNames(requestAdapter.getOriginalRequest())
@@ -3376,9 +3370,8 @@ async function holdProxyPluginHostedToolCalls(
     notices: outcome.notices.map((notice) => ({
       id: notice.id,
       name: notice.name,
-      // The client runs the notice like any tool it declared, so the call
-      // names the namespace the notice tool was declared in; Codex answers
-      // "unsupported call" to one without it.
+      // The notice call includes the namespace where the tool was declared.
+      // Codex requires this namespace to avoid an "unsupported call" error.
       ...(notice.namespace ? { namespace: notice.namespace } : {}),
       arguments:
         typeof notice.arguments === "string"

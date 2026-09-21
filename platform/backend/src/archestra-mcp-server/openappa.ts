@@ -44,8 +44,8 @@ const RemedyPlanArgumentsSchema = z.object({
   return_schema: z.record(z.string(), z.unknown()).optional(),
 });
 
-// Shared by the chat elicitation bridge and the MRTR input-required signal so
-// both channels request the identical approve/deny ruling form.
+// Shared by the chat elicitation bridge and the MRTR input-required signal.
+// Both channels request the same approve/deny ruling form.
 const HITL_RULING_SCHEMA = {
   type: "object",
   properties: {
@@ -58,7 +58,7 @@ const HITL_RULING_SCHEMA = {
   required: ["action"],
 } as const;
 
-// The binding records a precheck refusal verbatim and rejects one over 64 KiB.
+// The binding records a precheck refusal verbatim and rejects values over 64 KiB.
 const MAX_PRECHECK_REFUSAL_BYTES = 64 * 1024;
 
 const registry = defineArchestraTools([
@@ -147,7 +147,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_GET_REMEDY_PLANS_SHORT_NAME,
     title: "Read a blocked call's ruling and remedy plans",
     description:
-      "Read why the guardrails policy blocked a tool call and which remedy plans it offers. The platform gives you this call in place of a blocked call. It runs nothing and changes nothing. The plans are for you. When the ruling offers a plan, choose the appropriate plan and immediately call execute_remedy_plan with the offer_id and plan from the ruling. Do not ask the user for permission first; execute_remedy_plan opens any required human review itself. Then retry the original call. If the ruling offers no plan, explain the block.",
+      "Read why the guardrails policy blocked a tool call and which remedy plans it offers. The platform gives you this call in place of a blocked call. It runs nothing and changes nothing. The plans are for you. When the ruling offers a plan, choose the appropriate plan and immediately call execute_remedy_plan with the offer_id and plan from the ruling. Do not ask the user for permission first. The execute_remedy_plan tool opens required human reviews directly. Then retry the original call. If the ruling offers no plan, explain the block.",
     schema: NoticeArguments,
     async handler({ args }) {
       // The ruling the runtime already made, carried by the call itself. This
@@ -161,7 +161,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
     title: "Execute OpenAPPA remedy plan",
     description:
-      "Execute a remedy plan offered by the guardrails policy for a blocked call. Call this as soon as a ruling offers the plan; do not ask the user for permission first. Pass the exact offer_id and plan description shown in the ruling. If the result says review_required, immediately call the declared ask_user tool with that offer ID; do not ask in plain text. After approval, call execute_remedy_plan again with the same offer and plan. After execution succeeds, retry the original call or use the admitted output. If review is denied, canceled, unavailable, or unanswered, stop and state that the action remains blocked.",
+      "Execute a remedy plan offered by the guardrails policy for a blocked call. Call this tool as soon as a ruling offers the plan. Do not ask the user for permission first. Pass the exact offer_id and plan description from the ruling. If the result says review_required, immediately call the declared ask_user tool with that offer ID. Do not ask the user in plain text. After approval, call execute_remedy_plan again with the same offer and plan. After execution succeeds, retry the original call or use the admitted output. If review is denied, canceled, unavailable, or unanswered, stop and state that the action remains blocked.",
     schema: RemedyPlanArgumentsSchema.extend({
       execution: RemedyExecutionSchema.optional().describe(
         "Transport record added by the proxy for retry identity and exact history restoration. It does not authorize the remedy.",
@@ -233,9 +233,9 @@ const registry = defineArchestraTools([
         return unknownOfferResult();
       }
 
-      // Check if this offer requires human review before executing or taking locks.
-      // Session routing comes from the verified claims, so the review lookup
-      // needs no offer-owner table.
+      // Check if this offer requires human review before executing or acquiring locks.
+      // Session routing uses the verified claims, so the review lookup
+      // requires no offer-owner table.
       const review = await loadOfferReview({
         organizationId: context.organizationId,
         sessionId: claims.session_id,
@@ -251,8 +251,8 @@ const registry = defineArchestraTools([
           ...(claims.caller_id ? { caller_id: claims.caller_id } : {}),
           ...(claims.parent_id ? { parent_id: claims.parent_id } : {}),
         };
-        // Before anyone is asked, check that the reviewed call could run if
-        // approved; a refusal is recorded as this remedy's result instead.
+        // Check that the reviewed call can run before prompting the user.
+        // A refusal is recorded as this remedy's result.
         const precheck = {
           review,
           spelling: claims.spelling ?? claims.tool ?? undefined,
@@ -274,8 +274,8 @@ const registry = defineArchestraTools([
           } else if (cachedRuling === "none") {
             ruling = undefined;
           } else if (context.mrtr) {
-            // External MCP clients reach their native question tool through
-            // ask_user. Stage the exact review first so the model cannot change
+            // External MCP clients reach their native question tool through ask_user.
+            // Stage the exact review first so the model cannot alter
             // the question or bind an answer to a different offer.
             await stageHitlReview({
               session: reviewSession,
@@ -325,8 +325,8 @@ const registry = defineArchestraTools([
         ...(precheckRefusal ? { precheckRefusal } : {}),
       });
       if (!ruling || !byOffer.known) return byOffer.result;
-      // Display-only: the chat card shows the person's ruling. `_meta` never
-      // reaches the model, which reads the ruling from the result text.
+      // Display-only: the chat card displays the human ruling.
+      // `_meta` does not reach the model; the model reads the ruling from result text.
       return {
         ...byOffer.result,
         _meta: {
@@ -389,11 +389,10 @@ function unstampedRemedyArguments(
 }
 
 /**
- * The model-visible refusal for a reviewed call that could not run even if
- * approved, so that no one is asked to approve it. Only Archestra built-ins are
- * checked, through the executor's own gates. Any other tool, a review that
- * lacks the call, or a precheck that fails to run leaves the call to the
- * reviewer, as before this check existed.
+ * The model-visible refusal for a reviewed call that cannot run even if approved.
+ * Only Archestra built-in tools are checked through executor gates.
+ * Other tools, reviews without call details, or failed prechecks continue
+ * to the reviewer.
  */
 async function precheckReviewedCall(params: {
   review: { tool?: string; arguments?: string };
@@ -469,12 +468,12 @@ function parseArgumentsRecord(
 }
 
 /**
- * Parses the unified elicitation envelope shared by the chat bridge and MRTR
- * requestState into a remedy ruling. `accept` must carry an explicit
- * `approve`/`deny` content action: a malformed or missing content action is
- * NOT treated as approval — it yields no ruling, so the upstream runtime
- * resolves the review as `NoAnswer` (fail closed). `decline` maps to deny;
- * `cancel`, absence, or any unrecognized shape also yields no ruling.
+ * Parses the unified elicitation envelope into a remedy ruling.
+ * An `accept` action must include an explicit `approve` or `deny` content action.
+ * Malformed or missing actions yield no ruling, causing the upstream runtime
+ * to resolve the review as `NoAnswer` (fail closed).
+ * A `decline` action maps to `deny`.
+ * A `cancel` action or unrecognized payload yields no ruling.
  */
 function parseHitlRuling(envelope: unknown): "approve" | "deny" | undefined {
   if (typeof envelope !== "object" || envelope === null) return undefined;

@@ -37,7 +37,7 @@ A new session forks only when returned history contains a valid mark or signed t
 
 An agent that calls a tool through `run_tool` is evaluated on the tool that runs. A rule for `send_email` applies to a `run_tool` dispatch with `tool_name = "send_email"` exactly as it applies to a direct call. The remedy notice for a denied dispatch names that tool, not `run_tool`.
 
-Clients can register the MCP gateway under any name. Connect each client to one Archestra MCP gateway. OpenAPPA refuses a session that declares the remedy tools twice — the same gateway registered under two names, for example. If OpenAPPA cannot verify a session's gateway tools, reconnect the MCP server and start a new session.
+You can register the MCP gateway under any name. Connect each client to only one Archestra MCP gateway. OpenAPPA refuses sessions that declare remedy tools more than once, such as one gateway registered under two names. If OpenAPPA cannot verify gateway tools for a session, reconnect the MCP server and start a new session.
 
 The default policy has no rules for specific tools. A catch-all annotator adds no restrictions or label changes. Explicit tool rules take precedence over this fallback.
 

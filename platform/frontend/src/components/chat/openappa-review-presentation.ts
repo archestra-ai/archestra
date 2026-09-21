@@ -1,7 +1,6 @@
 /**
- * Turns an OpenAPPA review payload into the same structured call Chat shows
- * on a tool card: a tool name plus arguments with nested JSON strings revived
- * so `todos: "[{\\"id\\":1}]"` renders as an array, not an escaped blob.
+ * Formats an OpenAPPA review payload for tool card display.
+ * Extracts the tool name and parses JSON strings into structured arguments.
  */
 
 export type ReviewPresentation = {

@@ -112,8 +112,8 @@ export function getCompactToolState({
     return "error";
   }
 
-  // The remedy call itself succeeded, but the call it put up for review was
-  // refused and will not run: reading it as completed would say otherwise.
+  // The remedy executed, but the user denied the reviewed tool call.
+  // Mark the tool as denied instead of completed.
   if (extractMcpHumanRuling(toolResultPart?.output ?? part.output) === "deny") {
     return "denied";
   }
@@ -132,9 +132,8 @@ export function getCompactToolState({
 }
 
 /**
- * How a reviewed remedy call reads when the viewer ruled on it. The platform
- * stamps the viewer's own ruling on the remedy's result; every other result,
- * and a ruled remedy whose result is an error, gets null.
+ * Returns display text for a reviewed remedy decision.
+ * Returns null if the result contains an error or lacks a human ruling.
  */
 export function getHumanRulingDisplay({
   part,

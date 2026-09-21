@@ -46,8 +46,8 @@ export class AppaCodexAdapter implements AppaClientAdapter {
   }
 
   classifyToolName(name: string, namespace?: string): "gateway" | "local" {
-    // Codex declares each MCP server's tools inside a `mcp__<server>`
-    // namespace and calls them by their bare advertised names.
+    // Codex declares MCP server tools in `mcp__<server>` namespaces
+    // and invokes them using bare advertised names.
     return name.startsWith("mcp:") ||
       name.startsWith("mcp__") ||
       namespace?.startsWith("mcp__")

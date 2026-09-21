@@ -197,10 +197,10 @@ export function readRemedyExecution(params: {
     return null;
   const parsedOriginalArguments = parseJson(parsed.data.original_arguments);
   if (!isRecord(parsedOriginalArguments)) return null;
-  // The stamp adds the receipt, the proxy's stamped members, and the matched
-  // offer's JWS members beside the model's arguments, and replaces any the
-  // model echoed; what is left must be the model's own call. Restoration
-  // still returns the original bytes.
+  // The stamp attaches the receipt, proxy metadata, and offer JWS members
+  // to the arguments, replacing any values echoed by the model.
+  // The remaining arguments represent the model's original tool call.
+  // Restoration returns the original payload bytes.
   if (
     !isDeepStrictEqual(
       withoutOfferJws(withoutProxyMembers(argumentsValue)),

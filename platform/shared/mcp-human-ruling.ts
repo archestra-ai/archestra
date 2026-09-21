@@ -1,18 +1,16 @@
 /**
- * Platform-reserved `_meta` key recording the ruling a person gave on a call
- * the guardrails policy held for their review. The platform stamps it on the
- * remedy's result so the chat card can say whether the viewer approved or
- * denied the call. Like every `_meta` key it never reaches the model, and like
- * `archestraError` it is stripped from every upstream tool result, so a server
- * cannot make its own card claim a ruling nobody gave.
+ * Platform-reserved `_meta` key for human review rulings on held tool calls.
+ * The platform attaches this metadata to remedy results so Chat can display
+ * whether the user approved or denied the call.
+ * This metadata never reaches the model and is stripped from upstream tool results.
  */
 export const MCP_HUMAN_RULING_META_KEY = "archestraHumanRuling";
 
 export type McpHumanRuling = "approve" | "deny";
 
 /**
- * Read the human ruling off a tool result's `_meta`. Null for every result
- * that carries none, and for any value other than the two rulings.
+ * Reads the human ruling from a tool result's `_meta`.
+ * Returns null if missing or if the value is not a valid ruling.
  */
 export function extractMcpHumanRuling(result: unknown): McpHumanRuling | null {
   if (result == null || typeof result !== "object") {

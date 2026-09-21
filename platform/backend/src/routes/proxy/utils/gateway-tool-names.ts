@@ -40,31 +40,28 @@ export type ToolNameResolution = {
 export type VerifiedToolDeclaration = DeclaredToolSpelling & ToolAttestation;
 
 /**
- * Which of the tools a request names are this platform's gateway tools, and
- * which tool each one is.
+ * Identifies which tools in a request originate from the platform MCP gateway.
  *
- * A client relabels an MCP server's tools before its model sees them: Claude
- * Code presents the advertised `A` as `mcp__<label>__A`, OpenCode as
- * `<label>_A`, Codex as member `A` of a `mcp__<label>` namespace, and Chat and
- * SDK callers send `A` itself. The label is whatever the person connecting the
- * client typed, so it proves nothing, and a hostile MCP server connected to
- * the same client can give its tools any name, ours included.
+ * Clients modify tool names before presenting them to the model. Claude Code
+ * prefixes names with `mcp__<label>__`, OpenCode uses `<label>_`, and Codex uses
+ * an `mcp__<label>` namespace. Chat and SDK callers send unmodified names.
+ * Client labels do not prove identity. An untrusted MCP server can use any
+ * tool name, including platform tool names.
  *
- * What proves a declaration is ours is the attestation marker the gateway puts
- * in front of every description it serves (see `tool-attestation.ts`), which
- * `extractGatewayToolDeclarations` took out of the body. A marker that
- * verifies ties that exact declaration, its namespace and wire name, to the
- * name the gateway advertised, whatever the label. The mode says what the
- * request offered:
- *  - "attested": at least one marker verified. Attested declarations resolve
- *    to their advertised names; every other name keeps its own spelling, and
- *    one that would read as a built-in or as a tool a gateway serves is
- *    marked foreign.
- *  - "chat": the platform's own Chat before its tool list carries markers.
- *    Chat assembles that list from the gateway itself, so names are taken as
- *    they are.
- *  - "compat": no marker verified. The label-anchored resolution this
- *    replaces runs instead, until the next release deletes it.
+ * The gateway includes an attestation marker in each tool description
+ * (see `tool-attestation.ts`). The proxy extracts and verifies these markers.
+ * A verified marker binds the declared wire name and namespace to the advertised
+ * tool name, regardless of client labels.
+ *
+ * Modes:
+ *  - "attested": At least one marker verified. Attested declarations resolve
+ *    to their advertised names. Other declarations keep their wire spellings.
+ *    Unattested declarations that match built-ins or gateway tools receive a
+ *    foreign prefix.
+ *  - "chat": Internal Chat requests. The platform constructs this tool list
+ *    directly from the gateway, so names are accepted as provided.
+ *  - "compat": No markers verified. The system falls back to label-based
+ *    resolution for backwards compatibility.
  *
  * Every function here is a closure, so each can be passed on its own.
  */
@@ -143,13 +140,12 @@ export async function resolveGatewayToolIdentity(params: {
 // === Internal helpers ===
 
 /**
- * Attested mode. An effective attestation resolves its declaration to the
- * advertised name. Any other name keeps its spelling, namespaced names as
- * `<namespace>__<name>`, and one that would read as a built-in or as a tool a
- * gateway serves is marked {@link FOREIGN_TOOL_NAME_PREFIX foreign}. So
- * neither a label nor a namespace nor a bare name can confer built-in, control
- * or notice status, or a real tool's policy identity. No label is anchored and
- * no prefix is learned.
+ * Resolves tool identities in attested mode.
+ * Verified declarations resolve to their advertised tool names.
+ * Unverified declarations keep their wire spellings.
+ * Unverified names that match built-ins or gateway tools receive the
+ * {@link FOREIGN_TOOL_NAME_PREFIX foreign} prefix.
+ * Client labels and namespaces cannot grant built-in status or bypass policy.
  */
 async function attestedIdentity(params: {
   organizationId: string;
@@ -243,22 +239,16 @@ async function attestedIdentity(params: {
 }
 
 /**
- * Removes, in place, the attestations that cannot be taken at their word, and
- * returns what it removed and why.
+ * Removes conflicting or untrusted attestations in place and records reasons.
  *
- * - replayed: the gateway advertises a name once, so the same (gateway, name)
- *   under two spellings is a replayed marker or the gateway registered twice
- *   in one client, and nothing says which spelling is the real one. Both go.
- *   The same name from two different gateways is two real tools and stays.
- * - branded_third_party: a tool the gateway did not serve as a built-in never
- *   reads as one.
- * - non_owner_built_in: when exactly one gateway attests the OpenAPPA remedy
- *   pair, built-ins from any other gateway go, so control and notice status
- *   come from a single gateway. With no single owner (OpenAPPA off, or two
- *   gateways that each serve the pair) built-ins from every gateway stay,
- *   which keeps two-gateway setups working. The residual: in that case a
- *   member can replay one gateway's built-in marker, leaked from a session
- *   that bypassed the proxy, next to another gateway, and it is accepted.
+ * - replayed: The gateway advertises each tool once. If the same tool appears
+ *   under multiple spellings, both are removed because true provenance is
+ *   ambiguous. Distinct tools from different gateways remain active.
+ * - branded_third_party: Third-party tools never receive built-in status.
+ * - non_owner_built_in: If exactly one gateway attests the OpenAPPA remedy
+ *   tools, built-ins from other gateways are removed. This ensures control and
+ *   notice operations route through a single gateway. If multiple gateways
+ *   attest the remedy tools, all built-ins remain active.
  */
 function demoteAttestations(
   effective: Map<string, VerifiedToolDeclaration>,
@@ -391,18 +381,13 @@ async function compatIdentity(params: {
 }
 
 /**
- * Compat: maps a client-decorated name to the platform's own when its label
- * is the client server name of one of the organization's gateway-capable
- * agents (`toMcpClientServerName`), or a prefix this request's own tool list
- * puts in front of a branded name ({@link learnGatewayDecorationPrefixes}).
+ * Compatibility mode: maps client-decorated names using configured gateway
+ * names or learned prefixes ({@link learnGatewayDecorationPrefixes}).
  *
- * A label is not proof: a server connected straight to the client can take
- * one, which is why attested requests never come here. Behind Claude Code's
- * fixed `mcp` prefix, a bare built-in short name left after stripping is
- * expanded to its full name, as run_tool resolves it. A label in first
- * position must leave a `<server>__<tool>` name behind and is never expanded,
- * so an ordinary `filesystem__read_file` is not taken for
- * `archestra__read_file` because a gateway is named Filesystem.
+ * Labels do not provide cryptographic proof. For Claude Code declarations
+ * with the `mcp` prefix, short built-in names expand to full names.
+ * When a label appears in the first position, names must retain the
+ * `<server>__<tool>` format and do not expand short names.
  */
 function compatCanonicalize(params: {
   toolName: string;

@@ -110,9 +110,9 @@ segment in `/v1/mcp/:profileId`, and accepts a UUID **or** the gateway's slug.
 export ARCHESTRA_GATEWAY_ID=<uuid-or-slug>
 ```
 
-The runners register that server under the label `gw` and take
-`ARCHESTRA_GATEWAY_LABEL` to override it. Any label works; "Client
-configuration" below says why.
+The runners register that server under the label `gw` and use
+`ARCHESTRA_GATEWAY_LABEL` as an override. Any label works. The
+"Client configuration" section explains why.
 
 ### Step 4 — a gateway bearer token
 
@@ -439,7 +439,7 @@ qualification in the way noted.
 | Claude Code | prompt on **stdin**, not as a positional argument | `--allowed-tools` is variadic and would swallow a positional prompt as one more tool name. |
 | Claude Code | `--strict-mcp-config --mcp-config <file>` | Pins the run to this harness's gateway registration and ignores the developer's own `~/.claude` MCP servers. |
 | Claude Code | `MAX_THINKING_TOKENS=0` | Keeps transcripts readable and the runs cheap; thinking blocks are irrelevant to what is being qualified (restoration preserves them either way). |
-| all three | the MCP server registered under **any** label (`gw` by default) | The gateway signs each tool it lists, in the tool's description, and the proxy verifies and strips that signature before anything else reads the request. A signed tool resolves to the name the gateway advertised whatever the client calls it — `mcp__<label>__archestra__get_remedy_plans`, OpenCode's `<label>_<tool>`, or a member of Codex's `mcp__<label>` namespace — so the label plays no part. A server that copies the names carries no valid signature, and its tools stay foreign. |
+| all three | the MCP server registered under **any** label (`gw` by default) | The gateway signs each tool description that it lists. The proxy verifies and removes that signature before parsing the request. A signed tool resolves to the advertised name regardless of client prefixes, such as `mcp__<label>__<tool>`, `<label>_<tool>`, or Codex namespace wrappers. The client label does not affect tool resolution. A server that copies tool names without a valid signature remains untrusted. |
 | all three | `X-Appa-Session-ID` on the provider traffic | It names the OpenAPPA root, which the proxy scopes to the credential. The gateway resolves a remedy from the offer id, so a header there is optional. |
 
 ---
@@ -448,8 +448,8 @@ qualification in the way noted.
 
 | Response | Cause | Fix |
 | --- | --- | --- |
-| `OpenAPPA cannot verify the … tools this session declares. Reconnect …` | The gateway tools carry signatures that do not verify: the client fetched its tool list before a deploy or a secret rotation, or from another deployment. | Reconnect the MCP server to the client (Claude Code: `/mcp`), then start a new session. |
-| `OpenAPPA needs exactly one declaration of …` | The session declares a remedy tool twice: the same gateway registered under two labels, two gateways of this platform in one client, or a server replaying the gateway's tool. The message names both spellings. | Register one gateway of this platform per client, under one label. |
+| `OpenAPPA cannot verify the … tools this session declares. Reconnect …` | The gateway tools carry invalid signatures. The client fetched tool lists before a deployment or secret rotation, or from a different deployment. | Reconnect the MCP server to the client (Claude Code: `/mcp`), then start a new session. |
+| `OpenAPPA needs exactly one declaration of …` | The session declares a remedy tool more than once. Causes include the same gateway registered under two labels, multiple platform gateways in one client, or duplicate tool declarations. The message lists both spellings. | Register one platform gateway per client, using one label. |
 
 ## Troubleshooting Anthropic 401 Responses
 

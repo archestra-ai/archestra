@@ -49,8 +49,8 @@ export function McpElicitationDialog({
     return null;
   }
 
-  // Only the platform marks a request as a review, so a third-party server
-  // can never render approval controls, whatever its tool is named.
+  // Only the platform marks a request as an OpenAPPA review.
+  // Third-party servers cannot display approval controls.
   if (request.kind === "openappa_review") {
     return (
       <RemedyReviewDialog
@@ -175,10 +175,9 @@ export function McpElicitationDialog({
 }
 
 /**
- * The viewer's ruling on a call the guardrails policy held for review. The
- * review text names the tool and its exact arguments over several lines, so it
- * is shown as written. The three buttons are the whole answer: there is no
- * form field that could contradict them.
+ * Review dialog for a tool call held by guardrails policy.
+ * Displays the tool name and exact arguments in preformatted text.
+ * The action buttons provide the complete response.
  */
 function RemedyReviewDialog({
   request,

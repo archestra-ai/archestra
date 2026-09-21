@@ -27,10 +27,9 @@ export class AppaOpenCodeAdapter implements AppaClientAdapter {
   }
 
   classifyToolName(name: string): "gateway" | "local" {
-    // OpenCode presents an MCP tool as `<alias>_<advertised name>` under its
-    // `mcp:` namespacing, and every name a gateway advertises is
-    // `<server>__<tool>`. OpenCode's own tools (`bash`, `read`,
-    // `todowrite`, ...) never carry those markers.
+    // OpenCode formats MCP tools as `<alias>_<advertised name>` under `mcp:` namespaces.
+    // Gateway tool names use the `<server>__<tool>` format.
+    // Native OpenCode tools (such as `bash` or `read`) do not contain these patterns.
     return name.startsWith("mcp:") || name.includes("__") ? "gateway" : "local";
   }
 

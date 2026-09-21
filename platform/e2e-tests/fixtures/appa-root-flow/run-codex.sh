@@ -29,13 +29,12 @@ token="${ARCHESTRA_GATEWAY_TOKEN:?set ARCHESTRA_GATEWAY_TOKEN — see README.md,
 # below), so it is never written to the config file.
 : "${ARCHESTRA_PROXY_KEY:?set ARCHESTRA_PROXY_KEY — see README.md, \"Setup\" step 5}"
 
-# The label the client registers the gateway under. Any label works: Codex
-# declares the gateway as a `mcp__<label>` namespace, the gateway signs each
-# tool it lists, in the tool's description, and the proxy verifies and strips
-# that signature, so the namespace's members resolve to the built-in APPA tools
-# whatever the label is. A server that copies the names carries no valid
-# signature and stays foreign. The default matches no gateway name, so every
-# run exercises that.
+# The label used to register the gateway. Any label works.
+# Codex declares the gateway as an `mcp__<label>` namespace. The gateway signs
+# each tool description that it lists. The proxy verifies and removes that signature.
+# As a result, namespace members resolve to built-in APPA tools regardless of the label.
+# An untrusted server that copies tool names lacks a valid signature and remains untrusted.
+# The default label 'gw' matches no gateway name, so every run exercises signature verification.
 gateway_label="${ARCHESTRA_GATEWAY_LABEL:-gw}"
 
 # Every directory this script writes into, whether or not a transcript path was

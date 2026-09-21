@@ -41,10 +41,9 @@ export const ChatMcpElicitationResponseSchema = z.object({
 });
 
 /**
- * A built-in elicitation the chat renders with its own controls instead of a
- * generic form. `openappa_review` asks a person to rule on a call the
- * guardrails policy held for review. Only built-in tools set a kind; requests
- * from third-party MCP servers never carry one.
+ * Built-in elicitation kind rendered with custom chat controls.
+ * `openappa_review` prompts users to review tool calls held by guardrails.
+ * Third-party MCP server requests never include a kind.
  */
 type ChatMcpElicitationKind = "openappa_review";
 

@@ -411,7 +411,7 @@ function oneRemedyDeclaration(params: {
   if (second) {
     throw new ApiError(
       400,
-      `OpenAPPA needs exactly one declaration of ${shortName}; this request declares both ${spellingLabel(first)} and ${spellingLabel(second)}. Connect this client to one gateway of this platform at a time.`,
+      `OpenAPPA needs exactly one declaration of ${shortName}. This request declares both ${spellingLabel(first)} and ${spellingLabel(second)}. Connect this client to one gateway of this platform at a time.`,
     );
   }
   if (!first) return undefined;

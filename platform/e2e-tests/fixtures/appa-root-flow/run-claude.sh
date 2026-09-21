@@ -26,12 +26,12 @@ gateway="${ARCHESTRA_GATEWAY_ID:?set ARCHESTRA_GATEWAY_ID — see README.md, \"S
 token="${ARCHESTRA_GATEWAY_TOKEN:?set ARCHESTRA_GATEWAY_TOKEN — see README.md, \"Setup\" step 4}"
 proxy_key="${ARCHESTRA_PROXY_KEY:?set ARCHESTRA_PROXY_KEY — see README.md, \"Setup\" step 5}"
 
-# The label the client registers the gateway under. Any label works: the gateway
-# signs each tool it lists, in the tool's description, and the proxy verifies
-# and strips that signature, so `mcp__<label>__archestra__*` resolves to the
-# built-in APPA tools whatever the label is. A server that copies the names
-# carries no valid signature and stays foreign. The default matches no gateway
-# name, so every run exercises that.
+# The label used to register the gateway. Any label works.
+# The gateway signs each tool description that it lists. The proxy verifies
+# and removes that signature. As a result, `mcp__<label>__archestra__*` resolves
+# to built-in APPA tools regardless of the label. An untrusted server that copies
+# tool names lacks a valid signature and remains untrusted. The default label 'gw'
+# matches no gateway name, so every run exercises signature verification.
 gateway_label="${ARCHESTRA_GATEWAY_LABEL:-gw}"
 
 # Every directory this script writes into, whether or not a transcript path was

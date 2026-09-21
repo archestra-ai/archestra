@@ -1467,7 +1467,7 @@ function hitlQuestionGuidance(offerIds: readonly string[]): string {
     "Do not reply to the user and do not ask for approval in plain text.",
     "Immediately call the declared ask_user tool once for each offer ID below.",
     "For each call, use question 'Open the pending HITL review.', header 'Approval', options Approve and Deny, and remedy_offer_ids containing only that offer ID.",
-    "The platform replaces that placeholder text with the exact reviewed tool call and shows the client's native question UI when available.",
+    "The platform replaces that placeholder text with the reviewed tool call and displays the client native question UI when available.",
     `Offer IDs: ${JSON.stringify(offerIds)}.`,
   ].join(" ");
 }
@@ -1481,7 +1481,7 @@ function hitlDecisionGuidance(
   if (approved.length > 0) {
     return [
       `The verified human answer approved OpenAPPA offer IDs ${JSON.stringify(approved)}.`,
-      "Your next and only tool calls must be execute_remedy_plan calls for those offers, using each plan already shown earlier in the conversation.",
+      "Your next and only tool calls must be execute_remedy_plan calls for those offers, using the plan shown earlier in the conversation.",
       "Do not call or retry the blocked tool in the same response.",
       "Wait for execute_remedy_plan to report successful authorization. Only then retry the blocked tool in a new response.",
       "Do not ask another question and do not describe this step in prose.",
@@ -1578,7 +1578,7 @@ function appendQuestionContinuation(params: {
   }
 }
 
-/** Codex must not turn a required HITL workflow step into a prose response. */
+/** Prevents Codex from converting a required HITL workflow step into prose. */
 function requireCodexToolCall(params: {
   binding: AppaPluginBinding;
   context: LlmProxyBeforeModelContext;
@@ -1666,7 +1666,7 @@ function trajectoryStamper(
   return (call) => ({
     ...call,
     wireId: stampToolCallId({
-      // Compose transport stamps instead of discarding an inner wire identity
+      // Compose transport stamps instead of replacing inner wire identities,
       // such as the signed native-question ID used to claim a HITL answer.
       callId: call.wireId ?? call.id,
       sessionId,

@@ -94,15 +94,12 @@ export function shouldForwardAnthropicBeta(
  *
  * - String arguments: validated as JSON, wrapped in `{ raw: ... }` if invalid
  * - Object arguments: serialized with JSON.stringify
- * - Names, with the namespace the call named, are canonicalized to the
- *   platform's own names, and a `run_tool` dispatch is unwrapped to the target
- *   tool it names — policies must evaluate the tool that will actually
- *   execute, not the opaque wrapper (whose name matches no `tools` row and
- *   would fail open as "no policies found").
+ * - Names and namespaces are canonicalized to platform tool names.
+ * - `run_tool` dispatches unwrap to their target tools so policies evaluate
+ *   the executing tool rather than the wrapper.
  *
- * `resolution` defaults to taking each name as spelled, with the strict
- * dispatch match. A wrapper the compat scan recognizes is still unwrapped, so
- * its target is evaluated like any other.
+ * `resolution` defaults to wire names with strict dispatch matching.
+ * Wrappers recognized by compatibility scanning are also unwrapped.
  */
 export function normalizeToolCallsForPolicy(
   toolCalls: Array<{
@@ -152,21 +149,16 @@ export function normalizeToolCallsForPolicy(
 }
 
 /**
- * What the tool-invocation guardrail rules on for a batch of calls:
- * {@link normalizeToolCallsForPolicy}'s entry for each call, and two
- * additions for calls whose declaration carries no effective attestation.
- * Both only ever add enforcement.
+ * Prepares tool calls for policy evaluation.
+ * Returns normalized entries from {@link normalizeToolCallsForPolicy}
+ * and adds enforcement rules for declarations without verified attestations:
  *
- * - A call through a `run_tool`-shaped declaration nothing proves is ours is
- *   ruled on as itself, and the tool it names is ruled on too. The gateway
- *   registered in one client under two labels, or a replayed marker, demotes
- *   the real wrapper to exactly that, and the client still routes it to the
- *   gateway, which runs the target: ruling on the wrapper alone would let a
- *   blocked write through. See {@link resolveUnprovenRunToolTarget}.
- * - A name the proxy never persists a tool row under, which is how it names a
- *   foreign-marked lookalike and an unattested Codex namespace member, is
- *   ruled under the org's default for discovered tools when no row carries
- *   it, instead of being allowed.
+ * - Calls using unverified `run_tool` wrappers evaluate both the wrapper
+ *   and the named target tool. If a gateway is registered under multiple labels
+ *   or uses replayed markers, evaluating the target prevents blocked actions
+ *   from running unreviewed (see {@link resolveUnprovenRunToolTarget}).
+ * - Names without persisted tool rows (such as foreign lookalikes or unattested
+ *   Codex namespace members) use the organization default policy for discovered tools.
  */
 export function toolCallsForPolicyEvaluation(params: {
   toolCalls: Array<{
@@ -253,18 +245,14 @@ export interface AccumulatedToolCall {
  * unwraps the rewritten call straight back to the same target, so it is policy-
  * evaluated exactly like a `run_tool` dispatch the model had written itself.
  *
- * The rewritten call is addressed to `run_tool` as this request declares it —
- * the client's own spelling, in its namespace — since that is the only name the
- * client can route. `toolIdentity` defaults to names taken as spelled.
+ * Rewritten calls target `run_tool` using the declared client spelling and namespace.
+ * `toolIdentity` defaults to wire spellings.
  *
- * A model that copies the client's decoration onto a name `search_tools`
- * returned (`mcp__<label>__github__list_repos`, OpenCode's
- * `<label>_github__list_repos`, or `github__list_repos` in Codex's
- * `mcp__<label>` namespace) names a tool `run_tool` only knows undecorated.
- * When an attestation proves the `run_tool` declaration, its spelling shows
- * exactly what that decoration is, so the target is handed over without it.
- * That shapes only what `run_tool` is asked to run, never an identity: the
- * target is ruled on as whatever tool that name is.
+ * When a model copies client prefixes onto names returned by `search_tools`
+ * (such as `mcp__<label>__<tool>`, `<label>_<tool>`, or Codex namespaces),
+ * `run_tool` expects the undecorated target name. Verified `run_tool` attestations
+ * identify the client prefix so the proxy can remove it before dispatch.
+ * Policy evaluation continues to evaluate the target tool identity.
  *
  * Returns `null` when there is nothing to do — no dispatch pair in the tool
  * list (`full` exposure, where a missing tool really is disabled), or every
@@ -311,11 +299,9 @@ export function planDispatchModeToolCallRewrites(params: {
       return toolCall;
     }
 
-    // A name the request did not declare can read as foreign only because it
-    // looks like one of ours (an undeclared bare `archestra__read_app`). The
-    // foreign mark exists to keep a declared lookalike from taking our
-    // identity; `run_tool` is handed the name as the model wrote it, less
-    // the client's proven decoration, and resolves it itself.
+    // Undeclared tools receive a foreign prefix only when matching built-in names.
+    // This prefix prevents lookalikes from assuming platform identities.
+    // The target name passes to `run_tool` without client decoration.
     const targetName =
       undecorated(toolCall, decoration) ??
       (canonicalName.startsWith(FOREIGN_TOOL_NAME_PREFIX)

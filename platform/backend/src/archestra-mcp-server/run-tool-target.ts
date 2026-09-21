@@ -12,13 +12,11 @@ import { archestraMcpBranding } from "./branding";
  * Unwrap a `run_tool` dispatch to the underlying tool it targets and that
  * tool's own arguments.
  *
- * `run_tool` is a meta wrapper: its args carry `tool_name` (the tool actually
- * being invoked) and `tool_args` (that tool's input). For any call that
- * {@link resolveRunToolDispatch} does not read as a dispatch to a target, the
- * tool name and args are returned unchanged. This mirrors the resolution
- * `run_tool` performs internally so that approval policy checks and
- * human-facing approval prompts describe the real target tool rather than the
- * opaque `run_tool` wrapper.
+ * `run_tool` is a dispatch wrapper whose arguments contain `tool_name` and
+ * `tool_args`. For any call that {@link resolveRunToolDispatch} does not read
+ * as a dispatch to a target, the tool name and arguments return unchanged.
+ * This mirrors internal `run_tool` resolution so policy checks and approval
+ * prompts describe the actual target tool instead of the `run_tool` wrapper.
  */
 export function resolveRunToolTarget(params: {
   toolName: string;
@@ -49,9 +47,9 @@ type RunToolDispatch =
   | { kind: "not_dispatch" }
   /**
    * A `run_tool` dispatch whose target resolved to a canonical tool name.
-   * `loose` marks a wrapper recognized only by the compat decoration scan:
-   * nothing proves it is ours, so its target is taken as written and earns no
-   * trust a proven wrapper would.
+   * `loose` marks a wrapper recognized only by compat decoration scanning.
+   * Because provenance is unverified, its target is evaluated as written
+   * and receives no extra trust.
    */
   | { kind: "target"; toolName: string; loose?: true }
   /**
@@ -69,10 +67,10 @@ type RunToolDispatch =
  * policies evaluate the tool that actually produced the data instead of the
  * built-in wrapper.
  *
- * The wrapper is recognized strictly by default: the canonical name must be
- * the platform's own `run_tool`. `loose` also recognizes it behind a client
- * label (see {@link runToolMatch}); a wrapper found only that way never yields
- * a built-in or an expanded target.
+ * By default, the wrapper requires a strict match to the platform `run_tool`.
+ * When `loose` is enabled, the scanner also recognizes client prefixes
+ * (see {@link runToolMatch}). A wrapper identified only by loose matching
+ * never resolves to a built-in or expanded target.
  */
 export function resolveRunToolDispatch(params: {
   toolName: string;
@@ -97,9 +95,9 @@ export function resolveRunToolDispatch(params: {
       toolName: resolveRunToolTargetName(targetToolName),
     };
   }
-  // Built-in status is the platform's to confer. A wrapper nothing proves is
-  // ours must not hand it to the tool it names, so a built-in target leaves
-  // the call as the wrapper it is.
+  // The platform controls built-in status. An unverified wrapper cannot grant
+  // built-in status to the tool it names. A built-in target remains evaluated
+  // as the wrapper itself.
   if (isBuiltInTarget(targetToolName)) {
     return { kind: "not_dispatch" };
   }
@@ -107,17 +105,14 @@ export function resolveRunToolDispatch(params: {
 }
 
 /**
- * The tool a call through an unproven `run_tool` wrapper names, and that
- * tool's arguments: `toolName` is a wire spelling whose declaration carries
- * no effective attestation, recognized as the wrapper by the loose scan, the
- * strict match included (a bare lookalike reads as the wrapper too).
+ * Resolves the target tool and arguments for an unverified `run_tool` wrapper.
+ * `toolName` is a wire spelling without a verified attestation that matches
+ * the wrapper under loose scanning.
  *
- * The client may route such a call to the platform's real gateway, registered
- * twice or behind a replayed marker, and that gateway runs the target. So the
- * target is ruled on as well, in addition to the wrapper itself, never in its
- * place: that would hand a lookalike the target's policy identity. As with any
- * loose match, the target is taken as written and never as a built-in.
- * Undefined when the call is no such dispatch or names no usable target.
+ * Clients might route this call to a platform gateway that executes the target.
+ * The policy evaluates the target in addition to the wrapper itself, rather than
+ * replacing the wrapper. The target is evaluated as written and never as a
+ * built-in tool. Returns undefined if the call is not a valid dispatch.
  */
 export function resolveUnprovenRunToolTarget(params: {
   toolName: string;
@@ -156,28 +151,22 @@ export function resolveRunToolTargetName(requestedName: string): string {
 const ARCHESTRA_SHORT_NAME_SET = new Set<string>(ARCHESTRA_TOOL_SHORT_NAMES);
 
 /**
- * How a tool name reads as the `run_tool` dispatch wrapper: `strict` when its
- * canonical name is the platform's own wrapper, `loose` when only the compat
- * decoration scan finds it.
+ * Determines whether a tool name matches the `run_tool` dispatch wrapper.
+ * Returns `strict` when the canonical name matches the platform wrapper.
+ * Returns `loose` when matched through compatibility prefix scanning.
  *
- * Canonical names come from the proxy's gateway tool identity, which resolves
- * an attested declaration to the name the gateway advertised whatever label
- * the client gave it. A strict match is therefore enough for every request
- * that carries a valid attestation, and it is the default.
+ * Canonical names resolve verified gateway declarations to advertised names
+ * regardless of client labels. A strict match handles all requests with valid
+ * attestations.
  *
- * The loose scan exists only for compat requests, which carry no valid
- * attestation: there a client label (Claude Code's `mcp__<alias>__…`,
- * OpenCode's `<alias>_…`) may still sit in front of our branded prefix, and a
- * missed wrapper leaves policies evaluating an opaque name that fails open.
- * Nothing proves such a wrapper is ours, though: any server connected to the
- * client can name a tool that way. So a loose match only ever hands the target
- * to policy evaluation as written. It never yields a built-in or an expanded
- * target (see {@link resolveRunToolDispatch}), and trusted-data evaluation
- * never extends it the unknown-target trust a proven wrapper earns.
+ * The loose scan supports unverified legacy requests where client prefixes
+ * (such as Claude Code `mcp__<alias>__` or OpenCode `<alias>_`) precede the
+ * branded tool name. Without loose matching, policies would evaluate an
+ * unknown wrapper name and fail open. Loose matches provide target tools to
+ * policies as written, without granting built-in status or extra trust.
  *
- * Only suffixes that still carry a server prefix are considered, so a
- * third-party tool merely named `run_tool` is not mistaken for the wrapper —
- * the prefix has to be one the branding recognizes as ours.
+ * Only suffixes with recognized platform branding prefixes match, preventing
+ * third-party tools named `run_tool` from matching.
  */
 function runToolMatch(
   toolName: string,

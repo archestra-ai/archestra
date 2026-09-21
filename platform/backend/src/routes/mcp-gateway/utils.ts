@@ -661,14 +661,13 @@ export async function createAgentServer(params: {
       logger.warn({ err: dbError }, "Failed to persist tools/list request:");
     }
 
-    // Attest every served tool so the LLM proxy can tell this gateway's tools
-    // from a lookalike whatever label the client registered it under. The
-    // marker goes in the description, the one field every client forwards to
-    // the model provider verbatim, and only here: the log row above stays
-    // unmarked. Minting is deterministic, so an unchanged list stays
-    // byte-identical and client and prompt caches still hit. Session-auth
-    // callers are the platform's own browser surfaces (MCP proxy, app
-    // previews), which never reach a model through the proxy.
+    // Attest each served tool so the LLM proxy can identify gateway tools
+    // regardless of client labels.
+    // The marker is placed in the description because clients forward descriptions
+    // unchanged to model providers.
+    // Minting is deterministic to preserve prompt and client caches.
+    // Browser surfaces using session auth do not forward tools through the proxy
+    // and do not receive markers.
     const servedTools = tokenAuth?.isSessionAuth
       ? toolsList
       : toolsList.map((tool) => ({
@@ -1333,9 +1332,9 @@ export async function createAgentServer(params: {
         organizationId: tokenAuth?.organizationId,
       }),
       toolName: name,
-      // Every exit — built-in, blocked, and error results included — must
-      // carry `resultType`: a 2026-07-28 client rejects a result without it.
-      // An InputRequiredResult already carries its own.
+      // All results must include `resultType`.
+      // Clients using protocol 2026-07-28 reject results without this property.
+      // `InputRequiredResult` includes its own `resultType`.
       execute: async (signal) => {
         const result = await executeCallToolRequest(signal);
         return "resultType" in result ? result : complete(result);

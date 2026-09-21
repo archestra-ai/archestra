@@ -202,9 +202,9 @@ Personal offers require their original user. Organization offers allow any calle
 
 The embedded API returns typed remedy outcomes, refusal reasons, and offer descriptions.
 
-An offer that needs a human reviewer carries a review entry. `loadOfferReview` returns the review text together with the reviewed call's tool and arguments. The gateway asks the person, then passes their ruling with the remedy. A denial is final: the runtime retires the offer, and the model is told that the reviewer refused the call and that it must not retry the call in another form. Any options that do not need that reviewer are listed after the denial.
+An offer that requires human review includes a review entry. `loadOfferReview` returns the review text with the reviewed tool name and arguments. The gateway prompts the user, then sends their ruling with the remedy. A denial is final. The runtime retires the offer and informs the model that the reviewer rejected the call. The model must not retry the call in another format. Options that do not require that reviewer appear after the denial.
 
-When the host can tell that the reviewed call would fail even if approved, it sends `precheck_refusal` instead of asking. The binding records that text as the remedy's result without involving the runtime, so the offer stays live and no approval is spent.
+When the host determines that the reviewed call will fail even if approved, it returns `precheck_refusal` without prompting the user. The binding records this text as the remedy result without invoking the runtime. The offer remains active and no user approval is consumed.
 
 The proxy replaces a denied call with `archestra__get_remedy_plans`. The notice preserves the original call position and provider call ID. It carries the blocked tool, its arguments, and the policy ruling in plain text. Other allowed calls in the same response run normally. On later requests, the proxy restores each notice to the original tool call and injects the ruling as its result.
 
@@ -235,7 +235,7 @@ ARCHESTRA_OPENAPPA_TEST_DATABASE_URL=postgresql://... pnpm test
 The native tests use real hooks, a real PostgreSQL database, two Node processes,
 and a local HTTP sanitizer. They cover changed resends, concurrent duplicates,
 session isolation, parallel identical calls, reverse-order results after restart,
-canceled-batch replay, remedy acceptance, human review denials and precheck refusals, restriction persistence without model
+canceled-batch replay, remedy acceptance, human review denials, precheck refusals, restriction persistence without model
 history, one-time sanitizer execution, unknown outcomes, and injected receipt
 commit failure with event rollback. The storage test in the OpenAPPA tree is:
 

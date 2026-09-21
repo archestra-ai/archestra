@@ -12,22 +12,17 @@ import {
 export type GatewayToolDeclaration = DeclaredToolSpelling & { marker?: string };
 
 /**
- * Takes the gateway's attestation markers out of a request body, in place,
- * and returns one entry per named declaration, in order.
+ * Removes gateway attestation markers from a request body in place.
+ * Returns an ordered array of declarations with recorded markers.
  *
- * The gateway puts a marker in front of every tool description it serves, and
- * the client forwards it here. Each declaration's leading marker is recorded
- * and removed; a description that held only the marker loses its key. Every
- * other marker-shaped token anywhere in the body is then removed too: a second
- * token stacked in a description, and every place a client echoes a
- * description back — system prompts, tool results that list tool definitions
- * (Claude Code's tool search), Responses `function_call_output`, Chat
- * Completions tool messages.
+ * The gateway prepends a marker to each tool description in tools/list.
+ * Clients forward descriptions here. Each declaration's leading marker is
+ * recorded and removed. If a description contained only the marker, its key is
+ * deleted. All other marker-like tokens across the request body are removed,
+ * including echoed descriptions in system prompts, tool results, and tool messages.
  *
- * Runs before the provider's request adapter is created, and so before any
- * log, provider request or discovered-tool row can see the body: the adapters
- * keep a reference to this same object rather than a copy, so the model, the
- * interaction record and persistence all read the stripped body.
+ * Runs before the provider request adapter is created. As a result, logs,
+ * provider requests, and persisted records only receive the cleaned request body.
  */
 export function extractGatewayToolDeclarations(
   body: unknown,
@@ -36,10 +31,9 @@ export function extractGatewayToolDeclarations(
 }
 
 /**
- * The same removal for a raw JSON body the proxy forwards without handling it
- * (a provider's catch-all route, such as Anthropic's count_tokens). Returns
- * the parsed body with every marker taken out, or null when the bytes hold no
- * marker or are not JSON, so they can go upstream unchanged.
+ * Removes attestation markers from a raw JSON body forwarded without proxy handling
+ * (such as Anthropic count_tokens). Returns the parsed body with markers removed,
+ * or null if the payload contains no markers or is invalid JSON.
  */
 export function removeMarkersFromForwardedJson(raw: Buffer): object | null {
   if (!mayHoldAttestationToken(raw)) return null;
@@ -87,10 +81,9 @@ function takeMarkers(body: unknown): {
 }
 
 /**
- * Removes every token from every string value in the body, in place, and
- * returns whether any string changed. Keys are never touched, and a string is
- * only reassigned when it changed. Iterative, so a deeply nested body cannot
- * overflow the stack.
+ * Iteratively removes attestation tokens from all string values in the body.
+ * Modifies objects in place and returns true if any values changed.
+ * Object keys remain unchanged.
  */
 function removeTokensEverywhere(body: unknown): boolean {
   let changed = false;

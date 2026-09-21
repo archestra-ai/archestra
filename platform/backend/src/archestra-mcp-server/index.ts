@@ -406,12 +406,11 @@ export async function executeArchestraTool(
 }
 
 /**
- * Runs the checks executeArchestraTool makes before a built-in's handler —
- * RBAC, assignment, existence and argument validation — without running it.
- * Returns the error result the call would get, or null when it would reach the
- * handler. The arguments first get run_tool's envelope repair, so a call is
- * refused only when neither a direct call nor run_tool would run it. OpenAPPA
- * uses this so a person is never asked to approve a call that cannot run.
+ * Validates a built-in tool call without executing it.
+ * Runs RBAC, tool assignment, tool existence, and argument validation checks.
+ * Returns the error result if validation fails, or null if the call is valid.
+ * Applies envelope repair to arguments first.
+ * OpenAPPA uses this check so users are not asked to approve invalid calls.
  */
 export async function preflightArchestraToolCall(params: {
   toolName: string;
@@ -535,9 +534,9 @@ async function resolveToolAssignment(
 }
 
 /**
- * The gates between a call and a built-in's handler. executeArchestraTool and
- * preflightArchestraToolCall share them, so the precheck cannot pass a call
- * the executor refuses or refuse one it runs.
+ * Shared validation gates between a call and a built-in handler.
+ * Used by executeArchestraTool and preflightArchestraToolCall to ensure
+ * consistent admission decisions.
  */
 async function admitArchestraToolCall(params: {
   toolName: string;

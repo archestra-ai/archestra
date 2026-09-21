@@ -15,12 +15,11 @@ import { SEEDED_APP_RENDER_META_KEY } from "./seeded-app-render";
 export const MCP_EXECUTED_AS_META_KEY = "archestraExecutedAs";
 
 /**
- * Platform-reserved metadata keys: `archestraError` (set only by the MCP
- * client's error results), the seeded-app-render marker (set only by
- * open-in-chat conversation seeding), the executed-as identity, and the human
- * ruling (set only on a reviewed remedy's result). Renderers and the
- * trusted-data guardrail key off them to identify platform-authored results,
- * so upstream copies must never survive.
+ * Platform-reserved metadata keys: `archestraError` (error results),
+ * the seeded-app-render marker, the executed-as identity, and the human
+ * ruling (reviewed remedy results).
+ * Renderers and trusted-data guardrails use these keys to identify
+ * platform-generated results. Upstream copies are always removed.
  */
 export const RESERVED_PLATFORM_META_KEYS = [
   "archestraError",

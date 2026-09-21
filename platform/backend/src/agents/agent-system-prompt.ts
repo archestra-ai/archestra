@@ -51,11 +51,11 @@ export const TOOL_DENIAL_INSTRUCTION =
 
 /**
  * System prompt instruction for OpenAPPA remedy plans.
- * Directs the model to act on remedy plans rather than halting when a tool is blocked.
- * Rulings count readers without naming them, so the model is told not to fill
- * that gap with a guess. Interactive runs execute a remedy plan immediately;
- * execute_remedy_plan itself collects any required human approval. Headless
- * runs describe the plans and stop because nobody can answer a review.
+ * Directs the model to execute remedy plans instead of stopping when a tool is blocked.
+ * Rulings count readers without naming them, so the model must not guess reader identities.
+ * Interactive runs execute a remedy plan immediately;
+ * execute_remedy_plan collects any required human approval. Headless
+ * runs describe available plans and stop because no user can review them.
  *
  * @public — asserted by the assembler tests.
  */

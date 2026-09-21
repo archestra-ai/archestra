@@ -40,6 +40,7 @@ describe("catch-all tool annotations", () => {
     ).toEqual({
       valid: true,
       errors: [],
+      warnings: [],
     });
   });
 

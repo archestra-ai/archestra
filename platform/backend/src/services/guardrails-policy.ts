@@ -49,11 +49,16 @@ export const guardrailsPolicyService = {
    * unchanged entry that stopped resolving composes as an empty battery, so one
    * stale entry never takes a whole policy down. `previous` defaults to the
    * organization's latest revision, which is what every save is measured against.
+   *
+   * Such an entry is a warning, not an error: the document is valid and the
+   * battery it names governs nothing. A caller that reports "valid" and stops
+   * there hides a battery that stopped working, so every path that reports a
+   * validation reports its warnings too.
    */
   async validate(
     content: string,
     params: { organizationId: string; previous?: string },
-  ) {
+  ): Promise<{ valid: boolean; errors: string[]; warnings: string[] }> {
     requireEnabled();
     const { organizationId } = params;
     const resolution = await openappaDeclarations.resolve({
@@ -71,10 +76,13 @@ export const guardrailsPolicyService = {
         })
       ).entries.map((entry) => entry.entry),
     );
+    const warnings: string[] = [];
     for (const entry of resolution.entries)
-      if (!entry.battery && !kept.has(entry.entry))
-        errors.push(
-          `include: no battery answers ${JSON.stringify(entry.entry)}`,
+      if (!entry.battery)
+        (kept.has(entry.entry) ? warnings : errors).push(
+          kept.has(entry.entry)
+            ? `include: ${JSON.stringify(entry.entry)} resolves to no battery and governs nothing`
+            : `include: no battery answers ${JSON.stringify(entry.entry)}`,
         );
     if (errors.length === 0) {
       const composed = await openappaDeclarations.composeForCheck({
@@ -83,7 +91,7 @@ export const guardrailsPolicyService = {
       });
       if ((composed.content ?? null) === null) errors.push(...composed.errors);
     }
-    return { valid: errors.length === 0, errors };
+    return { valid: errors.length === 0, errors, warnings };
   },
 
   /**

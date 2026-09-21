@@ -169576,11 +169576,18 @@
                       "items": {
                         "type": "string"
                       }
+                    },
+                    "warnings": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     }
                   },
                   "required": [
                     "valid",
-                    "errors"
+                    "errors",
+                    "warnings"
                   ],
                   "additionalProperties": false
                 }

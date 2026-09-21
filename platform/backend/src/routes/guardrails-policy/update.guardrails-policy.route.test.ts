@@ -298,6 +298,26 @@ describe("guardrails policy authoring", () => {
     ).toMatchObject({
       batteries: [{ name: "acme", status: "unavailable" }],
     });
+    // Valid, but degraded: the check says so instead of answering plain success.
+    const validated = await app.inject({
+      method: "POST",
+      url: "/api/guardrails-policy/validate",
+      payload: { content: unknown },
+    });
+    expect(validated.json()).toMatchObject({ valid: true, errors: [] });
+    expect(validated.json().warnings).toHaveLength(1);
+    // And the agent is told which battery governs nothing.
+    const read = await executeArchestraTool(
+      "archestra__get_guardrails_policy",
+      {},
+      { organizationId: orgId, userId, agent: { id: "a", name: "A" } },
+    );
+    expect(read.structuredContent).toMatchObject({
+      effective: {
+        error: null,
+        batteries: [{ name: "acme", status: "unavailable" }],
+      },
+    });
   });
 
   test("disabled feature hides API and agent tools", async () => {

@@ -140,11 +140,9 @@ it("explains separate wildcard and team-relative inheritance for the same recipi
   // The same role reaches this object two ways. Both are shown, and each says
   // which one it is, because they are revoked in different places.
   expect(
-    await screen.findByText(/via every MCP registry entry/),
+    await screen.findByText(/From organization settings/),
   ).toBeInTheDocument();
-  expect(
-    screen.getByText(/via every object their teams reach/),
-  ).toBeInTheDocument();
+  expect(screen.getByText(/From team access settings/)).toBeInTheDocument();
   expect(screen.getAllByText("Editor")).toHaveLength(2);
   // Neither is editable here: an inherited grant has no picker and no remove
   // button, which is what "change it at its source" means in the markup.
@@ -263,6 +261,6 @@ it("lets readers inspect grants without offering mutations", async () => {
     screen.queryByRole("button", { name: "Save permissions" }),
   ).not.toBeInTheDocument();
   expect(
-    screen.queryByRole("combobox", { name: "Add permission recipient" }),
+    screen.queryByRole("button", { name: "Add access" }),
   ).not.toBeInTheDocument();
 });

@@ -66,16 +66,21 @@ export function OrganizationPermissions() {
 
   return (
     <>
-      <div className="max-w-3xl space-y-10">
-        <div className="space-y-2">
-          <Label htmlFor="permission-resource">Resource</Label>
+      <div className="space-y-6">
+        <div className="flex items-center gap-3 border-b pb-4">
+          <Label
+            htmlFor="permission-resource"
+            className="text-sm text-muted-foreground"
+          >
+            Manage access to
+          </Label>
           <Select
             value={resource}
             onValueChange={(value) => selectResource(value as ScopedResource)}
           >
             <SelectTrigger
               id="permission-resource"
-              className="w-full sm:w-64"
+              className="w-auto min-w-40 border-transparent bg-transparent text-base font-semibold shadow-none hover:bg-muted dark:bg-transparent dark:hover:bg-muted"
               aria-label="Resource type"
             >
               <SelectValue />
@@ -90,52 +95,29 @@ export function OrganizationPermissions() {
           </Select>
         </div>
 
-        <section aria-labelledby="all-resource-access" className="space-y-4">
-          <div className="space-y-1">
-            <h2
-              id="all-resource-access"
-              className="text-lg font-semibold tracking-tight"
-            >
-              All {plural}
-            </h2>
-            <p className="text-sm text-muted-foreground">
-              These recipients have access to every{" "}
-              {RESOURCE_SINGULAR[resource]}, including those created later.
-            </p>
-          </div>
+        <section aria-label={`All ${plural}`}>
           <ResourcePermissions
             key={`${resource}:all`}
             resource={resource}
             scope="*"
+            title={`All ${plural}`}
             onDirtyChange={setAllDirty}
-            description={null}
+            description={`Access to every ${RESOURCE_SINGULAR[resource]}, including ones created later.`}
           />
         </section>
 
         {!ORGANIZATION_WIDE_RESOURCES.has(resource) && (
           <section
-            aria-labelledby="team-resource-access"
-            className="space-y-4 border-t pt-8"
+            aria-label={`${label} shared with their teams`}
+            className="border-t pt-6"
           >
-            <div className="space-y-1">
-              <h2
-                id="team-resource-access"
-                className="text-lg font-semibold tracking-tight"
-              >
-                {label} shared with their teams
-              </h2>
-              <p className="max-w-prose text-sm text-muted-foreground">
-                Give people additional permissions on {plural} shared with a
-                team they belong to. This does not give them access to other{" "}
-                {plural}.
-              </p>
-            </div>
             <ResourcePermissions
               key={`${resource}:teams`}
               resource={resource}
               scope={TEAM_RESOURCE_SCOPE}
+              title={`${label} shared with their teams`}
               onDirtyChange={setTeamsDirty}
-              description={null}
+              description={`Access only to ${plural} shared with a team the recipient belongs to.`}
               showInherited={false}
             />
           </section>

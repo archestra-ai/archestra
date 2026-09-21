@@ -54,8 +54,8 @@ export function InitialResourcePermissions({
         <h3 className="text-sm font-medium">Permissions</h3>
         <p className="mt-1 text-sm text-muted-foreground">
           You get full access. Choose who else can access this resource when it
-          is created; you can update permissions later. Existing grants for all
-          resources of this type also apply.
+          is created; you can update permissions later. Access set in
+          organization settings also applies.
         </p>
       </div>
       {grants.length > 0 && (

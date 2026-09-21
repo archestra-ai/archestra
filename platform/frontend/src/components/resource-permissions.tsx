@@ -13,18 +13,18 @@ import {
   AlertTriangle,
   Bot,
   Globe,
+  Plus,
   Shield,
   Trash2,
   User,
   Users,
 } from "lucide-react";
-import { type ReactNode, useEffect, useId, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { useFieldArray, useForm } from "react-hook-form";
+import { AddResourceAccessDialog } from "@/components/add-resource-access-dialog";
 import { QueryLoadError } from "@/components/query-load-error";
 import { Button } from "@/components/ui/button";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
-import { Label } from "@/components/ui/label";
-import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   Select,
   SelectContent,
@@ -35,7 +35,6 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   type ResourcePermissions as Policy,
-  usePermissionRecipients,
   useResourcePermissions,
   useUpdateResourcePermissions,
 } from "@/lib/resource-permissions.query";
@@ -45,6 +44,7 @@ export function ResourcePermissions({
   scope,
   onDirtyChange,
   embedded = false,
+  title,
   description,
   showInherited = true,
 }: {
@@ -52,13 +52,14 @@ export function ResourcePermissions({
   scope: string;
   onDirtyChange?: (dirty: boolean) => void;
   embedded?: boolean;
+  title?: string;
   description?: ReactNode;
   showInherited?: boolean;
 }) {
   const policy = useResourcePermissions(resource, scope);
   if (policy.isPending)
     return (
-      <div className="max-w-3xl space-y-4">
+      <div className="space-y-4">
         <output className="sr-only">Loading permissions…</output>
         {[0, 1].map((row) => (
           <div
@@ -91,6 +92,7 @@ export function ResourcePermissions({
       onRetry={() => void policy.refetch()}
       onDirtyChange={onDirtyChange}
       embedded={embedded}
+      title={title}
       description={description}
       showInherited={showInherited}
     />
@@ -103,6 +105,7 @@ function PermissionsEditor({
   onRetry,
   onDirtyChange,
   embedded = false,
+  title,
   description,
   showInherited,
 }: {
@@ -111,10 +114,10 @@ function PermissionsEditor({
   onRetry: () => void;
   onDirtyChange?: (dirty: boolean) => void;
   embedded?: boolean;
+  title?: string;
   description?: ReactNode;
   showInherited: boolean;
 }) {
-  const recipientInputId = useId();
   const form = useForm<{ revision: number; grants: Policy["grants"] }>({
     defaultValues: { revision: policy.revision, grants: policy.grants },
   });
@@ -132,14 +135,9 @@ function PermissionsEditor({
     control: form.control,
     name: "grants",
   });
-  const [search, setSearch] = useState("");
+  const [addOpen, setAddOpen] = useState(false);
   const canManage = policy.effectiveActions.includes("manage-permissions");
-  const recipients = usePermissionRecipients({
-    resource: policy.resource,
-    scope: policy.scope,
-    query: search,
-    enabled: canManage,
-  });
+  const presets = presetsFor(policy.resource);
   const mutation = useUpdateResourcePermissions(policy.resource, policy.scope);
   const changedElsewhere = dirty && policy.revision !== form.watch("revision");
   const reset = () =>
@@ -170,33 +168,53 @@ function PermissionsEditor({
       actions: grant.actions,
       via:
         grant.sourceScope === TEAM_RESOURCE_SCOPE
-          ? "every object their teams reach"
-          : `every ${scopedResourceNouns[policy.resource]}`,
+          ? "From team access settings"
+          : "From organization settings",
     })),
     ...policy.legacyAccess.map((grant) => ({
       key: `legacy:${subjectKey(grant.subject)}`,
       name: grant.name,
       type: grant.subject.type,
       actions: grant.actions,
-      via: "existing roles and visibility",
+      via: "From existing access settings",
     })),
   ];
   const Container = embedded ? "div" : "form";
+  const explanation =
+    description === undefined
+      ? policy.scope === "*"
+        ? `Applies to every ${scopedResourceNouns[policy.resource]}, including ones created later.`
+        : policy.scope === TEAM_RESOURCE_SCOPE
+          ? "Applies only to resources shared with a recipient’s teams."
+          : null
+      : description;
   return (
-    <Container
-      onSubmit={embedded ? undefined : submit}
-      className="max-w-3xl space-y-4"
-    >
-      {description !== null && (
-        <p className="text-sm text-muted-foreground">
-          {description ??
-            (policy.scope === "*"
-              ? `Applies to every ${scopedResourceNouns[policy.resource]} in this organization, including ones created later.`
-              : policy.scope === TEAM_RESOURCE_SCOPE
-                ? "Applies to objects granted to a recipient's teams, and follows team membership as it changes. Service accounts have no teams."
-                : "Access from every grant below is combined.")}
-        </p>
-      )}
+    <Container onSubmit={embedded ? undefined : submit} className="space-y-3">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0 space-y-1">
+          <h2 className="text-sm font-semibold">{title ?? "Who has access"}</h2>
+          {explanation && (
+            <p className="max-w-prose text-sm text-muted-foreground">
+              {explanation}
+            </p>
+          )}
+        </div>
+        {canManage && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="shrink-0"
+            disabled={
+              mutation.isPending || !policy.effectiveActions.includes("read")
+            }
+            onClick={() => setAddOpen(true)}
+          >
+            <Plus className="size-4" />
+            <span>Add access</span>
+          </Button>
+        )}
+      </div>
       {refreshFailed && (
         <InlineNotice variant="error">
           <AlertCircle />
@@ -239,7 +257,9 @@ function PermissionsEditor({
         {(fields.length > 0 || indirect.length > 0) && (
           <div className="flex items-center gap-3 pb-2 text-xs font-medium text-muted-foreground">
             <span className="flex-1">Recipient</span>
-            <span className="w-36">Permission</span>
+            <span className="w-36 border border-transparent px-3">
+              Permission
+            </span>
             <span className="size-8" />
           </div>
         )}
@@ -251,9 +271,9 @@ function PermissionsEditor({
           </p>
         )}
         {fields.map((grant, index) => (
-          <div key={grant.id} className="flex items-center gap-3 py-3">
+          <div key={grant.id} className="flex items-center gap-3 py-1.5">
             <SubjectIcon type={grant.subject.type} />
-            <div className="min-w-0 flex-1">
+            <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2">
               <p className="break-words text-sm font-medium">{grant.name}</p>
               <p className="text-xs text-muted-foreground">
                 {subjectLabels[grant.subject.type]}
@@ -261,12 +281,11 @@ function PermissionsEditor({
             </div>
             <Select
               disabled={!canManage || mutation.isPending}
-              value={presetFor(grant.actions)}
+              value={presetFor(grant.actions, policy.resource)}
               onValueChange={(preset) => {
-                const choice =
-                  resourcePermissionPresets[
-                    preset as keyof typeof resourcePermissionPresets
-                  ];
+                const choice = Object.entries(presets).find(
+                  ([key]) => key === preset,
+                )?.[1];
                 if (choice)
                   update(index, { ...grant, actions: [...choice.actions] });
               }}
@@ -276,32 +295,28 @@ function PermissionsEditor({
                 className="h-auto min-h-8 w-36 shrink-0 border-transparent text-left shadow-none hover:bg-muted dark:bg-transparent dark:hover:bg-muted [&_[data-slot=select-value]]:line-clamp-none [&_[data-slot=select-value]]:whitespace-normal"
                 aria-label={`Permission for ${grant.name}`}
               >
-                <SelectValue>{actionSummary(grant.actions)}</SelectValue>
+                <SelectValue>
+                  {actionSummary(grant.actions, policy.resource)}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
-                {Object.entries(resourcePermissionPresets).map(
-                  ([key, preset]) => (
-                    <SelectItem
-                      key={key}
-                      value={key}
-                      disabled={preset.actions.some(
-                        (action) => !policy.effectiveActions.includes(action),
-                      )}
-                    >
-                      <span className="block font-medium">{preset.label}</span>
-                      <span className="block text-xs text-muted-foreground">
-                        {
-                          presetDescriptions[
-                            key as keyof typeof resourcePermissionPresets
-                          ]
-                        }
-                      </span>
-                    </SelectItem>
-                  ),
-                )}
-                {presetFor(grant.actions) === "custom" && (
+                {Object.entries(presets).map(([key, preset]) => (
+                  <SelectItem
+                    key={key}
+                    value={key}
+                    disabled={preset.actions.some(
+                      (action) => !policy.effectiveActions.includes(action),
+                    )}
+                  >
+                    <span className="block font-medium">{preset.label}</span>
+                    <span className="block text-xs text-muted-foreground">
+                      {presetDescription(key, policy.resource)}
+                    </span>
+                  </SelectItem>
+                ))}
+                {presetFor(grant.actions, policy.resource) === "custom" && (
                   <SelectItem value="custom" disabled>
-                    {actionSummary(grant.actions)}
+                    {actionSummary(grant.actions, policy.resource)}
                   </SelectItem>
                 )}
               </SelectContent>
@@ -322,100 +337,68 @@ function PermissionsEditor({
         {indirect.map((grant) => (
           <div
             key={grant.key}
-            className="flex items-center gap-3 py-3 text-muted-foreground"
+            className="flex items-center gap-3 py-1.5 text-muted-foreground"
           >
             <SubjectIcon type={grant.type} />
             <div className="min-w-0 flex-1">
               <p className="break-words text-sm font-medium">{grant.name}</p>
               <p className="text-xs">
-                {`${subjectLabels[grant.type]} · via ${grant.via}`}
+                {`${subjectLabels[grant.type]} · ${grant.via}`}
               </p>
             </div>
-            <p className="w-36 shrink-0 text-xs">
-              {actionSummary(grant.actions)}
+            <p className="w-36 shrink-0 border border-transparent px-3 text-sm text-foreground">
+              {actionSummary(grant.actions, policy.resource)}
             </p>
             <span className="size-8 shrink-0" />
           </div>
         ))}
       </div>
 
-      {canManage && (
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div className="w-full max-w-xs space-y-2">
-            <Label htmlFor={recipientInputId}>Add recipient</Label>
-            <SearchableSelect
-              id={recipientInputId}
-              className="w-full max-w-xs"
-              value=""
-              ariaLabel="Add permission recipient"
-              placeholder="Choose who to add…"
-              searchPlaceholder="Search recipients…"
-              onSearchQueryChange={setSearch}
-              items={(recipients.data ?? [])
-                .filter(
-                  (recipient) =>
-                    !fields.some(
-                      (grant) =>
-                        subjectKey(grant.subject) ===
-                        subjectKey(recipient.subject),
-                    ),
-                )
-                .map((recipient) => ({
-                  value: subjectKey(recipient.subject),
-                  label: recipient.name,
-                  description: subjectLabels[recipient.subject.type],
-                }))}
-              onValueChange={(key) => {
-                const recipient = recipients.data?.find(
-                  (entry) => subjectKey(entry.subject) === key,
-                );
-                if (recipient) append({ ...recipient, actions: ["read"] });
-              }}
-              disabled={
-                mutation.isPending || !policy.effectiveActions.includes("read")
-              }
-            />
+      {canManage && dirty && (
+        <div className="flex items-center justify-between gap-3 border-t pt-3">
+          <span className="text-xs text-muted-foreground">Unsaved changes</span>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              aria-label="Discard changes"
+              disabled={mutation.isPending}
+              onClick={reset}
+            >
+              <span>Discard</span>
+            </Button>
+            <Button
+              type={embedded ? "button" : "submit"}
+              size="sm"
+              aria-label="Save permissions"
+              onClick={embedded ? () => void submit() : undefined}
+              disabled={mutation.isPending || changedElsewhere || refreshFailed}
+            >
+              <span>{mutation.isPending ? "Saving…" : "Save"}</span>
+            </Button>
           </div>
-          {dirty && (
-            <div className="flex items-center gap-2">
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                aria-label="Discard changes"
-                disabled={mutation.isPending}
-                onClick={reset}
-              >
-                <span>Discard</span>
-              </Button>
-              <Button
-                type={embedded ? "button" : "submit"}
-                size="sm"
-                aria-label="Save permissions"
-                onClick={embedded ? () => void submit() : undefined}
-                disabled={
-                  mutation.isPending || changedElsewhere || refreshFailed
-                }
-              >
-                <span>{mutation.isPending ? "Saving…" : "Save"}</span>
-              </Button>
-            </div>
-          )}
         </div>
       )}
-      {recipients.isError && (
-        <InlineNotice variant="error">
-          <AlertCircle />
-          <span className="font-medium">Could not load recipients.</span>
-          <Button
-            type="button"
-            variant="link"
-            className="ml-auto h-auto p-0"
-            onClick={() => void recipients.refetch()}
-          >
-            <span>Retry</span>
-          </Button>
-        </InlineNotice>
+      {canManage && (
+        <AddResourceAccessDialog
+          open={addOpen}
+          onOpenChange={setAddOpen}
+          resource={policy.resource}
+          scope={policy.scope}
+          context={title ?? policy.name}
+          existingSubjects={fields.map((entry) => entry.subject)}
+          presets={Object.entries(presets).map(([value, preset]) => ({
+            value,
+            label: preset.label,
+            description: presetDescription(value, policy.resource),
+            actions: [...preset.actions],
+            disabled: preset.actions.some(
+              (action) => !policy.effectiveActions.includes(action),
+            ),
+          }))}
+          onAdd={(grants) => append(grants)}
+        />
       )}
     </Container>
   );
@@ -441,9 +424,12 @@ function subjectKey(subject: PermissionSubject) {
   return `${subject.type}:${subject.id}`;
 }
 /** @public - shared with initial-resource-permissions.tsx */
-export function presetFor(actions: ResourcePermissionAction[]) {
+export function presetFor(
+  actions: ResourcePermissionAction[],
+  resource?: ScopedResource,
+) {
   return (
-    Object.entries(resourcePermissionPresets).find(
+    Object.entries(presetsFor(resource)).find(
       ([, preset]) =>
         preset.actions.length === actions.length &&
         preset.actions.every((action) => actions.includes(action)),
@@ -455,13 +441,40 @@ export function presetFor(actions: ResourcePermissionAction[]) {
  * A row states its access once: the picker carries it for a direct grant, this
  * carries it for a grant that is only being explained.
  */
-function actionSummary(actions: ResourcePermissionAction[]) {
-  const preset = presetFor(actions);
-  if (preset !== "custom")
-    return resourcePermissionPresets[
-      preset as keyof typeof resourcePermissionPresets
-    ].label;
+function actionSummary(
+  actions: ResourcePermissionAction[],
+  resource: ScopedResource,
+) {
+  const preset = presetFor(actions, resource);
+  const choice = Object.entries(presetsFor(resource)).find(
+    ([key]) => key === preset,
+  )?.[1];
+  if (choice) return choice.label;
   return actions.map((action) => actionLabels[action]).join(", ");
+}
+
+function presetsFor(
+  resource?: ScopedResource,
+): Record<
+  string,
+  { label: string; actions: readonly ResourcePermissionAction[] }
+> {
+  if (resource === "log" || resource === "auditLog") {
+    return {
+      view: resourcePermissionPresets.view,
+      manage: {
+        label: "Full access",
+        actions: ["read", "manage-permissions"] as const,
+      },
+    };
+  }
+  return resourcePermissionPresets;
+}
+
+function presetDescription(preset: string, resource: ScopedResource) {
+  return preset === "manage" && (resource === "log" || resource === "auditLog")
+    ? "View logs and manage who can access them"
+    : presetDescriptions[preset as keyof typeof resourcePermissionPresets];
 }
 /** Singular, for sentences. `resourceLabels` is plural and reads as "every agents". */
 const scopedResourceNouns: Record<ScopedResource, string> = {

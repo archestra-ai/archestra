@@ -4,16 +4,15 @@ import {
   CalendarClock,
   MoreHorizontal,
   Pause,
-  Pencil,
   Play,
   Plus,
-  Power,
   Trash2,
 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 import { runHref } from "@/app/projects/[id]/schedules/[triggerId]/run-row.utils";
 import { AgentSelector } from "@/components/agent-selector";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import {
   DEFAULT_FORM_STATE,
   isValidCronExpression,
@@ -53,6 +52,7 @@ import {
   useUpdateScheduleTrigger,
 } from "@/lib/schedule-trigger.query";
 import { cn } from "@/lib/utils";
+import { formatCronSchedule } from "@/lib/utils/format-cron";
 
 /**
  * Schedules that belong to a project: recurring agent runs whose chats land in
@@ -100,7 +100,10 @@ function ProjectSchedulesSectionContent({
   canCreate: boolean;
   defaultAgentId: string | null;
 }) {
-  const { data } = useScheduleTriggers({ projectId, refetchInterval: 10000 });
+  const { data, isPending, isError } = useScheduleTriggers({
+    projectId,
+    refetchInterval: 10000,
+  });
   const { data: canCreateSchedules } = useHasPermissions({
     scheduledTask: ["create"],
   });
@@ -117,20 +120,33 @@ function ProjectSchedulesSectionContent({
     entityFromUrl: scheduleFromUrl ?? null,
   });
   const schedules = data?.data ?? [];
+  const { data: canUpdateSchedules } = useHasPermissions({
+    scheduledTask: ["update"],
+  });
+  const { data: canDeleteSchedules } = useHasPermissions({
+    scheduledTask: ["delete"],
+  });
 
   return (
     <section>
-      <div className="mb-2 flex items-center justify-between">
-        <h2 className="text-sm font-medium">Schedules</h2>
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <h2 className="text-sm font-semibold">Schedules</h2>
+          {!isPending && !isError && schedules.length > 0 && (
+            <span className="text-xs text-muted-foreground">
+              {schedules.length}
+            </span>
+          )}
+        </div>
         {canCreate && canCreateSchedules === true && (
           <Button
-            variant="ghost"
-            size="icon"
-            aria-label="New schedule"
-            title="New schedule"
+            variant="outline"
+            size="sm"
+            className="h-7 gap-1 text-xs has-[>svg]:px-2"
             onClick={() => setCreateOpen(true)}
           >
-            <Plus className="h-4 w-4" />
+            <Plus className="size-3.5" />
+            <span>New schedule</span>
           </Button>
         )}
       </div>
@@ -155,18 +171,29 @@ function ProjectSchedulesSectionContent({
         />
       )}
 
-      {schedules.length === 0 ? (
-        <p className="py-2 text-sm text-muted-foreground">
-          No schedules yet. Runs will appear in Recents.
+      {isPending ? (
+        <p className="py-3 text-sm text-muted-foreground">Loading schedules…</p>
+      ) : isError ? (
+        <p className="py-3 text-sm text-muted-foreground">
+          Schedules could not be loaded.
         </p>
+      ) : schedules.length === 0 ? (
+        <div className="rounded-lg border border-dashed px-3 py-4">
+          <p className="text-sm font-medium">No schedules yet</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Run an agent here on a schedule or whenever you need it.
+          </p>
+        </div>
       ) : (
-        <div className="space-y-1.5">
+        <div className="space-y-2">
           {schedules.map((schedule) => (
             <ScheduleRow
               key={schedule.id}
               projectId={projectId}
               schedule={schedule}
               onEdit={openEditDialog}
+              canEdit={canUpdateSchedules === true}
+              canDelete={canDeleteSchedules === true}
             />
           ))}
         </div>
@@ -181,10 +208,14 @@ function ScheduleRow({
   projectId,
   schedule,
   onEdit,
+  canEdit,
+  canDelete,
 }: {
   projectId: string;
   schedule: ScheduleTrigger;
   onEdit: (schedule: ScheduleTrigger) => void;
+  canEdit: boolean;
+  canDelete: boolean;
 }) {
   const enableSchedule = useEnableScheduleTrigger();
   const disableSchedule = useDisableScheduleTrigger();
@@ -192,6 +223,7 @@ function ScheduleRow({
   const runNow = useStartScheduleRun(schedule.id);
   const router = useRouter();
   const { resolve, isResolving } = useResolveRunChat();
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const { data: runs, isPending: loadingRuns } = useScheduleTriggerRuns(
     schedule.id,
     {
@@ -207,84 +239,131 @@ function ScheduleRow({
     else router.push(`/projects/${projectId}/schedules/${schedule.id}`);
   };
   return (
-    <div className="group relative flex items-center gap-1 rounded-lg border pr-1 transition-colors hover:bg-accent focus-within:bg-accent">
-      <Button
-        variant="ghost"
-        aria-label={`View runs for ${schedule.name}`}
-        onClick={openRuns}
-        disabled={loadingRuns || isResolving}
-        className="h-auto min-w-0 flex-1 justify-start gap-2 px-2 py-2 text-left font-normal hover:bg-transparent after:absolute after:inset-0 after:rounded-lg"
-      >
+    <div className="rounded-lg border px-3 py-2.5">
+      <div className="flex items-start gap-2.5">
         <span
           className={cn(
-            "flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10",
+            "mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-md bg-primary/10",
             !schedule.enabled && "bg-muted",
           )}
         >
-          <CalendarClock
-            className="h-4 w-4 text-muted-foreground"
-            aria-hidden
-          />
+          <CalendarClock className="size-4 text-muted-foreground" aria-hidden />
         </span>
-        <span className="min-w-0 flex-1">
-          <span className="flex items-center gap-2">
-            <span className="truncate text-sm font-medium">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center justify-between gap-2">
+            <span
+              className="truncate text-sm font-medium"
+              title={schedule.name}
+            >
               {schedule.name}
             </span>
-          </span>
-          <span className="block truncate text-xs text-muted-foreground">
+            <Badge variant="outline" className="shrink-0 text-[10px]">
+              {schedule.enabled ? "Active" : "Paused"}
+            </Badge>
+          </div>
+          <p className="truncate text-xs text-muted-foreground">
             {schedule.agent?.name ?? "Default agent"}
-          </span>
-        </span>
-      </Button>
-      <Badge variant="outline" className="shrink-0 text-xs">
-        {schedule.enabled ? "Enabled" : "Manual"}
-      </Badge>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
+          </p>
+          <p
+            className="mt-1 truncate text-xs text-muted-foreground"
+            title={`${formatCronSchedule(schedule.cronExpression)} · ${schedule.timezone}`}
+          >
+            {formatCronSchedule(schedule.cronExpression)} · {schedule.timezone}
+          </p>
+        </div>
+      </div>
+      <div className="mt-2 flex items-center gap-1 border-t pt-2">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 px-2 text-xs"
+          aria-label={`View runs for ${schedule.name}`}
+          onClick={openRuns}
+          disabled={loadingRuns || isResolving}
+        >
+          Runs
+        </Button>
+        {canEdit && (
           <Button
             variant="ghost"
-            size="icon"
-            className="relative z-10 h-7 w-7 shrink-0"
-            aria-label={`Actions for ${schedule.name}`}
+            size="sm"
+            className="h-7 px-2 text-xs"
+            onClick={() => onEdit(schedule)}
+            aria-label={`Edit ${schedule.name}`}
           >
-            <MoreHorizontal className="h-4 w-4" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem onSelect={() => onEdit(schedule)}>
-            <Pencil className="h-4 w-4" />
             Edit
-          </DropdownMenuItem>
-          <DropdownMenuItem disabled={runNow.isPending} onSelect={runNow.start}>
-            <Play className="h-4 w-4" />
-            Run manually
-          </DropdownMenuItem>
-          <DropdownMenuItem
+          </Button>
+        )}
+        {canEdit && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2 text-xs"
             disabled={enableSchedule.isPending || disableSchedule.isPending}
-            onSelect={() =>
+            onClick={() =>
               (schedule.enabled ? disableSchedule : enableSchedule).mutate(
                 schedule.id,
               )
             }
+            aria-label={`${schedule.enabled ? "Pause" : "Resume"} ${schedule.name}`}
           >
             {schedule.enabled ? (
-              <Pause className="h-4 w-4" />
+              <Pause className="size-3.5" />
             ) : (
-              <Power className="h-4 w-4" />
+              <Play className="size-3.5" />
             )}
-            <span>{schedule.enabled ? "Disable" : "Enable"}</span>
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            variant="destructive"
-            disabled={deleteSchedule.isPending}
-            onSelect={() => deleteSchedule.mutate(schedule.id)}
-          >
-            <Trash2 className="h-4 w-4" />
-            Delete
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+            <span>{schedule.enabled ? "Pause" : "Resume"}</span>
+          </Button>
+        )}
+        <div className="ml-auto" />
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 shrink-0"
+              aria-label={`Actions for ${schedule.name}`}
+            >
+              <MoreHorizontal className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem
+              disabled={runNow.isPending}
+              onSelect={runNow.start}
+            >
+              <Play className="h-4 w-4" />
+              Run now
+            </DropdownMenuItem>
+            {canDelete && (
+              <DropdownMenuItem
+                variant="destructive"
+                disabled={deleteSchedule.isPending}
+                onSelect={() => setDeleteOpen(true)}
+              >
+                <Trash2 className="h-4 w-4" />
+                Delete schedule
+              </DropdownMenuItem>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+      {deleteOpen && (
+        <DeleteConfirmDialog
+          open={deleteOpen}
+          onOpenChange={setDeleteOpen}
+          title={`Delete ${schedule.name}?`}
+          description="This removes the schedule and its run history. Chats and sessions already created by its runs remain in the project."
+          isPending={deleteSchedule.isPending}
+          onConfirm={() =>
+            deleteSchedule.mutate(schedule.id, {
+              onSuccess: (result) => {
+                if (result?.success) setDeleteOpen(false);
+              },
+            })
+          }
+        />
+      )}
     </div>
   );
 }

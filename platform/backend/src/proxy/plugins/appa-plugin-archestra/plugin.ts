@@ -1,11 +1,18 @@
 import config from "@/config";
+import { clientSessionId } from "@/openappa/actor";
 import { buildNoticeArguments, type RemedyExecution } from "@/openappa/notice";
 import type { OfferJws } from "@/openappa/offer-claims";
 import {
   offerIdFromJws,
+  offerSessionFromJws,
   signOfferClaims,
   unsignedOfferClaims,
 } from "@/openappa/offer-claims";
+import {
+  type AppaRequestTools,
+  namespacedToolName,
+  underscoreLabeledPlatformToolName,
+} from "@/openappa/request";
 import {
   cancelCalls,
   endTurn,
@@ -15,6 +22,8 @@ import {
   type OpenAppaSession,
   processProxyResults,
 } from "@/openappa/service";
+import { stampToolCallId } from "@/openappa/trajectory-stamp";
+import { appaWireFamily } from "@/openappa/wire";
 import type {
   LlmProxyBeforeModelContext,
   LlmProxyContextTrust,
@@ -119,15 +128,25 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
   async onPrepareToolCalls(
     context: LlmProxyToolCallsContext,
   ): Promise<LlmProxyToolCallsOutcome | undefined> {
-    const control = this.bindings.get(context.resources)?.request.tools
-      ?.controlToolName;
-    if (!control) return;
+    const binding = this.bindings.get(context.resources);
+    const tools = binding?.request.tools;
+    if (!binding || !tools) return;
     let changed = false;
     const toolCalls = context.toolCalls.map((call) => {
-      if (call.name !== control) return call;
+      // The control tool the gateway declared, in the namespace it declared
+      // it in: a same-named member of another server is a foreign tool, and
+      // never carries this session's offers.
+      if (
+        call.name !== tools.controlToolName ||
+        call.namespace !== tools.controlNamespace
+      )
+        return call;
       const stamped = stampControlExecution(
         call,
-        this.bindings.get(context.resources)?.request.offerClaims,
+        sessionOfferClaims(
+          binding.request.offerClaims,
+          binding.session.session_id,
+        ),
       );
       changed ||= stamped !== call;
       return stamped;
@@ -159,20 +178,23 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     if (held.length === 0) return { decision: "release" };
     // The client must run the notices, so the turn stays open.
     binding.turnOpen = true;
+    const notices = held.map(({ call, feedback }) => ({
+      id: call.id,
+      name: tools.noticeToolName,
+      ...noticeNamespace(tools),
+      arguments: JSON.stringify(
+        buildNoticeArguments({
+          id: call.id,
+          tool: call.name,
+          arguments: call.arguments,
+          result: feedback,
+        }),
+      ),
+    }));
+    const stamp = trajectoryStamper(binding, context);
     return {
       decision: "hold",
-      notices: held.map(({ call, feedback }) => ({
-        id: call.id,
-        name: tools.noticeToolName,
-        arguments: JSON.stringify(
-          buildNoticeArguments({
-            id: call.id,
-            tool: call.name,
-            arguments: call.arguments,
-            result: feedback,
-          }),
-        ),
-      })),
+      notices: stamp ? notices.map(stamp) : notices,
       blocked: held.map(({ call, feedback }) => ({
         id: call.id,
         name: call.name,
@@ -187,14 +209,27 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     const binding = this.bindings.get(context.resources);
     if (!binding) return;
     const calls = [...context.toolCalls];
-    const decisions = await evaluateToolCalls(binding.session, calls, {
-      canonicalize: (name) => this.canonicalize(binding, name),
-      ...(binding.request.tools
-        ? { controlToolName: binding.request.tools.controlToolName }
-        : {}),
-    });
+    const tools = binding.request.tools;
+    const decisions = await evaluateToolCalls(
+      binding.session,
+      calls.map((call) => ({
+        ...call,
+        name: namespacedToolName(call.name, call.namespace),
+      })),
+      {
+        canonicalize: (name) => this.canonicalize(binding, name),
+        ...(tools
+          ? {
+              controlToolName: namespacedToolName(
+                tools.controlToolName,
+                tools.controlNamespace,
+              ),
+            }
+          : {}),
+      },
+    );
 
-    const notice = binding.request.tools?.noticeToolName;
+    const notice = tools?.noticeToolName;
     const blocked: { id: string; name: string; reason: string }[] = [];
     const released: typeof calls = [];
     for (const [index, call] of calls.entries()) {
@@ -237,6 +272,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       released.push({
         id: call.id,
         name: notice,
+        ...noticeNamespace(tools),
         arguments: JSON.stringify(
           buildNoticeArguments({
             id: call.id,
@@ -249,6 +285,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
               offerIds: decision.offers ?? [],
               tool: identity.name,
               spelling: identity.name,
+              ...(identity.dispatch ? { dispatch: identity.dispatch } : {}),
             }),
           }),
         ),
@@ -257,8 +294,13 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
 
     // Keep turn open while tool calls are awaiting client execution.
     binding.turnOpen = true;
-    if (blocked.length === 0) return;
-    return { decision: "allow", toolCalls: released, blocked };
+    const stamp = trajectoryStamper(binding, context);
+    if (blocked.length === 0 && !stamp) return;
+    return {
+      decision: "allow",
+      toolCalls: stamp ? released.map(stamp) : released,
+      ...(blocked.length > 0 ? { blocked } : {}),
+    };
   }
 
   async onModelResponse(
@@ -278,6 +320,11 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
   // === Internal helpers ===
 
   private canonicalize(binding: AppaPluginBinding, name: string): string {
+    const platformTool = underscoreLabeledPlatformToolName(
+      name,
+      binding.canonicalizeToolName,
+    );
+    if (platformTool) return platformTool;
     return binding.adapter?.classifyToolName(name) === "local"
       ? binding.canonicalizeToolName(
           binding.adapter.normalizeLocalToolName(name),
@@ -300,9 +347,16 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     arguments: string | Record<string, unknown>;
     custom: boolean;
     namespace?: string;
+    /** The client's dispatch tool, when the call reached its target through it. */
+    dispatch?: string;
   } {
     const [normalized] = normalizeToolCallsForPolicy(
-      [{ name: call.name, arguments: call.arguments }],
+      [
+        {
+          name: namespacedToolName(call.name, call.namespace),
+          arguments: call.arguments,
+        },
+      ],
       (name) => this.canonicalize(binding, name),
     );
     if (normalized.isRunToolDispatchTarget) {
@@ -313,6 +367,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         name: normalized.toolCallName,
         arguments: normalized.toolCallArgs,
         custom: false,
+        dispatch: call.name,
       };
     }
     return {
@@ -347,7 +402,12 @@ function cloneTrustedContext(context: AppaTrustedContext): AppaTrustedContext {
 
 function signedOffersForDenial(
   session: OpenAppaSession,
-  params: { offerIds: string[]; tool: string; spelling: string },
+  params: {
+    offerIds: string[];
+    tool: string;
+    spelling: string;
+    dispatch?: string;
+  },
 ): OfferJws[] {
   const secret = config.openappa.offerSigningSecret;
   if (params.offerIds.length === 0) return [];
@@ -367,9 +427,24 @@ function signedOffersForDenial(
         offerId,
         tool: params.tool,
         spelling: params.spelling,
+        ...(params.dispatch ? { dispatch: params.dispatch } : {}),
       }),
       secret,
     ),
+  );
+}
+
+/**
+ * Returns offers from history that belong to the current session.
+ * A fork replays parent notices and offers. To prevent modifying parent state,
+ * the fork excludes parent offers from its control calls.
+ */
+function sessionOfferClaims(
+  envelopes: readonly OfferJws[] | undefined,
+  sessionId: string,
+): OfferJws[] | undefined {
+  return envelopes?.filter(
+    (envelope) => offerSessionFromJws(envelope) === sessionId,
   );
 }
 
@@ -448,4 +523,89 @@ function toolInputOf(
     // Not JSON: reported as the text it is.
   }
   return { arguments: args };
+}
+
+/**
+ * Returns the gateway namespace declared for the notice tool in Codex.
+ * Dispatches notices to this namespace.
+ */
+function noticeNamespace(tools: AppaRequestTools | undefined): {
+  namespace?: string;
+} {
+  return tools?.noticeNamespace ? { namespace: tools.noticeNamespace } : {};
+}
+
+/**
+ * Appends trajectory stamps to tool-call IDs for supported wire families.
+ * Stamped IDs identify source session lineage in future turns.
+ * Skips sessions that lack caller scoping, or models that truncate tool-call IDs.
+ */
+function trajectoryStamper(
+  binding: AppaPluginBinding,
+  context: Pick<
+    LlmProxyRequestContext,
+    "interactionType" | "provider" | "model"
+  >,
+):
+  | ((
+      call: LlmProxyToolCallsContext["toolCalls"][number],
+    ) => LlmProxyToolCallsContext["toolCalls"][number])
+  | undefined {
+  const { session } = binding;
+  const callerId = session.caller_id;
+  const secret = config.openappa.offerSigningSecret;
+  if (
+    !callerId ||
+    secret.length === 0 ||
+    !appaWireFamily(context.interactionType) ||
+    !tracesLineage(binding) ||
+    shortensToolCallIds(context)
+  )
+    return undefined;
+  const sessionId = clientSessionId(session.session_id);
+  return (call) => ({
+    ...call,
+    wireId: stampToolCallId({
+      callId: call.id,
+      sessionId,
+      organizationId: session.organization_id,
+      callerId,
+      secret,
+    }),
+  });
+}
+
+/**
+ * Returns true if the client or model truncates tool-call IDs.
+ * Models from the Mistral family or using the Mistral provider truncate IDs,
+ * which corrupts trajectory stamps. When adding support for a model family
+ * whose IDs are too short to carry a stamp, extend
+ * SHORT_TOOL_CALL_ID_MODEL_FAMILIES below.
+ */
+function shortensToolCallIds(
+  context: Pick<LlmProxyRequestContext, "provider" | "model">,
+): boolean {
+  const model = context.model.toLowerCase();
+  return (
+    context.provider === "mistral" ||
+    SHORT_TOOL_CALL_ID_MODEL_FAMILIES.some((family) => model.includes(family))
+  );
+}
+
+const SHORT_TOOL_CALL_ID_MODEL_FAMILIES = [
+  "mistral",
+  "devstral",
+  "codestral",
+  "pixtral",
+  "mixtral",
+];
+
+/** Returns true if this session is caller-scoped and eligible for lineage tracing. */
+function tracesLineage(binding: AppaPluginBinding): boolean {
+  const callerId = binding.session.caller_id;
+  return (
+    !binding.chat &&
+    callerId !== undefined &&
+    binding.session.session_id.startsWith(`${callerId}|`)
+  );
 }

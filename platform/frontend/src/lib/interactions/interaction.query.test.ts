@@ -33,6 +33,12 @@ describe("isSessionId", () => {
     expect(isSessionId(`scheduled-${uuid}`)).toBe(true);
   });
 
+  it("accepts an OpenCode session ID", () => {
+    expect(isSessionId("ses_f49a8a42cffe6WL2TufX4o2cqZ")).toBe(true);
+    expect(isSessionId("ses_")).toBe(false);
+    expect(isSessionId("ses_ report")).toBe(false);
+  });
+
   it("is case-insensitive", () => {
     expect(isSessionId(uuid.toUpperCase())).toBe(true);
   });

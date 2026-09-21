@@ -1978,6 +1978,32 @@ class ToolModel {
   }
 
   /**
+   * When OpenAPPA is on, every existing agent gets the notice and control
+   * tools. New agents inherit them via {@link assignDefaultArchestraToolsToAgent}.
+   * Idempotent (`createManyIfNotExists`).
+   */
+  static async backfillOpenAppaToolsToAllAgents(): Promise<void> {
+    if (!config.openappa.enabled) return;
+    const shortNames: ArchestraToolShortName[] = [
+      "get_remedy_plans",
+      "execute_remedy_plan",
+    ];
+    const organizationIds = await OrganizationModel.findAllIds();
+    for (const organizationId of organizationIds) {
+      const toolIds = await ToolModel.getToolIdsForOrgByShortNames(
+        organizationId,
+        shortNames,
+      );
+      if (toolIds.length === 0) continue;
+      const agentIds =
+        await AgentModel.findNonBuiltInIdsByOrganizationId(organizationId);
+      for (const agentId of agentIds) {
+        await AgentToolModel.createManyIfNotExists(agentId, toolIds);
+      }
+    }
+  }
+
+  /**
    * Assign skill tools to a single agent if its org has opted in
    * (`organization.skillToolsEnabled`). No-op otherwise.
    *
@@ -2131,6 +2157,12 @@ class ToolModel {
     // method assigns just the tools every agent gets.
     const defaultToolShortNames: ArchestraToolShortName[] = [
       ...DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
+      ...(config.openappa.enabled
+        ? ([
+            "get_remedy_plans",
+            "execute_remedy_plan",
+          ] as ArchestraToolShortName[])
+        : []),
     ];
 
     const defaultToolNames = defaultToolShortNames.map((shortName) =>

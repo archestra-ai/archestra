@@ -175,6 +175,9 @@ class MistralStreamAdapter
   formatTextDeltaSSE(text: string) {
     return this.delegate.formatTextDeltaSSE(text);
   }
+  setTextSuffix(getSuffix: (completedText: string) => string) {
+    this.delegate.setTextSuffix(getSuffix);
+  }
   getRawToolCallEvents() {
     return this.delegate.getRawToolCallEvents();
   }

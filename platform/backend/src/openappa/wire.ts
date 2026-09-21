@@ -18,13 +18,18 @@ import {
   type SupportedProviderDiscriminator,
 } from "@archestra/shared";
 import config from "@/config";
+import logger from "@/logging";
+import { OpenAppaSessionModel } from "@/models";
 import { parseClaudeMetadataSessionId } from "@/routes/proxy/utils/headers/session-id";
+import { clientSessionId } from "./actor";
 import {
   type NoticeOriginalCall,
   readNotice,
   readRemedyExecution,
 } from "./notice";
 import type { OfferJws } from "./offer-claims";
+import { appendSessionReceipt, stripSessionReceipts } from "./session-token";
+import { parseTrajectoryStamp, type TrajectoryStamp } from "./trajectory-stamp";
 
 export type AppaWireFamily =
   | "anthropic:messages"
@@ -40,6 +45,9 @@ export type AppaSessionIdentity = {
     | "claude-code-header"
     | "claude-metadata"
     | "opencode-session"
+    | "codex-turn-metadata"
+    | "opencode-session-header"
+    | "opencode-hosted-header"
     | "prompt-cache-key"
     | "metadata-session-id"
     | "conversation"
@@ -101,6 +109,10 @@ export function restoreAppaNotices(params: {
     // call it a custom tool call again, since the request carrying it back may
     // declare no tools at all.
     const custom = notice.original.kind === "custom";
+    // A model can call a name no tool has, spaces and all. Put back in
+    // history, that name fails the provider's own validation and ends the
+    // session; the notice already records the call and its ruling.
+    if (!PROVIDER_TOOL_NAME.test(notice.tool)) continue;
     if (!call.restore(notice.tool, notice.original, notice.namespace)) continue;
     restoreResult({
       ...params,
@@ -148,6 +160,127 @@ export function restoreAppaRemedyExecutions(params: {
   return historicalControlToolName;
 }
 
+/**
+ * Restores original provider tool-call IDs from trajectory stamps across call
+ * and result items. Returns all parsed stamps to identify source context.
+ * Runs before any component inspects history.
+ *
+ * Covers all chat wires. When a conversation switches providers mid-session,
+ * it retains previous IDs.
+ */
+export function restoreTrajectoryStamps(params: {
+  interactionType: string;
+  body: unknown;
+}): TrajectoryStamp[] {
+  const found: TrajectoryStamp[] = [];
+  const restore = (
+    record: Record<string, unknown> | undefined,
+    key: string,
+  ) => {
+    const value = record?.[key];
+    const stamp =
+      typeof value === "string" ? parseTrajectoryStamp(value) : undefined;
+    if (!record || !stamp) return;
+    record[key] = stamp.callId;
+    found.push(stamp);
+  };
+  const wire =
+    appaWireFamily(params.interactionType) ??
+    OTHER_STAMP_WIRES[params.interactionType as SupportedProviderDiscriminator];
+  if (wire === "anthropic:messages") {
+    for (const block of anthropicBlocks(params.body)) {
+      if (block.type === "tool_use") restore(block, "id");
+      else if (block.type === "tool_result") restore(block, "tool_use_id");
+    }
+  } else if (wire === "openai:responses") {
+    for (const item of responsesItems(params.body)) restore(item, "call_id");
+  } else if (wire === "openai:chatCompletions") {
+    for (const message of chatMessages(params.body)) {
+      restore(message, "tool_call_id");
+      for (const call of asArray(message.tool_calls) ?? []) {
+        restore(asRecord(call), "id");
+      }
+    }
+  } else if (wire === "bedrock:converse") {
+    for (const message of chatMessages(params.body)) {
+      for (const block of asArray(message.content) ?? []) {
+        restore(asRecord(asRecord(block)?.toolUse), "toolUseId");
+        restore(asRecord(asRecord(block)?.toolResult), "toolUseId");
+      }
+    }
+  } else if (wire === "gemini:generateContent") {
+    for (const content of asArray(asRecord(params.body)?.contents) ?? []) {
+      for (const part of asArray(asRecord(content)?.parts) ?? []) {
+        restore(asRecord(asRecord(part)?.functionCall), "id");
+        restore(asRecord(asRecord(part)?.functionResponse), "id");
+      }
+    }
+  }
+  return found;
+}
+
+/**
+ * Removes session-receipt marks from conversation history before request
+ * forwarding. Only message text fields are inspected. Tool arguments, results,
+ * reasoning, and instructions are not treated as control data.
+ *
+ * Stripping is unconditional: receipts must never reach providers or logs,
+ * even when OpenAPPA is off. Lineage evidence resolution (a database lookup
+ * restricted to the request's caller) happens separately, only with APPA on.
+ */
+export function stripSessionReceiptsFromRequest(params: {
+  family: AppaWireFamily;
+  body: unknown;
+}): string[] {
+  const codes: string[] = [];
+  for (const site of historyTextSites(params.family, params.body)) {
+    const restored = stripSessionReceipts(site.get());
+    site.set(restored.text);
+    codes.push(...restored.codes);
+  }
+  return [...new Set(codes)];
+}
+
+/** Resolves stripped receipt codes to caller-owned lineage evidence. */
+export async function sessionReceiptEvidence(params: {
+  organizationId: string;
+  callerId: string;
+  codes: string[];
+}): Promise<string[]> {
+  const unique = [...new Set(params.codes)];
+  if (unique.length === 0) return [];
+  const owners = await OpenAppaSessionModel.receiptTokenOwners({
+    organizationId: params.organizationId,
+    tokens: unique,
+  });
+  const sessionIds: string[] = [];
+  for (const code of unique) {
+    const owner = owners.get(code);
+    if (!owner) {
+      logger.debug({ code }, "OpenAPPA ignored an unknown session receipt");
+      continue;
+    }
+    if (owner.callerId !== params.callerId) continue;
+    sessionIds.push(clientSessionId(owner.sessionId));
+  }
+  return sessionIds;
+}
+
+/** Appends one session receipt to the final non-empty model text part. */
+export function appendSessionReceiptToResponse(params: {
+  family: AppaWireFamily;
+  response: unknown;
+  code: string;
+}): boolean {
+  let last: TextSite | undefined;
+  for (const site of responseTextSites(params.family, params.response)) {
+    if (site.get()) last = site;
+  }
+  if (!last) return false;
+  last.set(appendSessionReceipt(last.get(), params.code));
+  return true;
+}
+
 /** Removes tools from every declaration container, by exact wire name. */
 export function stripAppaTools(params: {
   body: unknown;
@@ -177,14 +310,26 @@ export function stripAppaTools(params: {
  *
  * Codex groups an MCP server's tools under one `namespace` declaration and
  * calls a member by its own name, so a namespace's members are returned under
- * those names.
+ * those names, each with the namespace that declares it: the name alone does
+ * not say which server a member belongs to.
  */
-export function declaredTools(body: unknown): unknown[] {
+export function declaredTools(
+  body: unknown,
+): Array<{ tool: unknown; namespace?: string }> {
   return toolContainers(body)
     .flatMap(({ holder, key }) =>
       Array.isArray(holder[key]) ? (holder[key] as unknown[]) : [],
     )
-    .flatMap((tool) => groupedMembers(tool)?.members ?? [tool]);
+    .flatMap((tool) => {
+      const group = groupedMembers(tool);
+      if (!group) return [{ tool }];
+      const namespace = asRecord(tool)?.name;
+      return group.members.map((member) =>
+        typeof namespace === "string"
+          ? { tool: member, namespace }
+          : { tool: member },
+      );
+    });
 }
 
 /**
@@ -289,27 +434,26 @@ export function isResultGovernedHostedTool(params: {
 }
 
 /**
- * The client session this request belongs to, as the client itself reports it.
+ * The client session this request belongs to, as the client itself reports it
+ * through generic wire fields.
  *
  * A session id cannot come from static client configuration: it changes every
  * time a person starts a new session, and no external client has logic to mint
- * one for us. What each client does have is its own notion of a session, which
- * it already puts on the wire — so the adapter reads it from there, and a
- * client needs no OpenAPPA-specific setup at all.
+ * one for us. Client-specific signals - Claude Code's session header, Codex's
+ * turn metadata, OpenCode's session headers - are extracted by the client
+ * adapters (`appa-plugin-archestra/adapters`), which run before these generic
+ * fallbacks. An explicit `X-Appa-Session-ID` still wins where it is sent
+ * (Chat, the qualification harness, any caller that manages roots
+ * deliberately).
  *
- * An explicit `X-Appa-Session-ID` still wins where it is sent (Chat, the
- * qualification harness, any caller that manages roots deliberately).
- *
- * What each family offers, and why:
- *  - anthropic:messages — Claude Code sends `x-claude-code-session-id`, and
- *    repeats the same uuid inside `metadata.user_id` (a JSON blob of
- *    device/account/session). Either is per-session and survives a restart of
- *    the same session.
- *  - openai:responses / chatCompletions — OpenCode sends `x-opencode-session`.
- *    Other OpenAI-family requests fall back to request fields that are stable
- *    across a conversation: `prompt_cache_key` (OpenAI's own per-conversation
- *    cache partition), then an explicit `metadata.session_id`, then
- *    `conversation`.
+ * What each family offers generically, and why:
+ *  - anthropic:messages - Claude clients repeat the session uuid inside
+ *    `metadata.user_id` (a JSON blob of device/account/session), which is
+ *    per-session and survives a restart of the same session.
+ *  - openai:responses / chatCompletions - the legacy OpenCode
+ *    `x-opencode-session` header, then request fields that are stable across a
+ *    conversation: `prompt_cache_key` (OpenAI's own per-conversation cache
+ *    partition), an explicit `metadata.session_id`, then `conversation`.
  */
 export function appaSessionIdentity(params: {
   family: AppaWireFamily;
@@ -334,20 +478,12 @@ export function appaSessionIdentity(params: {
     typeof value === "string" && value.length > 0 ? value : undefined;
 
   if (params.family === "anthropic:messages") {
-    const claudeCode = header("x-claude-code-session-id");
     const userId = field(asRecord(body?.metadata)?.user_id);
     const metadataSession = userId
       ? (parseClaudeMetadataSessionId(userId) ?? userId)
       : undefined;
-    if (claudeCode) {
-      return {
-        sessionId: claudeCode,
-        parentId,
-        provenance: "claude-code-header",
-      };
-    }
     if (metadataSession) {
-      // Claude Code session ID from user_id metadata.
+      // Claude session ID from user_id metadata.
       return {
         sessionId: metadataSession,
         parentId,
@@ -459,6 +595,25 @@ const APPA_WIRE_FAMILY_BY_INTERACTION_TYPE: Partial<
   "zhipuai:chatCompletions": "openai:chatCompletions",
 };
 
+/**
+ * Where the other chat wires carry a call's id, for putting the provider's
+ * back: in an APPA family's shape (Cohere and native Ollama name calls the
+ * way Chat Completions does; Azure Responses is the Responses wire), or in
+ * their own.
+ */
+const OTHER_STAMP_WIRES: Partial<
+  Record<
+    SupportedProviderDiscriminator,
+    AppaWireFamily | "bedrock:converse" | "gemini:generateContent"
+  >
+> = {
+  "azure:responses": "openai:responses",
+  "bedrock:converse": "bedrock:converse",
+  "cohere:chat": "openai:chatCompletions",
+  "gemini:generateContent": "gemini:generateContent",
+  "ollama-native:chat": "openai:chatCompletions",
+};
+
 /** Where the three families declare tools; Responses adds `additional_tools`. */
 const TOOL_CONTAINERS = ["tools", "additional_tools"] as const;
 
@@ -526,6 +681,9 @@ function endsWithUserTurn(params: {
     !content.some((block) => asRecord(block)?.type === "tool_result")
   );
 }
+
+/** The tool names every APPA wire's provider accepts in a request. */
+const PROVIDER_TOOL_NAME = /^[A-Za-z0-9_-]+$/;
 
 type ToolCallSite = {
   id: string;
@@ -849,6 +1007,140 @@ function chatMessages(body: unknown): Record<string, unknown>[] {
   }
   return messages;
 }
+
+type TextSite = { get: () => string; set: (text: string) => void };
+
+/**
+ * Text that a client may carry between turns. This accepts only the documented
+ * message containers for each wire, rather than walking arbitrary nested data.
+ */
+function historyTextSites(family: AppaWireFamily, body: unknown): TextSite[] {
+  const sites: TextSite[] = [];
+  const addContent = (message: Record<string, unknown>) => {
+    if (typeof message.content === "string") {
+      sites.push({
+        get: () => message.content as string,
+        set: (text) => {
+          message.content = text;
+        },
+      });
+      return;
+    }
+    for (const part of asArray(message.content) ?? []) {
+      const record = asRecord(part);
+      if (
+        !record ||
+        typeof record.text !== "string" ||
+        !HISTORY_TEXT_PART_TYPES.has(record.type as string)
+      )
+        continue;
+      sites.push({
+        get: () => record.text as string,
+        set: (text) => {
+          record.text = text;
+        },
+      });
+    }
+  };
+
+  if (family === "openai:responses") {
+    const record = asRecord(body);
+    if (typeof record?.input === "string") {
+      sites.push({
+        get: () => record.input as string,
+        set: (text) => {
+          record.input = text;
+        },
+      });
+      return sites;
+    }
+    for (const item of responsesItems(body)) {
+      if (
+        (item.type !== undefined && item.type !== "message") ||
+        (item.role !== "user" && item.role !== "assistant")
+      )
+        continue;
+      addContent(item);
+    }
+    return sites;
+  }
+
+  for (const message of chatMessages(body)) {
+    if (message.role !== "user" && message.role !== "assistant") continue;
+    addContent(message);
+  }
+  return sites;
+}
+
+/** Text parts the proxy may return as model-visible assistant content. */
+function responseTextSites(
+  family: AppaWireFamily,
+  response: unknown,
+): TextSite[] {
+  const sites: TextSite[] = [];
+  const responseRecord = asRecord(response);
+  if (!responseRecord) return sites;
+
+  if (family === "anthropic:messages") {
+    for (const part of asArray(responseRecord.content) ?? []) {
+      const record = asRecord(part);
+      if (record?.type !== "text" || typeof record.text !== "string") continue;
+      sites.push({
+        get: () => record.text as string,
+        set: (text) => {
+          record.text = text;
+        },
+      });
+    }
+    return sites;
+  }
+
+  if (family === "openai:responses") {
+    for (const item of asArray(responseRecord.output) ?? []) {
+      const message = asRecord(item);
+      if (message?.type !== "message" || message.role !== "assistant") continue;
+      for (const part of asArray(message.content) ?? []) {
+        const record = asRecord(part);
+        if (record?.type !== "output_text" || typeof record.text !== "string")
+          continue;
+        sites.push({
+          get: () => record.text as string,
+          set: (text) => {
+            record.text = text;
+          },
+        });
+      }
+    }
+    return sites;
+  }
+
+  for (const choice of asArray(responseRecord.choices) ?? []) {
+    const message = asRecord(asRecord(choice)?.message);
+    if (!message) continue;
+    if (typeof message.content === "string") {
+      sites.push({
+        get: () => message.content as string,
+        set: (text) => {
+          message.content = text;
+        },
+      });
+      continue;
+    }
+    for (const part of asArray(message.content) ?? []) {
+      const record = asRecord(part);
+      if (record?.type !== "text" || typeof record.text !== "string") continue;
+      sites.push({
+        get: () => record.text as string,
+        set: (text) => {
+          record.text = text;
+        },
+      });
+    }
+  }
+  return sites;
+}
+
+const HISTORY_TEXT_PART_TYPES = new Set(["text", "input_text", "output_text"]);
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
   return typeof value === "object" && value !== null && !Array.isArray(value)

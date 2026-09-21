@@ -167,11 +167,8 @@ vi.mock("@/services/mcp-active-use.ee", () => ({
 }));
 // SPDX-SnippetEnd
 
-// Several tests below call vi.resetModules(), which rebuilds the graph the
-// dynamically-imported manager pulls in — a real singleton imported statically
-// by this file would then be a different object from the one the code under
-// test uses, and stubbing it would silently do nothing. Mock factories survive
-// the reset, so the enterprise gate is mocked like every other dependency.
+// The manager is dynamically imported by tests, so configure the enterprise
+// gate through the mock instance it shares with the module under test.
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -537,7 +534,6 @@ describe("McpServerRuntimeManager", () => {
   describe("isEnabled", () => {
     beforeEach(() => {
       vi.clearAllMocks();
-      vi.resetModules();
       mockK8sDeploymentInstances.length = 0;
     });
 
@@ -615,7 +611,6 @@ describe("McpServerRuntimeManager", () => {
   describe("status transitions", () => {
     beforeEach(() => {
       vi.clearAllMocks();
-      vi.resetModules();
     });
 
     test("should start with not_initialized status when config loads", async () => {
@@ -657,7 +652,6 @@ describe("McpServerRuntimeManager", () => {
   describe("stopServer", () => {
     beforeEach(() => {
       vi.clearAllMocks();
-      vi.resetModules();
     });
 
     test("should call stopDeployment, deleteK8sService, and deleteK8sSecret when deployment exists", async () => {
@@ -947,7 +941,6 @@ describe("McpServerRuntimeManager", () => {
 
     beforeEach(() => {
       vi.clearAllMocks();
-      vi.resetModules();
     });
 
     function buildCleanupSpies() {
@@ -1078,7 +1071,6 @@ describe("McpServerRuntimeManager", () => {
 
     beforeEach(() => {
       vi.clearAllMocks();
-      vi.resetModules();
     });
 
     test("tears down shared Deployment for all siblings then recreates via startServer", async () => {
@@ -1239,7 +1231,6 @@ describe("McpServerRuntimeManager", () => {
   describe("streamMcpServerLogs", () => {
     beforeEach(() => {
       vi.clearAllMocks();
-      vi.resetModules();
     });
 
     test("writes a helpful message when runtime is not configured", async () => {

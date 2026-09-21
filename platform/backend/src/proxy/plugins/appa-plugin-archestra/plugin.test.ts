@@ -1,3 +1,5 @@
+import config from "@/config";
+import { signOfferClaims, unsignedOfferClaims } from "@/openappa/offer-claims";
 import * as appaService from "@/openappa/service";
 import type { LlmProxyRequestContext } from "@/proxy/plugins/registry";
 import { describe, expect, test, vi } from "@/test";
@@ -718,6 +720,172 @@ describe("rendering runtime text for this client", () => {
         '{ "offer_id": "offer-1", "plan": "narrow readers" }',
       );
       expect(evaluateToolCalls).not.toHaveBeenCalled();
+    } finally {
+      evaluateToolCalls.mockRestore();
+    }
+  });
+
+  test("a fork's control call carries none of the offers its parent surfaced", async () => {
+    const plugin = new AppaPluginArchestra([]);
+    const context = requestContext({
+      sessionId: "user:user|fork",
+      canonicalizeToolName: (name) => name,
+    });
+    const signed = (sessionId: string, offerId: string) =>
+      signOfferClaims(
+        unsignedOfferClaims({
+          organizationId: "organization",
+          sessionId,
+          callerId: "user:user",
+          offerId,
+        }),
+        "test-offer-signing-secret-32chars",
+      );
+    const trusted = context.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as Record<string, unknown>;
+    trusted.request = {
+      tools: {
+        controlToolName: "archestra__execute_remedy_plan",
+        noticeToolName: "archestra__get_remedy_plans",
+      },
+      spellings: new Map(),
+      customTools: new Set(),
+      namespaces: new Map(),
+      // The fork replays its parent's notices, offers included, beside its own.
+      offerClaims: [
+        signed("user:user|parent", "parent-offer"),
+        signed("user:user|fork", "fork-offer"),
+      ],
+    };
+    await plugin.onSessionInit(context);
+    const outcome = await plugin.onPrepareToolCalls({
+      ...context,
+      toolCalls: ["parent-offer", "fork-offer"].map((offer_id, index) => ({
+        id: `provider-call-${index}`,
+        name: "archestra__execute_remedy_plan",
+        arguments: JSON.stringify({ offer_id }),
+      })),
+    });
+    if (outcome?.decision !== "allow") throw new Error("expected allow");
+    const [parentOffer, forkOffer] = outcome.toolCalls.map((call) =>
+      JSON.parse(call.arguments as string),
+    );
+
+    // Spending the parent's offer would change the parent's labels from
+    // inside the fork: with no signed routing, the gateway knows no such offer.
+    expect(parentOffer.signature).toBeUndefined();
+    expect(forkOffer.signature).toEqual(expect.any(String));
+  });
+
+  test("gives a session's offer only to the control tool of the gateway's Codex namespace", async () => {
+    const plugin = new AppaPluginArchestra([]);
+    const context = requestContext({
+      sessionId: "user:user|codex",
+      canonicalizeToolName: (name) => name,
+    });
+    const trusted = context.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as Record<string, unknown>;
+    trusted.request = {
+      tools: {
+        controlToolName: "archestra__execute_remedy_plan",
+        noticeToolName: "archestra__get_remedy_plans",
+        controlNamespace: "mcp__my_gateway",
+        noticeNamespace: "mcp__my_gateway",
+      },
+      spellings: new Map(),
+      customTools: new Set(),
+      namespaces: new Map(),
+      offerClaims: [
+        signOfferClaims(
+          unsignedOfferClaims({
+            organizationId: "organization",
+            sessionId: "user:user|codex",
+            callerId: "user:user",
+            offerId: "offer-1",
+          }),
+          "test-offer-signing-secret-32chars",
+        ),
+      ],
+    };
+    await plugin.onSessionInit(context);
+    const outcome = await plugin.onPrepareToolCalls({
+      ...context,
+      toolCalls: ["mcp__lookalike", "evil", "mcp__my_gateway"].map(
+        (namespace) => ({
+          id: `call-${namespace}`,
+          name: "archestra__execute_remedy_plan",
+          namespace,
+          arguments: JSON.stringify({ offer_id: "offer-1" }),
+        }),
+      ),
+    });
+    if (outcome?.decision !== "allow") throw new Error("expected allow");
+    const [lookalike, unanchored, gateway] = outcome.toolCalls.map((call) =>
+      JSON.parse(call.arguments as string),
+    );
+
+    // Another server's member of the same name is a foreign tool: it gets
+    // neither the signed offer nor the execution record.
+    expect(lookalike).toEqual({ offer_id: "offer-1" });
+    expect(unanchored).toEqual({ offer_id: "offer-1" });
+    expect(gateway.signature).toEqual(expect.any(String));
+    expect(gateway.execution).toMatchObject({
+      kind: "appa_remedy",
+      call_id: "call-mcp__my_gateway",
+    });
+  });
+
+  test.for([
+    ["openai", "gpt-4.1", true],
+    ["mistral", "mistral-large-latest", false],
+    ["openrouter", "mistralai/devstral-small-2505", false],
+    ["vllm", "Codestral-22B-v0.1", false],
+  ] as const)("a %s call to %s gets a trajectory stamp: %s", async ([
+    provider,
+    model,
+    stamped,
+  ]) => {
+    // OpenCode cuts every tool-call id to nine characters for Mistral's
+    // provider and its model families; a stamp would not survive that.
+    config.openappa = {
+      ...config.openappa,
+      offerSigningSecret: "test-offer-signing-secret-32chars",
+    };
+    const plugin = new AppaPluginArchestra([]);
+    const context = requestContext({
+      sessionId: "user:user|ses_opencode",
+      canonicalizeToolName: (name) => name,
+    });
+    const trusted = context.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as Record<string, unknown>;
+    trusted.request = {
+      tools: {
+        controlToolName: "archestra__execute_remedy_plan",
+        noticeToolName: "archestra__get_remedy_plans",
+      },
+      spellings: new Map(),
+      customTools: new Set(),
+      namespaces: new Map(),
+    };
+    const evaluateToolCalls = vi
+      .spyOn(appaService, "evaluateToolCalls")
+      .mockResolvedValue([{ kind: "allow" }]);
+    try {
+      await plugin.onSessionInit(context);
+      const outcome = await plugin.onToolCalls({
+        ...context,
+        interactionType: "openai:chatCompletions",
+        provider,
+        model,
+        toolCalls: [{ id: "call_1", name: "read", arguments: "{}" }],
+      });
+
+      const wireId =
+        outcome?.decision === "allow" ? outcome.toolCalls[0].wireId : undefined;
+      expect(wireId !== undefined).toBe(stamped);
     } finally {
       evaluateToolCalls.mockRestore();
     }

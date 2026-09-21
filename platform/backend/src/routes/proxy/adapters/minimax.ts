@@ -537,10 +537,16 @@ class MinimaxResponseAdapter implements LLMResponseAdapter<MinimaxResponse> {
    * MiniMax doesn't have a refusal field, so we use content only
    */
   withRewrittenToolCalls(
-    toolCalls: Array<{ id: string; name: string; arguments: string }>,
+    toolCalls: Array<{
+      id: string;
+      name: string;
+      arguments: string;
+      wireId?: string;
+    }>,
   ): MinimaxResponse {
     // Positional: one rewritten entry per call this response carries, in
-    // order, so ids the client correlates by are untouched.
+    // order. The id the client correlates by is the provider's unless the
+    // call carries the one it is given instead.
     const choice = this.response.choices[0];
     if (!choice?.message.tool_calls) return this.response;
     const tool_calls = choice.message.tool_calls.map((toolCall, index) => {
@@ -548,6 +554,7 @@ class MinimaxResponseAdapter implements LLMResponseAdapter<MinimaxResponse> {
       if (!rewritten || toolCall.type !== "function") return toolCall;
       return {
         ...toolCall,
+        id: rewritten.wireId ?? toolCall.id,
         function: {
           ...toolCall.function,
           name: rewritten.name,
@@ -811,7 +818,7 @@ class MinimaxStreamAdapter
           delta: {
             tool_calls: toolCalls.map((toolCall, index) => ({
               index,
-              id: toolCall.id,
+              id: toolCall.wireId ?? toolCall.id,
               type: "function" as const,
               function: {
                 name: toolCall.name,

@@ -1,3 +1,5 @@
+import type { AppaSessionIdentity } from "@/openappa/wire";
+import { ApiError } from "@/types";
 import type { AppaClientAdapter } from "../types";
 import { readHeader } from "../utils";
 
@@ -28,4 +30,46 @@ export class AppaOpenCodeAdapter implements AppaClientAdapter {
       ? name
       : `builtin:${name}`;
   }
+
+  /**
+   * Extracts OpenCode session identity from request headers: `X-Session-Id`,
+   * `x-session-affinity`, `session-id` on Responses, or `x-opencode-session`.
+   * The ID remains stable across resumes and compactions.
+   * Contradictory session headers are rejected.
+   */
+  extractSessionIdentity(context: {
+    headers: Readonly<Record<string, string | string[] | undefined>>;
+  }): AppaSessionIdentity | undefined {
+    const claims = OPENCODE_SESSION_HEADERS.flatMap((header) => {
+      const value = readHeader(context.headers, header);
+      return value ? [value] : [];
+    });
+    const hosted = readHeader(context.headers, "x-opencode-session");
+    const [normal] = claims;
+    if (claims.some((claim) => claim !== normal)) {
+      throw new ApiError(
+        400,
+        "OpenAPPA cannot bind contradictory OpenCode session headers",
+      );
+    }
+    if (normal && hosted && normal !== hosted) {
+      throw new ApiError(
+        400,
+        "OpenAPPA cannot bind contradictory OpenCode session headers",
+      );
+    }
+    if (normal) {
+      return { sessionId: normal, provenance: "opencode-session-header" };
+    }
+    return hosted
+      ? { sessionId: hosted, provenance: "opencode-hosted-header" }
+      : undefined;
+  }
 }
+
+/** Request headers where OpenCode provides its session ID. */
+const OPENCODE_SESSION_HEADERS = [
+  "x-session-id",
+  "x-session-affinity",
+  "session-id",
+] as const;

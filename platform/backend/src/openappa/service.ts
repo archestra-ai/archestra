@@ -34,6 +34,12 @@ export type OpenAppaSession = {
   caller_id?: string;
   session_id: string;
   parent_id?: string;
+  /**
+   * The session this one forks, on a new session whose history the proxy
+   * traced to it: its first event opens a root of its own seeded from that
+   * session's labels.
+   */
+  fork_of?: string;
 };
 
 const ResultDecisionFields = {
@@ -738,6 +744,8 @@ export async function executeRemedyByOffer(params: {
   ownerCallerId?: string;
   tool?: string;
   spelling?: string;
+  /** The client's dispatch tool the blocked call went through, from verified claims. */
+  dispatch?: string;
   /** Provider or client-supplied logical execution identity, when available. */
   toolCallId?: string;
   controlToolName?: string;
@@ -761,6 +769,7 @@ export async function executeRemedyByOffer(params: {
           : {}),
         ...(params.tool ? { tool: params.tool } : {}),
         ...(params.spelling ? { spelling: params.spelling } : {}),
+        ...(params.dispatch ? { dispatch: params.dispatch } : {}),
         execution_mode: params.toolCallId ? "tracked" : "untracked",
         ...(params.toolCallId ? { tool_call_id: params.toolCallId } : {}),
         original_arguments: params.originalArguments,

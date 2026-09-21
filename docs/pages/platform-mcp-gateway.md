@@ -3,7 +3,7 @@ title: MCP Gateway
 category: MCP
 order: 1
 description: Unified access point for all MCP servers
-lastUpdated: 2026-09-20
+lastUpdated: 2026-09-21
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -207,6 +207,8 @@ The built-in [`ask_user`](/docs/platform-archestra-mcp-server#ask_user) tool ask
 Headless sessions cannot show forms. Models receive guidance to list options in their text replies instead.
 
 Codex declines forms when its approval policy is `never`. Set the policy to `on-request` to answer forms.
+
+Codex also gates its native question tool on some releases. If Codex reports `request_user_input is unavailable in Default mode`, run `codex features enable default_mode_request_user_input` and restart Codex.
 
 The model decides whether to use a form. Some client models ask permission questions in plain text.
 

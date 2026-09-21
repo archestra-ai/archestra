@@ -1,4 +1,5 @@
 import { SkillModel, SkillTeamModel } from "@/models";
+import { runScopedResourcePermissionCutover } from "@/services/resource-permissions-cutover";
 import { describe, expect, test } from "@/test";
 import type { ResourceVisibilityScope } from "@/types/visibility";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
@@ -62,6 +63,67 @@ describe("SkillTeamModel.getUserAccessibleSkillIds", () => {
         organizationId: org.id,
       }),
     ).not.toContain(skill.id);
+  });
+  test("restricting a migrated public skill to a role revokes organization credential access", async ({
+    makeOrganization,
+    makeUser,
+    makeCustomRole,
+  }) => {
+    const org = await makeOrganization({ legacyPermissions: true });
+    const author = await makeUser();
+    const role = await makeCustomRole(org.id, { permission: {} });
+    const skill = await seedSkill({
+      organizationId: org.id,
+      name: "formerly-public-skill",
+      scope: "org",
+      authorId: author.id,
+    });
+    await runScopedResourcePermissionCutover();
+    expect(
+      await SkillTeamModel.getUserAccessibleSkillIds({
+        organizationId: org.id,
+      }),
+    ).toContain(skill.id);
+    const key = {
+      organizationId: org.id,
+      resource: "skill" as const,
+      scope: skill.id,
+    };
+    const policy = await ResourcePermissionPolicyModel.find(key);
+    await ResourcePermissionPolicyModel.replace({
+      ...key,
+      revision: policy?.revision ?? 0,
+      grants: [
+        { subject: { type: "role", id: role.id }, actions: ["read", "use"] },
+      ],
+    });
+    expect(
+      await SkillTeamModel.getUserAccessibleSkillIds({
+        organizationId: org.id,
+      }),
+    ).not.toContain(skill.id);
+    await runScopedResourcePermissionCutover();
+    expect(
+      await SkillTeamModel.getUserAccessibleSkillIds({
+        organizationId: org.id,
+      }),
+    ).not.toContain(skill.id);
+    const restricted = await ResourcePermissionPolicyModel.find(key);
+    await ResourcePermissionPolicyModel.replace({
+      ...key,
+      revision: restricted?.revision ?? 0,
+      grants: [
+        {
+          subject: { type: "organization", id: "*" },
+          actions: ["read", "use"],
+        },
+      ],
+    });
+    expect(
+      await SkillTeamModel.getUserAccessibleSkillIds({
+        organizationId: org.id,
+      }),
+    ).toContain(skill.id);
   });
   test("returns org skills, own personal skills, and team skills", async ({
     makeOrganization,

@@ -18,6 +18,13 @@ export async function runScopedResourcePermissionCutover(
 ): Promise<void> {
   const started = Date.now();
   const run = async (tx: Transaction) => {
+    // A rolling restart can overlap another startup or a permission save on
+    // an already-running replica. Serialize policy writes before reading the
+    // grants to merge, so an upsert cannot restore a concurrently revoked
+    // grant from its earlier statement snapshot. Reads remain available.
+    await tx.execute(
+      sql`LOCK TABLE resource_permission_policies IN SHARE ROW EXCLUSIVE MODE`,
+    );
     for (const statement of [
       ...SHARING_CONVERSION_STATEMENTS,
       ...ROLE_RETIREMENT_STATEMENTS,
@@ -56,8 +63,7 @@ export const SHARING_CONVERSION_STATEMENTS = [
 -- object's own policy is the statement "this object is governed by grants
 -- now", so a later run leaves it alone: re-deriving from the retired columns
 -- would undo every editor change, handing back access revoked there on the
--- next start. The organization-level statements below keep merging, because
--- they carry role authority rather than any one object's audience.
+-- next start. Organization-level authority is likewise imported only once.
 WITH candidates AS (
   SELECT a.organization_id, CASE WHEN a.agent_type = 'mcp_gateway' THEN 'mcpGateway' ELSE 'agent' END AS resource,
     a.id::text AS scope, a.scope::text AS visibility, a.author_id, a.id AS source_id
@@ -88,10 +94,9 @@ WITH candidates AS (
     CASE ps.visibility WHEN 'organization' THEN 'org' WHEN 'team' THEN 'team' ELSE 'personal' END,
     p.user_id, p.id
   FROM projects p LEFT JOIN project_shares ps ON ps.project_id = p.id
-  WHERE p.deleted_at IS NULL
   UNION ALL
   SELECT pl.organization_id, 'plugin', pl.id::text, pl.scope, pl.author_id, pl.id
-  FROM plugins pl WHERE pl.deleted_at IS NULL
+  FROM plugins pl
   UNION ALL
   SELECT v.organization_id, 'llmVirtualKey', v.id::text, v.scope, v.author_id, v.id
   FROM virtual_api_keys v
@@ -106,12 +111,12 @@ WITH candidates AS (
   SELECT kb.organization_id, 'knowledgeBase', kb.id::text,
     CASE kb.visibility WHEN 'org-wide' THEN 'org' WHEN 'team-scoped' THEN 'team' ELSE 'personal' END,
     NULL::text, kb.id
-  FROM knowledge_bases kb WHERE kb.deleted_at IS NULL
+  FROM knowledge_bases kb
   UNION ALL
   SELECT c.organization_id, 'knowledgeConnector', c.id::text,
     CASE c.visibility WHEN 'team-scoped' THEN 'team' ELSE 'org' END,
     NULL::text, c.id
-  FROM knowledge_base_connectors c WHERE c.deleted_at IS NULL
+  FROM knowledge_base_connectors c
   UNION ALL
   SELECT f.organization_id, 'knowledgeFile', f.id::text,
     CASE f.visibility WHEN 'org-wide' THEN 'org' WHEN 'team-scoped' THEN 'team' ELSE 'personal' END,
@@ -330,6 +335,8 @@ WITH resources(resource) AS (
     SELECT 'manage-permissions' WHERE COALESCE(roles.permission::jsonb->r.resource, '[]'::jsonb) ? 'update'
     UNION
     SELECT 'use' WHERE r.resource = 'llmModel' AND COALESCE(roles.permission::jsonb->r.resource, '[]'::jsonb) ? 'update'
+    UNION
+    SELECT 'use' WHERE r.resource = 'mcpRegistry' AND COALESCE(roles.permission::jsonb->'mcpServerInstallation', '[]'::jsonb) ? 'create'
   ) expanded
   WHERE CASE
     WHEN r.resource = 'mcpRegistry' THEN COALESCE(roles.permission::jsonb->'mcpServerInstallation', '[]'::jsonb) ? 'admin'
@@ -524,15 +531,15 @@ export const ROLE_RETIREMENT_STATEMENTS = [
 --
 -- Two names do not survive the move. \`knowledgeSource:admin\` governed three
 -- kinds of object, which are three grant namespaces, so it fans out to all
--- three. \`mcpServerInstallation:admin\` was authority over registry entries,
--- which already convert as \`mcpRegistry\`, so it folds into that.
+-- three. Registry authority was already converted above from the catalog
+-- actions plus the installation admin flag; importing that flag again here
+-- would manufacture actions a read-only catalog administrator never held.
 WITH holders AS (
   SELECT o.id AS organization_id, source.role_action, grantee.id AS role_id
   FROM organization o
   CROSS JOIN (VALUES
     ('project'), ('plugin'), ('llmVirtualKey'), ('llmProviderApiKey'),
-    ('knowledgeSource'), ('scheduledTask'), ('log'), ('auditLog'),
-    ('mcpServerInstallation')
+    ('knowledgeSource'), ('scheduledTask'), ('log'), ('auditLog')
   ) AS source(role_action)
   JOIN LATERAL (
     -- The built-in roles keep their permissions in code, not in this table,
@@ -547,15 +554,27 @@ WITH holders AS (
   ) grantee ON true
 ), targeted AS (
   SELECT h.organization_id, mapped.resource, h.role_id,
-    -- Reading rows someone else created is all the two log actions ever did.
-    CASE WHEN mapped.resource IN ('log', 'auditLog')
-      THEN ARRAY['read']
-      ELSE ARRAY['read', 'use', 'update', 'delete', 'manage-permissions'] END AS actions
+    -- Log viewers keep read-only access. The built-in admin also needs to
+    -- delegate that access now that the old role action has been retired.
+    ARRAY(
+      SELECT action FROM unnest(CASE
+        WHEN mapped.resource IN ('log', 'auditLog') AND h.role_id = 'admin'
+          THEN ARRAY['read', 'manage-permissions']
+        WHEN mapped.resource IN ('log', 'auditLog') THEN ARRAY['read']
+        ELSE ARRAY['read', 'use', 'update', 'delete', 'manage-permissions'] END) action
+      WHERE h.role_id IN ('admin', 'platform_admin') OR EXISTS (
+        -- The old admin flag widened scope, while the ordinary role actions
+        -- still gated CRUD. Preserve both halves for custom roles.
+        SELECT 1 FROM organization_role roles
+        WHERE roles.organization_id = h.organization_id AND roles.id = h.role_id
+          AND COALESCE(roles.permission::jsonb->h.role_action, '[]'::jsonb)
+            ? CASE action WHEN 'use' THEN 'read' WHEN 'manage-permissions' THEN 'update' ELSE action END
+      )
+    ) AS actions
   FROM holders h
   CROSS JOIN LATERAL (
     SELECT unnest(CASE h.role_action
       WHEN 'knowledgeSource' THEN ARRAY['knowledgeBase', 'knowledgeConnector', 'knowledgeFile']
-      WHEN 'mcpServerInstallation' THEN ARRAY['mcpRegistry']
       ELSE ARRAY[h.role_action] END) AS resource
   ) mapped
   WHERE NOT EXISTS (

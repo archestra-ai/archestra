@@ -63,7 +63,7 @@ function renderEditor(onParentSubmit?: () => void) {
       embedded={!!onParentSubmit}
     />
   );
-  return render(
+  const view = render(
     <QueryClientProvider client={client}>
       {onParentSubmit ? (
         <form
@@ -79,7 +79,47 @@ function renderEditor(onParentSubmit?: () => void) {
       )}
     </QueryClientProvider>,
   );
+  return { ...view, client };
 }
+
+it("preserves an unsaved draft when a background refresh fails", async () => {
+  const user = userEvent.setup();
+  const { client } = renderEditor();
+  await user.click(
+    await screen.findByRole("button", {
+      name: "Remove direct access for Build automation",
+    }),
+  );
+  server.use(http.get(endpoint, () => new HttpResponse(null, { status: 503 })));
+  await client.invalidateQueries({ queryKey: ["resource-permissions"] });
+  await waitFor(() =>
+    expect(
+      screen.getByRole("button", { name: "Save permissions" }),
+    ).toBeDisabled(),
+  );
+  expect(screen.queryByText("Build automation")).not.toBeInTheDocument();
+  server.use(http.get(endpoint, () => HttpResponse.json(policy)));
+  await user.click(screen.getByRole("button", { name: "Retry" }));
+  await waitFor(() =>
+    expect(
+      screen.getByRole("button", { name: "Save permissions" }),
+    ).toBeEnabled(),
+  );
+  expect(screen.queryByText("Build automation")).not.toBeInTheDocument();
+});
+
+it("refreshes a clean editor without reporting a conflicting draft", async () => {
+  const { client } = renderEditor();
+  await screen.findByText("Build automation");
+  policy = { ...policy, revision: 2, grants: [] };
+  await client.invalidateQueries({ queryKey: ["resource-permissions"] });
+  await waitFor(() =>
+    expect(screen.queryByText("Build automation")).not.toBeInTheDocument(),
+  );
+  expect(
+    screen.queryByRole("button", { name: "Discard draft and reload" }),
+  ).not.toBeInTheDocument();
+});
 
 it("explains separate wildcard and team-relative inheritance for the same recipient", async () => {
   policy.inheritedGrants = [

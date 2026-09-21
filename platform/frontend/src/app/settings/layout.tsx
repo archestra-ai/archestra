@@ -13,6 +13,11 @@ import { useSecretsType } from "@/lib/secrets.query";
 import { resolveSettingsSection, useSettingsTabs } from "./settings-tabs";
 
 const PAGE_CONFIG: Record<string, { title: string; description: ReactNode }> = {
+  "/settings/permissions": {
+    title: "Permissions",
+    description:
+      "Choose who can access each type of resource. Individual resources can grant additional access from their Permissions section.",
+  },
   "/settings/service-accounts": {
     title: "Service Accounts",
     description:

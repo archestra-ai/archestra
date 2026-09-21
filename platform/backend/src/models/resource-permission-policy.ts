@@ -122,9 +122,18 @@ export default class ResourcePermissionPolicyModel {
           scope: "*",
           legacySharingMigrated: true,
           grants: [
-            ...["admin", "platform_admin"].map((id) => ({
+            ...(resource === "log" || resource === "auditLog"
+              ? ["admin"]
+              : ["admin", "platform_admin"]
+            ).map((id) => ({
               subject: { type: "role" as const, id },
-              actions: resourcePermissionPresets.manage.actions,
+              actions:
+                resource === "log" || resource === "auditLog"
+                  ? ([
+                      "read",
+                      "manage-permissions",
+                    ] as ResourcePermissionAction[])
+                  : resourcePermissionPresets.manage.actions,
             })),
             ...(resource === "llmModel"
               ? [
@@ -502,6 +511,7 @@ export default class ResourcePermissionPolicyModel {
           resource: policy.resource,
           scope: policy.scope,
           grants: policy.grants,
+          legacyOrganizationAudience: policy.legacyOrganizationAudience,
         }
       : { resource: resource.data, scope, grants: [] };
   }
@@ -560,6 +570,9 @@ export default class ResourcePermissionPolicyModel {
       .update(table)
       .set({
         grants: params.grants,
+        // An explicit edit makes the selected recipients authoritative. A
+        // role grant must no longer retain the old organization audience.
+        legacyOrganizationAudience: false,
         revision: params.revision + 1,
         updatedAt: new Date(),
       })

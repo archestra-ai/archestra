@@ -3,6 +3,7 @@ import {
   canDelegateScopedPermissions,
   hasScopedPermission,
   isBuiltInCatalogId,
+  ORGANIZATION_WIDE_RESOURCES,
   type PermissionSubject,
   PredefinedRoleNameSchema,
   type ResourcePermissionAction,
@@ -313,6 +314,14 @@ export class ResourcePermissions {
   }
 
   static async getEffective(params: PermissionContext) {
+    if (
+      params.scope === TEAM_RESOURCE_SCOPE &&
+      ORGANIZATION_WIDE_RESOURCES.has(params.resource)
+    )
+      throw new ApiError(
+        400,
+        "This resource only supports organization-wide permissions",
+      );
     const target =
       params.scope === "*" || params.scope === TEAM_RESOURCE_SCOPE
         ? null
@@ -487,8 +496,17 @@ export class ResourcePermissions {
   static async validateRecipients(params: {
     organizationId: string;
     grants: ResourcePermissionGrant[];
+    scope?: ResourcePermissionScope;
   }): Promise<void> {
     const subjects = params.grants.map((grant) => grant.subject);
+    if (
+      params.scope === TEAM_RESOURCE_SCOPE &&
+      subjects.some((subject) => subject.type === "serviceAccount")
+    )
+      throw new ApiError(
+        400,
+        "Service accounts do not belong to teams; grant access to specific resources or all resources instead",
+      );
     if (new Set(subjects.map(subjectKey)).size !== subjects.length)
       throw new ApiError(400, "Each recipient can have only one direct grant");
     const existing = await ResourcePermissionSubjectModel.findExisting({
@@ -520,13 +538,25 @@ export class ResourcePermissions {
     },
   ) {
     const current = await ResourcePermissionPolicyModel.find(params);
+    // Retaining an existing grant does not delegate new authority. A limited
+    // permission manager may revoke access without removing stronger grants
+    // held by other recipients, but may add only actions they hold themselves.
     const requested = params.grants.flatMap((grant) =>
-      grant.actions.map((action) => ({
-        organizationId: params.organizationId,
-        resource: params.resource,
-        scope: params.scope,
-        action,
-      })),
+      grant.actions
+        .filter(
+          (action) =>
+            !current?.grants.some(
+              (existing) =>
+                subjectKey(existing.subject) === subjectKey(grant.subject) &&
+                existing.actions.includes(action),
+            ),
+        )
+        .map((action) => ({
+          organizationId: params.organizationId,
+          resource: params.resource,
+          scope: params.scope,
+          action,
+        })),
     );
     // Adding a resource to a team's reach can activate that team's members'
     // existing relative grants. Authorize those actions as part of sharing.
@@ -604,6 +634,7 @@ export class ResourcePermissions {
   private static async findRecipients(params: {
     organizationId: string;
     query: string;
+    scope?: ResourcePermissionScope;
   }) {
     const recipients = await ResourcePermissionSubjectModel.search(params);
     const defaults: { subject: PermissionSubject; name: string }[] = [
@@ -620,7 +651,12 @@ export class ResourcePermissions {
       .filter((recipient) =>
         recipient.name.toLowerCase().includes(params.query.toLowerCase()),
       )
-      .concat(recipients);
+      .concat(recipients)
+      .filter(
+        (recipient) =>
+          params.scope !== TEAM_RESOURCE_SCOPE ||
+          recipient.subject.type !== "serviceAccount",
+      );
   }
   private static async describeLegacyAccess(
     params: PermissionContext & {

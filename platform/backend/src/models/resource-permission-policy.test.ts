@@ -86,6 +86,66 @@ describe("resource permission policy persistence", () => {
       }),
     ).toBe(true);
   });
+  test("restricting a migrated public agent to a role revokes organization credential access", async ({
+    makeOrganization,
+    makeUser,
+    makeAgent,
+    makeCustomRole,
+  }) => {
+    const organization = await makeOrganization({ legacyPermissions: true });
+    const author = await makeUser();
+    const role = await makeCustomRole(organization.id, { permission: {} });
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      authorId: author.id,
+      agentType: "agent",
+      scope: "org",
+    });
+    await runScopedResourcePermissionCutover();
+    const key = {
+      organizationId: organization.id,
+      resource: "agent" as const,
+      scope: agent.id,
+    };
+    const policy = await ResourcePermissionPolicyModel.find(key);
+    await ResourcePermissionPolicyModel.replace({
+      ...key,
+      revision: policy?.revision ?? 0,
+      grants: [
+        { subject: { type: "role", id: role.id }, actions: ["read", "use"] },
+      ],
+    });
+    expect(
+      await AgentTeamModel.credentialHasAgentAccess({
+        organizationId: organization.id,
+        agentId: agent.id,
+        teamId: null,
+      }),
+    ).toBe(false);
+    await runScopedResourcePermissionCutover();
+    expect(
+      await AgentTeamModel.credentialHasAgentAccess({
+        organizationId: organization.id,
+        agentId: agent.id,
+        teamId: null,
+      }),
+    ).toBe(false);
+    const restricted = await ResourcePermissionPolicyModel.find(key);
+    await ResourcePermissionPolicyModel.replace({
+      ...key,
+      revision: restricted?.revision ?? 0,
+      grants: [
+        { subject: { type: "organization", id: "*" }, actions: ["use"] },
+      ],
+    });
+    expect(
+      await AgentTeamModel.credentialHasAgentAccess({
+        organizationId: organization.id,
+        agentId: agent.id,
+        teamId: null,
+      }),
+    ).toBe(true);
+  });
   test("an explicitly granted role does not publish a newly created org-scope agent", async ({
     makeOrganization,
     makeUser,

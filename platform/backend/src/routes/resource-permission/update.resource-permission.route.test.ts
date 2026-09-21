@@ -42,6 +42,123 @@ describe("resource permission routes", () => {
     await app.close();
   });
 
+  test.each([
+    "scheduledTask",
+    "log",
+    "auditLog",
+  ] as const)("%s rejects team-relative scope instead of saving an ineffective policy", async (resource) => {
+    const key = { organizationId, resource, scope: "teams:*" };
+    const before = await ResourcePermissionPolicyModel.find(key);
+    const url = `/api/resource-permissions/${resource}/teams:*`;
+    expect((await app.inject({ method: "GET", url })).statusCode).toBe(400);
+    expect(
+      (await app.inject({ method: "GET", url: `${url}/subjects` })).statusCode,
+    ).toBe(400);
+    const response = await app.inject({
+      method: "PUT",
+      url,
+      payload: { revision: 0, grants: [] },
+    });
+    expect(response.statusCode, response.body).toBe(400);
+    expect(await ResourcePermissionPolicyModel.find(key)).toEqual(before);
+  });
+
+  test("team-relative grants exclude service accounts and reject direct API submissions", async () => {
+    const account = await ServiceAccountModel.create({
+      organizationId,
+      createdBy: user.id,
+      name: "Synthetic release automation",
+      role: "member",
+    });
+    const url = "/api/resource-permissions/agent/teams:*";
+    const subjects = await app.inject({
+      method: "GET",
+      url: `${url}/subjects`,
+    });
+    expect(subjects.statusCode, subjects.body).toBe(200);
+    expect(
+      subjects
+        .json()
+        .some(
+          (recipient: { subject: { type: string } }) =>
+            recipient.subject.type === "serviceAccount",
+        ),
+    ).toBe(false);
+    const organizationSubjects = await app.inject({
+      method: "GET",
+      url: "/api/resource-permissions/agent/*/subjects",
+    });
+    expect(organizationSubjects.statusCode, organizationSubjects.body).toBe(
+      200,
+    );
+    expect(organizationSubjects.json()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          subject: { type: "serviceAccount", id: account.id },
+        }),
+      ]),
+    );
+    const key = {
+      organizationId,
+      resource: "agent" as const,
+      scope: "teams:*",
+    };
+    const before = await ResourcePermissionPolicyModel.find(key);
+    const response = await app.inject({
+      method: "PUT",
+      url,
+      payload: {
+        revision: before?.revision ?? 0,
+        grants: [
+          {
+            subject: { type: "serviceAccount", id: account.id },
+            actions: ["read"],
+          },
+        ],
+      },
+    });
+    expect(response.statusCode, response.body).toBe(400);
+    expect(await ResourcePermissionPolicyModel.find(key)).toEqual(before);
+  });
+
+  test("audits retiring the legacy audience even when the selected recipients are unchanged", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({
+      organizationId,
+      agentType: "agent",
+      authorId: user.id,
+      scope: "org",
+    });
+    const policy = await ResourcePermissionPolicyModel.find({
+      organizationId,
+      resource: "agent",
+      scope: agent.id,
+    });
+    expect(policy?.legacyOrganizationAudience).toBe(true);
+    const response = await app.inject({
+      method: "PUT",
+      url: `/api/resource-permissions/agent/${agent.id}`,
+      payload: { revision: policy?.revision, grants: policy?.grants },
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    const audit = await AuditLogModel.findPaginated({
+      organizationId,
+      limit: 10,
+      offset: 0,
+      resourceId: agent.id,
+    });
+    expect(audit.data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          action: "resourcePermissions.updated",
+          before: expect.objectContaining({ legacyOrganizationAudience: true }),
+          after: expect.objectContaining({ legacyOrganizationAudience: false }),
+        }),
+      ]),
+    );
+  });
+
   test("an expired enterprise entitlement still permits revocation but rejects new grants", async ({
     makeAgent,
     makeUser,
@@ -134,6 +251,94 @@ describe("resource permission routes", () => {
         }),
       ).toBe(false);
     }
+  });
+
+  test("a limited permission manager can revoke access while preserving stronger existing grants", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+    makeCustomRole,
+  }) => {
+    const agent = await makeAgent({
+      organizationId,
+      agentType: "agent",
+      authorId: user.id,
+      scope: "personal",
+    });
+    const manager = await makeUser();
+    const reader = await makeUser();
+    const role = await makeCustomRole(organizationId, { permission: {} });
+    await makeMember(manager.id, organizationId, { role: role.role });
+    await makeMember(reader.id, organizationId, { role: role.role });
+    const url = `/api/resource-permissions/agent/${agent.id}`;
+    const current = await ResourcePermissionPolicyModel.find({
+      organizationId,
+      resource: "agent",
+      scope: agent.id,
+    });
+    const grants = [
+      ...(current?.grants ?? []),
+      {
+        subject: { type: "user", id: manager.id },
+        actions: ["read", "manage-permissions"],
+      },
+      { subject: { type: "user", id: reader.id }, actions: ["read"] },
+    ];
+    const setup = await app.inject({
+      method: "PUT",
+      url,
+      payload: { revision: current?.revision, grants },
+    });
+    expect(setup.statusCode, setup.body).toBe(200);
+    user = manager;
+    const retained = grants.filter((grant) => grant.subject.id !== reader.id);
+    const revoked = await app.inject({
+      method: "PUT",
+      url,
+      payload: { revision: setup.json().revision, grants: retained },
+    });
+    expect(revoked.statusCode, revoked.body).toBe(200);
+    expect((await app.inject({ method: "GET", url })).json().grants).toEqual(
+      expect.arrayContaining(
+        retained.map((grant) => expect.objectContaining(grant)),
+      ),
+    );
+    expect(
+      await ResourcePermissions.allows({
+        organizationId,
+        userId: reader.id,
+        resource: "agent",
+        scope: agent.id,
+        action: "read",
+      }),
+    ).toBe(false);
+    const escalated = await app.inject({
+      method: "PUT",
+      url,
+      payload: {
+        revision: revoked.json().revision,
+        grants: [
+          ...retained,
+          { subject: { type: "user", id: reader.id }, actions: ["update"] },
+        ],
+      },
+    });
+    expect(escalated.statusCode, escalated.body).toBe(403);
+    const audit = await AuditLogModel.findPaginated({
+      organizationId,
+      limit: 10,
+      offset: 0,
+      resourceId: agent.id,
+    });
+    expect(audit.data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          action: "resourcePermissions.updated",
+          before: expect.objectContaining({ grants }),
+          after: expect.objectContaining({ grants: retained }),
+        }),
+      ]),
+    );
   });
 
   test("can revoke one's last direct grant without a misleading failed save", async ({

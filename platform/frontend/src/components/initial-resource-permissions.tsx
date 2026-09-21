@@ -8,10 +8,11 @@ import {
   type ScopedResource,
 } from "@archestra/shared";
 import { useQuery } from "@tanstack/react-query";
-import { Trash2 } from "lucide-react";
+import { AlertCircle, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { presetFor, subjectLabels } from "@/components/resource-permissions";
 import { Button } from "@/components/ui/button";
+import { InlineNotice } from "@/components/ui/inline-notice";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   Select,
@@ -151,17 +152,18 @@ export function InitialResourcePermissions({
         }}
       />
       {recipients.isError && (
-        <p role="alert" className="text-sm text-destructive">
-          <span>Could not load recipients. </span>
+        <InlineNotice variant="error">
+          <AlertCircle />
+          <span className="font-medium">Could not load recipients.</span>
           <Button
             type="button"
             variant="link"
-            className="h-auto p-0"
+            className="ml-auto h-auto p-0"
             onClick={() => void recipients.refetch()}
           >
             <span>Retry</span>
           </Button>
-        </p>
+        </InlineNotice>
       )}
     </div>
   );

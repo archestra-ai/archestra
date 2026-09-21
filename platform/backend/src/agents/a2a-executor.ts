@@ -85,7 +85,7 @@ export interface A2AAttachment {
   /** Optional filename for context */
   name?: string;
   /** Private original bytes, supplied only by trusted internal ingestion. */
-  originalFile?: { data: Buffer; mimeType: string; filename?: string };
+  originalFile?: { data: Buffer; filename?: string };
 }
 
 /**

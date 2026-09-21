@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import type { EnvironmentTarget } from "@archestra/sandbox-rs";
 import {
   MAX_PROJECT_UPLOAD_BYTES,
@@ -903,26 +902,10 @@ const registry = defineArchestraTools([
         const fileScope = currentThreadFileScope(context);
         if (fileScope) {
           try {
-            const file = await fileStore.get({
-              ref: result.artifactId,
-              organizationId: guard.userCtx.organizationId,
-              userId: guard.userCtx.userId,
-            });
-            // A concurrent overwrite may keep the file id. Only expose the
-            // exact bytes this export produced to the Slack delivery tool.
-            if (
-              !file ||
-              createHash("sha256").update(file.data).digest("hex") !==
-                result.sha256
-            ) {
-              throw new Error(
-                "The exported file changed before it could be retained.",
-              );
-            }
             threadFile = threadFileStore.retain({
               scope: fileScope,
-              data: file.data,
-              filename: file.filename,
+              data: result.data,
+              filename: result.filename,
             });
           } catch {
             result.stagingNotices.push(

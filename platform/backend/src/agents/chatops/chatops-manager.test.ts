@@ -3131,7 +3131,6 @@ describe("ChatOpsManager attachment passthrough", () => {
       name: "photo.png",
       originalFile: {
         data: Buffer.alloc(16 * 1024 * 1024, 1),
-        mimeType: "image/png",
         filename: "photo.png",
       },
     };
@@ -3216,7 +3215,6 @@ describe("ChatOpsManager attachment passthrough", () => {
           : "current.png",
       originalFile: {
         data: Buffer.alloc(10 * 1024 * 1024, 2),
-        mimeType: currentContentType ?? "image/png",
         filename:
           currentContentType === "application/pdf"
             ? "current.pdf"
@@ -3272,7 +3270,6 @@ describe("ChatOpsManager attachment passthrough", () => {
       name: "history.pdf",
       originalFile: {
         data: originalBytes,
-        mimeType: "application/pdf",
         filename: "history.pdf",
       },
     };
@@ -3370,7 +3367,6 @@ describe("ChatOpsManager attachment passthrough", () => {
           name: "history.pdf",
           originalFile: {
             data: originalBytes,
-            mimeType: "application/pdf",
             filename: "history.pdf",
           },
         }),

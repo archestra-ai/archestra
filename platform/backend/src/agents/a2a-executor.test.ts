@@ -951,7 +951,6 @@ describe("executeA2AMessage isolation scope", () => {
         name: "photo.png",
         originalFile: {
           data: original,
-          mimeType: "image/png",
           filename: "photo.png",
         },
       },
@@ -975,7 +974,7 @@ describe("executeA2AMessage isolation scope", () => {
         contentType: mimeType,
         contentBase64: data.toString("base64"),
         name,
-        originalFile: { data, mimeType, filename: name },
+        originalFile: { data, filename: name },
       })),
     ];
     const sandboxCreation = vi.spyOn(

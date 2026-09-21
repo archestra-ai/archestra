@@ -92,8 +92,11 @@ export interface ExportArtifactParams {
   environment?: EnvironmentTarget;
 }
 
-export interface ArtifactRef {
+export interface ExportedArtifact {
   artifactId: string;
+  /** Captured export bytes for internal consumers; never serialize into a tool result. */
+  data: Buffer;
+  filename: string;
   sandboxId: SandboxId;
   path: string;
   mimeType: string;

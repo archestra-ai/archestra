@@ -16,7 +16,7 @@ DB-backed, Dagger-materialized execution sandbox for Agent Skills.
   sandbox home, and attachment staging dir. The image itself (base image,
   apt-package baseline, non-root user) is defined in the Rust Dagger backend
   (`platform/archestra-rs/sandbox-core/src/backends/dagger.rs`).
-- `types.ts` — `SkillSandboxLimits`, `CommandResult`, `ArtifactRef`,
+- `types.ts` — `SkillSandboxLimits`, `CommandResult`, `ExportedArtifact`,
   `UploadRef`, `SkillSandboxError`, runtime status enum. Tool-layer code in
   `../archestra-mcp-server/sandbox.ts` re-uses these so the service/tool
   boundary stays typed end-to-end.

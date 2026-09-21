@@ -1069,6 +1069,7 @@ describe("sandbox tools (runtime enabled)", () => {
         expect(textOf(exported)).toContain(metadata.sha256);
         expect(textOf(exported)).toContain("post_thread_file");
         expect(textOf(exported)).not.toContain(data.toString("base64"));
+        expect(exported.structuredContent).not.toHaveProperty("data");
         expect(
           threadFileStore.resolve({
             scope: threadScope,
@@ -1092,6 +1093,8 @@ describe("sandbox tools (runtime enabled)", () => {
         .spyOn(skillSandboxRuntimeService, "exportArtifact")
         .mockResolvedValue({
           artifactId: "artifact-1",
+          data: Buffer.alloc(42, 7),
+          filename: "file.txt",
           sha256: "0".repeat(64),
           sandboxId: "sb" as any,
           path: "/home/sandbox/out/file.txt",
@@ -1125,6 +1128,7 @@ describe("sandbox tools (runtime enabled)", () => {
       // panel, and neither the structured output nor the text mentions a URL.
       expect(structured.downloadUrl).toBeUndefined();
       expect(structured.threadFile).toBeUndefined();
+      expect(structured).not.toHaveProperty("data");
       expect(JSON.stringify(result.content)).not.toContain(
         "/api/skill-sandbox/artifacts",
       );
@@ -1141,6 +1145,8 @@ describe("sandbox tools (runtime enabled)", () => {
       const ctx = await makeConversationCtx();
       vi.spyOn(skillSandboxRuntimeService, "exportArtifact").mockResolvedValue({
         artifactId: "tiny-png",
+        data: Buffer.alloc(256, 7),
+        filename: "preview.png",
         sha256: "0".repeat(64),
         sandboxId: "sb" as any,
         path: "/home/sandbox/preview.png",
@@ -1247,6 +1253,13 @@ describe("sandbox tools (runtime enabled)", () => {
       expect(second.overwritten).toBe(true);
       expect(second.artifactId).toBe(first.artifactId);
       expect(second.sizeBytes).toBe(Buffer.from("version-two").byteLength);
+      expect(first.data).toEqual(Buffer.from("v1"));
+      expect(second.data).toEqual(Buffer.from("version-two"));
+      expect(first.filename).toBe("result.txt");
+      expect(
+        (await fileStore.get({ ref: first.artifactId, organizationId, userId }))
+          ?.data,
+      ).toEqual(second.data);
     });
 
     // Conversation scope resolves the existing file via resolveMyFileRef (not the
@@ -1831,6 +1844,8 @@ describe("PFS tools (search_files, my_file source, download_file project)", () =
         .spyOn(skillSandboxRuntimeService, "exportArtifact")
         .mockResolvedValue({
           artifactId: "art-0",
+          data: Buffer.from("out"),
+          filename: "out.txt",
           sha256: "0".repeat(64),
           sandboxId: "sb" as any,
           path: "/home/sandbox/out.txt",
@@ -1869,6 +1884,8 @@ describe("PFS tools (search_files, my_file source, download_file project)", () =
         .spyOn(skillSandboxRuntimeService, "exportArtifact")
         .mockResolvedValue({
           artifactId: "art-1",
+          data: Buffer.from("out"),
+          filename: "out.txt",
           sha256: "0".repeat(64),
           sandboxId: "sb" as any,
           path: "/home/sandbox/out.txt",

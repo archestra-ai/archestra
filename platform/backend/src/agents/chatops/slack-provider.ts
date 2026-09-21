@@ -2072,7 +2072,7 @@ class SlackProvider implements ChatOpsProvider {
           const originalFile =
             originalFileSize + buffer.length <=
             CHATOPS_ATTACHMENT_LIMITS.MAX_TOTAL_ATTACHMENTS_SIZE
-              ? { data: buffer, mimeType: contentType, filename: file.name }
+              ? { data: buffer, filename: file.name }
               : undefined;
 
           // Shrink an image that is too large for the model's inline limit

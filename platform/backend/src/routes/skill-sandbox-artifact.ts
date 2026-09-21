@@ -25,10 +25,9 @@ const ARTIFACT_REF = z
   .regex(/^(?:[0-9a-fA-F-]{36}|obj_[A-Za-z0-9_-]{1,2048})$/);
 
 /**
- * Serves bytes from `skill_sandbox_files` (kind `artifact`) back to the browser so the UI
- * can render previews or trigger downloads. The MCP tool only ever returns
- * metadata (`ArtifactRef`); this is the only path that exposes the actual
- * bytes outside the sandbox runtime.
+ * Serves persistent file bytes to the browser for previews and downloads.
+ * download_file returns metadata only; Slack delivery uses a separate scoped
+ * file reference.
  *
  * Security:
  *   - Auth via the standard /api/ middleware (org + user must match the

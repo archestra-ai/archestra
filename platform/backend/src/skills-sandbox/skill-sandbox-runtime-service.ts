@@ -32,9 +32,9 @@ import {
   skillRootPath,
 } from "./runtime-image";
 import {
-  type ArtifactRef,
   type CommandResult,
   type ExportArtifactParams,
+  type ExportedArtifact,
   type MountRef,
   type MountSkillParams,
   type RunCommandParams,
@@ -214,7 +214,9 @@ class SkillSandboxRuntimeService {
     });
   }
 
-  async exportArtifact(params: ExportArtifactParams): Promise<ArtifactRef> {
+  async exportArtifact(
+    params: ExportArtifactParams,
+  ): Promise<ExportedArtifact> {
     this.ensureEnabled();
 
     return this.runWithSandbox(params.sandboxId, async (sandbox) => {
@@ -296,6 +298,8 @@ class SkillSandboxRuntimeService {
           if (updated) {
             return {
               artifactId: updated.id,
+              data,
+              filename,
               sha256,
               sandboxId: params.sandboxId,
               path: resolvedPath,
@@ -351,6 +355,8 @@ class SkillSandboxRuntimeService {
 
       return {
         artifactId: row.id,
+        data,
+        filename,
         sha256,
         sandboxId: params.sandboxId,
         path: resolvedPath,

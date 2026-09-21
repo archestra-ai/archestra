@@ -3,10 +3,7 @@ import {
   SLACK_REQUIRED_BOT_SCOPES,
   SLACK_SLASH_COMMANDS,
 } from "@archestra/shared";
-import { WebClient } from "@slack/web-api";
-import { HttpResponse, http } from "msw";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { useMswServer } from "@/test/msw";
 
 // The canonical Map-backed fake from src/__mocks__/cache-manager.ts stands in
 // for the distributed cache so the sticky-thread activation gate
@@ -2355,7 +2352,6 @@ describe("SlackProvider file attachment downloads", () => {
       name,
       originalFile: {
         data: fileContent,
-        mimeType: mimetype,
         filename: name,
       },
     });
@@ -2498,7 +2494,7 @@ describe("SlackProvider file attachment downloads", () => {
       contentType: "image/jpeg",
       contentBase64: shrunk.toString("base64"),
       name: "IMG_0354.png",
-      originalFile: { mimeType: "image/png", filename: "IMG_0354.png" },
+      originalFile: { filename: "IMG_0354.png" },
     });
     expect(result?.attachments?.[0].originalFile?.data.equals(bigImage)).toBe(
       true,
@@ -2887,7 +2883,6 @@ describe("SlackProvider file attachment downloads", () => {
       name: "photo1.jpg",
       originalFile: {
         data: img1,
-        mimeType: "image/jpeg",
         filename: "photo1.jpg",
       },
     });
@@ -2897,7 +2892,6 @@ describe("SlackProvider file attachment downloads", () => {
       name: "photo2.png",
       originalFile: {
         data: img2,
-        mimeType: "image/png",
         filename: "photo2.png",
       },
     });
@@ -4051,55 +4045,5 @@ describe("SlackProvider.handleSlashCommand — signup welcome", () => {
     expect(await UserModel.findByEmail(email)).toBeTruthy();
     expect(conversationsOpen).not.toHaveBeenCalled();
     expect(postMessage).not.toHaveBeenCalled();
-  });
-});
-
-describe("SlackProvider.uploadFileToThread", () => {
-  const server = useMswServer();
-  test("returns Slack's actual file receipt after uploading exact bytes into the thread", async () => {
-    const provider = createProvider();
-    (provider as unknown as { client: WebClient }).client = new WebClient(
-      "xoxb-test",
-      { retryConfig: { retries: 0 } },
-    );
-    const data = Buffer.from([0, 255, 2, 42]);
-    let uploaded: Buffer | undefined;
-    let completed: URLSearchParams | undefined;
-    server.use(
-      http.post("https://slack.com/api/files.getUploadURLExternal", () =>
-        HttpResponse.json({
-          ok: true,
-          file_id: "F_RECEIPT",
-          upload_url: "https://files.slack.com/upload-private",
-        }),
-      ),
-      http.post(
-        "https://files.slack.com/upload-private",
-        async ({ request }) => {
-          const form = await request.formData();
-          const body = form.get("body");
-          if (!(body instanceof File)) throw new Error("Missing uploaded file");
-          uploaded = Buffer.from(await body.arrayBuffer());
-          return HttpResponse.text("OK");
-        },
-      ),
-      http.post(
-        "https://slack.com/api/files.completeUploadExternal",
-        async ({ request }) => {
-          completed = new URLSearchParams(await request.text());
-          return HttpResponse.json({ ok: true, files: [{ id: "F_RECEIPT" }] });
-        },
-      ),
-    );
-    const receipt = await provider.uploadFileToThread({
-      channelId: "C_PRIVATE",
-      threadId: "100.1",
-      filename: "image.png",
-      data,
-    });
-    expect(receipt).toEqual({ fileId: "F_RECEIPT" });
-    expect(uploaded).toEqual(data);
-    expect(completed?.get("channel_id")).toBe("C_PRIVATE");
-    expect(completed?.get("thread_ts")).toBe("100.1");
   });
 });

@@ -1,6 +1,6 @@
 {
-  "id": "c538d0d1-9df6-4551-aa05-b144e4d2766a",
-  "prevId": "a06190d1-e7b2-4d32-8532-87d5b06dc885",
+  "id": "165fb8e7-02d6-4b00-a3a7-6f2e02fb5124",
+  "prevId": "2516bdb2-ba9b-4b44-85de-298b31e171be",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -26772,6 +26772,30 @@
           "primaryKey": false,
           "notNull": false
         },
+        "forked_from": {
+          "name": "forked_from",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "forked_at": {
+          "name": "forked_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "receipt_token": {
+          "name": "receipt_token",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "receipt_issued_at": {
+          "name": "receipt_issued_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
         "start_decision": {
           "name": "start_decision",
           "type": "jsonb",
@@ -26793,6 +26817,70 @@
           "isUnique": false,
           "with": {},
           "method": "btree",
+          "concurrently": false
+        },
+        "openappa_sessions_forked_from_idx": {
+          "name": "openappa_sessions_forked_from_idx",
+          "columns": [
+            {
+              "expression": "organization_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "forked_from",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
+          "method": "btree",
+          "concurrently": false
+        },
+        "openappa_sessions_unscoped_session_idx": {
+          "name": "openappa_sessions_unscoped_session_idx",
+          "columns": [
+            {
+              "expression": "organization_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "substr(\"session_id\", strpos(\"session_id\", '|') + 1)",
+              "isExpression": true,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
+          "method": "btree",
+          "concurrently": false
+        },
+        "openappa_sessions_org_receipt_token_uidx": {
+          "name": "openappa_sessions_org_receipt_token_uidx",
+          "columns": [
+            {
+              "expression": "organization_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "receipt_token",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "with": {},
+          "method": "btree",
+          "where": "\"openappa_sessions\".\"receipt_token\" IS NOT NULL",
           "concurrently": false
         }
       },

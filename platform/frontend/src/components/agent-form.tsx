@@ -130,12 +130,9 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import {
-  CompactWarning,
-  CompactWarningText,
-} from "@/components/ui/compact-warning";
 import { ExpandableText } from "@/components/ui/expandable-text";
 import { FieldDescription } from "@/components/ui/field-description";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -4579,7 +4576,7 @@ export function AgentForm({
       {/* Environment warnings appear above the form, below the page tabs. */}
       <PageHeaderBanner>
         {!readOnly && environmentConflicts.conflicts.length > 0 && (
-          <CompactWarning className="flex-nowrap items-start gap-x-3 bg-amber-50/90 shadow-sm backdrop-blur-md dark:bg-amber-950/60">
+          <InlineNotice floating className="flex-nowrap items-start gap-x-3">
             <AlertTriangle className="mt-0.5" />
             <div className="min-w-0 flex-1">
               <span className="block font-medium">
@@ -4589,13 +4586,13 @@ export function AgentForm({
                 )}{" "}
                 not in this environment
               </span>
-              <CompactWarningText className="mt-1 block">
+              <InlineNoticeText className="mt-1 block">
                 Tools from{" "}
                 <McpConflictServerList
                   names={environmentConflicts.conflicts.map((c) => c.name)}
                 />{" "}
                 stop working once it moves.
-              </CompactWarningText>
+              </InlineNoticeText>
             </div>
             <Button
               type="button"
@@ -4607,24 +4604,24 @@ export function AgentForm({
             >
               <span>{removeConflictingToolsLabel}</span>
             </Button>
-          </CompactWarning>
+          </InlineNotice>
         )}
         {!readOnly &&
           environmentConflicts.blocksSave &&
           environmentConflicts.conflicts.length === 0 && (
-            <CompactWarning className="flex-nowrap items-start gap-x-3 bg-amber-50/90 shadow-sm backdrop-blur-md dark:bg-amber-950/60">
+            <InlineNotice floating className="flex-nowrap items-start gap-x-3">
               <AlertTriangle className="mt-0.5" />
               <div className="min-w-0 flex-1">
-                <CompactWarningText className="text-amber-900 dark:text-amber-200">
+                <InlineNoticeText>
                   {environmentConflicts.isVerifying
                     ? "Checking which of this agent's tools work in the new environment…"
                     : "Could not check which of this agent's tools work in the new environment, so the change cannot be saved yet."}
-                </CompactWarningText>
+                </InlineNoticeText>
               </div>
-            </CompactWarning>
+            </InlineNotice>
           )}
         {!readOnly && mcpEnvConflicts.length > 0 && (
-          <CompactWarning className="flex-nowrap items-start gap-x-3 bg-amber-50/90 shadow-sm backdrop-blur-md dark:bg-amber-950/60">
+          <InlineNotice floating className="flex-nowrap items-start gap-x-3">
             <AlertTriangle className="mt-0.5" />
             <div className="min-w-0 flex-1">
               <span className="block font-medium">
@@ -4632,13 +4629,13 @@ export function AgentForm({
                 {mcpEnvConflicts.length === 1 ? null : <span>s</span>} not in
                 this environment
               </span>
-              <CompactWarningText className="mt-1 block">
+              <InlineNoticeText className="mt-1 block">
                 Remove {mcpEnvConflicts.length === 1 ? "it" : "them"} or change
                 the environment before saving:{" "}
                 <McpConflictServerList
                   names={mcpEnvConflicts.map((c) => c.name)}
                 />
-              </CompactWarningText>
+              </InlineNoticeText>
             </div>
             <Button
               type="button"
@@ -4651,7 +4648,7 @@ export function AgentForm({
             >
               Remove incompatible
             </Button>
-          </CompactWarning>
+          </InlineNotice>
         )}
       </PageHeaderBanner>
       {!readOnly &&

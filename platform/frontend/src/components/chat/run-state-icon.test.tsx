@@ -8,7 +8,7 @@ describe("RunStateIcon", () => {
     vi.useRealTimers();
   });
 
-  it("distinguishes recent model activity from a stalled working run", () => {
+  it("names the machine and the wait when a working run goes quiet", () => {
     vi.useFakeTimers();
     vi.setSystemTime("2026-09-03T12:00:00.000Z");
 
@@ -20,7 +20,7 @@ describe("RunStateIcon", () => {
         lastModelActivityAt="2026-09-03T11:58:00.000Z"
       />,
     );
-    expect(screen.getByLabelText("Run active")).toBeInTheDocument();
+    expect(screen.getByLabelText("Running")).toBeInTheDocument();
 
     rerender(
       <RunStateIcon
@@ -30,10 +30,12 @@ describe("RunStateIcon", () => {
         lastModelActivityAt="2026-09-03T11:40:00.000Z"
       />,
     );
-    expect(screen.getByLabelText("Run may be stalled")).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Running · quiet for 20m"),
+    ).toBeInTheDocument();
   });
 
-  it("keeps a completed turn active while its retained session still calls the model", () => {
+  it("keeps a completed turn's session live while it still calls the model", () => {
     vi.useFakeTimers();
     vi.setSystemTime("2026-09-03T12:00:00.000Z");
 
@@ -45,7 +47,9 @@ describe("RunStateIcon", () => {
         lastModelActivityAt="2026-09-03T11:58:00.000Z"
       />,
     );
-    expect(screen.getByLabelText("Run active")).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Session active · turn completed"),
+    ).toBeInTheDocument();
     rerender(
       <RunStateIcon
         state="TASK_STATE_COMPLETED"
@@ -54,23 +58,14 @@ describe("RunStateIcon", () => {
         lastModelActivityAt="2026-09-03T11:30:00.000Z"
       />,
     );
-    expect(screen.getByLabelText("Run completed")).toBeInTheDocument();
-    rerender(
-      <RunStateIcon
-        state="TASK_STATE_COMPLETED"
-        startedAt="2026-09-03T11:00:00.000Z"
-        endedAt="2026-09-03T11:59:00.000Z"
-        lastModelActivityAt="2026-09-03T11:58:00.000Z"
-      />,
-    );
-    expect(screen.getByLabelText("Run completed")).toBeInTheDocument();
+    expect(screen.getByLabelText("Completed")).toBeInTheDocument();
   });
 
   it.each([
-    ["TASK_STATE_AUTH_REQUIRED", "Run authentication required"],
-    ["TASK_STATE_COMPLETED", "Run completed"],
-    ["TASK_STATE_FAILED", "Run failed"],
-    ["TASK_STATE_CANCELED", "Run canceled"],
+    ["TASK_STATE_AUTH_REQUIRED", "Running · Needs sign-in"],
+    ["TASK_STATE_COMPLETED", "Completed"],
+    ["TASK_STATE_FAILED", "Ended · Failed"],
+    ["TASK_STATE_CANCELED", "Canceled"],
   ] as const)("maps %s to %s", (state, label) => {
     render(<RunStateIcon state={state} />);
     expect(screen.getByLabelText(label)).toBeInTheDocument();
@@ -83,19 +78,21 @@ describe("RunStateIcon", () => {
         attentionState="input_required"
       />,
     );
-    expect(screen.getByLabelText("Run waiting for input")).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Running · Needs your input"),
+    ).toBeInTheDocument();
   });
 
   it("explains the compact status on hover", async () => {
     const user = userEvent.setup();
     render(<RunStateIcon state="TASK_STATE_WORKING" />);
 
-    await user.hover(screen.getByLabelText("Run active"));
+    await user.hover(screen.getByLabelText("Running"));
 
-    expect(await screen.findByRole("tooltip")).toHaveTextContent("Run active");
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("Running");
   });
 
-  it("prioritizes an overdue hard deadline while cleanup is pending", () => {
+  it("reads as stopping once the hard deadline has passed", () => {
     vi.useFakeTimers();
     vi.setSystemTime("2026-09-03T12:00:00.000Z");
 
@@ -109,6 +106,6 @@ describe("RunStateIcon", () => {
       />,
     );
 
-    expect(screen.getByLabelText("Run cleanup pending")).toBeInTheDocument();
+    expect(screen.getByLabelText("Stopping")).toBeInTheDocument();
   });
 });

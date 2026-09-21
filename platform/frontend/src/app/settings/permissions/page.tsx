@@ -10,7 +10,7 @@ export default function PermissionsSettingsPage() {
   const enterpriseCoreActive = useEnterpriseFeature("core");
   return (
     <ErrorBoundary>
-      <SmallTeamTierBanner featureName="resource permissions" />
+      <SmallTeamTierBanner featureName="Resource permissions" />
       <DisabledEnterpriseSection disabled={!enterpriseCoreActive}>
         <OrganizationPermissions />
       </DisabledEnterpriseSection>

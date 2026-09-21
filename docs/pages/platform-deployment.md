@@ -2,7 +2,7 @@
 title: Deployment
 category: Archestra Platform
 order: 3
-lastUpdated: 2026-09-19
+lastUpdated: 2026-09-21
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -124,7 +124,7 @@ Helm deployment is our recommended approach for deploying Archestra Platform to 
 Install Archestra Platform using the Helm chart from our OCI registry:
 
 ```bash
-export ARCHESTRA_VERSION="1.4.0-rc.15" # x-release-please-version
+export ARCHESTRA_VERSION="1.4.0-rc.16" # x-release-please-version
 helm upgrade archestra-platform \
   oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts/archestra-platform \
   --version "$ARCHESTRA_VERSION" \
@@ -1040,7 +1040,7 @@ On GKE, custom Sandbox controllers can produce a “not backed by a controller�
   - Values: `true`, `false`
 
 - **`ARCHESTRA_AGENT_RUNTIME_BASE_IMAGE`** - Container image prefilled when Agent Runtime is enabled on an Agent. The built-in image supplies the default Agent loop. Custom images can replace it and set their own command.
-  - Default: `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/agent-archestra:1.4.0-rc.15` <!-- x-release-please-version -->
+  - Default: `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/agent-archestra:1.4.0-rc.16` <!-- x-release-please-version -->
 
 - **`ARCHESTRA_AGENT_RUNTIME_ALLOW_PRIVILEGED`** - Allows Agent administrators to configure privileged Agent Runtime pods. Privileged containers have node-level access.
   - Default: `false`
@@ -2121,7 +2121,7 @@ To learn more about enterprise licensing, see the [pricing model](/docs/platform
 ### OpenAPPA Tool Guardrails (experimental)
 
 - `ARCHESTRA_OPENAPPA_ENABLED`: defaults to `false`. Explicit `true` enables OpenAPPA and its policy editor.
-- `ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET`: HMAC secret for offer routing JWS on `get_remedy_plans` / `execute_remedy_plan`. The proxy attaches a flattened JWS JSON Serialization (RFC 7515 §7.2.2) with an unencoded payload (RFC 7797): `protected`, `payload`, `signature`. This is JWS (integrity), not JWE (encryption). `protected` carries `alg` (`HS256`) and `kid` (`default`); unknown algorithms fail closed. Remedy arguments (`offer_id`, `plan`) and the execution receipt stay outside the JWS. Required when OpenAPPA is enabled. Every backend replica must use the same value.
+- `ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET`: HMAC secret for offer routing JWS on `get_remedy_plans` / `execute_remedy_plan`, single-use native-question receipts, session receipts, and tool-call ID stamps for Claude Code, Codex, and OpenCode. The proxy attaches a flattened JWS JSON Serialization (RFC 7515 §7.2.2) with an unencoded payload (RFC 7797): `protected`, `payload`, `signature`. This is JWS (integrity), not JWE (encryption). `protected` carries `alg` (`HS256`) and `kid` (`default`); unknown algorithms fail closed. Remedy arguments (`offer_id`, `plan`) and the execution receipt stay outside the JWS. The proxy can append a two-line protected-session mark to the first reply and compaction summaries. The mark proves which protected session authored the reply. The proxy strips the mark before forwarding requests to the provider and before logging. Most replies carry no mark. Optional. Helm deployments generate and preserve an `offer-signing-secret` key across upgrades. Other deployments derive a key from the session authentication secret. Set this variable (minimum 32 characters) to configure an explicit key or rotate keys independently. Every backend replica must resolve to the same value.
 - `ARCHESTRA_OPENAPPA_YELL_ENABLED`: defaults to `true`. Set `false` to disable reporting. With OpenAPPA and Guardrails v2 enabled, exposes agent feedback reporting. Reports go to Archestra’s shared HTTPS receiver, private GCS storage, and internal Slack channel. No GCP credentials are required in your deployment.
 - `ARCHESTRA_OPENAPPA_POSTGRES_MAX_CONNECTIONS`: defaults to `4`. Each backend process opens up to this many PostgreSQL connections for OpenAPPA. A guardrail check holds one connection until it finishes, including its calls to external authorities. Checks beyond the limit wait up to 30 seconds, then fail. Raise the value if your policies consult slow authorities.
 - `ARCHESTRA_LLM_PROXY_PLUGINS`: comma-separated plugin list, empty by default. Enabling OpenAPPA automatically registers its plugin. The list alone does not enable APPA.
@@ -2132,7 +2132,7 @@ Policies are stored in PostgreSQL and edited in OpenAPPA. Container policy paths
 
 Reporting sends the agent’s message verbatim, plus filtered policy diagnostics. Reports identify Archestra and the hostname from `ARCHESTRA_FRONTEND_URL`. Agents can include their session’s policy decisions. Diagnostics exclude raw prompts, tool arguments, tool outputs, and session identifiers. Policy names remain visible. Messages must not contain secrets, personal data, or task content. Reporting does not change policies or grant tool permissions. The active policy must permit the `yell` tool, directly or through a matching wildcard. Restart the backend after changing the reporting flag.
 
-With OpenAPPA disabled, existing Tool Guardrails run unchanged. When enabled, OpenAPPA replaces proxy tool-call and tool-result checks. Errors fail closed. A blocked call returns as a `get_remedy_plans` notice tool call. The model inspects the ruling, selects a remedy with `execute_remedy_plan`, and retries. Tool requests must declare both APPA tools. Calls that need human approval stay blocked. See the [integration guide](https://github.com/archestra-ai/archestra/blob/main/platform/archestra-rs/openappa-rs/README.md) for current limitations.
+With OpenAPPA disabled, existing Tool Guardrails run unchanged. When enabled, OpenAPPA replaces proxy tool-call and tool-result checks. Errors fail closed. A blocked call returns as a `get_remedy_plans` notice tool call. The model inspects the ruling, selects a remedy with `execute_remedy_plan`, and retries. The proxy injects missing notice or control tool declarations. Calls that need human approval stay blocked. See the [integration guide](https://github.com/archestra-ai/archestra/blob/main/platform/archestra-rs/openappa-rs/README.md) for current limitations.
 
 Notice restoration supports Anthropic Messages, OpenAI Responses, and OpenAI Chat Completions. Bedrock InvokeModel uses Anthropic restoration. Other protocols evaluate calls and results, but notices stay in history.
 

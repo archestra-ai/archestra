@@ -1,5 +1,5 @@
 {
-  "id": "cc691d19-68a2-43f5-98e8-0a1a3e310182",
+  "id": "070a44ed-fb7d-4eb1-9bbf-ed1a05951f03",
   "prevId": "756f120a-5ecf-43c7-85dc-421d1dbc31ac",
   "version": "7",
   "dialect": "postgresql",
@@ -19825,88 +19825,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.resource_permission_policies": {
-      "name": "resource_permission_policies",
-      "schema": "",
-      "columns": {
-        "organization_id": {
-          "name": "organization_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "resource": {
-          "name": "resource",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "scope": {
-          "name": "scope",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "grants": {
-          "name": "grants",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'[]'::jsonb"
-        },
-        "legacy_sharing_migrated": {
-          "name": "legacy_sharing_migrated",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "revision": {
-          "name": "revision",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 1
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "resource_permission_policies_organization_id_organization_id_fk": {
-          "name": "resource_permission_policies_organization_id_organization_id_fk",
-          "tableFrom": "resource_permission_policies",
-          "tableTo": "organization",
-          "columnsFrom": [
-            "organization_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "resource_permission_policies_organization_id_resource_scope_pk": {
-          "name": "resource_permission_policies_organization_id_resource_scope_pk",
-          "columns": [
-            "organization_id",
-            "resource",
-            "scope"
-          ]
-        }
-      },
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.credential_connections": {
       "name": "credential_connections",
       "schema": "",
@@ -26772,6 +26690,30 @@
           "primaryKey": false,
           "notNull": false
         },
+        "forked_from": {
+          "name": "forked_from",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "forked_at": {
+          "name": "forked_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "receipt_token": {
+          "name": "receipt_token",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "receipt_issued_at": {
+          "name": "receipt_issued_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
         "start_decision": {
           "name": "start_decision",
           "type": "jsonb",
@@ -26791,6 +26733,70 @@
             }
           ],
           "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "openappa_sessions_forked_from_idx": {
+          "name": "openappa_sessions_forked_from_idx",
+          "columns": [
+            {
+              "expression": "organization_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "forked_from",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "openappa_sessions_unscoped_session_idx": {
+          "name": "openappa_sessions_unscoped_session_idx",
+          "columns": [
+            {
+              "expression": "organization_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "substr(\"session_id\", strpos(\"session_id\", '|') + 1)",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "openappa_sessions_org_receipt_token_uidx": {
+          "name": "openappa_sessions_org_receipt_token_uidx",
+          "columns": [
+            {
+              "expression": "organization_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "receipt_token",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"openappa_sessions\".\"receipt_token\" IS NOT NULL",
           "concurrently": false,
           "method": "btree",
           "with": {}

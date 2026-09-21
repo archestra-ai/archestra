@@ -7,9 +7,9 @@ import {
   SelectMcpServerCredentialTypeAndTeams,
 } from "@/app/mcp/registry/_parts/select-mcp-server-credential-type-and-teams";
 import { StandardFormDialog } from "@/components/standard-dialog";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { useFeature } from "@/lib/config/config.query";
 
 export interface OAuthInstallResult {
@@ -116,16 +116,13 @@ export function OAuthConfirmationDialog({
       }
     >
       {canInstall && byosEnabled ? (
-        <Alert
-          variant="default"
-          className="border-amber-500/50 bg-amber-50 dark:bg-amber-950/20"
-        >
-          <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-500" />
-          <AlertDescription className="text-amber-700 dark:text-amber-400">
+        <InlineNotice>
+          <AlertCircle />
+          <InlineNoticeText>
             Read-only Vault Secret Manager doesn't support OAuth credentials.
             They will be stored in the database.
-          </AlertDescription>
-        </Alert>
+          </InlineNoticeText>
+        </InlineNotice>
       ) : null}
 
       {isReauth ? (

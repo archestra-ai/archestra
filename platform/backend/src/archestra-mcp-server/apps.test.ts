@@ -3392,14 +3392,19 @@ describe("refine_app", () => {
   }
 
   // An elicitation bridge whose writer auto-resolves each streamed request with
-  // the given action/content, so the bridge's real poll loop completes.
-  function autoAnsweringContext(answer: {
-    action: "accept" | "decline" | "cancel";
-    content?: Record<string, string | number | boolean | string[]>;
-  }): ArchestraContext {
+  // the given action/content, so the bridge's real poll loop completes. Every
+  // chunk the chat stream would carry lands in `streamed`.
+  function autoAnsweringContext(
+    answer: {
+      action: "accept" | "decline" | "cancel";
+      content?: Record<string, string | number | boolean | string[]>;
+    },
+    streamed: unknown[] = [],
+  ): ArchestraContext {
     const bridge = createChatMcpElicitationBridge({ conversationId });
     const writer: ChatMcpElicitationWriter = {
       write: (chunk) => {
+        streamed.push(chunk);
         const data = (chunk as { data?: { id?: string } }).data;
         if (!data?.id) return;
         void resolveChatMcpElicitation({
@@ -3413,11 +3418,17 @@ describe("refine_app", () => {
       },
     };
     bridge.setWriter(writer);
-    return { ...context, conversationId, elicitation: bridge };
+    return {
+      ...context,
+      conversationId,
+      elicitation: bridge,
+      currentToolCallId: "call_refine",
+    };
   }
 
   test("questions + accepted answers return the answers and do not persist", async () => {
     const appId = await scaffoldApp("Refine Q");
+    const streamed: unknown[] = [];
     const result = await refine(
       {
         appId,
@@ -3430,13 +3441,24 @@ describe("refine_app", () => {
           },
         ],
       },
-      autoAnsweringContext({
-        action: "accept",
-        content: { audience: "the team", style: "dark" },
-      }),
+      autoAnsweringContext(
+        {
+          action: "accept",
+          content: { audience: "the team", style: "dark" },
+        },
+        streamed,
+      ),
     );
 
     expect(result.isError).toBe(false);
+    // The card names the refine_app call that asked, so it leaves the chat
+    // once that call finishes.
+    expect(streamed).toContainEqual(
+      expect.objectContaining({
+        type: "data-mcp-elicitation",
+        data: expect.objectContaining({ toolCallId: "call_refine" }),
+      }),
+    );
     expect(structured(result).answers).toEqual({
       audience: "the team",
       style: "dark",

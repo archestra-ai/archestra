@@ -3,10 +3,13 @@ import {
   ARCHESTRA_TOKEN_PREFIX,
   LEGACY_ARCHESTRA_TOKEN_PREFIXES,
   OAUTH_TOKEN_ID_PREFIX,
+  TOOL_ASK_USER_FULL_NAME,
   TOOL_CANCEL_RUN_FULL_NAME,
   TOOL_COPY_FILE_SHORT_NAME,
   TOOL_CREATE_SKILL_FULL_NAME,
   TOOL_DOWNLOAD_FILE_FULL_NAME,
+  TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
+  TOOL_GET_REMEDY_PLANS_SHORT_NAME,
   TOOL_GET_RUN_FULL_NAME,
   TOOL_LIST_RUNS_FULL_NAME,
   TOOL_LIST_SKILLS_FULL_NAME,
@@ -22,7 +25,11 @@ import {
   TOOL_UPLOAD_FILE_FULL_NAME,
   TOOL_WHOAMI_FULL_NAME,
 } from "@archestra/shared";
-import type { ListToolsResult } from "@modelcontextprotocol/sdk/types.js";
+import {
+  ErrorCode,
+  type ListToolsResult,
+  McpError,
+} from "@modelcontextprotocol/sdk/types.js";
 import { onTestFinished, vi } from "vitest";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
 import mcpClient from "@/clients/mcp-client";
@@ -73,6 +80,7 @@ type TestCallToolHandler = (
 ) => Promise<{
   content: Array<{ type: string; text: string }>;
   isError?: boolean;
+  resultType?: string;
   structuredContent?: { items?: unknown[] };
 }>;
 
@@ -1489,7 +1497,11 @@ describe("createAgentServer tools/list", () => {
     });
 
     expect(response.tools.map((tool) => tool.name).sort()).toEqual(
-      [TOOL_RUN_TOOL_FULL_NAME, TOOL_SEARCH_TOOLS_FULL_NAME].sort(),
+      [
+        TOOL_ASK_USER_FULL_NAME,
+        TOOL_RUN_TOOL_FULL_NAME,
+        TOOL_SEARCH_TOOLS_FULL_NAME,
+      ].sort(),
     );
     expect(
       response.tools.every((tool) => tool.inputSchema?.type === "object"),
@@ -1497,6 +1509,43 @@ describe("createAgentServer tools/list", () => {
     expect(
       response.tools.some((tool) => tool.name === TOOL_TODO_WRITE_FULL_NAME),
     ).toBe(false);
+  });
+
+  test("lists APPA notice and remedy tools for an unassigned agent when OpenAPPA is enabled", async ({
+    makeAgent,
+    makeOrganization,
+  }) => {
+    const previousEnabled = config.openappa.enabled;
+    config.openappa.enabled = true;
+    onTestFinished(() => {
+      config.openappa.enabled = previousEnabled;
+    });
+    const org = await makeOrganization();
+    const agent = await makeAgent({
+      organizationId: org.id,
+      toolExposureMode: "search_and_run_only",
+    });
+
+    const { server } = await createAgentServer({ agentId: agent.id });
+    const listToolsHandler = (
+      server.server as unknown as {
+        _requestHandlers: Map<string, TestListToolsHandler>;
+      }
+    )._requestHandlers.get("tools/list");
+    if (!listToolsHandler) throw new Error("Expected tools/list handler");
+
+    const response = await listToolsHandler({
+      method: "tools/list",
+      params: {},
+    });
+    const names = response.tools.map((tool) => tool.name);
+
+    expect(names).toContain(
+      archestraMcpBranding.getToolName(TOOL_GET_REMEDY_PLANS_SHORT_NAME),
+    );
+    expect(names).toContain(
+      archestraMcpBranding.getToolName(TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME),
+    );
   });
 
   test.for([
@@ -1612,6 +1661,7 @@ describe("createAgentServer tools/list", () => {
 
     expect(names).toEqual(
       new Set([
+        TOOL_ASK_USER_FULL_NAME,
         TOOL_RUN_TOOL_FULL_NAME,
         TOOL_SEARCH_TOOLS_FULL_NAME,
         TOOL_GET_RUN_FULL_NAME,
@@ -1673,6 +1723,7 @@ describe("createAgentServer tools/list", () => {
 
       // meta tools and the skill/sandbox runtime path stay top-level
       for (const exposed of [
+        TOOL_ASK_USER_FULL_NAME,
         TOOL_SEARCH_TOOLS_FULL_NAME,
         TOOL_RUN_TOOL_FULL_NAME,
         TOOL_LIST_SKILLS_FULL_NAME,
@@ -2114,6 +2165,7 @@ describe("createAgentServer tools/list", () => {
     // Exactly the discovery/dispatch pair — asserted as the whole list, so any
     // extra tool of any class fails regardless of which path contributed it.
     expect(response.tools.map((tool) => tool.name).sort()).toEqual([
+      "archestra__ask_user",
       "archestra__run_tool",
       "archestra__search_tools",
     ]);
@@ -3366,6 +3418,8 @@ describe("createAgentServer tools/list", () => {
       expect(sendRequest).toHaveBeenCalledWith(
         elicitationRequest,
         expect.any(Object),
+        // A person answers in minutes, not the SDK's default 60 seconds.
+        { timeout: 10 * 60 * 1000 },
       );
       expect(result).toEqual({
         action: "accept",
@@ -3374,6 +3428,212 @@ describe("createAgentServer tools/list", () => {
     } finally {
       executeToolCallForOwnerSpy.mockRestore();
     }
+  });
+
+  test("ask_user elicits a choice form through the MCP caller", async ({
+    makeAgent,
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id });
+    const { server } = await createAgentServer({ agentId: agent.id });
+    const callToolHandler = (
+      server.server as unknown as {
+        _requestHandlers: Map<string, TestCallToolHandler>;
+      }
+    )._requestHandlers.get("tools/call");
+    expect(callToolHandler).toBeDefined();
+    if (!callToolHandler) {
+      throw new Error("Expected tools/call handler to be registered");
+    }
+
+    const sendRequest = vi.fn().mockResolvedValue({
+      action: "accept",
+      content: { choice: "Accept for this session" },
+    });
+    const result = await callToolHandler(
+      {
+        method: "tools/call",
+        params: {
+          name: TOOL_ASK_USER_FULL_NAME,
+          arguments: {
+            question: "Accept this change for the rest of this session?",
+            options: [
+              { label: "Accept for this session" },
+              { label: "Do not accept" },
+            ],
+          },
+          _meta: {
+            "io.modelcontextprotocol/clientCapabilities": {
+              elicitation: {},
+            },
+          },
+        },
+      },
+      { sendRequest },
+    );
+
+    expect(sendRequest).toHaveBeenCalledWith(
+      {
+        method: "elicitation/create",
+        params: {
+          mode: "form",
+          message: "Accept this change for the rest of this session?",
+          requestedSchema: expect.objectContaining({
+            type: "object",
+            required: ["choice"],
+          }),
+        },
+      },
+      expect.any(Object),
+      // A person answers a form in minutes, not the SDK's default 60 seconds.
+      { timeout: 10 * 60 * 1000 },
+    );
+    expect(result.isError).not.toBe(true);
+    expect(result.structuredContent).toEqual({
+      action: "accept",
+      selected: ["Accept for this session"],
+    });
+  });
+
+  test("ask_user reports a question nobody answered in time, not a client without forms", async ({
+    makeAgent,
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id });
+    const { server } = await createAgentServer({ agentId: agent.id });
+    const callToolHandler = (
+      server.server as unknown as {
+        _requestHandlers: Map<string, TestCallToolHandler>;
+      }
+    )._requestHandlers.get("tools/call");
+    if (!callToolHandler) {
+      throw new Error("Expected tools/call handler to be registered");
+    }
+
+    const result = await callToolHandler(
+      {
+        method: "tools/call",
+        params: {
+          name: TOOL_ASK_USER_FULL_NAME,
+          arguments: {
+            question: "Accept this change for the rest of this session?",
+            options: [
+              { label: "Accept for this session" },
+              { label: "Do not accept" },
+            ],
+          },
+          _meta: {
+            "io.modelcontextprotocol/clientCapabilities": {
+              elicitation: {},
+            },
+          },
+        },
+      },
+      {
+        sendRequest: vi
+          .fn()
+          .mockRejectedValue(
+            new McpError(ErrorCode.RequestTimeout, "Request timed out"),
+          ),
+      },
+    );
+
+    expect(result.isError).not.toBe(true);
+    expect(result.structuredContent).toEqual({
+      action: "cancel",
+      selected: [],
+      timedOut: true,
+    });
+    expect(JSON.stringify(result.content)).toContain(
+      "did not answer the question in time",
+    );
+  });
+
+  test("ask_user asks a stateless-revision client with an input request, never mid-call", async ({
+    makeAgent,
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id });
+    const { server } = await createAgentServer({
+      agentId: agent.id,
+      mrtr: { enabled: true, clientCapabilities: { elicitation: {} } },
+    });
+    const callToolHandler = (
+      server.server as unknown as {
+        _requestHandlers: Map<string, TestCallToolHandler>;
+      }
+    )._requestHandlers.get("tools/call");
+    if (!callToolHandler) {
+      throw new Error("Expected tools/call handler to be registered");
+    }
+    const sendRequest = vi.fn();
+
+    const result = await callToolHandler(
+      {
+        method: "tools/call",
+        params: {
+          name: TOOL_ASK_USER_FULL_NAME,
+          arguments: {
+            question: "Accept this change for the rest of this session?",
+            options: [
+              { label: "Accept for this session" },
+              { label: "Do not accept" },
+            ],
+          },
+        },
+      },
+      { sendRequest },
+    );
+
+    // Such a client drops a request opened mid-call, which would leave the
+    // call waiting out the answer timeout.
+    expect(sendRequest).not.toHaveBeenCalled();
+    expect(result.resultType).toBe("input_required");
+  });
+
+  test("ask_user does not hang elicitation/create when the client never declared elicitation", async ({
+    makeAgent,
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id });
+    const { server } = await createAgentServer({ agentId: agent.id });
+    const callToolHandler = (
+      server.server as unknown as {
+        _requestHandlers: Map<string, TestCallToolHandler>;
+      }
+    )._requestHandlers.get("tools/call");
+    expect(callToolHandler).toBeDefined();
+    if (!callToolHandler) {
+      throw new Error("Expected tools/call handler to be registered");
+    }
+
+    const sendRequest = vi.fn().mockImplementation(() => new Promise(() => {}));
+    const result = await callToolHandler(
+      {
+        method: "tools/call",
+        params: {
+          name: TOOL_ASK_USER_FULL_NAME,
+          arguments: {
+            question: "Accept this change for the rest of this session?",
+            options: [
+              { label: "Accept for this session" },
+              { label: "Do not accept" },
+            ],
+          },
+        },
+      },
+      { sendRequest },
+    );
+
+    expect(sendRequest).not.toHaveBeenCalled();
+    expect(result.isError).toBe(true);
+    expect((result.content?.[0] as { text?: string })?.text).toContain(
+      "did not answer the choice form",
+    );
   });
 
   test("advertises the healthy-connection tool when two assigned tools share a name across different catalog items", async ({

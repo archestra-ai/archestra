@@ -234,7 +234,9 @@ test.describe("LLM logs — session detail inline conversation", () => {
     // ...and the subagent's assistant answer does not (its thread isn't shown).
     await expect(page.getByText("Subagent answer")).toHaveCount(0);
     await expect(page.getByText("Sub-agent", { exact: true })).toBeVisible();
-    await expect(page.getByText("Main", { exact: true })).toBeVisible();
+    await expect(
+      llmLogsPage.table.getByText("Test Agent", { exact: true }),
+    ).toBeVisible();
   });
 
   test("omits the conversation block and shows the empty state for a session with no interactions", async ({

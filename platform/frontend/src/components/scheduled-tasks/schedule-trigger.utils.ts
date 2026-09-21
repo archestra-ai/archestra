@@ -26,17 +26,27 @@ export const DEFAULT_FORM_STATE = (): ScheduleTriggerFormState => ({
 
 export type ScheduleMode = "hourly" | "daily" | "custom";
 
+export type ScheduleFrequency =
+  | "manual"
+  | "hourly"
+  | "6h"
+  | "12h"
+  | "daily"
+  | "weekly"
+  | "custom";
+
 const DEFAULT_DAILY_SCHEDULE = {
   hour: "9",
   minute: "0",
-  days: [1, 2, 3, 4, 5],
+  days: [0, 1, 2, 3, 4, 5, 6],
 };
 
 /**
- * Maps a cron expression onto the Schedule section's UI state. Expressions that
- * fit the simple "hourly" or "daily" presets open in those tabs; anything else
- * (steps, day-of-month, named fields, 6-part, …) opens in the "custom" tab so it
- * round-trips untouched instead of being silently rewritten by a preset.
+ * Maps a cron expression onto the legacy ScheduleMode state used by the
+ * structured picker. It recognizes only hourly and daily shapes; callers that
+ * need manual, 6-hour, 12-hour, or weekly classification should use
+ * parseScheduleFrequency. Unsupported syntax returns custom state so it
+ * round-trips untouched instead of being silently rewritten.
  */
 export function parseCronToMode(cron: string): {
   mode: ScheduleMode;
@@ -61,7 +71,12 @@ export function parseCronToMode(cron: string): {
     month === "*" &&
     dayOfWeek === "*"
   ) {
-    return { mode: "hourly", ...DEFAULT_DAILY_SCHEDULE };
+    return {
+      mode: "hourly",
+      hour: DEFAULT_DAILY_SCHEDULE.hour,
+      minute,
+      days: DEFAULT_DAILY_SCHEDULE.days,
+    };
   }
 
   // Daily preset: fixed minute+hour, every day/month, simple weekday pattern.
@@ -80,6 +95,32 @@ export function parseCronToMode(cron: string): {
   return { mode: "custom", ...DEFAULT_DAILY_SCHEDULE };
 }
 
+export function parseScheduleFrequency(
+  cron: string,
+  enabled: boolean,
+): ScheduleFrequency {
+  if (!enabled) {
+    return "manual";
+  }
+
+  const normalizedCron = normalizeCronExpression(cron);
+  if (normalizedCron === "0 */6 * * *") {
+    return "6h";
+  }
+  if (normalizedCron === "0 */12 * * *") {
+    return "12h";
+  }
+
+  const parsed = parseCronToMode(normalizedCron);
+  if (parsed.mode === "hourly") {
+    return "hourly";
+  }
+  if (parsed.mode === "daily") {
+    return parsed.days.length === 1 ? "weekly" : "daily";
+  }
+  return "custom";
+}
+
 export function buildCronFromSchedule(
   mode: Exclude<ScheduleMode, "custom">,
   hour: string,
@@ -91,16 +132,43 @@ export function buildCronFromSchedule(
       return `${minute} * * * *`;
     case "daily": {
       const sorted = [...days].sort((a, b) => a - b);
-      const dayOfWeek =
-        sorted.length === 7 || sorted.length === 0 ? "*" : sorted.join(",");
+      const dayOfWeek = compressDayOfWeek(sorted);
       return `${minute} ${hour} * * ${dayOfWeek}`;
+    }
+  }
+}
+
+export function buildScheduleCron(
+  frequency: ScheduleFrequency,
+  hour: string,
+  minute: string,
+  days: number[],
+): string | null {
+  switch (frequency) {
+    case "manual":
+    case "custom":
+      return null;
+    case "hourly":
+      return buildCronFromSchedule("hourly", hour, minute, days);
+    case "6h":
+      return "0 */6 * * *";
+    case "12h":
+      return "0 */12 * * *";
+    case "daily":
+      return buildCronFromSchedule("daily", hour, minute, days);
+    case "weekly": {
+      const day = days[0];
+      return day === undefined
+        ? null
+        : buildCronFromSchedule("daily", hour, minute, [day]);
     }
   }
 }
 
 /**
  * Validates a cron expression the same way the backend does: croner in 5-part
- * mode. Used to gate form submission and surface inline errors in the custom tab.
+ * mode. Used to gate form submission and surface inline errors in the custom
+ * frequency.
  */
 export function isValidCronExpression(expression: string): boolean {
   const trimmed = expression.trim();
@@ -245,4 +313,46 @@ function parseDayOfWeekField(dayOfWeek: string): number[] | null {
     }
   }
   return days;
+}
+
+function normalizeCronExpression(cron: string): string {
+  return cron.trim().split(/\s+/).join(" ");
+}
+
+function compressDayOfWeek(days: number[]): string {
+  const uniqueDays = [...new Set(days)];
+  if (uniqueDays.length === 7 || uniqueDays.length === 0) {
+    return "*";
+  }
+
+  const sorted = uniqueDays.sort((a, b) => a - b);
+  const parts: string[] = [];
+  let start = sorted[0];
+  let end = sorted[0];
+
+  const appendRun = () => {
+    if (start === undefined || end === undefined) {
+      return;
+    }
+    if (end - start >= 2) {
+      parts.push(`${start}-${end}`);
+      return;
+    }
+    for (let day = start; day <= end; day++) {
+      parts.push(String(day));
+    }
+  };
+
+  for (const day of sorted.slice(1)) {
+    if (day === end + 1) {
+      end = day;
+      continue;
+    }
+    appendRun();
+    start = day;
+    end = day;
+  }
+  appendRun();
+
+  return parts.join(",");
 }

@@ -193,27 +193,32 @@ describe("detectCursorClientId", () => {
 });
 
 describe("detectOpenCodeClientId", () => {
-  test.each([
-    { "user-agent": "opencode/1.0.0 (darwin) node" },
-    { originator: "opencode" },
-    { "x-opencode-session": "ses_123" },
-  ])("attributes OpenCode from its wire signals: %o", (headers) => {
-    expect(detectOpenCodeClientId(headers)).toBe(OPENCODE_CLIENT_ID);
+  test("attributes OpenCode by its User-Agent on every provider wire", () => {
+    expect(
+      detectOpenCodeClientId({
+        "user-agent":
+          "opencode/1.18.31 ai-sdk/provider-utils/4.0.46 runtime/bun/1.3.14",
+      }),
+    ).toBe(OPENCODE_CLIENT_ID);
+    // The OpenAI Responses wire also carries `originator: opencode`.
+    expect(detectOpenCodeClientId({ originator: "opencode" })).toBe(
+      OPENCODE_CLIENT_ID,
+    );
   });
 
-  test("does not attribute a non-OpenCode request", () => {
+  test("does not attribute other clients", () => {
     expect(detectOpenCodeClientId({})).toBeUndefined();
     expect(
-      detectOpenCodeClientId({ "user-agent": "OpenAI/Python 1.0" }),
+      detectOpenCodeClientId({ "user-agent": "codex_cli_rs/0.155.0" }),
     ).toBeUndefined();
     expect(
-      detectOpenCodeClientId({ "user-agent": "not-opencode" }),
+      detectOpenCodeClientId({ "user-agent": "notopencode/1.0" }),
     ).toBeUndefined();
     expect(
-      detectOpenCodeClientId({ originator: "myopencode" }),
+      detectOpenCodeClientId({ "x-opencode-session": "ses_untrusted" }),
     ).toBeUndefined();
     expect(
-      detectOpenCodeClientId({ originator: "codex_cli_rs" }),
+      detectOpenCodeClientId({ "x-session-affinity": "ses_untrusted" }),
     ).toBeUndefined();
   });
 });

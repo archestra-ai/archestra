@@ -7,7 +7,7 @@ import {
   SettingsBlock,
   SettingsSectionStack,
 } from "@/components/settings/settings-block";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { PermissionButton } from "@/components/ui/permission-button";
 import {
   useCheckSecretsConnectivity,
@@ -79,27 +79,27 @@ export default function SecretsSettingsPage() {
           </div>
 
           {checkConnectivityMutation.isError && (
-            <Alert variant="destructive">
-              <AlertTitle>Connection Failed</AlertTitle>
-              <AlertDescription>
+            <InlineNotice variant="error">
+              <span className="font-medium">Connection Failed</span>
+              <InlineNoticeText>
                 {checkConnectivityMutation.error?.message ||
                   "Failed to connect to Vault"}
-              </AlertDescription>
-            </Alert>
+              </InlineNoticeText>
+            </InlineNotice>
           )}
 
           {checkConnectivityMutation.isSuccess &&
             checkConnectivityMutation.data && (
-              <Alert>
-                <AlertTitle>Connection Successful</AlertTitle>
-                <AlertDescription>
+              <InlineNotice variant="neutral">
+                <span className="font-medium">Connection Successful</span>
+                <InlineNoticeText>
                   Found {checkConnectivityMutation.data.secretCount} secret
                   {checkConnectivityMutation.data.secretCount === 1 ? null : (
                     <span>s</span>
                   )}
                   .
-                </AlertDescription>
-              </Alert>
+                </InlineNoticeText>
+              </InlineNotice>
             )}
         </div>
       </SettingsBlock>

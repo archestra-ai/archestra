@@ -54,7 +54,7 @@ const registry = defineArchestraTools([
       "Give an Agent Runtime Agent a credential this client already holds, so a handed-over task can use the CLI authentication the local session was using. " +
       "The value is stored personally for you: it applies to every run YOU start on that Agent, not only the current one, and never to anyone else's runs. " +
       "Organization-wide credentials are set in Settings and are refused here. " +
-      "The Agent must have `allowAgentSuppliedCredentialValues` enabled; without it this tool does nothing. " +
+      "An Agent accepts these values unless an administrator turned that off in its Agent Runtime settings, in which case this tool refuses and the credential is set in Settings instead. " +
       "EXPOSURE: the value passes through your context and is written into this client's transcript, and some clients show tool arguments in their approval prompt. It is redacted from this platform's tool-call log, not from anything before it. Prefer Settings for a credential that should never enter a model's context. " +
       "The value reaches the workspace on the Agent's NEXT turn, not one already running.",
     schema: z.object({
@@ -104,9 +104,11 @@ const registry = defineArchestraTools([
             "This Agent has no Agent Runtime configured, so it has no workspace to receive a credential.",
           );
         }
-        if (!runtime.allowAgentSuppliedCredentialValues) {
+        // Only an explicit `false` refuses. An Agent stored before this field
+        // existed has no value at all, and those must keep working.
+        if (runtime.allowAgentSuppliedCredentialValues === false) {
           return errorResult(
-            `"${agent.name}" does not accept credential values from a connected client. An administrator enables that per Agent in its Agent Runtime settings; until then, set the credential in Settings instead.`,
+            `"${agent.name}" does not accept credential values from a connected client. An administrator turned that off for this Agent in its Agent Runtime settings; set the credential in Settings instead.`,
           );
         }
 

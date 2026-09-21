@@ -211,6 +211,7 @@ export const RouteId = {
   GetInteractionSummaries: "getInteractionSummaries",
   GetInteraction: "getInteraction",
   GetInteractionSessions: "getInteractionSessions",
+  GetInteractionSessionLineage: "getInteractionSessionLineage",
   GetUniqueExternalAgentIds: "getUniqueExternalAgentIds",
   GetUniqueUserIds: "getUniqueUserIds",
 

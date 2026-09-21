@@ -2,6 +2,12 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+// Radix Select uses browser pointer-capture and scrolling APIs that jsdom omits.
+Element.prototype.scrollIntoView = vi.fn();
+Element.prototype.hasPointerCapture = vi.fn().mockReturnValue(false);
+Element.prototype.setPointerCapture = vi.fn();
+Element.prototype.releasePointerCapture = vi.fn();
+
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/config/config.query");
 
@@ -74,6 +80,8 @@ const SCHEDULE: ScheduleTrigger = {
 function mockSchedulePermissions(granted: {
   read?: boolean;
   create?: boolean;
+  update?: boolean;
+  delete?: boolean;
 }) {
   vi.mocked(useHasPermissions).mockImplementation((permissions) => {
     const actions = permissions.scheduledTask ?? [];
@@ -117,19 +125,22 @@ beforeEach(() => {
   vi.mocked(useScheduleTriggerRuns).mockReturnValue({
     data: { data: [] },
   } as unknown as ReturnType<typeof useScheduleTriggerRuns>);
-  const idleMutation = { mutate: vi.fn(), isPending: false };
-  vi.mocked(useDeleteScheduleTrigger).mockReturnValue(
-    idleMutation as unknown as ReturnType<typeof useDeleteScheduleTrigger>,
-  );
-  vi.mocked(useDisableScheduleTrigger).mockReturnValue(
-    idleMutation as unknown as ReturnType<typeof useDisableScheduleTrigger>,
-  );
-  vi.mocked(useEnableScheduleTrigger).mockReturnValue(
-    idleMutation as unknown as ReturnType<typeof useEnableScheduleTrigger>,
-  );
-  vi.mocked(useRunScheduleTriggerNow).mockReturnValue(
-    idleMutation as unknown as ReturnType<typeof useRunScheduleTriggerNow>,
-  );
+  vi.mocked(useDeleteScheduleTrigger).mockReturnValue({
+    mutate: vi.fn(),
+    isPending: false,
+  } as unknown as ReturnType<typeof useDeleteScheduleTrigger>);
+  vi.mocked(useDisableScheduleTrigger).mockReturnValue({
+    mutate: vi.fn(),
+    isPending: false,
+  } as unknown as ReturnType<typeof useDisableScheduleTrigger>);
+  vi.mocked(useEnableScheduleTrigger).mockReturnValue({
+    mutate: vi.fn(),
+    isPending: false,
+  } as unknown as ReturnType<typeof useEnableScheduleTrigger>);
+  vi.mocked(useRunScheduleTriggerNow).mockReturnValue({
+    mutate: vi.fn(),
+    isPending: false,
+  } as unknown as ReturnType<typeof useRunScheduleTriggerNow>);
 });
 
 describe("ProjectSchedulesSection without scheduledTask:read", () => {
@@ -184,7 +195,12 @@ describe("ProjectSchedulesSection with scheduledTask:read only", () => {
 
 describe("ProjectSchedulesSection with scheduledTask read+create", () => {
   beforeEach(() => {
-    mockSchedulePermissions({ read: true, create: true });
+    mockSchedulePermissions({
+      read: true,
+      create: true,
+      update: true,
+      delete: true,
+    });
   });
 
   it("shows the New schedule button when the caller allows creating", () => {
@@ -209,18 +225,31 @@ describe("ProjectSchedulesSection with scheduledTask read+create", () => {
     expect(screen.getByText(/no schedules yet/i)).toBeInTheDocument();
   });
 
-  it("lists existing schedules", () => {
+  it("lists multiple schedules with their agents, cadence, and state", () => {
     vi.mocked(useScheduleTriggers).mockReturnValue({
-      data: { data: [SCHEDULE] },
+      data: {
+        data: [
+          SCHEDULE,
+          {
+            ...SCHEDULE,
+            id: "trigger-2",
+            name: "Daily report",
+            enabled: false,
+          },
+        ],
+      },
     } as unknown as ReturnType<typeof useScheduleTriggers>);
 
     render(<ProjectSchedulesSection projectId="project-1" />);
 
     expect(screen.getByText("Weekly summary")).toBeInTheDocument();
-    expect(screen.getByText("Reporter")).toBeInTheDocument();
+    expect(screen.getByText("Daily report")).toBeInTheDocument();
+    expect(screen.getAllByText("Reporter")).toHaveLength(2);
+    expect(screen.getByText("Active")).toBeInTheDocument();
+    expect(screen.getByText("Paused")).toBeInTheDocument();
   });
 
-  it("opens the latest run chat and keeps editing and running in the actions menu", async () => {
+  it("opens the latest run chat and provides direct edit and pause controls", async () => {
     const user = userEvent.setup();
     const open = vi.fn();
     vi.mocked(useDialogUrlParam).mockReturnValue({
@@ -251,19 +280,47 @@ describe("ProjectSchedulesSection with scheduledTask read+create", () => {
       "/chat/latest-chat?scheduleTriggerId=trigger-1&scheduleRunId=latest-run",
     );
     await user.click(
-      screen.getByRole("button", { name: "Actions for Weekly summary" }),
+      screen.getByRole("button", { name: "Edit Weekly summary" }),
     );
-    expect(open).not.toHaveBeenCalled();
-    await user.click(screen.getByRole("menuitem", { name: "Run manually" }));
-    expect(useRunScheduleTriggerNow().mutate).toHaveBeenCalledWith(
+    expect(open).toHaveBeenCalledWith(SCHEDULE);
+    await user.click(
+      screen.getByRole("button", { name: "Pause Weekly summary" }),
+    );
+    expect(useDisableScheduleTrigger().mutate).toHaveBeenCalledWith(
       SCHEDULE.id,
-      expect.any(Object),
     );
     await user.click(
       screen.getByRole("button", { name: "Actions for Weekly summary" }),
     );
-    await user.click(screen.getByRole("menuitem", { name: "Edit" }));
-    expect(open).toHaveBeenCalledWith(SCHEDULE);
+    await user.click(screen.getByRole("menuitem", { name: "Run now" }));
+    expect(useRunScheduleTriggerNow().mutate).toHaveBeenCalledWith(
+      SCHEDULE.id,
+      expect.any(Object),
+    );
+  });
+
+  it("resumes a paused schedule and confirms deletion before removing it", async () => {
+    const user = userEvent.setup();
+    vi.mocked(useScheduleTriggers).mockReturnValue({
+      data: { data: [{ ...SCHEDULE, enabled: false }] },
+    } as unknown as ReturnType<typeof useScheduleTriggers>);
+    render(<ProjectSchedulesSection projectId="project-1" />);
+
+    await user.click(
+      screen.getByRole("button", { name: "Resume Weekly summary" }),
+    );
+    expect(useEnableScheduleTrigger().mutate).toHaveBeenCalledWith(SCHEDULE.id);
+    await user.click(
+      screen.getByRole("button", { name: "Actions for Weekly summary" }),
+    );
+    await user.click(screen.getByRole("menuitem", { name: "Delete schedule" }));
+    expect(screen.getByText("Delete Weekly summary?")).toBeInTheDocument();
+    expect(useDeleteScheduleTrigger().mutate).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Delete" }));
+    expect(useDeleteScheduleTrigger().mutate).toHaveBeenCalledWith(
+      SCHEDULE.id,
+      expect.any(Object),
+    );
   });
 });
 
@@ -339,7 +396,7 @@ describe("ProjectSchedulesSection default agent", () => {
       expect.objectContaining({ enabled: false, projectId: "project-1" }),
     );
     await userEvent.click(schedulePicker());
-    await userEvent.click(screen.getByRole("button", { name: /^Every hour/ }));
+    await userEvent.click(screen.getByRole("option", { name: "Every hour" }));
     expect(screen.getByText("Timezone")).toBeVisible();
     await userEvent.click(screen.getByRole("button", { name: "Create" }));
     expect(useCreateScheduleTrigger().mutateAsync).toHaveBeenLastCalledWith(
@@ -397,11 +454,11 @@ describe("ProjectSchedulesSection default agent", () => {
       selector: "label",
     }).parentElement;
     await userEvent.click(
-      within(schedulePicker as HTMLElement).getByRole("combobox"),
+      within(schedulePicker as HTMLElement).getByRole("combobox", {
+        name: "Schedule",
+      }),
     );
-    await userEvent.click(
-      screen.getByRole("button", { name: /Manual.*Never runs automatically/ }),
-    );
+    await userEvent.click(screen.getByRole("option", { name: "Manual" }));
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
     expect(useUpdateScheduleTrigger().mutateAsync).toHaveBeenLastCalledWith({
       id: SCHEDULE.id,

@@ -54,11 +54,8 @@ import { BulkActions } from "@/components/ui/bulk-actions-bar";
 import { BulkActionsScope } from "@/components/ui/bulk-actions-context";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { Button } from "@/components/ui/button";
-import {
-  CompactWarning,
-  CompactWarningText,
-} from "@/components/ui/compact-warning";
 import { DataTable } from "@/components/ui/data-table";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { Switch } from "@/components/ui/switch";
@@ -603,18 +600,18 @@ export default function ModelsPage() {
               <SubscriptionReconnectNotice key={key.id} credential={key} />
             ))}
           {syncModelsMutation.data?.success === false && (
-            <CompactWarning>
+            <InlineNotice>
               <RefreshCw />
               <span className="font-medium">
                 Some models could not be refreshed
               </span>
-              <CompactWarningText>
+              <InlineNoticeText>
                 {syncModelsMutation.data.failures
                   .map((failure) => failure.name)
                   .join(", ")}
                 . Existing models are still listed.
-              </CompactWarningText>
-            </CompactWarning>
+              </InlineNoticeText>
+            </InlineNotice>
           )}
         </div>
       )}

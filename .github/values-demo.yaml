@@ -1,0 +1,58 @@
+# Separate, small staging installation for recording public product demos.
+# The bundled PostgreSQL release has its own persistent volume in archestra-demo.
+fullnameOverride: archestra-demo
+
+archestra:
+  replicaCount: 1
+  worker:
+    enabled: false
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "1Gi"
+    limits:
+      memory: "4Gi"
+
+  env:
+    ARCHESTRA_API_BASE_URL: "https://demo.archestra.dev"
+    ARCHESTRA_FRONTEND_URL: "https://demo.archestra.dev"
+    ARCHESTRA_AGENT_RUNTIME_PLATFORM_BASE_URL: "http://archestra-demo.archestra-demo.svc.cluster.local:9000"
+    ARCHESTRA_MCP_SANDBOX_DOMAIN: "demo-sandbox.archestra.dev"
+    ARCHESTRA_AUTH_COOKIE_DOMAIN: "demo.archestra.dev"
+    # Staging's parent-domain cookies are also sent to this host; isolate names.
+    ARCHESTRA_AUTH_COOKIE_PREFIX: "archestra-demo"
+    ARCHESTRA_CHAT_DEFAULT_PROVIDER: "gemini"
+    ARCHESTRA_CHAT_DEFAULT_MODEL: "gemini-2.5-flash"
+
+  gkeBackendConfig:
+    enabled: true
+  service:
+    annotations:
+      cloud.google.com/backend-config: '{"ports": {"9000":"archestra-demo-backend-config", "3000":"archestra-demo-frontend-config"}}'
+      cloud.google.com/neg: '{"ingress": true}'
+  ingress:
+    enabled: true
+    annotations:
+      kubernetes.io/ingress.class: "gce"
+      kubernetes.io/ingress.global-static-ip-name: "archestra-demo-ip"
+      ingress.gcp.cloud.google.com/load-balancer-type: "External"
+      networking.gke.io/managed-certificates: "archestra-demo-ssl"
+      ingress.gcp.cloud.google.com/ssl-redirect: "true"
+    hosts:
+      - host: demo.archestra.dev
+        paths:
+          - path: /
+            port: 3000
+            pathType: Prefix
+      - host: "*.demo-sandbox.archestra.dev"
+        paths:
+          - path: /
+            port: 9000
+            pathType: Prefix
+    tls:
+      - hosts:
+          - "*.demo-sandbox.archestra.dev"
+        secretName: archestra-demo-sandbox-wildcard-tls
+
+postgresql:
+  enabled: true

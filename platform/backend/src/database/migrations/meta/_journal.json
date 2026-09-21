@@ -3391,23 +3391,30 @@
       "breakpoints": true
     },
     {
+      "idx": 484,
+      "version": "7",
+      "when": 1789951675892,
+      "tag": "0484_openappa_session_fork_receipts",
+      "breakpoints": true
+    },
+    {
       "idx": 485,
       "version": "7",
-      "when": 1789989745484,
+      "when": 1790013056126,
       "tag": "0485_scoped_resource_permissions",
       "breakpoints": true
     },
     {
       "idx": 486,
       "version": "7",
-      "when": 1789989746484,
+      "when": 1790013070755,
       "tag": "0486_backfill_resource_permission_grants",
       "breakpoints": true
     },
     {
       "idx": 487,
       "version": "7",
-      "when": 1789989747484,
+      "when": 1790013074621,
       "tag": "0487_complete_scoped_rbac_cutover",
       "breakpoints": true
     }

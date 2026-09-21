@@ -5,6 +5,7 @@ import {
   buildUserSystemPromptContext,
   PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES,
   parseFullToolName,
+  TOOL_ASK_USER_SHORT_NAME,
   TOOL_COPY_FILE_SHORT_NAME,
   TOOL_DOWNLOAD_FILE_SHORT_NAME,
   TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
@@ -46,19 +47,28 @@ import type { ToolExposureMode } from "@/types";
 
 /** @public — canonical instruction text, asserted by the assembler tests. */
 export const TOOL_DENIAL_INSTRUCTION =
-  "When a tool execution is not approved by the user, do not retry it. Explain what happened and ask the user what they'd like to do instead.";
+  "When a tool execution is not approved by the user, do not retry it. Explain what happened. Ask what they'd like to do instead only if they have not already declined or dismissed a question about it. A declined or dismissed question is final for this turn: do not repeat it in a form or prose, offer the same options again, or end with a follow-up invitation. Wait for a new user message before revisiting that question.";
 
 /**
  * System prompt instruction for OpenAPPA remedy plans.
  * Directs the model to act on remedy plans rather than halting when a tool is blocked.
+ * Rulings count readers without naming them, so the model is told not to fill
+ * that gap with a guess. Only a run that can show the user a question routes
+ * to ask_user for a decision. Other runs name the plans in their replies.
  *
  * @public — asserted by the assembler tests.
  */
-export function buildAppaRemedyInstruction(): string {
+export function buildAppaRemedyInstruction(params: {
+  canAskUser: boolean;
+}): string {
   const executeRemedyPlan = archestraMcpBranding.getToolName(
     TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
   );
-  return `A blocked tool call comes back with a ruling as its result. The ruling explains the block and can offer remedy plans, each with an offer id. The plans are addressed to you, not to the user. Choose one, call ${executeRemedyPlan} with its exact offer id and plan, and do what its result says. The instruction above about unapproved tools does not apply to these rulings. Involve the user only when the ruling offers no plan, or when the choice between plans needs a judgment that only they can make. In that case, name the plans and what each one would change.`;
+  const askUser = archestraMcpBranding.getToolName(TOOL_ASK_USER_SHORT_NAME);
+  const userDecision = params.canAskUser
+    ? `Use ${askUser} to present the remedy plans, never a plain-text question. Put the exact offer id for the plan or plans this question decides in remedy_offer_ids. Omit that field for unrelated questions. Call ${executeRemedyPlan} only after its result explicitly accepts that plan, using that plan's offer id and plan. When they decline or dismiss, briefly state that the action remains blocked and stop. Do not repeat the offered plan, ask the same question again, or invite them to reconsider or tell you how to proceed.`
+    : "Without user input, describe the available plans and stop. Do not choose or execute a plan.";
+  return `A blocked tool call returns a ruling as its result. The ruling explains the block and can offer remedy plans, each with an offer id. Name the plans to the user. In your questions and replies, describe the block and each plan only in the ruling's own words, and never guess who the readers are or how access would change. The rule above about unapproved tools does not apply to these rulings. ${userDecision} If the ruling offers no plan, explain the block to the user.`;
 }
 
 /** @public — canonical preamble for a project's instructions, asserted by the
@@ -169,6 +179,13 @@ export async function buildAgentSystemPrompt(params: {
    * attached any files". Empty/absent leaves the prompt unchanged.
    */
   projectFileNames?: string[];
+  /**
+   * Whether this run can show the user a question and wait for the answer
+   * (chat only: its stream carries the elicitation round trip). Headless runs
+   * — A2A, ChatOps, schedules, subagents — list ask_user too, but nobody can
+   * answer it there, so their prompt never steers the model toward it.
+   */
+  canAskUser?: boolean;
 }): Promise<string | undefined> {
   const {
     agent,
@@ -181,6 +198,7 @@ export async function buildAgentSystemPrompt(params: {
     projectInstructions,
     openedApp,
     projectFileNames,
+    canAskUser = false,
   } = params;
 
   const renderedPrompt = await renderAgentPrompt({
@@ -233,10 +251,19 @@ export async function buildAgentSystemPrompt(params: {
     ? `${PROJECT_INSTRUCTIONS_PREFIX}\n\n${projectInstructions}`
     : null;
 
+  // Choices go through ask_user only where someone can answer it, and only
+  // when the tool is in the set the model sees.
+  const askUserAvailable =
+    canAskUser &&
+    archestraMcpBranding.getToolName(TOOL_ASK_USER_SHORT_NAME) in mcpTools;
+  const toolDenialInstruction = askUserAvailable
+    ? `${TOOL_DENIAL_INSTRUCTION} ${buildAskUserChoiceInstruction()}`
+    : TOOL_DENIAL_INSTRUCTION;
+
   // Only while OpenAPPA is enforcing: with it off there are no rulings to act
   // on and the instruction would describe tools the session cannot see.
   const appaRemedyInstruction = (await isGuardrailsV2Active())
-    ? buildAppaRemedyInstruction()
+    ? buildAppaRemedyInstruction({ canAskUser: askUserAvailable })
     : null;
 
   const openedAppPrompt = openedApp
@@ -265,7 +292,7 @@ export async function buildAgentSystemPrompt(params: {
       fileHandlingInstruction,
       knowledgeSearchInstruction,
       advisorConsultInstruction,
-      TOOL_DENIAL_INSTRUCTION,
+      toolDenialInstruction,
       appaRemedyInstruction,
       toolResultInstructions,
       appBuildConductInstruction,
@@ -300,6 +327,12 @@ async function buildEffectiveNativeSkillCatalogPrompt(params: {
 }
 
 // ===== Internal helpers =====
+
+/** Appended to the denial instruction for a run that can show a question. */
+function buildAskUserChoiceInstruction(): string {
+  const askUser = archestraMcpBranding.getToolName(TOOL_ASK_USER_SHORT_NAME);
+  return `If you offer them choices, use ${askUser}, never a plain-text multiple-choice question.`;
+}
 
 const INVISIBLE_CHARACTERS = /[\p{Cf}\u2028\u2029]/gu;
 

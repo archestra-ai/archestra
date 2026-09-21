@@ -5,6 +5,7 @@ import { useState } from "react";
 import { StandardDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
 import { FieldDescription } from "@/components/ui/field-description";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -122,9 +123,9 @@ export function PluginGithubUpdatesDialog({
       </section>
 
       {plugin.lastSyncError && (
-        <p className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
-          {plugin.lastSyncError}
-        </p>
+        <InlineNotice variant="error">
+          <InlineNoticeText>{plugin.lastSyncError}</InlineNoticeText>
+        </InlineNotice>
       )}
 
       {candidate ? (

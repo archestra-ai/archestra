@@ -595,6 +595,9 @@ jobs:
 
       - name: Upload blob report
         if: ${{ !cancelled() }}
+        # Playwright reports are diagnostic artifacts; an artifact-service
+        # outage must not turn a passing E2E leg red in the merge queue.
+        continue-on-error: true
         uses: ./.github/actions/github-upload-artifact
         with:
           # Suffixed so the report job's blob-report-* download glob (which
@@ -767,6 +770,9 @@ jobs:
 
       - name: Upload hibernation blob report
         if: ${{ !cancelled() }}
+        # Playwright reports are diagnostic artifacts; an artifact-service
+        # outage must not turn a passing E2E leg red in the merge queue.
+        continue-on-error: true
         uses: ./.github/actions/github-upload-artifact
         with:
           name: blob-report-k8s-hibernation-${{ matrix.name }}
@@ -965,6 +971,9 @@ jobs:
 
       - name: Upload blob report
         if: ${{ !cancelled() }}
+        # Playwright reports are diagnostic artifacts; an artifact-service
+        # outage must not turn a passing E2E leg red in the merge queue.
+        continue-on-error: true
         uses: ./.github/actions/github-upload-artifact
         with:
           name: blob-report-lite-${{ matrix.name }}
@@ -1309,6 +1318,9 @@ jobs:
 
       - name: Upload blob report
         if: ${{ !cancelled() }}
+        # Playwright reports are diagnostic artifacts; an artifact-service
+        # outage must not turn a passing E2E leg red in the merge queue.
+        continue-on-error: true
         uses: ./.github/actions/github-upload-artifact
         with:
           name: blob-report-quickstart
@@ -1393,6 +1405,9 @@ jobs:
 
       - name: Upload blob report
         if: ${{ !cancelled() }}
+        # Playwright reports are diagnostic artifacts; an artifact-service
+        # outage must not turn a passing E2E leg red in the merge queue.
+        continue-on-error: true
         uses: ./.github/actions/github-upload-artifact
         with:
           name: blob-report-vault

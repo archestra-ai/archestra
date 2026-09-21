@@ -87,9 +87,12 @@ A battery is an OpenAPPA policy package for one provider: a policy file that
 names tools by their canonical namespace (`mcp/github/get_file_contents`), optional
 helper scripts the policy consults over the externals protocol, and the
 `APPA_PROVIDER_*` credential each helper reads. The addon exposes the batteries
-bundled with the pinned OpenAPPA commit that declare the `archestra` host, and
-validates uploaded packages with the same marketplace checks. An organization can
-upload its own package under a bundled name to replace it.
+bundled with the pinned OpenAPPA commit that govern MCP tools, the only tools
+Archestra serves, and validates uploaded packages with the same marketplace
+checks. An organization can upload its own package under a bundled name to
+replace it. The Archestra adapter, which maps a spelled tool name onto its
+canonical identity and back, lives in the addon (`openappa-rs/src/adapter.rs`);
+OpenAPPA knows only that a host embeds it.
 
 The runtime opens the composed *effective policy* rather than the root policy
 alone. A battery install binds a battery to one MCP catalog entry. The composer
@@ -131,13 +134,15 @@ envelope on stdin and the credential as a Dagger secret, and returns the helper'
 stdout as the answer. The bridge needs the sandbox runtime
 (`ARCHESTRA_DAGGER_RUNTIME_ENABLED`). Its budget is 4.5 seconds including
 container start; a slow, failed, or unavailable helper answers 5xx, which the
-runtime treats as no answer, never as a denial. Because helper consults run
-while the runtime holds its global state lock, one slow helper delays every other
-OpenAPPA operation in the process for up to that budget.
+runtime treats as no answer, never as a denial. A dispatch holds its pooled
+PostgreSQL connection across its consults, so slow helpers keep those connections
+busy and dispatches waiting for one fail closed once the wait runs out; the
+addon's global state lock is not involved, as it covers initialization, policy
+reload and the start hook only.
 
 A battery with helpers can be enabled for one catalog entry per organization at a
 time. Uploaded packages cannot be deleted while an install references their name.
-Migration `0480_previous_gideon` adds the package, install, and effective policy
+Migration `0483_openappa_batteries` adds the package, install, and effective policy
 tables.
 
 ## Tool calls and results

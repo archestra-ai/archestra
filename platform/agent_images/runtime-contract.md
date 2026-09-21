@@ -7,6 +7,7 @@ This reference is for custom image authors. For maintained image targets and bui
 | Requirement | Contract |
 | --- | --- |
 | Shell | `/bin/sh` must exist. Archestra uses it for the bootstrap and configured command. |
+| Workspace files | `python3` must be on `PATH` for reading, writing and transferring workspace files. Archestra sends the helper program with each request, so the image needs no copy of it. Images without `python3` run normally; only file access is refused, with a message that says so. |
 | Live terminal | `tmux` must be on `PATH`. The process runs in one tmux session so the run can accept terminal input and a user can attach from the Runs tab. |
 | Input attention | Set the tmux user option `@archestra_attention` to `1` when the client needs input. Set `@archestra_attention_label` to a short reason, such as `Permission needed`. Clear both options when work resumes. |
 | Command | Set **Command** and **Arguments** to the executable and arguments for the Agent client. If Command is blank, `archestra-runtime-agent` must be on `PATH`. |

@@ -179,6 +179,7 @@ Additionally, any env var matching ARCHESTRA_CHAT_*_API_KEY is treated as sensit
   "ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_BEARER"
   "ARCHESTRA_METRICS_SECRET"
   "ARCHESTRA_HASHICORP_VAULT_TOKEN"
+  "ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET"
 }}
 {{- $podNameProvided := hasKey .Values.archestra.env "POD_NAME" }}
 {{- $podNamespaceProvided := hasKey .Values.archestra.env "POD_NAMESPACE" }}
@@ -286,6 +287,17 @@ An explicit archestra.env value overrides the injection.
     secretKeyRef:
       name: {{ $authSecretName }}
       key: secrets-encryption-secret
+      optional: true
+{{- end }}
+{{- if not (hasKey .Values.archestra.env "ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET") }}
+- name: ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET
+  valueFrom:
+    secretKeyRef:
+      name: {{ $authSecretName }}
+      key: offer-signing-secret
+      # optional so pods still start when the key is absent (pre-upgrade
+      # migration Job ordering, or an external Secret without this key;
+      # config.ts then falls back to a key derived from the auth secret).
       optional: true
 {{- end }}
 {{- if not (hasKey .Values.archestra.env "ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE") }}
@@ -592,6 +604,11 @@ rbac.environmentNamespaces, so both grant exactly the same access (no drift).
 - apiGroups: [""]
   resources: ["secrets"]
   verbs: ["get", "list", "create", "update", "patch", "delete", "watch"]
+# Agent image prefetch reads the default ServiceAccount's image pull secrets.
+- apiGroups: [""]
+  resources: ["serviceaccounts"]
+  resourceNames: ["default"]
+  verbs: ["get"]
 # ConfigMaps for the per-environment Dagger engine config (engine.json).
 - apiGroups: [""]
   resources: ["configmaps"]

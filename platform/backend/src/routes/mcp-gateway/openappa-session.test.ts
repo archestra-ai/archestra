@@ -10,6 +10,7 @@ import config, { parseOpenAppaConfig } from "@/config";
 import * as database from "@/database";
 import { TeamTokenModel, UserTokenModel } from "@/models";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
+import { signOfferClaims, unsignedOfferClaims } from "@/openappa/offer-claims";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import mcpGatewayRoutes from "./index";
 
@@ -104,6 +105,69 @@ describe("OpenAPPA sessions on the MCP gateway", () => {
     expect(JSON.stringify(response.json())).toContain("No live offer");
     expect(native.executeRemedyByOffer).not.toHaveBeenCalled();
     expect(native.dispatchHook).not.toHaveBeenCalled();
+  });
+
+  test("hands the runtime the dispatch tool a signed offer names", async ({
+    makeAgent,
+    makeMember,
+    makeUser,
+  }) => {
+    const agent = await makeAgent();
+    const user = await makeUser();
+    await makeMember(user.id, agent.organizationId);
+    const { value: token } = await UserTokenModel.create(
+      user.id,
+      agent.organizationId,
+    );
+    const secret = "test-offer-signing-secret-32chars";
+    config.openappa = { ...config.openappa, offerSigningSecret: secret };
+    const jws = signOfferClaims(
+      unsignedOfferClaims({
+        organizationId: agent.organizationId,
+        sessionId: "conversation",
+        callerId: `user:${user.id}`,
+        offerId: "offer-1",
+        tool: "archestra__whoami",
+        spelling: "archestra__whoami",
+        dispatch: "my_gateway_archestra__run_tool",
+      }),
+      secret,
+    );
+    native.executeRemedyByOffer.mockResolvedValue(
+      JSON.stringify({
+        decision: "mcp_result",
+        offer: { status: "known" },
+        result: { content: [{ type: "text", text: "[appa] Authorized." }] },
+      }),
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/mcp/${agent.id}`,
+      headers: {
+        "content-type": "application/json",
+        accept: "application/json, text/event-stream",
+        authorization: `Bearer ${token}`,
+      },
+      payload: {
+        jsonrpc: "2.0",
+        method: "tools/call",
+        params: {
+          name: "archestra__execute_remedy_plan",
+          arguments: { offer_id: "offer-1", ...jws },
+          _meta: { "com.archestra/logicalToolCallId": "logical-remedy-1" },
+        },
+        id: "remedy-1",
+      },
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(
+      JSON.parse(native.executeRemedyByOffer.mock.calls[0][0]),
+    ).toMatchObject({
+      tool: "archestra__whoami",
+      dispatch: "my_gateway_archestra__run_tool",
+    });
   });
 
   test("uses untracked mode when an anonymous-token remedy has no logical id", async ({

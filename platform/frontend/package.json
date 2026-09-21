@@ -1,6 +1,6 @@
 {
   "name": "@frontend",
-  "version": "1.4.0-rc.15",
+  "version": "1.4.0-rc.16",
   "private": true,
   "type": "module",
   "scripts": {
@@ -137,7 +137,7 @@
     "typescript": "catalog:",
     "typescript-7": "catalog:",
     "vite-tsconfig-paths": "^6.1.1",
-    "vitest": "^4.1.0"
+    "vitest": "^4.1.11"
   },
   "msw": {
     "workerDirectory": [

@@ -4,11 +4,11 @@ import type { archestraApiTypes } from "@archestra/shared";
 import { AlertTriangle, Info, KeyRound, ShieldCheck, User } from "lucide-react";
 import { lazy, Suspense, useEffect, useState } from "react";
 import { StandardFormDialog } from "@/components/standard-dialog";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { FieldDescription } from "@/components/ui/field-description";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { LinkifiedText } from "@/components/ui/linkified-text";
@@ -378,25 +378,25 @@ export function RemoteServerInstallDialog({
       }
     >
       {isReauth && (
-        <Alert className="bg-background/60">
-          <KeyRound className="h-4 w-4" />
-          <AlertDescription>
+        <InlineNotice variant="neutral">
+          <KeyRound />
+          <InlineNoticeText>
             Replace credentials for this existing connection only. Tool
             assignments and policies stay unchanged. Use Manage credentials to
             add or remove connections.
-          </AlertDescription>
-        </Alert>
+          </InlineNoticeText>
+        </InlineNotice>
       )}
 
       {isReinstall && (
-        <Alert className="border-amber-500/50 bg-amber-500/10">
-          <AlertTriangle className="h-4 w-4 text-amber-500" />
-          <AlertDescription>
+        <InlineNotice>
+          <AlertTriangle />
+          <InlineNoticeText>
             This server's catalog now requires values that weren't asked for at
             install time. Provide them below to finish the reinstall; existing
             tool assignments are preserved.
-          </AlertDescription>
-        </Alert>
+          </InlineNoticeText>
+        </InlineNotice>
       )}
 
       <SelectMcpServerCredentialTypeAndTeams
@@ -438,24 +438,24 @@ export function RemoteServerInstallDialog({
       )}
 
       {canInstall && hasOAuth && usesBrowserOAuth && (
-        <Alert>
-          <Info className="h-4 w-4" />
-          <AlertDescription>
+        <InlineNotice variant="info">
+          <Info />
+          <InlineNoticeText>
             This server requires OAuth authentication. You'll be redirected to
             complete the authentication flow after clicking Install.
-          </AlertDescription>
-        </Alert>
+          </InlineNoticeText>
+        </InlineNotice>
       )}
 
       {canInstall && hasOAuth && !usesBrowserOAuth && (
-        <Alert>
-          <Info className="h-4 w-4" />
-          <AlertDescription>
+        <InlineNotice variant="info">
+          <Info />
+          <InlineNoticeText>
             This server uses shared OAuth client credentials. The values below
             are stored with the installation, and {catalogItem.name} will fetch
             short-lived bearer tokens automatically when tools run.
-          </AlertDescription>
-        </Alert>
+          </InlineNoticeText>
+        </InlineNotice>
       )}
 
       {/* Config fields - always show when config exists */}

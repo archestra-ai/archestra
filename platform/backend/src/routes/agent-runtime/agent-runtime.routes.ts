@@ -36,6 +36,7 @@ import {
 } from "@/services/agent-runtime/credentials";
 import { getResolvedAgentRuntimeModelCompatibility } from "@/services/agent-runtime/model-compatibility";
 import { resolveAgentRuntime } from "@/services/agent-runtime/pod-run";
+import { agentRunReconciler } from "@/services/agent-runtime/reconciler";
 import {
   cancelDetachedAgentTask,
   startDetachedAgentTask,
@@ -50,6 +51,7 @@ import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   type Agent,
   type AgentRunSession,
+  AgentRunSessionResponseSchema,
   AgentRunShareVisibilitySchema,
   type AgentRunStartupProgress,
   ApiError,
@@ -664,18 +666,23 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["Agents"],
         querystring: PaginationQuerySchema,
         response: constructResponseSchema(
-          createPaginatedResponseSchema(SelectAgentRunSessionSchema),
+          createPaginatedResponseSchema(AgentRunSessionResponseSchema),
         ),
       },
     },
     async (request, reply) => {
-      return reply.send(
-        await AgentRunModel.listForActor({
-          actorUserId: request.user.id,
-          organizationId: request.organizationId,
-          pagination: request.query,
-        }),
-      );
+      const runs = await AgentRunModel.listForActor({
+        actorUserId: request.user.id,
+        organizationId: request.organizationId,
+        pagination: request.query,
+      });
+      return reply.send({
+        ...runs,
+        data: runs.data.map((run) => ({
+          ...run,
+          terminalRetained: agentRunReconciler.hasRetainedTerminal(run.taskId),
+        })),
+      });
     },
   );
 
@@ -701,21 +708,25 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const workspace = await AgentWorkspaceModel.findByWorkloadName(
           owned.workloadName,
         );
+        const terminalRetained =
+          workspace?.state === "idle" &&
+          workspace.lastTaskId === owned.taskId &&
+          workspace.expiresAt.getTime() > Date.now() &&
+          (await resolveAgentRuntimeBackendDriver(
+            owned.backend,
+          ).hasRetainedTerminal(owned));
+        agentRunReconciler.recordRetainedTerminal(
+          owned.taskId,
+          terminalRetained,
+        );
         return reply.send({
           ...owned,
+          terminalRetained,
           workspace: workspace
             ? {
                 state: workspace.state,
                 expiresAt: workspace.expiresAt,
                 idleAt: workspace.idleAt,
-                terminalAvailable:
-                  workspace.state === "idle" &&
-                  workspace.lastTaskId === owned.taskId &&
-                  workspace.expiresAt.getTime() > Date.now()
-                    ? await resolveAgentRuntimeBackendDriver(
-                        owned.backend,
-                      ).hasRetainedTerminal(owned)
-                    : false,
                 connection: ["active", "idle"].includes(workspace.state)
                   ? await resolveAgentRuntimeBackendDriver(
                       owned.backend,
@@ -753,6 +764,9 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
         if (explicitlyShared || sharedThroughProject) {
           return reply.send({
             ...shared,
+            terminalRetained: agentRunReconciler.hasRetainedTerminal(
+              shared.taskId,
+            ),
             viewerRole: "shared" as const,
             startupProgress: null,
           });

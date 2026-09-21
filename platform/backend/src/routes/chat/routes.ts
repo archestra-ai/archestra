@@ -2131,7 +2131,13 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Conversation not found");
       }
 
-      await resolveChatMcpElicitation({ id, response: body });
+      const accepted = await resolveChatMcpElicitation({ id, response: body });
+      if (!accepted) {
+        throw new ApiError(
+          409,
+          "This question is no longer waiting for an answer",
+        );
+      }
 
       return reply.send({ success: true });
     },

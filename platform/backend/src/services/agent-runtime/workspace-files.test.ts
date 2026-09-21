@@ -103,12 +103,7 @@ test("workspace transfers preserve bytes, require overwrite, and reject path esc
     function call(request: Record<string, unknown>) {
       const result = spawnSync(
         "python3",
-        [
-          path.resolve(
-            import.meta.dirname,
-            "../../../../agent_images/bin/archestra-workspace-files",
-          ),
-        ],
+        [path.resolve(import.meta.dirname, "../../static/workspace-files.py")],
         {
           env: {
             ...process.env,

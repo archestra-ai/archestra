@@ -264,6 +264,45 @@ describe("AgentRuntimeFields", () => {
       }),
     ]);
   });
+
+  // The backend reads an absent value as enabled, so the switch has to show
+  // enabled for a config that never set the field, and write an explicit
+  // `false` when an administrator turns it off.
+  it("shows client-supplied credentials as accepted until turned off", async () => {
+    vi.mocked(useAppName).mockReturnValue("Archestra");
+    vi.mocked(useFeature).mockImplementation((flag) =>
+      flag === "agentRuntime" ? true : undefined,
+    );
+    const user = userEvent.setup();
+
+    render(
+      <QueryClientProvider
+        client={
+          new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        }
+      >
+        <Harness />
+      </QueryClientProvider>,
+    );
+    await user.click(
+      screen.getByRole("switch", { name: "Dedicated Agent runtime" }),
+    );
+
+    const toggle = screen.getByRole("switch", {
+      name: "Accept credentials from a connected client",
+    });
+    expect(toggle).toBeChecked();
+    expect(
+      JSON.parse(screen.getByTestId("config").textContent ?? "{}"),
+    ).not.toHaveProperty("allowAgentSuppliedCredentialValues");
+
+    await user.click(toggle);
+
+    expect(toggle).not.toBeChecked();
+    expect(
+      JSON.parse(screen.getByTestId("config").textContent ?? "{}"),
+    ).toMatchObject({ allowAgentSuppliedCredentialValues: false });
+  });
 });
 
 function Harness() {

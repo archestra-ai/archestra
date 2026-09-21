@@ -9,6 +9,7 @@ import {
   primaryKey,
   text,
   timestamp,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 
 // The payload and policy bytes belong to OpenAPPA. TypeScript never decodes
@@ -60,9 +61,30 @@ export const openappaSessionsTable = pgTable(
     root: text().notNull(),
     ...scope(),
     parentId: text("parent_id"),
+    // Independent-root source, used to validate lineage and locate inherited
+    // result receipts. parentId instead identifies a shared-family subagent.
+    forkedFrom: text("forked_from"),
+    // Parent-lock-protected cutoff for receipts claimed before the fork. A NULL
+    // cutoff after crash recovery deliberately inherits no result receipts.
+    forkedAt: timestamp("forked_at", { withTimezone: true }),
+    receiptToken: text("receipt_token"),
+    receiptIssuedAt: timestamp("receipt_issued_at", { withTimezone: true }),
     startDecision: jsonb("start_decision").notNull(),
   },
-  (table) => [index("openappa_sessions_root_idx").on(table.root)],
+  (table) => [
+    index("openappa_sessions_root_idx").on(table.root),
+    index("openappa_sessions_forked_from_idx").on(
+      table.organizationId,
+      table.forkedFrom,
+    ),
+    index("openappa_sessions_unscoped_session_idx").on(
+      table.organizationId,
+      sql`substr(${table.sessionId}, strpos(${table.sessionId}, '|') + 1)`,
+    ),
+    uniqueIndex("openappa_sessions_org_receipt_token_uidx")
+      .on(table.organizationId, table.receiptToken)
+      .where(sql`${table.receiptToken} IS NOT NULL`),
+  ],
 );
 
 export const openappaOperationsTable = pgTable(

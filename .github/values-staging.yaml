@@ -50,9 +50,6 @@ archestra:
   renderer:
     enabled: true
 
-  codeRuntime:
-    enabled: true
-
   # Pod Disruption Budget: ensure at least 3 of 4 pods stay running during
   # voluntary disruptions (node upgrades, autoscaling, maintenance)
   podDisruptionBudget:
@@ -69,67 +66,16 @@ archestra:
       maxUnavailable: 0
       maxSurge: "50%"
 
-  # Vertex AI Gemini configuration
-  # Uses Application Default Credentials (ADC) via GKE Workload Identity
-  # instead of API keys for authentication
   env:
-    ARCHESTRA_ANALYTICS: disabled
-    ARCHESTRA_BETA: "true"
-    # Enable OpenAPPA policy editing and GitHub sync on staging.
-    # Enforcement requires the deployment-wide switch on /openappa (off by default).
-    ARCHESTRA_OPENAPPA_ENABLED: "true"
-    # HMAC secret for signed offer routing. Set via the staging secret overlay
-    # (ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET); replicas must share it.
-    # Keep agent feedback reporting enabled via the shared OpenAPPA receiver.
-    ARCHESTRA_OPENAPPA_YELL_ENABLED: "true"
-    ARCHESTRA_LLM_PROXY_PLUGINS: ""
-    # BETA: MCP registry attention, ownership and dismissal workflows.
-    # Explicit so staging keeps it if the beta master switch is disabled.
-    ARCHESTRA_MCP_SERVER_ALERTING_ENABLED: "true"
-    ARCHESTRA_DYNAMIC_TOOL_ACCESS_ENABLED: "true"
-    ARCHESTRA_MCP_SKILLS_ENABLED: "true"
-    # Agent Runtime is intentionally independent of ARCHESTRA_BETA.
-    # Enable it only on staging while the capability is being rolled out.
-    ARCHESTRA_AGENT_RUNTIME_ENABLED: "true"
-    ARCHESTRA_AGENT_RUNTIME_WARM_POOL_SIZE: "1"
-    ARCHESTRA_AGENT_RUNTIME_WARM_POOL_MAX_POOLS: "4"
-    # Agent Sandbox workspaces run in separate pods, so the API's ordinary loopback URL
-    # cannot reach the platform from a run pod. Use the in-cluster Service that
-    # the Agent Runtime NetworkPolicy already permits on port 9000.
+    # Runtime pods reach this installation through its in-cluster API Service.
     ARCHESTRA_AGENT_RUNTIME_PLATFORM_BASE_URL: "http://archestra-platform.archestra.svc.cluster.local:9000"
-    # Nested development stacks require privilege and a dedicated node pool.
-    # Runtime state, home directories, and Docker data share one durable PVC.
-    ARCHESTRA_AGENT_RUNTIME_ALLOW_PRIVILEGED: "true"
-    ARCHESTRA_AGENT_RUNTIME_NODE_SELECTOR: "archestra-agent-runtime=true"
-    ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_SIZE: "60Gi"
-    ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_CLASS: "standard-rwo"
-    # Scale-from-zero on the Agent Runtime pool plus a cold multi-GB image pull can
-    # take 6+ minutes before the container starts.
-    ARCHESTRA_AGENT_RUNTIME_POD_START_TIMEOUT_SECONDS: "900"
-    # BETA: auto-sync-permissions connectors (off by default everywhere else).
-    # Explicit so staging keeps the feature even if ARCHESTRA_BETA is ever
-    # flipped off.
-    ARCHESTRA_KNOWLEDGE_BASE_AUTO_SYNC_PERMISSIONS_ENABLED: "true"
-    # BETA: the M-Files connector (off by default everywhere else). Explicit
-    # for the same reason as the auto-sync flag above.
-    ARCHESTRA_KNOWLEDGE_BASE_MFILES_CONNECTOR_ENABLED: "true"
-    # Serve the VAF Add On from main's CI build (proxied with the GitHub
-    # token the deploy workflow injects): no release carries the package yet.
-    # Remove both once the first release ships with the .mfappx asset.
-    ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_SOURCE_REF: "main"
-    # BETA: MCP idle hibernation (off by default everywhere else). Explicit so
-    # staging keeps the feature even if ARCHESTRA_BETA is ever flipped off.
-    ARCHESTRA_ORCHESTRATOR_MCP_IDLE_HIBERNATION_ENABLED: "true"
-    ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED: "true"
-    ARCHESTRA_ENTERPRISE_LICENSE_FULL_WHITE_LABELING: "true"
-    ARCHESTRA_ENTERPRISE_LICENSE_KNOWLEDGE_BASE_ACTIVATED: "true"
     # Retention stays OFF here on purpose. This deployment is where the
     # platform gets stress-tested, and a large `interactions` table is the
     # point — the volume is the test data, not a problem to sweep up. Storage
     # autoresizes, so it grows with the table.
     # Apps Hackathon session recording. The documented flag deliberately cannot
     # open this on a licensed deployment (see parseHackathonRecorderEnabled),
-    # and staging activates the enterprise license above — so it takes the
+    # and the shared values activate the enterprise license — so it takes the
     # separate override, which exists for exactly this deployment and is
     # deliberately absent from .env.example and the deployment docs.
     ARCHESTRA_HACKATHON_RECORDER_ENTERPRISE_OVERRIDE: "true"
@@ -154,59 +100,14 @@ archestra:
     # secret come from archestra-ai/infra (gke/dns.tf, gke-apps/cert-manager);
     # the ingress rule + tls entry below route the sandbox hosts to the frontend.
     ARCHESTRA_MCP_SANDBOX_DOMAIN: "sandbox.archestra.dev"
-    ARCHESTRA_GEMINI_VERTEX_AI_ENABLED: "true"
-    ARCHESTRA_GEMINI_VERTEX_AI_PROJECT: "friendly-path-465518-r6"
-    ARCHESTRA_GEMINI_VERTEX_AI_LOCATION: "us-central1"
-    # Staging has no data-residency requirement, so it takes the global endpoint
-    # for the Gemini 3+ generations us-central1 does not serve.
-    ARCHESTRA_GEMINI_VERTEX_AI_ALLOW_GLOBAL_ENDPOINT: "true"
     ARCHESTRA_BEDROCK_BASE_URL: "https://bedrock-runtime.eu-north-1.amazonaws.com"
     ARCHESTRA_BEDROCK_INFERENCE_PROFILE_PREFIX: "eu"
     ARCHESTRA_AUTH_COOKIE_DOMAIN: ".archestra.dev"
-    # SSO-only sign-in. Google is the configured identity provider.
-    # Closes the password endpoints (not just the form) and revokes the
-    # sessions of anyone with no federated account, so everyone re-enters
-    # through Google. Also blocks turning on the require-two-factor org policy,
-    # since enrolment needs a password — 2FA comes from Workspace instead.
-    ARCHESTRA_AUTH_DISABLE_BASIC_AUTH: "true"
-    # No new users by invitation: 403s /organization/invite-member and hides the
-    # invite UI on Settings -> Users.
-    # Scope, so this is not read as "no new users at all":
-    #   - It gates *issuing* an invitation, not *redeeming* one. Anything still
-    #     outstanding stays acceptable, and cancel-invitation is 403'd as well,
-    #     so it can no longer be revoked through the API while this is on.
-    #     Checked before enabling: staging has one live auto-provisioned invite
-    #     (ms-teams, expires 2026-08-30); every other row is accepted or expired.
-    #   - ChatOps auto-provisioning is unaffected. It inserts the user, member
-    #     and invitation rows directly instead of calling invite-member, so a
-    #     first-time Slack/Teams sender still lands in the org.
-    ARCHESTRA_AUTH_DISABLE_INVITATIONS: "true"
     ARCHESTRA_FRONTEND_URL: "https://frontend.archestra.dev"
-    # Trust only the Google Front End ranges that terminate the ingress, so
-    # request.ip is the real caller instead of the load balancer. Per-IP rate
-    # limits and audit sourceIp then stop collapsing onto one shared address.
-    # These two CIDRs are the documented GCLB/health-check ranges, and are the
-    # socket peers this deployment actually sees. NOT "true": that would trust a
-    # client-supplied X-Forwarded-For and let any caller choose its own IP.
-    ARCHESTRA_TRUST_PROXY: "35.191.0.0/16,130.211.0.0/22"
     ARCHESTRA_SENTRY_ENVIRONMENT: "archestra.dev"
     ARCHESTRA_AGENTS_INCOMING_EMAIL_PROVIDER: "outlook"
     ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_MAILBOX_ADDRESS: "agents@archestraai.onmicrosoft.com"
     ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_WEBHOOK_URL: "https://backend.archestra.dev/api/webhooks/incoming-email"
-    # Locked chats. Configuring the escrow public key is what ENABLES the
-    # feature (it is off everywhere it is unset), because a locked chat's
-    # audit trail — LLM interactions, MCP tool calls, chat
-    # errors — is stored encrypted under a key that exists only in the
-    # browser that created the chat. Without an escrowed copy those rows
-    # would be recoverable by nobody, which is worse for an auditable
-    # deployment than not offering the feature.
-    #
-    # This is the PUBLIC half of an RSA-4096 keypair, so it is not a secret
-    # and does not belong in a repo secret — publishing it is how escrow is
-    # meant to work. The PRIVATE half is deliberately NOT in this repo or in
-    # the cluster: it lives offline with the security team and is used only
-    # in the documented break-glass procedure.
-    ARCHESTRA_LOCKED_CHAT_ESCROW_PUBLIC_KEY: "LS0tLS1CRUdJTiBQVUJMSUMgS0VZLS0tLS0KTUlJQ0lqQU5CZ2txaGtpRzl3MEJBUUVGQUFPQ0FnOEFNSUlDQ2dLQ0FnRUFvakRQWU5RbjNSYktoamJ5MUVzTgpvYXYwNGUyQnpoOTFWaEs0TlErNDFEcGVwcjg0dGx6R3ZjandYVC9OQ0txODJvem9kUGwyZE5NeWFxdDE0UG5FCnQ0NUsvRXdrTXE0VlFEUWtlTUJJTFh6c1ZlY0YzQmZ3Rko1eGNLdGFCNXRsNXRRRWVPakhPU2xiamN0czVyaDkKN2wzcE5DdURoUXRkajNmSE80NTN2UXN4eDEyK0drZlpQVVNWeFpiNEhhYkdhazMxWTl3UG1pZVV5ajVzSkkwTwp6VzFrVHFiMkFocEVSQnIxUkNFeUgrSzlvdmRCZlZiYUdGTFZIdmtiSkdSbVNzYk85SVZsQUpNUHE5ZnJXam1VCm5oR2h0UVFzeTQ2TG92ZXFSaTMxM2RaeDUweXEvVGd2TFJLSVFDZEtKYmkvVEoyRmtVMk9VSXdpYWFTQjdyNTAKa0YvZDhGUTNsUVdKWlA4YXU1UWQzQjV1bzl1M3NTMWk1WTZOeHRBYWN0TjBEV2k2L3ZjbEtlRjg5YTFtbkZ3TApBTkZteENsbkVxL3UydmpwbWhOQS9JMnVFVXFvQmZ5NkUxVFFyNSsySUhnZGVXT2tPTFJnYXc5QWE3Z3g1SzlqCkdjaHhXUDkzMDhvN01SS1JsdjlPaTl2UUZsMVB3YUZPbEIyUzIvb2RCcTNhNDFzMkhNUU1ZalJZMC9wR0NuWjUKM2xuN1BzZm9qOEZMd1NoZkRHNVhmNTNnREo0UXB4a3N0amdrekx5ZkxHaThUVGdwSjVmeDJWdVZQajdtTk5JMwpoNWxYZnh4N09Gd1daZEJUVFBnZ3h6LzN1MUs5TTNoUnlObUxrOXZEUVhRS2k2TWdMNVF1THRvQTdVL01GSzBXClY2ZVIyTG4zMFhMVDduaDNlcnRNYnNFQ0F3RUFBUT09Ci0tLS0tRU5EIFBVQkxJQyBLRVktLS0tLQo="
     ARCHESTRA_CHAT_DEFAULT_PROVIDER: "anthropic"
     ARCHESTRA_CHAT_DEFAULT_MODEL: "claude-opus-4-5-20251101"
 
@@ -228,23 +129,12 @@ archestra:
   # Orchestrator configuration with Workload Identity for Vertex AI
   orchestrator:
     kubernetes:
-      networkPolicy:
-        # Enable SSRF protection for MCP server pods
-        create: true
-
       rbac:
         # Namespaces backing deployment environments the platform may deploy
         # MCP servers into. Each entry gets a namespace-scoped Role + RoleBinding
         # and is surfaced to the app as ARCHESTRA_ORCHESTRATOR_ENVIRONMENT_NAMESPACES.
         environmentNamespaces:
           - env-test
-
-      serviceAccount:
-        # GKE Workload Identity binding to allow Vertex AI access via ADC
-        # The GCP service account (archestra-vertex-ai@friendly-path-465518-r6.iam.gserviceaccount.com)
-        # is created and bound in the archestra-ai/infra repo (gke/main.tf)
-        annotations:
-          iam.gke.io/gcp-service-account: archestra-vertex-ai@friendly-path-465518-r6.iam.gserviceaccount.com
 
       # Additional RBAC for MCP K8s operator service account
       # Grants cluster-wide read access and namespace-specific permissions for the Kubernetes MCP server

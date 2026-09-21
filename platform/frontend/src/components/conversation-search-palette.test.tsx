@@ -332,7 +332,9 @@ describe("ConversationSearchPalette", () => {
 
     expect(screen.getByText("Nightly report run")).toBeInTheDocument();
     // The row carries the same liveness-aware run mark as the sidebar.
-    expect(screen.getByLabelText("Run may be stalled")).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Running · quiet for 20m"),
+    ).toBeInTheDocument();
     fireEvent.click(
       screen.getByRole("button", { name: "Open project Release work" }),
     );

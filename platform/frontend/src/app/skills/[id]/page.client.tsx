@@ -36,7 +36,6 @@ import {
 import { useResourceOwnershipTransfer } from "@/components/use-resource-ownership-transfer";
 import { WizardFooter } from "@/components/wizard-footer";
 import { formatPermissionConstraint } from "@/lib/auth/auth.utils";
-import { useFeature } from "@/lib/config/config.query";
 import {
   backToListLabel,
   notYoursToChange,

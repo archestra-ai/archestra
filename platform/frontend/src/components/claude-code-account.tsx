@@ -7,10 +7,7 @@ import { QueryLoadError } from "@/components/query-load-error";
 import { RuntimeCredentialIcon } from "@/components/runtime-credential-icon";
 import { StandardDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
-import {
-  CompactWarning,
-  CompactWarningText,
-} from "@/components/ui/compact-warning";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { DialogCancelButton } from "@/components/unsaved-changes-guard";
@@ -103,10 +100,10 @@ export function ClaudeCodeAccount({
   return (
     <div className="space-y-4">
       {variant === "compact" ? (
-        <CompactWarning>
+        <InlineNotice>
           <RuntimeCredentialIcon icon="logo:anthropic" className="size-3.5" />
           <span className="font-medium">Claude Code</span>
-          <CompactWarningText>{statusText}</CompactWarningText>
+          <InlineNoticeText>{statusText}</InlineNoticeText>
           <Button
             type="button"
             variant="outline"
@@ -118,7 +115,7 @@ export function ClaudeCodeAccount({
             <span>{connected ? "Manage" : "Sign in"}</span>
             <ExternalLink className="size-3" />
           </Button>
-        </CompactWarning>
+        </InlineNotice>
       ) : (
         <div
           className={

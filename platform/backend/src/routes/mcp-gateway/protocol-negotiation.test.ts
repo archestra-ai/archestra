@@ -146,11 +146,14 @@ describe("MCP Gateway - protocol revision negotiation", () => {
     const body = response.json();
     expect(body.id).toBe(7);
     expect(body.result.protocolVersion).toBe(STATELESS_MCP_PROTOCOL_REVISION);
-    expect(body.result.protocolVersions).toEqual([
+    expect(body.result.supportedVersions).toEqual([
       STATELESS_MCP_PROTOCOL_REVISION,
       LEGACY_MCP_PROTOCOL_REVISION,
     ]);
     expect(body.result.serverInfo.name).toBe(`archestra-agent-${agent.id}`);
+    expect(body.result._meta["io.modelcontextprotocol/serverInfo"].name).toBe(
+      `archestra-agent-${agent.id}`,
+    );
     // listChanged is true for this revision: subscriptions/listen backs it.
     expect(body.result.capabilities.tools).toEqual({ listChanged: true });
     expect(body.result.capabilities.extensions).toHaveProperty(

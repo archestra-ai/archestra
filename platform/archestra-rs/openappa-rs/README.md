@@ -23,9 +23,10 @@ flowchart LR
 
 ## Build and run
 
-Cargo fetches OpenAPPA from its public Git repository at commit
-`9f9b02c1baeaa86791d2495895f928e9ef09e2c7`, pinned in this package's manifest and
-the workspace lockfile. A sibling checkout is not required. Update the revision
+Cargo fetches the OpenAPPA runtime from upstream `main` at commit
+`4f2b89e05baef8a74c4a4ded3b8214996de01ae5`, the merge of
+archestra-ai/OpenAPPA#384 (a host that embeds the runtime brings its own
+adapter), pinned in this package's manifest and the workspace lockfile. A sibling checkout is not required. Update the revision
 and lockfile together when adopting a newer runtime. The lockfile also selects
 `rmcp` 3.4.0, matching the runtime's MCP API. Rebuild the native addon and
 restart the backend after updating; production uses the normal Archestra image build.
@@ -110,6 +111,17 @@ The proxy scopes external session IDs to the authenticated credential. Another c
 
 `SessionStart` restores the existing trajectory. The proxy sends `Prompt` at the start of each user turn, and `TurnEnd` after a terminal model answer. Detached MCP tasks remain disabled while OpenAPPA is enabled.
 
+For Claude Code, Codex, and OpenCode, the proxy can append this two-line mark to a protected session's first reply and compaction summaries:
+
+```
+▄█▄▄▄█▄  protected session XK7-Q2M9
+██▄█▄██
+```
+
+Claude Code supplies its session header. Codex supplies thread metadata. OpenCode supplies session headers. The mark proves which protected session authored the reply. The proxy strips the mark before forwarding requests to the provider and before logging. Most replies carry no mark. Signed tool-call IDs supply separate lineage evidence.
+
+Only supported text fields carry the mark. Structured outputs, tool data, reasoning fields, and unsupported clients never carry the mark. Compaction summaries retain the mark so lineage survives client-side history rewrites.
+
 Both streaming and non-streaming proxy paths call `ToolCall`; existing streaming
 buffers retain tool deltas until the decision completes. Existing name
 normalization unwraps `run_tool` and client decorations. Chat does not check
@@ -131,13 +143,13 @@ the proxy filters model input, not data already stored or displayed by Chat.
 
 ## Storage and interrupted processing
 
-Migration `0471_openappa_native.sql` creates the event and receipt tables. Migration `0479_perpetual_malcolm_colcord.sql` adds host-key indexes. Offer routing is a host-signed plaintext claim, not a table.
+Migration `0471_openappa_native.sql` creates the event and receipt tables. Migration `0479_perpetual_malcolm_colcord.sql` adds host-key indexes. Migration `0483_openappa_batteries.sql` adds the composed batteries. Migration `0484_openappa_session_fork_receipts.sql` adds fork lineage. Offer routing is a host-signed claim. Session receipts are stored on `openappa_sessions` and verified by lookup.
 
 | Table | Owner / purpose |
 | --- | --- |
 | `openappa_events` | Rust-encoded ordered event batches by root and sequence |
 | `openappa_policy_files` | Original policy bytes addressed by their hash |
-| `openappa_sessions` | Scoped actor/root/parent mapping and start decision |
+| `openappa_sessions` | Scoped actor/root/parent mapping, start decision, and fork lineage (`forked_from`, `forked_at`) |
 | `openappa_operations` | Call, lifecycle, and remedy receipts |
 | `openappa_processed_results` | Result status, decision, and approved output |
 
@@ -159,6 +171,21 @@ events, so a failed dispatch leaves nothing to discard. A durable pending
 receipt blocks further work in that family after an interruption.
 
 Completed result keys are session ID + tool call ID. Operation keys are session ID + operation ID. Remedy-execution receipts bind the authenticated spender. Submitting different result bytes under a completed result key returns the saved approved output without re-evaluating hooks. Submitting changed arguments under an existing logical call ID is refused.
+
+## Forks
+
+The proxy can create a new session as a fork only before that session opens a
+trajectory. A fork requires a protected-session mark or a tool-call stamp from the same
+caller and organization. A session cannot be both a child and a fork. A
+session that already owns a root cannot move to another history. The fork
+opens an independent root with the parent root's policy revision, current state,
+effects, and denials. Parent and child activities stay separate.
+
+`forked_at` is the database-clock watermark recorded while the process holds the parent root lock.
+A fork inherits only parent decisions completed strictly before that watermark,
+including across a chain of forks. If the parent admits a result after the fork opens,
+the fork withholds that result. If a process stops unexpectedly before writing
+the session row, recovery sets a NULL watermark and inherits no results.
 
 Pending receipts deliberately require operator investigation. Inspect the
 scoped operation/result, native event history, and external authority records.

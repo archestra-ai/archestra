@@ -812,6 +812,7 @@ const registry = defineArchestraTools([
               toolName,
               message: "A few questions to refine your app:",
               requestedSchema: buildQuestionsSchema(args.questions),
+              toolCallId: context.currentToolCallId,
             })
           : ({ status: "no_viewer" } as const);
 

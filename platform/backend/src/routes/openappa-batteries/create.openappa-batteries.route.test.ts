@@ -310,7 +310,7 @@ describe("guardrails batteries", () => {
     const files = [
       {
         path: "appa-package.toml",
-        text: 'schema = 1\nname = "github"\ndescription = "Our GitHub rules"\n[battery]\npolicy = "appa.toml"\nhosts = ["archestra"]\nnamespaces = ["github"]\n',
+        text: 'schema = 1\nname = "github"\ndescription = "Our GitHub rules"\n[battery]\npolicy = "appa.toml"\nhosts = []\nnamespaces = ["github"]\n',
       },
       {
         path: "appa.toml",
@@ -458,7 +458,7 @@ describe("guardrails batteries", () => {
           files: [
             {
               path: "appa-package.toml",
-              text: 'schema = 1\nname = "acme"\ndescription = "Echo helper"\n[battery]\npolicy = "appa.toml"\nhosts = ["archestra"]\nnamespaces = ["acme"]\nhelpers = ["echo.py"]\n',
+              text: 'schema = 1\nname = "acme"\ndescription = "Echo helper"\n[battery]\npolicy = "appa.toml"\nhosts = []\nnamespaces = ["acme"]\nhelpers = ["echo.py"]\n',
             },
             {
               path: "appa.toml",
@@ -477,9 +477,12 @@ describe("guardrails batteries", () => {
           files: [
             {
               path: "appa-package.toml",
-              text: 'schema = 1\nname = "github"\ndescription = "Replaced"\n[battery]\npolicy = "appa.toml"\nhosts = ["archestra"]\nnamespaces = ["github"]\n',
+              text: 'schema = 1\nname = "github"\ndescription = "Replaced"\n[battery]\npolicy = "appa.toml"\nhosts = []\nnamespaces = ["github"]\n',
             },
-            { path: "appa.toml", text: "[policy]\nversion = 2\n" },
+            {
+              path: "appa.toml",
+              text: '[policy]\nversion = 2\n[[policy.tool]]\nname = "mcp/github/list"\ndelta = {}\n',
+            },
           ],
         },
       });

@@ -764,6 +764,7 @@ class InteractionModel {
           cost: schema.interactionsTable.cost,
           baselineCost: schema.interactionsTable.baselineCost,
           createdAt: schema.interactionsTable.createdAt,
+          source: schema.interactionsTable.source,
           requestType: sql<"main" | "subagent">`
             CASE
               WHEN ${schema.interactionsTable.source} = 'opencode:main'

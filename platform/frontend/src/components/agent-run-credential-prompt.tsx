@@ -6,10 +6,7 @@ import { useState } from "react";
 import { AgentRuntimeCredentialsDialog } from "@/components/agent-runtime-credentials-dialog";
 import { ClaudeCodeAccount } from "@/components/claude-code-account";
 import { Button } from "@/components/ui/button";
-import {
-  CompactWarning,
-  CompactWarningText,
-} from "@/components/ui/compact-warning";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 
 type MissingCredential = {
   key: string;
@@ -72,16 +69,14 @@ export function AgentRuntimeCredentialPrompt({
 
   return (
     <>
-      {/* Deliberately slimmer than an <Alert>: this sits directly under the
-          composer, where a full padded alert block dwarfs the input row. */}
-      <CompactWarning className="mt-2">
+      <InlineNotice className="mt-2">
         <KeyRound />
         <span className="font-medium">
           {missing.length === 1
             ? `${missing[0].label} is required`
             : `${missing.length} connections are required`}
         </span>
-        <CompactWarningText>{helperText}</CompactWarningText>
+        <InlineNoticeText>{helperText}</InlineNoticeText>
         <Button
           type="button"
           size="sm"
@@ -91,7 +86,7 @@ export function AgentRuntimeCredentialPrompt({
         >
           Connect
         </Button>
-      </CompactWarning>
+      </InlineNotice>
       {connecting && (
         <AgentRuntimeCredentialsDialog
           agentId={agentId}

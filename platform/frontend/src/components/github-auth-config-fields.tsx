@@ -41,9 +41,9 @@ export function GithubAuthConfigFields({
   githubAppConfigId,
   onGithubAppConfigIdChange,
   githubAppConfigs,
-  authLabel = "Authentication Method",
+  authLabel = "Authentication method",
   authOptional = false,
-  authDescription = "Use GitHub App authentication for organization-managed installs.",
+  authDescription = "A personal access token reaches one repository. A GitHub App suits organization-managed installs.",
   configuredDescription = "Manage GitHub App configurations in",
   appConfigDescription,
   appConfigError,
@@ -69,7 +69,7 @@ export function GithubAuthConfigFields({
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="pat">Personal Access Token</SelectItem>
+            <SelectItem value="pat">Personal access token</SelectItem>
             <SelectItem value="github_app">GitHub App</SelectItem>
           </SelectContent>
         </Select>
@@ -79,7 +79,7 @@ export function GithubAuthConfigFields({
 
       {authMethod === "github_app" && (
         <div className="space-y-2">
-          <Label htmlFor="github-app-config">GitHub App Configuration</Label>
+          <Label htmlFor="github-app-config">GitHub App configuration</Label>
           {githubAppConfigs.length > 0 ? (
             // Distinct keys: without them React reconciles the two branches as
             // one element and Chrome page-translate crashes on the bare text

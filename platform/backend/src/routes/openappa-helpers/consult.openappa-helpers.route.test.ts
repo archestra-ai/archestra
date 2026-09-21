@@ -1,4 +1,6 @@
 import { createHash } from "node:crypto";
+import { ADMIN_ROLE_NAME } from "@archestra/shared";
+import { vi } from "vitest";
 import config from "@/config";
 import OpenAppaBatteryInstallModel from "@/models/openappa-battery-install";
 import RuntimeCredentialConnectionModel from "@/models/runtime-credential-connection";
@@ -11,6 +13,8 @@ import { createFastifyInstance, type FastifyInstanceWithZod } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import routes from "./openappa-helpers.routes";
 
+const CREDENTIAL_VALUE = "gh-token-value-under-test";
+
 const envelope = {
   version: 1,
   kind: "annotation",
@@ -22,15 +26,19 @@ describe("battery helper bridge", () => {
   let app: FastifyInstanceWithZod;
   let organizationId: string;
   let userId: string;
-  beforeEach(async ({ makeOrganization, makeUser }) => {
+  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
     organizationId = (await makeOrganization()).id;
     userId = (await makeUser()).id;
+    await makeMember(userId, organizationId, { role: ADMIN_ROLE_NAME });
     config.openappa.enabled = true;
     app = createFastifyInstance();
     await app.register(routes);
   });
   afterEach(async () => {
     await app.close();
+    // This file shares its worker with the rest of the mock-free project, so a
+    // sandbox spy left standing would serve the next file's tests too.
+    vi.restoreAllMocks();
   });
 
   const consult = (params: {
@@ -38,6 +46,7 @@ describe("battery helper bridge", () => {
     externalName?: string;
     authorization?: string;
     remoteAddress?: string;
+    payload?: unknown;
   }) =>
     app.inject({
       method: "POST",
@@ -47,7 +56,7 @@ describe("battery helper bridge", () => {
           ? {}
           : { authorization: params.authorization },
       remoteAddress: params.remoteAddress ?? "127.0.0.1",
-      payload: envelope,
+      payload: params.payload ?? envelope,
     });
   const bridgeBearer = () => `Bearer ${openappaBatteriesService.bridgeToken}`;
 
@@ -62,6 +71,54 @@ describe("battery helper bridge", () => {
       enabled: true,
       credentialBindings,
     });
+
+  /** An install whose credential resolves, so a consult reaches the sandbox. */
+  const installBoundGithub = async (
+    makeInternalMcpCatalog: (params: {
+      organizationId: string;
+    }) => Promise<{ id: string }>,
+  ) => {
+    await RuntimeCredentialDefinitionModel.create({
+      organizationId,
+      createdBy: userId,
+      definition: {
+        key: "github-token",
+        name: "GitHub token",
+        kind: "secret",
+        description: "",
+        icon: null,
+        allowPersonal: false,
+        allowOrganization: true,
+      },
+    });
+    await RuntimeCredentialConnectionModel.upsert({
+      organizationId,
+      scope: "organization",
+      userId: null,
+      credentialId: "github-token",
+      value: CREDENTIAL_VALUE,
+    });
+    return installGithub(
+      (await makeInternalMcpCatalog({ organizationId })).id,
+      { APPA_PROVIDER_GITHUB_TOKEN: "github-token" },
+    );
+  };
+
+  /** The sandbox is a process boundary; the bridge's own logic stays real. */
+  const stubSandbox = (
+    result: Pick<
+      Awaited<ReturnType<typeof sandboxRuntimeService.runCommand>>,
+      "exitCode" | "stdout" | "stderr"
+    >,
+  ) => {
+    vi.spyOn(sandboxRuntimeService, "attach").mockResolvedValue(undefined);
+    return vi.spyOn(sandboxRuntimeService, "runCommand").mockResolvedValue({
+      ...result,
+      durationMs: 1,
+      timedOut: false,
+      truncated: false,
+    });
+  };
 
   test("only the runtime's bearer over loopback reaches a helper", async ({
     makeInternalMcpCatalog,
@@ -84,6 +141,37 @@ describe("battery helper bridge", () => {
           installId: install.id,
           authorization: bridgeBearer(),
           remoteAddress: "10.0.0.7",
+        })
+      ).statusCode,
+    ).toBe(403);
+  });
+
+  test("a rejected caller is turned away before its body is looked at", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const install = await installGithub(
+      (await makeInternalMcpCatalog({ organizationId })).id,
+    );
+    // A body the consult schema refuses, proven by sending it as the runtime.
+    const malformed = ["not", "an", "envelope"];
+    expect(
+      (
+        await consult({
+          installId: install.id,
+          authorization: bridgeBearer(),
+          payload: malformed,
+        })
+      ).statusCode,
+    ).toBe(400);
+    // The same body from off-box is turned away on where it came from, not on
+    // what it contains: a 400 would mean it was parsed and validated first.
+    expect(
+      (
+        await consult({
+          installId: install.id,
+          authorization: bridgeBearer(),
+          remoteAddress: "10.0.0.7",
+          payload: malformed,
         })
       ).statusCode,
     ).toBe(403);
@@ -159,6 +247,45 @@ describe("battery helper bridge", () => {
     ).toBe(502);
   });
 
+  test("a helper that exits non-zero answers 502", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const install = await installBoundGithub(makeInternalMcpCatalog);
+    stubSandbox({ exitCode: 3, stdout: "", stderr: "traceback" });
+
+    const response = await consult({
+      installId: install.id,
+      authorization: bridgeBearer(),
+    });
+
+    expect(response.statusCode).toBe(502);
+  });
+
+  test("the bound credential reaches the helper's environment and nothing else", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const install = await installBoundGithub(makeInternalMcpCatalog);
+    const run = stubSandbox({
+      exitCode: 0,
+      stdout: JSON.stringify({ version: 1, answer: {} }),
+      stderr: "",
+    });
+
+    expect(
+      (await consult({ installId: install.id, authorization: bridgeBearer() }))
+        .statusCode,
+    ).toBe(200);
+
+    const params = run.mock.calls[0]?.[0];
+    expect(params?.secretEnv).toEqual([
+      { name: "APPA_PROVIDER_GITHUB_TOKEN", value: CREDENTIAL_VALUE },
+    ]);
+    // Everything the run carries besides the secret channel: the mounted
+    // battery files, the command, the envelope on stdin.
+    const { secretEnv: _secret, ...rest } = params ?? {};
+    expect(JSON.stringify(rest)).not.toContain(CREDENTIAL_VALUE);
+  });
+
   test("consults beyond half the sandbox pool are refused as busy", async ({
     makeInternalMcpCatalog,
   }) => {
@@ -194,7 +321,7 @@ describe("battery helper bridge", () => {
       const files = [
         {
           path: "appa-package.toml",
-          text: 'schema = 1\nname = "acme"\ndescription = "Echo helper"\n[battery]\npolicy = "appa.toml"\nhosts = ["archestra"]\nnamespaces = ["acme"]\nhelpers = ["echo.py"]\n',
+          text: 'schema = 1\nname = "acme"\ndescription = "Echo helper"\n[battery]\npolicy = "appa.toml"\nhosts = []\nnamespaces = ["acme"]\nhelpers = ["echo.py"]\n',
         },
         {
           path: "appa.toml",

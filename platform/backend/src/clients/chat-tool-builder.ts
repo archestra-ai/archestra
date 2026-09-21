@@ -13,6 +13,7 @@ import {
   parseFullToolName,
   platformExecutedAs,
   stripReservedPlatformMeta,
+  TOOL_ASK_USER_SHORT_NAME,
   TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
@@ -756,8 +757,16 @@ export async function buildArchestraToolOutput(params: {
 
   if (targetToolName === toolName) {
     // Not a run_tool dispatch — no UI resource to attach, but the card still
-    // names who the platform ran this for.
-    return { content: text, _meta: executedAsMeta };
+    // names who the platform ran this for. ask_user keeps the user's recorded
+    // answer, which its card reads back after a reload.
+    return {
+      content: text,
+      _meta: executedAsMeta,
+      ...(targetShortName === TOOL_ASK_USER_SHORT_NAME &&
+      isRecord(response.structuredContent)
+        ? { structuredContent: response.structuredContent }
+        : {}),
+    };
   }
 
   let resourceUri: string | undefined;
@@ -1373,7 +1382,12 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
         // outlast it.
         ...(detachable ? { upstreamTimeoutMs: TASK_TTL_MS } : {}),
         ...(elicitation
-          ? { elicitationHandler: elicitation.createHandler({ toolName }) }
+          ? {
+              elicitationHandler: elicitation.createHandler({
+                toolName,
+                toolCallId,
+              }),
+            }
           : {}),
         // LockedChat: the persisted mcp_tool_calls row is encrypted under the
         // conversation key, or redacted when there is no escrow record.

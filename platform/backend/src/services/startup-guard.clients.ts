@@ -12,6 +12,7 @@ import {
   STARTUP_GUARD_INSTALL,
   VIRTUAL_KEY_HEADER,
 } from "@archestra/shared";
+import logger from "@/logging";
 import type { StartupGuardClient, StartupGuardContext } from "./startup-guard";
 
 /**
@@ -933,8 +934,12 @@ function opencodeWindowsRestoreRoutingPlugin(): string {
       else { Remove-Item -Force -ErrorAction SilentlyContinue $archPluginFile }
     } catch { Remove-Item -Force -ErrorAction SilentlyContinue $archPluginFile }
     Remove-Item -Force -ErrorAction SilentlyContinue $archPluginState
-  } else { Remove-Item -Force -ErrorAction SilentlyContinue $archPluginFile }
-  Remove-Item -Force -ErrorAction SilentlyContinue ((Join-Path ${opencodeConfigDirPs()} 'opencode.json') + '.archestra-backup')`;
+  } else { Remove-Item -Force -ErrorAction SilentlyContinue $archPluginFile }`;
+}
+
+function opencodeWindowsRemoveConfigBackup(): string {
+  // After plugin restore and proxy strip, matching Bash disconnect_proxy.
+  return `  Remove-Item -Force -ErrorAction SilentlyContinue ((Join-Path ${opencodeConfigDirPs()} 'opencode.json') + '.archestra-backup')`;
 }
 
 function opencodeRestoreRoutingPluginSh(): string {
@@ -1027,6 +1032,7 @@ function opencodeWindowsProxyDisconnect(ctx: StartupGuardContext): string {
       [IO.File]::WriteAllText($archOc, ($archCfg | ConvertTo-Json -Depth 32), (New-Object System.Text.UTF8Encoding $false))
     } catch { }
   }
+${opencodeWindowsRemoveConfigBackup()}
 }`;
   }
   const id = opencodeProviderId(ctx.proxy?.provider ?? "");
@@ -1034,6 +1040,7 @@ function opencodeWindowsProxyDisconnect(ctx: StartupGuardContext): string {
   ${opencodeWindowsRestoreRoutingPlugin()}
 ${opencodeWindowsStrip("provider", psq(id))}
   Remove-Item -Force -ErrorAction SilentlyContinue (Join-Path $env:USERPROFILE ${psq(`.archestra/opencode-${id}.key`)})
+${opencodeWindowsRemoveConfigBackup()}
 }`;
 }
 
@@ -1116,10 +1123,14 @@ function opencodePassthroughRoutes(
 ): Record<string, string> {
   const providerSuffix = ctx.proxy?.provider ? `/${ctx.proxy.provider}` : "";
   const rawUrl = ctx.proxy?.url ?? "";
-  const baseUrl =
-    providerSuffix && rawUrl.endsWith(providerSuffix)
-      ? rawUrl.slice(0, -providerSuffix.length)
-      : rawUrl;
+  const stripped = Boolean(providerSuffix) && rawUrl.endsWith(providerSuffix);
+  if (providerSuffix && rawUrl && !stripped) {
+    logger.warn(
+      { provider: ctx.proxy?.provider, proxyUrl: rawUrl },
+      "OpenCode passthrough proxy URL does not end with the provider suffix; using the full URL as the route base",
+    );
+  }
+  const baseUrl = stripped ? rawUrl.slice(0, -providerSuffix.length) : rawUrl;
   return Object.fromEntries(
     OPENCODE_PASSTHROUGH_PROVIDER_ROUTES.map((route) => [
       route.openCodeProviderId,

@@ -84,4 +84,23 @@ describe("ProjectScheduleRunsClient", () => {
 
     expect(runNowMutate).toHaveBeenCalledWith("trigger-1", expect.any(Object));
   });
+
+  it("explains that a paused schedule can still be run manually", () => {
+    vi.mocked(useScheduleTrigger).mockReturnValue({
+      data: {
+        name: "Daily report",
+        cronExpression: "0 9 * * *",
+        timezone: "UTC",
+        enabled: false,
+        agent: { name: "Reporter" },
+      },
+      isLoading: false,
+    } as ReturnType<typeof useScheduleTrigger>);
+
+    render(<ProjectScheduleRunsClient />);
+
+    expect(
+      screen.getByText("Reporter · Paused — runs only when started manually"),
+    ).toBeInTheDocument();
+  });
 });

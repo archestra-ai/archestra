@@ -327,7 +327,8 @@ function PermissionsEditor({
 function subjectKey(subject: PermissionSubject) {
   return `${subject.type}:${subject.id}`;
 }
-function presetFor(actions: ResourcePermissionAction[]) {
+/** @public - shared with initial-resource-permissions.tsx */
+export function presetFor(actions: ResourcePermissionAction[]) {
   return (
     Object.entries(resourcePermissionPresets).find(
       ([, preset]) =>
@@ -358,7 +359,8 @@ const scopedResourceNouns: Record<ScopedResource, string> = {
   mcpGateway: "MCP gateway",
   mcpRegistry: "MCP registry entry",
 };
-const subjectLabels: Record<PermissionSubject["type"], string> = {
+/** @public - shared with initial-resource-permissions.tsx */
+export const subjectLabels: Record<PermissionSubject["type"], string> = {
   user: "User",
   team: "Team",
   serviceAccount: "Service account",

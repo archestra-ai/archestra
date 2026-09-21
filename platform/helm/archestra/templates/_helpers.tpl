@@ -604,6 +604,11 @@ rbac.environmentNamespaces, so both grant exactly the same access (no drift).
 - apiGroups: [""]
   resources: ["secrets"]
   verbs: ["get", "list", "create", "update", "patch", "delete", "watch"]
+# Agent image prefetch reads the default ServiceAccount's image pull secrets.
+- apiGroups: [""]
+  resources: ["serviceaccounts"]
+  resourceNames: ["default"]
+  verbs: ["get"]
 # ConfigMaps for the per-environment Dagger engine config (engine.json).
 - apiGroups: [""]
   resources: ["configmaps"]

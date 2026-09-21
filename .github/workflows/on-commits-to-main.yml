@@ -97,6 +97,7 @@ jobs:
       GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
       AUTH_ADMIN_EMAIL: ${{ secrets.ARCHESTRA_DEMO_AUTH_ADMIN_EMAIL }}
       AUTH_ADMIN_PASSWORD: ${{ secrets.ARCHESTRA_DEMO_AUTH_ADMIN_PASSWORD }}
+      MFILES_VAF_ADD_ON_GITHUB_TOKEN: ${{ secrets.ARCHESTRA_STAGING_MFILES_VAF_ADD_ON_GITHUB_TOKEN }}
 
   # Keeps the backend-unit-test shards' cargo cache warm for FRESH PR
   # branches: Actions caches are only shared downward from the default

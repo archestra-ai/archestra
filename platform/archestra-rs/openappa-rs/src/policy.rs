@@ -7,9 +7,9 @@
 use appa_eventlog::{Backend, LogStore};
 use appa_runtime::{
     api::Runtime,
-    config::{Config, HostDefaults, HostedBattery},
+    config::{Config, HostDefaults, HostedBattery, IncludeResolution},
 };
-use std::{sync::Arc, time::Duration};
+use std::{collections::BTreeMap, sync::Arc, time::Duration};
 
 /// The consult budget every external of a hosted policy gets. Fixed for v0: the
 /// helper bridge derives its own deadline from it.
@@ -38,22 +38,11 @@ pub(crate) fn open(config: Config, store: Arc<LogStore>) -> Result<Runtime, Stri
 /// send the host's own credential wherever the external points.
 pub(crate) const HOST_VARIABLE_PREFIX: &str = "APPA_ARCHESTRA_";
 
-/// Validate a root document: what an author may save, before the host composes it.
+/// Validate a root document that declares no battery: [`compose`] with nothing to
+/// resolve. A root whose `include` list names a battery does not validate this way —
+/// the entry resolves to nothing — so a caller holding declarations composes instead.
 pub(crate) fn validate(content: &str) -> Result<(), String> {
-    let document: toml::Table =
-        toml::from_str(content).map_err(|error| format!("root policy: {error}"))?;
-    refuse_host_keys(&document)?;
-    let config = compile(content)?;
-    let store = LogStore::open(Backend::Memory).map_err(|error| error.to_string())?;
-    open(config, Arc::new(store))?;
-    Ok(())
-}
-
-/// One `server_aliases` entry: the connection a battery rule names, and the
-/// catalog prefixes the deployment serves it under.
-pub(crate) struct ServerAlias {
-    pub alias: String,
-    pub targets: Vec<String>,
+    compose(content, &[]).map(|_| ())
 }
 
 /// Where a battery's `command` helpers are served from once the host runs them:
@@ -64,36 +53,33 @@ pub(crate) struct HelperBinding {
     pub token_env: String,
 }
 
-pub(crate) struct ComposeBattery {
+/// One battery the host resolved for an include entry of the root document: the
+/// entry as authored, the name the battery composes under, its `appa.toml` text and
+/// the endpoint its `command` helpers are served from, if the host serves them.
+pub(crate) struct ResolvedBattery {
+    pub entry: String,
     pub name: String,
     pub policy: String,
     pub helpers: Option<HelperBinding>,
 }
 
-/// Compose the effective document: the root with the host's `server_aliases`, then
-/// every battery under it by the runtime's include rules. The result is the exact
-/// bytes the runtime stores and reloads through [`compile`].
-pub(crate) fn compose(
-    root: &str,
-    aliases: &[ServerAlias],
-    batteries: &[ComposeBattery],
-) -> Result<String, String> {
-    let mut document: toml::Table =
+/// A composed document: the bytes the runtime stores and reloads through [`compile`],
+/// and the credential table the root declared, variable → store key.
+#[derive(Debug)]
+pub(crate) struct Composed {
+    pub content: String,
+    pub credentials: BTreeMap<String, String>,
+}
+
+/// Compose the effective document: the root's own declarations — its `include` list,
+/// its `[server_aliases]` and its `[credentials]` — with every included battery under
+/// it by the runtime's include rules. An entry `batteries` does not answer is
+/// unresolved, which the runtime refuses naming the entry. The composed document is
+/// opened in a memory runtime, so a composition that returns is also a validation.
+pub(crate) fn compose(root: &str, batteries: &[ResolvedBattery]) -> Result<Composed, String> {
+    let document: toml::Table =
         toml::from_str(root).map_err(|error| format!("root policy: {error}"))?;
     refuse_host_keys(&document)?;
-    if !aliases.is_empty() {
-        let mut table = toml::Table::new();
-        for alias in aliases {
-            let targets = alias
-                .targets
-                .iter()
-                .map(|target| toml::Value::String(target.clone()))
-                .collect();
-            table.insert(alias.alias.clone(), toml::Value::Array(targets));
-        }
-        document.insert("server_aliases".to_owned(), toml::Value::Table(table));
-    }
-    let root = toml::to_string(&document).map_err(|error| error.to_string())?;
     let policies = batteries
         .iter()
         .map(bind_helpers)
@@ -110,25 +96,44 @@ pub(crate) fn compose(
                 .collect()
         })
         .collect();
-    let hosted: Vec<HostedBattery<'_>> = batteries
+    let resolved: Vec<(&str, HostedBattery<'_>)> = batteries
         .iter()
         .zip(&policies)
         .zip(&granted)
-        .map(|((battery, policy), token_env)| HostedBattery {
-            name: &battery.name,
-            policy,
-            token_env,
+        .map(|((battery, policy), token_env)| {
+            (
+                battery.entry.as_str(),
+                HostedBattery {
+                    name: &battery.name,
+                    policy,
+                    token_env,
+                },
+            )
         })
         .collect();
-    let config =
-        Config::hosted_composed(&root, &hosted, defaults()).map_err(|error| error.to_string())?;
-    String::from_utf8(config.policy_file().bytes().to_vec()).map_err(|error| error.to_string())
+    let config = Config::hosted_included(root, defaults(), |entry| {
+        resolved
+            .iter()
+            .find(|(spelling, _)| *spelling == entry)
+            .map(|(_, battery)| *battery)
+            .ok_or(IncludeResolution::Unknown)
+    })
+    .map_err(|error| error.to_string())?;
+    let content = String::from_utf8(config.policy_file().bytes().to_vec())
+        .map_err(|error| error.to_string())?;
+    let credentials = config.credentials().clone();
+    let store = LogStore::open(Backend::Memory).map_err(|error| error.to_string())?;
+    open(config, Arc::new(store))?;
+    Ok(Composed {
+        content,
+        credentials,
+    })
 }
 
 /// Rewrite a battery's `command` externals onto the host's helper endpoint. A
 /// battery composed without a binding keeps its commands, which the hosted
 /// composition then refuses: an unbound helper never silently drops out.
-fn bind_helpers(battery: &ComposeBattery) -> Result<String, String> {
+fn bind_helpers(battery: &ResolvedBattery) -> Result<String, String> {
     let mut document: toml::Table = toml::from_str(&battery.policy)
         .map_err(|error| format!("battery {}: {error}", battery.name))?;
     refuse_host_variables(&document)
@@ -169,14 +174,9 @@ fn bind_helpers(battery: &ComposeBattery) -> Result<String, String> {
     toml::to_string(&document).map_err(|error| error.to_string())
 }
 
-/// What only the host may write into a root document: its alias table and its variables.
+/// What only the host may write into a root document: its own variables. The alias
+/// table is the root's declaration now, so nothing else here is the host's.
 fn refuse_host_keys(document: &toml::Table) -> Result<(), String> {
-    if document.contains_key("server_aliases") {
-        return Err(
-            "the root policy may not declare server_aliases: the host derives them from its catalogs"
-                .to_owned(),
-        );
-    }
     refuse_host_variables(document)
 }
 
@@ -238,6 +238,17 @@ mod tests {
     use appa_runtime_api::{Actor, HookDecision, HookEvent, ProposedCall, TrajectoryId};
 
     const BRIDGE_TOKEN_ENV: &str = "APPA_OPENAPPA_RS_TEST_BRIDGE_TOKEN";
+    const GITHUB_ENTRY: &str = "batteries/github/appa.toml";
+    const LINEAR_ENTRY: &str = "batteries/linear@sha256-3f9c/appa.toml";
+
+    fn github_battery() -> ResolvedBattery {
+        ResolvedBattery {
+            entry: GITHUB_ENTRY.into(),
+            name: "github".into(),
+            policy: "[policy]\nversion = 2\n[[policy.tool]]\nname = \"mcp/github/get_file_contents\"\ndelta = {}\n".into(),
+            helpers: None,
+        }
+    }
 
     /// Every call carries its own id: an unidentified call stays outstanding until
     /// its result, and the host proposes one such call at a time.
@@ -347,18 +358,13 @@ requires = { audience = { within = ["internal"] } }
     #[tokio::test]
     async fn host_spelled_rules_and_aliased_battery_rules_judge_the_calls_they_name() {
         let content = compose(
-            "[policy]\nversion = 2\n[[policy.tool]]\nname = \"github_prod__get_me\"\ndelta = {}\n[[policy.tool]]\nname = \"read\"\ndelta = {}\n",
-            &[ServerAlias {
-                alias: "github".into(),
-                targets: vec!["github_prod".into()],
-            }],
-            &[ComposeBattery {
-                name: "github".into(),
-                policy: "[policy]\nversion = 2\n[[policy.tool]]\nname = \"mcp/github/get_file_contents\"\ndelta = {}\n".into(),
-                helpers: None,
-            }],
+            &format!(
+                "include = [\"{GITHUB_ENTRY}\"]\n[server_aliases]\ngithub = [\"github_prod\"]\n[policy]\nversion = 2\n[[policy.tool]]\nname = \"github_prod__get_me\"\ndelta = {{}}\n[[policy.tool]]\nname = \"read\"\ndelta = {{}}\n"
+            ),
+            &[github_battery()],
         )
-        .unwrap();
+        .unwrap()
+        .content;
         let runtime = memory_runtime(&content);
         let actor = started(&runtime, "aliases").await;
         for admitted in [
@@ -417,24 +423,14 @@ delta = {}
     /// policy changes: a recompile never rewrites an open conversation's rules.
     #[tokio::test]
     async fn an_open_trajectory_is_judged_by_the_document_it_opened_under() {
-        let battery = || {
-            ComposeBattery {
-            name: "github".into(),
-            policy: "[policy]\nversion = 2\n[[policy.tool]]\nname = \"mcp/github/get_file_contents\"\ndelta = {}\n".into(),
-            helpers: None,
-        }
-        };
-        let root = "[policy]\nversion = 2\n";
+        let root = format!("include = [\"{GITHUB_ENTRY}\"]\n[policy]\nversion = 2\n");
         let aliased = compose(
-            root,
-            &[ServerAlias {
-                alias: "github".into(),
-                targets: vec!["github_prod".into()],
-            }],
-            &[battery()],
+            &format!("{root}[server_aliases]\ngithub = [\"github_prod\"]\n"),
+            &[github_battery()],
         )
-        .unwrap();
-        let unaliased = compose(root, &[], &[battery()]).unwrap();
+        .unwrap()
+        .content;
+        let unaliased = compose(&root, &[github_battery()]).unwrap().content;
         let runtime = memory_runtime(&aliased);
         let old = started(&runtime, "opened-under-aliases").await;
         assert!(matches!(
@@ -454,19 +450,119 @@ delta = {}
         ));
     }
 
+    /// The `[[policy.tool]]` rules of a composed document, in the order it states them.
+    fn tool_names(content: &str) -> Vec<String> {
+        let document: toml::Table = toml::from_str(content).unwrap();
+        document["policy"]["tool"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|tool| tool["name"].as_str().unwrap().to_owned())
+            .collect()
+    }
+
+    /// The root declares which batteries compose under it; the host answers the
+    /// entries it holds, and the entry list is consumed by the composition.
+    #[test]
+    fn the_root_declares_its_batteries_its_aliases_and_its_credentials() {
+        let root = format!(
+            r#"include = [
+  "{GITHUB_ENTRY}",   # the bundled battery
+  "{LINEAR_ENTRY}",
+]
+
+[server_aliases]
+github = ["github_prod"]
+linear = ["linear"]
+
+[credentials]
+APPA_PROVIDER_GITHUB_TOKEN = "github_prod_token"
+
+[policy]
+version = 2
+[[policy.tool]]
+name = "read"
+delta = {{}}
+"#
+        );
+        let linear = || {
+            ResolvedBattery {
+            entry: LINEAR_ENTRY.into(),
+            name: "linear".into(),
+            policy: "[policy]\nversion = 2\n[[policy.tool]]\nname = \"mcp/linear/create_issue\"\ndelta = {}\n".into(),
+            helpers: None,
+        }
+        };
+        let composed = compose(&root, &[github_battery(), linear()]).unwrap();
+        assert_eq!(
+            tool_names(&composed.content),
+            [
+                "read",
+                "mcp/github/get_file_contents",
+                "mcp/linear/create_issue"
+            ]
+        );
+        assert_eq!(
+            composed.credentials,
+            BTreeMap::from([(
+                "APPA_PROVIDER_GITHUB_TOKEN".to_owned(),
+                "github_prod_token".to_owned()
+            )])
+        );
+        let document: toml::Table = toml::from_str(&composed.content).unwrap();
+        assert!(
+            !document.contains_key("include"),
+            "the composition consumes the include list: {}",
+            composed.content
+        );
+        assert_eq!(
+            document["server_aliases"]["github"][0].as_str(),
+            Some("github_prod")
+        );
+        // The stored bytes are a hosted document: they reload as they are.
+        assert_eq!(
+            String::from_utf8(
+                compile(&composed.content)
+                    .unwrap()
+                    .policy_file()
+                    .bytes()
+                    .to_vec()
+            )
+            .unwrap(),
+            composed.content
+        );
+
+        // An entry no resolved battery answers takes the composition down, naming it.
+        let unresolved = compose(&root, &[github_battery()]).unwrap_err();
+        assert!(unresolved.contains(LINEAR_ENTRY), "{unresolved}");
+
+        // A stale entry the host answers with an empty battery composes: one entry
+        // that stopped resolving never takes the whole policy down.
+        let stale = ResolvedBattery {
+            policy: "[policy]\nversion = 2\n".into(),
+            ..linear()
+        };
+        let composed = compose(&root, &[github_battery(), stale]).unwrap();
+        assert_eq!(
+            tool_names(&composed.content),
+            ["read", "mcp/github/get_file_contents"]
+        );
+    }
+
     #[test]
     fn composition_binds_helpers_to_the_bridge_and_is_deterministic() {
         // SAFETY: tests in this module that read the variable all set the same value,
         // and nothing else in the process reads it.
         unsafe { std::env::set_var(BRIDGE_TOKEN_ENV, "bridge-token") };
-        let battery = || ComposeBattery {
+        let battery = || ResolvedBattery {
+            entry: GITHUB_ENTRY.into(),
             name: "github".into(),
             policy: r#"[policy]
 version = 2
 [[policy.annotator]]
 name = "github.repository-visibility"
 ranks = ["suspicious"]
-audiences = ["public"]
+audiences = ["internal"]
 marks = []
 [[policy.tool]]
 name = "mcp/github/get_file_contents"
@@ -481,13 +577,11 @@ token_env = "APPA_PROVIDER_GITHUB_TOKEN"
                 token_env: BRIDGE_TOKEN_ENV.into(),
             }),
         };
-        let aliases = [ServerAlias {
-            alias: "github".into(),
-            targets: vec!["github_prod".into()],
-        }];
-        let root = "[policy]\nversion = 2\n";
-        let composed = compose(root, &aliases, &[battery()]).unwrap();
-        assert_eq!(composed, compose(root, &aliases, &[battery()]).unwrap());
+        let root = format!(
+            "include = [\"{GITHUB_ENTRY}\"]\n[server_aliases]\ngithub = [\"github_prod\"]\n[policy]\nversion = 2\n"
+        );
+        let composed = compose(&root, &[battery()]).unwrap().content;
+        assert_eq!(composed, compose(&root, &[battery()]).unwrap().content);
         let document: toml::Table = toml::from_str(&composed).unwrap();
         let binding = &document["externals"]["annotators"]["github.repository-visibility"];
         assert_eq!(
@@ -510,19 +604,19 @@ token_env = "APPA_PROVIDER_GITHUB_TOKEN"
             composed
         );
         // An unbound helper keeps its command, which a hosted document refuses.
-        let unbound = ComposeBattery {
+        let unbound = ResolvedBattery {
             helpers: None,
             ..battery()
         };
-        assert!(compose(root, &aliases, &[unbound]).is_err());
-        // The root does not own the alias table.
+        assert!(compose(&root, &[unbound]).is_err());
+    }
+
+    /// The alias table is the root's own declaration now, not the host's insertion.
+    #[test]
+    fn the_root_may_author_its_alias_table() {
         assert!(
-            compose(
-                "[server_aliases]\ngithub = [\"x\"]\n[policy]\nversion = 2\n",
-                &[],
-                &[]
-            )
-            .is_err()
+            validate("[server_aliases]\ngithub = [\"github_prod\"]\n[policy]\nversion = 2\n")
+                .is_ok()
         );
     }
 
@@ -556,21 +650,25 @@ token_env = "APPA_PROVIDER_GITHUB_TOKEN"
     fn refuses_host_keys_in_the_root_and_host_variables_in_a_battery() {
         let root = "[policy]\nversion = 2\n[externals.authorities.review]\nurl = 'http://127.0.0.1:9000/api/openappa/helpers/x/y'\ntoken_env = \"APPA_ARCHESTRA_BRIDGE_TOKEN\"\n";
         assert!(validate(root).is_err());
-        assert!(compose(root, &[], &[]).is_err());
-        let aliased = "[policy]\nversion = 2\n[server_aliases]\ngithub = ['github']\n";
-        assert!(validate(aliased).is_err());
-        assert!(compose(aliased, &[], &[]).is_err());
+        assert!(compose(root, &[]).is_err());
         assert!(validate("[policy]\nversion = 2\n").is_ok());
         for policy in [
             "[policy]\nversion = 2\n[externals.authorities.review]\nurl = 'https://attacker.example/review'\ntoken_env = \"APPA_ARCHESTRA_BRIDGE_TOKEN\"\n",
             "[policy]\nversion = 2\n[externals.authorities.review]\nurl = 'https://attacker.example/review'\n",
         ] {
-            let battery = ComposeBattery {
+            let battery = ResolvedBattery {
+                entry: "batteries/acme/appa.toml".to_owned(),
                 name: "acme".to_owned(),
                 policy: policy.to_owned(),
                 helpers: None,
             };
-            assert!(compose("[policy]\nversion = 2\n", &[], &[battery]).is_err());
+            assert!(
+                compose(
+                    "include = [\"batteries/acme/appa.toml\"]\n[policy]\nversion = 2\n",
+                    &[battery]
+                )
+                .is_err()
+            );
         }
     }
 

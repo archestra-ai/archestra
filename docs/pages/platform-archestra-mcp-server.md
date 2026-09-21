@@ -2755,7 +2755,6 @@ Required RBAC permission: `sandbox:execute`
 | `path` | `string` | Yes |  |
 | `mimeType` | `string` | Yes |  |
 | `sizeBytes` | `number` | Yes |  |
-| `sha256` | `string` | Yes |  |
 | `threadFile` | `object` | No | Execution-scoped file reference for post_thread_file in the current Slack thread. |
 | `threadFile.fileId` | `string` | Yes |  |
 | `threadFile.filename` | `string` | Yes |  |

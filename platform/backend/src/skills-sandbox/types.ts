@@ -102,7 +102,6 @@ export interface ExportedArtifact {
   path: string;
   mimeType: string;
   sizeBytes: number;
-  sha256: string;
   /** See {@link CommandResult.stagingNotices}. */
   stagingNotices: string[];
   /** True when an existing same-named persistent file was replaced in place. */

@@ -249,11 +249,15 @@ describe("temporary sandbox lifecycle", () => {
     ).toThrow("has ended");
   });
 
-  test("entry limits cover every sandbox in an execution and release restores admission", () => {
+  test("entry limits apply across sandboxes and release restores global capacity", () => {
+    const fill = (ctx: ReturnType<typeof openSandbox>) => {
+      const state = ephemeralSandboxStore.findById(ctx.sandbox.id);
+      if (!state) throw new Error("Missing temporary sandbox");
+      for (let i = 0; i < 256; i++)
+        state.appendCommand({ command: "true", timeoutSeconds: 1 });
+    };
     const ctx = openSandbox();
-    const state = ephemeralSandboxStore.findById(ctx.sandbox.id);
-    for (let i = 0; i < 256; i++)
-      state?.appendCommand({ command: "true", timeoutSeconds: 1 });
+    fill(ctx);
     const other = ephemeralSandboxStore.create({
       ...ctx.sandbox,
       isolationKey: ctx.isolationKey,
@@ -265,13 +269,15 @@ describe("temporary sandbox lifecycle", () => {
         mimeType: "text/plain",
       }),
     ).toThrow("storage is full");
-    ephemeralSandboxStore.release(ctx.isolationKey);
+    for (let i = 0; i < 7; i++) fill(openSandbox());
     const next = openSandbox();
     expect(() =>
       ephemeralSandboxStore
         .findById(next.sandbox.id)
         ?.appendCommand({ command: "true", timeoutSeconds: 1 }),
-    ).not.toThrow();
+    ).toThrow("storage is full");
+    ephemeralSandboxStore.release(ctx.isolationKey);
+    expect(() => fill(next)).not.toThrow();
   });
 
   test("byte limits reject an upload atomically before retaining a partial recipe", () => {

@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import type { ReplayEntry } from "@archestra/sandbox-rs";
 import config from "@/config";
 import logger from "@/logging";
@@ -283,7 +282,6 @@ class SkillSandboxRuntimeService {
       }
 
       const data = Buffer.from(artifact.dataBase64, "base64");
-      const sha256 = createHash("sha256").update(data).digest("hex");
       const mimeType = resolveArtifactMime({
         buffer: data,
         claimed: params.mimeType,
@@ -298,7 +296,6 @@ class SkillSandboxRuntimeService {
         return {
           data,
           filename,
-          sha256,
           sandboxId: params.sandboxId,
           path: resolvedPath,
           mimeType,
@@ -346,7 +343,6 @@ class SkillSandboxRuntimeService {
               artifactId: updated.id,
               data,
               filename,
-              sha256,
               sandboxId: params.sandboxId,
               path: resolvedPath,
               mimeType: updated.mimeType,
@@ -403,7 +399,6 @@ class SkillSandboxRuntimeService {
         artifactId: row.id,
         data,
         filename,
-        sha256,
         sandboxId: params.sandboxId,
         path: resolvedPath,
         mimeType: row.mimeType,

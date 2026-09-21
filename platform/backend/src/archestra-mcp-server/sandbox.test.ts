@@ -1113,6 +1113,42 @@ describe("sandbox tools (runtime enabled)", () => {
   });
 
   describe("download_file", () => {
+    test("persistent ChatOps exports do not create Slack file references", async () => {
+      const ctx = {
+        ...context,
+        isolationKey: randomUUID(),
+        chatOpsBindingId: randomUUID(),
+        chatOpsThreadId: "1780000000.000001",
+        chatOpsMessageId: "1780000000.000002",
+      };
+      const data = Buffer.from("private report");
+      vi.spyOn(sandboxRuntimeService, "isEnabled", "get").mockReturnValue(true);
+      vi.spyOn(sandboxRuntimeService, "readArtifact").mockResolvedValue({
+        dataBase64: data.toString("base64"),
+        sizeBytes: data.length,
+      });
+
+      try {
+        const result = await executeArchestraTool(
+          TOOL_DOWNLOAD_FILE_FULL_NAME,
+          { path: "report.txt" },
+          ctx,
+        );
+        expect(result.isError, textOf(result)).toBe(false);
+        const fileId = result.structuredContent?.fileId;
+        if (typeof fileId !== "string") throw new Error("Missing saved file");
+        expect(
+          (await fileStore.get({ ref: fileId, organizationId, userId }))?.data,
+        ).toEqual(data);
+        expect(result.structuredContent).not.toHaveProperty("threadFile");
+        expect(textOf(result)).not.toContain("Slack");
+        expect(textOf(result)).not.toContain("post_thread_file");
+      } finally {
+        executionSandboxRegistry.release(ctx.isolationKey);
+        threadFileStore.release(ctx.isolationKey);
+      }
+    });
+
     test.for([
       {
         filename: "report.pdf",
@@ -1243,7 +1279,6 @@ describe("sandbox tools (runtime enabled)", () => {
           artifactId: "artifact-1",
           data: Buffer.alloc(42, 7),
           filename: "file.txt",
-          sha256: "0".repeat(64),
           sandboxId: "sb" as any,
           path: "/home/sandbox/out/file.txt",
           mimeType: "text/plain",
@@ -1295,7 +1330,6 @@ describe("sandbox tools (runtime enabled)", () => {
         artifactId: "tiny-png",
         data: Buffer.alloc(256, 7),
         filename: "preview.png",
-        sha256: "0".repeat(64),
         sandboxId: "sb" as any,
         path: "/home/sandbox/preview.png",
         mimeType: "image/png",
@@ -1996,7 +2030,6 @@ describe("PFS tools (search_files, my_file source, download_file project)", () =
           artifactId: "art-0",
           data: Buffer.from("out"),
           filename: "out.txt",
-          sha256: "0".repeat(64),
           sandboxId: "sb" as any,
           path: "/home/sandbox/out.txt",
           mimeType: "text/plain",
@@ -2036,7 +2069,6 @@ describe("PFS tools (search_files, my_file source, download_file project)", () =
           artifactId: "art-1",
           data: Buffer.from("out"),
           filename: "out.txt",
-          sha256: "0".repeat(64),
           sandboxId: "sb" as any,
           path: "/home/sandbox/out.txt",
           mimeType: "text/plain",

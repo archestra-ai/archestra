@@ -231,7 +231,6 @@ const DownloadFileOutputSchema = z.object({
   path: z.string(),
   mimeType: z.string(),
   sizeBytes: z.number(),
-  sha256: z.string(),
   threadFile: z
     .object({
       fileId: z.string(),
@@ -924,13 +923,8 @@ const registry = defineArchestraTools([
               filename: result.filename,
             });
           } catch {
-            if (ephemeral) {
-              return errorResult(
-                "The temporary file could not be retained. Export it again during an active Slack execution.",
-              );
-            }
-            result.stagingNotices.push(
-              "The file was saved, but a file reference for Slack could not be retained. Export it again before posting it.",
+            return errorResult(
+              "The temporary file could not be retained. Export it again during an active Slack execution.",
             );
           }
         }
@@ -952,7 +946,6 @@ const registry = defineArchestraTools([
             path: result.path,
             mimeType: result.mimeType,
             sizeBytes: result.sizeBytes,
-            sha256: result.sha256,
             ...(threadFile ? { threadFile } : {}),
             stagingNotices: result.stagingNotices,
             overwritten: result.overwritten,
@@ -2712,6 +2705,7 @@ function currentThreadFileScope(
     !organizationId ||
     !userId ||
     !isolationKey ||
+    !executionSandboxRegistry.isEphemeralExecution(isolationKey) ||
     !chatOpsBindingId ||
     !chatOpsThreadId ||
     !chatOpsMessageId ||

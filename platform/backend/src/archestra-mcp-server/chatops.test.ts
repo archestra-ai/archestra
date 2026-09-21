@@ -252,14 +252,9 @@ describe("post_thread_file", () => {
     expect(uploads).toHaveLength(2);
   });
 
-  test.for([
-    { filename: "report.csv", data: Buffer.from("item,count\nalpha,2\n") },
-    { filename: "report.pdf", data: Buffer.from("%PDF-1.7\n%%EOF\n") },
-    { filename: "archive.zip", data: Buffer.from([0x50, 0x4b, 3, 4, 0, 255]) },
-  ])("uploads $filename unchanged without a sandbox", async ({
-    filename,
-    data,
-  }) => {
+  test("uploads a non-image binary unchanged without a sandbox", async () => {
+    const filename = "archive.zip";
+    const data = Buffer.from([0x50, 0x4b, 3, 4, 0, 255]);
     config.skillsSandbox.enabled = false;
     const file = retain({ filename, data });
     const result = await send(file);

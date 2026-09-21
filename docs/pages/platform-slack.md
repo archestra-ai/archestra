@@ -133,31 +133,21 @@ Admins can view autoprovisioned users on the **Settings → Users** page — fro
 
 ## Attachments
 
-Messages sent to the bot can include file attachments (images, PDFs, documents, etc.). Attachments are automatically downloaded and passed to the agent for processing. Files the selected model can read — images, PDFs, and text documents such as CSV, TSV, JSON, XML, YAML, TOML, and Markdown — are included inline in the agent's context. When the agent has a code sandbox, other file types (for example a SQLite database or a ZIP archive) are placed into the sandbox so the agent can open them with its tools. Anything that still cannot be provided is noted by name so the agent can tell the user. A message that contains only a file (no text) is processed too.
+Attach files when you message the bot. The agent reads supported files directly. A [code sandbox](/docs/platform-code-sandbox) lets it work with other formats. The agent receives a notice when an attachment cannot be read.
 
 ### Files In Threads
 
-Agents can return original attachments or generated files in the current channel thread. Enable **Post Thread File** in the agent's tools. Slack stores the uploaded file; no public file host is needed.
+Agents can return attachments and generated files in the same Slack channel thread. Files upload directly to Slack without a public file host.
 
-For example, attach a product photo and ask the agent to crop it for a draft. Generated documents and spreadsheets use the same upload flow. Creating or editing files requires a code sandbox. Returning an unchanged attachment does not.
+Make **Post Thread File** available through the [agent's tools](/docs/platform-agents#tool-access-modes). Creating or editing files requires a code sandbox. Returning an unchanged attachment works without one.
 
-References to original attachments and generated files last only for the current agent execution. Later messages fetch attachments again from Slack or regenerate outputs. Slack sandbox uploads and exports bypass persistent file storage. Persistent file-writing tools are unavailable in Slack executions. Uploads remain subject to tool policies and the agent's network restrictions. Policies requiring approval block file delivery in this version.
+The agent can reuse temporary files only during the current run. Later requests must fetch the original attachment again or regenerate the output.
 
-Temporary application buffers are released when execution ends, with a one-hour expiry as a fallback. An upload already in progress may finish after that point. Dagger runtime copies follow its cache eviction policy and may outlive the execution. Slack keeps delivered files under its own retention policy. Structured inline file bodies are omitted from Slack interaction logs. Text extracted from files and ordinary tool output still follow the configured log retention.
+File delivery supports channel threads, including private channels the bot can access. See the [tool reference](/docs/platform-archestra-mcp-server#post_thread_file) for limits, access requirements, and retention.
 
-Delivery supports channel threads, including private channels the bot can access. Direct-message delivery and sending to other channels are not supported. This does not provide a public media URL for services such as Buffer.
+### Use Case
 
-See the [tool reference](/docs/platform-archestra-mcp-server#chatops) for supported formats and delivery controls.
-
-**Incoming Attachment Limits:**
-- Max 20 attachments per message
-- Max 10 MiB per non-image file
-- Max 20 MiB per image
-- Max 25 MiB total across all attachments in a single message
-
-Outgoing files can be up to 20 MiB each.
-
-The agent receives a notice when an attachment cannot be provided. Large images may use smaller model previews while retaining their original bytes for the current execution.
+Attach a product photo and ask the agent to crop it for a draft. The agent returns the edited image in the same thread.
 
 ## Troubleshooting
 

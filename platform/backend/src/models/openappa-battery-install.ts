@@ -72,6 +72,15 @@ class OpenAppaBatteryInstallModel {
       .where(eq(table.organizationId, params.organizationId));
   }
 
+  /** Every organization holding rows, for the step that declares the legacy ones. */
+  static async listOrganizationIds(): Promise<string[]> {
+    const rows = await db
+      .selectDistinct({ organizationId: table.organizationId })
+      .from(table)
+      .orderBy(asc(table.organizationId));
+    return rows.map((row) => row.organizationId);
+  }
+
   static async list(organizationId: string): Promise<BatteryInstall[]> {
     return db
       .select()

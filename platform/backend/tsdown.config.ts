@@ -299,6 +299,8 @@ export default defineConfig((options: UserConfig) => {
       // Encryption-key re-encryption migration, run by the Helm migration Job.
       "src/standalone-scripts/reencrypt-content.ee.ts",
       "src/standalone-scripts/reencrypt-secrets.ts",
+      // Battery installs → policy declarations, run by the Helm migration Job.
+      "src/standalone-scripts/openappa-declare-installs.ts",
     ],
 
     // Copy SQL migrations and other assets that need to exist at runtime

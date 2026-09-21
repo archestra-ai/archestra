@@ -73,7 +73,7 @@ class OpenAppaSessionModel {
           .returning({ receiptToken: table.receiptToken });
         if (assigned?.receiptToken) return assigned.receiptToken;
         // No row updated: the session row is missing, or a concurrent writer
-        // already assigned its token — read once to tell the two apart.
+        // already assigned its token - read once to tell the two apart.
         const raced = await OpenAppaSessionModel.find({
           organizationId: params.organizationId,
           sessionId: params.sessionId,

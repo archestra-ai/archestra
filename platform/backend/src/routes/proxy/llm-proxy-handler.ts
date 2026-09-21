@@ -2475,7 +2475,7 @@ async function handleStreaming<
         // call the client cannot execute. `state.toolCalls` is updated to match
         // what actually went out, so the persisted interaction and
         // `toProviderResponse()` describe the turn the client saw rather than
-        // the one the model first wrote — logged under the provider's call
+        // the one the model first wrote - logged under the provider's call
         // ids, as the requests are.
         const allEvents =
           rewrittenToolCalls && streamAdapter.formatToolCallsSSE

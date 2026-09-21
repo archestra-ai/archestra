@@ -439,18 +439,18 @@ export function isResultGovernedHostedTool(params: {
  *
  * A session id cannot come from static client configuration: it changes every
  * time a person starts a new session, and no external client has logic to mint
- * one for us. Client-specific signals — Claude Code's session header, Codex's
- * turn metadata, OpenCode's session headers — are extracted by the client
+ * one for us. Client-specific signals - Claude Code's session header, Codex's
+ * turn metadata, OpenCode's session headers - are extracted by the client
  * adapters (`appa-plugin-archestra/adapters`), which run before these generic
  * fallbacks. An explicit `X-Appa-Session-ID` still wins where it is sent
  * (Chat, the qualification harness, any caller that manages roots
  * deliberately).
  *
  * What each family offers generically, and why:
- *  - anthropic:messages — Claude clients repeat the session uuid inside
+ *  - anthropic:messages - Claude clients repeat the session uuid inside
  *    `metadata.user_id` (a JSON blob of device/account/session), which is
  *    per-session and survives a restart of the same session.
- *  - openai:responses / chatCompletions — the legacy OpenCode
+ *  - openai:responses / chatCompletions - the legacy OpenCode
  *    `x-opencode-session` header, then request fields that are stable across a
  *    conversation: `prompt_cache_key` (OpenAI's own per-conversation cache
  *    partition), an explicit `metadata.session_id`, then `conversation`.

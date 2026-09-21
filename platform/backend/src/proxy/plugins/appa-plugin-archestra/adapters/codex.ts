@@ -85,7 +85,7 @@ export class AppaCodexAdapter implements AppaClientAdapter {
       threadId ??= claim.threadId;
     }
     // `forked_from_thread_id` marks the client's fork, but the runtime only
-    // opens a child on a spawn the parent prepared — a bare parent id would
+    // opens a child on a spawn the parent prepared - a bare parent id would
     // refuse the session outright. The fork's replayed history carries the
     // parent's trajectory stamps, which continue the parent's root instead.
     const root = threadId ?? sessionId;

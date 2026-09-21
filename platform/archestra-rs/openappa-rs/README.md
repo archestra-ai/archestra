@@ -110,16 +110,16 @@ The proxy scopes external session IDs to the authenticated credential. Another c
 
 `SessionStart` restores the existing trajectory. The proxy sends `Prompt` at the start of each user turn, and `TurnEnd` after a terminal model answer. Detached MCP tasks remain disabled while OpenAPPA is enabled.
 
-For Claude Code, Codex, and OpenCode, the proxy may show this two-line mark at the end of a protected session's first reply and on compaction summaries:
+For Claude Code, Codex, and OpenCode, the proxy can append this two-line mark to a protected session's first reply and compaction summaries:
 
 ```
 ▄█▄▄▄█▄  protected session XK7-Q2M9
 ██▄█▄██
 ```
 
-Claude Code supplies its session header. Codex supplies thread metadata. OpenCode supplies session headers. The mark proves which protected session wrote the reply. The proxy removes it before the provider and before logging. Most replies carry nothing. Signed tool-call IDs supply separate lineage evidence.
+Claude Code supplies its session header. Codex supplies thread metadata. OpenCode supplies session headers. The mark proves which protected session authored the reply. The proxy strips the mark before forwarding requests to the provider and before logging. Most replies carry no mark. Signed tool-call IDs supply separate lineage evidence.
 
-Only supported text fields carry the mark. Structured outputs, tool data, reasoning fields, and unsupported clients do not. Compaction summaries keep the mark so lineage survives a client rewrite.
+Only supported text fields carry the mark. Structured outputs, tool data, reasoning fields, and unsupported clients never carry the mark. Compaction summaries retain the mark so lineage survives client-side history rewrites.
 
 Both streaming and non-streaming proxy paths call `ToolCall`; existing streaming
 buffers retain tool deltas until the decision completes. Existing name
@@ -142,7 +142,7 @@ the proxy filters model input, not data already stored or displayed by Chat.
 
 ## Storage and interrupted processing
 
-Migration `0471_openappa_native.sql` creates the event and receipt tables. Migration `0479_perpetual_malcolm_colcord.sql` adds host-key indexes. Migration `0483_openappa_batteries.sql` adds the composed batteries. Migration `0484_openappa_session_forks.sql` adds fork lineage. Offer routing is a host-signed claim. Session receipts are stored on `openappa_sessions` and verified by lookup.
+Migration `0471_openappa_native.sql` creates the event and receipt tables. Migration `0479_perpetual_malcolm_colcord.sql` adds host-key indexes. Migration `0483_openappa_batteries.sql` adds the composed batteries. Migration `0484_openappa_session_fork_receipts.sql` adds fork lineage. Offer routing is a host-signed claim. Session receipts are stored on `openappa_sessions` and verified by lookup.
 
 | Table | Owner / purpose |
 | --- | --- |
@@ -177,13 +177,13 @@ The proxy can create a new session as a fork only before that session opens a
 trajectory. A fork requires a protected-session mark or a tool-call stamp from the same
 caller and organization. A session cannot be both a child and a fork. A
 session that already owns a root cannot move to another history. The fork
-opens its own root with the parent root's policy revision, current state,
-effects, and denials. Parent and child activities remain separate.
+opens an independent root with the parent root's policy revision, current state,
+effects, and denials. Parent and child activities stay separate.
 
 `forked_at` is the database-clock watermark recorded while the process holds the parent root lock.
 A fork inherits only parent decisions completed strictly before that watermark,
 including across a chain of forks. If the parent admits a result after the fork opens,
-the fork withholds that result. If a process crashes before it writes
+the fork withholds that result. If a process stops unexpectedly before writing
 the session row, recovery sets a NULL watermark and inherits no results.
 
 Pending receipts deliberately require operator investigation. Inspect the

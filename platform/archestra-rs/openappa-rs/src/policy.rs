@@ -98,12 +98,26 @@ pub(crate) fn compose(
         .iter()
         .map(bind_helpers)
         .collect::<Result<Vec<_>, _>>()?;
+    // A battery reads one variable at most: the bridge token of the helpers this host
+    // bound for it.
+    let granted: Vec<Vec<&str>> = batteries
+        .iter()
+        .map(|battery| {
+            battery
+                .helpers
+                .iter()
+                .map(|binding| binding.token_env.as_str())
+                .collect()
+        })
+        .collect();
     let hosted: Vec<HostedBattery<'_>> = batteries
         .iter()
         .zip(&policies)
-        .map(|(battery, policy)| HostedBattery {
+        .zip(&granted)
+        .map(|((battery, policy), token_env)| HostedBattery {
             name: &battery.name,
             policy,
+            token_env,
         })
         .collect();
     let config =

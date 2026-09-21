@@ -28,6 +28,7 @@
 //! the event the host names it in, never through an argument the parent spells, so
 //! [`names_children`] is always empty and no raw spelling derives as the spawn.
 
+use appa_runtime::yell::HarnessName;
 use appa_runtime_api::{
     Actor, Adapter, AdapterName, CanonicalTool, Derived, ParseRefusal, ProposedCall, TrajectoryId,
 };
@@ -48,6 +49,11 @@ pub(crate) fn adapter() -> Adapter {
 
 /// The name the reporting receiver files Archestra's yells under.
 pub(crate) const HARNESS: &str = "archestra";
+
+/// The name this host files its reports under.
+pub(crate) fn harness() -> HarnessName {
+    HarnessName::parse(HARNESS).expect("the harness name is spelled as a package name")
+}
 
 /// The control tool as Archestra advertises it to the model.
 pub(crate) const CONTROL_TOOL_RAW: &str = "archestra__execute_remedy_plan";

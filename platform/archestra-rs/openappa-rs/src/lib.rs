@@ -1135,7 +1135,7 @@ impl State {
                 &self.runtime,
                 appa_runtime::yell::embedded::Request {
                     actor: actor.clone(),
-                    harness: adapter::HARNESS,
+                    harness: adapter::harness(),
                     endpoint: reporting.endpoint.clone(),
                     hostname: reporting.hostname.clone(),
                     message: args.message,

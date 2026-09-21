@@ -28,6 +28,7 @@ import {
   GithubAuthConfigFields,
   type GithubAuthMethod,
 } from "@/components/github-auth-config-fields";
+import { GithubPatFields } from "@/components/github-pat-fields";
 import { SearchInput } from "@/components/search-input";
 import { StandardDialog } from "@/components/standard-dialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -50,7 +51,6 @@ import {
 import { FieldDescription } from "@/components/ui/field-description";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { SecretInput } from "@/components/ui/secret-input";
 import {
   Select,
   SelectContent,
@@ -849,87 +849,24 @@ export function ImportMarketplaceDialog({
                   </>
                 }
                 patFields={
-                  <>
-                    {githubPats.length > 0 && (
-                      <Select
-                        value={githubPatId || "new"}
-                        onValueChange={(value) => {
-                          setGithubPatId(value === "new" ? "" : value);
-                          if (value !== "new") {
-                            setGithubToken("");
-                            setNewTokenName("");
-                          }
-                        }}
-                      >
-                        <SelectTrigger
-                          className="w-full"
-                          aria-label="Saved token"
-                        >
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {githubPats.map((pat) => (
-                            <SelectItem key={pat.id} value={pat.id}>
-                              {pat.name}
-                            </SelectItem>
-                          ))}
-                          <SelectItem value="new">New token…</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    )}
-                    {githubPatId ? (
-                      <p className="text-sm text-muted-foreground">
-                        Scheduled checks stay authenticated with this saved
-                        token. Manage saved tokens in{" "}
-                        <a
-                          href="/settings/credentials"
-                          className="font-medium text-primary underline-offset-4 hover:underline"
-                        >
-                          Settings → Credentials
-                        </a>
-                        .
-                      </p>
-                    ) : (
-                      <>
-                        <SecretInput
-                          id="marketplace-github-token"
-                          value={githubToken}
-                          onChange={(e) => setGithubToken(e.target.value)}
-                          placeholder="ghp_…"
-                        />
-                        {githubToken.trim() && (
-                          <Input
-                            value={newTokenName}
-                            onChange={(e) => setNewTokenName(e.target.value)}
-                            placeholder={`Token name — e.g. ${repoSlug || "marketplace repo"} token`}
-                            aria-label="Token name"
-                            autoComplete="off"
-                            data-1p-ignore
-                            data-lpignore="true"
-                          />
-                        )}
-                        <p className="text-sm text-muted-foreground">
-                          Needed for private repositories. Saved to{" "}
-                          <a
-                            href="/settings/credentials"
-                            className="font-medium text-primary underline-offset-4 hover:underline"
-                          >
-                            Settings → Credentials
-                          </a>{" "}
-                          on import so scheduled checks stay authenticated.{" "}
-                          <a
-                            href="https://github.com/settings/personal-access-tokens/new"
-                            target="_blank"
-                            rel="noreferrer"
-                            className="font-medium text-primary underline-offset-4 hover:underline"
-                          >
-                            Create a token
-                          </a>
-                          .
-                        </p>
-                      </>
-                    )}
-                  </>
+                  <GithubPatFields
+                    idPrefix="marketplace"
+                    pats={githubPats}
+                    patId={githubPatId}
+                    onPatIdChange={(patId) => {
+                      setGithubPatId(patId);
+                      if (patId) {
+                        setGithubToken("");
+                        setNewTokenName("");
+                      }
+                    }}
+                    token={githubToken}
+                    onTokenChange={setGithubToken}
+                    tokenName={newTokenName}
+                    onTokenNameChange={setNewTokenName}
+                    repoLabel={repoSlug}
+                    purpose="scheduled checks"
+                  />
                 }
               />
               <div className="space-y-2">

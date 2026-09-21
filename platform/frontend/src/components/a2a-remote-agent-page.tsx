@@ -1,8 +1,8 @@
 "use client";
 
-import { PackageX, Power, Trash2 } from "lucide-react";
+import { CircleCheck, Loader2, PackageX, Power, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   A2aRemoteAgentForm,
   type A2aRemoteAgentFormSubmission,
@@ -10,6 +10,8 @@ import {
 import { AgentIcon } from "@/components/agent-icon";
 import { AgentPageShell } from "@/components/agent-pages/agent-page-shell";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { PageBackLink } from "@/components/page-back-link";
+import { PageWizard } from "@/components/page-wizard";
 import { PermissionRequirementHint } from "@/components/permission-requirement-hint";
 import { QueryLoadError } from "@/components/query-load-error";
 import {
@@ -46,27 +48,76 @@ import { useHasPermissions } from "@/lib/auth/auth.query";
 
 const CREATE_BACK_HREF = "/agents/new";
 const LIST_HREF = "/agents";
+const A2A_SETUP_STEPS = [{ id: "connection", title: "Connection" }] as const;
 
 export function CreateA2aRemoteAgentPage() {
   const router = useRouter();
   const permission = useHasPermissions({ agentSettings: ["update"] });
+  const readPermission = useHasPermissions({ agent: ["read"] });
   const createMutation = useCreateA2aRemoteAgent();
   const [formDirty, setFormDirty] = useState(false);
+  const [created, setCreated] = useState<{ id: string; name: string } | null>(
+    null,
+  );
   const navigationGuard = usePageUnsavedChangesGuard(formDirty);
+  const isReadPermissionKnown = !readPermission.isPending;
+  const showsUnreadableSuccess =
+    !!created && isReadPermissionKnown && !readPermission.data;
+
+  useEffect(() => {
+    if (!created || !isReadPermissionKnown || !readPermission.data) return;
+    router.push(a2aRemoteAgentDetailHref(created.id));
+  }, [created, isReadPermissionKnown, readPermission.data, router]);
 
   return (
     <>
-      <AgentPageShell
-        backHref={CREATE_BACK_HREF}
-        backLabel="Add Agent"
-        onBackRequest={() => navigationGuard.requestNavigate(CREATE_BACK_HREF)}
-        header={{
-          title: "Connect external A2A agent",
-          description:
-            "Connect an Agent2Agent-compatible system and choose who can assign it.",
-        }}
+      <PageWizard
+        title="Connect external A2A agent"
+        description="Connect an Agent2Agent-compatible system and choose who can assign it."
+        backLink={
+          showsUnreadableSuccess ? undefined : (
+            <PageBackLink
+              href={CREATE_BACK_HREF}
+              onNavigate={() => {
+                if (createMutation.isPending || created) return;
+                navigationGuard.requestNavigate(CREATE_BACK_HREF);
+              }}
+            >
+              Add Agent
+            </PageBackLink>
+          )
+        }
+        steps={A2A_SETUP_STEPS}
+        activeStep="connection"
       >
-        {permission.isPending ? (
+        {showsUnreadableSuccess ? (
+          <Empty className="border">
+            <EmptyHeader>
+              <EmptyMedia variant="icon">
+                <CircleCheck />
+              </EmptyMedia>
+              <EmptyTitle>External A2A agent connected</EmptyTitle>
+              <EmptyDescription>
+                <span>
+                  &quot;{created.name}&quot; was connected. You do not have
+                  permission to view it.
+                </span>
+              </EmptyDescription>
+            </EmptyHeader>
+          </Empty>
+        ) : created ? (
+          <Empty className="border">
+            <EmptyHeader>
+              <EmptyMedia variant="icon">
+                <Loader2 className="animate-spin" />
+              </EmptyMedia>
+              <EmptyTitle>External A2A agent connected</EmptyTitle>
+              <EmptyDescription>
+                Opening &quot;{created.name}&quot;…
+              </EmptyDescription>
+            </EmptyHeader>
+          </Empty>
+        ) : permission.isPending ? (
           <FormSkeleton />
         ) : permission.data ? (
           <A2aRemoteAgentForm
@@ -84,7 +135,12 @@ export function CreateA2aRemoteAgentPage() {
                 },
                 {
                   onSuccess: (agent) => {
-                    if (agent) router.push(a2aRemoteAgentDetailHref(agent.id));
+                    if (!agent) return;
+                    setCreated({ id: agent.id, name: agent.name });
+                    // The draft is saved and the destination is deliberate;
+                    // clear the old capture before routing so it cannot ask
+                    // about changes that no longer exist.
+                    setFormDirty(false);
                   },
                 },
               );
@@ -100,7 +156,7 @@ export function CreateA2aRemoteAgentPage() {
             </CardContent>
           </Card>
         )}
-      </AgentPageShell>
+      </PageWizard>
       <UnsavedChangesDialog
         open={navigationGuard.confirmOpen}
         onKeepEditing={navigationGuard.keepEditing}
@@ -172,6 +228,7 @@ export function A2aRemoteAgentDetailPage({ id }: { id: string }) {
   return (
     <>
       <AgentPageShell
+        stickyFooter
         backHref={LIST_HREF}
         backLabel="Agents"
         onBackRequest={() => navigationGuard.requestNavigate(LIST_HREF)}

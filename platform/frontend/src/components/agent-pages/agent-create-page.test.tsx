@@ -524,4 +524,30 @@ describe("AgentCreatePage", () => {
       screen.getByRole("button", { name: /connect via a2a/i }),
     ).toBeInTheDocument();
   });
+
+  it("guards an unrelated in-app link while a configuration draft is dirty", async () => {
+    const user = userEvent.setup();
+    render(<AgentCreatePage kind="mcp_gateway" />);
+    await user.click(screen.getByTestId(E2eTestId.AgentSetupNextButton));
+    await user.click(screen.getByTestId(E2eTestId.AgentSetupNextButton));
+    await user.click(screen.getByRole("button", { name: "make dirty" }));
+
+    const sidebarLink = document.createElement("a");
+    sidebarLink.href = "/settings";
+    sidebarLink.textContent = "Settings";
+    document.body.append(sidebarLink);
+    try {
+      await user.click(sidebarLink);
+
+      expect(
+        screen.getByRole("heading", { name: "Discard unsaved changes?" }),
+      ).toBeInTheDocument();
+      expect(push).not.toHaveBeenCalled();
+
+      await user.click(screen.getByRole("button", { name: "Discard changes" }));
+      expect(push).toHaveBeenCalledWith("/settings");
+    } finally {
+      sidebarLink.remove();
+    }
+  });
 });

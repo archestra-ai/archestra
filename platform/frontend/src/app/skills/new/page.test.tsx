@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -96,8 +96,9 @@ describe("NewSkillPage catalog gating", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("Custom GitHub URL")).toBeInTheDocument();
     expect(screen.getByText("Blank template")).toBeInTheDocument();
-    // The source step comes first; the editor waits for a choice.
-    expect(screen.getByText("Source")).toBeInTheDocument();
+    // Source selection is a prelude, so a one-step configuration wizard does
+    // not add a redundant numbered stepper.
+    expect(screen.queryByText("Source")).not.toBeInTheDocument();
     expect(contentEditor()).not.toBeInTheDocument();
   });
 
@@ -119,6 +120,23 @@ describe("NewSkillPage catalog gating", () => {
       "href",
       "/skills",
     );
+  });
+
+  it("confirms before leaving a dirty configuration draft", async () => {
+    mockOrganization(false);
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.type(screen.getByLabelText("Skill name"), "release-checklist");
+    await user.click(screen.getByRole("link", { name: "Skills" }));
+
+    expect(
+      screen.getByRole("heading", { name: "Discard unsaved changes?" }),
+    ).toBeVisible();
+    expect(routerPush).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "Discard changes" }));
+    expect(routerPush).toHaveBeenCalledWith("/skills");
   });
 
   it("shows neither the catalog nor the editor while the org setting is loading", () => {
@@ -200,5 +218,79 @@ describe("NewSkillPage wizard", () => {
     await user.click(screen.getByText("Blank template"));
     await user.click(screen.getByRole("button", { name: "Back" }));
     expect(screen.getByText("Popular repositories")).toBeInTheDocument();
+  });
+
+  it("guards a source change that would discard the configuration draft", async () => {
+    mockOrganization(true);
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(screen.getByText("Blank template"));
+    await user.type(screen.getByLabelText("Skill name"), "release-checklist");
+    await user.click(screen.getByRole("button", { name: "Back" }));
+    await user.click(screen.getByRole("button", { name: /Custom GitHub URL/ }));
+
+    expect(
+      screen.getByRole("heading", { name: "Discard unsaved changes?" }),
+    ).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Keep editing" }));
+    expect(
+      screen.queryByTestId("import-skills-dialog"),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /Custom GitHub URL/ }));
+    await user.click(screen.getByRole("button", { name: "Discard changes" }));
+    expect(screen.getByTestId("import-skills-dialog")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /Blank template/ }));
+    expect(screen.getByLabelText("Skill name")).toHaveValue("");
+  });
+
+  it("keeps the draft and re-enables retry after a failed create", async () => {
+    mockOrganization(false);
+    createMutateAsync.mockResolvedValueOnce(null);
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.clear(screen.getByLabelText("Skill name"));
+    await user.type(screen.getByLabelText("Skill name"), "release-checklist");
+    await user.type(
+      screen.getByLabelText("Description"),
+      "Verify a release before shipping.",
+    );
+    await user.click(screen.getByRole("button", { name: "Create skill" }));
+
+    await waitFor(() => expect(createMutateAsync).toHaveBeenCalledTimes(1));
+    expect(screen.getByLabelText("Skill name")).toHaveValue(
+      "release-checklist",
+    );
+    expect(screen.getByRole("button", { name: "Create skill" })).toBeEnabled();
+  });
+
+  it("keeps the creator in place when it cannot read the new skill", async () => {
+    mockOrganization(false);
+    vi.mocked(useHasPermissions).mockImplementation(
+      (permissions) =>
+        ({
+          data: !Object.values(permissions).some((actions) =>
+            actions.includes("read"),
+          ),
+          isPending: false,
+        }) as ReturnType<typeof useHasPermissions>,
+    );
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.type(screen.getByLabelText("Skill name"), "release-checklist");
+    await user.type(
+      screen.getByLabelText("Description"),
+      "Verify a release before shipping.",
+    );
+    await user.click(screen.getByRole("button", { name: "Create skill" }));
+
+    expect(
+      await screen.findByText(/do not have permission to view it/i),
+    ).toBeVisible();
+    expect(routerPush).not.toHaveBeenCalled();
   });
 });

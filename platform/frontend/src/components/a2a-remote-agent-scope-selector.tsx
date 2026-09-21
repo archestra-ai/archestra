@@ -16,6 +16,7 @@ export function A2aRemoteAgentScopeSelector({
   onUserIdsChange,
   onChoiceChange,
   initialScope,
+  disabled = false,
 }: {
   scope: ResourceVisibilityScope;
   onScopeChange: (scope: ResourceVisibilityScope) => void;
@@ -25,6 +26,7 @@ export function A2aRemoteAgentScopeSelector({
   onUserIdsChange: (ids: string[]) => void;
   onChoiceChange?: (choice: A2aVisibilityChoice) => void;
   initialScope?: ResourceVisibilityScope;
+  disabled?: boolean;
 }) {
   const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
   const { data: canManageExternalAgents } = useHasPermissions({
@@ -52,6 +54,7 @@ export function A2aRemoteAgentScopeSelector({
       onUserIdsChange={onUserIdsChange}
       hasNoAvailableTeams={hasNoAvailableTeams}
       showTeamRequired
+      disabled={disabled}
     />
   );
 }

@@ -247,6 +247,15 @@ function SkillDetailView({
   const [isSaving, setIsSaving] = useState(false);
 
   const handleSave = async () => {
+    if (
+      isSaving ||
+      isAccessPending ||
+      !canEdit ||
+      !isDirty ||
+      !contentComplete ||
+      isGone
+    )
+      return;
     // The draft can move while the request is in flight, so what was sent is
     // what the new base records — anything typed meanwhile stays unsaved
     // rather than being counted as written.
@@ -423,7 +432,13 @@ function SkillDetailView({
       {section === "usage" ? (
         <SkillUsagePanel skillRef={{ kind: "standalone", skillId: skill.id }} />
       ) : (
-        <div className="flex flex-col gap-4">
+        <form
+          className="flex flex-col gap-4"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void handleSave();
+          }}
+        >
           {isGone ? (
             <Alert variant="destructive">
               <AlertDescription>
@@ -480,8 +495,8 @@ function SkillDetailView({
               <div className="flex items-center gap-2">
                 <PermissionButton
                   permissions={{ skill: ["update"] }}
+                  type="submit"
                   disabled={!isDirty || !contentComplete || isGone || isSaving}
-                  onClick={handleSave}
                 >
                   {isSaving ? (
                     <>
@@ -495,7 +510,7 @@ function SkillDetailView({
               </div>
             </WizardFooter>
           )}
-        </div>
+        </form>
       )}
 
       <UnsavedChangesDialog

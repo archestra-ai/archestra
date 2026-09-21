@@ -185,7 +185,8 @@ export function useGuardedInAppNavigation({
       if (
         !anchor ||
         anchor.target === "_blank" ||
-        anchor.hasAttribute("download")
+        anchor.hasAttribute("download") ||
+        anchor.hasAttribute("data-unsaved-navigation-owner")
       ) {
         return;
       }

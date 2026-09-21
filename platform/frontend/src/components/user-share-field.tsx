@@ -108,10 +108,12 @@ export function UserShareField({
   value,
   onValueChange,
   label = "Users",
+  disabled = false,
 }: {
   value: string[];
   onValueChange: (userIds: string[]) => void;
   label?: string;
+  disabled?: boolean;
 }) {
   const candidates = useShareCandidates();
   return (
@@ -125,6 +127,7 @@ export function UserShareField({
         searchPlaceholder="Search users..."
         emptyMessage="No users found."
         className="w-full"
+        disabled={disabled}
       />
     </div>
   );

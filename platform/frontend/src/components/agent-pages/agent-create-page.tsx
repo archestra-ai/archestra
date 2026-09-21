@@ -5,6 +5,8 @@ import { ArrowLeft, ArrowRight, CircleCheck, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AgentForm } from "@/components/agent-form";
+import { PageBackLink } from "@/components/page-back-link";
+import { PageWizard } from "@/components/page-wizard";
 import { Button } from "@/components/ui/button";
 import {
   Empty,
@@ -16,10 +18,10 @@ import {
 import {
   UnsavedChangesDialog,
   useBeforeUnloadWhileDirty,
+  useGuardedInAppNavigation,
   useUnsavedChangesGuard,
 } from "@/components/unsaved-changes-guard";
 import { WizardFooter } from "@/components/wizard-footer";
-import { WizardStepper } from "@/components/wizard-stepper";
 import { a2aRemoteAgentNewHref } from "@/lib/a2a-remote-agent-route";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
@@ -32,7 +34,6 @@ import {
   agentListHref,
   getAgentSetupSteps,
 } from "./agent-page-config";
-import { AgentPageShell } from "./agent-page-shell";
 
 /**
  * `/<family>/new` — the setup wizard for a record that does not exist yet.
@@ -95,20 +96,29 @@ export function AgentCreatePage({
   }, [created, isReadPermissionKnown, canReadFamily, router, kind]);
 
   const [isDirty, setIsDirty] = useState(false);
+  const isSavingRef = useRef(false);
   useBeforeUnloadWhileDirty(isDirty);
   const closeTargetRef = useRef<"list" | "catalog">("list");
+  const pendingHrefRef = useRef<string | null>(null);
   const completeClose = useCallback(
     (open: boolean) => {
       if (open) return;
       if (closeTargetRef.current === "catalog") {
         closeTargetRef.current = "list";
+        pendingHrefRef.current = null;
         setSelectedTemplate(null);
         setSourceSelected(false);
         setStep(steps[0].id);
         setIsDirty(false);
         return;
       }
-      router.push(agentListHref(kind));
+      const href = pendingHrefRef.current;
+      pendingHrefRef.current = null;
+      // A discard or a successful create is the end of this form. Clear the
+      // listener before routing so a stale dirty capture cannot intercept the
+      // destination while the new page is opening.
+      setIsDirty(false);
+      router.push(href ?? agentListHref(kind));
     },
     [router, kind, steps],
   );
@@ -118,49 +128,58 @@ export function AgentCreatePage({
     isDirty,
     onOpenChange: completeClose,
   });
+  const requestNavigate = useCallback(
+    (href: string) => {
+      if (isSavingRef.current) return;
+      closeTargetRef.current = "list";
+      pendingHrefRef.current = href;
+      guard.requestClose();
+    },
+    [guard],
+  );
+  useGuardedInAppNavigation({ isDirty, onRequestNavigate: requestNavigate });
   const isChoosingSource = sourceChooserEnabled && !sourceSelected;
-  const header = {
-    title: `Create ${config.singular}`,
-    description: isChoosingSource
-      ? "Choose how you want to add an Agent."
-      : selectedTemplate
-        ? `${selectedTemplate.name} is prefilled below. Review or change any setting before creating it.`
-        : config.createDescription,
-    action:
-      !isChoosingSource && steps.length > 1 ? (
-        <div className="hidden sm:block">
-          <WizardStepper
-            compact
-            steps={steps}
-            activeStep={step}
-            // Earlier steps can be revisited; a later one is reached through
-            // its predecessor's Next, which is what checks the step is
-            // complete.
-            onStepClick={(target) => {
-              const targetIndex = steps.findIndex((s) => s.id === target);
-              if (targetIndex < stepIndex) goToStep(target);
-            }}
-            stepTestIdPrefix={E2eTestId.AgentSetupStep}
-          />
-        </div>
-      ) : undefined,
-  };
 
   return (
-    <AgentPageShell
-      stickyFooter
+    <PageWizard
+      title={`Create ${config.singular}`}
+      description={
+        isChoosingSource
+          ? "Choose how you want to add an Agent."
+          : selectedTemplate
+            ? `${selectedTemplate.name} is prefilled below. Review or change any setting before creating it.`
+            : config.createDescription
+      }
       // The list needs the same read permission this role is missing, so on
       // the success state there is nowhere to go back to.
-      backHref={showsUnreadableSuccess ? undefined : agentListHref(kind)}
-      backLabel={config.plural}
-      onBackRequest={() => {
-        closeTargetRef.current =
-          sourceChooserEnabled && sourceSelected && !created
-            ? "catalog"
-            : "list";
-        guard.requestClose();
+      backLink={
+        showsUnreadableSuccess ? undefined : (
+          <PageBackLink
+            href={agentListHref(kind)}
+            onNavigate={() => {
+              if (isSavingRef.current) return;
+              pendingHrefRef.current = null;
+              closeTargetRef.current =
+                sourceChooserEnabled && sourceSelected && !created
+                  ? "catalog"
+                  : "list";
+              guard.requestClose();
+            }}
+          >
+            {config.plural}
+          </PageBackLink>
+        )
+      }
+      steps={steps}
+      activeStep={isChoosingSource || created ? undefined : step}
+      // Earlier steps can be revisited; a later one is reached through its
+      // predecessor's Next, which is what checks the step is complete.
+      onStepClick={(target) => {
+        if (isSavingRef.current) return;
+        const targetIndex = steps.findIndex((s) => s.id === target);
+        if (targetIndex < stepIndex) goToStep(target);
       }}
-      header={header}
+      stepTestIdPrefix={E2eTestId.AgentSetupStep}
     >
       {showsUnreadableSuccess ? (
         <Empty className="border">
@@ -225,80 +244,86 @@ export function AgentCreatePage({
             setIsDirty(false);
             setCreated(record);
           }}
-          footer={({ isSaving, canSubmit }) => (
-            <WizardFooter>
-              <div>
-                {prevStep ? (
+          footer={({ isSaving, canSubmit }) => {
+            // AgentForm owns the mutation state. Keep the shell's revisitable
+            // stepper from changing the draft while its final submit is in
+            // flight, alongside the footer buttons it already disables.
+            isSavingRef.current = isSaving;
+            return (
+              <WizardFooter>
+                <div>
+                  {prevStep ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={isSaving}
+                      onClick={() => goToStep(prevStep.id)}
+                    >
+                      <ArrowLeft className="h-4 w-4" />
+                      <span>{prevStep.title}</span>
+                    </Button>
+                  ) : sourceChooserEnabled ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        closeTargetRef.current = "catalog";
+                        guard.requestClose();
+                      }}
+                      disabled={isSaving}
+                    >
+                      <ArrowLeft className="h-4 w-4" />
+                      Catalog
+                    </Button>
+                  ) : (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={guard.requestClose}
+                      disabled={isSaving}
+                    >
+                      Cancel
+                    </Button>
+                  )}
+                </div>
+                {nextStep ? (
+                  // Moving on needs what a create would need of this step (a
+                  // name, a complete visibility choice), so the last step is
+                  // never reached with a record that cannot be created.
+                  //
+                  // Keyed apart from the Create button, and with the default
+                  // action stopped: the step change re-renders this slot as
+                  // the submit button while the click is still dispatching,
+                  // and a reused DOM button would then submit the form.
                   <Button
+                    key="next"
                     type="button"
-                    variant="outline"
-                    disabled={isSaving}
-                    onClick={() => goToStep(prevStep.id)}
-                  >
-                    <ArrowLeft className="h-4 w-4" />
-                    <span>{prevStep.title}</span>
-                  </Button>
-                ) : sourceChooserEnabled ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => {
-                      closeTargetRef.current = "catalog";
-                      guard.requestClose();
+                    disabled={!canSubmit}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      goToStep(nextStep.id);
                     }}
-                    disabled={isSaving}
+                    data-testid={E2eTestId.AgentSetupNextButton}
                   >
-                    <ArrowLeft className="h-4 w-4" />
-                    Catalog
+                    <span>{nextStep.title}</span>
+                    <ArrowRight className="h-4 w-4" />
                   </Button>
                 ) : (
                   <Button
-                    type="button"
-                    variant="outline"
-                    onClick={guard.requestClose}
-                    disabled={isSaving}
+                    key="create"
+                    type="submit"
+                    disabled={!canSubmit}
+                    data-testid={E2eTestId.AgentSetupSubmitButton}
                   >
-                    Cancel
+                    {isSaving && <Loader2 className="h-4 w-4 animate-spin" />}
+                    <span>
+                      {isSaving ? "Creating..." : `Create ${config.singular}`}
+                    </span>
                   </Button>
                 )}
-              </div>
-              {nextStep ? (
-                // Moving on needs what a create would need of this step (a
-                // name, a complete visibility choice), so the last step is
-                // never reached with a record that cannot be created.
-                //
-                // Keyed apart from the Create button, and with the default
-                // action stopped: the step change re-renders this slot as
-                // the submit button while the click is still dispatching,
-                // and a reused DOM button would then submit the form.
-                <Button
-                  key="next"
-                  type="button"
-                  disabled={!canSubmit}
-                  onClick={(event) => {
-                    event.preventDefault();
-                    goToStep(nextStep.id);
-                  }}
-                  data-testid={E2eTestId.AgentSetupNextButton}
-                >
-                  <span>{nextStep.title}</span>
-                  <ArrowRight className="h-4 w-4" />
-                </Button>
-              ) : (
-                <Button
-                  key="create"
-                  type="submit"
-                  disabled={!canSubmit}
-                  data-testid={E2eTestId.AgentSetupSubmitButton}
-                >
-                  {isSaving && <Loader2 className="h-4 w-4 animate-spin" />}
-                  <span>
-                    {isSaving ? "Creating..." : `Create ${config.singular}`}
-                  </span>
-                </Button>
-              )}
-            </WizardFooter>
-          )}
+              </WizardFooter>
+            );
+          }}
         />
       )}
 
@@ -307,6 +332,6 @@ export function AgentCreatePage({
         onKeepEditing={guard.keepEditing}
         onDiscard={guard.discardChanges}
       />
-    </AgentPageShell>
+    </PageWizard>
   );
 }

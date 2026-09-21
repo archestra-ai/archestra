@@ -1,23 +1,43 @@
 "use client";
 
-import { ArrowLeft, ArrowRight, FileText, Github } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  CircleCheck,
+  FileText,
+  Github,
+  Loader2,
+} from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import type { ProfileLabelsRef } from "@/components/agent-labels";
 import { CatalogSourceCard } from "@/components/catalog-source-card";
 import { FilterBar } from "@/components/filter-bar";
-import { PageLayout } from "@/components/page-layout";
+import { PageWizard } from "@/components/page-wizard";
 import { SearchInput } from "@/components/search-input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { Separator } from "@/components/ui/separator";
+import {
+  UnsavedChangesDialog,
+  useBeforeUnloadWhileDirty,
+  useGuardedInAppNavigation,
+  useUnsavedChangesGuard,
+} from "@/components/unsaved-changes-guard";
 import { WizardFooter } from "@/components/wizard-footer";
-import { WizardStepper } from "@/components/wizard-stepper";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useOrganization } from "@/lib/organization.query";
 import { parseManifestFields } from "@/lib/skills/manifest-compose";
 import {
@@ -33,17 +53,20 @@ import { POPULAR_REPOS } from "../_parts/popular-repos";
 import {
   blankSkillDraft,
   buildSkillSaveBody,
+  isSkillDraftDirty,
   type SkillDraft,
 } from "../_parts/skill-draft";
 import { SkillForm } from "../_parts/skill-form";
 import { SkillBackLink } from "../_parts/skill-page-shell";
 
 type CreateStep = "source" | "configure";
+type SkillImportState = {
+  repoUrl: string;
+  autoDiscover: boolean;
+  initialSkill?: IndexedSkillSelection;
+};
 
-const CREATE_STEPS: Array<{ id: CreateStep; title: string }> = [
-  { id: "source", title: "Source" },
-  { id: "configure", title: "Configure" },
-];
+const CONFIGURE_STEPS = [{ id: "configure", title: "Configure" }] as const;
 
 const STEP_DESCRIPTIONS: Record<CreateStep, string> = {
   source: "Import from a GitHub repo or start from a blank template.",
@@ -65,11 +88,10 @@ export default function NewSkillPage() {
 
 function NewSkillWizard() {
   const router = useRouter();
-  const [importState, setImportState] = useState<{
-    repoUrl: string;
-    autoDiscover: boolean;
-    initialSkill?: IndexedSkillSelection;
-  } | null>(null);
+  const { data: canCreate } = useHasPermissions({ skill: ["create"] });
+  const { data: canReadSkills, isPending: isReadPermissionPending } =
+    useHasPermissions({ skill: ["read"] });
+  const [importState, setImportState] = useState<SkillImportState | null>(null);
   const [search, setSearch] = useState("");
   const { data: organization, isPending: isOrganizationPending } =
     useOrganization();
@@ -85,12 +107,8 @@ function NewSkillWizard() {
   const [step, setStep] = useState<CreateStep>("source");
   const effectiveStep: CreateStep =
     catalogDisabled && step === "source" ? "configure" : step;
-  const steps = catalogDisabled
-    ? CREATE_STEPS.filter((s) => s.id !== "source")
-    : CREATE_STEPS;
-  const stepIndex = steps.findIndex((s) => s.id === effectiveStep);
-
   const [draft, setDraft] = useState<SkillDraft>(blankSkillDraft);
+  const blankDraft = useMemo(() => blankSkillDraft(), []);
   const labelsRef = useRef<ProfileLabelsRef>(null);
   const patchDraft = (patch: Partial<SkillDraft>) =>
     setDraft((prev) => ({ ...prev, ...patch }));
@@ -99,9 +117,29 @@ function NewSkillWizard() {
     [draft.manifest],
   );
   const contentComplete = parsed.hasName && parsed.hasDescription;
+  const isDirty = useMemo(
+    () => isSkillDraftDirty(draft, blankDraft),
+    [blankDraft, draft],
+  );
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isGuardBypassed, setIsGuardBypassed] = useState(false);
+  const submittingRef = useRef(false);
+  const [created, setCreated] = useState<{ id: string; name: string } | null>(
+    null,
+  );
+  const routedCreatedRef = useRef<string | null>(null);
 
   const createSkill = useCreateSkill();
   const handleCreate = async () => {
+    if (
+      submittingRef.current ||
+      canCreate !== true ||
+      !contentComplete ||
+      createSkill.isPending
+    )
+      return;
+    submittingRef.current = true;
+    setIsSubmitting(true);
     const finalLabels = labelsRef.current?.saveUnsavedLabel() ?? draft.labels;
     // A handled failure resolves to null and a rejection is reported by the
     // mutation's own `onError`; both keep the wizard where it is with the
@@ -109,14 +147,88 @@ function NewSkillWizard() {
     const created = await createSkill
       .mutateAsync(buildSkillSaveBody({ ...draft, labels: finalLabels }, null))
       .catch(() => null);
-    if (created) router.push(`/skills/${created.id}`);
+    if (!created) {
+      submittingRef.current = false;
+      setIsSubmitting(false);
+      return;
+    }
+    setIsGuardBypassed(true);
+    setDraft(blankDraft);
+    setCreated({
+      id: created.id,
+      name: parsed.name?.trim() || "Skill",
+    });
   };
 
-  const openImport = () => setImportState({ repoUrl: "", autoDiscover: false });
+  const guardedDirty = isDirty && !isGuardBypassed;
+  useBeforeUnloadWhileDirty(guardedDirty);
+  const pendingHrefRef = useRef<string | null>(null);
+  const pendingImportRef = useRef<SkillImportState | null>(null);
+  const isReadPermissionKnown = !isReadPermissionPending;
+  const showsUnreadableSuccess =
+    !!created && isReadPermissionKnown && canReadSkills !== true;
+  useEffect(() => {
+    if (
+      !created ||
+      !isReadPermissionKnown ||
+      canReadSkills !== true ||
+      routedCreatedRef.current === created.id
+    )
+      return;
+    routedCreatedRef.current = created.id;
+    router.push(`/skills/${created.id}`);
+  }, [canReadSkills, created, isReadPermissionKnown, router]);
+  const guard = useUnsavedChangesGuard({
+    isDirty: guardedDirty,
+    onOpenChange: (open) => {
+      if (open) return;
+      const pendingImport = pendingImportRef.current;
+      pendingImportRef.current = null;
+      if (pendingImport) {
+        setIsGuardBypassed(false);
+        setDraft(blankDraft);
+        setStep("source");
+        setImportState(pendingImport);
+        return;
+      }
+      const href = pendingHrefRef.current;
+      pendingHrefRef.current = null;
+      if (href) {
+        setIsGuardBypassed(true);
+        setDraft(blankDraft);
+        router.push(href);
+      }
+    },
+  });
+  const requestNavigate = useCallback(
+    (href: string) => {
+      if (submittingRef.current) return;
+      pendingHrefRef.current = href;
+      guard.requestClose();
+    },
+    [guard],
+  );
+  useGuardedInAppNavigation({
+    isDirty: guardedDirty,
+    onRequestNavigate: requestNavigate,
+  });
+
+  const requestImport = useCallback(
+    (nextImport: SkillImportState) => {
+      if (!isDirty) {
+        setImportState(nextImport);
+        return;
+      }
+      pendingImportRef.current = nextImport;
+      guard.requestClose();
+    },
+    [guard, isDirty],
+  );
+  const openImport = () => requestImport({ repoUrl: "", autoDiscover: false });
   const importPopular = (repoUrl: string) =>
-    setImportState({ repoUrl, autoDiscover: true });
+    requestImport({ repoUrl, autoDiscover: true });
   const importIndexedSkill = (skill: SkillCatalogResult) =>
-    setImportState({
+    requestImport({
       repoUrl: skill.repo,
       autoDiscover: true,
       initialSkill: {
@@ -148,26 +260,48 @@ function NewSkillWizard() {
 
   return (
     <>
-      <PageLayout
+      <PageWizard
         title="Add a new skill"
         description={STEP_DESCRIPTIONS[effectiveStep]}
-        backLink={<SkillBackLink href="/skills" label="Skills" />}
-        actionButton={
-          <WizardStepper
-            compact
-            steps={steps}
-            activeStep={effectiveStep}
-            onStepClick={(target) => {
-              const targetIndex = steps.findIndex((s) => s.id === target);
-              if (targetIndex < stepIndex) setStep(target);
-            }}
-          />
+        backLink={
+          isSubmitting ? undefined : (
+            <SkillBackLink href="/skills" label="Skills" />
+          )
         }
-        maxWidth="wizard"
-        contentOverflowX="clip"
+        steps={
+          created || effectiveStep !== "configure" ? undefined : CONFIGURE_STEPS
+        }
+        activeStep={effectiveStep === "configure" ? "configure" : undefined}
       >
         <div className="space-y-6">
-          {isOrganizationPending ? null : (
+          {showsUnreadableSuccess ? (
+            <Empty className="border">
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <CircleCheck />
+                </EmptyMedia>
+                <EmptyTitle>Skill created</EmptyTitle>
+                <EmptyDescription>
+                  <span>
+                    &quot;{created?.name ?? "Skill"}&quot; was created. You do
+                    not have permission to view it.
+                  </span>
+                </EmptyDescription>
+              </EmptyHeader>
+            </Empty>
+          ) : created ? (
+            <Empty className="border">
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <Loader2 className="animate-spin" />
+                </EmptyMedia>
+                <EmptyTitle>Skill created</EmptyTitle>
+                <EmptyDescription>
+                  Opening &quot;{created.name}&quot;…
+                </EmptyDescription>
+              </EmptyHeader>
+            </Empty>
+          ) : isOrganizationPending ? null : (
             <>
               {effectiveStep === "source" && (
                 <div className="mx-auto max-w-3xl space-y-8">
@@ -290,10 +424,17 @@ function NewSkillWizard() {
               )}
 
               {effectiveStep === "configure" && (
-                <div className="flex flex-col gap-4">
+                <form
+                  className="flex flex-col gap-4"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    void handleCreate();
+                  }}
+                >
                   <SkillForm
                     draft={draft}
                     onChange={patchDraft}
+                    readOnly={isSubmitting}
                     onFilesChange={(update) =>
                       setDraft((prev) => ({
                         ...prev,
@@ -304,12 +445,20 @@ function NewSkillWizard() {
                   />
                   <WizardFooter>
                     {catalogDisabled ? (
-                      <Button variant="outline" asChild>
-                        <Link href="/skills">Cancel</Link>
-                      </Button>
+                      isSubmitting ? (
+                        <Button variant="outline" type="button" disabled>
+                          Cancel
+                        </Button>
+                      ) : (
+                        <Button variant="outline" asChild>
+                          <Link href="/skills">Cancel</Link>
+                        </Button>
+                      )
                     ) : (
                       <Button
                         variant="outline"
+                        type="button"
+                        disabled={isSubmitting}
                         onClick={() => setStep("source")}
                       >
                         <ArrowLeft className="h-4 w-4" />
@@ -318,18 +467,33 @@ function NewSkillWizard() {
                     )}
                     <PermissionButton
                       permissions={{ skill: ["create"] }}
-                      disabled={!contentComplete || createSkill.isPending}
-                      onClick={handleCreate}
+                      type="submit"
+                      disabled={
+                        canCreate !== true ||
+                        !contentComplete ||
+                        createSkill.isPending ||
+                        isSubmitting
+                      }
                     >
                       {createSkill.isPending ? "Creating..." : "Create skill"}
                     </PermissionButton>
                   </WizardFooter>
-                </div>
+                </form>
               )}
             </>
           )}
         </div>
-      </PageLayout>
+      </PageWizard>
+
+      <UnsavedChangesDialog
+        open={guard.confirmOpen}
+        onKeepEditing={() => {
+          pendingHrefRef.current = null;
+          pendingImportRef.current = null;
+          guard.keepEditing();
+        }}
+        onDiscard={guard.discardChanges}
+      />
 
       <ImportSkillsDialog
         open={importState !== null}

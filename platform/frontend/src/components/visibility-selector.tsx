@@ -32,6 +32,7 @@ export function VisibilitySelector<Value extends string>({
   options,
   onValueChange,
   readOnly = false,
+  disabled = false,
   children,
 }: {
   label?: string;
@@ -41,12 +42,13 @@ export function VisibilitySelector<Value extends string>({
   options: VisibilityOption<Value>[];
   onValueChange: (value: Value) => void;
   readOnly?: boolean;
+  disabled?: boolean;
   children?: React.ReactNode;
 }) {
   const [expanded, setExpanded] = useState(false);
   const selected =
     options.find((option) => option.value === value) ?? options[0];
-  const isStatic = options.length <= 1 || readOnly;
+  const isStatic = options.length <= 1 || readOnly || disabled;
 
   return (
     <div className="space-y-4">
@@ -154,6 +156,7 @@ export function VisibilitySelector<Value extends string>({
         ) : (
           <button
             type="button"
+            disabled={disabled}
             onClick={() => setExpanded(true)}
             className="w-full cursor-pointer rounded-lg border p-3 text-left transition-colors hover:bg-muted/50"
           >

@@ -111,6 +111,8 @@ Wrapping splits a string across sibling elements, so Testing Library's default `
 
 ## Forms
 
+- Before choosing a create/edit surface, read [Form surfaces](references/form-surfaces.md).
+- For page-based creation or configuration, follow [Page wizards](playbooks/page-wizards.md). Agent creation is the baseline; one-step and multi-step forms use the same shared wizard.
 - Prefer `useForm` from `react-hook-form` over multiple `useState` hooks for form state.
 - Pass form objects to child components as `form: UseFormReturn<FormValues>` rather than passing individual setters.
 - Parent components should handle mutations and submission.

@@ -49,6 +49,8 @@ function renderPage() {
 
 const discoverMock = vi.fn();
 const importMock = vi.fn();
+const routerPush = vi.fn();
+const createPluginMutateAsync = vi.fn();
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -65,7 +67,7 @@ beforeEach(() => {
     },
   );
   vi.mocked(useRouter).mockReturnValue({
-    push: vi.fn(),
+    push: routerPush,
   } as unknown as ReturnType<typeof useRouter>);
   vi.mocked(useSearchParams).mockReturnValue(
     new URLSearchParams() as ReturnType<typeof useSearchParams>,
@@ -91,7 +93,7 @@ beforeEach(() => {
     isPending: false,
   } as unknown as ReturnType<typeof useCreateGithubPat>);
   vi.mocked(useCreatePlugin).mockReturnValue({
-    mutateAsync: vi.fn(),
+    mutateAsync: createPluginMutateAsync,
     isPending: false,
   } as unknown as ReturnType<typeof useCreatePlugin>);
   vi.mocked(usePlugins).mockReturnValue({
@@ -126,6 +128,7 @@ beforeEach(() => {
     isPending: false,
     isError: false,
   } as unknown as ReturnType<typeof usePreviewGithubPlugin>);
+  createPluginMutateAsync.mockResolvedValue({ id: "plugin-new" });
 });
 
 describe("NewPluginPage", () => {
@@ -485,10 +488,10 @@ describe("NewPluginPage", () => {
     expect(screen.getByTestId("plugin-scope-selector")).toBeVisible();
 
     const create = screen.getByRole("button", { name: /Create plugin/ });
-    const contentCard = displayName.closest(".rounded-lg.border");
-    if (!contentCard) throw new Error("Plugin content card not rendered");
+    const contentSection = displayName.closest("section");
+    if (!contentSection) throw new Error("Plugin content section not rendered");
     expect(
-      within(contentCard as HTMLElement).queryByRole("button", {
+      within(contentSection as HTMLElement).queryByRole("button", {
         name: /Create plugin/,
       }),
     ).not.toBeInTheDocument();
@@ -497,5 +500,61 @@ describe("NewPluginPage", () => {
 
     await user.type(displayName, "Session guard");
     expect(create).toBeEnabled();
+  });
+
+  it("confirms before leaving a dirty configuration draft", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(screen.getByRole("button", { name: /Blank template/ }));
+    await user.type(screen.getByLabelText("Display name"), "Session guard");
+    await user.click(screen.getByRole("link", { name: "Plugins" }));
+
+    expect(
+      screen.getByRole("heading", { name: "Discard unsaved changes?" }),
+    ).toBeVisible();
+    expect(routerPush).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "Discard changes" }));
+    expect(routerPush).toHaveBeenCalledWith("/plugins");
+  });
+
+  it("keeps the draft and re-enables retry after a failed create", async () => {
+    createPluginMutateAsync.mockResolvedValueOnce(null);
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(screen.getByRole("button", { name: /Blank template/ }));
+    await user.type(screen.getByLabelText("Display name"), "Session guard");
+    await user.click(screen.getByRole("button", { name: /Create plugin/ }));
+
+    await waitFor(() =>
+      expect(createPluginMutateAsync).toHaveBeenCalledTimes(1),
+    );
+    expect(screen.getByLabelText("Display name")).toHaveValue("Session guard");
+    expect(screen.getByRole("button", { name: /Create plugin/ })).toBeEnabled();
+  });
+
+  it("keeps the creator in place when it cannot read the new plugin", async () => {
+    vi.mocked(useHasPermissions).mockImplementation(
+      (permissions) =>
+        ({
+          data: !Object.values(permissions).some((actions) =>
+            actions.includes("read"),
+          ),
+          isPending: false,
+        }) as ReturnType<typeof useHasPermissions>,
+    );
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(screen.getByRole("button", { name: /Blank template/ }));
+    await user.type(screen.getByLabelText("Display name"), "Session guard");
+    await user.click(screen.getByRole("button", { name: /Create plugin/ }));
+
+    expect(
+      await screen.findByText(/do not have permission to view it/i),
+    ).toBeVisible();
+    expect(routerPush).not.toHaveBeenCalled();
   });
 });

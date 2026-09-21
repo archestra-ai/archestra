@@ -231,6 +231,8 @@ function PluginDetailView({
   const [isSaving, setIsSaving] = useState(false);
 
   const handleSave = async () => {
+    if (isSaving || canUpdate !== true || !isDirty || !isComplete || isGone)
+      return;
     const finalLabels = labelsRef.current?.saveUnsavedLabel() ?? draft.labels;
     let submitted = { ...draft, labels: finalLabels };
     setIsSaving(true);
@@ -488,7 +490,13 @@ function PluginDetailView({
         </div>
       }
     >
-      <div className="flex flex-col gap-4">
+      <form
+        className="flex flex-col gap-4"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void handleSave();
+        }}
+      >
         {isGone ? (
           <Alert variant="destructive">
             <AlertDescription>
@@ -534,8 +542,8 @@ function PluginDetailView({
             <div className="flex items-center gap-2">
               <PermissionButton
                 permissions={{ plugin: ["update", "admin"] }}
+                type="submit"
                 disabled={!isDirty || !isComplete || isGone || isSaving}
-                onClick={handleSave}
               >
                 {isSaving ? (
                   <>
@@ -549,7 +557,7 @@ function PluginDetailView({
             </div>
           </WizardFooter>
         )}
-      </div>
+      </form>
 
       <UnsavedChangesDialog
         open={guard.confirmOpen}

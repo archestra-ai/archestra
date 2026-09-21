@@ -65,6 +65,10 @@ interface EditCatalogContentProps {
   onDirtyChange?: (isDirty: boolean) => void;
   /** Ref to imperatively trigger form submission */
   submitRef?: React.MutableRefObject<(() => Promise<void>) | null>;
+  /** Uses the page wizard's labelled sections and page-level padding. */
+  pageSurface?: boolean;
+  /** Reports the awaited mutation state to a page-level navigation guard. */
+  onSavingChange?: (isSaving: boolean) => void;
   /**
    * Replaces the default Discard/Save footer. Rendered inside the form, so a
    * `type="submit"` button triggers the save. Used by the setup wizard to keep
@@ -85,6 +89,8 @@ export function EditCatalogContent({
   onSaved,
   onDirtyChange,
   submitRef,
+  pageSurface = false,
+  onSavingChange,
   footer,
 }: EditCatalogContentProps) {
   // Authorization gate for the edit form itself — covers every entry point
@@ -111,54 +117,64 @@ export function EditCatalogContent({
     (s) => s.catalogId === item.id,
   ).length;
 
-  const onSubmit = (
+  const onSubmit = async (
     values: McpCatalogFormValues,
     form: UseFormReturn<McpCatalogFormValues>,
   ) => {
+    if (!canEdit) {
+      form.setError("name", {
+        type: "permission",
+        message: "You do not have permission to edit this MCP server.",
+      });
+      throw new Error("MCP registry edit permission is not available");
+    }
     const { multitenant: _multitenant, ...updateData } =
       transformFormToApiData(values);
 
-    // Callback form so the dialog only closes on success; on a validation
-    // error it stays open for correction.
-    updateMutation.mutate(
-      { id: item.id, data: updateData },
-      {
-        onSuccess: () => {
-          onSaved?.();
-          if (!keepOpenOnSave) {
-            onClose();
-          }
+    // Await the mutation so the form stays dirty on a validation or network
+    // error and the dialog only closes after the update has landed.
+    onSavingChange?.(true);
+    try {
+      await updateMutation.mutateAsync(
+        { id: item.id, data: updateData },
+        {
+          onError: (error) => {
+            // Network-policy rejections point at the Server URL — show them
+            // inline on that field rather than as a toast.
+            if (
+              getCatalogMutationErrorCode(error) ===
+              REMOTE_SERVER_URL_NOT_ALLOWED_CODE
+            ) {
+              form.setError("serverUrl", {
+                type: "server",
+                message:
+                  error instanceof Error
+                    ? error.message
+                    : "Server URL is not allowed by the environment's network policy.",
+              });
+            }
+            // Rename 409s point at the Name field — same inline treatment.
+            if (
+              getCatalogMutationErrorCode(error) === CATALOG_NAME_CONFLICT_CODE
+            ) {
+              form.setError("name", {
+                type: "server",
+                message:
+                  error instanceof Error
+                    ? error.message
+                    : "An MCP server with this name already exists in this organization.",
+              });
+            }
+          },
         },
-        onError: (error) => {
-          // Network-policy rejections point at the Server URL — show them
-          // inline on that field rather than as a toast.
-          if (
-            getCatalogMutationErrorCode(error) ===
-            REMOTE_SERVER_URL_NOT_ALLOWED_CODE
-          ) {
-            form.setError("serverUrl", {
-              type: "server",
-              message:
-                error instanceof Error
-                  ? error.message
-                  : "Server URL is not allowed by the environment's network policy.",
-            });
-          }
-          // Rename 409s point at the Name field — same inline treatment.
-          if (
-            getCatalogMutationErrorCode(error) === CATALOG_NAME_CONFLICT_CODE
-          ) {
-            form.setError("name", {
-              type: "server",
-              message:
-                error instanceof Error
-                  ? error.message
-                  : "An MCP server with this name already exists in this organization.",
-            });
-          }
-        },
-      },
-    );
+      );
+    } finally {
+      onSavingChange?.(false);
+    }
+    onSaved?.();
+    if (!keepOpenOnSave) {
+      onClose();
+    }
   };
 
   if (canEditLoading) {
@@ -201,6 +217,7 @@ export function EditCatalogContent({
         onSubmit={onSubmit}
         embedded={keepOpenOnSave}
         wizardPanel={keepOpenOnSave && !!footer}
+        pageSurface={pageSurface}
         onDirtyChange={onDirtyChange}
         submitRef={submitRef}
         affectedServerCount={affectedServerCount}

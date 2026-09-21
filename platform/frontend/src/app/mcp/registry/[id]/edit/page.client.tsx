@@ -2,10 +2,10 @@
 
 import { ArrowLeft, ArrowRight, PackageX } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useRef } from "react";
+import { useCallback, useRef, useState } from "react";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { PageBackLink } from "@/components/page-back-link";
-import { PageLayout } from "@/components/page-layout";
+import { PageWizard } from "@/components/page-wizard";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -16,12 +16,17 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  UnsavedChangesDialog,
+  useBeforeUnloadWhileDirty,
+  useGuardedInAppNavigation,
+  useUnsavedChangesGuard,
+} from "@/components/unsaved-changes-guard";
 import { WizardFooter } from "@/components/wizard-footer";
 import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
 import {
   SETUP_STEPS,
   type SetupStepId,
-  SetupStepper,
   TestConnectionStep,
   ToolsAndGuardrailsStep,
   useTestConnectionTarget,
@@ -38,11 +43,51 @@ export function McpCatalogItemEditPage({ id }: { id: string }) {
   const { data: catalogItems, isPending } = useInternalMcpCatalog({});
   const item = catalogItems?.find((catalogItem) => catalogItem.id === id);
   const navigation = useSetupNavigation();
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const [isDirty, setIsDirty] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  useBeforeUnloadWhileDirty(isDirty);
+  const pendingHrefRef = useRef<string | null>(null);
+  const guard = useUnsavedChangesGuard({
+    isDirty,
+    onOpenChange: (open) => {
+      if (open) return;
+      const href = pendingHrefRef.current;
+      pendingHrefRef.current = null;
+      if (!href) return;
+      setIsDirty(false);
+      if (href.startsWith(pathname)) router.replace(href, { scroll: false });
+      else router.push(href);
+    },
+  });
+  const requestNavigate = useCallback(
+    (href: string) => {
+      if (isSaving) return;
+      pendingHrefRef.current = href;
+      guard.requestClose();
+    },
+    [guard, isSaving],
+  );
+  useGuardedInAppNavigation({ isDirty, onRequestNavigate: requestNavigate });
+  const requestStep = useCallback(
+    (target: SetupStepId) => {
+      if (target === navigation.step) return;
+      if (isSaving) return;
+      if (!isDirty) {
+        navigation.goToStep(target);
+        return;
+      }
+      const params = new URLSearchParams(searchParams.toString());
+      params.set("step", target);
+      requestNavigate(`${pathname}?${params.toString()}`);
+    },
+    [isDirty, isSaving, navigation, pathname, requestNavigate, searchParams],
+  );
 
   return (
-    <PageLayout
-      maxWidth="wizard"
-      contentOverflowX="clip"
+    <PageWizard
       title={
         item ? (
           <span className="flex min-w-0 items-center gap-3">
@@ -67,15 +112,9 @@ export function McpCatalogItemEditPage({ id }: { id: string }) {
       backLink={
         <PageBackLink href={`/mcp/registry/${id}`}>Back to server</PageBackLink>
       }
-      actionButton={
-        item ? (
-          <SetupStepper
-            compact
-            activeStep={navigation.step}
-            onStepClick={navigation.goToStep}
-          />
-        ) : undefined
-      }
+      steps={item ? SETUP_STEPS : undefined}
+      activeStep={item ? navigation.step : undefined}
+      onStepClick={requestStep}
     >
       {isPending ? (
         <div className="space-y-4">
@@ -95,18 +134,35 @@ export function McpCatalogItemEditPage({ id }: { id: string }) {
           </EmptyHeader>
         </Empty>
       ) : (
-        <SetupWizard item={item} navigation={navigation} />
+        <SetupWizard
+          item={item}
+          navigation={navigation}
+          onDirtyChange={setIsDirty}
+          onSavingChange={setIsSaving}
+          onSaved={() => setIsDirty(false)}
+        />
       )}
-    </PageLayout>
+      <UnsavedChangesDialog
+        open={guard.confirmOpen}
+        onKeepEditing={guard.keepEditing}
+        onDiscard={guard.discardChanges}
+      />
+    </PageWizard>
   );
 }
 
 function SetupWizard({
   item,
   navigation,
+  onDirtyChange,
+  onSavingChange,
+  onSaved,
 }: {
   item: CatalogItem;
   navigation: ReturnType<typeof useSetupNavigation>;
+  onDirtyChange: (isDirty: boolean) => void;
+  onSavingChange: (isSaving: boolean) => void;
+  onSaved: () => void;
 }) {
   const router = useRouter();
   const { step, nextStep, prevStep, goToStep } = navigation;
@@ -137,12 +193,16 @@ function SetupWizard({
             item={item}
             onClose={() => {}}
             keepOpenOnSave
+            pageSurface
+            onDirtyChange={onDirtyChange}
+            onSavingChange={onSavingChange}
             // A save lands a success toast in the bottom-right corner, exactly
             // where this step's sticky footer sits — so staying here would mean
             // waiting out the toast before the CTA under it could be clicked.
             // Saving is also the point at which this step is done, so move on
             // — or, for a plain Save, back to the server's page.
             onSaved={() => {
+              onSaved();
               if (saveIntentRef.current === "finish") router.push(detailHref);
               else goToStep("test");
             }}
@@ -166,8 +226,8 @@ function SetupWizard({
                       </Button>
                     )}
                   </div>
-                  {/* The form clears its dirty state as soon as the save is
-                      submitted, so `isSaving` has to be checked first —
+                  {/* The form clears its dirty state only after the mutation
+                      completes, so `isSaving` has to be checked first —
                       otherwise the buttons flip to their clean faces
                       mid-save. */}
                   <div className="flex items-center gap-2">

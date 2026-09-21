@@ -1,4 +1,10 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useHasPermissions } from "@/lib/auth/auth.query";
@@ -12,13 +18,17 @@ import {
   useTeams,
 } from "@/lib/teams/team.query";
 import { McpCatalogForm } from "./mcp-catalog-form";
+import type { McpCatalogFormValues } from "./mcp-catalog-form.types";
 
-const { useIdentityProvidersMock, useK8sImagePullSecretsMock } = vi.hoisted(
-  () => ({
-    useIdentityProvidersMock: vi.fn(() => ({ data: [] })),
-    useK8sImagePullSecretsMock: vi.fn(() => ({ data: [] })),
-  }),
-);
+const {
+  useGetSecretMock,
+  useIdentityProvidersMock,
+  useK8sImagePullSecretsMock,
+} = vi.hoisted(() => ({
+  useGetSecretMock: vi.fn(() => ({ data: null as unknown })),
+  useIdentityProvidersMock: vi.fn(() => ({ data: [] })),
+  useK8sImagePullSecretsMock: vi.fn(() => ({ data: [] })),
+}));
 
 vi.mock("@/lib/config/config.query");
 
@@ -59,7 +69,7 @@ vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
 }));
 
 vi.mock("@/lib/secrets.query", () => ({
-  useGetSecret: vi.fn(() => ({ data: null })),
+  useGetSecret: useGetSecretMock,
 }));
 
 vi.mock("@/lib/docs/docs", () => ({
@@ -74,7 +84,20 @@ vi.mock("@/components/agent-icon-picker", () => ({
 }));
 
 vi.mock("@/components/agent-labels", () => ({
-  ProfileLabels: () => <div data-testid="profile-labels" />,
+  ProfileLabels: ({
+    onLabelsChange,
+  }: {
+    onLabelsChange?: (labels: { key: string; value: string }[]) => void;
+  }) => (
+    <div data-testid="profile-labels">
+      <button
+        type="button"
+        onClick={() => onLabelsChange?.([{ key: "draft", value: "label" }])}
+      >
+        Edit labels
+      </button>
+    </div>
+  ),
 }));
 
 vi.mock("@/components/environment-variables-form-field", () => ({
@@ -119,6 +142,7 @@ describe("McpCatalogForm enterprise gating", () => {
     vi.mocked(useAppName).mockReturnValue("Archestra");
     useIdentityProvidersMock.mockReturnValue({ data: [] });
     useK8sImagePullSecretsMock.mockReturnValue({ data: [] });
+    useGetSecretMock.mockReturnValue({ data: null });
     global.ResizeObserver = class ResizeObserver {
       observe() {}
       unobserve() {}
@@ -363,5 +387,164 @@ describe("McpCatalogForm enterprise gating", () => {
         "mcp-server-123-regcred-containerregistry-example-com-user",
       ),
     ).toBeInTheDocument();
+  });
+
+  it("does not replace an edited local draft when its secret hydrates late", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    const submitRef = { current: null as (() => Promise<void>) | null };
+    const initialValues = {
+      id: "catalog-local-1",
+      name: "Local MCP",
+      description: "",
+      icon: null,
+      serverType: "local",
+      serverUrl: "",
+      oauthConfig: null,
+      userConfig: {},
+      enterpriseManagedConfig: null,
+      localConfigSecretId: "secret-1",
+      localConfig: {
+        command: "node",
+        arguments: ["server.js"],
+        environment: [
+          {
+            key: "API_KEY",
+            type: "secret",
+            promptOnInstallation: false,
+            required: true,
+          },
+        ],
+        envFrom: [],
+        dockerImage: "registry.example.com/mcp/server",
+        transportType: "stdio",
+        httpPort: null,
+        httpPath: null,
+        serviceAccount: null,
+        imagePullSecrets: [
+          {
+            source: "credentials",
+            server: "registry.example.com",
+            username: "robot",
+          },
+        ],
+      },
+      deploymentSpecYaml: null,
+      scope: "personal",
+      teams: [],
+      labels: [],
+    } as never;
+
+    const { rerender } = render(
+      <McpCatalogForm
+        mode="edit"
+        initialValues={initialValues}
+        onSubmit={onSubmit}
+        submitRef={submitRef}
+      />,
+    );
+
+    const nameInput = screen.getByLabelText("Name *");
+    await user.clear(nameInput);
+    await user.type(nameInput, "draft-name");
+
+    useGetSecretMock.mockReturnValue({
+      data: {
+        secret: {
+          API_KEY: "hydrated-api-key",
+          "__regcred_password:registry.example.com:robot": "hydrated-password",
+        },
+      },
+    });
+    rerender(
+      <McpCatalogForm
+        mode="edit"
+        initialValues={initialValues}
+        onSubmit={onSubmit}
+        submitRef={submitRef}
+      />,
+    );
+
+    await waitFor(() =>
+      expect(submitRef.current).toEqual(expect.any(Function)),
+    );
+    await act(async () => {
+      await submitRef.current?.();
+    });
+
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    const submitted = onSubmit.mock.calls[0]?.[0];
+    expect(submitted?.name).toBe("draft-name");
+    expect(submitted?.localConfig?.environment).toHaveLength(1);
+    expect(submitted?.localConfig?.environment?.[0]).toMatchObject({
+      key: "API_KEY",
+    });
+    expect(submitted?.localConfig?.environment?.[0]).not.toHaveProperty(
+      "value",
+    );
+    expect(submitted?.localConfig?.imagePullSecrets).toHaveLength(1);
+    expect(submitted?.localConfig?.imagePullSecrets?.[0]).toMatchObject({
+      source: "credentials",
+      server: "registry.example.com",
+      username: "robot",
+    });
+    expect(submitted?.localConfig?.imagePullSecrets?.[0]).not.toHaveProperty(
+      "password",
+    );
+  });
+
+  it("does not replace a labels-only draft when create prefill data changes", async () => {
+    const user = userEvent.setup();
+    const formValues: McpCatalogFormValues = {
+      name: "Prefilled MCP",
+      description: "",
+      icon: null,
+      serverType: "remote",
+      serverUrl: "https://mcp.example.com",
+      authMethod: "none",
+      includeBearerPrefix: true,
+      authHeaderName: "",
+      additionalHeaders: [],
+      enterpriseManagedConfig: null,
+      oauthConfig: undefined,
+      localConfig: {
+        command: "",
+        arguments: "",
+        environment: [],
+        envFrom: [],
+        dockerImage: "",
+        transportType: "streamable-http",
+        httpPort: "",
+        httpPath: "/mcp",
+        serviceAccount: "",
+        imagePullSecrets: [],
+      },
+      scope: "personal",
+      teams: [],
+      environmentId: null,
+      labels: [],
+    };
+    const { rerender } = render(
+      <McpCatalogForm
+        mode="create"
+        formValues={formValues}
+        onSubmit={vi.fn()}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Edit labels" }));
+    const updatedFormValues = {
+      ...formValues,
+      name: "Refetched MCP",
+    };
+    rerender(
+      <McpCatalogForm
+        mode="create"
+        formValues={updatedFormValues}
+        onSubmit={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByLabelText("Name *")).toHaveValue("Prefilled MCP");
   });
 });

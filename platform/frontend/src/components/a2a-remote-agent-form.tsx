@@ -11,7 +11,6 @@ import { A2aRemoteAgentScopeSelector } from "@/components/a2a-remote-agent-scope
 import { createdByFact } from "@/components/created-by-cell";
 import { DetailFacts } from "@/components/detail-facts";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
-import { FloatingActionBar } from "@/components/settings/settings-block";
 import {
   SettingsSection,
   SettingsSectionGroup,
@@ -24,6 +23,7 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { SecretInput } from "@/components/ui/secret-input";
 import { Textarea } from "@/components/ui/textarea";
+import { WizardFooter } from "@/components/wizard-footer";
 import type {
   A2aRemoteAgent,
   UpdateA2aRemoteAgentBody,
@@ -340,6 +340,7 @@ export function A2aRemoteAgentForm({
     onSubmit(submission);
   };
   const submit = form.handleSubmit(() => {
+    if (isSaving || inspectionPending) return;
     if (!validateCredential() || !validateAccess()) return;
     const draft = form.getValues();
     const draftStamp = connectionStamp(draft, agent);
@@ -378,291 +379,300 @@ export function A2aRemoteAgentForm({
         <DetailFacts facts={[createdByFact(agent.createdBy)]} />
       )}
       <form id={formId} className="flex flex-col" onSubmit={submit}>
-        <SettingsSectionGroup>
-          <SettingsSection
-            title="Connection"
-            description={`Set the external agent's base URL and how ${appName} authenticates. Connecting validates the Agent Card before saving.`}
-          >
-            <div className="space-y-2">
-              <Label htmlFor="a2a-url">Agent base URL</Label>
-              <Input
-                id="a2a-url"
-                type="url"
-                aria-invalid={!!form.formState.errors.url}
-                aria-describedby="a2a-url-help a2a-url-error"
-                placeholder="https://agent.example.com"
-                {...form.register("url", {
-                  required: urlRequiredMessage,
-                  validate: (value) =>
-                    keepsLegacySource && !value.trim()
-                      ? true
-                      : !!normalizeAgentBaseUrl(value.trim()) ||
-                        "Enter an HTTP(S) base URL without credentials, a query, or a fragment.",
-                  onChange: invalidateSource,
+        <fieldset
+          disabled={!agent && isSaving}
+          inert={!agent && isSaving ? true : undefined}
+          className="contents"
+        >
+          <SettingsSectionGroup>
+            <SettingsSection
+              title="Connection"
+              description={`Set the external agent's base URL and how ${appName} authenticates. Connecting validates the Agent Card before saving.`}
+            >
+              <div className="space-y-2">
+                <Label htmlFor="a2a-url">Agent base URL</Label>
+                <Input
+                  id="a2a-url"
+                  type="url"
+                  aria-invalid={!!form.formState.errors.url}
+                  aria-describedby="a2a-url-help a2a-url-error"
+                  placeholder="https://agent.example.com"
+                  {...form.register("url", {
+                    required: urlRequiredMessage,
+                    validate: (value) =>
+                      keepsLegacySource && !value.trim()
+                        ? true
+                        : !!normalizeAgentBaseUrl(value.trim()) ||
+                          "Enter an HTTP(S) base URL without credentials, a query, or a fragment.",
+                    onChange: invalidateSource,
+                  })}
+                />
+                <FieldDescription id="a2a-url-help">
+                  {keepsLegacySource
+                    ? "This connection uses a legacy Agent Card source. Leave this blank to keep it, or enter a base URL to replace it."
+                    : "We'll append /.well-known/agent-card.json to this base URL."}
+                </FieldDescription>
+                {form.formState.errors.url ? (
+                  <p
+                    id="a2a-url-error"
+                    role="alert"
+                    className="text-sm text-destructive"
+                  >
+                    {form.formState.errors.url.message}
+                  </p>
+                ) : null}
+              </div>
+              <div className="space-y-2">
+                <Label>Authentication</Label>
+                <FieldDescription>
+                  These credentials are also used to retrieve protected Agent
+                  Cards.
+                </FieldDescription>
+              </div>
+              <RadioGroup
+                aria-label="Authentication"
+                value={values.authType}
+                onValueChange={(value) => {
+                  const nextAuthType = value as AuthType;
+                  form.setValue("authType", nextAuthType, {
+                    shouldDirty: true,
+                  });
+                  invalidateCompatibility();
+                }}
+                className="grid gap-2 sm:grid-cols-3"
+              >
+                {ALL_AUTH_TYPES.map((authType) => {
+                  const unsupported =
+                    capabilitiesInspected &&
+                    !!inspection &&
+                    !inspection.supportedAuthTypes.includes(authType);
+                  return (
+                    <Label
+                      key={authType}
+                      htmlFor={`a2a-auth-${authType}`}
+                      className="flex cursor-pointer items-start gap-2 rounded-md border p-3 has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5 has-[[data-disabled]]:cursor-not-allowed has-[[data-disabled]]:opacity-50"
+                    >
+                      <RadioGroupItem
+                        id={`a2a-auth-${authType}`}
+                        value={authType}
+                        disabled={unsupported}
+                      />
+                      <span className="space-y-1">
+                        <span className="block">{AUTH_LABELS[authType]}</span>
+                        {unsupported ? (
+                          <span className="block text-xs font-normal text-muted-foreground">
+                            Not supported by this Agent Card
+                          </span>
+                        ) : null}
+                      </span>
+                    </Label>
+                  );
                 })}
-              />
-              <FieldDescription id="a2a-url-help">
-                {keepsLegacySource
-                  ? "This connection uses a legacy Agent Card source. Leave this blank to keep it, or enter a base URL to replace it."
-                  : "We'll append /.well-known/agent-card.json to this base URL."}
-              </FieldDescription>
-              {form.formState.errors.url ? (
+              </RadioGroup>
+              {values.authType === "api_key" ? (
+                <div className="space-y-2">
+                  <Label htmlFor="a2a-header">Header name</Label>
+                  <Input
+                    id="a2a-header"
+                    aria-invalid={!!form.formState.errors.headerName}
+                    aria-describedby="a2a-header-error"
+                    {...form.register("headerName", {
+                      required: "A header name is required.",
+                      onChange: invalidateCompatibility,
+                    })}
+                  />
+                  {form.formState.errors.headerName ? (
+                    <p
+                      id="a2a-header-error"
+                      role="alert"
+                      className="text-sm text-destructive"
+                    >
+                      {form.formState.errors.headerName.message}
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
+              {values.authType !== "none" ? (
+                <div className="space-y-2">
+                  <Label htmlFor="a2a-credential">
+                    {canReuseStoredCredential
+                      ? "Replace credential (optional)"
+                      : "Credential"}
+                  </Label>
+                  <SecretInput
+                    id="a2a-credential"
+                    revealable
+                    aria-invalid={!!form.formState.errors.credential}
+                    aria-describedby="a2a-credential-help a2a-credential-error"
+                    placeholder={
+                      canReuseStoredCredential ? "••••••••" : undefined
+                    }
+                    {...form.register("credential", {
+                      onChange: invalidateCompatibility,
+                    })}
+                  />
+                  <FieldDescription id="a2a-credential-help">
+                    {canReuseStoredCredential
+                      ? "Leave this blank to keep the stored credential, or enter a replacement."
+                      : "The credential is stored securely and cannot be shown again."}
+                  </FieldDescription>
+                  {form.formState.errors.credential ? (
+                    <p
+                      id="a2a-credential-error"
+                      role="alert"
+                      className="text-sm text-destructive"
+                    >
+                      {form.formState.errors.credential.message}
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
+              <div className="flex justify-end">
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={inspectionPending || !canInspect}
+                  onClick={() => void inspectConnection()}
+                >
+                  <span>
+                    {inspectionPending ? "Checking…" : "Check Agent Card"}
+                  </span>
+                </Button>
+              </div>
+              {inspectionPending ? (
+                <output
+                  aria-label="Checking Agent Card"
+                  className="flex items-center gap-2 text-sm text-muted-foreground"
+                >
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span>
+                    Checking the Agent Card and authentication settings…
+                  </span>
+                </output>
+              ) : null}
+              {inspectionError ? (
                 <p
-                  id="a2a-url-error"
+                  role="alert"
+                  aria-label="Agent Card unavailable"
+                  className="text-sm text-destructive"
+                >
+                  {inspectionError}
+                </p>
+              ) : null}
+              {inspection && !inspectionError ? (
+                <output
+                  aria-label="Agent Card found"
+                  className="flex items-start gap-2 rounded-md border bg-muted/40 p-3 text-sm"
+                >
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 text-green-600" />
+                  <div>
+                    <p className="font-medium">{inspection.name}</p>
+                    <p className="text-muted-foreground">
+                      {inspection.selectedInterface.protocolBinding},{" "}
+                      {inspection.selectedInterface.protocolVersion}
+                    </p>
+                  </div>
+                </output>
+              ) : null}
+              {inspection &&
+              !inspectionPending &&
+              !connectionNeedsInspection ? (
+                <output
+                  aria-label="Connection compatible"
+                  className="flex items-center gap-2 text-sm text-green-700 dark:text-green-400"
+                >
+                  <CheckCircle2 className="h-4 w-4" />
+                  <span>
+                    Agent Card and authentication settings are compatible.
+                  </span>
+                </output>
+              ) : null}
+            </SettingsSection>
+            <SettingsSection
+              title="Details"
+              description={
+                agent
+                  ? `Customize how this external agent appears in ${appName}.`
+                  : "Optional local details. Empty fields use the Agent Card values."
+              }
+            >
+              <div className="space-y-2">
+                <Label htmlFor="a2a-name">Display name (optional)</Label>
+                <Input
+                  id="a2a-name"
+                  placeholder={inspection?.name ?? "Uses the Agent Card name"}
+                  {...form.register("name")}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="a2a-description">Description (optional)</Label>
+                <Textarea
+                  id="a2a-description"
+                  rows={3}
+                  placeholder={
+                    inspection?.description ?? "Uses the Agent Card description"
+                  }
+                  {...form.register("description")}
+                />
+              </div>
+            </SettingsSection>
+            <SettingsSection
+              title="Access"
+              description="Choose who can discover and assign this external agent."
+            >
+              <div
+                aria-invalid={
+                  !!form.formState.errors.teamIds ||
+                  !!form.formState.errors.userIds
+                }
+                aria-describedby="a2a-access-error"
+              >
+                <A2aRemoteAgentScopeSelector
+                  initialScope={agent?.scope}
+                  onChoiceChange={(choice) => {
+                    form.clearErrors(["teamIds", "userIds"]);
+                    form.setValue("accessChoice", choice, {
+                      shouldDirty: true,
+                    });
+                  }}
+                  scope={values.scope}
+                  onScopeChange={(scope) =>
+                    form.setValue("scope", scope, { shouldDirty: true })
+                  }
+                  teamIds={values.teamIds}
+                  onTeamIdsChange={(ids) =>
+                    form.setValue("teamIds", ids, { shouldDirty: true })
+                  }
+                  userIds={values.userIds}
+                  onUserIdsChange={(ids) =>
+                    form.setValue("userIds", ids, { shouldDirty: true })
+                  }
+                  disabled={!agent && isSaving}
+                />
+              </div>
+              {form.formState.errors.teamIds ? (
+                <p
+                  id="a2a-access-error"
                   role="alert"
                   className="text-sm text-destructive"
                 >
-                  {form.formState.errors.url.message}
+                  {form.formState.errors.teamIds.message}
                 </p>
               ) : null}
-            </div>
-            <div className="space-y-2">
-              <Label>Authentication</Label>
-              <FieldDescription>
-                These credentials are also used to retrieve protected Agent
-                Cards.
-              </FieldDescription>
-            </div>
-            <RadioGroup
-              aria-label="Authentication"
-              value={values.authType}
-              onValueChange={(value) => {
-                const nextAuthType = value as AuthType;
-                form.setValue("authType", nextAuthType, {
-                  shouldDirty: true,
-                });
-                invalidateCompatibility();
-              }}
-              className="grid gap-2 sm:grid-cols-3"
-            >
-              {ALL_AUTH_TYPES.map((authType) => {
-                const unsupported =
-                  capabilitiesInspected &&
-                  !!inspection &&
-                  !inspection.supportedAuthTypes.includes(authType);
-                return (
-                  <Label
-                    key={authType}
-                    htmlFor={`a2a-auth-${authType}`}
-                    className="flex cursor-pointer items-start gap-2 rounded-md border p-3 has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5 has-[[data-disabled]]:cursor-not-allowed has-[[data-disabled]]:opacity-50"
-                  >
-                    <RadioGroupItem
-                      id={`a2a-auth-${authType}`}
-                      value={authType}
-                      disabled={unsupported}
-                    />
-                    <span className="space-y-1">
-                      <span className="block">{AUTH_LABELS[authType]}</span>
-                      {unsupported ? (
-                        <span className="block text-xs font-normal text-muted-foreground">
-                          Not supported by this Agent Card
-                        </span>
-                      ) : null}
-                    </span>
-                  </Label>
-                );
-              })}
-            </RadioGroup>
-            {values.authType === "api_key" ? (
-              <div className="space-y-2">
-                <Label htmlFor="a2a-header">Header name</Label>
-                <Input
-                  id="a2a-header"
-                  aria-invalid={!!form.formState.errors.headerName}
-                  aria-describedby="a2a-header-error"
-                  {...form.register("headerName", {
-                    required: "A header name is required.",
-                    onChange: invalidateCompatibility,
-                  })}
-                />
-                {form.formState.errors.headerName ? (
-                  <p
-                    id="a2a-header-error"
-                    role="alert"
-                    className="text-sm text-destructive"
-                  >
-                    {form.formState.errors.headerName.message}
-                  </p>
-                ) : null}
-              </div>
-            ) : null}
-            {values.authType !== "none" ? (
-              <div className="space-y-2">
-                <Label htmlFor="a2a-credential">
-                  {canReuseStoredCredential
-                    ? "Replace credential (optional)"
-                    : "Credential"}
-                </Label>
-                <SecretInput
-                  id="a2a-credential"
-                  revealable
-                  aria-invalid={!!form.formState.errors.credential}
-                  aria-describedby="a2a-credential-help a2a-credential-error"
-                  placeholder={
-                    canReuseStoredCredential ? "••••••••" : undefined
-                  }
-                  {...form.register("credential", {
-                    onChange: invalidateCompatibility,
-                  })}
-                />
-                <FieldDescription id="a2a-credential-help">
-                  {canReuseStoredCredential
-                    ? "Leave this blank to keep the stored credential, or enter a replacement."
-                    : "The credential is stored securely and cannot be shown again."}
-                </FieldDescription>
-                {form.formState.errors.credential ? (
-                  <p
-                    id="a2a-credential-error"
-                    role="alert"
-                    className="text-sm text-destructive"
-                  >
-                    {form.formState.errors.credential.message}
-                  </p>
-                ) : null}
-              </div>
-            ) : null}
-            <div className="flex justify-end">
-              <Button
-                type="button"
-                variant="outline"
-                disabled={inspectionPending || !canInspect}
-                onClick={() => void inspectConnection()}
-              >
-                <span>
-                  {inspectionPending ? "Checking…" : "Check Agent Card"}
-                </span>
-              </Button>
-            </div>
-            {inspectionPending ? (
-              <output
-                aria-label="Checking Agent Card"
-                className="flex items-center gap-2 text-sm text-muted-foreground"
-              >
-                <Loader2 className="h-4 w-4 animate-spin" />
-                <span>
-                  Checking the Agent Card and authentication settings…
-                </span>
-              </output>
-            ) : null}
-            {inspectionError ? (
-              <p
-                role="alert"
-                aria-label="Agent Card unavailable"
-                className="text-sm text-destructive"
-              >
-                {inspectionError}
-              </p>
-            ) : null}
-            {inspection && !inspectionError ? (
-              <output
-                aria-label="Agent Card found"
-                className="flex items-start gap-2 rounded-md border bg-muted/40 p-3 text-sm"
-              >
-                <CheckCircle2 className="mt-0.5 h-4 w-4 text-green-600" />
-                <div>
-                  <p className="font-medium">{inspection.name}</p>
-                  <p className="text-muted-foreground">
-                    {inspection.selectedInterface.protocolBinding},{" "}
-                    {inspection.selectedInterface.protocolVersion}
-                  </p>
-                </div>
-              </output>
-            ) : null}
-            {inspection && !inspectionPending && !connectionNeedsInspection ? (
-              <output
-                aria-label="Connection compatible"
-                className="flex items-center gap-2 text-sm text-green-700 dark:text-green-400"
-              >
-                <CheckCircle2 className="h-4 w-4" />
-                <span>
-                  Agent Card and authentication settings are compatible.
-                </span>
-              </output>
-            ) : null}
-          </SettingsSection>
-          <SettingsSection
-            title="Details"
-            description={
-              agent
-                ? `Customize how this external agent appears in ${appName}.`
-                : "Optional local details. Empty fields use the Agent Card values."
-            }
-          >
-            <div className="space-y-2">
-              <Label htmlFor="a2a-name">Display name (optional)</Label>
-              <Input
-                id="a2a-name"
-                placeholder={inspection?.name ?? "Uses the Agent Card name"}
-                {...form.register("name")}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="a2a-description">Description (optional)</Label>
-              <Textarea
-                id="a2a-description"
-                rows={3}
-                placeholder={
-                  inspection?.description ?? "Uses the Agent Card description"
-                }
-                {...form.register("description")}
-              />
-            </div>
-          </SettingsSection>
-          <SettingsSection
-            title="Access"
-            description="Choose who can discover and assign this external agent."
-          >
-            <div
-              aria-invalid={
-                !!form.formState.errors.teamIds ||
-                !!form.formState.errors.userIds
-              }
-              aria-describedby="a2a-access-error"
-            >
-              <A2aRemoteAgentScopeSelector
-                initialScope={agent?.scope}
-                onChoiceChange={(choice) => {
-                  form.clearErrors(["teamIds", "userIds"]);
-                  form.setValue("accessChoice", choice, {
-                    shouldDirty: true,
-                  });
-                }}
-                scope={values.scope}
-                onScopeChange={(scope) =>
-                  form.setValue("scope", scope, { shouldDirty: true })
-                }
-                teamIds={values.teamIds}
-                onTeamIdsChange={(ids) =>
-                  form.setValue("teamIds", ids, { shouldDirty: true })
-                }
-                userIds={values.userIds}
-                onUserIdsChange={(ids) =>
-                  form.setValue("userIds", ids, { shouldDirty: true })
-                }
-              />
-            </div>
-            {form.formState.errors.teamIds ? (
-              <p
-                id="a2a-access-error"
-                role="alert"
-                className="text-sm text-destructive"
-              >
-                {form.formState.errors.teamIds.message}
-              </p>
-            ) : null}
-            {form.formState.errors.userIds ? (
-              <p
-                id="a2a-access-error"
-                role="alert"
-                className="text-sm text-destructive"
-              >
-                {form.formState.errors.userIds.message}
-              </p>
-            ) : null}
-          </SettingsSection>
-        </SettingsSectionGroup>
+              {form.formState.errors.userIds ? (
+                <p
+                  id="a2a-access-error"
+                  role="alert"
+                  className="text-sm text-destructive"
+                >
+                  {form.formState.errors.userIds.message}
+                </p>
+              ) : null}
+            </SettingsSection>
+          </SettingsSectionGroup>
+        </fieldset>
       </form>
-      <FloatingActionBar>
+      <WizardFooter className="sm:justify-end">
         <Button
           type="submit"
           form={formId}
@@ -679,7 +689,7 @@ export function A2aRemoteAgentForm({
                 : "Connect agent"}
           </span>
         </Button>
-      </FloatingActionBar>
+      </WizardFooter>
     </>
   );
 }

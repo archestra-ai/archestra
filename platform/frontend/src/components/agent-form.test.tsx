@@ -677,8 +677,19 @@ vi.mock("@/components/share-personal-credentials-dialog", () => ({
 }));
 
 vi.mock("@/components/visibility-selector", () => ({
-  VisibilitySelector: ({ children }: { children?: React.ReactNode }) => (
-    <div data-testid="visibility-selector">{children}</div>
+  VisibilitySelector: ({
+    children,
+    disabled,
+  }: {
+    children?: React.ReactNode;
+    disabled?: boolean;
+  }) => (
+    <div
+      data-testid="visibility-selector"
+      data-disabled={disabled ? "true" : "false"}
+    >
+      {children}
+    </div>
   ),
 }));
 
@@ -2923,6 +2934,37 @@ describe("AgentForm save payload and failure handling", () => {
         screen.getByRole("button", { name: /update/i }),
       ).not.toBeDisabled();
     });
+  });
+
+  it("freezes create fields and visibility while a save is in flight", async () => {
+    const user = userEvent.setup();
+    let releaseCreate!: (agent: unknown) => void;
+    createAgent.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          releaseCreate = resolve;
+        }),
+    );
+
+    render(<AgentForm agentType="agent" />);
+
+    const nameInput = screen.getByPlaceholderText("Enter agent name");
+    await user.type(nameInput, "New Agent");
+    await user.click(screen.getByRole("button", { name: /create/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /create/i })).toBeDisabled();
+    });
+    expect(nameInput).toBeDisabled();
+    expect(screen.getByTestId("visibility-selector")).toHaveAttribute(
+      "data-disabled",
+      "true",
+    );
+
+    await act(async () => {
+      releaseCreate({ id: "created-agent", name: "New Agent" });
+    });
+    await waitFor(() => expect(nameInput).toBeEnabled());
   });
 
   it("hides existing runtime settings when another form panel is active", () => {

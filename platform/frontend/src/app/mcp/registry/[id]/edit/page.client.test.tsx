@@ -19,7 +19,6 @@ vi.mock("../../_parts/catalog-setup-wizard", () => ({
     { id: "test", title: "Test Connection" },
     { id: "tools", title: "Tools & Guardrails" },
   ],
-  SetupStepper: () => <div />,
   TestConnectionStep: () => <div>Connection test</div>,
   ToolsAndGuardrailsStep: () => <div>Tool review</div>,
   useTestConnectionTarget: () => ({ target: { id: "connection-1" } }),

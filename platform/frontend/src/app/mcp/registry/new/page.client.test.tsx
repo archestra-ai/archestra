@@ -10,7 +10,11 @@ vi.mock("@/lib/hooks/use-app-name", () => ({
 }));
 
 vi.mock("../_parts/catalog-setup-wizard", () => ({
-  SetupStepper: () => <div data-testid="setup-stepper" />,
+  SETUP_STEPS: [
+    { id: "configuration", title: "Configuration" },
+    { id: "test", title: "Test Connection" },
+    { id: "tools", title: "Tools & Guardrails" },
+  ],
 }));
 vi.mock("../_parts/archestra-catalog-tab", () => ({
   ArchestraCatalogTab: () => <div data-testid="catalog-browser" />,
@@ -75,7 +79,7 @@ describe("NewMcpCatalogItemPage", () => {
 
     expect(
       screen.getByRole("heading", {
-        name: "Add MCP Server to the Private Registry",
+        name: "Add MCP Server",
       }),
     ).toBeInTheDocument();
     expect(
@@ -96,6 +100,9 @@ describe("NewMcpCatalogItemPage", () => {
     expect(screen.getByText("Start from scratch")).toBeInTheDocument();
     expect(screen.getByText("Select from Online Catalog")).toBeInTheDocument();
     expect(screen.queryByTestId("mcp-catalog-form")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Step 1 of 3: Configuration/ }),
+    ).not.toBeInTheDocument();
   });
 
   it("skips the chooser and opens the form directly when the online catalog is disabled", () => {
@@ -107,13 +114,16 @@ describe("NewMcpCatalogItemPage", () => {
       screen.queryByText("Select from Online Catalog"),
     ).not.toBeInTheDocument();
     expect(screen.getByTestId("mcp-catalog-form")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Step 1 of 3: Configuration/ }),
+    ).toBeInTheDocument();
   });
 
   it("shows Cancel (not Back) in the footer when the catalog is disabled", () => {
     mockOrganization(false);
     renderPage();
 
-    expect(screen.getByRole("link", { name: "Cancel" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: /back/i }),
     ).not.toBeInTheDocument();

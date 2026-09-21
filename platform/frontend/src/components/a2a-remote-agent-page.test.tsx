@@ -205,6 +205,212 @@ describe("external A2A agent routed pages", () => {
       });
     });
     expect(push).toHaveBeenCalledWith("/agents/a2a/remote-agent-1");
+    expect(screen.queryByRole("button", { name: "Connect agent" })).toBeNull();
+  });
+
+  it("does not start a second Agent Card check while the first submit is pending", async () => {
+    const user = userEvent.setup();
+    let inspectCalls = 0;
+    let releaseInspection!: () => void;
+    const inspectionReady = new Promise<void>((resolve) => {
+      releaseInspection = resolve;
+    });
+    server.use(
+      http.post(`${REGISTRY_URL}/inspect`, async () => {
+        inspectCalls += 1;
+        await inspectionReady;
+        return HttpResponse.json({
+          name: "Fixture Agent",
+          description: null,
+          agentCard: remoteAgent.agentCard,
+          cardHash: remoteAgent.cardHash,
+          selectedInterface: remoteAgent.connection.selectedInterface,
+          supportedAuthTypes: ["none"],
+          selectedSecurityRequirement: null,
+        });
+      }),
+    );
+
+    renderPage(<CreateA2aRemoteAgentPage />);
+    await user.type(
+      screen.getByLabelText("Agent base URL"),
+      remoteAgent.discoveryUrl,
+    );
+    const connectButton = screen.getByRole("button", {
+      name: "Connect agent",
+    });
+    await user.click(connectButton);
+    await waitFor(() => expect(connectButton).toBeDisabled());
+    await user.click(connectButton);
+    expect(inspectCalls).toBe(1);
+
+    releaseInspection();
+    await waitFor(() =>
+      expect(
+        screen.getByRole("status", { name: "Agent Card found" }),
+      ).toBeInTheDocument(),
+    );
+  });
+
+  it("freezes create controls while the connection is being saved", async () => {
+    const user = userEvent.setup();
+    let releaseCreate!: () => void;
+    let markCreateStarted!: () => void;
+    const createReady = new Promise<void>((resolve) => {
+      releaseCreate = resolve;
+    });
+    const createStarted = new Promise<void>((resolve) => {
+      markCreateStarted = resolve;
+    });
+    server.use(
+      http.post(`${REGISTRY_URL}/inspect`, () =>
+        HttpResponse.json({
+          name: "Fixture Agent",
+          description: null,
+          agentCard: remoteAgent.agentCard,
+          cardHash: remoteAgent.cardHash,
+          selectedInterface: remoteAgent.connection.selectedInterface,
+          supportedAuthTypes: ["none"],
+          selectedSecurityRequirement: null,
+        }),
+      ),
+      http.post(REGISTRY_URL, async () => {
+        markCreateStarted();
+        await createReady;
+        return HttpResponse.json(remoteAgent);
+      }),
+    );
+
+    renderPage(<CreateA2aRemoteAgentPage />);
+    await user.type(
+      screen.getByLabelText("Agent base URL"),
+      remoteAgent.discoveryUrl,
+    );
+    await user.click(screen.getByRole("button", { name: "Connect agent" }));
+    await createStarted;
+
+    expect(screen.getByLabelText("Agent base URL")).toBeDisabled();
+    expect(screen.getByLabelText("Display name (optional)")).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Check Agent Card" }),
+    ).toBeDisabled();
+    expect(screen.getByText("Personal", { exact: true })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Personal/ })).toBeNull();
+
+    releaseCreate();
+    await waitFor(() =>
+      expect(screen.queryByLabelText("Agent base URL")).toBeNull(),
+    );
+  });
+
+  it("keeps the success state in place when the creator cannot read the new agent", async () => {
+    const user = userEvent.setup();
+    const push = vi.fn();
+    vi.mocked(useRouter).mockReturnValue({
+      push,
+      replace: vi.fn(),
+    } as unknown as ReturnType<typeof useRouter>);
+    vi.mocked(useHasPermissions).mockImplementation(
+      (permissions) =>
+        ({
+          data: !!permissions.agentSettings?.includes("update"),
+          isPending: false,
+        }) as ReturnType<typeof useHasPermissions>,
+    );
+    server.use(
+      http.post(`${REGISTRY_URL}/inspect`, () =>
+        HttpResponse.json({
+          name: "Fixture Agent",
+          description: null,
+          agentCard: remoteAgent.agentCard,
+          cardHash: remoteAgent.cardHash,
+          selectedInterface: remoteAgent.connection.selectedInterface,
+          supportedAuthTypes: ["none"],
+          selectedSecurityRequirement: null,
+        }),
+      ),
+      http.post(REGISTRY_URL, () => HttpResponse.json(remoteAgent)),
+    );
+
+    renderPage(<CreateA2aRemoteAgentPage />);
+    await user.type(
+      screen.getByLabelText("Agent base URL"),
+      remoteAgent.discoveryUrl,
+    );
+    await user.click(screen.getByRole("button", { name: "Connect agent" }));
+
+    expect(
+      await screen.findByText("External A2A agent connected"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/you do not have permission to view it/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByLabelText("Agent base URL")).toBeNull();
+    expect(screen.queryByRole("link", { name: "Add Agent" })).toBeNull();
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it("waits for read permission before routing after A2A creation", async () => {
+    const user = userEvent.setup();
+    const push = vi.fn();
+    let readPermissionPending = true;
+    let readPermission: boolean | undefined;
+    vi.mocked(useRouter).mockReturnValue({
+      push,
+      replace: vi.fn(),
+    } as unknown as ReturnType<typeof useRouter>);
+    vi.mocked(useHasPermissions).mockImplementation(
+      (permissions) =>
+        ({
+          data: permissions.agentSettings?.includes("update")
+            ? true
+            : readPermission,
+          isPending: permissions.agent?.includes("read")
+            ? readPermissionPending
+            : false,
+        }) as ReturnType<typeof useHasPermissions>,
+    );
+    server.use(
+      http.post(`${REGISTRY_URL}/inspect`, () =>
+        HttpResponse.json({
+          name: "Fixture Agent",
+          description: null,
+          agentCard: remoteAgent.agentCard,
+          cardHash: remoteAgent.cardHash,
+          selectedInterface: remoteAgent.connection.selectedInterface,
+          supportedAuthTypes: ["none"],
+          selectedSecurityRequirement: null,
+        }),
+      ),
+      http.post(REGISTRY_URL, () => HttpResponse.json(remoteAgent)),
+    );
+
+    const view = renderPage(<CreateA2aRemoteAgentPage />);
+    await user.type(
+      screen.getByLabelText("Agent base URL"),
+      remoteAgent.discoveryUrl,
+    );
+    await user.click(screen.getByRole("button", { name: "Connect agent" }));
+    expect(
+      await screen.findByText("External A2A agent connected"),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/opening/i)).toBeInTheDocument();
+    expect(push).not.toHaveBeenCalled();
+
+    readPermission = true;
+    readPermissionPending = false;
+    view.rerender(
+      <QueryClientProvider
+        client={
+          new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        }
+      >
+        <CreateA2aRemoteAgentPage />
+      </QueryClientProvider>,
+    );
+    await waitFor(() =>
+      expect(push).toHaveBeenCalledWith("/agents/a2a/remote-agent-1"),
+    );
   });
 
   it("guards the create page from discarding an unsaved connection", async () => {
@@ -856,7 +1062,7 @@ function renderPage(children: React.ReactNode) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
-  render(
+  return render(
     <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>,
   );
 }

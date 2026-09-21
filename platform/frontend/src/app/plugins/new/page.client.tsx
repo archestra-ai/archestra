@@ -1,40 +1,59 @@
 "use client";
 
 import { POPULAR_PLUGIN_MARKETPLACES } from "@archestra/shared";
-import { ArrowLeft, ArrowRight, FileText, Github } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  CircleCheck,
+  FileText,
+  Github,
+  Loader2,
+} from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import type { ProfileLabelsRef } from "@/components/agent-labels";
 import { CatalogSourceCard } from "@/components/catalog-source-card";
 import { FilterBar } from "@/components/filter-bar";
-import { PageLayout } from "@/components/page-layout";
+import { PageWizard } from "@/components/page-wizard";
 import { SearchInput } from "@/components/search-input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { Separator } from "@/components/ui/separator";
+import {
+  UnsavedChangesDialog,
+  useBeforeUnloadWhileDirty,
+  useGuardedInAppNavigation,
+  useUnsavedChangesGuard,
+} from "@/components/unsaved-changes-guard";
 import { WizardFooter } from "@/components/wizard-footer";
-import { WizardStepper } from "@/components/wizard-stepper";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { useCreatePlugin } from "@/lib/plugins/plugin.query";
 import { ImportMarketplaceDialog } from "../_parts/import-marketplace-dialog";
 import {
   blankPluginDraft,
   isPluginDraftComplete,
+  isPluginDraftDirty,
   type PluginDraft,
 } from "../_parts/plugin-draft";
 import { PluginForm } from "../_parts/plugin-form";
 import { PluginBackLink } from "../_parts/plugin-page-shell";
 
 type CreateStep = "source" | "configure";
+type PluginImportState = { repoUrl: string; autoDiscover: boolean };
 
-const CREATE_STEPS: Array<{ id: CreateStep; title: string }> = [
-  { id: "source", title: "Source" },
-  { id: "configure", title: "Configure" },
-];
+const CONFIGURE_STEPS = [{ id: "configure", title: "Configure" }] as const;
 
 const STEP_DESCRIPTIONS: Record<CreateStep, string> = {
   source: "Import from GitHub, or start blank.",
@@ -63,13 +82,12 @@ function NewPluginGate() {
 
   if (!enabled) {
     return (
-      <PageLayout
+      <PageWizard
         title="Plugins"
         description="Plugins are disabled for this deployment."
-        maxWidth="wizard"
       >
         <div />
-      </PageLayout>
+      </PageWizard>
     );
   }
 
@@ -78,12 +96,14 @@ function NewPluginGate() {
 
 function NewPluginWizard() {
   const router = useRouter();
+  const { data: canCreate } = useHasPermissions({
+    plugin: ["create", "admin"],
+  });
+  const { data: canReadPlugins, isPending: isReadPermissionPending } =
+    useHasPermissions({ plugin: ["read", "admin"] });
   const searchParams = useSearchParams();
   const initialSource = searchParams.get("source");
-  const [importState, setImportState] = useState<{
-    repoUrl: string;
-    autoDiscover: boolean;
-  } | null>(
+  const [importState, setImportState] = useState<PluginImportState | null>(
     initialSource === "marketplace"
       ? { repoUrl: "", autoDiscover: false }
       : null,
@@ -93,17 +113,36 @@ function NewPluginWizard() {
   const [step, setStep] = useState<CreateStep>(
     initialSource === "blank" ? "configure" : "source",
   );
-  const stepIndex = CREATE_STEPS.findIndex((s) => s.id === step);
-
   const [draft, setDraft] = useState<PluginDraft>(blankPluginDraft);
+  const blankDraft = useMemo(() => blankPluginDraft(), []);
   const labelsRef = useRef<ProfileLabelsRef>(null);
   const patchDraft = (patch: Partial<PluginDraft>) =>
     setDraft((prev) => ({ ...prev, ...patch }));
 
   const isComplete = isPluginDraftComplete({ draft, isGithubPlugin: false });
+  const isDirty = useMemo(
+    () => isPluginDraftDirty(draft, blankDraft),
+    [blankDraft, draft],
+  );
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isGuardBypassed, setIsGuardBypassed] = useState(false);
+  const submittingRef = useRef(false);
+  const [created, setCreated] = useState<{ id: string; name: string } | null>(
+    null,
+  );
+  const routedCreatedRef = useRef<string | null>(null);
 
   const createPlugin = useCreatePlugin();
   const handleCreate = async () => {
+    if (
+      submittingRef.current ||
+      canCreate !== true ||
+      !isComplete ||
+      createPlugin.isPending
+    )
+      return;
+    submittingRef.current = true;
+    setIsSubmitting(true);
     const finalLabels = labelsRef.current?.saveUnsavedLabel() ?? draft.labels;
     // A handled failure resolves to null and a rejection is reported by the
     // mutation's own `onError`; both keep the page where it is with the draft
@@ -121,12 +160,83 @@ function NewPluginWizard() {
         labels: finalLabels,
       })
       .catch(() => null);
-    if (created) router.push(`/plugins/${created.id}`);
+    if (!created) {
+      submittingRef.current = false;
+      setIsSubmitting(false);
+      return;
+    }
+    setIsGuardBypassed(true);
+    setDraft(blankDraft);
+    setCreated({ id: created.id, name: draft.displayName.trim() || "Plugin" });
   };
 
-  const openImport = () => setImportState({ repoUrl: "", autoDiscover: false });
+  const guardedDirty = isDirty && !isGuardBypassed;
+  useBeforeUnloadWhileDirty(guardedDirty);
+  const pendingHrefRef = useRef<string | null>(null);
+  const pendingImportRef = useRef<PluginImportState | null>(null);
+  const isReadPermissionKnown = !isReadPermissionPending;
+  const showsUnreadableSuccess =
+    !!created && isReadPermissionKnown && canReadPlugins !== true;
+  useEffect(() => {
+    if (
+      !created ||
+      !isReadPermissionKnown ||
+      canReadPlugins !== true ||
+      routedCreatedRef.current === created.id
+    )
+      return;
+    routedCreatedRef.current = created.id;
+    router.push(`/plugins/${created.id}`);
+  }, [canReadPlugins, created, isReadPermissionKnown, router]);
+  const guard = useUnsavedChangesGuard({
+    isDirty: guardedDirty,
+    onOpenChange: (open) => {
+      if (open) return;
+      const pendingImport = pendingImportRef.current;
+      pendingImportRef.current = null;
+      if (pendingImport) {
+        setIsGuardBypassed(false);
+        setDraft(blankDraft);
+        setStep("source");
+        setImportState(pendingImport);
+        return;
+      }
+      const href = pendingHrefRef.current;
+      pendingHrefRef.current = null;
+      if (href) {
+        setIsGuardBypassed(true);
+        setDraft(blankDraft);
+        router.push(href);
+      }
+    },
+  });
+  const requestNavigate = useCallback(
+    (href: string) => {
+      if (submittingRef.current) return;
+      pendingHrefRef.current = href;
+      guard.requestClose();
+    },
+    [guard],
+  );
+  useGuardedInAppNavigation({
+    isDirty: guardedDirty,
+    onRequestNavigate: requestNavigate,
+  });
+
+  const requestImport = useCallback(
+    (nextImport: PluginImportState) => {
+      if (!isDirty) {
+        setImportState(nextImport);
+        return;
+      }
+      pendingImportRef.current = nextImport;
+      guard.requestClose();
+    },
+    [guard, isDirty],
+  );
+  const openImport = () => requestImport({ repoUrl: "", autoDiscover: false });
   const importPopular = (repoUrl: string) =>
-    setImportState({ repoUrl, autoDiscover: true });
+    requestImport({ repoUrl, autoDiscover: true });
   const goToPlugins = () => router.push("/plugins");
 
   const filteredMarketplaces = useMemo(() => {
@@ -143,28 +253,46 @@ function NewPluginWizard() {
 
   return (
     <>
-      <PageLayout
+      <PageWizard
         title="Add a new plugin"
         description={STEP_DESCRIPTIONS[step]}
-        backLink={<PluginBackLink href="/plugins" label="Plugins" />}
-        actionButton={
-          <WizardStepper
-            compact
-            steps={CREATE_STEPS}
-            activeStep={step}
-            onStepClick={(target) => {
-              const targetIndex = CREATE_STEPS.findIndex(
-                (candidate) => candidate.id === target,
-              );
-              if (targetIndex < stepIndex) setStep(target);
-            }}
-          />
+        backLink={
+          isSubmitting ? undefined : (
+            <PluginBackLink href="/plugins" label="Plugins" />
+          )
         }
-        maxWidth="wizard"
-        contentOverflowX="clip"
+        steps={created || step !== "configure" ? undefined : CONFIGURE_STEPS}
+        activeStep={step === "configure" ? "configure" : undefined}
       >
         <div className="space-y-6">
-          {step === "source" && (
+          {showsUnreadableSuccess ? (
+            <Empty className="border">
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <CircleCheck />
+                </EmptyMedia>
+                <EmptyTitle>Plugin created</EmptyTitle>
+                <EmptyDescription>
+                  <span>
+                    &quot;{created?.name ?? "Plugin"}&quot; was created. You do
+                    not have permission to view it.
+                  </span>
+                </EmptyDescription>
+              </EmptyHeader>
+            </Empty>
+          ) : created ? (
+            <Empty className="border">
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <Loader2 className="animate-spin" />
+                </EmptyMedia>
+                <EmptyTitle>Plugin created</EmptyTitle>
+                <EmptyDescription>
+                  Opening &quot;{created?.name ?? "Plugin"}&quot;…
+                </EmptyDescription>
+              </EmptyHeader>
+            </Empty>
+          ) : step === "source" ? (
             <div className="mx-auto max-w-3xl space-y-8">
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <CatalogSourceCard
@@ -250,33 +378,60 @@ function NewPluginWizard() {
                 </CardContent>
               </Card>
             </div>
-          )}
+          ) : null}
 
-          {step === "configure" && (
-            <div className="flex flex-col gap-4">
+          {!created && step === "configure" && (
+            <form
+              className="flex flex-col gap-4"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void handleCreate();
+              }}
+            >
               <PluginForm
                 draft={draft}
                 onChange={patchDraft}
                 labelsRef={labelsRef}
+                readOnly={isSubmitting}
                 isCreate
               />
               <WizardFooter>
-                <Button variant="outline" onClick={() => setStep("source")}>
+                <Button
+                  variant="outline"
+                  type="button"
+                  disabled={isSubmitting}
+                  onClick={() => setStep("source")}
+                >
                   <ArrowLeft className="h-4 w-4" />
                   Back
                 </Button>
                 <PermissionButton
                   permissions={{ plugin: ["create", "admin"] }}
-                  disabled={!isComplete || createPlugin.isPending}
-                  onClick={handleCreate}
+                  type="submit"
+                  disabled={
+                    canCreate !== true ||
+                    !isComplete ||
+                    createPlugin.isPending ||
+                    isSubmitting
+                  }
                 >
                   {createPlugin.isPending ? "Creating..." : "Create plugin"}
                 </PermissionButton>
               </WizardFooter>
-            </div>
+            </form>
           )}
         </div>
-      </PageLayout>
+      </PageWizard>
+
+      <UnsavedChangesDialog
+        open={guard.confirmOpen}
+        onKeepEditing={() => {
+          pendingHrefRef.current = null;
+          pendingImportRef.current = null;
+          guard.keepEditing();
+        }}
+        onDiscard={guard.discardChanges}
+      />
 
       <ImportMarketplaceDialog
         open={importState !== null}

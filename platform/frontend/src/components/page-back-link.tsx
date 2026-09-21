@@ -26,6 +26,11 @@ export function PageBackLink({
     >
       <Link
         href={href}
+        // Page-owned back links already funnel through their own navigation
+        // callback. The document-level dirty guard must leave these alone so
+        // creation pages can distinguish returning to a source chooser from
+        // an unrelated sidebar link to the same list.
+        data-unsaved-navigation-owner={onNavigate ? "page-back" : undefined}
         onClick={(event) => {
           onClick?.(event);
           if (

@@ -53,7 +53,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { WizardStepper } from "@/components/wizard-stepper";
 import { useSession } from "@/lib/auth/auth.query";
 import { useInitiateOAuth } from "@/lib/auth/oauth.query";
 import {
@@ -113,25 +112,6 @@ export const SETUP_STEPS: Array<{ id: SetupStepId; title: string }> = [
   { id: "test", title: "Test Connection" },
   { id: "tools", title: "Tools & Guardrails" },
 ];
-
-export function SetupStepper({
-  activeStep,
-  onStepClick,
-  compact = false,
-}: {
-  activeStep: SetupStepId;
-  onStepClick?: (step: SetupStepId) => void;
-  compact?: boolean;
-}) {
-  return (
-    <WizardStepper
-      steps={SETUP_STEPS}
-      activeStep={activeStep}
-      onStepClick={onStepClick}
-      compact={compact}
-    />
-  );
-}
 
 /**
  * Resolves the install the Test Connection step reports on — the current

@@ -928,6 +928,7 @@ export function AccessLevelSelector({
   onTeamIdsChange,
   hasNoAvailableTeams,
   showTeamRequired,
+  disabled = false,
 }: {
   scope: AgentScope;
   onScopeChange: (scope: AgentScope) => void;
@@ -949,6 +950,7 @@ export function AccessLevelSelector({
   onTeamIdsChange: (ids: string[]) => void;
   hasNoAvailableTeams: boolean;
   showTeamRequired: boolean;
+  disabled?: boolean;
 }) {
   const scopeOptions = getScopeOptions(agentType);
   const canShareWithTeams = isAdmin || isTeamAdmin;
@@ -1049,6 +1051,7 @@ export function AccessLevelSelector({
       label="Visibility"
       value={choice}
       options={options}
+      disabled={disabled}
       onValueChange={(nextChoice) => {
         onChoiceChange?.(nextChoice);
         selectChoice(nextChoice);
@@ -1058,6 +1061,7 @@ export function AccessLevelSelector({
         <UserShareField
           value={assignedUserIds}
           onValueChange={onUserIdsChange}
+          disabled={disabled}
         />
       )}
 
@@ -1065,7 +1069,10 @@ export function AccessLevelSelector({
         <div className="space-y-2">
           <TeamVisibilityPicker
             disabled={
-              !canShareWithTeams || hasNoAvailableTeams || !canReadTeams
+              disabled ||
+              !canShareWithTeams ||
+              hasNoAvailableTeams ||
+              !canReadTeams
             }
             teams={teams ?? []}
             value={assignedTeamIds}
@@ -3161,6 +3168,7 @@ export function AgentForm({
     return () => onDirtyChange?.(false);
   }, [isDirty, onDirtyChange]);
 
+  const isCreateSaving = !agent && (isSaving || createAgent.isPending);
   const canSubmit =
     !!name.trim() &&
     !isSaving &&
@@ -3443,7 +3451,11 @@ export function AgentForm({
         void handleSave();
       }}
     >
-      <fieldset disabled={readOnly} className="contents">
+      <fieldset
+        disabled={readOnly || isCreateSaving}
+        inert={isCreateSaving || undefined}
+        className="contents"
+      >
         <div className="space-y-4">
           {showConfigurationSections && agentType === "profile" && (
             <Alert variant="warning">
@@ -3566,6 +3578,7 @@ export function AgentForm({
                         onUserIdsChange={setAssignedUserIds}
                         hasNoAvailableTeams={hasNoAvailableTeams}
                         showTeamRequired={true}
+                        disabled={isCreateSaving}
                       />
                     </div>
                   )}
@@ -4694,6 +4707,7 @@ export function AgentForm({
               variant="outline"
               size="sm"
               className="h-7 shrink-0 self-center bg-background/80 px-2 text-xs"
+              disabled={isCreateSaving}
               onClick={() =>
                 agentToolsEditorRef.current?.removeIncompatibleTools()
               }

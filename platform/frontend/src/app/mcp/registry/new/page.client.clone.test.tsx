@@ -123,7 +123,7 @@ const cloneSource = {
 
 describe("NewMcpCatalogItemPage clone flow", () => {
   const push = vi.fn();
-  const mutate = vi.fn();
+  const mutateAsync = vi.fn();
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -139,7 +139,7 @@ describe("NewMcpCatalogItemPage clone flow", () => {
       data: [cloneSource],
     } as unknown as ReturnType<typeof useInternalMcpCatalog>);
     vi.mocked(useCreateInternalMcpCatalogItem).mockReturnValue({
-      mutate,
+      mutateAsync,
       isPending: false,
     } as unknown as ReturnType<typeof useCreateInternalMcpCatalogItem>);
     vi.mocked(useOrganization).mockReturnValue({
@@ -191,15 +191,13 @@ describe("NewMcpCatalogItemPage clone flow", () => {
   });
 
   it("submits the edited values and shows a network-policy rejection inline instead of silently dropping it", async () => {
-    mutate.mockImplementation((_data, opts) => {
+    mutateAsync.mockImplementation(async (_data, opts) => {
       const error = new Error(
         "The remote MCP server host is not permitted by the environment's network egress policy.",
       ) as Error & { internalCode?: string };
       error.internalCode = "remote_server_url_not_allowed";
-      // TanStack Query always delivers mutation callbacks asynchronously —
-      // a synchronous call here would land before the form's post-submit
-      // baseline reset and get wiped, which real mutations never hit.
-      setTimeout(() => opts?.onError?.(error), 0);
+      opts?.onError?.(error);
+      throw error;
     });
 
     const user = userEvent.setup();
@@ -212,9 +210,9 @@ describe("NewMcpCatalogItemPage clone flow", () => {
     await user.click(screen.getByRole("button", { name: "Add Server" }));
 
     await waitFor(() => {
-      expect(mutate).toHaveBeenCalledTimes(1);
+      expect(mutateAsync).toHaveBeenCalledTimes(1);
     });
-    expect(mutate.mock.calls[0][0]).toMatchObject({
+    expect(mutateAsync.mock.calls[0][0]).toMatchObject({
       name: "my-edited-name",
       clonedFrom: "clone-source-id",
     });
@@ -227,6 +225,34 @@ describe("NewMcpCatalogItemPage clone flow", () => {
     ).toBeInTheDocument();
     // ...the user's edits survive the failed submit, and no navigation happens.
     expect(screen.getByDisplayValue("my-edited-name")).toBeInTheDocument();
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it("keeps a create-only user in place after the server is created", async () => {
+    vi.mocked(useHasPermissions).mockImplementation((permissions) => {
+      if ("mcpRegistry" in permissions) {
+        return {
+          data: permissions.mcpRegistry?.includes("create") ?? false,
+          isPending: false,
+        } as ReturnType<typeof useHasPermissions>;
+      }
+      return { data: true, isPending: false } as ReturnType<
+        typeof useHasPermissions
+      >;
+    });
+    mutateAsync.mockResolvedValue({ id: "created-server", name: "new-server" });
+
+    const user = userEvent.setup();
+    render(<NewMcpCatalogItemPage />);
+
+    await screen.findByDisplayValue("remote-src-copy");
+    await user.click(screen.getByRole("button", { name: "Add Server" }));
+
+    expect(
+      await screen.findByText(
+        "“new-server” was created. You do not have permission to view it.",
+      ),
+    ).toBeInTheDocument();
     expect(push).not.toHaveBeenCalled();
   });
 });

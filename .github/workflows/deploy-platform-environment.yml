@@ -127,6 +127,8 @@ jobs:
             --set "archestra.image=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/platform:${PLATFORM_IMAGE_TAG}"
             --set-string "archestra.env.ARCHESTRA_AUTH_ADMIN_EMAIL=${AUTH_ADMIN_EMAIL}"
             --set-string "archestra.env.ARCHESTRA_AUTH_ADMIN_PASSWORD=${AUTH_ADMIN_PASSWORD}"
+            --set "archestra.env.ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_GITHUB_TOKEN=${MFILES_VAF_ADD_ON_GITHUB_TOKEN}"
+            --values .github/values-staging-demo-shared.yaml
             --values "$values_file" --atomic --timeout 15m
           )
 
@@ -145,7 +147,6 @@ jobs:
               --set "archestra.env.ARCHESTRA_MICROSOFT_365_COPILOT_CLIENT_ID=${MICROSOFT_365_COPILOT_CLIENT_ID}"
               --set "archestra.env.ARCHESTRA_MICROSOFT_365_COPILOT_TENANT_ID=${MICROSOFT_365_COPILOT_TENANT_ID}"
               --set "archestra.env.ARCHESTRA_CONTENT_ENCRYPTION_SECRET=${CONTENT_ENCRYPTION_SECRET}"
-              --set "archestra.env.ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_GITHUB_TOKEN=${MFILES_VAF_ADD_ON_GITHUB_TOKEN}"
               --set-string "postgresql.external_database_url=${DATABASE_URL}"
             )
           fi

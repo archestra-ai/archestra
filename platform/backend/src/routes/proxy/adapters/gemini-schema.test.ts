@@ -292,4 +292,84 @@ describe("sanitizeGeminiToolSchema", () => {
     sanitizeGeminiToolSchema(schema);
     expect(schema).toEqual(snapshot);
   });
+
+  it("folds a numeric const into a typed field without an enum", () => {
+    expect(sanitizeGeminiToolSchema({ type: "integer", const: 1 })).toEqual({
+      type: "integer",
+      description: "Value must be `1`.",
+    });
+  });
+
+  it("folds a boolean const into a typed field without an enum", () => {
+    expect(sanitizeGeminiToolSchema({ type: "boolean", const: true })).toEqual({
+      type: "boolean",
+      description: "Value must be `true`.",
+    });
+  });
+
+  it("keeps a string const as a string enum", () => {
+    expect(
+      sanitizeGeminiToolSchema({ type: "string", const: "appa_remedy" }),
+    ).toEqual({
+      type: "string",
+      enum: ["appa_remedy"],
+    });
+  });
+
+  it("drops non-string const nested the way OpenAPPA notice/execution schemas advertise", () => {
+    expect(
+      sanitizeGeminiToolSchema({
+        type: "object",
+        properties: {
+          notice: {
+            type: "object",
+            properties: {
+              v: { type: "integer", const: 1 },
+              call_id: { type: "string" },
+              custom: { type: "boolean", const: true },
+            },
+          },
+          execution: {
+            type: "object",
+            properties: {
+              v: { type: "integer", const: 1 },
+              kind: { type: "string", const: "appa_remedy" },
+            },
+          },
+        },
+      }),
+    ).toEqual({
+      type: "object",
+      properties: {
+        notice: {
+          type: "object",
+          properties: {
+            v: { type: "integer", description: "Value must be `1`." },
+            call_id: { type: "string" },
+            custom: { type: "boolean", description: "Value must be `true`." },
+          },
+        },
+        execution: {
+          type: "object",
+          properties: {
+            v: { type: "integer", description: "Value must be `1`." },
+            kind: { type: "string", enum: ["appa_remedy"] },
+          },
+        },
+      },
+    });
+  });
+
+  it("leaves an existing enum in place when const is also set", () => {
+    expect(
+      sanitizeGeminiToolSchema({
+        type: "string",
+        const: "ignored",
+        enum: ["keep"],
+      }),
+    ).toEqual({
+      type: "string",
+      enum: ["keep"],
+    });
+  });
 });

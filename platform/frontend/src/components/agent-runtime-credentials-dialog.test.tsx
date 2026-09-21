@@ -559,6 +559,53 @@ describe("credential setup deep links", () => {
     show();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
+
+  // `transfer_credential` declares a credential as optional so it never blocks
+  // anyone's run. Preflight reports only required keys as missing, so the link
+  // has to name what it wants or the dialog opens on nothing.
+  describe("keys named by the link", () => {
+    // Only the optional declaration, so a required one does not also render an
+    // input and blur what these assertions prove.
+    const optional = declarations.filter(({ required }) => !required);
+
+    it("asks for an optional declared key the link names", async () => {
+      window.history.replaceState(
+        null,
+        "",
+        "/agents/agent-1?setup=credentials&keys=OPTIONAL_TOKEN",
+      );
+      show({ declarations: optional });
+      expect(
+        await screen.findByPlaceholderText("Paste secret"),
+      ).toBeInTheDocument();
+    });
+
+    it("leaves an optional key alone when the link names nothing", async () => {
+      window.history.replaceState(
+        null,
+        "",
+        "/agents/agent-1?setup=credentials",
+      );
+      show({ declarations: optional });
+      expect(await screen.findByRole("dialog")).toBeInTheDocument();
+      expect(
+        screen.queryByPlaceholderText("Paste secret"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("ignores a named key the Agent does not declare", async () => {
+      window.history.replaceState(
+        null,
+        "",
+        "/agents/agent-1?setup=credentials&keys=NOT_DECLARED",
+      );
+      show({ declarations: optional });
+      expect(await screen.findByRole("dialog")).toBeInTheDocument();
+      expect(
+        screen.queryByPlaceholderText("Paste secret"),
+      ).not.toBeInTheDocument();
+    });
+  });
 });
 
 it.each([

@@ -444,6 +444,57 @@ describe("APPA GitHub sync", () => {
       await GuardrailsPolicyModel.findLatest(organizationId),
     ).toMatchObject({ content: declared, revision: 1 });
     // Accepting it is the operator's call, and it clears the pending flag.
+    const accepted = await app.inject({
+      method: "POST",
+      url: "/api/openappa/github-sync/accept-held",
+    });
+    expect(accepted.statusCode, accepted.body).toBe(200);
+    // What the repository drops is named, in the answer and in the record.
+    expect(accepted.json()).toMatchObject({
+      reasons: ["drops_batteries"],
+      droppedBatteries: ["github"],
+    });
+    expect(await OpenAppaGithubSyncModel.find(organizationId)).toMatchObject({
+      declarationsPendingPublish: false,
+      heldContent: null,
+    });
+    await vi.waitFor(async () => {
+      const records = await db
+        .select()
+        .from(schema.auditLogsTable)
+        .where(
+          and(
+            eq(schema.auditLogsTable.organizationId, organizationId),
+            eq(schema.auditLogsTable.action, "organization.updated"),
+          ),
+        );
+      expect(
+        records.some((record) =>
+          (
+            (record.after as { droppedBatteries?: string[] })
+              ?.droppedBatteries ?? []
+          ).includes("github"),
+        ),
+      ).toBe(true);
+    });
+  });
+
+  test("a disconnect drops the held pull with the schedule that fetched it", async () => {
+    await configure();
+    await syncAppaGithubPolicy(organizationId);
+    const granted = `include = ["batteries/github/appa.toml"]\n\n[credentials]\nAPPA_PROVIDER_GITHUB_TOKEN = "github-token"\n\n${policy}`;
+    upstream(granted, "d".repeat(40));
+    await syncAppaGithubPolicy(organizationId);
+    expect(await OpenAppaGithubSyncModel.find(organizationId)).toMatchObject({
+      heldReasons: ["changes_credentials"],
+    });
+
+    expect((await action({ action: "disconnect" })).statusCode).toBe(200);
+    expect(await OpenAppaGithubSyncModel.find(organizationId)).toMatchObject({
+      heldContent: null,
+      heldReasons: [],
+    });
+    // Nothing is left to accept, and the text is its authors' again.
     expect(
       (
         await app.inject({
@@ -451,10 +502,35 @@ describe("APPA GitHub sync", () => {
           url: "/api/openappa/github-sync/accept-held",
         })
       ).statusCode,
-    ).toBe(200);
+    ).toBe(409);
+    expect(
+      await GuardrailsPolicyModel.findLatest(organizationId),
+    ).toMatchObject({ content: policy, revision: 1 });
+  });
+
+  test("a pull that loses the revision race publishes nothing and keeps the declarations pending", async () => {
+    await configure();
+    await OpenAppaGithubSyncModel.setDeclarationsPendingPublish(
+      organizationId,
+      true,
+    );
+    server.use(
+      http.get(
+        "https://api.github.com/repos/example/policies/contents/guardrails/appa.toml",
+        async () => {
+          // The schedule moves while the document downloads.
+          expect(
+            (await action({ action: "schedule", interval: "15m" })).statusCode,
+          ).toBe(200);
+          return HttpResponse.text(policy);
+        },
+      ),
+    );
+    await syncAppaGithubPolicy(organizationId);
+    expect(await GuardrailsPolicyModel.findLatest(organizationId)).toBeNull();
     expect(await OpenAppaGithubSyncModel.find(organizationId)).toMatchObject({
-      declarationsPendingPublish: false,
-      heldContent: null,
+      content: null,
+      declarationsPendingPublish: true,
     });
   });
 

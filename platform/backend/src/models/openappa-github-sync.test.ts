@@ -107,6 +107,90 @@ describe("OpenAppaGithubSyncModel held pulls", () => {
       lastSyncError: null,
     });
   });
+
+  test("finish answers whether the pull it recorded was still the expected one", async ({
+    makeOrganization,
+  }) => {
+    const organizationId = (await makeOrganization()).id;
+    await OpenAppaGithubSyncModel.save(organizationId, { ...source });
+    const { revision } = mustExist(
+      await OpenAppaGithubSyncModel.find(organizationId),
+    );
+    const outcome = {
+      content: "[policy]\nversion = 2\n# pulled\n",
+      contentHash: "hash-c",
+      sourceCommit: "c".repeat(40),
+    };
+    expect(
+      await OpenAppaGithubSyncModel.finish({
+        organizationId,
+        revision: randomUUID(),
+        outcome,
+      }),
+    ).toBe(false);
+    expect(
+      mustExist(await OpenAppaGithubSyncModel.find(organizationId)),
+    ).toMatchObject({ content: null });
+    expect(
+      await OpenAppaGithubSyncModel.finish({
+        organizationId,
+        revision,
+        outcome,
+      }),
+    ).toBe(true);
+  });
+
+  test("changing the schedule drops the held pull, and publishing needs the bytes that were held", async ({
+    makeOrganization,
+    makeUser,
+  }) => {
+    const organizationId = (await makeOrganization()).id;
+    const userId = (await makeUser()).id;
+    await OpenAppaGithubSyncModel.save(organizationId, { ...source });
+    const hold = async () => {
+      const { revision } = mustExist(
+        await OpenAppaGithubSyncModel.find(organizationId),
+      );
+      await OpenAppaGithubSyncModel.hold({
+        organizationId,
+        revision,
+        ...heldPull,
+        reasons: [...heldPull.reasons],
+      });
+    };
+    await hold();
+
+    // Bytes held under a schedule may not outlive it.
+    await OpenAppaGithubSyncModel.setInterval(organizationId, null);
+    expect(
+      mustExist(await OpenAppaGithubSyncModel.find(organizationId)),
+    ).toMatchObject({ heldContent: null, heldReasons: [] });
+    expect(
+      await OpenAppaGithubSyncModel.publishHeld({
+        organizationId,
+        userId,
+        heldContentHash: heldPull.contentHash,
+      }),
+    ).toBeNull();
+
+    await OpenAppaGithubSyncModel.setInterval(organizationId, "1h");
+    await hold();
+    // A newer pull replaced what the accepting user read.
+    expect(
+      await OpenAppaGithubSyncModel.publishHeld({
+        organizationId,
+        userId,
+        heldContentHash: "hash-of-an-older-pull",
+      }),
+    ).toBeNull();
+    expect(
+      await OpenAppaGithubSyncModel.publishHeld({
+        organizationId,
+        userId,
+        heldContentHash: heldPull.contentHash,
+      }),
+    ).toMatchObject({ contentHash: heldPull.contentHash });
+  });
 });
 
 describe("OpenAppaGithubSyncModel.ensureRow", () => {

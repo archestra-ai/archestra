@@ -56,6 +56,11 @@ class OpenAppaGithubSyncModel {
         .onConflictDoUpdate({ target: table.organizationId, set: values });
     });
   }
+  /**
+   * Change or stop the schedule. A held pull belongs to the schedule that
+   * fetched it: changing that schedule hands the text back to its authors, so
+   * the held bytes go rather than wait to land on a later manual edit.
+   */
   static async setInterval(
     organizationId: string,
     interval: AppaGithubSource["interval"] | null,
@@ -66,19 +71,24 @@ class OpenAppaGithubSyncModel {
       );
       await tx
         .update(table)
-        .set({ interval, revision: randomUUID() })
+        .set({ interval, revision: randomUUID(), ...NO_HOLD })
         .where(eq(table.organizationId, organizationId));
     });
   }
+  /**
+   * Record a pull's outcome, answering whether it was still the pull this row
+   * expected: a download that raced a source edit or a disconnect records
+   * nothing, and its caller must not act as though it had.
+   */
   static async finish(params: {
     organizationId: string;
     revision: string;
     outcome:
       | { error: string }
       | { content: string; contentHash: string; sourceCommit: string };
-  }) {
+  }): Promise<boolean> {
     const { organizationId, revision, outcome } = params;
-    await db.transaction(async (tx) => {
+    return db.transaction(async (tx) => {
       // Share the editor's lock: source changes, manual edits and imported revisions serialize.
       await tx.execute(
         sql`select pg_advisory_xact_lock(hashtextextended(${`guardrails-policy:${organizationId}`}, 0))`,
@@ -106,7 +116,8 @@ class OpenAppaGithubSyncModel {
         )
         .returning();
       // A download racing a source edit or disconnect must not publish a policy revision.
-      if (!source || "error" in outcome) return;
+      if (!source) return false;
+      if ("error" in outcome) return true;
       const policies = schema.guardrailsPolicyRevisionsTable;
       const [current] = await tx
         .select()
@@ -114,7 +125,7 @@ class OpenAppaGithubSyncModel {
         .where(eq(policies.organizationId, organizationId))
         .orderBy(desc(policies.revision))
         .limit(1);
-      if (current?.contentHash === outcome.contentHash) return;
+      if (current?.contentHash === outcome.contentHash) return true;
       await tx.insert(policies).values({
         organizationId,
         revision: (current?.revision ?? 0) + 1,
@@ -122,6 +133,7 @@ class OpenAppaGithubSyncModel {
         contentHash: outcome.contentHash,
         updatedBy: null,
       });
+      return true;
     });
   }
 
@@ -174,6 +186,8 @@ class OpenAppaGithubSyncModel {
   static async publishHeld(params: {
     organizationId: string;
     userId: string;
+    /** The held bytes the accepting user saw; anything else is a newer pull. */
+    heldContentHash: string;
   }): Promise<{ contentHash: string; sourceCommit: string } | null> {
     const { organizationId, userId } = params;
     return db.transaction(async (tx) => {
@@ -184,8 +198,12 @@ class OpenAppaGithubSyncModel {
         .select()
         .from(table)
         .where(eq(table.organizationId, organizationId));
-      if (!row?.heldContent || !row.heldContentHash || !row.heldSourceCommit)
+      // Syncing off means the text belongs to its authors again: bytes the
+      // schedule fetched may not land on top of what they wrote since.
+      if (!row?.interval) return null;
+      if (!row.heldContent || !row.heldContentHash || !row.heldSourceCommit)
         return null;
+      if (row.heldContentHash !== params.heldContentHash) return null;
       const policies = schema.guardrailsPolicyRevisionsTable;
       const [current] = await tx
         .select()

@@ -58,11 +58,21 @@ class OpenAppaBatteriesService {
     defaultTtl: 0,
   });
 
-  constructor() {
-    // The native runtime resolves url `token_env` variables from the process
-    // environment when it compiles a policy, so the value must exist before
-    // the first composed document is opened.
+  /**
+   * Publishes the bridge bearer where the runtime reads it, and answers the
+   * variable a composition must name for it.
+   *
+   * Upstream contract: `Config::hosted`/`Config::hosted_composed` resolve every
+   * `token_env` a hosted document names with `std::env::var` on this process,
+   * and refuse the document when the variable is unset. The addon therefore
+   * reads the bearer from the environment both when it composes a policy and
+   * when it opens one, and every caller that is about to cross into it
+   * publishes the value first instead of relying on this module having been
+   * imported earlier.
+   */
+  publishBridgeToken(): string {
     process.env[OPENAPPA_BRIDGE_TOKEN_ENV] = this.bridgeToken;
+    return OPENAPPA_BRIDGE_TOKEN_ENV;
   }
 
   /** Every battery this organization can install, bundled and uploaded, with its installs. */
@@ -510,9 +520,17 @@ class OpenAppaBatteriesService {
         expected,
       });
       if (policy) return { policy, installs: plan.installs };
+      // Another composition stored its result between this attempt's read and
+      // its write. Reading again at once tends to lose the same race, so wait
+      // first, jittered so simultaneous losers do not line up again.
+      await sleep(recomposeBackoffMs(attempt));
     }
-    throw new Error(
-      "the effective policy kept changing while it was being recomposed",
+    // Exhaustion is contention, not a fault: the inputs are fine and the next
+    // call composes them. Callers relay this as "retry later", the way every
+    // other saturated OpenAPPA path does.
+    throw new ApiError(
+      503,
+      "The effective policy is being recomposed; retry shortly",
     );
   }
 
@@ -619,7 +637,9 @@ class OpenAppaBatteriesService {
         helpers: owner
           ? {
               urlBase: `http://127.0.0.1:${config.api.port}${OPENAPPA_HELPERS_PREFIX}/${owner.id}`,
-              tokenEnv: OPENAPPA_BRIDGE_TOKEN_ENV,
+              // The value must already be in the environment the addon reads;
+              // naming it and publishing it are the same step.
+              tokenEnv: this.publishBridgeToken(),
             }
           : undefined,
       });
@@ -852,6 +872,17 @@ const loadNative = () => import("@archestra/openappa-rs");
 
 const RECOMPILE_ATTEMPTS = 3;
 const RECOMPILE_CONCURRENCY = 4;
+/** Base wait after a lost store, doubled per attempt and jittered on top. */
+const RECOMPILE_BACKOFF_MS = 25;
+
+function recomposeBackoffMs(attempt: number): number {
+  const delay = RECOMPILE_BACKOFF_MS * 2 ** attempt;
+  return delay + Math.random() * delay;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 /** An install's status on its own; ownership among active installs is settled by the plan. */
 function installStatus(params: {

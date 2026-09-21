@@ -319,6 +319,12 @@ async function handleMcpPostRequest(
         principal,
         capabilities,
       });
+      if (!capabilitySessionId) {
+        fastify.log.warn(
+          { profileId },
+          "Could not encode MCP capability session id",
+        );
+      }
     }
   }
 
@@ -440,16 +446,17 @@ async function handleMcpPostRequest(
     const originalSend = transport.send.bind(transport);
     transport.send = async (message, options) => {
       if (isServerInitiatedRequestMessage(message)) {
-        const wireId = pendingInboundRequests.register({
-          id: message.id,
-          transport,
-          agentId: profileId,
-          caller: principal,
-        });
+        let wireId: string | undefined;
         try {
+          wireId = pendingInboundRequests.register({
+            id: message.id,
+            transport,
+            agentId: profileId,
+            caller: principal,
+          });
           return await originalSend({ ...message, id: wireId }, options);
         } catch (error) {
-          pendingInboundRequests.forget({ wireId });
+          if (wireId !== undefined) pendingInboundRequests.forget({ wireId });
           throw error;
         }
       }

@@ -510,11 +510,15 @@ async function restorePendingChatMcpElicitation({
   }
   try {
     await cacheManager.set(key, claimed, remainingMs);
-  } catch (error) {
-    logger.warn(
-      { error, key },
-      "Could not hand a chat MCP elicitation back after its answer failed to store",
-    );
+  } catch {
+    try {
+      await cacheManager.set(key, claimed, remainingMs);
+    } catch (retryError) {
+      logger.warn(
+        { error: retryError, key },
+        "Could not hand a chat MCP elicitation back after its answer failed to store",
+      );
+    }
   }
 }
 

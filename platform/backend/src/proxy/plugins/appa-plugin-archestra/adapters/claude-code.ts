@@ -11,6 +11,7 @@ export class AppaClaudeCodeAdapter implements AppaClientAdapter {
       questions: [
         {
           question: args.question,
+          // Claude Code's AskUserQuestion tab label is at most 12 characters.
           header: questionHeader(args.header, 12),
           options: args.options.map((option) => ({
             label: option.label,

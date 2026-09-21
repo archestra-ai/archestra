@@ -120,10 +120,18 @@ class PendingInboundRequests {
     this.remove(params.wireId);
   }
 
-  /** Forget every request that depended on a transport that has closed. */
+  /**
+   * Forget every request that depended on a transport that has closed.
+   * The registry holds the live transport the answer POST writes back to; a
+   * closed transport cannot deliver that answer, so TTL cannot keep it alive.
+   */
   forgetTransport(params: { transport: StreamableHTTPServerTransport }): void {
     for (const [wireId, entry] of this.entries) {
       if (entry.transport === params.transport) {
+        logger.warn(
+          { agentId: entry.agentId },
+          "Dropping pending server-initiated request because its transport closed",
+        );
         this.remove(wireId);
       }
     }

@@ -79,6 +79,7 @@ import {
   ATTR_MCP_IS_ERROR_RESULT,
   startActiveMcpSpan,
 } from "@/observability/tracing";
+import { sanitizeGeminiToolSchema } from "@/routes/proxy/adapters/gemini-schema";
 import { skillsSurfaceEnabled } from "@/services/agent-skill-resolution";
 import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
 import { isAppConnectorAudienceRef } from "@/services/apps/app-connector-resource";
@@ -2437,11 +2438,16 @@ function summarizeCatalogDescription(description: string): string {
 export function normalizeToolInputSchema(
   schema: unknown,
 ): McpListTool["inputSchema"] {
-  if (isRecord(schema) && schema.type === "object") {
-    return schema as McpListTool["inputSchema"];
-  }
+  const objectSchema =
+    isRecord(schema) && schema.type === "object"
+      ? schema
+      : { type: "object", properties: {} };
 
-  return { type: "object", properties: {} };
+  // MCP clients (Kilo, Claude Code, …) copy tools/list schemas into the
+  // provider tool list. Gemini 400s the whole request if any advertised
+  // schema still has a non-string `const`/`enum`. Execution still validates
+  // against the original Zod/JSON Schema.
+  return sanitizeGeminiToolSchema(objectSchema) as McpListTool["inputSchema"];
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

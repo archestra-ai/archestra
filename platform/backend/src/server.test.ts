@@ -143,6 +143,39 @@ describe("createFastifyInstance", () => {
       expect(response.json().error.type).not.toBe("api_internal_server_error");
     });
 
+    test("returns a useful service-unavailable response when a provider connection times out", async () => {
+      const { posthogErrorTrackingService } = await import(
+        "@/services/error-tracking"
+      );
+      const captureSpy = vi.spyOn(
+        posthogErrorTrackingService,
+        "captureException",
+      );
+      const app = createFastifyInstance();
+      app.get("/v1/ollama/test-provider-timeout", async () => {
+        throw Object.assign(new Error("Connect Timeout Error"), {
+          code: "FST_REPLY_FROM_INTERNAL_SERVER_ERROR",
+          statusCode: 500,
+        });
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/v1/ollama/test-provider-timeout",
+      });
+
+      expect(response.statusCode).toBe(503);
+      expect(response.json()).toEqual({
+        error: {
+          message:
+            "Could not connect to the model provider. Check its base URL and network access, then retry.",
+          type: "api_service_unavailable_error",
+        },
+      });
+      expect(captureSpy).not.toHaveBeenCalled();
+      captureSpy.mockRestore();
+    });
+
     test("captures 500s but not upstream-fault 502/504s to error tracking", async () => {
       const { posthogErrorTrackingService } = await import(
         "@/services/error-tracking"

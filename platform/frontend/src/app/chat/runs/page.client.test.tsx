@@ -224,6 +224,32 @@ describe("AgentRunChatSession", () => {
       screen.getByRole("heading", { name: "Terminal connection details" }),
     ).toBeInTheDocument();
     expect(screen.getByText("kubectl exec example")).toBeInTheDocument();
+    expect(
+      screen.queryByText("Port forwarding command"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows a copyable port forwarding command for a configured workspace", async () => {
+    const user = userEvent.setup();
+    const command =
+      "kubectl port-forward -n archestra-dev pod/active-pod :3000 :9000";
+    queryState.value.data = run({
+      state: "TASK_STATE_WORKING",
+      endedAt: null,
+      portForwardCommand: command,
+    });
+    render(<AgentRunChatSession taskId="task-1" />);
+    act(() => terminalState.props?.onCommandChange?.("kubectl exec example"));
+
+    await user.click(screen.getByRole("button", { name: "More run actions" }));
+    await user.click(
+      screen.getByRole("menuitem", { name: "View connection details" }),
+    );
+
+    expect(screen.getByText(command)).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Copy port forwarding command" }),
+    ).toBeEnabled();
   });
 
   it("exposes Share from the actions menu instead of a separate button", async () => {

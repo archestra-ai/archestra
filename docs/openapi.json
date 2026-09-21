@@ -47662,6 +47662,15 @@
                                         },
                                         "additionalProperties": false
                                       },
+                                      "ports": {
+                                        "maxItems": 20,
+                                        "type": "array",
+                                        "items": {
+                                          "type": "integer",
+                                          "minimum": 1,
+                                          "maximum": 65535
+                                        }
+                                      },
                                       "environment": {
                                         "nullable": true,
                                         "type": "array",
@@ -49319,6 +49328,15 @@
                                 },
                                 "additionalProperties": false
                               },
+                              "ports": {
+                                "maxItems": 20,
+                                "type": "array",
+                                "items": {
+                                  "type": "integer",
+                                  "minimum": 1,
+                                  "maximum": 65535
+                                }
+                              },
                               "environment": {
                                 "nullable": true,
                                 "type": "array",
@@ -50400,6 +50418,15 @@
                           }
                         }
                       },
+                      "ports": {
+                        "maxItems": 20,
+                        "type": "array",
+                        "items": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 65535
+                        }
+                      },
                       "environment": {
                         "nullable": true,
                         "type": "array",
@@ -51114,6 +51141,15 @@
                             }
                           },
                           "additionalProperties": false
+                        },
+                        "ports": {
+                          "maxItems": 20,
+                          "type": "array",
+                          "items": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 65535
+                          }
                         },
                         "environment": {
                           "nullable": true,
@@ -52827,6 +52863,15 @@
                             },
                             "additionalProperties": false
                           },
+                          "ports": {
+                            "maxItems": 20,
+                            "type": "array",
+                            "items": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 65535
+                            }
+                          },
                           "environment": {
                             "nullable": true,
                             "type": "array",
@@ -54169,6 +54214,15 @@
                             }
                           },
                           "additionalProperties": false
+                        },
+                        "ports": {
+                          "maxItems": 20,
+                          "type": "array",
+                          "items": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 65535
+                          }
                         },
                         "environment": {
                           "nullable": true,
@@ -55582,6 +55636,15 @@
                               },
                               "additionalProperties": false
                             },
+                            "ports": {
+                              "maxItems": 20,
+                              "type": "array",
+                              "items": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 65535
+                              }
+                            },
                             "environment": {
                               "nullable": true,
                               "type": "array",
@@ -56677,6 +56740,15 @@
                           },
                           "additionalProperties": false
                         },
+                        "ports": {
+                          "maxItems": 20,
+                          "type": "array",
+                          "items": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 65535
+                          }
+                        },
                         "environment": {
                           "nullable": true,
                           "type": "array",
@@ -57704,6 +57776,15 @@
                           }
                         }
                       },
+                      "ports": {
+                        "maxItems": 20,
+                        "type": "array",
+                        "items": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 65535
+                        }
+                      },
                       "environment": {
                         "nullable": true,
                         "type": "array",
@@ -58235,6 +58316,15 @@
                             }
                           },
                           "additionalProperties": false
+                        },
+                        "ports": {
+                          "maxItems": 20,
+                          "type": "array",
+                          "items": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 65535
+                          }
                         },
                         "environment": {
                           "nullable": true,
@@ -60623,6 +60713,15 @@
                           },
                           "additionalProperties": false
                         },
+                        "ports": {
+                          "maxItems": 20,
+                          "type": "array",
+                          "items": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 65535
+                          }
+                        },
                         "environment": {
                           "nullable": true,
                           "type": "array",
@@ -61710,6 +61809,15 @@
                             }
                           },
                           "additionalProperties": false
+                        },
+                        "ports": {
+                          "maxItems": 20,
+                          "type": "array",
+                          "items": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 65535
+                          }
                         },
                         "environment": {
                           "nullable": true,
@@ -69629,6 +69737,15 @@
                           },
                           "additionalProperties": false
                         },
+                        "ports": {
+                          "maxItems": 20,
+                          "type": "array",
+                          "items": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 65535
+                          }
+                        },
                         "environment": {
                           "nullable": true,
                           "type": "array",
@@ -77370,6 +77487,10 @@
                     },
                     "terminalRetained": {
                       "type": "boolean"
+                    },
+                    "portForwardCommand": {
+                      "nullable": true,
+                      "type": "string"
                     },
                     "workspace": {
                       "nullable": true,
@@ -368807,6 +368928,10 @@
                       },
                       "terminalRetained": {
                         "type": "boolean"
+                      },
+                      "portForwardCommand": {
+                        "nullable": true,
+                        "type": "string"
                       },
                       "workspace": {
                         "nullable": true,

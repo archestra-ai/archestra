@@ -3,7 +3,7 @@ title: Agent Runtime (Beta)
 category: Agents
 order: 7
 description: Run coding agents and delegated tasks in isolated containers
-lastUpdated: "2026-09-19"
+lastUpdated: "2026-09-21"
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -45,6 +45,8 @@ The **Agents** list marks an Agent with a dedicated runtime with a **Runtime** b
 **Settings → Agents → Runtime Backend** shows backend health and deployment defaults. Each Agent can override its image, command, environment variables, resources, and run controls. Deployment defaults remain managed by the operator.
 
 Use an image containing the tools your task needs. A coding image might include Git and a language toolchain. Leave **Command** blank when the image supplies `archestra-runtime-agent`; otherwise set its executable and arguments.
+
+In the runtime's Advanced settings, enter any container ports you want to forward, such as `3000` for a web app. Separate multiple ports with commas. Open **Connection details** on an active run to copy its port forwarding command. Leave the field empty when the runtime exposes no ports.
 
 ### Environments And Network Egress
 

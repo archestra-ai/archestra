@@ -5,8 +5,10 @@ import {
   getArchestraToolShortName,
   isAgentTool,
   isSkillTool,
+  TOOL_ASK_USER_SHORT_NAME,
   TOOL_CANCEL_RUN_SHORT_NAME,
   TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
+  TOOL_GET_REMEDY_PLANS_SHORT_NAME,
   TOOL_GET_RUN_SHORT_NAME,
   TOOL_LIST_RUNS_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
@@ -37,6 +39,10 @@ import { toolEntries as appToolEntries, tools as appTools } from "./apps";
 import { captureToolAuditBefore, recordToolAudit } from "./audit";
 import { archestraMcpBranding } from "./branding";
 import { toolEntries as chatToolEntries, tools as chatTools } from "./chat";
+import {
+  toolEntries as credentialToolEntries,
+  tools as credentialTools,
+} from "./credentials";
 import { delegationToolArgsSchema, handleDelegation } from "./delegation";
 import { isArchestraToolAvailableToAgent } from "./dynamic-tools";
 import {
@@ -172,6 +178,7 @@ function getToolEntries(): Partial<
       ...pluginToolEntries,
       ...sandboxToolEntries,
       ...taskToolEntries,
+      ...credentialToolEntries,
       ...appToolEntries,
       ...appDataToolEntries,
       ...appLlmToolEntries,
@@ -209,6 +216,7 @@ function getAllTools(): (typeof identityTools)[number][] {
       ...pluginTools,
       ...sandboxTools,
       ...taskTools,
+      ...credentialTools,
       ...hookTools,
       ...appTools,
       ...appDataTools,
@@ -295,9 +303,10 @@ export async function executeArchestraTool(
   }
   // A child runs outside APPA and must not execute remedies on the parent's
   // shared logging session. Direct calls also respect the feature flag.
+  const remedyShortName = archestraMcpBranding.getToolShortName(toolName);
   if (
-    archestraMcpBranding.getToolShortName(toolName) ===
-      TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME &&
+    (remedyShortName === TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME ||
+      remedyShortName === TOOL_GET_REMEDY_PLANS_SHORT_NAME) &&
     !(await isGuardrailsV2Active())
   ) {
     throw { code: -32601, message: "Guardrails v2 is disabled" };
@@ -473,6 +482,7 @@ function brandTools(tools: ReturnType<typeof getAllTools>) {
 // that the caller can observe and control the returned run. Access to the run
 // itself remains actor-scoped inside each handler.
 const ASSIGNMENT_EXEMPT_SHORT_NAMES = new Set<ArchestraToolShortName>([
+  TOOL_ASK_USER_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
   TOOL_GET_RUN_SHORT_NAME,
@@ -501,6 +511,7 @@ async function resolveToolAssignment(
   if (ASSIGNMENT_EXEMPT_SHORT_NAMES.has(shortName)) return null;
   if (
     (shortName === TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME ||
+      shortName === TOOL_GET_REMEDY_PLANS_SHORT_NAME ||
       (shortName === "yell" && openappaYellEnabled())) &&
     (await isGuardrailsV2Active())
   )

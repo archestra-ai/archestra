@@ -101,7 +101,7 @@ export function GithubSyncPanel({
         <span className="text-muted-foreground">Synced from</span>
         {sourceRepo ? (
           <a
-            href={`https://github.com/${sourceRepo}${skill.githubSyncRef ? `/tree/${skill.githubSyncRef}` : ""}`}
+            href={`${/^https?:\/\//.test(sourceRepo) ? sourceRepo : `https://github.com/${sourceRepo}`}${skill.githubSyncRef ? `/tree/${skill.githubSyncRef}` : ""}`}
             target="_blank"
             rel="noreferrer"
             className="min-w-0 truncate font-mono underline underline-offset-4 hover:text-primary"

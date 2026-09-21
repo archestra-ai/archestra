@@ -3,6 +3,7 @@ import { useSearchParams } from "next/navigation";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useDefaultMcpGateway } from "@/lib/agent.query";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useLlmProxy } from "@/lib/llm-proxy.query";
 import { useOrganization } from "@/lib/organization.query";
 import ConnectionPage from "./page";
@@ -16,10 +17,22 @@ const refetchOrganizationMock = vi.fn();
 
 vi.mock("next/navigation");
 vi.mock("@/lib/agent.query");
+vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/llm-proxy.query");
 vi.mock("@/lib/organization.query");
 vi.mock("@/components/page-layout", () => ({
-  PageLayout: ({ children }: { children: ReactNode }) => <>{children}</>,
+  PageLayout: ({
+    children,
+    actionButton,
+  }: {
+    children: ReactNode;
+    actionButton?: ReactNode;
+  }) => (
+    <>
+      {actionButton}
+      {children}
+    </>
+  ),
 }));
 vi.mock("./connection-flow", () => ({
   ConnectionFlow: (props: unknown) => connectionFlowMock(props),
@@ -28,6 +41,9 @@ vi.mock("./connection-flow", () => ({
 describe("ConnectionPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: false,
+    } as ReturnType<typeof useHasPermissions>);
     vi.mocked(useSearchParams).mockReturnValue(
       new URLSearchParams("clientId=claude-code") as ReturnType<
         typeof useSearchParams
@@ -40,6 +56,35 @@ describe("ConnectionPage", () => {
     vi.mocked(useLlmProxy).mockReturnValue({
       data: undefined,
     } as ReturnType<typeof useLlmProxy>);
+  });
+
+  it.each([
+    true,
+    false,
+    undefined,
+  ])("shows the settings link only with read access (%s)", (allowed) => {
+    vi.mocked(useHasPermissions).mockImplementation(
+      (permissions) =>
+        ({
+          data: permissions.organizationSettings?.includes("read")
+            ? allowed
+            : false,
+        }) as ReturnType<typeof useHasPermissions>,
+    );
+    vi.mocked(useOrganization).mockReturnValue({
+      data: undefined,
+      isFetchedAfterMount: true,
+      isFetching: false,
+      isError: false,
+      refetch: refetchOrganizationMock,
+    } as unknown as ReturnType<typeof useOrganization>);
+    render(<ConnectionPage />);
+    const link = screen.queryByRole("link", { name: "Connection settings" });
+    if (allowed) {
+      expect(link).toHaveAttribute("href", "/settings/connection");
+    } else {
+      expect(link).not.toBeInTheDocument();
+    }
   });
 
   it("opens the client selection flow by default", () => {

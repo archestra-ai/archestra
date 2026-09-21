@@ -348,6 +348,9 @@ export const InteractionSummarySchema = BaseSelectInteractionSchema.pick({
 }).extend({
   type: SupportedProvidersDiscriminatorSchema,
   externalAgentIdLabel: z.string().nullable(),
+  requestType: RequestTypeSchema,
+  /** Origin of the call (`chat`, `chat:compaction`, …). Used to badge sub-agent rows. */
+  source: InteractionSourceSchema.nullable().optional(),
 });
 
 /**
@@ -782,6 +785,22 @@ export const LAST_USER_MESSAGE_PREVIEW_MAX_LENGTH = 200;
 /**
  * Session summary schema for the sessions endpoint
  */
+/**
+ * A logged session's fork lineage: the session it forks and the sessions
+ * forked from it. A fork is a new client session that replayed another
+ * session's history, such as a client fork or a summarizer run in a session of
+ * its own; it starts from that session's guardrail state and continues apart.
+ */
+export const SessionLineageSchema = z.object({
+  forkedFrom: z.string().nullable(),
+  forks: z.array(z.string()),
+  forksTruncated: z
+    .boolean()
+    .describe(
+      "True when the session has more forks than the bounded list returned.",
+    ),
+});
+
 export const SessionSummarySchema = z.object({
   sessionId: z.string().nullable(),
   sessionSource: z.string().nullable(),

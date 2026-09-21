@@ -2,14 +2,17 @@ import {
   CLAUDE_CLIENT_ID,
   CLAUDE_CODE_CLIENT_ID,
   CLAUDE_DESKTOP_CLIENT_ID,
+  OPENCODE_CLIENT_ID,
 } from "@archestra/shared";
 import { render, screen, waitFor } from "@testing-library/react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useFeature } from "@/lib/config/config.query";
 import {
   useInteraction,
   useInteractionSessions,
   useInteractionSummaries,
+  useSessionLineage,
 } from "@/lib/interactions/interaction.query";
 import SessionDetailPage from "./page.client";
 
@@ -18,11 +21,13 @@ vi.mock("next/navigation");
 // The unattributed-user badge interpolates the white-label app name, and the
 // real hook reads it through TanStack Query — which this suite renders without.
 vi.mock("@/lib/hooks/use-app-name");
+vi.mock("@/lib/config/config.query");
 
 vi.mock("@/lib/interactions/interaction.query", () => ({
   useInteraction: vi.fn(),
   useInteractionSummaries: vi.fn(),
   useInteractionSessions: vi.fn(),
+  useSessionLineage: vi.fn(() => ({ data: undefined })),
   useExportSessionInteractions: vi.fn(() => ({
     mutate: vi.fn(),
     isPending: false,
@@ -52,6 +57,7 @@ describe("SessionDetailPage", () => {
     vi.mocked(useInteraction).mockReturnValue({
       data: null,
     } as unknown as ReturnType<typeof useInteraction>);
+    vi.mocked(useFeature).mockReturnValue(false);
   });
 
   it("says nothing at all while session interactions are loading", async () => {
@@ -112,6 +118,32 @@ describe("SessionDetailPage", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("links a forked session to its parent and a parent to its forks", async () => {
+    vi.mocked(useFeature).mockReturnValue(true);
+    vi.mocked(useInteractionSessions).mockReturnValue({
+      data: { data: [{ sessionId: "test-session" }] },
+    } as unknown as ReturnType<typeof useInteractionSessions>);
+    vi.mocked(useInteractionSummaries).mockReturnValue({
+      data: { data: [], pagination: { total: 0 } },
+      isLoading: false,
+    } as unknown as ReturnType<typeof useInteractionSummaries>);
+    vi.mocked(useSessionLineage).mockReturnValue({
+      data: { forkedFrom: "parent-session", forks: ["fork-a", "fork-b"] },
+    } as unknown as ReturnType<typeof useSessionLineage>);
+
+    renderSessionDetailPage();
+
+    expect(await screen.findByText("Forked from")).toBeVisible();
+    expect(
+      screen.getByRole("link", { name: "parent-session" }),
+    ).toHaveAttribute("href", "/llm/logs/session/parent-session");
+    expect(screen.getByText("Forks")).toBeVisible();
+    expect(screen.getByRole("link", { name: "fork-b" })).toHaveAttribute(
+      "href",
+      "/llm/logs/session/fork-b",
+    );
+  });
+
   it("shows cache read/write totals when the session used prompt caching", async () => {
     vi.mocked(useInteractionSessions).mockReturnValue({
       data: {
@@ -142,7 +174,8 @@ describe("SessionDetailPage", () => {
     [CLAUDE_CLIENT_ID, "Claude Code"],
     [CLAUDE_CODE_CLIENT_ID, "Claude Code"],
     [CLAUDE_DESKTOP_CLIENT_ID, "Claude Desktop"],
-  ])("renders the Claude badge for client id '%s'", async (externalAgentId, label) => {
+    [OPENCODE_CLIENT_ID, "OpenCode"],
+  ])("renders the client badge for id '%s'", async (externalAgentId, label) => {
     vi.mocked(useInteractionSessions).mockReturnValue({
       data: { data: [{ externalAgentIds: [externalAgentId] }] },
     } as unknown as ReturnType<typeof useInteractionSessions>);
@@ -171,6 +204,49 @@ describe("SessionDetailPage", () => {
       await screen.findByText("No interactions found for this session"),
     ).toBeVisible();
     expect(screen.queryByText(/^Claude/)).not.toBeInTheDocument();
+  });
+
+  it("labels OpenCode side turns as sub-agent requests", async () => {
+    vi.mocked(useInteractionSessions).mockReturnValue({
+      data: { data: [{ externalAgentIds: [OPENCODE_CLIENT_ID] }] },
+    } as unknown as ReturnType<typeof useInteractionSessions>);
+    vi.mocked(useInteractionSummaries).mockReturnValue({
+      data: {
+        data: [
+          {
+            id: "title-request",
+            createdAt: "2026-09-19T22:42:41.000Z",
+            externalAgentId: OPENCODE_CLIENT_ID,
+            requestType: "subagent",
+            source: "opencode:subagent",
+            model: "title-model",
+            inputTokens: 10,
+            outputTokens: 2,
+            cost: "0",
+            billingMode: "metered",
+          },
+          {
+            id: "main-request",
+            createdAt: "2026-09-19T22:42:45.000Z",
+            externalAgentId: OPENCODE_CLIENT_ID,
+            requestType: "main",
+            source: "opencode:main",
+            model: "main-model",
+            inputTokens: 20,
+            outputTokens: 4,
+            cost: "0",
+            billingMode: "metered",
+          },
+        ],
+        pagination: { total: 2 },
+      },
+      isLoading: false,
+    } as unknown as ReturnType<typeof useInteractionSummaries>);
+
+    renderSessionDetailPage();
+
+    expect(await screen.findByText("Sub-agent", { exact: true })).toBeVisible();
+    expect(screen.getByText(OPENCODE_CLIENT_ID, { exact: true })).toBeVisible();
   });
 
   it("renders the rows-per-page selector when the session has interactions", async () => {
@@ -222,6 +298,117 @@ describe("SessionDetailPage", () => {
 
     expect(await screen.findByText(/1,250 in/)).toBeVisible();
     expect(screen.queryByText(/cache read/)).not.toBeInTheDocument();
+  });
+
+  it("states OpenAPPA session identity in the heading when OpenAPPA is on", async () => {
+    vi.mocked(useFeature).mockReturnValue(true);
+    vi.mocked(useInteractionSessions).mockReturnValue({
+      data: {
+        data: [
+          {
+            sessionId: "user:abc|ses_chat_1",
+            sessionSource: "conversation",
+            source: "chat",
+            sources: ["chat", "chat:compaction"],
+            conversationTitle: "Weather in Lisbon",
+            profileName: "My Assistant",
+            totalInputTokens: 10,
+            totalOutputTokens: 4,
+            totalCacheReadTokens: 0,
+            totalCacheWriteTokens: 0,
+          },
+        ],
+      },
+    } as unknown as ReturnType<typeof useInteractionSessions>);
+    vi.mocked(useInteractionSummaries).mockReturnValue({
+      data: { data: [], pagination: { total: 0 } },
+      isLoading: false,
+    } as unknown as ReturnType<typeof useInteractionSummaries>);
+
+    renderSessionDetailPage();
+
+    expect(await screen.findByText("Session")).toBeVisible();
+    expect(screen.getByText("user:abc|ses_chat_1")).toBeVisible();
+    expect(screen.getByText("Session source")).toBeVisible();
+    expect(screen.getByText("conversation")).toBeVisible();
+    expect(screen.getByText("Origins")).toBeVisible();
+  });
+
+  it("labels main-agent and ChatOps rows by profile name while labeling compaction", async () => {
+    vi.mocked(useInteractionSessions).mockReturnValue({
+      data: {
+        data: [{ profileName: "My Assistant" }],
+      },
+    } as unknown as ReturnType<typeof useInteractionSessions>);
+    vi.mocked(useInteractionSummaries).mockReturnValue({
+      data: {
+        data: [
+          {
+            id: "int-compact",
+            createdAt: "2026-09-18T10:00:00.000Z",
+            model: "claude-haiku",
+            inputTokens: 1,
+            outputTokens: 1,
+            source: "chat:compaction",
+            externalAgentId: null,
+            externalAgentIdLabel: null,
+          },
+          {
+            id: "int-main",
+            createdAt: "2026-09-18T09:59:00.000Z",
+            model: "claude-haiku",
+            inputTokens: 2,
+            outputTokens: 2,
+            source: "chat",
+            externalAgentId: null,
+            externalAgentIdLabel: null,
+          },
+          {
+            id: "int-slack",
+            createdAt: "2026-09-18T09:58:00.000Z",
+            model: "claude-haiku",
+            inputTokens: 2,
+            outputTokens: 2,
+            source: "chatops:slack",
+            externalAgentId: null,
+            externalAgentIdLabel: null,
+          },
+          {
+            id: "int-teams",
+            createdAt: "2026-09-18T09:57:00.000Z",
+            model: "claude-haiku",
+            inputTokens: 2,
+            outputTokens: 2,
+            source: "chatops:ms-teams",
+            externalAgentId: null,
+            externalAgentIdLabel: null,
+          },
+          {
+            id: "int-telegram",
+            createdAt: "2026-09-18T09:56:00.000Z",
+            model: "claude-haiku",
+            inputTokens: 2,
+            outputTokens: 2,
+            source: "chatops:telegram",
+            externalAgentId: null,
+            externalAgentIdLabel: null,
+          },
+        ],
+        pagination: { total: 5 },
+      },
+      isLoading: false,
+    } as unknown as ReturnType<typeof useInteractionSummaries>);
+
+    renderSessionDetailPage();
+
+    expect(await screen.findByText("Chat Compaction")).toBeVisible();
+    expect(screen.getAllByText("My Assistant").length).toBeGreaterThanOrEqual(
+      5,
+    );
+    expect(screen.queryByText("Slack")).not.toBeInTheDocument();
+    expect(screen.queryByText("MS Teams")).not.toBeInTheDocument();
+    expect(screen.queryByText("Telegram")).not.toBeInTheDocument();
+    expect(screen.queryByText("Main")).not.toBeInTheDocument();
   });
 });
 

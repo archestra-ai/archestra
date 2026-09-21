@@ -28,6 +28,9 @@ export function ClientIcon({ client, size = 36 }: ClientIconProps) {
           role="img"
           aria-label={`${client.label} logo`}
         >
+          {client.svgAccent && (
+            <path d={client.svgAccent.path} fill={client.svgAccent.color} />
+          )}
           <path d={client.svg} fill={client.iconColor || "currentColor"} />
         </svg>
       ) : client.iconOverride ? (

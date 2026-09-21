@@ -1,7 +1,8 @@
 /** Public bootstrap: secrets stay in process memory; only the approved script reaches disk. */
 export const CLIENT_CONNECTION_INSTALLER = String.raw`#!/usr/bin/env node
 const { spawn, spawnSync } = require('node:child_process');
-const { mkdtemp, writeFile, readFile, rm } = require('node:fs/promises');
+const { createHash } = require('node:crypto');
+const { mkdtemp, open, writeFile, readFile, rm } = require('node:fs/promises');
 const { tmpdir } = require('node:os');
 const { join } = require('node:path');
 
@@ -9,16 +10,18 @@ async function main() {
   const args = process.argv.slice(2);
   const value = (flag) => { const i = args.indexOf(flag); return i < 0 ? undefined : args[i + 1]; };
   if (args.includes('--help')) {
-    console.log('Usage: node connect.cjs --url https://deployment.example --client claude-code|claude-desktop|cursor|codex|copilot-cli [--no-open]');
+    console.log('Usage: node connect.cjs --url https://deployment.example --client claude-code|claude-desktop|cursor|codex|copilot-cli|opencode [--no-open]');
     return;
   }
   const origin = new URL(value('--url'));
   if (origin.username || origin.password || origin.search || origin.hash || origin.pathname !== '/') throw new Error('Use the deployment origin without credentials, a path, query, or fragment.');
-  if (origin.protocol !== 'https:' && !(origin.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(origin.hostname))) throw new Error('Use HTTPS (HTTP is allowed only on loopback for local development).');
+  if (origin.protocol !== 'https:' && !(origin.protocol === 'http:' && (['localhost', '127.0.0.1', '[::1]'].includes(origin.hostname) || origin.hostname.endsWith('.localhost')))) throw new Error('Use HTTPS (HTTP is allowed only on loopback for local development).');
+  const networkOrigin = new URL(origin);
+  if (networkOrigin.hostname.endsWith('.localhost')) networkOrigin.hostname = '127.0.0.1';
   const clientId = value('--client');
   const setupToken = value('--setup-token');
   if (setupToken && (clientId !== 'claude-desktop' || !/^archestra_con_[A-Za-z0-9_-]{32,43}$/.test(setupToken))) throw new Error('Invalid Desktop setup ticket.');
-  if (!['claude-code', 'claude-desktop', 'cursor', 'codex', 'copilot-cli'].includes(clientId)) throw new Error('Choose --client claude-code, claude-desktop, cursor, codex, or copilot-cli.');
+  if (!['claude-code', 'claude-desktop', 'cursor', 'codex', 'copilot-cli', 'opencode'].includes(clientId)) throw new Error('Choose --client claude-code, claude-desktop, cursor, codex, copilot-cli, or opencode.');
   const platform = { darwin: 'macos', linux: 'linux', win32: 'windows' }[process.platform];
   if (!platform) throw new Error('Supported operating systems: macOS, Linux, Windows.');
   if (typeof fetch !== 'function') throw new Error('Node.js 18 or newer is required.');
@@ -30,11 +33,19 @@ async function main() {
     return;
   }
   if (setupToken) {
-    await applySetup({ scriptPath: '/api/connection-setups/script/' + setupToken, origin, platform });
+    await applySetup({ scriptPath: '/api/connection-setups/script/' + setupToken, origin: networkOrigin, platform });
     return;
   }
+  const releaseLock = await acquireConnectionLock({ origin: origin.origin, clientId, platform });
+  try {
+    await runConnection({ args, clientId, networkOrigin, origin, platform });
+  } finally {
+    await releaseLock();
+  }
+}
+async function runConnection({ args, clientId, networkOrigin, origin, platform }) {
   const request = async (path, body) => {
-    const response = await fetch(new URL(path, origin), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), redirect: 'error', signal: AbortSignal.timeout(15000) });
+    const response = await fetch(new URL(path, networkOrigin), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), redirect: 'error', signal: AbortSignal.timeout(15000) });
     if (!response.ok) { const error = new Error('Connection request failed (HTTP ' + response.status + '). Restart the installer or check the deployment URL.'); error.retryable = response.status === 429 || response.status >= 500; throw error; }
     return response.json();
   };
@@ -67,11 +78,51 @@ async function main() {
     }
     if (state.status === 'pending') continue;
     if (state.status !== 'approved') throw new Error('Connection ' + state.status + '. Start the installer again when ready.');
+    console.log('Browser approval confirmed.');
     const scriptPath = '/api/connection-setups/script/archestra_con_' + started.deviceCode;
-    await applySetup({ scriptPath, origin, platform });
+    await applySetup({ scriptPath, origin: networkOrigin, platform });
     return;
   }
   throw new Error('Connection expired. Start the installer again.');
+}
+async function acquireConnectionLock({ origin, clientId, platform }) {
+  const digest = createHash('sha256').update(origin + '\n' + clientId + '\n' + platform).digest('hex').slice(0, 24);
+  const lockPath = join(tmpdir(), 'archestra-connect-' + digest + '.lock');
+  const staleAfterMs = 15 * 60 * 1000;
+  let handle;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      handle = await open(lockPath, 'wx', 0o600);
+      break;
+    } catch (error) {
+      if (error.code !== 'EEXIST') throw error;
+      let owner;
+      try { owner = JSON.parse(await readFile(lockPath, 'utf8')); } catch {}
+      const createdAt = Number(owner?.createdAt);
+      const stale = !Number.isFinite(createdAt) || Date.now() - createdAt > staleAfterMs;
+      if (!stale && Number.isSafeInteger(owner?.pid) && processIsRunning(owner.pid)) {
+        throw new Error('Another connection installer is already running for this deployment and client. Keep its approval URL open. Do not start a second installer.');
+      }
+      if (attempt === 1) break;
+      await rm(lockPath, { force: true });
+    }
+  }
+  if (!handle) throw new Error('Could not acquire the connection installer lock. Retry after the existing installer exits.');
+  await handle.writeFile(JSON.stringify({ pid: process.pid, createdAt: Date.now() }) + '\n');
+  await handle.close();
+  let released = false;
+  return async () => {
+    if (released) return;
+    released = true;
+    try {
+      const owner = JSON.parse(await readFile(lockPath, 'utf8'));
+      if (owner.pid === process.pid) await rm(lockPath, { force: true });
+    } catch {}
+  };
+}
+function processIsRunning(pid) {
+  try { process.kill(pid, 0); return true; }
+  catch (error) { return error.code === 'EPERM'; }
 }
 async function applySetup({ scriptPath, origin, platform }) {
   const response = await fetch(new URL(scriptPath, origin), { redirect: 'error', signal: AbortSignal.timeout(120000) });
@@ -79,8 +130,13 @@ async function applySetup({ scriptPath, origin, platform }) {
   const directory = await mkdtemp(join(tmpdir(), 'client-connect-'));
   try {
     const filename = join(directory, platform === 'windows' ? 'setup.ps1' : 'setup.sh');
-    await writeFile(filename, await response.text(), { mode: 0o600 });
-    console.log('Approval received. Applying the reviewed setup...');
+    const script = await response.text();
+    // Windows PowerShell 5.1 reads a BOM-less .ps1 in the system ANSI codepage,
+    // garbling the banner's Unicode mark and the startup-guard body the script
+    // installs. A UTF-8 BOM makes powershell.exe -File decode it correctly.
+    await writeFile(filename, platform === 'windows' ? '\uFEFF' + script : script, { mode: 0o600 });
+    const lineCount = script.trimEnd().split(/\r?\n/).length;
+    console.log('Downloaded approved setup (' + lineCount + ' lines). Applying now.');
     const child = platform === 'windows'
       ? spawnSync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', filename], { stdio: 'inherit' })
       : spawnSync('bash', [filename], { stdio: 'inherit' });

@@ -724,6 +724,15 @@ describe("geminiAdapterFactory", () => {
   });
 
   describe("extractApiKey", () => {
+    test("prefers a bearer token over an API key and marks it as OAuth", () => {
+      const apiKey = geminiAdapterFactory.extractApiKey({
+        authorization: "Bearer oauth-access-token",
+        "x-goog-api-key": "api-key-that-must-not-win",
+      });
+
+      expect(apiKey).toBe("Bearer:oauth-access-token");
+    });
+
     test("returns x-goog-api-key header", () => {
       const headers = { "x-goog-api-key": "test-api-key-123" };
       const apiKey = geminiAdapterFactory.extractApiKey(headers);

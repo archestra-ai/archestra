@@ -2,10 +2,11 @@
 
 import {
   DEFAULT_MODELS,
+  DocsPage,
   providerRequiresPerUserCredential,
   type SupportedProvider,
 } from "@archestra/shared";
-import { Download, KeyRound, RotateCcw } from "lucide-react";
+import { Download, KeyRound, RotateCcw, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
@@ -22,10 +23,13 @@ import {
 } from "@/components/agent-selector";
 import { CreditWarningNotice } from "@/components/connection/credit-warning-notice";
 import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
+import { ExternalDocsLink } from "@/components/external-docs-link";
 import { GithubCopilotSignIn } from "@/components/github-copilot-sign-in";
 import { PROVIDER_CONFIG } from "@/components/llm-provider-api-key-form";
 import { LlmProviderSelectItems } from "@/components/llm-provider-select-items";
 import { ProviderIcon } from "@/components/provider-icon";
+import { TerminalCard } from "@/components/terminal-surface";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -45,6 +49,7 @@ import {
   type CreateConnectionSetupResult,
   useCreateConnectionSetup,
 } from "@/lib/connection-setup.query";
+import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import { useLlmModelsByProvider } from "@/lib/llm-models.query";
@@ -96,6 +101,7 @@ const SCRIPT_CLIENT_IDS: readonly string[] = [
   "codex",
   "copilot-cli",
   "cursor",
+  "opencode",
 ] satisfies ScriptClientId[];
 
 /** Clients whose whole setup is delivered as a single `curl | bash` command. */
@@ -316,8 +322,7 @@ export function ConnectCommandPanel({
   const needsPerUserConnect =
     !!llmProxyId && providerIsPerUser && !configuredProviders.has(provider);
 
-  // The Copilot CLI refuses to launch a BYOK provider without an explicit
-  // COPILOT_MODEL, so the review step surfaces the model as a reviewable
+  // Clients that persist a model during setup surface it as a reviewable
   // choice instead of hard-wiring a default. null = the provider's default;
   // reset when the provider changes so a model picked for one provider never
   // leaks onto another. Options come from the org's synced model list; with
@@ -350,6 +355,8 @@ export function ConnectCommandPanel({
   const effectiveProxyAuth: ConnectProxyAuth = providerIsPerUser
     ? "virtual-key"
     : proxyAuth;
+  const openCodeProviderPassthrough =
+    client.id === "opencode" && effectiveProxyAuth === "provider-key";
 
   const gateway = mcpGateways?.find((g) => g.id === mcpGatewayId) ?? null;
   // The LLM Proxy may be available without a usable provider (e.g. virtual-key
@@ -411,6 +418,7 @@ export function ConnectCommandPanel({
     client.id === "claude-code" &&
     !!gateway &&
     !virtualKeyUnbacked;
+  const showDesktopGatewayStep = client.id === "claude-desktop" && !!gateway;
   // The script installs skills itself for everyone who can read them, so the
   // wizard never grows an extra step here. The marketplace step appears only
   // when there is no script to carry them: nothing to connect at all (below),
@@ -418,6 +426,10 @@ export function ConnectCommandPanel({
   const marketplaceVisible = useSkillsMarketplaceVisible(client);
   const skillsStepAvailable = skillsEnabled && marketplaceVisible;
   const appName = useAppName();
+  const desktopRevertDocsUrl = getFrontendDocsUrl(
+    DocsPage.PlatformClaudeDesktopExample,
+    "revert",
+  );
   // The exact name the script registers the gateway under — referenced in the
   // OAuth step so the user can find it in the `claude /mcp` list.
   const oauthServerName = deriveMcpServerName({
@@ -428,7 +440,8 @@ export function ConnectCommandPanel({
   // Passthrough setups also get a personal passthrough virtual key wired into the
   // command (best-effort: only when the user can mint one) so requests are
   // attributed to the user. Applies to Claude Code (Anthropic subscription or
-  // the user's own Bedrock credentials) and Codex (the user's own OpenAI key).
+  // the user's own Bedrock credentials), Codex (the user's own OpenAI key), and
+  // OpenCode (its locally authenticated supported providers).
   // Used purely to tailor the passthrough description copy — the backend
   // provisions it automatically; there is no separate UI choice.
   const { data: canAttribute } = useHasPermissions({
@@ -438,7 +451,8 @@ export function ConnectCommandPanel({
     canAttribute === true &&
     (((client.id === "claude-code" || client.id === "claude-desktop") &&
       (provider === "anthropic" || provider === "bedrock")) ||
-      (client.id === "codex" && provider === "openai"));
+      (client.id === "codex" && provider === "openai") ||
+      client.id === "opencode");
 
   const { mutateAsync: createSetup, isPending } = useCreateConnectionSetup();
   // Creating the personal key invalidates the available-keys query, so once the
@@ -654,7 +668,7 @@ export function ConnectCommandPanel({
 
   const proxyEditor = hasProxy ? (
     <div className="grid gap-3">
-      {providers.length > 1 && (
+      {providers.length > 1 && !openCodeProviderPassthrough && (
         <EditorField label="Provider">
           <Select
             value={provider ?? undefined}
@@ -703,6 +717,12 @@ export function ConnectCommandPanel({
                 <span>
                   The installer opens Claude subscription sign-in and configures
                   Desktop. Your token stays on your computer.
+                </span>
+              ) : openCodeProviderPassthrough ? (
+                <span>
+                  Supported OpenCode providers keep their model IDs and local
+                  credentials. Only their base URLs change, and a personal
+                  passthrough key attributes requests to you.
                 </span>
               ) : passthroughAttributes ? (
                 <span>
@@ -779,8 +799,12 @@ export function ConnectCommandPanel({
           )}
         </EditorField>
         <p className="text-xs text-muted-foreground">
-          Applied as COPILOT_MODEL by the setup script — pick a model your{" "}
-          {providerCatalog.label(provider)} access serves.
+          <span>
+            {client.id === "claude-desktop"
+              ? "Selected by default in Claude Desktop after setup"
+              : "Applied as COPILOT_MODEL by the setup script"}
+            {` — pick a model your ${providerCatalog.label(provider)} access serves.`}
+          </span>
         </p>
       </div>
     ) : null;
@@ -948,24 +972,31 @@ export function ConnectCommandPanel({
                     a virtual key
                   </span>
                 </>
+              ) : openCodeProviderPassthrough ? (
+                <span>
+                  Route supported OpenCode providers through{" "}
+                  <span className="font-medium text-foreground">
+                    the LLM Proxy
+                  </span>{" "}
+                  using their existing local credentials
+                </span>
               ) : (
-                <>
+                <span>
                   Passthrough to{" "}
                   <span className="font-medium text-foreground">
                     {providerCatalog.label(provider)}
                   </span>{" "}
                   through{" "}
-                  <ResourceLink href="/llm/proxy">the LLM Proxy</ResourceLink>{" "}
+                  <span className="font-medium text-foreground">
+                    the LLM Proxy
+                  </span>{" "}
                   using{" "}
                   <span className="font-medium text-foreground">
                     {client.id === "claude-desktop"
                       ? "your Claude subscription"
                       : "your provider key"}
-                  </span>{" "}
-                  <RecommendationChip>
-                    Good for reusing a subscription
-                  </RecommendationChip>
-                </>
+                  </span>
+                </span>
               )}
             </SetupSummaryRow>
           )}
@@ -979,9 +1010,7 @@ export function ConnectCommandPanel({
               editor={modelEditor}
               changeTestId="connect-change-model"
             >
-              Run{" "}
-              {client.id === "claude-desktop" ? "Claude Desktop" : "Copilot"}{" "}
-              with{" "}
+              Run <span>{client.label}</span> with{" "}
               <span className="font-medium text-foreground">
                 {effectiveModel}
               </span>
@@ -1112,7 +1141,7 @@ export function ConnectCommandPanel({
               ? "Install the connection"
               : "Run the setup script"
         }
-        last={!showOAuthStep}
+        last={!showOAuthStep && !showDesktopGatewayStep}
       >
         <div className="flex flex-col gap-3">
           {client.id === "claude-desktop" && (
@@ -1120,6 +1149,40 @@ export function ConnectCommandPanel({
               Only Claude Desktop is needed. Finish active Desktop tasks before
               setup restarts the app.
             </p>
+          )}
+          {client.id === "claude-desktop" && proxyActive && (
+            <Alert variant="warning">
+              <TriangleAlert />
+              <AlertTitle>
+                Claude Desktop uses separate conversation history
+              </AlertTitle>
+              <AlertDescription>
+                <p>
+                  Connecting the LLM Proxy switches Desktop to third-party mode.
+                  Your existing Claude conversations won&apos;t appear in that
+                  mode. The installer does not delete them.
+                </p>
+                {desktopRevertDocsUrl ? (
+                  <ExternalDocsLink href={desktopRevertDocsUrl}>
+                    How to return to standard Claude Desktop
+                  </ExternalDocsLink>
+                ) : (
+                  <p>
+                    To return to standard Claude Desktop, choose Anthropic
+                    sign-in on Desktop&apos;s sign-in screen and use your
+                    original Claude account. If that option is hidden, contact
+                    your administrator. See{" "}
+                    <ExternalDocsLink
+                      href="https://claude.com/docs/third-party/claude-desktop/installation#single-machine-setup"
+                      showIcon={false}
+                    >
+                      Claude&apos;s setup instructions
+                    </ExternalDocsLink>
+                    .
+                  </p>
+                )}
+              </AlertDescription>
+            </Alert>
           )}
           <output
             className="sr-only"
@@ -1146,11 +1209,11 @@ export function ConnectCommandPanel({
               "overflow-hidden rounded-xl border",
               connectRequest || client.id === "claude-desktop"
                 ? "bg-card"
-                : "border-[#1f2937] bg-[#0d1117] shadow-lg",
+                : "border-terminal-edge bg-terminal shadow-lg",
             )}
           >
             {!hasRunnableAnything ? (
-              <div className="px-5 py-4 text-sm text-[#9ca3af]">
+              <div className="px-5 py-4 text-sm text-muted-foreground">
                 No selected resource can be configured for this client and
                 operating system. Choose another platform or add a connection
                 resource.
@@ -1197,10 +1260,10 @@ export function ConnectCommandPanel({
                     <span>Download installer</span>
                   </a>
                 </Button>
-                <p className="max-w-xl text-sm leading-relaxed text-muted-foreground">
+                <p className="text-sm leading-relaxed text-muted-foreground">
                   Open in Claude Desktop and confirm Install. Your browser
                   guides you through subscription sign-in and restarting
-                  Desktop. No terminal or developer tools needed.
+                  Desktop.
                 </p>
                 <details className="text-xs text-muted-foreground">
                   <summary className="cursor-pointer">
@@ -1210,12 +1273,14 @@ export function ConnectCommandPanel({
                     The terminal option requires Python 3.9+ and Claude Code for
                     subscription sign-in.
                   </p>
-                  <SetupCommandLine
-                    command={result.command}
-                    pending={false}
-                    failed={false}
-                    onRetry={() => runGeneration(inputsKey)}
-                  />
+                  <TerminalCard className="mt-2">
+                    <SetupCommandLine
+                      command={result.command}
+                      pending={false}
+                      failed={false}
+                      onRetry={() => runGeneration(inputsKey)}
+                    />
+                  </TerminalCard>
                 </details>
               </div>
             ) : (
@@ -1266,6 +1331,33 @@ export function ConnectCommandPanel({
           )}
         </div>
       </ConnectionSection>
+
+      {showDesktopGatewayStep && (
+        <WizardStep n={4} title="Enable your gateway in Claude Desktop" last>
+          <div className="space-y-3 text-sm text-muted-foreground">
+            <p>
+              The installer registers your gateway. Claude Desktop does not let
+              installers enable connectors automatically, so you need to enable
+              the gateway in your conversation.
+            </p>
+            <ol className="list-decimal space-y-3 pl-5">
+              <li>
+                After Desktop restarts, open{" "}
+                <strong>Settings → Connectors</strong>. Select{" "}
+                <strong>{oauthServerName}</strong> and connect it if needed.
+                Complete sign-in and approve access in your browser.
+              </li>
+              <li>
+                In your conversation, open <strong>+ → Connectors</strong> and
+                enable <strong>{oauthServerName}</strong> if it is off. A
+                connected checkmark in Settings does not confirm it is enabled
+                for that conversation.
+              </li>
+              <li>Ask Claude to list the tools available from your gateway.</li>
+            </ol>
+          </div>
+        </WizardStep>
+      )}
 
       {showOAuthStep && (
         <WizardStep n={4} title={FINISH_OAUTH_FLOW_TITLE} last>
@@ -1330,7 +1422,7 @@ function PerUserConnectGate({
 }) {
   return (
     <div className="flex flex-col gap-3 px-5 py-4">
-      <p className="text-[13px] text-[#e5e7eb]">
+      <p className="text-[13px] text-foreground">
         Connect your {providerLabel} account to generate the command — it runs
         through your own personal virtual key, so your token never leaves the
         server.
@@ -1365,7 +1457,7 @@ function ProviderKeyGate({
 }) {
   return (
     <div className="flex flex-col gap-3 px-5 py-4">
-      <p className="text-[13px] text-[#e5e7eb]">
+      <p className="text-[13px] text-foreground">
         <span>{reason} </span>
         {canAddKey ? (
           <span>{`Add ${addKeyPhrase} to mint one from, or switch to your provider key in the review above.`}</span>
@@ -1410,15 +1502,6 @@ function ResourceLink({
     >
       {children}
     </Link>
-  );
-}
-
-/** Small positive chip used to flag a recommended option. */
-function RecommendationChip({ children }: { children: React.ReactNode }) {
-  return (
-    <span className="ml-1 inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300">
-      {children}
-    </span>
   );
 }
 

@@ -1,4 +1,6 @@
+import type { UIMessageChunk } from "ai";
 import { vi } from "vitest";
+import type { executeA2AMessage } from "@/agents/a2a-executor";
 
 vi.mock("@/auth");
 
@@ -7,7 +9,7 @@ const A2A_RESULT = {
   text: "done",
   finishReason: "stop",
   responseUiMessage: {
-    id: "asst-1",
+    id: "a0000000-0000-4000-8000-000000000001",
     role: "assistant",
     parts: [{ type: "text", text: "done" }],
   },
@@ -31,23 +33,37 @@ vi.mock("@/services/scheduled-run-conversation", () => ({
 
 import { hasAnyAgentTypeAdminPermission } from "@/auth";
 import {
+  MessageModel,
   ProjectModel,
   ScheduleTriggerModel,
   ScheduleTriggerRunModel,
   UserModel,
 } from "@/models";
+import ActiveChatRunModel from "@/models/chat-active-run";
+import { activeChatRunService } from "@/services/active-chat-run";
 import { beforeEach, describe, expect, test } from "@/test";
 import { handleScheduleTriggerRunExecution } from "./schedule-trigger-run-handler";
 
 describe("handleScheduleTriggerRunExecution", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.restoreAllMocks();
     vi.mocked(hasAnyAgentTypeAdminPermission).mockResolvedValue(false);
     mockExecuteA2AMessage.mockReset().mockResolvedValue(A2A_RESULT);
-    mockCreateAndLinkRunConversation.mockReset();
-    mockPersistRunConversationMessages.mockReset().mockResolvedValue(undefined);
-    mockRecordRunConversationError.mockReset().mockResolvedValue(undefined);
-    mockPersistRunUserMessage.mockReset().mockResolvedValue(undefined);
+    const actual = await vi.importActual<
+      typeof import("@/services/scheduled-run-conversation")
+    >("@/services/scheduled-run-conversation");
+    mockCreateAndLinkRunConversation
+      .mockReset()
+      .mockImplementation(actual.createAndLinkRunConversation);
+    mockPersistRunConversationMessages
+      .mockReset()
+      .mockImplementation(actual.persistRunConversationMessages);
+    mockRecordRunConversationError
+      .mockReset()
+      .mockImplementation(actual.recordRunConversationError);
+    mockPersistRunUserMessage
+      .mockReset()
+      .mockImplementation(actual.persistRunUserMessage);
   });
 
   test("executes A2A message and marks run as success", async ({
@@ -287,18 +303,16 @@ describe("handleScheduleTriggerRunExecution", () => {
       projectId: project.id,
     });
     const run = await makeScheduleTriggerRun(trigger.id);
-    mockCreateAndLinkRunConversation.mockResolvedValue({
-      id: "conv-1",
-      userId: actor.id,
-    });
 
     await handleScheduleTriggerRunExecution({
       runId: run.id,
       triggerId: trigger.id,
     });
 
+    const conversation =
+      await mockCreateAndLinkRunConversation.mock.results[0].value;
     expect(mockExecuteA2AMessage).toHaveBeenCalledWith(
-      expect.objectContaining({ conversationId: "conv-1" }),
+      expect.objectContaining({ conversationId: conversation.id }),
     );
     const updated = await ScheduleTriggerRunModel.findById(run.id);
     expect(updated?.status).toBe("success");
@@ -306,7 +320,7 @@ describe("handleScheduleTriggerRunExecution", () => {
     // the complete assistant turn — not reconstructed from interactions.
     expect(mockPersistRunConversationMessages).toHaveBeenCalledWith(
       expect.objectContaining({
-        conversation: expect.objectContaining({ id: "conv-1" }),
+        conversation: expect.objectContaining({ id: conversation.id }),
         userText: trigger.messageTemplate,
         assistantMessage: expect.objectContaining({
           role: "assistant",
@@ -314,6 +328,206 @@ describe("handleScheduleTriggerRunExecution", () => {
         }),
       }),
     );
+  });
+
+  test("publishes text and tool events before completion and replays after disconnect", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeInternalAgent,
+    makeScheduleTrigger,
+    makeScheduleTriggerRun,
+  }) => {
+    const org = await makeOrganization();
+    const actor = await makeUser();
+    await makeMember(actor.id, org.id);
+    const project = await ProjectModel.create({
+      organizationId: org.id,
+      userId: actor.id,
+      name: "Streaming schedule",
+    });
+    const agent = await makeInternalAgent({ organizationId: org.id });
+    const trigger = await makeScheduleTrigger({
+      organizationId: org.id,
+      agentId: agent.id,
+      actorUserId: actor.id,
+      projectId: project.id,
+    });
+    const run = await makeScheduleTriggerRun(trigger.id);
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const chunks: UIMessageChunk[] = [
+      { type: "start", messageId: A2A_RESULT.responseUiMessage.id },
+      { type: "text-start", id: "text-1" },
+      { type: "text-delta", id: "text-1", delta: "Checking now" },
+      {
+        type: "tool-input-available",
+        toolCallId: "tool-1",
+        toolName: "lookup",
+        input: { query: "status" },
+      },
+    ];
+    let executionParams: Parameters<typeof executeA2AMessage>[0] | undefined;
+    mockExecuteA2AMessage.mockImplementation(
+      async (params: Parameters<typeof executeA2AMessage>[0]) => {
+        executionParams = params;
+        for (const chunk of chunks) await params.onUiMessageChunk?.(chunk);
+        await gate;
+        await params.onUiMessageChunk?.({
+          type: "tool-output-available",
+          toolCallId: "tool-1",
+          output: "ready",
+        });
+        await params.onUiMessageChunk?.({ type: "text-end", id: "text-1" });
+        await params.onUiMessageChunk?.({
+          type: "finish",
+          finishReason: "stop",
+        });
+        return A2A_RESULT;
+      },
+    );
+    const execution = handleScheduleTriggerRunExecution({ runId: run.id });
+    try {
+      await vi.waitFor(() =>
+        expect(executionParams?.conversationId).toBeDefined(),
+      );
+      const conversationId = executionParams?.conversationId;
+      if (!conversationId) throw new Error("Missing run conversation");
+      const active =
+        await ActiveChatRunModel.findRunningByConversation(conversationId);
+      if (!active) throw new Error("Missing active run");
+      expect(
+        (await MessageModel.findByConversation(conversationId)).map(
+          (message) => message.role,
+        ),
+      ).toEqual(["user"]);
+      const reader = activeChatRunService
+        .createReplayStream(active.id)
+        .getReader();
+      for (const chunk of chunks)
+        expect((await reader.read()).value).toEqual(chunk);
+      expect((await ScheduleTriggerRunModel.findById(run.id))?.status).toBe(
+        "running",
+      );
+      await reader.cancel();
+      expect(executionParams?.abortSignal?.aborted).toBe(false);
+
+      // Duplicate delivery must neither execute again nor settle the live run.
+      await handleScheduleTriggerRunExecution({ runId: run.id });
+      expect(mockExecuteA2AMessage).toHaveBeenCalledTimes(1);
+      expect((await ScheduleTriggerRunModel.findById(run.id))?.status).toBe(
+        "running",
+      );
+
+      release();
+      await execution;
+      expect((await ActiveChatRunModel.findById(active.id))?.status).toBe(
+        "completed",
+      );
+      expect(
+        (await MessageModel.findByConversation(conversationId)).map(
+          (message) => message.role,
+        ),
+      ).toEqual(["user", "assistant"]);
+      const replay = activeChatRunService
+        .createReplayStream(active.id)
+        .getReader();
+      const replayed: UIMessageChunk[] = [];
+      while (true) {
+        const { done, value } = await replay.read();
+        if (done) break;
+        replayed.push(value);
+      }
+      expect(replayed).toEqual([
+        ...chunks,
+        {
+          type: "tool-output-available",
+          toolCallId: "tool-1",
+          output: "ready",
+        },
+        { type: "text-end", id: "text-1" },
+        { type: "finish", finishReason: "stop" },
+      ]);
+      expect((await ScheduleTriggerRunModel.findById(run.id))?.status).toBe(
+        "success",
+      );
+    } finally {
+      release();
+      await execution;
+    }
+  });
+
+  test("stopping the chat settles the run as cancelled, keeping partial output without an error", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeInternalAgent,
+    makeScheduleTrigger,
+    makeScheduleTriggerRun,
+  }) => {
+    const org = await makeOrganization();
+    const actor = await makeUser();
+    await makeMember(actor.id, org.id);
+    const project = await ProjectModel.create({
+      organizationId: org.id,
+      userId: actor.id,
+      name: "Stop schedule test",
+    });
+    const agent = await makeInternalAgent({ organizationId: org.id });
+    const trigger = await makeScheduleTrigger({
+      organizationId: org.id,
+      agentId: agent.id,
+      actorUserId: actor.id,
+      projectId: project.id,
+    });
+    const run = await makeScheduleTriggerRun(trigger.id);
+    let executionParams: Parameters<typeof executeA2AMessage>[0] | undefined;
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    mockExecuteA2AMessage.mockImplementation(
+      async (params: Parameters<typeof executeA2AMessage>[0]) => {
+        executionParams = params;
+        params.abortSignal?.addEventListener("abort", release, { once: true });
+        await gate;
+        return A2A_RESULT;
+      },
+    );
+    const execution = handleScheduleTriggerRunExecution({ runId: run.id });
+    try {
+      await vi.waitFor(() =>
+        expect(executionParams?.conversationId).toBeDefined(),
+      );
+      const conversationId = executionParams?.conversationId;
+      if (!conversationId) throw new Error("Missing run conversation");
+      await activeChatRunService.requestStop({
+        conversationId,
+        organizationId: org.id,
+      });
+      await vi.waitFor(() =>
+        expect(executionParams?.abortSignal?.aborted).toBe(true),
+      );
+      await execution;
+      expect(await ScheduleTriggerRunModel.findById(run.id)).toMatchObject({
+        status: "cancelled",
+        error: null,
+      });
+      expect(
+        await ActiveChatRunModel.findRunningByConversation(conversationId),
+      ).toBeNull();
+      expect(mockRecordRunConversationError).not.toHaveBeenCalled();
+      expect(
+        (await MessageModel.findByConversation(conversationId)).map(
+          (message) => message.role,
+        ),
+      ).toEqual(["user", "assistant"]);
+    } finally {
+      release();
+      await execution;
+    }
   });
 
   test("does not persist messages for an unscoped run", async ({
@@ -368,10 +582,6 @@ describe("handleScheduleTriggerRunExecution", () => {
       projectId: project.id,
     });
     const run = await makeScheduleTriggerRun(trigger.id);
-    mockCreateAndLinkRunConversation.mockResolvedValue({
-      id: "conv-1",
-      userId: actor.id,
-    });
     mockExecuteA2AMessage.mockRejectedValue(new Error("LLM provider down"));
 
     await handleScheduleTriggerRunExecution({
@@ -379,6 +589,8 @@ describe("handleScheduleTriggerRunExecution", () => {
       triggerId: trigger.id,
     });
 
+    const conversation =
+      await mockCreateAndLinkRunConversation.mock.results[0].value;
     const updated = await ScheduleTriggerRunModel.findById(run.id);
     expect(updated?.status).toBe("failed");
     expect(updated?.error).toBe("LLM provider down");
@@ -387,7 +599,7 @@ describe("handleScheduleTriggerRunExecution", () => {
     // the user message (so the chat carries it and "Try again" can resend it)...
     expect(mockPersistRunUserMessage).toHaveBeenCalledWith(
       expect.objectContaining({
-        conversation: expect.objectContaining({ id: "conv-1" }),
+        conversation: expect.objectContaining({ id: conversation.id }),
         userText: trigger.messageTemplate,
       }),
     );
@@ -396,7 +608,7 @@ describe("handleScheduleTriggerRunExecution", () => {
     // fallback card carrying the message.
     expect(mockRecordRunConversationError).toHaveBeenCalledWith(
       expect.objectContaining({
-        conversationId: "conv-1",
+        conversationId: conversation.id,
         error: expect.objectContaining({ message: "LLM provider down" }),
       }),
     );
@@ -426,10 +638,6 @@ describe("handleScheduleTriggerRunExecution", () => {
       projectId: project.id,
     });
     const run = await makeScheduleTriggerRun(trigger.id);
-    mockCreateAndLinkRunConversation.mockResolvedValue({
-      id: "conv-1",
-      userId: actor.id,
-    });
     mockPersistRunConversationMessages.mockRejectedValue(
       new Error("persist blew up"),
     );

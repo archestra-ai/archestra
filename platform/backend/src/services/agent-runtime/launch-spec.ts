@@ -339,6 +339,7 @@ export async function buildAgentRunLaunchSpec(params: {
   return {
     virtualApiKeyId: virtualKey?.virtualKey.id ?? null,
     spec: {
+      poolScope: `${params.organizationId}:${params.runtime.environmentId ?? "default"}`,
       taskId: params.taskId,
       agentRuntimeId: params.runtime.agentId,
       frozenName: constructStableRunName(agent.name, params.taskId),

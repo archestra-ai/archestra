@@ -138,6 +138,8 @@ class AnthropicOpenaiStreamAdapter
   private inner: LLMStreamAdapter<AnthropicStreamChunk, AnthropicResponse>;
   private ctx: AnthropicOpenaiContext;
   private pendingToolCallEvents: string[] = [];
+  private getTextSuffix: ((completedText: string) => string) | null = null;
+  private replacedText: string | null = null;
 
   constructor(ctx: AnthropicOpenaiContext) {
     this.inner = anthropicAdapterFactory.createStreamAdapter();
@@ -146,6 +148,10 @@ class AnthropicOpenaiStreamAdapter
 
   get state(): StreamAccumulatorState {
     return this.inner.state;
+  }
+
+  setTextSuffix(getSuffix: (completedText: string) => string): void {
+    this.getTextSuffix = getSuffix;
   }
 
   processChunk(chunk: AnthropicStreamChunk) {
@@ -209,7 +215,8 @@ class AnthropicOpenaiStreamAdapter
         delta: {
           tool_calls: toolCalls.map((toolCall, index) => ({
             index,
-            id: toolCall.id,
+            // The id the client is given, as the non-streamed turn does.
+            id: toolCall.wireId ?? toolCall.id,
             type: "function" as const,
             function: { name: toolCall.name, arguments: toolCall.arguments },
           })),
@@ -226,6 +233,7 @@ class AnthropicOpenaiStreamAdapter
     // refusal rather than the blocked tool calls. The finish reason is emitted
     // once, by formatEndSSE — this chunk must not also carry one.
     this.inner.formatCompleteTextSSE(text);
+    this.replacedText = text;
     return [
       this.formatChunk({
         delta: { role: "assistant", content: text },
@@ -238,7 +246,16 @@ class AnthropicOpenaiStreamAdapter
     const finishReason = mapStopReason(
       this.inner.toProviderResponse().stop_reason,
     );
-    return `${this.formatChunk({
+    const suffix =
+      this.getTextSuffix &&
+      this.replacedText === null &&
+      this.state.toolCalls.length === 0 &&
+      finishReason === "stop" &&
+      this.state.text
+        ? this.getTextSuffix(this.state.text)
+        : "";
+    const textDelta = suffix ? this.formatTextDeltaSSE(suffix) : "";
+    return `${textDelta}${this.formatChunk({
       delta: {},
       finishReason,
       usage: anthropicUsageViewToOpenai(this.state.usage),

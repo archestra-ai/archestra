@@ -58,7 +58,7 @@ Load these project skills when the task matches their domain:
 - **Token Price**: <http://localhost:3000/llm/cost/token-price> (Model pricing configuration)
 - **Tilt UI**: <http://localhost:10350/>
 - **Drizzle Studio**: <https://local.drizzle.studio/>
-- **MCP Gateway**: <http://localhost:9000/v1/mcp/:profileId> (POST for JSON-RPC stateless mode; authenticated GET returns 405; requires Bearer archestra_token auth)
+- **MCP Gateway**: <http://localhost:9000/v1/mcp/:profileId> (POST for JSON-RPC stateless mode; GET with Accept: text/event-stream opens the legacy HTTP+SSE stream, other GETs return 405; requires Bearer archestra_token auth)
 - **MCP Proxy**: <http://localhost:9000/mcp_proxy/:id> (POST for JSON-RPC requests to K8s pods)
 - **MCP Logs**: <http://localhost:9000/api/mcp_server/:id/logs> (GET container logs, ?lines=N to limit, ?follow=true for streaming)
 - **MCP Restart**: <http://localhost:9000/api/mcp_server/:id/restart> (POST to restart pod)

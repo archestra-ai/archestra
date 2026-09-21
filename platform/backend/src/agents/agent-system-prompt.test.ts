@@ -2,6 +2,7 @@ import {
   ADMIN_ROLE_NAME,
   ADVISOR_DELEGATION_TOOL_NAME,
   type ArchestraToolShortName,
+  TOOL_ASK_USER_SHORT_NAME,
   TOOL_COPY_FILE_SHORT_NAME,
   TOOL_DOWNLOAD_FILE_SHORT_NAME,
   TOOL_LIST_APP_VERSIONS_SHORT_NAME,
@@ -19,13 +20,16 @@ import {
 } from "@archestra/shared";
 import type { Tool } from "ai";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
+import config, { parseOpenAppaConfig } from "@/config";
 import { AgentModel, SkillModel } from "@/models";
+import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import type { OpenedApp } from "@/services/apps/opened-app-context";
 import { SKILL_SANDBOX_ATTACHMENTS_DIR } from "@/skills-sandbox/runtime-image";
 import { describe, expect, test } from "@/test";
 import {
   APP_BUILD_CONDUCT_INSTRUCTION,
   buildAgentSystemPrompt,
+  buildAppaRemedyInstruction,
   OPENED_APP_PREFIX,
   PROJECT_FILES_PREFIX,
   PROJECT_INSTRUCTIONS_PREFIX,
@@ -47,6 +51,8 @@ const runToolToolName = archestraMcpBranding.getToolName(
 
 const brand = (shortName: ArchestraToolShortName) =>
   archestraMcpBranding.getToolName(shortName);
+const askUserToolName = brand(TOOL_ASK_USER_SHORT_NAME);
+const withAskUser: Record<string, Tool> = { [askUserToolName]: {} as Tool };
 const searchFilesToolName = brand(TOOL_SEARCH_FILES_SHORT_NAME);
 // Sandbox runtime + persistent-file tools: the "full" file surface.
 const withFileTools: Record<string, Tool> = {
@@ -121,6 +127,162 @@ describe("buildAgentSystemPrompt", () => {
     });
 
     expect(prompt).toBe(`You are helpful.\n\n${TOOL_DENIAL_INSTRUCTION}`);
+    // No remedy instruction: OpenAPPA is off, so no ruling can reach the model.
+    expect(prompt).not.toContain(
+      buildAppaRemedyInstruction({ canAskUser: false }),
+    );
+  });
+
+  test("sends choices to ask_user only in a run that can show the user a question", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+  }) => {
+    const agent = await makeAgent({
+      systemPrompt: "You are helpful.",
+      toolExposureMode: "full",
+    });
+    const user = await makeUser();
+    await makeMember(user.id, agent.organizationId);
+    const common = {
+      agent,
+      organizationId: agent.organizationId,
+      userId: user.id,
+      agentId: agent.id,
+    };
+    const choiceRule = `If you offer them choices, use ${askUserToolName}, never a plain-text multiple-choice question.`;
+
+    // Chat: the stream shows the question and waits for the answer.
+    const chat = await buildAgentSystemPrompt({
+      ...common,
+      mcpTools: withAskUser,
+      canAskUser: true,
+    });
+    expect(chat).toContain(`${TOOL_DENIAL_INSTRUCTION} ${choiceRule}`);
+
+    // A2A, ChatOps, schedules and subagents list the tool too, but nobody can
+    // answer it there: a plain-text question is the only one that arrives.
+    const headless = await buildAgentSystemPrompt({
+      ...common,
+      mcpTools: withAskUser,
+    });
+    expect(headless).toContain(TOOL_DENIAL_INSTRUCTION);
+    expect(headless).not.toContain(askUserToolName);
+
+    // Nor where the tool is not in the set the model sees.
+    const withoutTool = await buildAgentSystemPrompt({
+      ...common,
+      mcpTools: someTool,
+      canAskUser: true,
+    });
+    expect(withoutTool).not.toContain(askUserToolName);
+  });
+
+  test("requires accepted remedy consent while OpenAPPA enforces", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+  }) => {
+    const agent = await makeAgent({
+      systemPrompt: "You are helpful.",
+      toolExposureMode: "full",
+    });
+    const user = await makeUser();
+    await makeMember(user.id, agent.organizationId);
+
+    // Enforcement needs both switches; otherwise no ruling can reach the
+    // model and the remedy instruction is omitted.
+    const openappa = config.openappa;
+    config.openappa = parseOpenAppaConfig("true");
+    await GuardrailsDeploymentModel.setEnabled(true);
+
+    try {
+      const prompt = await buildAgentSystemPrompt({
+        agent,
+        mcpTools: {},
+        organizationId: agent.organizationId,
+        userId: user.id,
+        agentId: agent.id,
+      });
+
+      expect(prompt).toBe(
+        `You are helpful.\n\n${TOOL_DENIAL_INSTRUCTION}\n\n${buildAppaRemedyInstruction({ canAskUser: false })}`,
+      );
+      // The model sees its own call answered with a ruling, never a call to
+      // the notice tool, and calls the control tool by its branded name.
+      const instruction = buildAppaRemedyInstruction({ canAskUser: true });
+      expect(
+        await buildAgentSystemPrompt({
+          agent,
+          mcpTools: withAskUser,
+          canAskUser: true,
+          organizationId: agent.organizationId,
+          userId: user.id,
+          agentId: agent.id,
+        }),
+      ).toContain(instruction);
+      expect(instruction).toContain("returns a ruling as its result");
+      expect(instruction).not.toContain('starts with "[appa]"');
+      expect(instruction).toContain("Name the plans to the user");
+      // Rulings count readers without naming them; the model must not guess.
+      expect(instruction).toContain(
+        "describe the block and each plan only in the ruling's own words",
+      );
+      expect(instruction).toContain("never guess who the readers are");
+      expect(instruction).not.toContain("Choose one yourself");
+      expect(instruction).toContain(
+        "Call archestra__execute_remedy_plan only after its result explicitly accepts that plan",
+      );
+      expect(instruction).toContain(
+        `Use ${askUserToolName} to present the remedy plans, never a plain-text question`,
+      );
+      expect(instruction).toContain(
+        "Put the exact offer id for the plan or plans this question decides in remedy_offer_ids",
+      );
+      expect(instruction).not.toContain("get_remedy_plans");
+      // A run nobody can answer a question in describes the plans and stops;
+      // it must never self-select or execute one.
+      const headless = buildAppaRemedyInstruction({ canAskUser: false });
+      expect(headless).not.toContain(askUserToolName);
+      expect(headless).toContain(
+        "Without user input, describe the available plans and stop.",
+      );
+      expect(headless).toContain("Do not choose or execute a plan.");
+      expect(headless).not.toContain("execute_remedy_plan");
+    } finally {
+      config.openappa = openappa;
+    }
+  });
+
+  test("omits the remedy instruction when only the server flag is on", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+  }) => {
+    const agent = await makeAgent({
+      systemPrompt: "You are helpful.",
+      toolExposureMode: "full",
+    });
+    const user = await makeUser();
+    await makeMember(user.id, agent.organizationId);
+
+    const openappa = config.openappa;
+    config.openappa = parseOpenAppaConfig("true");
+    await GuardrailsDeploymentModel.setEnabled(false);
+
+    try {
+      const prompt = await buildAgentSystemPrompt({
+        agent,
+        mcpTools: {},
+        organizationId: agent.organizationId,
+        userId: user.id,
+        agentId: agent.id,
+      });
+
+      expect(prompt).toBe(`You are helpful.\n\n${TOOL_DENIAL_INSTRUCTION}`);
+    } finally {
+      config.openappa = openappa;
+    }
   });
 
   test("renders Handlebars user context from a fetched user and their teams", async ({

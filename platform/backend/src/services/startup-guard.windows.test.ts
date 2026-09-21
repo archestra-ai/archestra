@@ -12,6 +12,7 @@ import {
   CLAUDE_CODE_GUARD_CLIENT,
   CODEX_GUARD_CLIENT,
   COPILOT_GUARD_CLIENT,
+  OPENCODE_GUARD_CLIENT,
 } from "@/services/startup-guard.clients";
 import {
   buildWindowsStartupGuardInstallSection,
@@ -54,6 +55,33 @@ const CTX: StartupGuardContext = {
       "https://archestra.example.com/skill-marketplace/archestra_skl_token123/repo.git",
   },
 };
+
+test("OpenCode provider-key disconnect restores the catalog and removes routing enforcement", () => {
+  if (!CTX.proxy) throw new Error("test proxy missing");
+  const section = buildWindowsStartupGuardInstallSection(
+    {
+      ...CTX,
+      proxy: {
+        ...CTX.proxy,
+        authMode: "provider-key",
+        provider: "openai",
+        url: "https://proxy.example.com/v1/openai",
+        passthroughVirtualKey: "arch_passthroughcafe",
+      },
+    },
+    OPENCODE_GUARD_CLIENT,
+  );
+
+  expect(section).toContain("plugins/archestra-llm-proxy.js");
+  expect(section).toContain("opencode-connection-state.json");
+  expect(section).toContain("opencode-routing-plugin-state.json");
+  expect(section).toContain("contentBase64");
+  expect(section).toContain("opencode.json') + '.archestra-backup'");
+  expect(section).toContain("enabledProvidersPresent");
+  expect(section).toContain("disabledProvidersPresent");
+  expect(section).toContain("moonshotai");
+  expect(section).not.toContain("StartsWith($Name + '/')");
+});
 
 describe("renderStartupGuardPowerShell (Claude Code)", () => {
   test("shows the remotes in pre-loader order with the demo visuals", () => {
@@ -231,7 +259,9 @@ describe("renderStartupGuardPowerShell (Claude Code)", () => {
     expect(script).toContain(
       "foreach ($r in $ActiveRemotes) { Write-Arch ('  ' + $r.Label) DarkGray }",
     );
-    expect(script).toContain("Write-Host -NoNewline ('  ' + $text)");
+    expect(script).toContain(
+      "Write-Host -NoNewline (ConvertTo-ArchConsole ('  ' + $text))",
+    );
     // colors go out as raw VT codes — console-API colors die on the
     // alternate screen buffer under conpty; checks are the brand purple
     expect(script).toContain("Magenta = '95'");
@@ -267,6 +297,48 @@ describe("renderStartupGuardPowerShell (Claude Code)", () => {
     );
     expect(whiteLabel).not.toContain("⣾⣿⣿⣿⣿⣷");
     expect(whiteLabel).toContain("'Acme AI'");
+  });
+
+  test("gates Unicode output on a UTF-8 capability switch; the legacy console gets the ASCII mark and transliterated glyphs", () => {
+    const script = renderStartupGuardPowerShell(CTX, CLAUDE_CODE_GUARD_CLIENT);
+    // the same capability convention as the connect banner: Windows Terminal
+    // or PowerShell 7+ switches the session to UTF-8, anything else (Windows
+    // PowerShell 5.1 in conhost) would mojibake braille on its OEM codepage
+    expect(script).toContain("$ArchUtf8 = $false");
+    expect(script).toContain(
+      "if ($env:WT_SESSION -or $PSVersionTable.PSVersion.Major -ge 6) {",
+    );
+    expect(script).toContain(
+      "[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new()",
+    );
+    // the braille mark only renders behind the capability gate; the legacy
+    // path shows the same ASCII rendition as the connect banner
+    expect(script).toContain(
+      "if ($ArchUtf8) {\nWrite-Arch '⠀⠀⠀⢀⣤⣶⣶⣦⡀⠀⠀⠀⠀⠀' White",
+    );
+    expect(script).toContain("} else {\nWrite-Host ''\nWrite-Host");
+    expect(script).toContain(".------------------.");
+    // one choke point transliterates every status glyph and dash a BOM-decoded
+    // guard can print, so source strings stay identical to the bash guard's
+    expect(script).toContain("function ConvertTo-ArchConsole");
+    expect(script).toContain("if ($ArchUtf8) { return $Text }");
+    for (const code of [
+      "0x25CB", // ○
+      "0x2713", // ✓
+      "0x2714", // ✔
+      "0x2716", // ✖
+      "0x2717", // ✗
+      "0x2014", // —
+      "0x00B7", // ·
+      "0x2026", // …
+    ]) {
+      expect(script).toContain(`[char]${code}`);
+    }
+    expect(script).toContain("$Text = ConvertTo-ArchConsole $Text");
+    // the non-interactive stderr advisories pass through it too
+    expect(script).toContain(
+      "[Console]::Error.WriteLine((ConvertTo-ArchConsole",
+    );
   });
 
   test("never blocks: opt-out env var and non-interactive paths return to the wrapper", () => {

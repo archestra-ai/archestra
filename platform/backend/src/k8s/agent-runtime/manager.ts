@@ -52,9 +52,11 @@ import {
   AgentWorkspaceFileResultSchema,
 } from "@/types/agent-workspace-file";
 import { RenewableCredentialBundleSchema } from "@/types/renewable-credential";
+import { buildAtomicFileWriteCommand } from "./atomic-file-write";
 import {
   AgentRuntimeCommandTransportError,
   execAgentRuntimeCommand,
+  streamAgentRuntimeCommand,
 } from "./exec";
 import {
   AGENT_RUNTIME_CONTAINER_NAME,
@@ -89,6 +91,11 @@ import {
 } from "./startup-phase";
 import { buildTmuxSteerCommand } from "./steering";
 import { withTranscriptRecoveryPod } from "./transcript-recovery";
+import {
+  agentWarmPoolManager,
+  readWorkspaceSandbox,
+  SANDBOX_CLAIM_API,
+} from "./warm-pool";
 
 /** `K8sClients` is internal to the shared module, so it is derived here. */
 type K8sClients = ReturnType<typeof createK8sClients>;
@@ -135,16 +142,14 @@ class AgentRuntimeManager {
       }),
     };
 
-    const existingSandbox = await clients.customObjectsApi
-      .getNamespacedCustomObject({
-        ...AGENT_SANDBOX_API,
-        name: names.sandbox,
-        namespace: withOwner.namespace,
-      })
-      .catch((error) => {
-        if (isK8sNotFoundError(error)) return null;
-        throw error;
-      });
+    const existingSandbox = await readWorkspaceSandbox({
+      api: clients.customObjectsApi,
+      name: names.sandbox,
+      namespace: withOwner.namespace,
+    }).catch((error) => {
+      if (isK8sNotFoundError(error)) return null;
+      throw error;
+    });
     if (existingSandbox) {
       logger.info(
         { taskId: withOwner.taskId, sandbox: names.sandbox },
@@ -188,6 +193,35 @@ class AgentRuntimeManager {
       }),
     );
 
+    if (
+      await agentWarmPoolManager.claim({
+        api: clients.customObjectsApi,
+        spec: withOwner,
+      })
+    ) {
+      const deadline =
+        Date.now() + config.agentRuntime.podStartTimeoutSeconds * 1000;
+      let pollDelayMs = 250;
+      while (true) {
+        try {
+          await readWorkspaceSandbox({
+            api: clients.customObjectsApi,
+            namespace: withOwner.namespace,
+            name: spec.frozenName,
+          });
+          break;
+        } catch (error) {
+          if (!isK8sNotFoundError(error) || Date.now() >= deadline) throw error;
+        }
+        await new Promise((resolve) => setTimeout(resolve, pollDelayMs));
+        pollDelayMs = Math.min(pollDelayMs * 2, 1000);
+      }
+      const session = await AgentRunModel.findByTaskId(spec.taskId);
+      if (!session) throw new Error("Workspace run no longer exists");
+      await this.continueRun({ session, spec, initial: true });
+      return;
+    }
+
     await withK8sApiRetry(
       () =>
         clients.customObjectsApi.createNamespacedCustomObject({
@@ -211,17 +245,10 @@ class AgentRuntimeManager {
     request: AgentWorkspaceFileRequest;
   }) {
     const request = AgentWorkspaceFileRequestSchema.parse(params.request);
-    const pod = await this.findPod(params.session);
-    if (pod?.status?.phase !== "Running" || !pod.metadata?.name) {
-      throw new ApiError(
-        409,
-        "Resume this workspace before accessing its files",
-      );
-    }
     const result = await this.execInPod({
       session: params.session,
-      podName: pod.metadata.name,
-      command: ["python3", "/usr/local/bin/archestra-workspace-files"],
+      podName: await this.requireRunningPodName(params.session),
+      command: WORKSPACE_FILES_COMMAND,
       stdin: NodeReadable.from([JSON.stringify(request)]),
     });
     const response = JSON.parse(result);
@@ -231,6 +258,52 @@ class AgentRuntimeManager {
         response.error || "Workspace file operation failed",
       );
     return AgentWorkspaceFileResultSchema.parse(response);
+  }
+
+  /** Run one transfer control operation and return its parsed reply. */
+  async runWorkspaceTransferCommand(params: {
+    session: AgentRunRecord;
+    args: string[];
+    stdin?: Readable;
+    timeoutMs: number;
+  }): Promise<unknown> {
+    const result = await this.execInPod({
+      session: params.session,
+      podName: await this.requireRunningPodName(params.session),
+      command: [...WORKSPACE_FILES_COMMAND, ...params.args],
+      stdin: params.stdin,
+      timeoutMs: params.timeoutMs,
+    });
+    const response = JSON.parse(result);
+    if (response.ok !== true) {
+      throw new ApiError(400, response.error || "Workspace transfer failed");
+    }
+    return response;
+  }
+
+  /** Stream a snapshot's bytes. The reply body is the file, so it never
+   * passes through a string or a tool payload. */
+  async readWorkspaceTransferRange(params: {
+    session: AgentRunRecord;
+    transferId: string;
+    offset: number;
+    length: number;
+    timeoutMs: number;
+  }): Promise<{ stdout: Readable; completed: Promise<void> }> {
+    return streamAgentRuntimeCommand({
+      exec: this.requireClients().exec,
+      namespace: params.session.runtimeScope,
+      podName: await this.requireRunningPodName(params.session),
+      container: AGENT_RUNTIME_CONTAINER_NAME,
+      command: [
+        ...WORKSPACE_FILES_COMMAND,
+        "read-range",
+        params.transferId,
+        String(params.offset),
+        String(params.length),
+      ],
+      timeoutMs: params.timeoutMs,
+    });
   }
 
   /**
@@ -308,13 +381,14 @@ class AgentRuntimeManager {
   async continueRun(params: {
     session: AgentRunRecord;
     spec: AgentRunLaunchSpec;
+    initial?: boolean;
   }): Promise<void> {
     const clients = this.requireClients();
-    const sandbox = (await clients.customObjectsApi.getNamespacedCustomObject({
-      ...AGENT_SANDBOX_API,
+    const sandbox = await readWorkspaceSandbox({
+      api: clients.customObjectsApi,
       namespace: params.session.runtimeScope,
       name: params.session.workloadName,
-    })) as AgentSandbox;
+    });
     const container = sandbox.spec.podTemplate.spec?.containers.find(
       (entry) => entry.name === AGENT_RUNTIME_CONTAINER_NAME,
     );
@@ -373,7 +447,7 @@ class AgentRuntimeManager {
                   {
                     apiVersion: sandbox.apiVersion,
                     kind: sandbox.kind,
-                    name: params.session.workloadName,
+                    name: sandbox.metadata.name ?? params.session.workloadName,
                     uid: sandbox.metadata.uid,
                   },
                 ]
@@ -381,10 +455,10 @@ class AgentRuntimeManager {
           },
           type: "Opaque",
           stringData: {
-            request: buildAgentRuntimeTurnScript(
-              params.spec,
+            request: buildAgentRuntimeTurnScript(params.spec, {
               inheritedVariableNames,
-            ),
+              initial: params.initial,
+            }),
           },
         },
       })
@@ -405,11 +479,11 @@ class AgentRuntimeManager {
         if (isK8sNotFoundError(error)) return null;
         throw error;
       });
-    const sandbox = (await clients.customObjectsApi.getNamespacedCustomObject({
-      ...AGENT_SANDBOX_API,
+    const sandbox = await readWorkspaceSandbox({
+      api: clients.customObjectsApi,
       namespace: session.runtimeScope,
       name: session.workloadName,
-    })) as AgentSandbox;
+    });
     if (
       sandbox.spec.shutdownTime &&
       Date.parse(sandbox.spec.shutdownTime) <= Date.now()
@@ -436,7 +510,7 @@ class AgentRuntimeManager {
       {
         ...AGENT_SANDBOX_API,
         namespace: session.runtimeScope,
-        name: session.workloadName,
+        name: sandbox.metadata.name ?? session.workloadName,
         body: { spec: { operatingMode: "Running" } },
       },
       setHeaderOptions("Content-Type", PatchStrategy.MergePatch),
@@ -446,6 +520,7 @@ class AgentRuntimeManager {
       timeoutMessage: "The workspace could not be resumed",
     });
     if (!podName) throw new Error("The workspace is not running");
+    await this.projectWarmCredentials(session, podName);
     const script = pending?.data?.request;
     if (!script) {
       const published = await this.execInPod({
@@ -527,7 +602,10 @@ class AgentRuntimeManager {
       };
       changed = true;
     }
-    if (!changed) return;
+    if (!changed) {
+      await this.projectWarmCredentials(session);
+      return;
+    }
     await clients.coreApi
       .patchNamespacedSecret(
         {
@@ -546,6 +624,7 @@ class AgentRuntimeManager {
         if (!isK8sConflictError(error) && !isK8sNotFoundError(error))
           throw error;
       });
+    await this.projectWarmCredentials(session);
   }
 
   async hasRetainedTerminal(
@@ -616,6 +695,7 @@ class AgentRuntimeManager {
     ).catch((error) => {
       if (!isK8sNotFoundError(error)) throw error;
     });
+    if (!retainCredentials) await this.projectWarmCredentials(session);
     await clients.coreApi
       .deleteNamespacedSecret({
         namespace: session.runtimeScope,
@@ -655,11 +735,16 @@ class AgentRuntimeManager {
   async suspendWorkspace(
     session: Pick<AgentRunRecord, "id" | "runtimeScope" | "workloadName">,
   ): Promise<void> {
+    const sandbox = await readWorkspaceSandbox({
+      api: this.requireClients().customObjectsApi,
+      namespace: session.runtimeScope,
+      name: session.workloadName,
+    });
     await this.requireClients().customObjectsApi.patchNamespacedCustomObject(
       {
         ...AGENT_SANDBOX_API,
         namespace: session.runtimeScope,
-        name: session.workloadName,
+        name: sandbox.metadata.name ?? session.workloadName,
         body: { spec: { operatingMode: "Suspended" } },
       },
       setHeaderOptions("Content-Type", PatchStrategy.MergePatch),
@@ -686,18 +771,36 @@ class AgentRuntimeManager {
     return new Date(Math.min(timestamp, Date.now()));
   }
 
-  getWorkspaceConnection(
+  async getWorkspaceConnection(
     session: Pick<AgentRunRecord, "workloadName" | "runtimeScope" | "taskId">,
   ) {
+    // Connection hints are optional; retained run history must remain readable
+    // when Kubernetes is disabled, unreachable, or the workspace has disappeared.
+    let sandbox: AgentSandbox;
+    try {
+      sandbox = await readWorkspaceSandbox({
+        api: this.requireClients().customObjectsApi,
+        namespace: session.runtimeScope,
+        name: session.workloadName,
+      });
+    } catch (error) {
+      if (!isK8sNotFoundError(error))
+        logger.debug(
+          { error, workloadName: session.workloadName },
+          "Workspace connection hints are unavailable",
+        );
+      return null;
+    }
+    const name = sandbox.metadata.name ?? session.workloadName;
     return {
-      hostname: `${session.workloadName}.${session.runtimeScope}`,
+      hostname: `${name}.${session.runtimeScope}`,
       shellCommand: [
         "kubectl",
         "exec",
         "-it",
         "-n",
         session.runtimeScope,
-        session.workloadName,
+        name,
         "-c",
         AGENT_RUNTIME_CONTAINER_NAME,
         "--",
@@ -713,11 +816,11 @@ class AgentRuntimeManager {
 
   async resumeWorkspace(session: AgentRunRecord): Promise<void> {
     const clients = this.requireClients();
-    const sandbox = (await clients.customObjectsApi.getNamespacedCustomObject({
-      ...AGENT_SANDBOX_API,
+    const sandbox = await readWorkspaceSandbox({
+      api: clients.customObjectsApi,
       namespace: session.runtimeScope,
       name: session.workloadName,
-    })) as AgentSandbox;
+    });
     if (
       sandbox.spec.shutdownTime &&
       Date.parse(sandbox.spec.shutdownTime) <= Date.now()
@@ -750,7 +853,7 @@ class AgentRuntimeManager {
       {
         ...AGENT_SANDBOX_API,
         namespace: session.runtimeScope,
-        name: session.workloadName,
+        name: sandbox.metadata.name ?? session.workloadName,
         body: { spec: { operatingMode: "Running" } },
       },
       setHeaderOptions("Content-Type", PatchStrategy.MergePatch),
@@ -1018,17 +1121,14 @@ class AgentRuntimeManager {
     let retryDelayMs = interval;
     while (!params.abortSignal?.aborted) {
       try {
-        const sandbox = await clients.customObjectsApi
-          .getNamespacedCustomObjectStatus({
-            ...AGENT_SANDBOX_API,
-            name: sandboxName,
-            namespace: params.session.runtimeScope,
-          })
-          .then((value) => value as AgentSandbox)
-          .catch((error) => {
-            if (isK8sNotFoundError(error)) return null;
-            throw error;
-          });
+        const sandbox = await readWorkspaceSandbox({
+          api: clients.customObjectsApi,
+          name: sandboxName,
+          namespace: params.session.runtimeScope,
+        }).catch((error) => {
+          if (isK8sNotFoundError(error)) return null;
+          throw error;
+        });
 
         if (params.abortSignal?.aborted) break;
         if (!sandbox) {
@@ -1123,6 +1223,16 @@ class AgentRuntimeManager {
 
     const deletions: Array<[string, () => Promise<unknown>]> = [
       [
+        "claim",
+        () =>
+          clients.customObjectsApi.deleteNamespacedCustomObject({
+            ...SANDBOX_CLAIM_API,
+            namespace,
+            name: names.sandbox,
+            propagationPolicy: "Foreground",
+          }),
+      ],
+      [
         "sandbox",
         () =>
           clients.customObjectsApi.deleteNamespacedCustomObject({
@@ -1215,6 +1325,34 @@ class AgentRuntimeManager {
 
   // ===================== internals =====================
 
+  private async projectWarmCredentials(
+    session: AgentRunRecord,
+    podName?: string,
+  ): Promise<void> {
+    const pod = await this.findPod(session);
+    if (
+      !pod?.metadata?.labels?.["archestra.io/warm-pool"] ||
+      pod.status?.phase !== "Running" ||
+      !pod.metadata.name
+    )
+      return;
+    const secret = await this.requireClients().coreApi.readNamespacedSecret({
+      namespace: session.runtimeScope,
+      name: agentRuntimeNames(session.workloadName).secret,
+    });
+    const data = secret.data?.[AGENT_RUNTIME_CREDENTIALS_SECRET_KEY];
+    await this.execInPod({
+      session,
+      podName: podName ?? pod.metadata.name,
+      command: buildAtomicFileWriteCommand(
+        "/var/run/archestra/credentials/current.json",
+      ),
+      stdin: NodeReadable.from([
+        data ? Buffer.from(data, "base64") : Buffer.from("{}"),
+      ]),
+    });
+  }
+
   private async refreshWorkspaceEgress(params: {
     sandbox: AgentSandbox;
     spec: Pick<
@@ -1238,7 +1376,7 @@ class AgentRuntimeManager {
     const spec = {
       ...params.spec,
       taskId,
-      frozenName: params.sandbox.metadata.name ?? params.spec.frozenName,
+      frozenName: params.spec.frozenName,
       namespace: params.spec.runtimeScope,
       ownerReferences: params.sandbox.metadata.ownerReferences,
     };
@@ -1498,6 +1636,7 @@ done`
     podName: string;
     command: string[];
     stdin?: Readable;
+    timeoutMs?: number;
   }): Promise<string> {
     return execAgentRuntimeCommand({
       exec: this.requireClients().exec,
@@ -1506,7 +1645,22 @@ done`
       container: AGENT_RUNTIME_CONTAINER_NAME,
       command: params.command,
       stdin: params.stdin,
+      timeoutMs: params.timeoutMs,
     });
+  }
+
+  /** Resolve the Pod backing a workspace, or explain that it must be resumed. */
+  private async requireRunningPodName(
+    session: AgentRunRecord,
+  ): Promise<string> {
+    const pod = await this.findPod(session);
+    if (pod?.status?.phase !== "Running" || !pod.metadata?.name) {
+      throw new ApiError(
+        409,
+        "Resume this workspace before accessing its files",
+      );
+    }
+    return pod.metadata.name;
   }
 
   private async waitForRunningPod(params: {
@@ -1682,3 +1836,10 @@ function shellQuote(value: string): string {
 function shellDisplayArgument(value: string): string {
   return /^[A-Za-z0-9_./:=+-]+$/.test(value) ? value : shellQuote(value);
 }
+
+/** The in-Pod helper owns path validation for both the bounded JSON path and
+ * streaming transfers, so every caller reaches the workspace the same way. */
+const WORKSPACE_FILES_COMMAND = [
+  "python3",
+  "/usr/local/bin/archestra-workspace-files",
+];

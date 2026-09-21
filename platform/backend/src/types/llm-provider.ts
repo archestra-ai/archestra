@@ -52,6 +52,18 @@ import type {
 } from "./common-llm-format";
 
 /**
+ * A call the provider ran inside the inference call. It is never the client's
+ * to execute, so it stays out of {@link LLMResponseAdapter.getToolCalls}.
+ */
+export type HostedToolCall = {
+  id: string;
+  name: string;
+  arguments: Record<string, unknown>;
+  /** What the run brought into the turn, as the wire carries it. */
+  output: string;
+};
+
+/**
  * Options for creating an LLM provider client
  */
 export interface CreateClientOptions {
@@ -61,6 +73,8 @@ export interface CreateClientOptions {
   agent?: GatewayAgent;
   /** Default headers to include with every request */
   defaultHeaders?: Record<string, string>;
+  /** Google Cloud quota project for a Gemini OAuth access token. */
+  googleUserProject?: string;
   /** Interaction source for observability metrics (e.g. "api", "chat", "knowledge:embedding") */
   source: InteractionSource;
   /**
@@ -86,6 +100,21 @@ export interface CreateClientOptions {
    * consumes the body. Used for billing signals at the HTTP boundary.
    */
   onResponseHeaders?: (headers: Headers) => void;
+  /**
+   * Ephemeral OpenCode-owned ChatGPT OAuth material for the OpenAI Responses
+   * bridge. It is extracted from one incoming request and must never be
+   * persisted, cached, or used by a non-Responses adapter.
+   */
+  openAiCodexPassthrough?: OpenAiCodexPassthrough;
+}
+
+export interface OpenAiCodexPassthrough {
+  accessToken: string;
+  accountId: string;
+  residency?: string;
+  originator?: string;
+  sessionId?: string;
+  userAgent?: string;
 }
 
 /**
@@ -237,7 +266,36 @@ export interface LLMResponseAdapter<TResponse> {
    * provider, so no response shape is ever rewritten speculatively.
    */
   withRewrittenToolCalls?(
-    toolCalls: Array<{ id: string; name: string; arguments: string }>,
+    toolCalls: Array<{
+      id: string;
+      name: string;
+      arguments: string;
+      /** Written to the client in place of `id` (OpenAPPA's trajectory stamp). */
+      wireId?: string;
+    }>,
+  ): TResponse;
+
+  /**
+   * Calls the provider ran inside the inference call, each with what it
+   * produced. Optional: a wire that does not surface them has none to rule on.
+   */
+  getHostedToolCalls?(): HostedToolCall[];
+
+  /**
+   * Return this response with its provider-run part withheld and `notices`
+   * standing in its place, for a client that must not see what those calls
+   * brought in.
+   */
+  withHeldHostedToolCalls?(
+    notices: Array<{
+      id: string;
+      name: string;
+      arguments: string;
+      /** The namespace the client declared the notice tool in (Codex). */
+      namespace?: string;
+      /** Written to the client in place of `id` (OpenAPPA's trajectory stamp). */
+      wireId?: string;
+    }>,
   ): TResponse;
 
   /** Get finish reasons array for OTEL tracing (e.g., ["stop"], ["tool_calls"]) */
@@ -270,6 +328,8 @@ export interface StreamAccumulatorState {
     id: string;
     name: string;
     arguments: string;
+    /** Written to the client in place of `id` (OpenAPPA's trajectory stamp). */
+    wireId?: string;
   }>;
   /** Raw tool call events stored for replay after policy approval */
   rawToolCallEvents: unknown[];
@@ -352,6 +412,12 @@ export interface LLMStreamAdapter<TChunk, TResponse> {
    */
   formatTextDeltaSSE(text: string): string | Uint8Array;
 
+  /**
+   * Configures an optional, synchronous footer for a completed text-only turn.
+   * Adapters without a protocol-specific terminal seam leave this unset.
+   */
+  setTextSuffix?(getSuffix: (completedText: string) => string): void;
+
   /** Get raw tool call events as SSE strings (for replay after policy approval) */
   getRawToolCallEvents(): (string | Uint8Array)[];
 
@@ -382,6 +448,25 @@ export interface LLMStreamAdapter<TChunk, TResponse> {
    */
   formatToolCallsSSE?(
     toolCalls: StreamAccumulatorState["toolCalls"],
+  ): (string | Uint8Array)[];
+
+  /**
+   * Asks the adapter to withhold every chunk from the first hosted call on, so
+   * the verdict is in before any of that reaches the client. Called before the
+   * first chunk, and only when something will rule on those calls: withholding
+   * costs the turn its token streaming.
+   */
+  withholdHostedToolCalls?(): void;
+
+  /** Streaming counterpart of {@link LLMResponseAdapter.getHostedToolCalls}. */
+  getHostedToolCalls?(): HostedToolCall[];
+
+  /**
+   * Discards the withheld chunks and emits `notices` in their place, ending
+   * with the terminal frame the client keeps.
+   */
+  formatHeldHostedToolCallsSSE?(
+    notices: StreamAccumulatorState["toolCalls"],
   ): (string | Uint8Array)[];
 
   /** Format the stream end marker */

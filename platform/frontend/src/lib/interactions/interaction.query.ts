@@ -5,6 +5,7 @@ import {
   type archestraApiTypes,
   type ClientFilter,
   type InteractionSource,
+  isUuid,
 } from "@archestra/shared";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -15,21 +16,24 @@ const {
   getInteraction,
   getInteractionSummaries,
   getInteractions,
+  getInteractionSessionLineage,
   getInteractionSessions,
   getUniqueExternalAgentIds,
   getUniqueUserIds,
 } = archestraApiSdk;
 
 /**
- * True when `value` is a full session ID — either a bare `<UUID>` or a
- * `scheduled-<UUID>`. The logs search box only supports session-ID lookup
- * (free-text content search was removed), so callers use this to decide
- * whether a typed term should filter or be ignored.
+ * Returns true when `value` is a full session ID: a bare `<UUID>`, a
+ * `scheduled-<UUID>`, or an OpenCode `ses_…` ID. The search box in logs
+ * supports only session-ID lookups. Callers use this function to decide
+ * whether a search term filters the table or is ignored.
  */
 export const isSessionId = (value: string): boolean => {
-  const sessionIdRegex =
-    /^(scheduled-)?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  return sessionIdRegex.test(value);
+  const openCodeSessionIdRegex = /^ses_[0-9a-z]{20,40}$/i;
+  const uuid = value.startsWith("scheduled-")
+    ? value.slice("scheduled-".length)
+    : value;
+  return isUuid(uuid) || openCodeSessionIdRegex.test(value);
 };
 
 export function useInteractions({
@@ -249,6 +253,36 @@ export function useUniqueUserIds() {
       throwOnApiError(response.error);
       return response.data ?? [];
     },
+  });
+}
+
+/**
+ * Fetches fork lineage for a session: the session it forks and any sessions
+ * forked from it. Enabled only when OpenAPPA is on.
+ */
+export function useSessionLineage({
+  sessionId,
+  enabled,
+}: {
+  sessionId: string;
+  enabled: boolean;
+}) {
+  return useQuery({
+    queryKey: ["interactions", "sessions", sessionId, "lineage"],
+    queryFn: async () => {
+      const response = await getInteractionSessionLineage({
+        path: { sessionId },
+      });
+      throwOnApiError(response.error);
+      return (
+        response.data ?? {
+          forkedFrom: null,
+          forks: [],
+          forksTruncated: false,
+        }
+      );
+    },
+    enabled,
   });
 }
 

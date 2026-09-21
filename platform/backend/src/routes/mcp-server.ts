@@ -44,6 +44,7 @@ import {
   TeamModel,
   ToolModel,
 } from "@/models";
+import { openappaBatteriesService } from "@/openappa/batteries";
 import { isByosEnabled, secretManager } from "@/secrets-manager";
 import {
   filterMcpServersAssignableToTarget,
@@ -98,6 +99,7 @@ import {
   UnmuteMcpServerAlertQuerySchema,
   UuidIdSchema,
 } from "@/types";
+import { trackBackgroundWork } from "@/utils/background-work";
 import {
   broadcastMcpInstallationStatus,
   broadcastMcpServersChanged,
@@ -1059,6 +1061,11 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   catalogId: capturedCatalogId,
                   mcpServerId: mcpServer.id,
                 });
+                trackBackgroundWork(
+                  openappaBatteriesService.onCatalogToolsChanged(
+                    capturedCatalogId,
+                  ),
+                );
 
                 // Set status to success after tools are fetched
                 await McpServerModel.update(mcpServer.id, {
@@ -1340,6 +1347,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       await assertScopedLifecycleAuthorization({
         mcpServer,
         userId: user.id,
+        organizationId,
         headers,
         action: "re-authenticate",
       });
@@ -1659,6 +1667,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           await assertScopedLifecycleAuthorization({
             mcpServer: server,
             userId: user.id,
+            organizationId,
             headers,
             action: "revoke",
           });
@@ -1737,6 +1746,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       await assertScopedLifecycleAuthorization({
         mcpServer,
         userId: user.id,
+        organizationId,
         headers,
         action: "revoke",
       });
@@ -2260,6 +2270,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       await assertScopedLifecycleAuthorization({
         mcpServer,
         userId: user.id,
+        organizationId,
         headers,
         action: "reinstall",
       });
@@ -2944,7 +2955,12 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async ({ params: { id }, user, headers }) => {
+    async (request) => {
+      const {
+        params: { id },
+        user,
+        headers,
+      } = request;
       const mcpServer = await McpServerModel.findById(id);
 
       if (!mcpServer) {
@@ -2967,11 +2983,17 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       await assertScopedLifecycleAuthorization({
         mcpServer,
         userId: user.id,
+        organizationId: request.organizationId,
         headers,
         action: "reload tools for",
       });
 
-      return reloadToolsForServer(mcpServer);
+      const result = await reloadToolsForServer(mcpServer);
+      request.auditAfter = {
+        ...request.auditBefore,
+        toolChanges: result,
+      };
+      return result;
     },
   );
 };
@@ -3318,15 +3340,17 @@ async function assertLifecycleRoutePermission(params: {
  */
 async function assertScopedLifecycleAuthorization(params: {
   mcpServer: {
+    id: string;
     scope: "personal" | "team" | "org";
     ownerId: string | null;
     teamId: string | null;
   };
   userId: string;
+  organizationId: string;
   headers: IncomingHttpHeaders;
   action: "revoke" | "re-authenticate" | "reinstall" | "reload tools for";
 }): Promise<void> {
-  const { mcpServer, userId, headers, action } = params;
+  const { mcpServer, userId, organizationId, headers, action } = params;
 
   switch (mcpServer.scope) {
     case "personal": {
@@ -3348,14 +3372,28 @@ async function assertScopedLifecycleAuthorization(params: {
       );
     }
     case "team": {
-      if (!mcpServer.teamId) {
-        throw new ApiError(500, "Team-scoped MCP server is missing its teamId");
+      // A deleted team no longer supplies an organization link. Resolve the
+      // retained connection through its owner and catalog before granting access.
+      if (
+        !mcpServer.teamId &&
+        !(await findMcpServerInOrganization(mcpServer.id, organizationId))
+      ) {
+        throw new ApiError(404, "MCP server not found");
       }
       const { success: canManageAllTeams } = await hasPermission(
         { team: ["create"] },
         headers,
       );
       if (canManageAllTeams) return;
+
+      // Team deletion clears the FK but retains the connection. Global team
+      // managers can still manage it; former team membership grants no access.
+      if (!mcpServer.teamId) {
+        throw new ApiError(
+          403,
+          `Only organization-level team managers can ${action} connections whose team was deleted`,
+        );
+      }
 
       const isLiteralTeamAdmin = await TeamModel.isUserTeamAdmin(
         mcpServer.teamId,
@@ -3449,6 +3487,9 @@ async function connectAndGetToolsForInstallation(params: {
       mcpServerId: params.mcpServerId,
       enterpriseTransportCredential: installDiscoveryCredential,
     });
+    trackBackgroundWork(
+      openappaBatteriesService.onCatalogToolsChanged(catalogItem.id),
+    );
     return tools;
   } catch (error) {
     if (
@@ -3497,6 +3538,9 @@ async function connectAndGetToolsForInstallation(params: {
         expiresInSeconds: null,
       },
     });
+    trackBackgroundWork(
+      openappaBatteriesService.onCatalogToolsChanged(catalogItem.id),
+    );
     return tools;
   }
 }

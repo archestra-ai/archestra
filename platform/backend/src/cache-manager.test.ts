@@ -15,15 +15,21 @@ const { mockGet, mockSet, mockDelete, mockDisconnect, mockOn } = vi.hoisted(
 );
 
 // Mock Keyv using the hoisted mock functions
-vi.mock("keyv", () => ({
-  default: class MockKeyv {
-    get = mockGet;
-    set = mockSet;
-    delete = mockDelete;
-    disconnect = mockDisconnect;
-    on = mockOn;
-  },
-}));
+vi.mock("keyv", async (importOriginal) => {
+  const { default: Keyv } = await importOriginal<typeof import("keyv")>();
+  const codec = new Keyv();
+  return {
+    default: class MockKeyv {
+      get = mockGet;
+      set = mockSet;
+      delete = mockDelete;
+      disconnect = mockDisconnect;
+      on = mockOn;
+      serializeData = codec.serializeData.bind(codec);
+      deserializeData = codec.deserializeData.bind(codec);
+    },
+  };
+});
 
 vi.mock("@keyv/postgres", () => ({
   default: vi.fn(),
@@ -32,6 +38,7 @@ vi.mock("@keyv/postgres", () => ({
 // Import after mocks are set up
 import {
   type AllowedCacheKey,
+  CacheKey,
   cacheManager,
   LRUCacheManager,
 } from "./cache-manager";
@@ -166,6 +173,26 @@ describe("CacheManager", () => {
 
       expect(result).toBeUndefined();
     });
+
+    test("distinguishes a failed strict read from a cache miss", async () => {
+      cacheManager.start();
+      mockKeyv.get.mockRejectedValueOnce(new Error("Connection failed"));
+
+      await expect(
+        cacheManager.get("test-key" as AllowedCacheKey, { throwOnError: true }),
+      ).rejects.toThrow("Connection failed");
+
+      mockKeyv.get.mockResolvedValueOnce(undefined);
+      await expect(
+        cacheManager.get("test-key" as AllowedCacheKey, { throwOnError: true }),
+      ).resolves.toBeUndefined();
+    });
+
+    test("rejects strict reads before startup", async () => {
+      await expect(
+        cacheManager.get("test-key" as AllowedCacheKey, { throwOnError: true }),
+      ).rejects.toThrow("CacheManager: Not started");
+    });
   });
 
   describe("set", () => {
@@ -228,6 +255,17 @@ describe("CacheManager", () => {
       const result = await cacheManager.delete("test-key" as AllowedCacheKey);
 
       expect(result).toBe(false);
+    });
+
+    test("throws on error when cleanup must fail closed", async () => {
+      cacheManager.start();
+      mockKeyv.delete.mockRejectedValue(new Error("Delete failed"));
+
+      await expect(
+        cacheManager.delete("test-key" as AllowedCacheKey, {
+          throwOnError: true,
+        }),
+      ).rejects.toThrow("Delete failed");
     });
   });
 
@@ -300,6 +338,117 @@ describe("CacheManager", () => {
 
       expect(result).toBeUndefined();
     });
+
+    test("keeps a failed strict claim retryable instead of reporting a miss", async () => {
+      cacheManager.start();
+      const key = `${CacheKey.ChatMcpElicitationPending}-retry` as const;
+      await insertKeyvEntry(key, { conversationId: "conversation" });
+      await db.execute(
+        sql`ALTER TABLE keyv_cache RENAME TO keyv_cache_unavailable`,
+      );
+      try {
+        await expect(
+          cacheManager.getAndDelete(key, { throwOnError: true }),
+        ).rejects.toThrow();
+        await expect(cacheManager.getAndDelete(key)).resolves.toBeUndefined();
+      } finally {
+        await db.execute(
+          sql`ALTER TABLE keyv_cache_unavailable RENAME TO keyv_cache`,
+        );
+      }
+
+      await expect(
+        cacheManager.getAndDelete(key, { throwOnError: true }),
+      ).resolves.toEqual({ conversationId: "conversation" });
+      await expect(
+        cacheManager.getAndDelete(key, { throwOnError: true }),
+      ).resolves.toBeUndefined();
+    });
+
+    test("rejects strict claims before startup", async () => {
+      await expect(
+        cacheManager.getAndDelete("test-key" as AllowedCacheKey, {
+          throwOnError: true,
+        }),
+      ).rejects.toThrow("CacheManager: Not started");
+    });
+  });
+
+  describe("shared response mailboxes", () => {
+    const key = `${CacheKey.LegacySseMessages}-stream-a` as const;
+    const otherKey = `${CacheKey.LegacySseMessages}-stream-b` as const;
+
+    beforeEach(async () => {
+      await ensureKeyvCacheTable();
+      await clearKeyvCache();
+      cacheManager.start();
+    });
+
+    test("preserves concurrent responses and consumes each mailbox once", async () => {
+      await Promise.all(
+        Array.from({ length: 12 }, (_, id) =>
+          cacheManager.appendToList({
+            key,
+            value: { id, text: ":result" },
+            ttl: 60_000,
+          }),
+        ),
+      );
+      await cacheManager.appendToList({
+        key: otherKey,
+        value: { id: 99 },
+        ttl: 60_000,
+      });
+
+      const consumers = await Promise.all([
+        cacheManager.getAndDeleteMany<Array<{ id: number; text: string }>>([
+          key,
+        ]),
+        cacheManager.getAndDeleteMany<Array<{ id: number; text: string }>>([
+          key,
+        ]),
+      ]);
+      const responses = consumers.flat().flatMap((entry) => entry.value);
+      expect(
+        responses.map((response) => response.id).sort((a, b) => a - b),
+      ).toEqual(Array.from({ length: 12 }, (_, id) => id));
+      expect(responses.every((response) => response.text === ":result")).toBe(
+        true,
+      );
+      expect(await cacheManager.getAndDeleteMany([key])).toEqual([]);
+      expect(await cacheManager.getAndDeleteMany([otherKey])).toEqual([
+        { key: otherKey, value: [{ id: 99 }] },
+      ]);
+    });
+
+    test("does not revive expired responses when another reply arrives", async () => {
+      await insertKeyvEntry(key, [{ id: 1 }], Date.now() - 1_000);
+      await cacheManager.appendToList({ key, value: { id: 2 }, ttl: 60_000 });
+      expect(await cacheManager.getAndDeleteMany([key])).toEqual([
+        { key, value: [{ id: 2 }] },
+      ]);
+      await insertKeyvEntry(key, [{ id: 3 }], Date.now() - 1_000);
+      expect(await cacheManager.getAndDeleteMany([key])).toEqual([]);
+      expect(await keyvEntryExists(key)).toBe(false);
+    });
+
+    test("sweeps abandoned entries without removing live or unrelated cache values", async () => {
+      await insertKeyvEntry(key, [{ id: 1 }], Date.now() - 1_000);
+      await cacheManager.appendToList({
+        key: otherKey,
+        value: { id: 2 },
+        ttl: 60_000,
+      });
+      await insertKeyvEntry(
+        "unrelated-key",
+        { keep: true },
+        Date.now() - 1_000,
+      );
+      await cacheManager.deleteExpiredByPrefix(CacheKey.LegacySseMessages);
+      expect(await keyvEntryExists(key)).toBe(false);
+      expect(await keyvEntryExists(otherKey)).toBe(true);
+      expect(await keyvEntryExists("unrelated-key")).toBe(true);
+    });
   });
 
   describe("deleteByPrefix", () => {
@@ -345,6 +494,21 @@ describe("CacheManager", () => {
       );
 
       expect(deletedCount).toBe(0);
+    });
+
+    test("treats LIKE metacharacters in the prefix as literals", async () => {
+      cacheManager.start();
+
+      await insertKeyvEntry("cache_%literal", { keep: false });
+      await insertKeyvEntry("cache_xliteral", { keep: true });
+
+      const deletedCount = await cacheManager.deleteByPrefix(
+        "cache_%" as AllowedCacheKey,
+      );
+
+      expect(deletedCount).toBe(1);
+      expect(await keyvEntryExists("cache_%literal")).toBe(false);
+      expect(await keyvEntryExists("cache_xliteral")).toBe(true);
     });
 
     test("returns 0 when not started", async () => {

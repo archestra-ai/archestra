@@ -16,13 +16,18 @@ export function ClientIcon({
 }) {
   if (client.icon) {
     return (
-      <Image
-        src={client.icon}
-        alt={client.label}
-        width={size}
-        height={size}
-        className="shrink-0 rounded dark:invert"
-      />
+      <span
+        className="relative block shrink-0"
+        style={{ width: size, height: size }}
+      >
+        <Image
+          src={client.icon}
+          alt={client.label}
+          fill
+          sizes={`${size}px`}
+          className="rounded object-contain dark:invert"
+        />
+      </span>
     );
   }
   return <ProviderIcon provider={client.provider} size={size} />;

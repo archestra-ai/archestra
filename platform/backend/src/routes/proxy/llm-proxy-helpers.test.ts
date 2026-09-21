@@ -317,6 +317,7 @@ describe("planDispatchModeToolCallRewrites", () => {
   // top-level in every exposure mode are genuinely directly callable, so
   // wrapping them would add a pointless dispatch hop.
   test.each([
+    "archestra__ask_user",
     "archestra__read_file",
     "archestra__run_command",
     "archestra__load_skill",
@@ -1170,6 +1171,19 @@ describe("handleError", () => {
 
     expect(sent.statusCode).toBe(529);
     expect(headers["retry-after"]).toBe("30");
+  });
+
+  test("synthesizes Retry-After from a Kimi RPM error body when the header is missing", () => {
+    const { reply, headers } = makeReply(false);
+    const error = Object.assign(
+      new Error(
+        "Your account request reached organization max RPM: 3, please try again after 1 seconds",
+      ),
+      { status: 429 },
+    );
+
+    expect(throwErrorFor(error, reply).statusCode).toBe(429);
+    expect(headers["retry-after"]).toBe("1");
   });
 
   test("drops a Retry-After value that is neither seconds nor a date", () => {

@@ -7,6 +7,8 @@ import {
   DEFAULT_MODELS,
   EXTERNAL_AGENT_ID_HEADER,
   isDefaultBrandedAppName,
+  OPENCODE_PASSTHROUGH_PROVIDER_ROUTES,
+  openCodePassthroughBaseUrl,
   VIRTUAL_KEY_HEADER,
 } from "@archestra/shared";
 import type { ConnectionSetupClientId } from "@/types";
@@ -15,10 +17,14 @@ import {
   claudeCodeOAuthNextStep,
   codexAttributionHeaderLines,
   copilotAttributionHeadersValue,
+  opencodeOAuthNextStep,
+  opencodeProviderTarget,
+  opencodeProxyHeaders,
   type SetupScriptContext,
   type SetupScriptProxySection,
 } from "./connection-setup-script";
 import { describeMarketplaceContents } from "./marketplace-copy";
+import { renderOpenCodeRoutingPlugin } from "./opencode-routing-plugin";
 import {
   buildStartupGuardContext,
   type StartupGuardClient,
@@ -27,6 +33,7 @@ import {
   CLAUDE_CODE_GUARD_CLIENT,
   CODEX_GUARD_CLIENT,
   COPILOT_GUARD_CLIENT,
+  OPENCODE_GUARD_CLIENT,
 } from "./startup-guard.clients";
 import {
   buildWindowsStartupGuardInstallSection,
@@ -73,6 +80,9 @@ export function renderWindowsSetupScript(ctx: SetupScriptContext): string {
     case "cursor":
       sections.push(...cursorSections(ctx));
       break;
+    case "opencode":
+      sections.push(...opencodeSections(ctx));
+      break;
   }
 
   sections.push(footer(ctx));
@@ -89,12 +99,14 @@ const CLIENT_LABELS: Record<ConnectionSetupClientId, string> = {
   codex: "Codex",
   "copilot-cli": "Copilot CLI",
   cursor: "Cursor",
+  opencode: "OpenCode",
 };
 
 const CLIENT_BINARIES: Partial<Record<ConnectionSetupClientId, string>> = {
   "claude-code": "claude",
   codex: "codex",
   "copilot-cli": "copilot",
+  opencode: "opencode",
 };
 
 /** Single-quote a value for PowerShell; safe for arbitrary content. */
@@ -246,7 +258,36 @@ To revoke this machine's access later in ${ctx.appName}: ${revocation.join("; ")
 
 function nextStepsFor(ctx: SetupScriptContext): string[] {
   const steps: string[] = [];
+  if (ctx.clientId === "cursor") {
+    steps.push(
+      ctx.mcp && ctx.runtimeHandoffInstructions
+        ? "Runtime handoff needs a manual step: paste the printed handoff instructions into Cursor Customize > Rules > User Rules. Keep your existing rules."
+        : "If you previously added runtime handoff instructions to Cursor User Rules, remove that text to disable them.",
+    );
+  }
   switch (ctx.clientId) {
+    case "opencode":
+      if (ctx.mcp) {
+        steps.push(opencodeOAuthNextStep(ctx.mcp.serverName));
+      }
+      if (ctx.proxy) {
+        if (ctx.proxy.authMode === "provider-key") {
+          steps.push(
+            "Keep using OpenCode's existing provider and model picker. Providers with compatible local credentials now route through the LLM proxy without moving credentials out of OpenCode.",
+          );
+        } else {
+          const target = opencodeProviderTarget(ctx);
+          steps.push(
+            `Select ${target.id}/${target.model} in OpenCode to use the virtual key-backed proxy provider.`,
+          );
+        }
+      }
+      if (ctx.mcp || ctx.proxy || ctx.skills) {
+        steps.push(
+          "Close every running OpenCode process. Then open a new PowerShell session and start `opencode`. The startup guard checks these remotes before every launch.",
+        );
+      }
+      break;
     case "claude-code":
       if (ctx.mcp) {
         steps.push(claudeCodeOAuthNextStep(ctx.mcp.serverName));
@@ -1079,6 +1120,11 @@ ${psCopilotModelApply({
 function cursorSections(ctx: SetupScriptContext): string[] {
   const sections: string[] = [];
 
+  if (ctx.mcp && ctx.runtimeHandoffInstructions) {
+    sections.push(`Say ${psq("Runtime handoff instructions — copy into Cursor User Rules")}
+Write-Host ([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${Buffer.from(ctx.runtimeHandoffInstructions).toString("base64")}')))`);
+  }
+
   if (ctx.mcp) {
     sections.push(`Say ${psq(`Adding MCP gateway "${ctx.mcp.serverName}" to ~/.cursor/mcp.json (OAuth)`)}
 $arch_path = Join-Path $env:USERPROFILE '.cursor\\mcp.json'
@@ -1133,4 +1179,243 @@ Then install these plugins from Customize -> Plugins:
   }
 
   return sections;
+}
+
+// ===================================================================
+// Internal helpers — OpenCode (spike)
+// ===================================================================
+
+/**
+ * PowerShell twin of the bash OpenCode sections: the same owned
+ * ~/.config/opencode/opencode.json, written BOM-free (Windows PowerShell 5.1's
+ * `Set-Content -Encoding utf8` adds a BOM), the same key file and skills clone.
+ */
+function opencodeWindowsProviderMerge(params: {
+  providerId: string;
+  baseUrl: string;
+  headers: Record<string, string>;
+  apiKeyRef?: string;
+  customEntry?: string;
+}): string {
+  const headerLines = Object.entries(params.headers)
+    .map(
+      ([key, value]) => `Set-ArchProp $archHeaders ${psq(key)} ${psq(value)}`,
+    )
+    .join("\n");
+  return `$archEntryProperty = $archCfg.provider.PSObject.Properties[${psq(params.providerId)}]
+$archEntry = if ($archEntryProperty) { $archEntryProperty.Value } else { [pscustomobject]@{} }
+$archOptionsProperty = $archEntry.PSObject.Properties['options']
+$archOptions = if ($archOptionsProperty) { $archOptionsProperty.Value } else { [pscustomobject]@{} }
+$archHeadersProperty = $archOptions.PSObject.Properties['headers']
+$archHeaders = if ($archHeadersProperty) { $archHeadersProperty.Value } else { [pscustomobject]@{} }
+${headerLines}
+Set-ArchProp $archOptions 'baseURL' ${psq(params.baseUrl)}
+Set-ArchProp $archOptions 'headers' $archHeaders
+${params.apiKeyRef ? `Set-ArchProp $archOptions 'apiKey' ${psq(params.apiKeyRef)}` : ""}
+${params.customEntry ?? ""}
+Set-ArchProp $archEntry 'options' $archOptions
+Set-ArchProp $archCfg.provider ${psq(params.providerId)} $archEntry`;
+}
+
+function opencodeWindowsRoutingPluginSection(params: {
+  routes: Record<string, string>;
+  headers: Record<string, string>;
+}): string {
+  const encoded = Buffer.from(
+    renderOpenCodeRoutingPlugin(params),
+    "utf8",
+  ).toString("base64");
+  return `$archPluginDir = Join-Path $archOcDir 'plugins'
+$archPluginFile = Join-Path $archPluginDir 'archestra-llm-proxy.js'
+$archPluginState = Join-Path $env:USERPROFILE '.archestra/opencode-routing-plugin-state.json'
+$null = New-Item -ItemType Directory -Force -Path $archPluginDir
+if (-not (Test-Path $archPluginState)) {
+  $archExistingPlugin = Test-Path $archPluginFile
+  $archPluginBackup = if ($archExistingPlugin) { [Convert]::ToBase64String([IO.File]::ReadAllBytes($archPluginFile)) } else { $null }
+  $archPluginStateValue = [pscustomobject]@{ existed = $archExistingPlugin; contentBase64 = $archPluginBackup }
+  $null = New-Item -ItemType Directory -Force -Path (Split-Path -Parent $archPluginState)
+  [IO.File]::WriteAllText($archPluginState, ($archPluginStateValue | ConvertTo-Json -Depth 4), (New-Object System.Text.UTF8Encoding $false))
+}
+[IO.File]::WriteAllBytes($archPluginFile, [Convert]::FromBase64String(${psq(encoded)}))
+Ok 'Installed the OpenCode LLM proxy routing guard'`;
+}
+
+function opencodeSections(ctx: SetupScriptContext): string[] {
+  const sections: string[] = [
+    `$archOcDir = if ($env:XDG_CONFIG_HOME) { Join-Path $env:XDG_CONFIG_HOME 'opencode' } else { Join-Path $env:USERPROFILE '.config/opencode' }
+$archOcFile = Join-Path $archOcDir 'opencode.json'
+function Read-ArchOcOwned {
+  if (Test-Path $archOcFile) {
+    $raw = Get-Content -Raw -Path $archOcFile
+    if ($raw -and $raw.Trim()) { return ($raw | ConvertFrom-Json) }
+  }
+  return [pscustomobject]@{ '$schema' = 'https://opencode.ai/config.json' }
+}
+function Write-ArchOcOwned($cfg) {
+  $null = New-Item -ItemType Directory -Force -Path (Split-Path -Parent $archOcFile)
+  $archBackup = $archOcFile + '.archestra-backup'
+  if ((Test-Path $archOcFile) -and -not (Test-Path $archBackup)) { Copy-Item -Path $archOcFile -Destination $archBackup }
+  [IO.File]::WriteAllText($archOcFile, ($cfg | ConvertTo-Json -Depth 32), (New-Object System.Text.UTF8Encoding $false))
+  Write-Host ('Updated ' + $archOcFile)
+}
+function Set-ArchProp($obj, $name, $value) {
+  if ($obj.PSObject.Properties[$name]) { $obj.$name = $value } else { $obj | Add-Member -NotePropertyName $name -NotePropertyValue $value }
+}
+function Enable-ArchOcProviders($cfg, [string[]]$providerIds) {
+  $archStateFile = Join-Path $env:USERPROFILE '.archestra/opencode-connection-state.json'
+  if (-not (Test-Path $archStateFile)) {
+    $enabled = $cfg.PSObject.Properties['enabled_providers']
+    $disabled = $cfg.PSObject.Properties['disabled_providers']
+    $providerState = [pscustomobject]@{}
+    foreach ($providerId in $providerIds) {
+      $providerEntry = if ($cfg.PSObject.Properties['provider']) { $cfg.provider.PSObject.Properties[$providerId] } else { $null }
+      $providerState | Add-Member -NotePropertyName $providerId -NotePropertyValue $(if ($providerEntry) { $providerEntry.Value } else { $null })
+    }
+    $state = [pscustomobject]@{
+      enabledProvidersPresent = [bool]$enabled
+      enabledProviders = if ($enabled) { @($enabled.Value) } else { $null }
+      disabledProvidersPresent = [bool]$disabled
+      disabledProviders = if ($disabled) { @($disabled.Value) } else { $null }
+      providerState = $providerState
+    }
+    $null = New-Item -ItemType Directory -Force -Path (Split-Path -Parent $archStateFile)
+    [IO.File]::WriteAllText($archStateFile, ($state | ConvertTo-Json -Depth 8), (New-Object System.Text.UTF8Encoding $false))
+  }
+  Set-ArchProp $cfg 'enabled_providers' @($providerIds)
+  $disabled = $cfg.PSObject.Properties['disabled_providers']
+  if ($disabled) {
+    $remaining = @($disabled.Value | Where-Object { $_ -notin $providerIds })
+    if ($remaining.Count -gt 0) { Set-ArchProp $cfg 'disabled_providers' $remaining }
+    else { $cfg.PSObject.Properties.Remove('disabled_providers') }
+  }
+}`,
+  ];
+
+  if (ctx.mcp) {
+    sections.push(`Say ${psq(`Registering MCP gateway "${ctx.mcp.serverName}" (OAuth)`)}
+$archCfg = Read-ArchOcOwned
+if (-not $archCfg.PSObject.Properties['mcp']) { Set-ArchProp $archCfg 'mcp' ([pscustomobject]@{}) }
+Set-ArchProp $archCfg.mcp ${psq(ctx.mcp.serverName)} ([pscustomobject]@{ type = 'remote'; url = ${psq(ctx.mcp.url)} })
+Write-ArchOcOwned $archCfg`);
+  }
+
+  if (ctx.proxy) {
+    if (ctx.proxy.authMode === "provider-key") {
+      const headers = opencodeProxyHeaders(ctx.proxy);
+      const legacyTarget = opencodeProviderTarget(ctx);
+      const routes = Object.fromEntries(
+        OPENCODE_PASSTHROUGH_PROVIDER_ROUTES.map((route) => [
+          route.openCodeProviderId,
+          openCodePassthroughBaseUrl(ctx.proxy?.baseUrl ?? "", route),
+        ]),
+      );
+      const cleanup = OPENCODE_PASSTHROUGH_PROVIDER_ROUTES.map((route) => {
+        const providerId = psq(route.openCodeProviderId);
+        const expected = psq(
+          openCodePassthroughBaseUrl(ctx.proxy?.baseUrl ?? "", route),
+        );
+        const managedHeaders = Object.entries(headers)
+          .map(
+            ([name, value]) =>
+              `      if ($archHeaders.PSObject.Properties[${psq(name)}] -and $archHeaders.${psq(name)} -eq ${psq(value)}) { $archHeaders.PSObject.Properties.Remove(${psq(name)}) }`,
+          )
+          .join("\n");
+        return `$archEntryProp = $archCfg.provider.PSObject.Properties[${providerId}]
+  if ($archEntryProp -and $archEntryProp.Value.PSObject.Properties['options']) {
+    $archOptions = $archEntryProp.Value.options
+    if ($archOptions.PSObject.Properties['baseURL'] -and $archOptions.baseURL -eq ${expected}) { $archOptions.PSObject.Properties.Remove('baseURL') }
+    $archHeadersProp = $archOptions.PSObject.Properties['headers']
+    if ($archHeadersProp) {
+      $archHeaders = $archHeadersProp.Value
+${managedHeaders}
+      if (@($archHeaders.PSObject.Properties).Count -eq 0) { $archOptions.PSObject.Properties.Remove('headers') }
+    }
+    if (@($archOptions.PSObject.Properties).Count -eq 0) { $archEntryProp.Value.PSObject.Properties.Remove('options') }
+    if (@($archEntryProp.Value.PSObject.Properties).Count -eq 0) { $archCfg.provider.PSObject.Properties.Remove(${providerId}) }
+  }`;
+      }).join("\n");
+      sections.push(`Say 'Routing supported OpenCode providers through the LLM proxy'
+${opencodeWindowsRoutingPluginSection({ routes, headers })}
+$archCfg = Read-ArchOcOwned
+if (-not $archCfg.PSObject.Properties['provider']) { Set-ArchProp $archCfg 'provider' ([pscustomobject]@{}) }
+if ($archCfg.PSObject.Properties['model'] -and $archCfg.model -eq ${psq(`${legacyTarget.id}/${legacyTarget.model}`)}) { $archCfg.PSObject.Properties.Remove('model') }
+$archStateFile = Join-Path $env:USERPROFILE '.archestra/opencode-connection-state.json'
+if (Test-Path $archStateFile) {
+  $archState = Get-Content -Raw -Path $archStateFile | ConvertFrom-Json
+  if ($archState.PSObject.Properties['providerState']) {
+    foreach ($archSavedProvider in $archState.providerState.PSObject.Properties) {
+      if ($null -ne $archSavedProvider.Value) { Set-ArchProp $archCfg.provider $archSavedProvider.Name $archSavedProvider.Value }
+      else { $archCfg.provider.PSObject.Properties.Remove($archSavedProvider.Name) }
+    }
+  }
+  if ($archState.enabledProvidersPresent) { Set-ArchProp $archCfg 'enabled_providers' @($archState.enabledProviders) }
+  else { $archCfg.PSObject.Properties.Remove('enabled_providers') }
+  if ($archState.disabledProvidersPresent) { Set-ArchProp $archCfg 'disabled_providers' @($archState.disabledProviders) }
+  else { $archCfg.PSObject.Properties.Remove('disabled_providers') }
+  Remove-Item -Force $archStateFile
+} else {
+${cleanup}
+}
+if (@($archCfg.provider.PSObject.Properties).Count -eq 0) { $archCfg.PSObject.Properties.Remove('provider') }
+Write-ArchOcOwned $archCfg
+Ok "OpenCode's credentialed native providers will resolve through the LLM proxy"`);
+    } else {
+      const target = opencodeProviderTarget(ctx);
+      const apiKeyRef = ctx.proxy.virtualKey
+        ? `{file:~/.archestra/opencode-${target.id}.key}`
+        : "";
+      const writeKey = ctx.proxy.virtualKey
+        ? `
+$ARCHESTRA_VIRTUAL_KEY = ${psq(ctx.proxy.virtualKey)}
+$archKeyPath = Join-Path $env:USERPROFILE ${psq(`.archestra/opencode-${target.id}.key`)}
+$null = New-Item -ItemType Directory -Force -Path (Split-Path -Parent $archKeyPath)
+[IO.File]::WriteAllText($archKeyPath, $ARCHESTRA_VIRTUAL_KEY, (New-Object System.Text.UTF8Encoding $false))
+Write-Host ('Stored the virtual key in ' + $archKeyPath)`
+        : "";
+      sections.push(`Say ${psq(`Routing OpenCode's "${target.id}" provider through the LLM proxy`)}${writeKey}
+${opencodeWindowsRoutingPluginSection({
+  routes: { [target.id]: target.baseUrl },
+  headers: opencodeProxyHeaders(ctx.proxy),
+})}
+$archCfg = Read-ArchOcOwned
+if (-not $archCfg.PSObject.Properties['provider']) { Set-ArchProp $archCfg 'provider' ([pscustomobject]@{}) }
+Enable-ArchOcProviders $archCfg @(${psq(target.id)})
+${opencodeWindowsProviderMerge({
+  providerId: target.id,
+  baseUrl: target.baseUrl,
+  headers: opencodeProxyHeaders(ctx.proxy),
+  apiKeyRef,
+})}
+Write-ArchOcOwned $archCfg
+$archEffective = $null
+try {
+  Push-Location $env:USERPROFILE
+  $archResolved = (& opencode debug config 2>$null | Out-String) | ConvertFrom-Json
+  $archEffective = $archResolved.provider.${psq(target.id)}.options.baseURL
+} catch { } finally { Pop-Location }
+if ($archEffective -eq ${psq(target.baseUrl)}) { Ok ${psq(`OpenCode resolves "${target.id}" through the LLM proxy`)} }
+else { Warn ('Another OpenCode config overrides provider.${target.id}.options.baseURL (resolved: ' + $archEffective + '). Remove that override to use the proxy.') }`);
+    }
+  }
+
+  if (ctx.skills) {
+    sections.push(`Say ${psq(`Installing the "${ctx.skills.marketplaceName}" skills`)}
+$archSkillsDir = Join-Path $archOcDir ${psq(`skills/${ctx.skills.marketplaceName}`)}
+if (-not (Get-Command git -ErrorAction SilentlyContinue)) { Warn ('git not found — clone the marketplace into ' + $archSkillsDir + ' yourself.') }
+elseif (Test-Path (Join-Path $archSkillsDir '.git')) {
+  try { & git -C $archSkillsDir remote set-url origin ${psq(ctx.skills.cloneUrl)} 2>$null; & git -C $archSkillsDir pull --ff-only -q 2>$null } catch { }
+  if ($LASTEXITCODE -ne 0) { Warn ('Could not update ' + $archSkillsDir) }
+} else {
+  $null = New-Item -ItemType Directory -Force -Path (Split-Path -Parent $archSkillsDir)
+  try { & git clone -q ${psq(ctx.skills.cloneUrl)} $archSkillsDir 2>$null } catch { }
+  if ($LASTEXITCODE -ne 0) { Warn ('Could not clone the marketplace into ' + $archSkillsDir) }
+}
+Write-Host ('Skills folder: ' + $archSkillsDir)`);
+  }
+
+  if (ctx.mcp) {
+    sections.push(`Say 'OpenCode MCP servers'
+try { & opencode mcp list 2>$null | Out-Host } catch { }`);
+  }
+  return withWindowsStartupGuard(ctx, OPENCODE_GUARD_CLIENT, sections);
 }

@@ -155,6 +155,14 @@ export function useConversation(conversationId?: string) {
     staleTime: 0, // Always refetch to ensure we have the latest messages
     gcTime: 10 * 60 * 1000, // Keep in cache for 10 minutes
     refetchOnWindowFocus: false, // Don't refetch when window gains focus
+    // The schedule worker links the conversation before registering its stream
+    // and seeding the prompt. Wait for that prompt before attaching to replay.
+    refetchInterval: (query) =>
+      query.state.data?.origin === "schedule_trigger" &&
+      query.state.data.messages.length === 0 &&
+      query.state.data.chatErrors.length === 0
+        ? 1_000
+        : false,
     retry: false, // Don't retry on error to avoid multiple 404s
   });
 }
@@ -799,6 +807,12 @@ export function useCancelChatMcpTask() {
   });
 }
 
+/**
+ * Answer a question the chat is waiting on. Resolves to `"answered"`,
+ * `"stale"` when the question is no longer waiting (409: answered already,
+ * timed out, or its run ended — nothing to report, the caller just drops it),
+ * or `"failed"` after reporting any other error.
+ */
 export function useResolveChatMcpElicitation() {
   type ResolveChatMcpElicitationBody = NonNullable<
     archestraApiTypes.ResolveChatMcpElicitationData["body"]
@@ -815,15 +829,20 @@ export function useResolveChatMcpElicitation() {
       conversationId: string;
       action: ResolveChatMcpElicitationBody["action"];
       content?: ResolveChatMcpElicitationBody["content"];
-    }) =>
-      callApi(
-        () =>
-          resolveChatMcpElicitation({
-            path: { id },
-            body: { conversationId, action, content },
-          }),
-        null,
-      ),
+    }): Promise<"answered" | "stale" | "failed"> => {
+      const { error, response } = await resolveChatMcpElicitation({
+        path: { id },
+        body: { conversationId, action, content },
+      });
+      if (!error) {
+        return "answered";
+      }
+      if (response?.status === 409) {
+        return "stale";
+      }
+      handleApiError(error);
+      return "failed";
+    },
   });
 }
 

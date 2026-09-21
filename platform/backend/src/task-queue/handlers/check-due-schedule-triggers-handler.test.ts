@@ -154,7 +154,7 @@ test.for([
     state === "TASK_STATE_INPUT_REQUIRED"
       ? { status: "running", completedAt: null }
       : {
-          status: "failed",
+          status: state === "TASK_STATE_CANCELED" ? "cancelled" : "failed",
           error: "Execution interrupted",
           completedAt: expect.any(Date),
         },

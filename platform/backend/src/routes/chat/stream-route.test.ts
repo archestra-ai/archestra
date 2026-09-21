@@ -167,24 +167,29 @@ describe("POST /api/chat slim error payload", () => {
       mockCreateUIMessageStream.mockImplementation(
         ({ onError }: { onError: (error: Error) => string }) => {
           const errorPayload = onError(new Error("Failed to fetch"));
-          return {
-            tee: () => [
-              errorPayload,
-              new ReadableStream({
-                start(controller) {
-                  controller.close();
-                },
-              }),
-            ],
-          };
+          return new ReadableStream({
+            start(controller) {
+              controller.enqueue({ type: "error", errorText: errorPayload });
+              controller.close();
+            },
+          });
         },
       );
       mockCreateUIMessageStreamResponse.mockImplementation(
-        ({ stream }: { stream: string }) =>
-          new Response(stream, {
-            status: 200,
-            headers: { "content-type": "text/plain" },
-          }),
+        ({ stream }: { stream: ReadableStream<{ errorText: string }> }) =>
+          new Response(
+            stream.pipeThrough(
+              new TransformStream({
+                transform(chunk, controller) {
+                  controller.enqueue(chunk.errorText);
+                },
+              }),
+            ),
+            {
+              status: 200,
+              headers: { "content-type": "text/plain" },
+            },
+          ),
       );
 
       app = createFastifyInstance();
@@ -278,20 +283,14 @@ describe("POST /api/chat missing MCP connection enforcement", () => {
     mockStartActiveChatSpan.mockImplementation(
       async ({ callback }: { callback: () => Promise<Response> }) => callback(),
     );
-    mockCreateUIMessageStream.mockImplementation(() => ({
-      tee: () => [
+    mockCreateUIMessageStream.mockImplementation(
+      () =>
         new ReadableStream({
           start(controller) {
             controller.close();
           },
         }),
-        new ReadableStream({
-          start(controller) {
-            controller.close();
-          },
-        }),
-      ],
-    }));
+    );
     mockCreateUIMessageStreamResponse.mockImplementation(
       () => new Response("", { status: 200 }),
     );
@@ -2476,7 +2475,7 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
         },
       });
 
-      return { tee: () => stream.tee() };
+      return stream;
     });
 
     const postResponsePromise = app.inject({

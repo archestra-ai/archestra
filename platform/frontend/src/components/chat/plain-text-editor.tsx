@@ -1,6 +1,9 @@
 "use client";
 
+import { useState } from "react";
+import { ConversationArtifactPanel } from "@/components/chat/conversation-artifact";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 
@@ -21,6 +24,7 @@ export function PlainTextEditor({
   onSave,
   onCancel,
   placeholder,
+  markdown = false,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -30,19 +34,41 @@ export function PlainTextEditor({
   onSave: () => void;
   onCancel: () => void;
   placeholder?: string;
+  markdown?: boolean;
 }) {
   const overLimit = count > max;
+  const [mode, setMode] = useState("edit");
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2 p-3">
-      <Textarea
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        aria-label={placeholder || "Text editor"}
-        className="min-h-40 flex-1 resize-none font-mono text-xs"
-        autoFocus
-      />
+      {markdown && (
+        <Tabs value={mode} onValueChange={setMode}>
+          <TabsList>
+            <TabsTrigger value="edit">Edit</TabsTrigger>
+            <TabsTrigger value="preview">Preview</TabsTrigger>
+          </TabsList>
+        </Tabs>
+      )}
+      {markdown && mode === "preview" ? (
+        <div className="min-h-40 flex-1 overflow-auto rounded-md border">
+          <ConversationArtifactPanel
+            artifact={value}
+            isOpen
+            onToggle={() => {}}
+            embedded
+            hideHeader
+          />
+        </div>
+      ) : (
+        <Textarea
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          aria-label={placeholder || "Text editor"}
+          className="min-h-40 flex-1 resize-none font-mono text-xs"
+          autoFocus
+        />
+      )}
       <div className="flex items-center justify-between">
         <span
           className={cn(

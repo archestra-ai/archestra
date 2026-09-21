@@ -18,6 +18,7 @@ export const ARCHESTRA_MCP_CATALOG_ID = "00000000-0000-4000-8000-000000000001";
 export const ARCHESTRA_TOOL_PREFIX = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}`;
 
 export const TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME = "execute_remedy_plan";
+export const TOOL_GET_REMEDY_PLANS_SHORT_NAME = "get_remedy_plans";
 export const TOOL_WHOAMI_SHORT_NAME = "whoami";
 export const TOOL_CREATE_AGENT_SHORT_NAME = "create_agent";
 export const TOOL_GET_AGENT_SHORT_NAME = "get_agent";
@@ -124,6 +125,7 @@ export const TOOL_ASSIGN_KNOWLEDGE_CONNECTOR_TO_AGENT_SHORT_NAME =
 export const TOOL_UNASSIGN_KNOWLEDGE_CONNECTOR_FROM_AGENT_SHORT_NAME =
   "unassign_knowledge_connector_from_agent";
 export const TOOL_TODO_WRITE_SHORT_NAME = "todo_write";
+export const TOOL_ASK_USER_SHORT_NAME = "ask_user";
 // Turn the current chat into a project (moves the chat + its files into a new project).
 export const TOOL_CREATE_PROJECT_FROM_CONVERSATION_SHORT_NAME =
   "create_project_from_conversation";
@@ -168,6 +170,12 @@ export const TOOL_POST_RUN_FILE_SHORT_NAME = "post_run_file";
 export const TOOL_READ_WORKSPACE_FILE_SHORT_NAME = "read_workspace_file";
 export const TOOL_WRITE_WORKSPACE_FILE_SHORT_NAME = "write_workspace_file";
 export const TOOL_DELETE_WORKSPACE_SHORT_NAME = "delete_workspace";
+export const TOOL_TRANSFER_WORKSPACE_FILE_SHORT_NAME =
+  "transfer_workspace_file";
+// Attach a credential the calling client already holds to a runtime Agent, so a
+// handoff can carry the CLI auth the local session was using. Personal scope
+// only, and only for Agents that opted in to accepting client-supplied values.
+export const TOOL_TRANSFER_CREDENTIAL_SHORT_NAME = "transfer_credential";
 export const TOOL_DOWNLOAD_FILE_SHORT_NAME = "download_file";
 export const TOOL_UPLOAD_FILE_SHORT_NAME = "upload_file";
 // persistent files: produced by agents, scoped to a conversation (or a project)
@@ -212,6 +220,7 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_WHOAMI_SHORT_NAME,
   TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
   "yell",
+  TOOL_GET_REMEDY_PLANS_SHORT_NAME,
   "get_guardrails_policy",
   "validate_guardrails_policy",
   "update_guardrails_policy",
@@ -286,6 +295,7 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_ASSIGN_KNOWLEDGE_CONNECTOR_TO_AGENT_SHORT_NAME,
   TOOL_UNASSIGN_KNOWLEDGE_CONNECTOR_FROM_AGENT_SHORT_NAME,
   TOOL_TODO_WRITE_SHORT_NAME,
+  TOOL_ASK_USER_SHORT_NAME,
   TOOL_CREATE_PROJECT_FROM_CONVERSATION_SHORT_NAME,
   TOOL_SET_PROJECT_SHARE_SHORT_NAME,
   TOOL_LIST_PROJECTS_SHORT_NAME,
@@ -314,6 +324,8 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_READ_WORKSPACE_FILE_SHORT_NAME,
   TOOL_WRITE_WORKSPACE_FILE_SHORT_NAME,
   TOOL_DELETE_WORKSPACE_SHORT_NAME,
+  TOOL_TRANSFER_WORKSPACE_FILE_SHORT_NAME,
+  TOOL_TRANSFER_CREDENTIAL_SHORT_NAME,
   TOOL_DOWNLOAD_FILE_SHORT_NAME,
   TOOL_UPLOAD_FILE_SHORT_NAME,
   TOOL_SEARCH_FILES_SHORT_NAME,
@@ -402,6 +414,7 @@ export const ARCHESTRA_TOOL_GROUP_BY_SHORT_NAME: Record<
   whoami: "identity",
   execute_remedy_plan: "identity",
   yell: "identity",
+  get_remedy_plans: "identity",
   get_guardrails_policy: "policies",
   validate_guardrails_policy: "policies",
   update_guardrails_policy: "policies",
@@ -485,6 +498,7 @@ export const ARCHESTRA_TOOL_GROUP_BY_SHORT_NAME: Record<
   unassign_knowledge_connector_from_agent: "knowledge_management",
 
   todo_write: "chat",
+  ask_user: "chat",
 
   create_project_from_conversation: "projects",
   set_project_share: "projects",
@@ -517,7 +531,9 @@ export const ARCHESTRA_TOOL_GROUP_BY_SHORT_NAME: Record<
   post_run_file: "tasks",
   read_workspace_file: "tasks",
   write_workspace_file: "tasks",
+  transfer_workspace_file: "tasks",
   delete_workspace: "tasks",
+  transfer_credential: "tasks",
   download_file: "skill_sandbox",
   upload_file: "skill_sandbox",
 
@@ -685,6 +701,8 @@ export const TOOL_UNASSIGN_KNOWLEDGE_CONNECTOR_FROM_AGENT_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_UNASSIGN_KNOWLEDGE_CONNECTOR_FROM_AGENT_SHORT_NAME}` as const;
 export const TOOL_TODO_WRITE_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_TODO_WRITE_SHORT_NAME}` as const;
+export const TOOL_ASK_USER_FULL_NAME =
+  `${ARCHESTRA_TOOL_PREFIX}${TOOL_ASK_USER_SHORT_NAME}` as const;
 export const TOOL_SEARCH_TOOLS_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_SEARCH_TOOLS_SHORT_NAME}` as const;
 export const TOOL_RUN_TOOL_FULL_NAME =
@@ -715,6 +733,8 @@ export const TOOL_RUN_COMMAND_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_RUN_COMMAND_SHORT_NAME}` as const;
 export const TOOL_START_RUN_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_START_RUN_SHORT_NAME}` as const;
+export const TOOL_TRANSFER_CREDENTIAL_FULL_NAME =
+  `${ARCHESTRA_TOOL_PREFIX}${TOOL_TRANSFER_CREDENTIAL_SHORT_NAME}` as const;
 export const TOOL_GET_RUN_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_GET_RUN_SHORT_NAME}` as const;
 export const TOOL_LIST_RUNS_FULL_NAME =
@@ -984,10 +1004,12 @@ export function isPrefillExemptArchestraToolShortName(
 
 /**
  * tools that stay top-level in `tools/list` regardless of an agent's
- * exposure mode. skills and sandbox runtime interaction are
- * progressive-disclosure mechanisms, so hiding their discover/activate/read/run
- * and file-transfer path behind `search_tools`/`run_tool` would make the common
- * runtime flow depend on deferred tool loading. App tools are deliberately
+ * exposure mode. `ask_user` is a conversation primitive (choice form /
+ * native elicitation), not a capability to discover. skills and sandbox
+ * runtime interaction are progressive-disclosure mechanisms, so hiding their
+ * discover/activate/read/run and file-transfer path behind
+ * `search_tools`/`run_tool` would make the common runtime flow depend on
+ * deferred tool loading. App tools are deliberately
  * absent: apps are a secondary flow, reached through `search_tools`/`run_tool`
  * and steered by the `search_and_run_only` system-prompt section, which names
  * the authoring tools verbatim so `run_tool` can dispatch them without a
@@ -995,6 +1017,7 @@ export function isPrefillExemptArchestraToolShortName(
  * resolves a `run_tool` call to its target tool before the app-render check.
  */
 export const ALWAYS_EXPOSED_ARCHESTRA_TOOL_SHORT_NAMES = [
+  TOOL_ASK_USER_SHORT_NAME,
   TOOL_LIST_SKILLS_SHORT_NAME,
   TOOL_LOAD_SKILL_SHORT_NAME,
   // The full sandbox + persistent-files surface stays top-level. delete_file is
@@ -1012,6 +1035,22 @@ export function isAlwaysExposedArchestraToolShortName(
 ): boolean {
   return ALWAYS_EXPOSED_ARCHESTRA_TOOL_SHORT_NAME_SET.has(shortName);
 }
+
+/**
+ * Maps tools to arguments stamped by the OpenAPPA proxy before dispatching to the client.
+ * Includes signed remedy offers on `ask_user` and execution receipts on `execute_remedy_plan`.
+ * The model never writes these arguments. The proxy strips them from provider history
+ * and tool declarations to keep provider state clean.
+ */
+export const PROXY_STAMPED_TOOL_ARGUMENTS = {
+  [TOOL_ASK_USER_SHORT_NAME]: ["remedy_offers"],
+  [TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME]: [
+    "execution",
+    "protected",
+    "payload",
+    "signature",
+  ],
+} as const satisfies Partial<Record<ArchestraToolShortName, readonly string[]>>;
 
 /**
  * App-management tools whose successful result identifies a single owned MCP

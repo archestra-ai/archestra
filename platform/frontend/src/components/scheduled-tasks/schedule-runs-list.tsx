@@ -15,7 +15,7 @@ import {
   useScheduleTriggerRuns,
 } from "@/lib/schedule-trigger.query";
 import { cn } from "@/lib/utils";
-import { formatRunTimestamp } from "@/lib/utils/format-run-timestamp";
+import { formatRunLabel } from "@/lib/utils/format-run-timestamp";
 
 /**
  * A schedule's runs, reused by the project runs page and the chat right-side
@@ -97,9 +97,12 @@ function RunRow({
   const rowContent = (
     <div className="flex items-center gap-3 px-3 py-2.5">
       <StatusBadge label={run.status} />
-      <span className="flex-1 truncate text-sm text-muted-foreground">
-        {formatRunTimestamp(run.createdAt)}
-      </span>
+      <div
+        className="min-w-0 flex-1 text-sm"
+        title={new Date(run.createdAt).toLocaleString()}
+      >
+        {formatRunLabel(run)}
+      </div>
       {(kind === "running" || isResolving) && (
         <Loader2 className="h-4 w-4 animate-spin text-amber-500" />
       )}

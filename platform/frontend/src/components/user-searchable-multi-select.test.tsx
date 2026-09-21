@@ -84,7 +84,7 @@ describe("UserSearchableMultiSelect", () => {
     );
 
     await user.click(screen.getByRole("combobox"));
-    await user.click(screen.getByRole("button", { name: /John Doe/i }));
+    await user.click(screen.getByRole("option", { name: /John Doe/i }));
 
     expect(onValueChange).toHaveBeenCalledWith(["user-1"]);
   });
@@ -102,7 +102,7 @@ describe("UserSearchableMultiSelect", () => {
     );
 
     await user.click(screen.getByRole("combobox"));
-    await user.click(screen.getByRole("button", { name: /John Doe/i }));
+    await user.click(screen.getByRole("option", { name: /John Doe/i }));
 
     expect(onValueChange).toHaveBeenCalledWith([]);
   });
@@ -120,7 +120,7 @@ describe("UserSearchableMultiSelect", () => {
     );
 
     await user.click(screen.getByRole("combobox"));
-    await user.click(screen.getByRole("button", { name: /Jane Smith/i }));
+    await user.click(screen.getByRole("option", { name: /Jane Smith/i }));
 
     expect(onValueChange).toHaveBeenCalledWith(["user-1", "user-2"]);
 
@@ -132,7 +132,7 @@ describe("UserSearchableMultiSelect", () => {
       />,
     );
 
-    await user.click(screen.getByRole("button", { name: /Bob Wilson/i }));
+    await user.click(screen.getByRole("option", { name: /Bob Wilson/i }));
     expect(onValueChange).toHaveBeenLastCalledWith([
       "user-1",
       "user-2",
@@ -271,7 +271,7 @@ describe("UserSearchableMultiSelect", () => {
 
     await user.click(screen.getByRole("combobox"));
 
-    const disabledItem = screen.getByRole("button", {
+    const disabledItem = screen.getByRole("option", {
       name: /John Doe/i,
     });
     expect(disabledItem).toBeDisabled();
@@ -294,7 +294,7 @@ describe("UserSearchableMultiSelect", () => {
     );
 
     await user.click(screen.getByRole("combobox"));
-    await user.click(screen.getByRole("button", { name: /Jane Smith/i }));
+    await user.click(screen.getByRole("option", { name: /Jane Smith/i }));
 
     expect(onValueChange).not.toHaveBeenCalled();
   });
@@ -387,12 +387,12 @@ describe("UserSearchableMultiSelect", () => {
 
     await user.click(screen.getByRole("combobox"));
 
-    expect(screen.getByRole("button", { name: /John Doe/i })).toHaveAttribute(
-      "aria-pressed",
+    expect(screen.getByRole("option", { name: /John Doe/i })).toHaveAttribute(
+      "aria-selected",
       "true",
     );
-    expect(screen.getByRole("button", { name: /Jane Smith/i })).toHaveAttribute(
-      "aria-pressed",
+    expect(screen.getByRole("option", { name: /Jane Smith/i })).toHaveAttribute(
+      "aria-selected",
       "false",
     );
   });

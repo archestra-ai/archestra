@@ -22,6 +22,7 @@ export const TOOL_PERMISSIONS: Record<
   whoami: null,
   execute_remedy_plan: null,
   yell: null,
+  get_remedy_plans: null,
   get_guardrails_policy: { resource: "toolPolicy", action: "read" },
   validate_guardrails_policy: { resource: "toolPolicy", action: "update" },
   update_guardrails_policy: { resource: "toolPolicy", action: "update" },
@@ -146,6 +147,7 @@ export const TOOL_PERMISSIONS: Record<
 
   // Chat — available to all (operate within user's own chat session)
   todo_write: null,
+  ask_user: null,
   create_project_from_conversation: { resource: "project", action: "create" },
   // Coarse gate matching the SetProjectShare route; the service additionally
   // restricts to the owner/project-admin and gates org-wide visibility behind
@@ -197,7 +199,12 @@ export const TOOL_PERMISSIONS: Record<
   post_run_file: { resource: "agent", action: "read" },
   read_workspace_file: { resource: "agent", action: "read" },
   write_workspace_file: { resource: "agent", action: "read" },
+  transfer_workspace_file: { resource: "agent", action: "read" },
   delete_workspace: { resource: "agent", action: "read" },
+  // Writes only the caller's own personal credential, so it needs no elevated
+  // permission; the handler additionally requires access to the target Agent
+  // and refuses keys declared at organization scope.
+  transfer_credential: { resource: "credential", action: "create" },
   // Persistent file store — these operate on `skill_sandbox_files`, not the
   // sandbox itself, so they gate on `file:manage`. Per-file authorization
   // (authorship, project membership) stays in the handlers.

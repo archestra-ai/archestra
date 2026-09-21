@@ -3,7 +3,7 @@ title: MCP Gateway
 category: MCP
 order: 1
 description: Unified access point for all MCP servers
-lastUpdated: 2026-09-15
+lastUpdated: 2026-09-21
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -107,9 +107,9 @@ See [MCP Authentication](/docs/mcp-authentication) for more details.
 
 Use Streamable HTTP with `/v1/mcp/{id-or-slug}`. Send MCP requests, including capability discovery, through POST.
 
-Authenticated GET requests return `405 Method Not Allowed` with `Allow: POST`. The gateway does not offer a standalone GET event stream. Missing or invalid credentials receive `401` with the OAuth discovery challenge.
+The same URL supports legacy HTTP+SSE clients, including Claude Code entries configured with transport `sse`. An authenticated GET with `Accept: text/event-stream` opens the stream. Its `endpoint` event supplies the URL for POSTing messages. Each POST receives `202 Accepted`; its MCP response arrives on the stream. Prefer Streamable HTTP when your client supports it.
 
-Legacy HTTP+SSE endpoints such as `/sse` and `/message` are not available.
+Other authenticated GET requests return `405 Method Not Allowed` with `Allow: POST`. GET requests declaring protocol `2026-07-28` also return `405`. Missing or invalid credentials receive `401` with the OAuth discovery challenge.
 
 ## Protocol Versions
 
@@ -197,6 +197,20 @@ Header passthrough applies to remote MCP servers and local MCP servers using str
 ## Elicitation
 
 MCP servers behind a gateway can use MCP elicitation to ask the connected client for more information during a tool call. Archestra passes these requests through only when the caller supports elicitation, so non-interactive clients are not asked to complete forms.
+
+The built-in [`ask_user`](/docs/platform-archestra-mcp-server#ask_user) tool asks the user to select from a list of options. Supported interactive clients show the question in their own interface:
+
+- Claude Code and Codex show their native MCP form.
+- OpenCode does not support MCP forms. Archestra routes the question to OpenCode's native question tool.
+- Archestra Chat displays questions as an inline card in the conversation. Multiple questions share one card with tabs.
+
+Headless sessions cannot show forms. Models receive guidance to list options in their text replies instead.
+
+Codex declines forms when its approval policy is `never`. Set the policy to `on-request` to answer forms.
+
+Codex shows the MCP form for `ask_user`. Some Codex releases also advertise a `request_user_input` tool they cannot run in Default mode. Enable that tool with `codex features enable default_mode_request_user_input` if you want Codex's own question UI.
+
+The model decides whether to use a form. Some client models ask permission questions in plain text.
 
 ## Version History
 

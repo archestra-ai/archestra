@@ -8,6 +8,7 @@ import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
 
 import {
   APP_ID_HEADER,
+  APPA_SESSION_HEADER,
   ArchestraInternalErrorCode,
   type BillingMode,
   BUILT_IN_AGENT_IDS,
@@ -18,6 +19,8 @@ import {
   type InteractionSource,
   InteractionSourceSchema,
   isProviderApiKeyOptional,
+  OPENCODE_AGENT_HEADER,
+  OPENCODE_CLIENT_ID,
   PROVIDER_BASE_URL_HEADER,
   providerDisplayNames,
   providerRequiresPerUserCredential,
@@ -56,6 +59,7 @@ import {
   LimitValidationService,
   LlmProviderApiKeyModel,
   ModelModel,
+  OpenAppaSessionModel,
   OrganizationModel,
   TeamModel,
   UserModel,
@@ -78,18 +82,33 @@ import {
   EVENT_GENAI_CONTENT_COMPLETION,
   type SpanTeamInfo,
 } from "@/observability/tracing";
+import { scopedSessionId } from "@/openappa/actor";
+import { forkedSession } from "@/openappa/lineage";
+import { prepareAppaRequest } from "@/openappa/request";
 import {
-  APPA_CHAT_BLOCK_HEADER,
-  APPA_CHAT_BLOCK_VERSION,
-  encodeChatBlock,
-} from "@/openappa/chat-block";
-import {
+  APPA_PARENT_HEADER,
   isAppaChatSource,
   isAppaDelegatedRun,
+  isWellFormedAppaId,
   type OpenAppaSession,
+  openappaEnabled,
   sessionFromHeaders,
 } from "@/openappa/service";
-import { APPA_PLUGIN_TRUSTED_CONTEXT } from "@/proxy/plugins/appa-plugin-archestra/types";
+import { formatSessionReceipt } from "@/openappa/session-token";
+import { stampedSessions } from "@/openappa/trajectory-stamp";
+import {
+  type AppaSessionIdentity,
+  appaWireFamily,
+  appendSessionReceiptToResponse,
+  restoreTrajectoryStamps,
+  sessionReceiptEvidence,
+  stripSessionReceiptsFromRequest,
+} from "@/openappa/wire";
+import { extractAppaSessionIdentity } from "@/proxy/plugins/appa-plugin-archestra/session-identity";
+import {
+  APPA_PLUGIN_TRUSTED_CONTEXT,
+  type AppaTrustedContext,
+} from "@/proxy/plugins/appa-plugin-archestra/types";
 import {
   getLlmProxyPluginRegistry,
   type LlmProxyPluginRegistry,
@@ -104,16 +123,19 @@ import {
   DUAL_LLM_KEEPALIVE_SSE_COMMENT,
   type DualLlmAnalysis,
   type GatewayAgent,
+  type HostedToolCall,
   type InsertInteraction,
   type InteractionAuthMethod,
   type InteractionRequest,
   type InteractionResponse,
   type LLMProvider,
   type LLMStreamAdapter,
+  type OpenAiCodexPassthrough,
   type ToolCallBlock,
   UNSAFE_CONTEXT_BOUNDARY_REASON,
   type UnsafeContextBoundary,
 } from "@/types";
+import { trackBackgroundWork } from "@/utils/background-work";
 import { repairLoneSurrogates } from "@/utils/lone-surrogates";
 import { isLoopbackRequest } from "@/utils/network";
 import { isUuid } from "@/utils/uuid";
@@ -140,6 +162,7 @@ import {
   shouldForwardAnthropicBeta,
   toSpanUserInfo,
   toToolCallBlock,
+  withProviderToolCallIds,
   withSessionContext,
 } from "./llm-proxy-helpers";
 import { StreamKeepAlive } from "./stream-keepalive";
@@ -164,7 +187,7 @@ const {
  */
 export interface LLMProxyContext<TRequest> {
   openappaSession?: OpenAppaSession;
-  openappaChatRequestId?: string;
+  sessionReceipt?: SessionReceiptOutput;
   pluginRegistry?: LlmProxyPluginRegistry;
   pluginContext?: LlmProxyRequestContext;
   /** Captured by the host after binding an authenticated APPA session. */
@@ -233,6 +256,14 @@ export interface LLMProxyContext<TRequest> {
   streamTiming: StreamTiming;
 }
 
+type SessionReceiptOutput = {
+  family: NonNullable<ReturnType<typeof appaWireFamily>>;
+  organizationId: string;
+  sessionId: string;
+  code: string;
+  footer: string;
+};
+
 export interface StreamTiming {
   requestReceivedAt: number;
   firstByteAt?: number;
@@ -271,10 +302,173 @@ function getProviderMessagesCount(messages: unknown): number | null {
   return null;
 }
 
+function resolveOpenAiCodexPassthrough(params: {
+  provider: Pick<
+    LLMProvider<unknown, unknown, unknown, unknown, unknown>,
+    "provider" | "interactionType"
+  >;
+  headers: Record<string, string | string[] | undefined>;
+}): OpenAiCodexPassthrough | undefined {
+  const { provider, headers } = params;
+  if (
+    provider.provider !== "openai" ||
+    provider.interactionType !== "openai:responses" ||
+    readSingleHeader(headers, "x-archestra-opencode-oauth-bridge") !== "true"
+  ) {
+    return undefined;
+  }
+
+  const authorization = readSingleHeader(headers, "authorization");
+  const accessToken = authorization?.match(/^Bearer\s+([^\s]+)$/i)?.[1];
+  const accountId = readSingleHeader(headers, "chatgpt-account-id");
+  if (
+    !accessToken ||
+    accessToken.length > 16_384 ||
+    !isBoundedHeaderValue(accountId, 256)
+  ) {
+    throw new ApiError(
+      400,
+      "OpenCode OAuth bridge requests require a bearer token and ChatGPT account ID.",
+    );
+  }
+
+  return {
+    accessToken,
+    accountId,
+    residency: optionalBoundedHeader(
+      headers,
+      "x-openai-internal-codex-residency",
+      64,
+    ),
+    originator: optionalBoundedHeader(headers, "originator", 128),
+    sessionId: optionalBoundedHeader(headers, "session-id", 256),
+    userAgent: optionalBoundedHeader(headers, "user-agent", 1024),
+  };
+}
+
+function optionalBoundedHeader(
+  headers: Record<string, string | string[] | undefined>,
+  name: string,
+  maxLength: number,
+): string | undefined {
+  const value = readSingleHeader(headers, name);
+  if (value === undefined) return undefined;
+  if (!isBoundedHeaderValue(value, maxLength)) {
+    throw new ApiError(400, `Invalid OpenCode OAuth bridge ${name} header.`);
+  }
+  return value;
+}
+
+function readSingleHeader(
+  headers: Record<string, string | string[] | undefined>,
+  name: string,
+): string | undefined {
+  const value = headers[name];
+  if (typeof value === "string") return value;
+  if (Array.isArray(value) && typeof value[0] === "string") return value[0];
+  return undefined;
+}
+
+function isBoundedHeaderValue(
+  value: string | undefined,
+  maxLength: number,
+): value is string {
+  return (
+    typeof value === "string" &&
+    value.length > 0 &&
+    value.length <= maxLength &&
+    !/[\r\n]/.test(value)
+  );
+}
+
+function markSessionReceiptIssued(receipt: SessionReceiptOutput): void {
+  trackBackgroundWork(
+    OpenAppaSessionModel.markReceiptIssued({
+      organizationId: receipt.organizationId,
+      sessionId: receipt.sessionId,
+    }).catch((error) => {
+      logger.warn(
+        { err: error, sessionId: receipt.sessionId },
+        "OpenAPPA failed to record session receipt issuance",
+      );
+    }),
+  );
+}
+
+/**
+ * Detects Claude Code compaction summary requests. Claude Code puts the
+ * instruction on a user turn (sometimes also in `system`); scan those text
+ * sites only so a large tool result cannot trigger a false re-issue and so
+ * the body is never serialized just to search it.
+ */
+function isClientCompactionRequest(body: unknown): boolean {
+  if (!body || typeof body !== "object" || Array.isArray(body)) return false;
+  const request = body as Record<string, unknown>;
+  if (containsCompactionInstruction(request.system)) return true;
+  if (!Array.isArray(request.messages)) return false;
+  for (const message of request.messages) {
+    if (!message || typeof message !== "object" || Array.isArray(message)) {
+      continue;
+    }
+    const role = (message as Record<string, unknown>).role;
+    if (role !== "user" && role !== "system") continue;
+    if (
+      containsCompactionInstruction(
+        (message as Record<string, unknown>).content,
+      )
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function containsCompactionInstruction(value: unknown): boolean {
+  if (typeof value === "string") {
+    return value.includes(CLAUDE_COMPACTION_INSTRUCTION);
+  }
+  if (!Array.isArray(value)) return false;
+  for (const block of value) {
+    if (!block || typeof block !== "object" || Array.isArray(block)) continue;
+    const text = (block as Record<string, unknown>).text;
+    if (
+      typeof text === "string" &&
+      text.includes(CLAUDE_COMPACTION_INSTRUCTION)
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+const CLAUDE_COMPACTION_INSTRUCTION =
+  "Your task is to create a detailed summary of the conversation so far";
+
+/** Returns true if the request requires JSON-only structured output. */
+function hasStructuredOutputConstraint(body: unknown): boolean {
+  if (!body || typeof body !== "object" || Array.isArray(body)) return false;
+  const request = body as Record<string, unknown>;
+  const format =
+    request.response_format ??
+    (request.text && typeof request.text === "object"
+      ? (request.text as Record<string, unknown>).format
+      : undefined) ??
+    (request.output_config && typeof request.output_config === "object"
+      ? (request.output_config as Record<string, unknown>).format
+      : undefined) ??
+    request.output_format;
+  if (!format || typeof format !== "object" || Array.isArray(format)) {
+    return false;
+  }
+  const type = (format as Record<string, unknown>).type;
+  return type === "json_schema" || type === "json_object";
+}
+
 /**
  * The subset of a proxied request body we read for session-id and client-app
  * extraction. Each consumer only touches its own fields (`detectClaudeClientId`
  * → `system`/`metadata`; `detectCodexClientId` → `client_metadata`;
+ * `detectOpenCodeClientId` → client identity headers;
  * `extractSessionInfo` → `metadata`/`user`/`client_metadata`), so one shared
  * view keeps the cast in a single place.
  */
@@ -311,6 +505,14 @@ export async function handleLLMProxy<
   let pluginContext: LlmProxyRequestContext | undefined;
   let pluginSessionInitialized = false;
 
+  // Receipt stripping is unconditional: a transcript carrying marks must never
+  // leak them to a provider or the logs, even with OpenAPPA off. APPA resolves
+  // the collected codes into lineage evidence separately, when it is active.
+  const requestWireFamily = appaWireFamily(provider.interactionType);
+  const strippedReceiptCodes = requestWireFamily
+    ? stripSessionReceiptsFromRequest({ family: requestWireFamily, body })
+    : [];
+
   // Extract header-based context
   const headersForExtraction = headers as Record<
     string,
@@ -322,7 +524,8 @@ export async function handleLLMProxy<
   // app from the request and record it (Claude clients → "anthropic_claude"
   // from the request body; Codex clients → "openai_codex" from the
   // client_metadata body shape or the originator/User-Agent headers the Codex
-  // CLI stamps on every request; Cursor → "cursor" from its User-Agent).
+  // CLI stamps on every request; OpenCode → "opencode" from its equivalent
+  // identity headers; Cursor → "cursor" from its User-Agent).
   const externalAgentId =
     utils.headers.externalAgentId.getExternalAgentId(headersForExtraction) ??
     utils.headers.clientApp.detectClaudeClientId(bodyForExtraction) ??
@@ -330,6 +533,7 @@ export async function handleLLMProxy<
       headersForExtraction,
       bodyForExtraction,
     ) ??
+    utils.headers.clientApp.detectOpenCodeClientId(headersForExtraction) ??
     utils.headers.clientApp.detectCursorClientId(headersForExtraction);
   const runId = utils.headers.runId.getRunId(headersForExtraction);
   const authOverride = (
@@ -352,15 +556,6 @@ export async function handleLLMProxy<
   let oauthUserId: string | undefined;
   let regularVirtualKeyUserId: string | undefined;
 
-  // Session extraction reuses the resolved client attribution above to gate
-  // the Codex-specific signals, so client identification lives in one place.
-  const { sessionId, sessionSource } =
-    utils.headers.sessionId.extractSessionInfo({
-      headers: headersForExtraction,
-      body: bodyForExtraction,
-      externalAgentId,
-    });
-
   // Extract interaction source (chat, chatops, email, etc.)
   // Internal callers set X-Archestra-Source; external API requests default to "api".
   const rawSource = utils.headers.metaHeader.getHeaderValue(
@@ -368,6 +563,24 @@ export async function handleLLMProxy<
     SOURCE_HEADER,
   );
   const parsedSource = InteractionSourceSchema.safeParse(rawSource).data;
+  const openCodeAgent = utils.headers.metaHeader.getHeaderValue(
+    headersForExtraction,
+    OPENCODE_AGENT_HEADER,
+  );
+  const openCodeParentSession = utils.headers.metaHeader.getHeaderValue(
+    headersForExtraction,
+    "x-parent-session-id",
+  );
+  const openCodeSource: InteractionSource | undefined =
+    externalAgentId === OPENCODE_CLIENT_ID
+      ? openCodeParentSession
+        ? "opencode:subagent"
+        : openCodeAgent === "title"
+          ? "opencode:title"
+          : openCodeAgent === "compaction"
+            ? "opencode:compaction"
+            : "opencode:main"
+      : undefined;
   const untrustedAppaChatSource =
     isAppaChatSource(parsedSource) && !isLoopbackRequest(request);
   // `model_router` is assigned by the route auth override, not accepted from
@@ -375,10 +588,37 @@ export async function handleLLMProxy<
   // loopback-only trust boundary.
   const source: InteractionSource =
     authOverride?.source ??
+    openCodeSource ??
     (parsedSource === "model_router" || untrustedAppaChatSource
       ? "api"
       : parsedSource) ??
     "api";
+
+  // Session extraction reuses the resolved client attribution above to gate
+  // OpenCode- and Codex-specific signals, so client identification lives in one place.
+  // An external client's explicit OpenAPPA session names the runtime's root
+  // for this request, under the credential's scope, and the proxy log follows
+  // the id as the client sent it, so the two records join by that id under
+  // the runtime's scope prefix. Chat's
+  // header is its conversation id, which the ordinary path already records. Only while OpenAPPA is on: off, the header names nothing.
+  // A malformed header is left to the OpenAPPA session check, which refuses it.
+  const appaSessionHeader =
+    openappaEnabled() && !isAppaChatSource(source)
+      ? headersForExtraction[APPA_SESSION_HEADER.toLowerCase()]
+      : undefined;
+  const ordinarySession = utils.headers.sessionId.extractSessionInfo({
+    headers: headersForExtraction,
+    body: bodyForExtraction,
+    externalAgentId,
+  });
+  // The platform's own requests carry the same id in both headers, and keep
+  // their ordinary provenance; only a client that names its session in the
+  // OpenAPPA header alone is followed there.
+  const { sessionId, sessionSource } =
+    isWellFormedAppaId(appaSessionHeader) &&
+    ordinarySession.sessionId !== appaSessionHeader
+      ? { sessionId: appaSessionHeader, sessionSource: "appa_header" as const }
+      : ordinarySession;
   const inheritedContextUntrusted =
     utils.headers.metaHeader.getHeaderValue(
       headersForExtraction,
@@ -394,6 +634,13 @@ export async function handleLLMProxy<
     request.headers,
   );
 
+  // When OpenAPPA is enabled, the proxy issues stamped tool-call IDs.
+  // The proxy restores original provider IDs before inspection, and uses
+  // the stamps to trace source session lineage.
+  const trajectoryStamps = restoreTrajectoryStamps({
+    interactionType: provider.interactionType,
+    body,
+  });
   const requestAdapter = provider.createRequestAdapter(body);
   const streamAdapter = provider.createStreamAdapter(body);
   const providerMessages = requestAdapter.getProviderMessages();
@@ -470,6 +717,16 @@ export async function handleLLMProxy<
       throw error;
     }
   }
+
+  // OpenCode owns refresh and rotation for this access token. Keep the bridge
+  // credential in request-local client options; never resolve or persist it as
+  // an Archestra-managed provider credential.
+  const openAiCodexPassthrough = passthroughVirtualKeyId
+    ? resolveOpenAiCodexPassthrough({
+        provider,
+        headers: request.raw.headers,
+      })
+    : undefined;
 
   // Authenticate and resolve API key (JWKS → virtual key → header extraction → keyless check)
   let apiKey: string | undefined;
@@ -553,6 +810,7 @@ export async function handleLLMProxy<
   if (
     !wasJwksAuthenticated &&
     !authOverride &&
+    !openAiCodexPassthrough &&
     rawApiKey &&
     !hasArchestraTokenPrefix(rawApiKey)
   ) {
@@ -1020,10 +1278,6 @@ export async function handleLLMProxy<
           requestAdapter.getOriginalRequest(),
         ),
       });
-    const commonMessages = canonicalizeCommonMessageToolNames(
-      requestAdapter.getMessages(),
-      canonicalizeToolName,
-    );
     const effectiveConsiderContextUntrusted =
       resolvedAgent.considerContextUntrusted || inheritedContextUntrusted;
     const initialUntrustedReason = resolvedAgent.considerContextUntrusted
@@ -1063,7 +1317,12 @@ export async function handleLLMProxy<
 
     const evaluateLegacyTrust = async () =>
       await utils.trustedData.evaluateIfContextIsTrusted({
-        messages: commonMessages,
+        // The request body is mutable by the wire restorers below. Build this
+        // just before analysis so signed transport footers reach no model.
+        messages: canonicalizeCommonMessageToolNames(
+          requestAdapter.getMessages(),
+          canonicalizeToolName,
+        ),
         agentId: resolvedAgentId,
         organizationId: resolvedAgent.organizationId,
         userId,
@@ -1105,8 +1364,22 @@ export async function handleLLMProxy<
       | Awaited<ReturnType<LlmProxyPluginRegistry["onToolResults"]>>
       | undefined;
     let openappaSession: OpenAppaSession | undefined;
+    let sessionReceipt: SessionReceiptOutput | undefined;
+    let appaIdentity: AppaSessionIdentity = {};
+    let hasNativeClientSession = false;
+    let appaCallerId: string | undefined;
+    let appaFamily: ReturnType<typeof appaWireFamily>;
+    let forkOf: string | undefined;
+    // Chat's own requests arrive over loopback and bring no credential of
+    // this platform that proves nobody: the stored provider secret goes to
+    // the provider. A request that brings an organization credential and
+    // names a Chat source is a client's, whatever its headers say, and is
+    // governed as one: its session scoped to that credential, never bound
+    // to a conversation.
     const isInternalChat =
-      isAppaChatSource(source) && isLoopbackRequest(request);
+      isAppaChatSource(source) &&
+      isLoopbackRequest(request) &&
+      !((authenticatedApp || virtualKeyId) && !authenticatedUserId);
     if (hasProxyPlugins) {
       // APPA recognizes Chat only after the loopback caller's owner,
       // organization, profile, and conversation root have been bound below.
@@ -1126,8 +1399,19 @@ export async function handleLLMProxy<
           "OpenAPPA requires an authenticated proxy request",
         );
       }
+      // The person behind the request, when the platform authenticated one.
+      // A platform request over loopback names its user in a header the
+      // platform itself wrote; a request that brings a credential of its own
+      // is a client's, and its user is what that credential proves, not what
+      // a header says: over the frontend's loopback rewrite the header is
+      // anyone's to write. Chat keeps the header: its conversation is
+      // ownership-checked against it below.
       const appaUserId =
-        authenticatedUserId ?? (isInternalRequest ? userId : undefined);
+        authenticatedUserId ??
+        (isInternalRequest &&
+        (isInternalChat || (!authenticatedApp && !virtualKeyId))
+          ? userId
+          : undefined);
       // Delegated A2A runs share the parent's logging session, but have no
       // APPA child-return lifecycle. Keep their events out of that trajectory;
       // the existing guardrails still evaluate the child independently.
@@ -1137,17 +1421,141 @@ export async function handleLLMProxy<
         (!isInternalRequest ||
           !isAppaDelegatedRun(resolvedAgent.id, externalAgentId))
       ) {
+        const callerId = appaUserId
+          ? `user:${appaUserId}`
+          : authenticatedApp
+            ? `app:${authenticatedApp.id}`
+            : virtualKeyId
+              ? `virtual-key:${virtualKeyId}`
+              : undefined;
+        appaCallerId = callerId;
+        // Extract client-native session metadata into APPA session identity.
+        // Client adapters resolve resume, fork, and compaction semantics
+        // before falling back to generic wire properties.
+        const incomingAppaSessionHeader =
+          headersForExtraction[APPA_SESSION_HEADER.toLowerCase()];
+        appaFamily = appaWireFamily(provider.interactionType);
+        appaIdentity = appaFamily
+          ? extractAppaSessionIdentity({
+              family: appaFamily,
+              body,
+              headers: headersForExtraction,
+            })
+          : {};
+        hasNativeClientSession =
+          appaIdentity.provenance === "claude-code-header" ||
+          appaIdentity.provenance === "codex-turn-metadata" ||
+          appaIdentity.provenance === "opencode-session-header" ||
+          appaIdentity.provenance === "opencode-hosted-header";
+        if (
+          hasNativeClientSession &&
+          appaIdentity.sessionId !== undefined &&
+          !isWellFormedAppaId(appaIdentity.sessionId)
+        ) {
+          throw new ApiError(
+            400,
+            "OpenAPPA requires a valid client-native session ID",
+          );
+        }
+        // Receipts were stripped from history above, before any forwarding or
+        // logging. APPA now resolves the collected codes into lineage evidence
+        // owned by this caller.
+        const receiptSessions = callerId
+          ? await sessionReceiptEvidence({
+              organizationId: resolvedAgent.organizationId,
+              callerId,
+              codes: strippedReceiptCodes,
+            })
+          : [];
+        // History carrying verified stamps or session receipts identifies
+        // parent context. A new session opens as a fork of its deepest ancestor.
+        const traceable =
+          appaCallerId &&
+          appaIdentity.sessionId &&
+          appaFamily &&
+          !isInternalChat &&
+          !incomingAppaSessionHeader &&
+          !headersForExtraction[APPA_PARENT_HEADER.toLowerCase()];
+        const stamped =
+          traceable && callerId
+            ? stampedSessions({
+                stamps: trajectoryStamps,
+                organizationId: resolvedAgent.organizationId,
+                callerId,
+                secret: config.openappa.offerSigningSecret,
+              })
+            : [];
+        // `forkedSession` identifies a single lineage head across stamps and text envelopes.
+        const traced = traceable ? [...stamped, ...receiptSessions] : [];
+        forkOf =
+          traced.length > 0 && callerId && appaIdentity.sessionId
+            ? await forkedSession({
+                organizationId: resolvedAgent.organizationId,
+                sessionId: appaIdentity.sessionId,
+                traced,
+                scope: (session) => scopedSessionId(callerId, session),
+              })
+            : undefined;
+        if (
+          appaIdentity.sessionId &&
+          isWellFormedAppaId(appaIdentity.sessionId) &&
+          !incomingAppaSessionHeader
+        ) {
+          headersForExtraction[APPA_SESSION_HEADER.toLowerCase()] =
+            appaIdentity.sessionId;
+        }
+        if (
+          appaIdentity.parentId &&
+          isWellFormedAppaId(appaIdentity.parentId) &&
+          !headersForExtraction[APPA_PARENT_HEADER.toLowerCase()]
+        ) {
+          headersForExtraction[APPA_PARENT_HEADER.toLowerCase()] =
+            appaIdentity.parentId;
+        }
         openappaSession = sessionFromHeaders({
           headers: headersForExtraction,
           organizationId: resolvedAgent.organizationId,
-          callerId: appaUserId
-            ? `user:${appaUserId}`
-            : authenticatedApp
-              ? `app:${authenticatedApp.id}`
-              : virtualKeyId
-                ? `virtual-key:${virtualKeyId}`
-                : undefined,
+          callerId,
+          // Chat sessions use conversation IDs with verified ownership.
+          ...(isInternalChat
+            ? {}
+            : {
+                // Scope external sessions to the authenticated principal.
+                scope:
+                  isInternalRequest &&
+                  !authenticatedUserId &&
+                  !authenticatedApp &&
+                  !virtualKeyId &&
+                  incomingAppaSessionHeader !== undefined
+                    ? undefined
+                    : callerId,
+                // Bind fallback root if no session was provided.
+                fallbackSessionId: callerId
+                  ? `${callerId}@${resolvedAgent.id}`
+                  : undefined,
+              }),
         });
+        if (!openappaSession)
+          throw new ApiError(
+            400,
+            "OpenAPPA requires valid X-Appa-Session-ID and optional X-Appa-Parent-ID headers",
+          );
+        if (forkOf && callerId)
+          openappaSession = {
+            ...openappaSession,
+            fork_of: scopedSessionId(callerId, forkOf),
+          };
+        if (
+          callerId &&
+          openappaSession.session_id === `${callerId}@${resolvedAgent.id}`
+        ) {
+          // Every conversation of this credential on this agent now shares one
+          // root: a turn ending in one releases the offers of the others.
+          logger.warn(
+            { agentId: resolvedAgent.id, callerId },
+            "OpenAPPA bound a fallback root because the client reported no session",
+          );
+        }
       }
       pluginContext = {
         requestId: request.id,
@@ -1163,6 +1571,15 @@ export async function handleLLMProxy<
         resources: new Map(),
       };
       if (openappaSession) {
+        // A Chat session is a conversation, and the request must name the
+        // user whose conversation it is: without one there is nothing to
+        // check the binding against, so the request is refused rather than
+        // bound unchecked.
+        if (isInternalChat && !appaUserId)
+          throw new ApiError(
+            403,
+            "OpenAPPA Chat session requires the conversation's user",
+          );
         if (isInternalChat && appaUserId) {
           const conversationAgentId = await ConversationModel.getAgentIdForUser(
             openappaSession.session_id,
@@ -1180,14 +1597,27 @@ export async function handleLLMProxy<
             );
           }
         }
+        // Restores this request's denial notices and resolves its APPA tools,
+        // in the request body the adapters read from, before the provider
+        // request and the tool results are built from it.
+        // It refuses the request outright when the session cannot be governed,
+        // so reaching the line below means APPA really is enforcing this turn.
+        // The ordinary invocation policies still run: they are evaluated inside
+        // the plugin pass, before APPA reserves a call.
+        const appaRequest = prepareAppaRequest({
+          body,
+          interactionType: provider.interactionType,
+          session: appaIdentity,
+          canonicalizeToolName,
+          trustBarePlatformTools: isInternalChat,
+        });
         pluginContext.resources.set(APPA_PLUGIN_TRUSTED_CONTEXT, {
           session: openappaSession,
           profileId: resolvedAgent.id,
           canonicalizeToolName,
-          ...(isAppaChatSource(source) && isLoopbackRequest(request)
-            ? { chatSource: source }
-            : {}),
-        });
+          request: appaRequest,
+          ...(isInternalChat ? { chatSource: source } : {}),
+        } satisfies AppaTrustedContext);
       }
       await pluginRegistry.onSessionInit(pluginContext);
       pluginSessionInitialized = true;
@@ -1204,6 +1634,34 @@ export async function handleLLMProxy<
             legacyTrustOutcome?.toolResultUpdates[result.id] ?? result.content,
         })),
       });
+      if (
+        openappaSession &&
+        hasNativeClientSession &&
+        !isInternalChat &&
+        !hasStructuredOutputConstraint(body) &&
+        appaCallerId &&
+        appaFamily &&
+        config.openappa.offerSigningSecret.length > 0
+      ) {
+        const receipt = await OpenAppaSessionModel.ensureReceiptToken({
+          organizationId: resolvedAgent.organizationId,
+          callerId: appaCallerId,
+          sessionId: openappaSession.session_id,
+          secret: config.openappa.offerSigningSecret,
+        });
+        if (
+          receipt &&
+          (receipt.receiptIssuedAt == null || isClientCompactionRequest(body))
+        ) {
+          sessionReceipt = {
+            family: appaFamily,
+            organizationId: resolvedAgent.organizationId,
+            sessionId: openappaSession.session_id,
+            code: receipt.token,
+            footer: formatSessionReceipt(receipt.token),
+          };
+        }
+      }
     }
     const trustedDataOutcome =
       legacyTrustOutcome ??
@@ -1313,7 +1771,8 @@ export async function handleLLMProxy<
     // can refine this after the upstream response identifies paid overage.
     let billingMode = utils.resolveInteractionBillingMode({
       isSubscriptionCredential:
-        provider.isSubscriptionCredential?.(apiKey) ?? false,
+        openAiCodexPassthrough !== undefined ||
+        provider.isSubscriptionCredential?.(apiKey) === true,
       autodetectEnabled: config.llmCost.subscriptionAutodetect,
     });
 
@@ -1339,6 +1798,11 @@ export async function handleLLMProxy<
           });
         }
       },
+      openAiCodexPassthrough,
+      ...(providerName === "gemini" &&
+      typeof headersForExtraction["x-goog-user-project"] === "string"
+        ? { googleUserProject: headersForExtraction["x-goog-user-project"] }
+        : {}),
     });
 
     if (pluginContext) {
@@ -1428,17 +1892,9 @@ export async function handleLLMProxy<
       }
     }
 
-    const chatBlockCapability = headersForExtraction[APPA_CHAT_BLOCK_HEADER];
     const ctx: LLMProxyContext<TRequest> = {
       openappaSession,
-      openappaChatRequestId:
-        openappaSession &&
-        isInternalChat &&
-        typeof chatBlockCapability === "string" &&
-        chatBlockCapability.startsWith(`${APPA_CHAT_BLOCK_VERSION}:`) &&
-        isUuid(chatBlockCapability.slice(3))
-          ? chatBlockCapability.slice(3)
-          : undefined,
+      ...(sessionReceipt ? { sessionReceipt } : {}),
       ...(pluginContext ? { pluginRegistry, pluginContext } : {}),
       agent: resolvedAgent,
       originalRequest: requestAdapter.getOriginalRequest(),
@@ -1616,9 +2072,20 @@ async function handleStreaming<
     streamTiming,
     pluginRegistry,
     pluginContext,
+    sessionReceipt,
   } = ctx;
 
   const providerName = provider.provider;
+  if (pluginContext && pluginRegistry?.governsHostedToolCalls(pluginContext)) {
+    streamAdapter.withholdHostedToolCalls?.();
+  }
+  if (sessionReceipt) {
+    streamAdapter.setTextSuffix?.((text) => {
+      if (text.length === 0) return "";
+      markSessionReceiptIssued(sessionReceipt);
+      return sessionReceipt.footer;
+    });
+  }
   let billingMode = initialBillingMode;
   const streamStartTime = Date.now();
   let firstChunkTime: number | undefined;
@@ -1893,8 +2360,43 @@ async function handleStreaming<
 
     logger.info("Stream loop completed, processing final events");
 
-    // Evaluate tool invocation policies
-    const toolCalls = streamAdapter.state.toolCalls;
+    const hostedToolCalls = streamAdapter.getHostedToolCalls?.() ?? [];
+    const hostedHold = streamAdapter.formatHeldHostedToolCallsSSE
+      ? await holdProxyPluginHostedToolCalls(
+          pluginRegistry,
+          pluginContext,
+          hostedToolCalls,
+        )
+      : null;
+    if (hostedHold && streamAdapter.formatHeldHostedToolCallsSSE) {
+      for (const blocked of hostedHold.blocked) {
+        recordBlockedToolCallMetrics({
+          allToolCallNames: [blocked.name],
+          reason: blocked.reason,
+          agent,
+          teams,
+          userTeams,
+          sessionId,
+          resolvedUser,
+          providerName,
+          toolCallCount: 1,
+          actualModel,
+          source,
+        });
+      }
+      const heldEvents = streamAdapter.formatHeldHostedToolCallsSSE(
+        hostedHold.notices,
+      );
+      if (!reply.raw.destroyed) {
+        for (const event of heldEvents) {
+          writeToClient(event);
+        }
+      }
+    }
+
+    // Evaluate tool invocation policies. A held turn's own calls rest on what
+    // was withheld, so they went with it.
+    const toolCalls = hostedHold ? [] : streamAdapter.state.toolCalls;
     let toolInvocationRefusal: LlmProxyToolCallRefusal | null = null;
 
     let rewrittenToolCalls: AccumulatedToolCall[] | null = null;
@@ -1940,6 +2442,22 @@ async function handleStreaming<
       if (policyOutcome.wasRewritten)
         rewrittenToolCalls = policyOutcome.toolCalls;
       toolInvocationRefusal = policyOutcome.refusal;
+      // Record metrics for tool calls substituted with denial notices.
+      for (const blocked of policyOutcome.blocked) {
+        recordBlockedToolCallMetrics({
+          allToolCallNames: [blocked.name],
+          reason: blocked.reason,
+          agent,
+          teams,
+          userTeams,
+          sessionId,
+          resolvedUser,
+          providerName,
+          toolCallCount: 1,
+          actualModel,
+          source,
+        });
+      }
 
       logger.info(
         { refused: !!toolInvocationRefusal },
@@ -1955,16 +2473,7 @@ async function handleStreaming<
 
       // Drop the held tool-call events and use the existing refusal format.
       // Its text comes from APPA when enabled.
-      const chatBlock =
-        ctx.openappaChatRequestId && ctx.openappaSession
-          ? encodeChatBlock({
-              session: ctx.openappaSession,
-              requestId: ctx.openappaChatRequestId,
-              feedback: contentMessage,
-              calls: rewrittenToolCalls ?? toolCalls,
-            })
-          : contentMessage;
-      const refusalEvents = streamAdapter.formatCompleteTextSSE(chatBlock);
+      const refusalEvents = streamAdapter.formatCompleteTextSSE(contentMessage);
       for (const event of refusalEvents) {
         writeToClient(event);
       }
@@ -1982,7 +2491,10 @@ async function handleStreaming<
         actualModel,
         source,
       });
-    } else if (toolCalls.length > 0) {
+    } else if (
+      toolCalls.length > 0 ||
+      (!hostedHold && hostedToolCalls.length > 0)
+    ) {
       // Policy allowed them, so hand the buffered events over now. Read once:
       // getRawToolCallEvents must not be called in a condition and again for
       // the flush, or a snapshot-per-call adapter would still work but a
@@ -1996,7 +2508,8 @@ async function handleStreaming<
         // call the client cannot execute. `state.toolCalls` is updated to match
         // what actually went out, so the persisted interaction and
         // `toProviderResponse()` describe the turn the client saw rather than
-        // the one the model first wrote.
+        // the one the model first wrote - logged under the provider's call
+        // ids, as the requests are.
         const allEvents =
           rewrittenToolCalls && streamAdapter.formatToolCallsSSE
             ? streamAdapter.formatToolCallsSSE(rewrittenToolCalls)
@@ -2180,7 +2693,10 @@ async function handleStreaming<
           providerType: provider.interactionType,
           request: originalRequest,
           processedRequest: request,
-          response: streamAdapter.toProviderResponse(),
+          response: withProviderToolCallIds(
+            streamAdapter.toProviderResponse(),
+            streamAdapter.state.toolCalls,
+          ),
           actualModel,
           usage,
           costs,
@@ -2204,7 +2720,12 @@ async function handleStreaming<
       // the failure; otherwise the provider ended the stream early (a truncated
       // response), and the partial content is all we have to log. Either way the
       // call must not disappear from interaction history.
-      await recordUsagelessInteraction(streamAdapter.toProviderResponse());
+      await recordUsagelessInteraction(
+        withProviderToolCallIds(
+          streamAdapter.toProviderResponse(),
+          streamAdapter.state.toolCalls,
+        ),
+      );
     }
   }
 }
@@ -2258,6 +2779,7 @@ async function handleNonStreaming<
     userTeams,
     pluginRegistry,
     pluginContext,
+    sessionReceipt,
   } = ctx;
 
   const providerName = provider.provider;
@@ -2415,7 +2937,30 @@ async function handleNonStreaming<
     },
   });
 
-  const toolCalls = responseAdapter.getToolCalls();
+  const hostedHold = responseAdapter.withHeldHostedToolCalls
+    ? await holdProxyPluginHostedToolCalls(
+        ctx.pluginRegistry,
+        ctx.pluginContext,
+        responseAdapter.getHostedToolCalls?.() ?? [],
+      )
+    : null;
+  for (const blocked of hostedHold?.blocked ?? []) {
+    recordBlockedToolCallMetrics({
+      allToolCallNames: [blocked.name],
+      reason: blocked.reason,
+      agent,
+      teams,
+      userTeams,
+      sessionId,
+      resolvedUser,
+      providerName,
+      toolCallCount: 1,
+      actualModel,
+      source,
+    });
+  }
+  // A held turn's own calls rest on what was withheld, so they go with it.
+  const toolCalls = hostedHold ? [] : responseAdapter.getToolCalls();
   logger.debug(
     { toolCallCount: toolCalls.length },
     `[${providerName}Proxy] Non-streaming response received, checking tool invocation policies`,
@@ -2428,6 +2973,8 @@ async function handleNonStreaming<
       id: toolCall.id,
       name: toolCall.name,
       arguments: JSON.stringify(toolCall.arguments),
+      // The namespace the model called the tool in, on a wire that has them.
+      ...(toolCall.namespace ? { namespace: toolCall.namespace } : {}),
     }));
     rewrittenToolCalls = planDispatchRewrites({
       supported: responseAdapter.withRewrittenToolCalls !== undefined,
@@ -2461,6 +3008,22 @@ async function handleNonStreaming<
     if (policyOutcome.wasRewritten)
       rewrittenToolCalls = policyOutcome.toolCalls;
     const toolInvocationRefusal = policyOutcome.refusal;
+    // Record metrics for tool calls substituted with denial notices.
+    for (const blocked of policyOutcome.blocked) {
+      recordBlockedToolCallMetrics({
+        allToolCallNames: [blocked.name],
+        reason: blocked.reason,
+        agent,
+        teams,
+        userTeams,
+        sessionId,
+        resolvedUser,
+        providerName,
+        toolCallCount: 1,
+        actualModel,
+        source,
+      });
+    }
 
     if (toolInvocationRefusal) {
       const { refusalMessage, contentMessage, reason, allToolCallNames } =
@@ -2470,18 +3033,9 @@ async function handleNonStreaming<
         `[${providerName}Proxy] Tool invocation blocked by policy`,
       );
 
-      const chatBlock =
-        ctx.openappaChatRequestId && ctx.openappaSession
-          ? encodeChatBlock({
-              session: ctx.openappaSession,
-              requestId: ctx.openappaChatRequestId,
-              feedback: contentMessage,
-              calls: rewrittenToolCalls ?? toolCalls,
-            })
-          : contentMessage;
       const refusalResponse = responseAdapter.toRefusalResponse(
-        ctx.openappaChatRequestId ? chatBlock : refusalMessage,
-        chatBlock,
+        refusalMessage,
+        contentMessage,
       );
 
       recordBlockedToolCallMetrics({
@@ -2559,6 +3113,12 @@ async function handleNonStreaming<
       );
 
       if (pluginRegistry && pluginContext) {
+        // A refusal is a terminal answer: the turn ends here, as it does on
+        // the streaming path, so the offers of this turn do not outlive it.
+        await pluginRegistry.onModelResponse({
+          ...pluginContext,
+          response: refusalResponse,
+        });
         await pluginRegistry.complete({
           ...pluginContext,
           response: refusalResponse,
@@ -2575,9 +3135,11 @@ async function handleNonStreaming<
   // (logged) shape it produced, so `getLoggedResponse` below must observe the
   // same call that produced the client response.
   const unobservedClientResponse =
-    rewrittenToolCalls && responseAdapter.withRewrittenToolCalls
-      ? responseAdapter.withRewrittenToolCalls(rewrittenToolCalls)
-      : responseAdapter.getOriginalResponse();
+    hostedHold && responseAdapter.withHeldHostedToolCalls
+      ? responseAdapter.withHeldHostedToolCalls(hostedHold.notices)
+      : rewrittenToolCalls && responseAdapter.withRewrittenToolCalls
+        ? responseAdapter.withRewrittenToolCalls(rewrittenToolCalls)
+        : responseAdapter.getOriginalResponse();
   let clientResponse = unobservedClientResponse;
   if (pluginRegistry && pluginContext) {
     const pluginResponse = await pluginRegistry.onModelResponse({
@@ -2595,7 +3157,6 @@ async function handleNonStreaming<
     }
     clientResponse = pluginResponse as TResponse;
   }
-
   // Note: Token metrics are reported by getObservableFetch() in the HTTP layer
   // for non-streaming requests. We only report cost here to avoid double counting.
   // TODO: Add test for metrics reported by the LLM proxy. It's not obvious since
@@ -2657,7 +3218,11 @@ async function handleNonStreaming<
       // A repaired batch logs what the client actually received. `getLoggedResponse`
       // still wins where it exists: those adapters log a different wire shape on
       // purpose, and after a rewrite they hand back that shape's rewritten form.
-      response: responseAdapter.getLoggedResponse?.() ?? clientResponse,
+      // Either way under the provider's call ids, as the requests are logged.
+      response: withProviderToolCallIds(
+        responseAdapter.getLoggedResponse?.() ?? clientResponse,
+        [...(rewrittenToolCalls ?? []), ...(hostedHold?.notices ?? [])],
+      ),
       actualModel,
       usage,
       costs,
@@ -2682,7 +3247,15 @@ async function handleNonStreaming<
       response: clientResponse,
     });
   }
-  return reply.send(clientResponse);
+  if (!sessionReceipt) return reply.send(clientResponse);
+  const outboundResponse = structuredClone(clientResponse);
+  const appended = appendSessionReceiptToResponse({
+    family: sessionReceipt.family,
+    response: outboundResponse,
+    code: sessionReceipt.code,
+  });
+  if (appended) markSessionReceiptIssued(sessionReceipt);
+  return reply.send(outboundResponse);
 }
 
 async function evaluateProxyPluginToolCalls(
@@ -2696,28 +3269,51 @@ async function evaluateProxyPluginToolCalls(
   refusal: LlmProxyToolCallRefusal | null;
   toolCalls: AccumulatedToolCall[];
   wasRewritten: boolean;
+  blocked: readonly { name: string; reason: string }[];
 }> {
   if (!registry || !context)
     return {
       refusal: await validate(toolCalls),
       toolCalls: [...toolCalls],
       wasRewritten: false,
+      blocked: [],
     };
+  // Capture argument values before plugins run, not mutable object references.
+  const originalCalls = toolCalls.map((call) => ({
+    ...call,
+    arguments:
+      typeof call.arguments === "string"
+        ? call.arguments
+        : JSON.stringify(call.arguments),
+  }));
   const outcome = await registry.onToolCalls(
     { ...context, toolCalls },
     validate,
   );
   if (outcome.decision === "allow") {
+    const releasedCalls = outcome.toolCalls.map((toolCall) => ({
+      ...toolCall,
+      arguments:
+        typeof toolCall.arguments === "string"
+          ? toolCall.arguments
+          : JSON.stringify(toolCall.arguments),
+    }));
     return {
       refusal: null,
-      toolCalls: outcome.toolCalls.map((toolCall) => ({
-        ...toolCall,
-        arguments:
-          typeof toolCall.arguments === "string"
-            ? toolCall.arguments
-            : JSON.stringify(toolCall.arguments),
-      })),
-      wasRewritten: outcome.toolCalls !== toolCalls,
+      toolCalls: releasedCalls,
+      wasRewritten:
+        releasedCalls.length !== originalCalls.length ||
+        releasedCalls.some((call, index) => {
+          const original = originalCalls[index];
+          return (
+            call.id !== original.id ||
+            call.wireId !== original.wireId ||
+            call.name !== original.name ||
+            call.namespace !== original.namespace ||
+            call.arguments !== original.arguments
+          );
+        }),
+      blocked: outcome.blocked ?? [],
     };
   }
 
@@ -2725,6 +3321,43 @@ async function evaluateProxyPluginToolCalls(
     refusal: outcome.refusal,
     toolCalls: [...toolCalls],
     wasRewritten: false,
+    blocked: [],
+  };
+}
+
+/**
+ * The notices that stand in for the provider-run part of a turn, or null when
+ * that part is the client's to have. Runs before the turn's own calls are
+ * checked: what a hosted call brought in is ruled on first.
+ */
+async function holdProxyPluginHostedToolCalls(
+  registry: LlmProxyPluginRegistry | undefined,
+  context: LlmProxyRequestContext | undefined,
+  hostedToolCalls: readonly HostedToolCall[],
+): Promise<{
+  notices: AccumulatedToolCall[];
+  blocked: readonly { name: string; reason: string }[];
+} | null> {
+  if (!registry || !context || hostedToolCalls.length === 0) return null;
+  const outcome = await registry.onHostedToolCalls({
+    ...context,
+    hostedToolCalls,
+  });
+  if (outcome.decision === "release") return null;
+  return {
+    notices: outcome.notices.map((notice) => ({
+      id: notice.id,
+      name: notice.name,
+      arguments:
+        typeof notice.arguments === "string"
+          ? notice.arguments
+          : JSON.stringify(notice.arguments),
+      // Codex dispatches a notice by the namespace its tool is declared in,
+      // and the client is given the id the plugin chose for it.
+      ...(notice.namespace ? { namespace: notice.namespace } : {}),
+      ...(notice.wireId ? { wireId: notice.wireId } : {}),
+    })),
+    blocked: outcome.blocked,
   };
 }
 

@@ -5,6 +5,7 @@ import {
   Download,
   ListChecks,
   MoreHorizontal,
+  Pencil,
   Trash2,
 } from "lucide-react";
 import {
@@ -54,6 +55,8 @@ export function SelectableFileList<T extends FileListItem>({
   canManage,
   selectedId,
   onOpen,
+  canEdit,
+  onEdit,
   onRequestDelete,
   onRequestSaveToKnowledge,
   canSaveToKnowledge,
@@ -66,6 +69,8 @@ export function SelectableFileList<T extends FileListItem>({
   /** The open file's id, highlighted in the list while it previews beside it. */
   selectedId?: string | null;
   onOpen: (id: string) => void;
+  canEdit?: (item: T) => boolean;
+  onEdit?: (id: string) => void;
   /**
    * The conversation these files belong to, when there is one. Downloads need
    * it: a locked chat's attachment serves its bytes only to a request bearing
@@ -173,6 +178,9 @@ export function SelectableFileList<T extends FileListItem>({
     return (
       <FileRowMenu
         item={item}
+        onEdit={
+          onEdit && canEdit?.(item as T) ? () => onEdit(item.id) : undefined
+        }
         onSelect={() => enterSelectionWith(item.id)}
         onDelete={() => onRequestDelete([item as T])}
         onSaveToKnowledge={
@@ -316,12 +324,14 @@ function toSelectedIds(selection: Record<string, boolean>): Set<string> {
  */
 function FileRowMenu({
   item,
+  onEdit,
   onSelect,
   onDelete,
   onSaveToKnowledge,
   onDownload,
 }: {
   item: FileListItem;
+  onEdit?: () => void;
   onSelect: () => void;
   onDelete: () => void;
   /** Omitted for rows that are already persisted outside this conversation. */
@@ -341,6 +351,12 @@ function FileRowMenu({
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
+        {onEdit && (
+          <DropdownMenuItem onSelect={onEdit}>
+            <Pencil className="h-4 w-4" />
+            Edit
+          </DropdownMenuItem>
+        )}
         {item.contentUrl && (
           // Not a bare <a href>: in a locked chat the bytes only come back to a
           // request carrying the conversation key, which an anchor cannot send.

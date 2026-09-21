@@ -64,13 +64,29 @@ function ndjson<TFrame>(frames: (string | Uint8Array)[]): TFrame[] {
 
 type ResponsesFrame = {
   type: string;
+  item_id?: string;
   output_index?: number;
-  item?: { type: string; call_id?: string; name?: string; arguments?: string };
+  item?: {
+    id?: string;
+    type: string;
+    call_id?: string;
+    name?: string;
+    arguments?: string;
+    input?: string;
+  };
   delta?: string;
+  input?: string;
   name?: string;
   arguments?: string;
   response?: {
-    output: Array<{ type: string; name?: string; call_id?: string }>;
+    output: Array<{
+      id?: string;
+      type: string;
+      name?: string;
+      call_id?: string;
+      arguments?: string;
+      input?: string;
+    }>;
   };
 };
 
@@ -144,6 +160,67 @@ describe.each([
     expect(persisted.output[0].name).toBe("archestra__run_tool");
   });
 
+  test.each([
+    ["the completed envelope", true],
+    ["what was streamed", false],
+  ] as const)("re-emits a namespaced call under its namespace, known from %s", (_source, withEnvelope) => {
+    // Codex declares its MCP servers' tools in namespaces and routes a call by
+    // the namespace the streamed item names; without it the call reaches no
+    // tool ("unsupported call").
+    const adapter = factory.createStreamAdapter();
+    const upstreamCall = {
+      id: "fc_orig",
+      call_id: "call_0",
+      type: "function_call",
+      name: "archestra__execute_remedy_plan",
+      arguments: '{"offer_id":"offer-1"}',
+      namespace: "mcp__my_gateway",
+    };
+    adapter.processChunk({
+      type: "response.output_item.added",
+      output_index: 0,
+      sequence_number: 1,
+      item: { ...upstreamCall, arguments: "", status: "in_progress" },
+    } as never);
+    if (withEnvelope) {
+      adapter.processChunk({
+        type: "response.completed",
+        sequence_number: 2,
+        response: {
+          id: "resp_1",
+          object: "response",
+          created_at: 0,
+          model: "gpt-x",
+          status: "completed",
+          output: [{ ...upstreamCall, status: "completed" }],
+        },
+      } as never);
+    }
+    const rewritten = [
+      {
+        id: "call_0",
+        name: "archestra__execute_remedy_plan",
+        arguments: '{"offer_id":"offer-1","execution":{"v":1}}',
+      },
+    ];
+
+    const events = sseData<ResponsesFrame & { item?: { namespace?: string } }>(
+      adapter.formatToolCallsSSE?.(rewritten) ?? [],
+    );
+
+    const items = events.filter((event) => event.item);
+    expect(items.map((event) => event.type)).toEqual([
+      "response.output_item.added",
+      "response.output_item.done",
+    ]);
+    for (const event of items) {
+      expect(event.item).toMatchObject({
+        call_id: "call_0",
+        namespace: "mcp__my_gateway",
+      });
+    }
+  });
+
   test("non-streaming: rewrites the function_call item in place by call_id", () => {
     const adapter = factory.createResponseAdapter({
       id: "resp_1",
@@ -183,6 +260,249 @@ describe.each([
       call_id: "call_0",
       name: "archestra__run_tool",
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Responses API — a batch mixing a DENIED custom tool call with an ALLOWED one.
+//
+// A custom tool is called with free-form text; the denial notice that replaces
+// a refused call is an ordinary function tool. So a rewritten custom call has
+// to change shape on the wire, and an untouched one must not — a client that
+// registered `shell` as a custom tool cannot execute it as a function call.
+// ---------------------------------------------------------------------------
+
+/** The notice's own arguments: JSON, because the notice tool is a function. */
+const NOTICE_ARGUMENTS = JSON.stringify({
+  tool: "apply_patch",
+  arguments: { input: "*** Begin Patch" },
+  ruling: "[appa] Blocked: this call cannot run yet.",
+  notice: { v: 1, call_id: "call_denied", custom: true },
+});
+const MIXED_REWRITE = [
+  {
+    id: "call_denied",
+    name: "archestra__get_remedy_plans",
+    arguments: NOTICE_ARGUMENTS,
+  },
+  // Untouched: the proxy carries a custom call's one argument as `input`.
+  {
+    id: "call_allowed",
+    name: "shell",
+    arguments: JSON.stringify({ input: "ls -la" }),
+  },
+];
+const MIXED_UPSTREAM_OUTPUT = [
+  {
+    id: "msg_1",
+    type: "message",
+    role: "assistant",
+    status: "completed",
+    content: [{ type: "output_text", text: "Working.", annotations: [] }],
+  },
+  {
+    id: "ctc_denied",
+    call_id: "call_denied",
+    type: "custom_tool_call",
+    name: "apply_patch",
+    input: "*** Begin Patch",
+    status: "completed",
+  },
+  {
+    id: "ctc_allowed",
+    call_id: "call_allowed",
+    type: "custom_tool_call",
+    name: "shell",
+    input: "ls -la",
+    status: "completed",
+  },
+];
+
+describe.each([
+  ["OpenAI Responses", openAiResponsesAdapterFactory],
+] as const)("%s custom tool call rewrites", (_label, factory) => {
+  test("holds a streamed custom call for policy and keeps it a custom call when no completed envelope arrives", () => {
+    const adapter = factory.createStreamAdapter();
+    // The call is held, not forwarded live, from its first frame on.
+    const added = adapter.processChunk({
+      type: "response.output_item.added",
+      output_index: 0,
+      sequence_number: 1,
+      item: {
+        id: "ctc_1",
+        call_id: "call_1",
+        type: "custom_tool_call",
+        name: "apply_patch",
+        input: "",
+        status: "in_progress",
+      },
+    } as never);
+    expect(added).toMatchObject({ isToolCallChunk: true, sseData: null });
+    // Its input streams as text, piece by piece.
+    for (const delta of ["*** Begin", " Patch"]) {
+      const held = adapter.processChunk({
+        type: "response.custom_tool_call_input.delta",
+        item_id: "ctc_1",
+        output_index: 0,
+        sequence_number: 2,
+        delta,
+      } as never);
+      expect(held).toMatchObject({ isToolCallChunk: true, sseData: null });
+    }
+    // Upstream ends without a completed envelope: what was streamed is still
+    // a custom call, in the persisted response and in the frames alike.
+    const response = adapter.toProviderResponse();
+    expect(response.output).toContainEqual(
+      expect.objectContaining({
+        type: "custom_tool_call",
+        call_id: "call_1",
+        name: "apply_patch",
+        input: "*** Begin Patch",
+      }),
+    );
+    const events = sseData<ResponsesFrame>(
+      adapter.formatToolCallsSSE?.([
+        {
+          id: "call_1",
+          name: "apply_patch",
+          arguments: JSON.stringify({ input: "*** Begin Patch" }),
+        },
+      ]) ?? [],
+    );
+    expect(events[0]).toMatchObject({
+      type: "response.output_item.added",
+      item: { type: "custom_tool_call", call_id: "call_1" },
+    });
+  });
+
+  test("streams the denial as a function call, the allowed call as a custom call, and a completed envelope that agrees with both", () => {
+    const adapter = factory.createStreamAdapter();
+    for (const item of MIXED_UPSTREAM_OUTPUT.slice(1)) {
+      adapter.processChunk({
+        type: "response.output_item.added",
+        output_index: MIXED_UPSTREAM_OUTPUT.indexOf(item),
+        sequence_number: 1,
+        item: { ...item, input: "", status: "in_progress" },
+      } as never);
+      adapter.processChunk({
+        type: "response.custom_tool_call_input.done",
+        item_id: item.id,
+        output_index: MIXED_UPSTREAM_OUTPUT.indexOf(item),
+        sequence_number: 2,
+        input: item.input,
+      } as never);
+    }
+    adapter.processChunk({
+      type: "response.completed",
+      sequence_number: 3,
+      response: {
+        id: "resp_mixed",
+        object: "response",
+        created_at: 0,
+        model: "gpt-x",
+        status: "completed",
+        output: MIXED_UPSTREAM_OUTPUT,
+      },
+    } as never);
+
+    const events = sseData<ResponsesFrame>(
+      adapter.formatToolCallsSSE?.(MIXED_REWRITE) ?? [],
+    );
+
+    expect(events.map((e) => e.type)).toEqual([
+      "response.output_item.added",
+      "response.function_call_arguments.delta",
+      "response.function_call_arguments.done",
+      "response.output_item.done",
+      "response.output_item.added",
+      "response.custom_tool_call_input.delta",
+      "response.custom_tool_call_input.done",
+      "response.output_item.done",
+      "response.completed",
+    ]);
+
+    // The denied call: a function call the client can actually run, under the
+    // item id upstream produced — a synthesized id would name an item the
+    // provider never sent, and the client echoes the item back next request.
+    expect(events.slice(0, 4).map((e) => e.item_id ?? e.item?.id)).toEqual([
+      "ctc_denied",
+      "ctc_denied",
+      "ctc_denied",
+      "ctc_denied",
+    ]);
+    expect(events[0].item).toMatchObject({
+      type: "function_call",
+      call_id: "call_denied",
+      name: "archestra__get_remedy_plans",
+    });
+    expect(events[1].delta).toBe(NOTICE_ARGUMENTS);
+    expect(events[3].item).toMatchObject({
+      type: "function_call",
+      arguments: NOTICE_ARGUMENTS,
+    });
+
+    // The allowed call stays a custom tool call, and its free-form input is
+    // sent as text rather than as the proxy's `{input: ...}` wrapper.
+    expect(events.slice(4, 8).map((e) => e.item_id ?? e.item?.id)).toEqual([
+      "ctc_allowed",
+      "ctc_allowed",
+      "ctc_allowed",
+      "ctc_allowed",
+    ]);
+    expect(events[4].item).toMatchObject({
+      type: "custom_tool_call",
+      call_id: "call_allowed",
+      name: "shell",
+    });
+    expect(events[5].delta).toBe("ls -la");
+    expect(events[6].input).toBe("ls -la");
+    expect(events[7].item).toMatchObject({
+      type: "custom_tool_call",
+      input: "ls -la",
+    });
+
+    // The client keeps the LAST completed envelope and reconstructs the turn
+    // from it, indexing by output_index. Every item it streamed must sit at the
+    // index the frames claimed, or the reconstruction names the wrong call.
+    const completedOutput = events[8].response?.output ?? [];
+    expect(completedOutput.map((item) => item.type)).toEqual([
+      "message",
+      "function_call",
+      "custom_tool_call",
+    ]);
+    for (const done of events.filter(
+      (event) => event.type === "response.output_item.done",
+    )) {
+      expect(completedOutput[done.output_index ?? -1]).toEqual(done.item);
+    }
+  });
+
+  test("non-streaming: the denial replaces the custom call in place, the allowed call is untouched", () => {
+    const adapter = factory.createResponseAdapter({
+      id: "resp_mixed",
+      object: "response",
+      created_at: 0,
+      model: "gpt-x",
+      status: "completed",
+      output: MIXED_UPSTREAM_OUTPUT,
+      usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 },
+    } as never);
+
+    const rewritten = adapter.withRewrittenToolCalls?.(MIXED_REWRITE) as {
+      output: Array<{ id?: string; type: string; name?: string }>;
+    };
+
+    expect(rewritten.output.map((item) => [item.type, item.name])).toEqual([
+      ["message", undefined],
+      ["function_call", "archestra__get_remedy_plans"],
+      ["custom_tool_call", "shell"],
+    ]);
+    expect(rewritten.output[1]).toMatchObject({
+      id: "ctc_denied",
+      call_id: "call_denied",
+      arguments: NOTICE_ARGUMENTS,
+    });
+    expect(rewritten.output[2]).toEqual(MIXED_UPSTREAM_OUTPUT[2]);
   });
 });
 

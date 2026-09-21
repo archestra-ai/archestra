@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { RUN_ID_HEADER } from "@archestra/shared";
+import type { JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
@@ -8,7 +9,11 @@ import type { TokenAuthContext } from "@/clients/mcp-client";
 import config from "@/config";
 import logger from "@/logging";
 import { AgentModel, AgentRunModel, McpToolCallModel } from "@/models";
-import { APPA_SESSION_HEADER, sessionFromHeaders } from "@/openappa/service";
+import {
+  APPA_SESSION_HEADER,
+  isWellFormedAppaId,
+  sessionFromHeaders,
+} from "@/openappa/service";
 import { skillsSurfaceEnabled } from "@/services/agent-skill-resolution";
 import {
   AgentRunAttentionStateSchema,
@@ -17,14 +22,31 @@ import {
   constructResponseSchema,
   UuidOrSlugSchema,
 } from "@/types";
+import { trackBackgroundWork } from "@/utils/background-work";
 import { getPublicRequestOrigin } from "../request-origin";
 import {
+  clientCapabilityKey,
+  clientCapabilityStore,
+  encodeCapabilitySession,
+  readCapabilitySession,
+} from "./client-capabilities";
+import {
+  dispatchLegacySseMessage,
+  LEGACY_SSE_MESSAGES_SEGMENT,
+  LegacySseSessionRegistry,
+  loadLegacySseSession,
+  openLegacySseStream,
+  wantsLegacySseStream,
+} from "./legacy-sse";
+import {
+  clientSupportsInputRequest,
   deriveStatePrincipal,
   extractMrtrParams,
   readClientCapabilities,
   supportsInputRequired,
   verifyRequestState,
 } from "./mrtr";
+import { pendingInboundRequests } from "./pending-inbound-requests";
 import {
   buildDiscoverResult,
   extractTraceContext,
@@ -63,6 +85,9 @@ import {
 // MCP Gateway request handling (stateless mode)
 // =============================================================================
 
+/** Where a legacy client echoes the session id the gateway gave it. */
+const MCP_SESSION_ID_HEADER = "mcp-session-id";
+
 /**
  * Sets the WWW-Authenticate header with the OAuth protected resource metadata URL.
  * Per RFC 9728, this tells clients where to discover the authorization server.
@@ -97,6 +122,30 @@ function stripRequestHeader(request: IncomingMessage, name: string): void {
       raw.splice(index, 2);
     }
   }
+}
+
+/**
+ * An external client may explicitly supply a logical call id for remedy
+ * idempotency. JSON-RPC ids are transport correlation values and are reusable,
+ * so they must never become durable receipt keys.
+ */
+function logicalToolCallId(body: Record<string, unknown>): string | undefined {
+  if (body.method !== "tools/call") return;
+  const params = body.params;
+  if (!params || typeof params !== "object" || Array.isArray(params)) return;
+  const meta = (params as Record<string, unknown>)._meta;
+  if (!meta || typeof meta !== "object" || Array.isArray(meta)) return;
+  const value = (meta as Record<string, unknown>)[
+    "com.archestra/logicalToolCallId"
+  ];
+  if (
+    typeof value !== "string" ||
+    value.length === 0 ||
+    Buffer.byteLength(value, "utf8") > 256 ||
+    !isWellFormedAppaId(value)
+  )
+    return;
+  return value;
 }
 
 /**
@@ -158,7 +207,72 @@ async function handleMcpPostRequest(
 ): Promise<unknown> {
   const { revision } = resolution;
   const body = request.body as Record<string, unknown>;
+  const principal = deriveStatePrincipal({
+    userId: tokenAuthContext?.userId,
+    tokenId: tokenAuthContext?.tokenId,
+    organizationId: tokenAuthContext?.organizationId,
+  });
+  // This client of this caller on this gateway: the key for its
+  // initialize-time capabilities. Pending server-initiated requests bind to
+  // the authenticated principal instead, so a User-Agent change cannot lose
+  // the caller's answer.
+  const capabilityKey = clientCapabilityKey({
+    profileId,
+    tokenId: tokenAuthContext?.tokenId,
+    userId: tokenAuthContext?.userId,
+    userAgent: readHeader(request, "user-agent"),
+  });
+
+  // Cancellation is a notification, so its target id lives in params rather
+  // than the envelope. Route it to the same live transport as the original
+  // server-initiated request and forget the admission slot immediately.
+  const cancellationParams = body.params;
+  if (
+    body.method === "notifications/cancelled" &&
+    typeof cancellationParams === "object" &&
+    cancellationParams !== null &&
+    "requestId" in cancellationParams
+  ) {
+    const requestId = (cancellationParams as Record<string, unknown>).requestId;
+    if (typeof requestId === "string" || typeof requestId === "number") {
+      const pending = pendingInboundRequests.consume({
+        wireId: requestId,
+        agentId: profileId,
+        caller: principal,
+      });
+      if (pending) {
+        pending.transport.onmessage?.({
+          ...body,
+          params: { ...cancellationParams, requestId: pending.id },
+        } as unknown as JSONRPCMessage);
+        reply.status(202);
+        return;
+      }
+    }
+  }
+
+  // A JSON-RPC response or error without a method answers a server-initiated
+  // request sent during an earlier POST call. Because each POST creates a fresh
+  // server, route the answer back to the active transport waiting for it.
+  // Unknown IDs or answers from other callers fall through to default handling.
+  if (body.method === undefined && body.id !== undefined && body.id !== null) {
+    const pending = pendingInboundRequests.consume({
+      wireId: body.id as string | number,
+      agentId: profileId,
+      caller: principal,
+    });
+    if (pending) {
+      pending.transport.onmessage?.({
+        ...body,
+        id: pending.id,
+      } as unknown as JSONRPCMessage);
+      reply.status(202);
+      return;
+    }
+  }
+
   const runId = readHeader(request, RUN_ID_HEADER);
+  const currentToolCallId = logicalToolCallId(body);
 
   // Read from the raw body: the SDK's request schemas drop unknown params, so
   // these are gone by the time a request handler runs.
@@ -177,6 +291,55 @@ async function handleMcpPostRequest(
   const isInitialize =
     typeof body?.method === "string" && body.method === "initialize";
 
+  let capabilitySessionId: string | undefined;
+  if (isInitialize) {
+    // A legacy client declares capabilities once at initialize.
+    // Store capabilities so later tool calls know if the client supports
+    // server-initiated requests (elicitation, sampling).
+    const capabilities = (
+      body?.params as { capabilities?: unknown } | undefined
+    )?.capabilities;
+    if (capabilities !== undefined) {
+      clientCapabilityStore.remember({ key: capabilityKey, capabilities });
+    }
+    // A client that can be asked something also gets them back as its
+    // session id, which it echoes on every request: that record outlives
+    // this process and reaches every replica.
+    if (
+      (["elicitation/create", "sampling/createMessage"] as const).some(
+        (method) =>
+          clientSupportsInputRequest({
+            clientCapabilities: capabilities,
+            request: { method, params: {} },
+          }),
+      )
+    ) {
+      capabilitySessionId = encodeCapabilitySession({
+        profileId,
+        principal,
+        capabilities,
+      });
+      if (!capabilitySessionId) {
+        fastify.log.warn(
+          { profileId },
+          "Could not encode MCP capability session id",
+        );
+      }
+    }
+  }
+
+  // Capabilities for this call: per-request `_meta` (2026-07-28 clients)
+  // first, then the initialize-time declaration (legacy clients) from the
+  // session id the client echoes, then from this process's memory.
+  const clientCapabilities =
+    readClientCapabilities(body) ??
+    readCapabilitySession({
+      sessionId: readHeader(request, MCP_SESSION_ID_HEADER),
+      profileId,
+      principal,
+    }) ??
+    clientCapabilityStore.lookup({ key: capabilityKey });
+
   fastify.log.trace(
     {
       profileId,
@@ -188,20 +351,43 @@ async function handleMcpPostRequest(
     "MCP gateway POST request received (stateless)",
   );
 
+  // Validate and parse OpenAPPA session headers.
+  let openappaSession: ReturnType<typeof sessionFromHeaders>;
+  try {
+    // Scope header-named sessions to the authenticated user principal.
+    // Tokens without a user identity execute offers by offer_id alone.
+    const namedSession = request.headers[APPA_SESSION_HEADER.toLowerCase()];
+    if (namedSession !== undefined && !isWellFormedAppaId(namedSession))
+      throw new ApiError(
+        400,
+        "OpenAPPA requires valid X-Appa-Session-ID and optional X-Appa-Parent-ID headers",
+      );
+    openappaSession =
+      namedSession !== undefined &&
+      tokenAuthContext?.organizationId &&
+      tokenAuthContext.userId
+        ? sessionFromHeaders({
+            headers: request.headers,
+            organizationId: tokenAuthContext.organizationId,
+            callerId: `user:${tokenAuthContext.userId}`,
+            scope: `user:${tokenAuthContext.userId}`,
+          })
+        : undefined;
+  } catch (error) {
+    if (!(error instanceof ApiError)) throw error;
+    reply.status(error.statusCode);
+    return {
+      jsonrpc: "2.0",
+      error: { code: -32600, message: error.message },
+      id: (request.body as { id?: string | number })?.id ?? null,
+    };
+  }
+
   try {
     // Create fresh server and transport for each request (stateless mode)
     const { server } = await createAgentServer({
-      openappaSession:
-        request.headers[APPA_SESSION_HEADER.toLowerCase()] &&
-        tokenAuthContext?.organizationId
-          ? sessionFromHeaders({
-              headers: request.headers,
-              organizationId: tokenAuthContext.organizationId,
-              callerId: tokenAuthContext.userId
-                ? `user:${tokenAuthContext.userId}`
-                : undefined,
-            })
-          : undefined,
+      openappaSession,
+      currentToolCallId,
       agentId: profileId,
       tokenAuth: tokenAuthContext,
       runId,
@@ -211,14 +397,89 @@ async function handleMcpPostRequest(
         enabled: revision === STATELESS_MCP_PROTOCOL_REVISION,
         inputResponses: mrtrParams.inputResponses,
         round: mrtrRound,
-        clientCapabilities: readClientCapabilities(body),
+        clientCapabilities,
       },
     });
-    const transport = createStatelessTransport(profileId);
+    // A client that declares a server-initiated capability may be asked a
+    // question mid-call (elicitation/create, sampling, ...). That needs an
+    // SSE response stream: in JSON-response mode the transport silently drops
+    // the mid-call request and the call hangs until the SDK timeout.
+    const declaresServerInitiated = SERVER_INITIATED_METHODS.some((method) =>
+      clientSupportsInputRequest({
+        clientCapabilities,
+        request: { method, params: {} },
+      }),
+    );
+    // A call that may detach as a task keeps JSON: after detach there is no
+    // live stream to elicit on, and the task must fail instead of elicit.
+    const declaresTasks = (() => {
+      if (typeof clientCapabilities !== "object" || clientCapabilities === null)
+        return false;
+      const extensions = (clientCapabilities as Record<string, unknown>)
+        .extensions;
+      return (
+        typeof extensions === "object" &&
+        extensions !== null &&
+        "io.modelcontextprotocol/tasks" in extensions
+      );
+    })();
+    const sseResponse = declaresServerInitiated && !declaresTasks;
+
+    const transport = createStatelessTransport(profileId, { sseResponse });
 
     fastify.log.trace({ profileId }, "Connecting server to transport");
     await server.connect(transport);
     fastify.log.trace({ profileId }, "Server connected to transport");
+
+    // Server.connect installs its own close hook. Compose with it so every
+    // outstanding request loses its live transport as soon as it closes.
+    const onTransportClose = transport.onclose;
+    transport.onclose = () => {
+      pendingInboundRequests.forgetTransport({ transport });
+      onTransportClose?.();
+    };
+
+    // Register every server-initiated request the call sends so the client's
+    // answer POST (a separate request in stateless mode) can be routed back
+    // to this Server instead of a fresh one. The request goes out under the
+    // wire id the registry issues, and so does a cancellation of it.
+    const originalSend = transport.send.bind(transport);
+    transport.send = async (message, options) => {
+      if (isServerInitiatedRequestMessage(message)) {
+        let wireId: string | undefined;
+        try {
+          wireId = pendingInboundRequests.register({
+            id: message.id,
+            transport,
+            agentId: profileId,
+            caller: principal,
+          });
+          return await originalSend({ ...message, id: wireId }, options);
+        } catch (error) {
+          if (wireId !== undefined) pendingInboundRequests.forget({ wireId });
+          throw error;
+        }
+      }
+      const cancelled = cancelledRequestId(message);
+      const wireId =
+        cancelled === undefined
+          ? undefined
+          : pendingInboundRequests.wireIdOf({ transport, id: cancelled });
+      if (wireId !== undefined) {
+        pendingInboundRequests.forget({ wireId });
+        return originalSend(
+          {
+            ...message,
+            params: {
+              ...(message as { params: Record<string, unknown> }).params,
+              requestId: wireId,
+            },
+          } as JSONRPCMessage,
+          options,
+        );
+      }
+      return originalSend(message, options);
+    };
 
     fastify.log.trace({ profileId }, "Calling transport.handleRequest");
 
@@ -236,6 +497,9 @@ async function handleMcpPostRequest(
       (revision === STATELESS_MCP_PROTOCOL_REVISION ? revision : undefined);
     if (echoVersion) {
       reply.raw.setHeader(MCP_PROTOCOL_VERSION_HEADER, echoVersion);
+    }
+    if (capabilitySessionId) {
+      reply.raw.setHeader(MCP_SESSION_ID_HEADER, capabilitySessionId);
     }
 
     // The bundled SDK transport validates this header against its own supported
@@ -303,7 +567,18 @@ async function handleMcpPostRequest(
 const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const { endpoint } = config.mcpGateway;
 
-  // Stateless gateways have no standalone SSE stream; MCP clients need 405 to stop polling.
+  // Legacy HTTP+SSE streams this process holds. Ended from `preClose`, before
+  // Fastify drains the HTTP server: a held stream IS one of the in-flight
+  // requests being drained, so ending it any later deadlocks the shutdown.
+  // Clients then reconnect to a live replica instead of a dead socket.
+  const legacySseSessions = new LegacySseSessionRegistry();
+  fastify.addHook("preClose", async () => {
+    legacySseSessions.close();
+  });
+
+  // GET opens the legacy HTTP+SSE stream for a client that asks for one. Any
+  // other GET is answered 405: the gateway offers nothing else on GET, and a
+  // Streamable HTTP client reads 405 as "no standalone stream" and stops.
   fastify.get(
     `${endpoint}/:profileId`,
     {
@@ -356,16 +631,124 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
         };
       }
 
+      // A legacy client reads its message endpoint from the stream. A
+      // Streamable HTTP client that opens the optional standalone stream gets
+      // the same stream and ignores the `endpoint` event; nothing is ever
+      // pushed to it unasked.
+      if (wantsLegacySseStream(request)) {
+        await openLegacySseStream({
+          request,
+          reply,
+          profileId,
+          principal: deriveStatePrincipal(tokenAuth),
+          registry: legacySseSessions,
+        });
+        return;
+      }
+
       reply.header("Allow", "POST");
       reply.status(405);
       return {
         jsonrpc: "2.0" as const,
         error: {
           code: -32000,
-          message: "Method not allowed. Use POST for MCP requests.",
+          message:
+            "Method not allowed. Use POST for MCP requests, or GET with Accept: text/event-stream for the legacy HTTP+SSE transport.",
         },
         id: null,
       };
+    },
+  );
+
+  // Legacy HTTP+SSE message endpoint. The stream opened by GET announces this
+  // URL, and the client POSTs every JSON-RPC message here. The answer goes
+  // back on the stream, never in this response.
+  fastify.post(
+    `${endpoint}/:profileId/${LEGACY_SSE_MESSAGES_SEGMENT}`,
+    {
+      schema: {
+        operationId: "mcpGatewaySseMessage",
+        tags: ["MCP Gateway"],
+        params: z.object({
+          profileId: UuidOrSlugSchema,
+        }),
+        querystring: z.object({
+          sessionId: z.string().uuid(),
+        }),
+        body: z.record(z.string(), z.unknown()),
+        response: {
+          202: z.object({ accepted: z.literal(true) }),
+          401: z.object({
+            error: z.string(),
+            message: z.string(),
+          }),
+          404: z.object({
+            error: z.string(),
+            message: z.string(),
+          }),
+        },
+      },
+    },
+    async (request, reply) => {
+      const token = extractBearerToken(request);
+      const profileId = await AgentModel.resolveIdFromIdOrSlug(
+        request.params.profileId,
+      );
+
+      if (!profileId || !token) {
+        setWWWAuthenticateHeader(request, reply);
+        reply.status(401);
+        return {
+          error: "Unauthorized",
+          message:
+            "Missing or invalid Authorization header. Expected: Bearer <platform_token> or Bearer <agent-id>",
+        };
+      }
+
+      const { result: tokenAuth, reason } = await authenticateMCPGatewayRequest(
+        profileId,
+        token,
+      );
+      if (!tokenAuth) {
+        setWWWAuthenticateHeader(request, reply);
+        reply.status(401);
+        return {
+          error: "Unauthorized",
+          message: describeGatewayAuthFailure(reason),
+        };
+      }
+
+      // Bind the stream to its gateway and principal. Unknown sessions return
+      // 404, avoiding an unnecessary OAuth retry for valid credentials.
+      const session = await loadLegacySseSession(request.query.sessionId);
+      if (
+        !session ||
+        session.profileId !== profileId ||
+        session.principal !== deriveStatePrincipal(tokenAuth)
+      ) {
+        reply.status(404);
+        return { error: "Not Found", message: "Unknown session" };
+      }
+
+      // Acknowledged now, answered on the stream: the client's POST must not
+      // wait on a tool call, and the SDK's own SSE server answers 202 too.
+      trackBackgroundWork(
+        dispatchLegacySseMessage({
+          request,
+          registry: legacySseSessions,
+          sessionId: request.query.sessionId,
+          profileId,
+          message: request.body,
+        }).catch((error) => {
+          fastify.log.error(
+            { error, profileId },
+            "Legacy SSE message dispatch failed",
+          );
+        }),
+      );
+
+      reply.status(202);
+      return { accepted: true as const };
     },
   );
 
@@ -480,7 +863,11 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
         reply.status(400);
         return {
           jsonrpc: "2.0",
-          error: { code: resolution.code, message: resolution.message },
+          error: {
+            code: resolution.code,
+            message: resolution.message,
+            ...(resolution.data && { data: resolution.data }),
+          },
           id: null,
         };
       }
@@ -684,20 +1071,24 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // the same capability builder `initialize` uses.
       if (isDiscoverRequest(request.body)) {
         reply.header(MCP_PROTOCOL_VERSION_HEADER, resolution.revision);
-        await logHandshake({
-          fastify,
-          profileId,
-          method: SERVER_DISCOVER_METHOD,
-          revision: resolution.revision,
-          tokenAuthContext: {
-            tokenId: tokenAuth.tokenId,
-            teamId: tokenAuth.teamId,
-            isOrganizationToken: tokenAuth.isOrganizationToken,
-            organizationId: tokenAuth.organizationId,
-            ...(tokenAuth.userId && { userId: tokenAuth.userId }),
-          },
-          runId: readHeader(request, RUN_ID_HEADER),
-        });
+        // Clients probe discover on a short timeout (Claude Code allows at
+        // most five seconds), so the handshake log never delays the reply.
+        trackBackgroundWork(
+          logHandshake({
+            fastify,
+            profileId,
+            method: SERVER_DISCOVER_METHOD,
+            revision: resolution.revision,
+            tokenAuthContext: {
+              tokenId: tokenAuth.tokenId,
+              teamId: tokenAuth.teamId,
+              isOrganizationToken: tokenAuth.isOrganizationToken,
+              organizationId: tokenAuth.organizationId,
+              ...(tokenAuth.userId && { userId: tokenAuth.userId }),
+            },
+            runId: readHeader(request, RUN_ID_HEADER),
+          }),
+        );
         return {
           jsonrpc: "2.0",
           result: buildDiscoverResult({
@@ -754,6 +1145,44 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
 function readHeader(request: FastifyRequest, name: string): string | undefined {
   const value = request.headers[name.toLowerCase()];
   return Array.isArray(value) ? value[0] : value;
+}
+
+const SERVER_INITIATED_METHODS = [
+  "elicitation/create",
+  "sampling/createMessage",
+  "roots/list",
+] as const;
+
+function isServerInitiatedRequestMessage(
+  message: JSONRPCMessage,
+): message is JSONRPCMessage & { id: string | number } {
+  return (
+    typeof message === "object" &&
+    message !== null &&
+    "method" in message &&
+    typeof message.method === "string" &&
+    (SERVER_INITIATED_METHODS as readonly string[]).includes(message.method) &&
+    "id" in message &&
+    message.id !== undefined
+  );
+}
+
+/** The request a `notifications/cancelled` message cancels, if it is one. */
+function cancelledRequestId(
+  message: JSONRPCMessage,
+): string | number | undefined {
+  if (
+    !("method" in message) ||
+    message.method !== "notifications/cancelled" ||
+    "id" in message
+  ) {
+    return undefined;
+  }
+  const requestId = (message.params as { requestId?: unknown } | undefined)
+    ?.requestId;
+  return typeof requestId === "string" || typeof requestId === "number"
+    ? requestId
+    : undefined;
 }
 
 function runtimeTokenMatchesRun(params: {

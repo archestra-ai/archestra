@@ -2,6 +2,7 @@ import {
   AGENT_RUNTIME_READABLE_TRANSCRIPT_FILE,
   AGENT_RUNTIME_READABLE_TRANSCRIPT_MAX_BYTES,
 } from "@/services/agent-runtime/runtime-contract";
+import { buildRuntimeFailureEnvelopeScript } from "./failure-envelope";
 
 /**
  * PID 1 owns the workspace, not the agent command. Requests are published by
@@ -46,6 +47,12 @@ while :; do
     fi
     if [ -f "$turn.started" ]; then
       # A replacement Pod cannot know which external effects completed.
+      ${buildRuntimeFailureEnvelopeScript({
+        prefixVariable: "turn",
+        code: "runtime.interrupted",
+        message:
+          "The Agent Runtime pod was replaced while this turn was running. The turn was not replayed because some actions may already have completed. Review the saved work before retrying.",
+      })}
       printf '75\n' > "$turn.exit.tmp"
       mv "$turn.exit.tmp" "$turn.exit"
       rm -f "$request" "$turn.session"
@@ -75,6 +82,12 @@ while :; do
       if { [ -f "$turn.running" ] || [ "$startup_polls" -ge 30 ]; } && [ "$(tmux display-message -p -t agent '#{pane_dead}' 2>/dev/null || echo 1)" = 1 ]; then
         dead_polls=$((dead_polls + 1))
         if [ "$dead_polls" -ge 3 ] && [ ! -f "$turn.result" ]; then
+          ${buildRuntimeFailureEnvelopeScript({
+            prefixVariable: "turn",
+            code: "runtime.pane_exited",
+            message:
+              "The Agent Runtime process exited unexpectedly before reporting its result. Review the saved work and runtime logs before retrying.",
+          })}
           printf '75\n' > "$turn.result.tmp"
           mv "$turn.result.tmp" "$turn.result"
           break

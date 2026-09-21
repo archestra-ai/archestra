@@ -3,14 +3,14 @@ title: Connect Your Agents
 category: Archestra Platform
 order: 8
 description: How the one-command setup script connects your AI tools, and how to audit or undo it
-lastUpdated: 2026-09-15
+lastUpdated: 2026-09-20
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
 ![The Connection page with a copyable coding-agent prompt](/docs/automated_screenshots/platform-connection_connect-with-ai.webp)
 
-Select your client on the Connection page. Claude Code, Cursor, Codex, and Copilot CLI show a setup prompt. Your agent prepares the connection; you review and approve it in your browser.
+Select your client on the Connection page. Claude Code, Cursor, Codex, Copilot CLI, and OpenCode show a setup prompt. Your agent prepares the connection; you review and approve it in your browser.
 
 Claude Desktop, n8n, and other clients show their setup instructions. Your selected client stays in the URL when you refresh or share the page.
 
@@ -24,7 +24,7 @@ You can also give your coding agent this prompt, replacing the example hostname:
 > Read https://ai.example.com/connect.md and connect this client.
 
 The public instructions need no installed skill or platform login.
-They support Claude Code, Cursor, Codex, and Copilot CLI.
+They support Claude Code, Cursor, Codex, Copilot CLI, and OpenCode.
 The terminal needs Node.js 18 or newer on macOS, Linux, or Windows.
 
 The agent downloads a public bootstrap installer and starts a connection request.
@@ -46,6 +46,8 @@ Your coding client may ask permission before running downloaded code.
 Browser approval authorizes installation. MCP gateway authentication remains the client's native OAuth flow.
 Follow the installer output to authenticate the gateway and reload your client.
 Verify that the gateway can list tools before considering the connection complete.
+
+For OpenCode, the connection agent runs the installer and `opencode mcp auth <name>` in sequence. Your browser opens twice: first for connection approval, then for gateway OAuth consent. Restart OpenCode after both steps complete.
 
 Cursor still requires its model settings and marketplace steps inside the app.
 See [Supported Clients](#supported-clients) for each client's remaining steps.
@@ -84,18 +86,18 @@ A script can set up four things:
 - **Skills** — installs a shared skills plugin into the client.
 - **Plugins** — installs selected, approved, platform-compatible plugins for the client. The review step lets you change the selection before generating the command. See [Plugins](/docs/platform-agent-plugins).
 
-For Claude Code, Codex, and Copilot CLI the script also installs a [startup guard](#startup-guard) that checks these remotes before every launch.
+For Claude Code, Codex, Copilot CLI, and OpenCode the script also installs a [startup guard](#startup-guard) that checks these remotes before every launch.
 
 The exact commands and files differ per client — see [Supported Clients](#supported-clients) below.
 
 ## Attribution Headers
 
-When it wires up the LLM proxy for Claude Code or Claude Desktop, the script adds two Archestra headers to every model request:
+When it wires up the LLM proxy, the script adds Archestra attribution headers to supported clients:
 
-- **X-Archestra-Agent-Id** names the client — Claude Code or Claude Desktop — so the proxy logs show which tool made each call. It carries no secret.
+- **X-Archestra-Agent-Id** names the client, such as Claude Code, Claude Desktop, Codex, or OpenCode. The proxy logs use it for client filters and badges. It carries no secret.
 - **X-Archestra-Virtual-Key** attributes the request to you. In passthrough mode your own provider credential still pays for inference; this key just tells the proxy whose request it is. Treat it as a secret.
 
-For Claude Code the script writes these into `ANTHROPIC_CUSTOM_HEADERS` in `~/.claude/settings.json`; for Claude Desktop they go in the Custom headers field. The merge replaces only these two lines, so any other headers you set stay put.
+Each client stores the headers in its native provider settings. The merge leaves unrelated headers unchanged.
 
 ## Idempotence and Backups
 
@@ -125,7 +127,7 @@ You can also read the generator. A deterministic renderer builds the script with
 
 ## Startup Guard
 
-For Claude Code, Codex, and Copilot CLI, the script installs a startup guard — a pre-loader that checks your Archestra remotes each time you launch `claude`, `codex`, or `copilot`. It makes a single health request covering the configured remotes — the LLM proxy and the MCP gateway; the skills marketplace rides on the same origin — then plays each remote's check in turn with a brief spinner. When everything is healthy, the CLI starts in about a second. The guard draws on the terminal's alternate screen, so nothing lingers after the CLI exits.
+For Claude Code, Codex, Copilot CLI, and OpenCode, the script installs a startup guard. It checks your Archestra remotes each time you launch `claude`, `codex`, `copilot`, or `opencode`. It makes one health request for the LLM proxy, MCP gateway, and skills origin. When everything is healthy, the CLI starts in about a second.
 
 A remote the platform reports down gets a "Failed to connect to …" line. After the last check, one prompt covers every down remote — "Disconnect MCP gateway (name) from Codex now? (Y/n)", naming your client, or "Disconnect all 3 unreachable resources…" when several are down. Enter or `y` disconnects them all — the exact reverse of the connect steps; plugins are uninstalled before their marketplace is removed. `n` keeps them. The guard reads the client's config back to confirm each removal landed. A removal it cannot confirm gets a ✗ line with the command to run by hand, and the guard stays installed to try again. Later launches skip a remote the guard disconnected. Once no connected remote is left, the guard removes itself — the script and the profile hook — so a stale wrapper can never break a launch. When the platform itself is unreachable, the guard retries its request for up to 15 seconds with a status line, showing the same disconnect prompt below it, then treats every remote as down. Every path ends with the CLI starting; the guard never blocks a launch. Non-interactive runs, `codex exec` or `claude -p` for example, only get a warning on stderr.
 
@@ -144,12 +146,13 @@ The guard lives under `~/.archestra/`, hooked in by a marked wrapper block in yo
 | Claude Code | `~/.archestra/claude-startup-guard.sh` | `~/.archestra/claude-startup-guard.ps1` | `ARCHESTRA_CLAUDE_GUARD=0` |
 | Codex | `~/.archestra/codex-startup-guard.sh` | `~/.archestra/codex-startup-guard.ps1` | `ARCHESTRA_CODEX_GUARD=0` |
 | Copilot CLI | `~/.archestra/copilot-startup-guard.sh` | `~/.archestra/copilot-startup-guard.ps1` | `ARCHESTRA_COPILOT_GUARD=0` |
+| OpenCode | `~/.archestra/opencode-startup-guard.sh` | `~/.archestra/opencode-startup-guard.ps1` | `ARCHESTRA_OPENCODE_GUARD=0` |
 
 Set the disable variable to turn the guard off without uninstalling. To remove everything by hand instead, follow your client's Revert steps below.
 
 ## Supported Clients
 
-Four clients get the one-command script: Claude Code, Codex, Cursor, and Copilot CLI. Claude Desktop gets a downloadable installer. n8n and Any Client get instructions you apply in the app yourself. Each section lists what changes and how to undo it. To also cut off access on the server, delete the virtual key on the **LLM Proxy** page and revoke any skills share link on the Skills page.
+Five clients get the one-command script: Claude Code, Codex, Cursor, Copilot CLI, and OpenCode. Claude Desktop gets a downloadable installer. n8n and Any Client get step-by-step instructions you apply yourself. Each section lists what changes and how to undo it. To also cut off access on the server, delete the virtual key on the **LLM Proxy** page and revoke any skills share link on the Skills page.
 
 ### Claude Code
 
@@ -206,11 +209,28 @@ The `copilot` CLI must be on your `PATH`.
 
 Download the setup helper and open it in normal Claude Desktop. Confirm its native installation prompt to start the reviewed setup. For an existing third-party profile, use the terminal option. The setup script supports macOS, Windows, and Linux. Choose subscription authentication or an API key in the review step. The script checks inference, saves a gateway profile, and restarts Desktop. It preserves manually created profiles and backs up changed files. Rerunning setup replaces the managed connection; a different deployment takes precedence over the previous one.
 
-Subscription setup obtains a token locally through the official Claude Code CLI. API-key setup uses a personal virtual key backed by your configured Anthropic key. The download requires Node.js 18+ and Python 3.9 or newer.
+Connecting the LLM Proxy switches Desktop to third-party mode with separate conversation history. Existing Claude conversations do not appear there. The installer does not delete or migrate them. Tools-only setup does not require this mode switch.
 
-Authorize the MCP connector in Desktop's **Settings → Connectors**. The selected shared skills install automatically after restart. Rerun Connect to install an updated snapshot. To switch back, rerun the previous deployment’s installer or select a manually created inference profile.
+Subscription setup opens Claude sign-in through the helper's browser flow. API-key setup uses a personal virtual key backed by your configured Anthropic key. The download uses Desktop's built-in runtime. Only the terminal option requires Python and Claude Code for subscription sign-in.
+
+Follow the gateway completion step on Connect after Desktop restarts. Authentication and enabling the gateway for a conversation are separate actions. The selected shared skills install automatically after restart. Rerun Connect to install an updated snapshot.
+
+To return to standard Claude, choose Anthropic sign-in on Desktop's sign-in screen. See [Revert](/docs/platform-claude-desktop-example#revert) for recovery guidance. Keep third-party application data to preserve conversations created there.
 
 See [Using Claude Desktop (Cowork)](/docs/platform-claude-desktop-example) for requirements and authentication details.
+
+### OpenCode
+
+OpenCode 1.17 or newer supports the reviewed setup script.
+
+- **MCP gateway** — adds the server to `~/.config/opencode/opencode.json`. Run `opencode mcp auth <name>` once to finish browser sign-in.
+- **LLM proxy** — keeps OpenCode provider IDs, model IDs, and local credentials. It enables compatible providers with valid credentials and routes them to proxy endpoints. Unsupported or uncredentialed providers stay hidden. If an active model becomes unavailable, OpenCode clears it without choosing a replacement.
+- **OAuth connections** — OpenCode refreshes local Google and ChatGPT access tokens. The routing guard forwards request bearer tokens and required account headers to the proxy adapter. Archestra does not store or refresh the OAuth tokens.
+- **Routing guard** — installs a global OpenCode plugin. The plugin updates the provider allowlist after project configuration loads. It blocks requests if a project overrides the Archestra base URL or chooses an unsupported provider, preventing direct provider requests.
+- **Skills** — clones the marketplace into `~/.config/opencode/skills/`. OpenCode loads the skills on its next start.
+- **Startup guard** — installs a pre-loader that checks your Archestra remotes before every `opencode` launch. See [Startup Guard](#startup-guard).
+- **Revert** — use the startup guard reconfigure menu. It removes the routing plugin and restores settings from previous connections. Local credentials and model selections stay unchanged. If the routing plugin file existed before setup, disconnect restores the original file content.
+
 ### n8n
 
 n8n is a workflow tool, so you configure nodes inside n8n — there is no script and nothing on disk to back up.
@@ -225,13 +245,26 @@ Selecting **Any Client** gives copy-paste instructions instead of a one-command 
 
 ## Configuring the Page
 
-Go to **Settings → Connection** to set what the page offers everyone. **Available clients** is the list of clients it shows setup instructions for — remove a chip to drop that client. "Any client" is always shown.
+Go to **Settings → Connect Page** to set what the page offers everyone. **Available clients** is the list of clients it shows setup instructions for — remove a chip to drop that client. "Any client" is always shown.
 
 You can turn off **LLM Proxy on Connect**, **Skills on Connect**, and **Plugins on Connect**. The page then omits those sections, and new setup commands cannot include them. Plugin management and existing installs keep working.
 
 The same page holds the defaults it pre-selects — an MCP gateway, a client, and the provider key a setup command's virtual key maps to — and the base URLs it hands out.
 
 Which model providers the page offers is not set here. That is one deployment-wide list, under **Settings → LLM → Model providers**.
+
+### Runtime Handoff Instructions
+
+**Suggest runtime handoff** adds configurable instructions to connected clients. It is on by default. Setup must include an MCP gateway with access to Agent Runtime tools. At session start, the agent explains how to move work to Cloud runtime. When you request a transfer, it uses the handoff skill and creates a runtime agent if needed.
+
+- **Claude Code:** the existing shell wrapper passes a local file through `--append-system-prompt-file`. Explicit system-prompt flags take precedence.
+- **Codex:** the wrapper reads effective settings through Codex's local configuration API. It combines existing developer instructions with the handoff text through `-c developer_instructions`. It does not edit `AGENTS.md` or replace the built-in prompt. Profile, directory, remote, and config overrides skip this addition, except model, provider, and reasoning-effort selections. If configuration cannot be read within three seconds, Codex launches unchanged with a warning. This requires Node.js and a Codex version supporting `config/read`.
+- **Copilot CLI:** the wrapper adds a local instruction directory through `COPILOT_CUSTOM_INSTRUCTIONS_DIRS`. Existing instruction directories stay included.
+- **Claude Desktop:** setup adds `organizationInstructions` to its managed profile. This requires Desktop 1.37937.0 or newer. Instructions longer than 3,000 characters fail setup without changing the profile.
+- **Cursor:** setup prints the instruction text. Paste it into **Customize → Rules → User Rules**, keeping your existing rules. Updates and removal remain manual.
+- **OpenCode:** the wrapper passes a temporary config overlay through `OPENCODE_CONFIG_CONTENT`. The overlay adds the handoff instruction without editing project files.
+
+After saving edits or disabling the feature, rerun Connect setup. Reload your shell for CLI clients and start a new conversation. Resumed conversations can retain their previous prompt. Disabling removes managed instructions during setup; remove Cursor's rule manually. Instructions guide the model; they do not guarantee an offer or start remote work automatically.
 
 ## Use Case
 

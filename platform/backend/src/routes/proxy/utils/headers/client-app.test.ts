@@ -2,12 +2,14 @@ import {
   CLAUDE_CLIENT_ID,
   CODEX_CLIENT_ID,
   CURSOR_CLIENT_ID,
+  OPENCODE_CLIENT_ID,
 } from "@archestra/shared";
 import { describe, expect, test } from "vitest";
 import {
   detectClaudeClientId,
   detectCodexClientId,
   detectCursorClientId,
+  detectOpenCodeClientId,
 } from "./client-app";
 
 describe("detectClaudeClientId", () => {
@@ -186,6 +188,37 @@ describe("detectCursorClientId", () => {
     // Only the full leading product token counts.
     expect(
       detectCursorClientId({ "user-agent": "Precursor/1.0" }),
+    ).toBeUndefined();
+  });
+});
+
+describe("detectOpenCodeClientId", () => {
+  test("attributes OpenCode by its User-Agent on every provider wire", () => {
+    expect(
+      detectOpenCodeClientId({
+        "user-agent":
+          "opencode/1.18.31 ai-sdk/provider-utils/4.0.46 runtime/bun/1.3.14",
+      }),
+    ).toBe(OPENCODE_CLIENT_ID);
+    // The OpenAI Responses wire also carries `originator: opencode`.
+    expect(detectOpenCodeClientId({ originator: "opencode" })).toBe(
+      OPENCODE_CLIENT_ID,
+    );
+  });
+
+  test("does not attribute other clients", () => {
+    expect(detectOpenCodeClientId({})).toBeUndefined();
+    expect(
+      detectOpenCodeClientId({ "user-agent": "codex_cli_rs/0.155.0" }),
+    ).toBeUndefined();
+    expect(
+      detectOpenCodeClientId({ "user-agent": "notopencode/1.0" }),
+    ).toBeUndefined();
+    expect(
+      detectOpenCodeClientId({ "x-opencode-session": "ses_untrusted" }),
+    ).toBeUndefined();
+    expect(
+      detectOpenCodeClientId({ "x-session-affinity": "ses_untrusted" }),
     ).toBeUndefined();
   });
 });

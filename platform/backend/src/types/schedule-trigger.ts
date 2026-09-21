@@ -21,6 +21,7 @@ export const ScheduleTriggerRunStatusSchema = z.enum([
   "running",
   "success",
   "failed",
+  "cancelled",
 ]);
 export type ScheduleTriggerRunStatus = z.infer<
   typeof ScheduleTriggerRunStatusSchema

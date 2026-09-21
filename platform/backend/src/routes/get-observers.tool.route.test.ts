@@ -2,6 +2,7 @@ import {
   ADMIN_ROLE_NAME,
   CLAUDE_CODE_CLIENT_ID,
   CODEX_CLIENT_ID,
+  OPENCODE_CLIENT_ID,
 } from "@archestra/shared";
 import { ToolObservationModel } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
@@ -53,6 +54,11 @@ describe("tool observation filters", () => {
       userId: otherUser.id,
       externalAgentId: CODEX_CLIENT_ID,
     });
+    await ToolObservationModel.recordObservations({
+      toolNames: [readTool.name],
+      userId: otherUser.id,
+      externalAgentId: OPENCODE_CLIENT_ID,
+    });
 
     const response = await app.inject({
       method: "GET",
@@ -64,7 +70,11 @@ describe("tool observation filters", () => {
     expect(body.users.map((u: { id: string }) => u.id).sort()).toEqual(
       [user.id, otherUser.id].sort(),
     );
-    expect([...body.clients].sort()).toEqual(["claude-code", "codex"]);
+    expect([...body.clients].sort()).toEqual([
+      "claude-code",
+      "codex",
+      "opencode",
+    ]);
   });
 
   test("with-assignments narrows to one user's tools from one client", async ({

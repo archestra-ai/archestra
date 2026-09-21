@@ -152,52 +152,31 @@ export async function runSandboxCommandTurn(params: {
         return;
       }
 
-      // Heartbeat while the command runs (container materialization + replay
-      // + the command itself can take minutes) so proxies with idle timeouts
-      // don't cut the SSE — same cadence as the LLM path's tool executions.
-      const heartbeatInterval = setInterval(() => {
-        try {
-          writer.write({
-            type: "data-heartbeat",
-            data: { timestamp: Date.now() },
-            transient: true,
-          });
-        } catch {
-          clearInterval(heartbeatInterval);
-        }
-      }, 5000);
-
-      let response: Awaited<ReturnType<typeof executeArchestraTool>>;
-      let output: Awaited<ReturnType<typeof buildArchestraToolOutput>>;
-      try {
-        // RBAC and assignment are enforced inside executeArchestraTool; errors
-        // (denials, validation, sandbox runtime failures) come back as isError
-        // results whose text the same output shaping turns into tool output —
-        // exactly what a model-initiated call would persist.
-        response = await executeArchestraTool(
-          toolName,
-          { command },
-          {
-            agent,
-            conversationId,
-            isolationKey: conversationId,
-            userId,
-            agentId: agent.id,
-            organizationId,
-            abortSignal: abortController.signal,
-          },
-        );
-        output = await buildArchestraToolOutput({
-          response,
-          toolName,
-          toolArguments: { command },
-          agentId: agent.id,
+      // RBAC and assignment are enforced inside executeArchestraTool; errors
+      // (denials, validation, sandbox runtime failures) come back as isError
+      // results whose text the same output shaping turns into tool output —
+      // exactly what a model-initiated call would persist.
+      const response = await executeArchestraTool(
+        toolName,
+        { command },
+        {
+          agent,
+          conversationId,
+          isolationKey: conversationId,
           userId,
+          agentId: agent.id,
           organizationId,
-        });
-      } finally {
-        clearInterval(heartbeatInterval);
-      }
+          abortSignal: abortController.signal,
+        },
+      );
+      const output = await buildArchestraToolOutput({
+        response,
+        toolName,
+        toolArguments: { command },
+        agentId: agent.id,
+        userId,
+        organizationId,
+      });
 
       logger.info(
         { conversationId, command, isError: response.isError ?? false },

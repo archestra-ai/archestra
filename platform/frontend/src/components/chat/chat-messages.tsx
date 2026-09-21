@@ -15,6 +15,8 @@ import {
   parseArchestraAppResourceUri,
   parseFullToolName,
   type ResourceVisibilityScope,
+  TOOL_ASK_USER_FULL_NAME,
+  TOOL_ASK_USER_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_TODO_WRITE_FULL_NAME,
   TOOL_TODO_WRITE_SHORT_NAME,
@@ -32,6 +34,7 @@ import {
   useState,
 } from "react";
 import { useStickToBottomContext } from "use-stick-to-bottom";
+import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import {
   Conversation,
   ConversationContent,
@@ -58,6 +61,8 @@ import {
   HookRunChip,
   type HookRunChipData,
 } from "@/components/chat/hook-run-chip";
+import { McpElicitationCard } from "@/components/chat/mcp-elicitation-card";
+import { isChoiceElicitationRequest } from "@/components/chat/mcp-elicitation-fields";
 import { McpTaskProvider } from "@/components/chat/mcp-task-context";
 import { ExecutedAsBadge } from "@/components/executed-as-badge";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
@@ -103,6 +108,8 @@ import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
 import { useMcpInstallOrchestrator } from "@/lib/mcp/mcp-install-orchestrator.hook";
 import { useOrganization } from "@/lib/organization.query";
 import { cn } from "@/lib/utils";
+import { identifyAskUserGroups } from "./ask-user-groups";
+import { getAskUserOutcome } from "./ask-user-outcome";
 import {
   AttachmentImage,
   AttachmentLink,
@@ -136,6 +143,7 @@ import {
   UnsafeContextStartsHereDivider,
 } from "./message-boundary-divider";
 import { PolicyDeniedTool } from "./policy-denied-tool";
+import { withoutProxyTransportArguments } from "./proxy-transport-arguments";
 import { TodoWriteTool } from "./todo-write-tool";
 import { ToolErrorLogsButton } from "./tool-error-logs-button";
 import { ToolStatusRow } from "./tool-status-row";
@@ -278,6 +286,9 @@ export function ChatMessages({
       new Set([
         TOOL_TODO_WRITE_FULL_NAME,
         getToolName(TOOL_TODO_WRITE_SHORT_NAME),
+        // A question renders as its own answer summary, not a circle.
+        TOOL_ASK_USER_FULL_NAME,
+        getToolName(TOOL_ASK_USER_SHORT_NAME),
         // Owned-app management tools render the app inline; compact grouping
         // would swallow their parts before MessageTool sees them.
         ...APP_RENDERING_ARCHESTRA_TOOL_SHORT_NAMES.flatMap((shortName) => [
@@ -325,7 +336,70 @@ export function ChatMessages({
   const session = conversationId ? getSession(conversationId) : null;
   const earlyToolUiStarts = session?.earlyToolUiStarts || {};
   const contextCompaction = session?.contextCompaction;
-  const hasPendingMcpElicitation = Boolean(session?.pendingMcpElicitation);
+  const pendingMcpElicitations = session?.pendingMcpElicitations ?? [];
+  const hasPendingMcpElicitation = pendingMcpElicitations.length > 0;
+  const toolCallOrderInMessages = useMemo(() => {
+    const order = new Map<string, number>();
+    let index = 0;
+    for (const message of messages) {
+      for (const part of message.parts ?? []) {
+        if (
+          typeof part === "object" &&
+          part !== null &&
+          "toolCallId" in part &&
+          typeof part.toolCallId === "string" &&
+          !order.has(part.toolCallId)
+        ) {
+          order.set(part.toolCallId, index++);
+        }
+      }
+    }
+    return order;
+  }, [messages]);
+  const pendingChoiceElicitations = useMemo(() => {
+    const filtered = pendingMcpElicitations.filter(isChoiceElicitationRequest);
+    return filtered.sort((a, b) => {
+      const aIndex = a.toolCallId
+        ? toolCallOrderInMessages.get(a.toolCallId)
+        : undefined;
+      const bIndex = b.toolCallId
+        ? toolCallOrderInMessages.get(b.toolCallId)
+        : undefined;
+      if (aIndex !== undefined && bIndex !== undefined) {
+        return aIndex - bIndex;
+      }
+      return 0;
+    });
+  }, [pendingMcpElicitations, toolCallOrderInMessages]);
+  const askUserGroupsByMessage = useMemo(
+    () =>
+      new Map(
+        messages.map((message) => [
+          message.id,
+          identifyAskUserGroups({
+            messageId: message.id,
+            parts: message.parts,
+            getToolShortName,
+          }),
+        ]),
+      ),
+    [messages, getToolShortName],
+  );
+  const groupedAskUserToolCallIds = useMemo(
+    () =>
+      new Set(
+        [...askUserGroupsByMessage.values()].flatMap((groups) =>
+          groups.flatMap((group) =>
+            group.members.map((member) => member.toolCallId),
+          ),
+        ),
+      ),
+    [askUserGroupsByMessage],
+  );
+  const ungroupedPendingChoiceElicitations = pendingChoiceElicitations.filter(
+    (request) =>
+      !request.toolCallId || !groupedAskUserToolCallIds.has(request.toolCallId),
+  );
   const liveMcpTasks = useMemo(() => session?.mcpTasks ?? {}, [session]);
 
   /**
@@ -531,7 +605,11 @@ export function ChatMessages({
     [subagentToolCalls],
   );
 
-  if (messages.length === 0 && chatErrors.length === 0) {
+  if (
+    messages.length === 0 &&
+    chatErrors.length === 0 &&
+    !isResponseInProgress
+  ) {
     // Don't show "start conversation" message while loading - prevents flash of empty state
     if (isLoadingConversation) {
       return null;
@@ -672,6 +750,16 @@ export function ChatMessages({
                       groupMap,
                       consumedIndices,
                     });
+                    const askUserGroups =
+                      askUserGroupsByMessage.get(message.id) ?? [];
+                    const askUserGroupStarts = new Map(
+                      askUserGroups.map((group) => [group.firstIndex, group]),
+                    );
+                    const consumedAskUserIndices = new Set(
+                      askUserGroups.flatMap((group) => [
+                        ...group.consumedIndices,
+                      ]),
+                    );
                     const partKeyTracker = new Map<string, number>();
                     return message.parts?.map((part, i) => {
                       const partKey = getMessagePartKey(
@@ -769,6 +857,61 @@ export function ChatMessages({
                             />
                           ),
                         });
+                      }
+
+                      const askUserGroup = askUserGroupStarts.get(i);
+                      if (askUserGroup) {
+                        const toolCallIds = new Set(
+                          askUserGroup.members.map(
+                            (member) => member.toolCallId,
+                          ),
+                        );
+                        const memberOrder = new Map(
+                          askUserGroup.members.map((member, index) => [
+                            member.toolCallId,
+                            index,
+                          ]),
+                        );
+                        return (
+                          <ErrorBoundary key={askUserGroup.key}>
+                            <McpElicitationCard
+                              groupId={askUserGroup.key}
+                              members={askUserGroup.members}
+                              terminalIncomplete={
+                                status === "ready" || status === "error"
+                              }
+                              requests={pendingChoiceElicitations
+                                .filter(
+                                  (request) =>
+                                    !!request.toolCallId &&
+                                    toolCallIds.has(request.toolCallId),
+                                )
+                                .sort((a, b) => {
+                                  const aIndex = a.toolCallId
+                                    ? memberOrder.get(a.toolCallId)
+                                    : undefined;
+                                  const bIndex = b.toolCallId
+                                    ? memberOrder.get(b.toolCallId)
+                                    : undefined;
+                                  if (
+                                    aIndex !== undefined &&
+                                    bIndex !== undefined
+                                  ) {
+                                    return aIndex - bIndex;
+                                  }
+                                  return 0;
+                                })}
+                              onRespond={
+                                session?.resolveMcpElicitation ??
+                                (async () => false)
+                              }
+                            />
+                          </ErrorBoundary>
+                        );
+                      }
+
+                      if (consumedAskUserIndices.has(i)) {
+                        return null;
                       }
 
                       // Skip parts consumed by compact groups
@@ -1605,6 +1748,12 @@ export function ChatMessages({
                 toolIconMap={toolIconMap}
               />
             ))}
+            {session && ungroupedPendingChoiceElicitations.length > 0 ? (
+              <McpElicitationCard
+                requests={ungroupedPendingChoiceElicitations}
+                onRespond={session.resolveMcpElicitation}
+              />
+            ) : null}
             <ContextCompactionStatus
               isCompacting={
                 contextCompaction?.isCompacting || isContextCompacting
@@ -1839,7 +1988,10 @@ const MessageTool = memo(
       getToolShortName,
     });
     const displayToolName = approvalDisplay.toolName;
-    const displayInput = approvalDisplay.input;
+    const displayInput = withoutProxyTransportArguments({
+      shortName: getToolShortName(displayToolName),
+      input: approvalDisplay.input,
+    });
     const hasInput = displayInput && Object.keys(displayInput).length > 0;
     const hasNestedToolCalls = Boolean(nestedToolCalls);
     const hasContent = Boolean(
@@ -1913,6 +2065,17 @@ const MessageTool = memo(
           onToolApprovalResponse={onToolApprovalResponse}
         />
       );
+    }
+
+    // Normal questions are consumed by identifyAskUserGroups. When a later
+    // unreadable/error part cannot form a group, suppress its earlier pending
+    // input so the generic renderer shows only the terminal part.
+    if (
+      getToolShortName(toolName) === TOOL_ASK_USER_SHORT_NAME &&
+      !errorText &&
+      getAskUserOutcome({ part, toolResultPart })?.status === "waiting"
+    ) {
+      return null;
     }
 
     if (authToolBody) {

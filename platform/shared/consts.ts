@@ -278,6 +278,13 @@ export const STARTUP_GUARD_INSTALL = {
     markerStart: "# >>> archestra copilot guard >>>",
     markerEnd: "# <<< archestra copilot guard <<<",
   },
+  opencode: {
+    scriptRelpath: ".archestra/opencode-startup-guard.sh",
+    psScriptRelpath: ".archestra/opencode-startup-guard.ps1",
+    skipRelpath: ".archestra/opencode-startup-guard.skip",
+    markerStart: "# >>> archestra opencode guard >>>",
+    markerEnd: "# <<< archestra opencode guard <<<",
+  },
 } as const;
 
 /** Client ids that get a startup guard (keys of {@link STARTUP_GUARD_INSTALL}). */
@@ -300,11 +307,26 @@ export type StartupGuardClientId = keyof typeof STARTUP_GUARD_INSTALL;
  */
 export const STARTUP_GUARD_FORMAT_VERSION = 1;
 
+export const DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS = `At session start, tell the user: "Say 'move this to Cloud runtime' to continue work in the cloud." When asked, use the Agent Runtime Handoff skill and create a runtime agent if needed.`;
+
 /**
  * Header name for external agent ID.
  * Clients can pass this header to associate interactions with their own agent identifiers.
  */
 export const EXTERNAL_AGENT_ID_HEADER = "X-Archestra-Agent-Id";
+
+/** OpenCode's request-local agent name, used only for display classification. */
+export const OPENCODE_AGENT_HEADER = "X-Archestra-OpenCode-Agent";
+
+/**
+ * The client session an OpenAPPA root is bound to, and the parent root a child
+ * session hangs from. A caller that manages roots deliberately sends them; for
+ * everyone else the wire adapter derives the session from what the client
+ * already sends (see `appaSessionIdentity`). Shared because the proxy, the MCP
+ * gateway and Chat all speak them.
+ */
+export const APPA_SESSION_HEADER = "X-Appa-Session-ID";
+export const APPA_PARENT_HEADER = "X-Appa-Parent-ID";
 
 /**
  * Environment the delegating caller runs in, set by the in-process A2A

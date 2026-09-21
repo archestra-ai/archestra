@@ -16,7 +16,10 @@ import { promisify } from "node:util";
 import {
   CLAUDE_CODE_CLIENT_ID,
   CODEX_CLIENT_ID,
+  DEFAULT_MODELS,
   EXTERNAL_AGENT_ID_HEADER,
+  OPENCODE_CLIENT_ID,
+  OPENCODE_PASSTHROUGH_PROVIDER_ROUTES,
   STARTUP_GUARD_INSTALL,
 } from "@archestra/shared";
 import { describe, expect, test } from "vitest";
@@ -44,6 +47,7 @@ const PROXY = {
   authMode: "virtual-key" as const,
   provider: "anthropic" as const,
   providerLabel: "Anthropic",
+  baseUrl: "https://archestra.example.com/v1",
   url: "https://archestra.example.com/v1/anthropic",
   proxyName: "default_proxy",
   virtualKey: "arch_deadbeefcafe",
@@ -60,6 +64,7 @@ const ANTHROPIC_PASSTHROUGH_PROXY = {
   authMode: "provider-key" as const,
   provider: "anthropic" as const,
   providerLabel: "Anthropic",
+  baseUrl: "https://archestra.example.com/v1",
   url: "https://archestra.example.com/v1/anthropic",
   proxyName: "default_proxy",
   virtualKey: null,
@@ -77,6 +82,7 @@ const OPENAI_PASSTHROUGH_PROXY = {
   authMode: "provider-key" as const,
   provider: "openai" as const,
   providerLabel: "OpenAI",
+  baseUrl: "https://archestra.example.com/v1",
   url: "https://archestra.example.com/v1/openai",
   proxyName: "default_proxy",
   virtualKey: null,
@@ -89,6 +95,7 @@ const GITHUB_COPILOT_PROXY = {
   authMode: "provider-key" as const,
   provider: "github-copilot" as const,
   providerLabel: "GitHub Copilot",
+  baseUrl: "https://archestra.example.com/v1",
   url: "https://archestra.example.com/v1/github-copilot",
   proxyName: "default_proxy",
   virtualKey: null,
@@ -410,7 +417,13 @@ function runInTerminal(body: string): Promise<string> {
   return runBashInTerminal(`set -euo pipefail\n${helperBlock()}\n${body}\n`);
 }
 
-const ALL_CLIENTS = ["claude-code", "codex", "copilot-cli", "cursor"] as const;
+const ALL_CLIENTS = [
+  "claude-code",
+  "codex",
+  "copilot-cli",
+  "cursor",
+  "opencode",
+] as const;
 
 describe("renderSetupScript", () => {
   test.each([
@@ -848,8 +861,9 @@ cli sh -c '[ -t 1 ] && echo TTY-VIA-CLI || echo PIPE-VIA-CLI; cat'`;
     expect(script).not.toContain("marketplace browse");
     // python3 fallback prints a manual snippet rather than failing.
     expect(script).toContain("python3 not found");
-    // Next steps name the exact command and server for the OAuth handshake.
-    expect(script).toContain("claude /mcp");
+    // Next steps name the exact command and server for the OAuth handshake,
+    // in a NEW session — the current one never sees the gateway.
+    expect(script).toContain("Start a new `claude` session, run `/mcp` there");
     expect(script).toContain(`select "${MCP.serverName}"`);
   });
 
@@ -1054,8 +1068,221 @@ cli sh -c '[ -t 1 ] && echo TTY-VIA-CLI || echo PIPE-VIA-CLI; cat'`;
 
   test("claude-code (windows): next steps carry the same OAuth guidance", () => {
     const script = renderSetupScript(fullContext("claude-code", "windows"));
-    expect(script).toContain("claude /mcp");
+    expect(script).toContain("Start a new `claude` session, run `/mcp` there");
     expect(script).toContain(`select "${MCP.serverName}"`);
+  });
+
+  test.each([
+    "macos",
+    "windows",
+  ] as const)("opencode (%s): next steps sign in first, then restart the client", (platform) => {
+    const script = renderSetupScript(fullContext("opencode", platform));
+    expect(script).toContain("Run `opencode mcp auth");
+    expect(script).toContain(
+      "this second browser approval is the gateway's native OAuth flow",
+    );
+    expect(script).toContain("If no browser opens, relay the URL");
+    const signInAt = script.indexOf(`opencode mcp auth ${MCP.serverName}`);
+    const restartAt = script.indexOf("Close every running OpenCode process");
+    expect(signInAt).toBeGreaterThan(-1);
+    expect(restartAt).toBeGreaterThan(signInAt);
+  });
+
+  test.each([
+    "macos",
+    "windows",
+  ] as const)("opencode (%s): preserves provider/model ids and routes native providers", (platform) => {
+    const script = renderSetupScript({
+      ...fullContext("opencode", platform),
+      proxy: OPENAI_PASSTHROUGH_PROXY,
+    });
+
+    expect(script).toContain(".config/opencode");
+    expect(script).not.toContain(".opencode/opencode.json");
+    expect(script).toContain(EXTERNAL_AGENT_ID_HEADER);
+    expect(script).toContain(OPENCODE_CLIENT_ID);
+    expect(script).toContain("/v1/anthropic/v1");
+    expect(script).toContain("/v1/gemini/v1beta");
+    expect(script).toContain("moonshotai");
+    expect(script).toContain("enabled_providers");
+    expect(script).toContain("archestra-llm-proxy.js");
+    expect(script).toContain("opencode-routing-plugin-state.json");
+    expect(script).not.toContain('cfg["model"]');
+    expect(script).not.toContain("Set-ArchProp $archCfg 'model'");
+  });
+
+  test("opencode provider-key merge preserves local auth options and model selection", async () => {
+    const script = renderSetupScript({
+      ...fullContext("opencode", "linux"),
+      proxy: OPENAI_PASSTHROUGH_PROXY,
+    });
+    const start = script.indexOf(
+      'say "Routing supported OpenCode providers through the LLM proxy"',
+    );
+    const end = script.indexOf("\nsay ", start + 5);
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+
+    const root = await mkdtemp(path.join(tmpdir(), "opencode-routing-"));
+    const home = path.join(root, "home");
+    const bin = path.join(root, "bin");
+    const configDir = path.join(home, ".config", "opencode");
+    const configPath = path.join(configDir, "opencode.json");
+    const pluginPath = path.join(
+      configDir,
+      "plugins",
+      "archestra-llm-proxy.js",
+    );
+    try {
+      await mkdir(configDir, { recursive: true });
+      await mkdir(path.dirname(pluginPath), { recursive: true });
+      await mkdir(bin);
+      await writeFile(pluginPath, "export const ExistingPlugin = true;\n");
+      await writeFile(
+        configPath,
+        JSON.stringify({
+          enabled_providers: ["local-provider"],
+          disabled_providers: ["google", "local-provider"],
+          model: "google/gemini-3.8-flash",
+          provider: {
+            google: {
+              options: {
+                apiVersion: "v1beta",
+                headers: { "X-Local-Header": "kept" },
+              },
+            },
+          },
+        }),
+      );
+      const opencode = path.join(bin, "opencode");
+      await writeFile(
+        opencode,
+        `#!/usr/bin/env bash
+cat "$HOME/.config/opencode/opencode.json"`,
+      );
+      await chmod(opencode, 0o755);
+      const block = path.join(root, "merge.sh");
+      await writeFile(
+        block,
+        `set -euo pipefail
+say() { :; }
+ok() { :; }
+warn() { :; }
+ARCHESTRA_OPENCODE_CONFIG="$HOME/.config/opencode/opencode.json"
+${script.slice(start, end)}
+`,
+      );
+      await execFileAsync("bash", [block], {
+        env: { ...process.env, HOME: home, PATH: `${bin}:${process.env.PATH}` },
+      });
+
+      const config = JSON.parse(await readFile(configPath, "utf8"));
+      expect(config.enabled_providers).toEqual(["local-provider"]);
+      expect(config.disabled_providers).toEqual(["google", "local-provider"]);
+      expect(config.model).toBe("google/gemini-3.8-flash");
+      expect(config.provider.google.options).toMatchObject({
+        apiVersion: "v1beta",
+        headers: { "X-Local-Header": "kept" },
+      });
+      expect(config.provider).not.toHaveProperty("anthropic");
+      expect(config.provider).not.toHaveProperty("openai");
+      expect(await readFile(pluginPath, "utf8")).toContain(
+        "export const ArchestraLlmProxy",
+      );
+      expect(
+        JSON.parse(
+          await readFile(
+            path.join(home, ".archestra", "opencode-routing-plugin-state.json"),
+            "utf8",
+          ),
+        ),
+      ).toEqual({
+        existed: true,
+        contentBase64: Buffer.from(
+          "export const ExistingPlugin = true;\n",
+        ).toString("base64"),
+      });
+      await expect(
+        stat(path.join(home, ".archestra", "opencode-connection-state.json")),
+      ).rejects.toMatchObject({ code: "ENOENT" });
+
+      const providerState = Object.fromEntries(
+        OPENCODE_PASSTHROUGH_PROVIDER_ROUTES.map(({ openCodeProviderId }) => [
+          openCodeProviderId,
+          openCodeProviderId === "google"
+            ? {
+                options: {
+                  apiVersion: "v1beta",
+                  headers: { "X-Local-Header": "kept" },
+                },
+              }
+            : null,
+        ]),
+      );
+      await writeFile(
+        path.join(home, ".archestra", "opencode-connection-state.json"),
+        JSON.stringify({
+          enabledProvidersPresent: true,
+          enabledProviders: ["local-provider"],
+          disabledProvidersPresent: true,
+          disabledProviders: ["google", "local-provider"],
+          providerState,
+        }),
+      );
+      await writeFile(
+        configPath,
+        JSON.stringify({
+          enabled_providers: OPENCODE_PASSTHROUGH_PROVIDER_ROUTES.map(
+            ({ openCodeProviderId }) => openCodeProviderId,
+          ),
+          disabled_providers: ["local-provider"],
+          model: "google/gemini-3.8-flash",
+          provider: {
+            google: {
+              options: {
+                baseURL: "https://archestra.example.com/v1/gemini/v1beta",
+                headers: {
+                  "X-Local-Header": "kept",
+                  [EXTERNAL_AGENT_ID_HEADER]: OPENCODE_CLIENT_ID,
+                },
+              },
+            },
+            anthropic: {
+              options: {
+                baseURL: "https://archestra.example.com/v1/anthropic/v1",
+              },
+            },
+          },
+        }),
+      );
+      await execFileAsync("bash", [block], {
+        env: { ...process.env, HOME: home, PATH: `${bin}:${process.env.PATH}` },
+      });
+      const restored = JSON.parse(await readFile(configPath, "utf8"));
+      expect(restored.enabled_providers).toEqual(["local-provider"]);
+      expect(restored.disabled_providers).toEqual(["google", "local-provider"]);
+      expect(restored.provider).toEqual({
+        google: {
+          options: {
+            apiVersion: "v1beta",
+            headers: { "X-Local-Header": "kept" },
+          },
+        },
+      });
+      await expect(
+        stat(path.join(home, ".archestra", "opencode-connection-state.json")),
+      ).rejects.toMatchObject({ code: "ENOENT" });
+
+      restored.model = `openai/${DEFAULT_MODELS.openai}`;
+      await writeFile(configPath, JSON.stringify(restored));
+      await execFileAsync("bash", [block], {
+        env: { ...process.env, HOME: home, PATH: `${bin}:${process.env.PATH}` },
+      });
+      const migrated = JSON.parse(await readFile(configPath, "utf8"));
+      expect(migrated).not.toHaveProperty("model");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 
   test("claude-code (windows): installs the PowerShell startup guard and profile wrapper", () => {

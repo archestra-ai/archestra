@@ -13,7 +13,10 @@ import {
 } from "fastify-type-provider-zod";
 import { type Mock, vi } from "vitest";
 import { hasPermission } from "@/auth";
+import config from "@/config";
 import { EnvironmentModel, InternalMcpCatalogModel } from "@/models";
+import OpenAppaBatteryInstallModel from "@/models/openappa-battery-install";
+import { openappaBatteriesService } from "@/openappa/batteries";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { ApiError, type User } from "@/types";
 import internalMcpCatalogRoutes from "./internal-mcp-catalog";
@@ -89,6 +92,55 @@ describe("internal MCP catalog routes", () => {
     expect(toolNames).not.toContain(TOOL_SEARCH_TOOLS_FULL_NAME);
     expect(toolNames).not.toContain(TOOL_RUN_TOOL_FULL_NAME);
     expect(toolNames).toContain(TOOL_TODO_WRITE_FULL_NAME);
+  });
+
+  test("restoring a deleted catalog returns its tools to the composed guardrails policy", async ({
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const wasEnabled = config.openappa.enabled;
+    config.openappa.enabled = true;
+    try {
+      const catalog = await makeInternalMcpCatalog({
+        organizationId,
+        name: "Docs",
+        serverUrl: "https://mcp.notion.com/mcp",
+      });
+      await makeTool({
+        catalogId: catalog.id,
+        name: "notion__search",
+        rawName: "search",
+      });
+      await OpenAppaBatteryInstallModel.createIfAbsent({
+        organizationId,
+        batteryName: "notion",
+        catalogId: catalog.id,
+        enabled: true,
+        credentialBindings: {},
+      });
+      const installed =
+        await openappaBatteriesService.recompile(organizationId);
+      const deleted = await app.inject({
+        method: "DELETE",
+        url: `/api/internal_mcp_catalog/${catalog.id}`,
+      });
+      expect(deleted.statusCode).toBe(200);
+      expect(
+        (await openappaBatteriesService.getEffectivePolicy(organizationId))
+          .installFingerprint,
+      ).not.toBe(installed.installFingerprint);
+      const restored = await app.inject({
+        method: "POST",
+        url: `/api/internal_mcp_catalog/${catalog.id}/restore`,
+      });
+      expect(restored.statusCode).toBe(200);
+      expect(
+        (await openappaBatteriesService.getEffectivePolicy(organizationId))
+          .installFingerprint,
+      ).toBe(installed.installFingerprint);
+    } finally {
+      config.openappa.enabled = wasEnabled;
+    }
   });
 
   test("DELETE /api/internal_mcp_catalog refuses an app-backing catalog (managed via the Apps lifecycle)", async ({

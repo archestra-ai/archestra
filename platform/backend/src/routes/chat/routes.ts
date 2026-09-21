@@ -51,7 +51,6 @@ import {
   createChatMcpElicitationBridge,
   resolveChatMcpElicitation,
 } from "@/clients/chat-mcp-elicitation";
-import { withOpenAppaChat } from "@/clients/chat-openappa";
 import {
   applyMcpTasksToMessages,
   chatTaskPrincipal,
@@ -149,6 +148,7 @@ import {
   UuidIdSchema,
 } from "@/types";
 import { ConversationFilesResponseSchema } from "@/types/conversation-file";
+import { SelectScheduleTriggerRunSchema } from "@/types/schedule-trigger";
 import {
   resolveAgentLlmOrDefault,
   resolveConversationLlmSelectionForAgent,
@@ -1066,18 +1066,12 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
               );
             }
 
-            // Cleared on every execute() exit path: the normal completion below
-            // and the top-level onError (which fires when execute throws, e.g.
-            // a non-context-length error during the context-trim probe).
-            let heartbeatInterval: ReturnType<typeof setInterval> | undefined;
-
             // Create stream with token usage data support
             const uiMessageStream = createUIMessageStream({
               // Preserve incoming message IDs so the client updates existing
               // assistant messages instead of rendering duplicate ones.
               originalMessages: messages as UIMessage[],
               onError: (error) => {
-                if (heartbeatInterval) clearInterval(heartbeatInterval);
                 // unlike the tool-level stream handler, a NoSuchToolError here
                 // is not a recoverable tool result: it must mark the run failed
                 // and persist, so it falls through to the normal error path.
@@ -1151,20 +1145,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     // exists, since without one the row could never be reopened.
                     lockedChatKey: lockedChatAudit?.dek ?? null,
                   });
-
-                // Send heartbeat every 5s to prevent connection drops
-                // during long-running tool executions / subagent calls.
-                heartbeatInterval = setInterval(() => {
-                  try {
-                    writer.write({
-                      type: "data-heartbeat",
-                      data: { timestamp: Date.now() },
-                      transient: true,
-                    });
-                  } catch {
-                    clearInterval(heartbeatInterval);
-                  }
-                }, 5000);
 
                 // Prefetch all UI resources eagerly before streaming starts so
                 // the merge transform below can emit data-tool-ui-start
@@ -1337,19 +1317,10 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 // "retrying may help".
                 let lastFinishReason: string | null = null;
 
-                const chatAppa = withOpenAppaChat({
-                  model,
-                  tools: mcpTools,
-                  session: {
-                    organization_id: organizationId,
-                    caller_id: `user:${user.id}`,
-                    session_id: conversationId,
-                  },
-                });
                 const streamTextConfig: ChatStreamTextConfig = {
-                  model: chatAppa.model,
+                  model,
                   messages: modelMessages,
-                  ...(supportsToolCalling && { tools: chatAppa.tools }),
+                  ...(supportsToolCalling && { tools: mcpTools }),
                   stopWhen: buildChatStopConditions(repeatTracker),
                   abortSignal: chatAbortController.signal,
                   experimental_repairToolCall: createToolCallRepair({
@@ -2066,8 +2037,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     } satisfies TokenUsage,
                   });
                 }
-
-                clearInterval(heartbeatInterval);
               },
             });
 
@@ -2144,7 +2113,13 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Conversation not found");
       }
 
-      await resolveChatMcpElicitation({ id, response: body });
+      const accepted = await resolveChatMcpElicitation({ id, response: body });
+      if (!accepted) {
+        throw new ApiError(
+          409,
+          "This question is no longer waiting for an answer",
+        );
+      }
 
       return reply.send({ success: true });
     },
@@ -2331,17 +2306,44 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         querystring: z.object({
           search: z.string().optional(),
         }),
-        response: constructResponseSchema(z.array(SelectConversationSchema)),
+        response: constructResponseSchema(
+          z.array(
+            SelectConversationSchema.extend({
+              scheduledRun: SelectScheduleTriggerRunSchema.pick({
+                id: true,
+                triggerId: true,
+                createdAt: true,
+                runKind: true,
+              })
+                .extend({ scheduleName: z.string() })
+                .nullable()
+                .optional(),
+            }),
+          ),
+        ),
       },
     },
     async (request, reply) => {
       const { search } = request.query;
+      const conversations = await ConversationModel.findAll(
+        request.user.id,
+        request.organizationId,
+        search,
+      );
+      const runs = await ScheduleTriggerRunModel.findByChatConversationIds({
+        organizationId: request.organizationId,
+        conversationIds: conversations
+          .filter((c) => c.origin === "schedule_trigger")
+          .map((c) => c.id),
+      });
+      const byConversation = new Map(
+        runs.map((run) => [run.chatConversationId, run]),
+      );
       return reply.send(
-        await ConversationModel.findAll(
-          request.user.id,
-          request.organizationId,
-          search,
-        ),
+        conversations.map((conversation) => ({
+          ...conversation,
+          scheduledRun: byConversation.get(conversation.id) ?? null,
+        })),
       );
     },
   );

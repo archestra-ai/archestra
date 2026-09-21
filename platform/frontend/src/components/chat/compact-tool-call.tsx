@@ -4,6 +4,7 @@ import {
   ARCHESTRA_MCP_CATALOG_ID,
   extractMcpExecutedAs,
   parseFullToolName,
+  TOOL_GET_REMEDY_PLANS_SHORT_NAME,
   TOOL_LOAD_SKILL_SHORT_NAME,
 } from "@archestra/shared";
 import type { DynamicToolUIPart, ToolUIPart } from "ai";
@@ -46,6 +47,7 @@ import {
   McpTaskStatusRow,
   useElapsedSince,
 } from "./mcp-task-status";
+import { withoutProxyTransportArguments } from "./proxy-transport-arguments";
 import { getSkillPillDisplay, SkillPill } from "./skill-pill";
 import { ToolErrorLogsButton } from "./tool-error-logs-button";
 import { ToolStatusRow } from "./tool-status-row";
@@ -594,12 +596,21 @@ function ExpandedToolCard({
 }) {
   const { part, toolResultPart, toolName, errorText, nestedToolCalls } = tool;
   const { data: session } = useSession();
+  const { getToolShortName } = useArchestraMcpIdentity();
   const {
     task,
     cancel: cancelTask,
     isCancelling: isCancellingTask,
   } = useMcpTaskFor(part.toolCallId);
   const hasInput = part.input && Object.keys(part.input).length > 0;
+  const toolShortName = getToolShortName(toolName);
+  const input = withoutProxyTransportArguments({
+    shortName: toolShortName,
+    input:
+      toolShortName === TOOL_GET_REMEDY_PLANS_SHORT_NAME
+        ? withParsedArguments(part.input)
+        : part.input,
+  });
   const isApprovalRequested = part.state === "approval-requested";
   // Whose credential the gateway used against the upstream server.
   const executedAs = extractMcpExecutedAs(
@@ -643,7 +654,7 @@ function ExpandedToolCard({
             isCancelling={isCancellingTask}
           />
         ) : null}
-        {hasInput ? <ToolInput input={part.input} defaultOpen /> : null}
+        {hasInput ? <ToolInput input={input} defaultOpen /> : null}
         {nestedToolCalls}
         {isApprovalRequested &&
           onToolApprovalResponse &&
@@ -697,4 +708,22 @@ function ExpandedToolCard({
       </ToolContent>
     </Tool>
   );
+}
+
+/**
+ * A denial notice carries the blocked call's arguments in their wire form.
+ * When that form is a JSON string, show the object it holds.
+ */
+function withParsedArguments(input: ToolUIPart["input"]): ToolUIPart["input"] {
+  if (typeof input !== "object" || input === null) return input;
+  const { arguments: args } = input as { arguments?: unknown };
+  if (typeof args !== "string") return input;
+  try {
+    return {
+      ...(input as Record<string, unknown>),
+      arguments: JSON.parse(args),
+    };
+  } catch {
+    return input;
+  }
 }

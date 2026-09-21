@@ -3,12 +3,17 @@
  * `builtin:<id>` for a built-in one.
  */
 
-/** The `owner/repo` a skill was imported from; null for a built-in. */
+/** Repository identity, including the origin for Enterprise; null for a built-in. */
 export function parseRepoFromSourceRef(
   sourceRef: string | null,
+  sourceOrigin?: string | null,
 ): string | null {
   const parsed = parseSourceRef(sourceRef);
-  return parsed && `${parsed.owner}/${parsed.repo}`;
+  if (!parsed) return null;
+  const repo = `${parsed.owner}/${parsed.repo}`;
+  return sourceOrigin && sourceOrigin !== "https://github.com"
+    ? `${sourceOrigin}/${repo}`
+    : repo;
 }
 
 /**
@@ -21,6 +26,7 @@ export function parseRepoFromSourceRef(
 export function githubSourceUrlAtCommit(params: {
   sourceRef: string | null;
   commit: string | null;
+  sourceOrigin?: string | null;
 }): string | null {
   const parsed = parseSourceRef(params.sourceRef);
   if (!parsed || !params.commit) return null;
@@ -29,7 +35,7 @@ export function githubSourceUrlAtCommit(params: {
     .filter(Boolean)
     .map(encodeURIComponent)
     .join("/");
-  const base = `https://github.com/${parsed.owner}/${parsed.repo}/tree/${params.commit}`;
+  const base = `${params.sourceOrigin ?? "https://github.com"}/${parsed.owner}/${parsed.repo}/tree/${params.commit}`;
   return path ? `${base}/${path}` : base;
 }
 

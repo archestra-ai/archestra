@@ -161,7 +161,8 @@ export function ConnectionFlow({
     (client?.id === "claude-code" ||
       client?.id === "cursor" ||
       client?.id === "codex" ||
-      client?.id === "copilot-cli");
+      client?.id === "copilot-cli" ||
+      client?.id === "opencode");
 
   const marketplaceVisible = useSkillsMarketplaceVisible(client);
   const skillsVisible = skillsEnabled && marketplaceVisible;

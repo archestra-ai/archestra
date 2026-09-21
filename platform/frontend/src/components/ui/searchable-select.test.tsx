@@ -32,7 +32,7 @@ describe("SearchableSelect", () => {
 
     await user.click(screen.getByRole("combobox"));
 
-    const disabledItem = screen.getByRole("button", {
+    const disabledItem = screen.getByRole("option", {
       name: /Already Added/i,
     });
     expect(disabledItem).toBeDisabled();
@@ -40,7 +40,7 @@ describe("SearchableSelect", () => {
     await user.click(disabledItem);
     expect(onValueChange).not.toHaveBeenCalled();
 
-    await user.click(screen.getByRole("button", { name: /Available User/i }));
+    await user.click(screen.getByRole("option", { name: /Available User/i }));
     expect(onValueChange).toHaveBeenCalledWith("available");
   });
 
@@ -71,10 +71,10 @@ describe("SearchableSelect", () => {
     await user.type(screen.getByPlaceholderText("Search..."), "Ada Lovelace");
 
     expect(
-      screen.getByRole("button", { name: /Lovelace, Ada M./i }),
+      screen.getByRole("option", { name: /Lovelace, Ada M./i }),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: /Babbage, Charles/i }),
+      screen.queryByRole("option", { name: /Babbage, Charles/i }),
     ).not.toBeInTheDocument();
   });
 
@@ -97,10 +97,10 @@ describe("SearchableSelect", () => {
     await user.type(screen.getByPlaceholderText("Search..."), "Ada Babbage");
 
     expect(
-      screen.queryByRole("button", { name: /Lovelace, Ada M./i }),
+      screen.queryByRole("option", { name: /Lovelace, Ada M./i }),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: /Babbage, Charles/i }),
+      screen.queryByRole("option", { name: /Babbage, Charles/i }),
     ).not.toBeInTheDocument();
   });
 
@@ -156,5 +156,39 @@ describe("SearchableSelect", () => {
         .getByPlaceholderText("Search...")
         .closest("[data-slot='popover-content']"),
     ).toHaveAttribute("data-align", "end");
+  });
+  it("selects the first enabled match with Arrow Down then Enter", async () => {
+    const user = userEvent.setup();
+    const onValueChange = vi.fn();
+
+    render(
+      <SearchableSelect
+        value=""
+        onValueChange={onValueChange}
+        placeholder="Select a model"
+        items={[
+          {
+            value: "legacy-haiku",
+            label: "Claude Haiku Legacy",
+            disabled: true,
+          },
+          { value: "haiku", label: "Claude Haiku" },
+        ]}
+      />,
+    );
+
+    await user.click(screen.getByRole("combobox"));
+    await user.type(screen.getByPlaceholderText("Search..."), "haiku");
+    await user.keyboard("{ArrowDown}");
+
+    expect(screen.getByPlaceholderText("Search...")).toHaveFocus();
+    expect(screen.getByPlaceholderText("Search...")).toHaveAttribute(
+      "aria-activedescendant",
+      screen.getByRole("option", { name: "Claude Haiku" }).id,
+    );
+
+    await user.keyboard("{Enter}");
+
+    expect(onValueChange).toHaveBeenCalledWith("haiku");
   });
 });

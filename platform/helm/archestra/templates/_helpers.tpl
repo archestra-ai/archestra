@@ -179,6 +179,7 @@ Additionally, any env var matching ARCHESTRA_CHAT_*_API_KEY is treated as sensit
   "ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_BEARER"
   "ARCHESTRA_METRICS_SECRET"
   "ARCHESTRA_HASHICORP_VAULT_TOKEN"
+  "ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET"
 }}
 {{- $podNameProvided := hasKey .Values.archestra.env "POD_NAME" }}
 {{- $podNamespaceProvided := hasKey .Values.archestra.env "POD_NAMESPACE" }}
@@ -286,6 +287,17 @@ An explicit archestra.env value overrides the injection.
     secretKeyRef:
       name: {{ $authSecretName }}
       key: secrets-encryption-secret
+      optional: true
+{{- end }}
+{{- if not (hasKey .Values.archestra.env "ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET") }}
+- name: ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET
+  valueFrom:
+    secretKeyRef:
+      name: {{ $authSecretName }}
+      key: offer-signing-secret
+      # optional so pods still start when the key is absent (pre-upgrade
+      # migration Job ordering, or an external Secret without this key;
+      # config.ts then falls back to a key derived from the auth secret).
       optional: true
 {{- end }}
 {{- if not (hasKey .Values.archestra.env "ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE") }}
@@ -611,6 +623,9 @@ rbac.environmentNamespaces, so both grant exactly the same access (no drift).
 - apiGroups: ["agents.x-k8s.io"]
   resources: ["sandboxes/status"]
   verbs: ["get"]
+- apiGroups: ["extensions.agents.x-k8s.io"]
+  resources: ["sandboxclaims", "sandboxtemplates", "sandboxwarmpools"]
+  verbs: ["get", "list", "create", "patch", "delete"]
 # DaemonSet for the MCP image pre-puller, which keeps every node's image cache
 # warm so a hibernated MCP server wakes without reaching the registry. Narrower
 # than the rule above on purpose: the reconciler only reads and rewrites its own

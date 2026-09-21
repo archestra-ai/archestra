@@ -1,3 +1,4 @@
+import { createHmac } from "node:crypto";
 import { homedir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -721,22 +722,35 @@ export const parseLogFormat = (
 };
 
 /** @public — exported for testability */
-export const parseDatabasePoolMax = (envValue?: string | undefined): number => {
-  const value = envValue?.trim();
+export const parseDatabasePoolMax = (envValue?: string | undefined): number =>
+  parsePoolSize({
+    envValue,
+    envName: "ARCHESTRA_DATABASE_POOL_MAX",
+    defaultValue: DEFAULT_DATABASE_POOL_MAX,
+    maxValue: MAX_DATABASE_POOL_MAX,
+  });
+
+function parsePoolSize(params: {
+  envValue: string | undefined;
+  envName: string;
+  defaultValue: number;
+  maxValue: number;
+}): number {
+  const value = params.envValue?.trim();
   if (!value) {
-    return DEFAULT_DATABASE_POOL_MAX;
+    return params.defaultValue;
   }
 
   const parsed = Number.parseInt(value, 10);
-  if (Number.isNaN(parsed) || parsed < 1 || parsed > MAX_DATABASE_POOL_MAX) {
+  if (Number.isNaN(parsed) || parsed < 1 || parsed > params.maxValue) {
     logger.warn(
-      `Invalid ARCHESTRA_DATABASE_POOL_MAX value "${value}", using default ${DEFAULT_DATABASE_POOL_MAX}`,
+      `Invalid ${params.envName} value "${value}", using default ${params.defaultValue}`,
     );
-    return DEFAULT_DATABASE_POOL_MAX;
+    return params.defaultValue;
   }
 
   return parsed;
-};
+}
 
 /** @public — exported for testability */
 export const parseChatMaxOutputTokens = (
@@ -2008,6 +2022,9 @@ export function parseLlmProxyPlugins(
   return plugins as LlmProxyPluginName[];
 }
 
+const MIN_OPENAPPA_OFFER_SIGNING_SECRET_LENGTH = 32;
+const OFFER_SIGNING_DOMAIN = "archestra.openappa.offer-signing.v1";
+
 /**
  * Validates APPA settings only when its feature flag is explicitly enabled.
  * @public — exported for testability
@@ -2015,11 +2032,55 @@ export function parseLlmProxyPlugins(
 export function parseOpenAppaConfig(
   enabled: string | undefined,
   yellEnabled?: string,
+  offerSigningSecret?: string,
+  postgresMaxConnections?: string,
+  authSecret?: string,
 ) {
+  const dedicated = offerSigningSecret ?? "";
+  if (
+    dedicated.length > 0 &&
+    dedicated.length < MIN_OPENAPPA_OFFER_SIGNING_SECRET_LENGTH
+  ) {
+    throw new Error(
+      `ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET must be at least ${MIN_OPENAPPA_OFFER_SIGNING_SECRET_LENGTH} characters`,
+    );
+  }
+  // Derives from the session authentication secret when no dedicated key is set.
+  // Uses a domain-separated HMAC so the key never collides with session or MRTR keys.
+  const secret = dedicated || deriveOfferSigningSecret(authSecret);
+  const isEnabled = enabled === "true";
+  if (isEnabled && secret.length === 0) {
+    logger.warn(
+      "OpenAPPA is enabled without a signing key. Set ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET or configure an auth secret, or signed remedy, native-question, session-receipt, and external-client tool-call requests will fail closed (503) until every replica uses the same secret.",
+    );
+  }
   return {
-    enabled: enabled === "true",
-    yellEnabled: enabled === "true" && (yellEnabled ?? "true") === "true",
+    enabled: isEnabled,
+    yellEnabled: isEnabled && (yellEnabled ?? "true") === "true",
+    offerSigningSecret: secret,
+    postgresMaxConnections: parseOpenAppaPostgresMaxConnections(
+      postgresMaxConnections,
+    ),
   };
+}
+
+function deriveOfferSigningSecret(authSecret: string | undefined): string {
+  if (!authSecret) return "";
+  return createHmac("sha256", authSecret)
+    .update(OFFER_SIGNING_DOMAIN)
+    .digest("base64url");
+}
+
+const DEFAULT_OPENAPPA_POSTGRES_MAX_CONNECTIONS = 4;
+const MAX_OPENAPPA_POSTGRES_MAX_CONNECTIONS = 64;
+
+function parseOpenAppaPostgresMaxConnections(envValue?: string): number {
+  return parsePoolSize({
+    envValue,
+    envName: "ARCHESTRA_OPENAPPA_POSTGRES_MAX_CONNECTIONS",
+    defaultValue: DEFAULT_OPENAPPA_POSTGRES_MAX_CONNECTIONS,
+    maxValue: MAX_OPENAPPA_POSTGRES_MAX_CONNECTIONS,
+  });
 }
 
 /**
@@ -2209,9 +2270,16 @@ const fileStorageS3Config = parseFileStorageS3Config({
   },
 });
 
+const authSessionSecret =
+  process.env.ARCHESTRA_AUTH_SESSION_SECRET?.trim() ||
+  process.env.ARCHESTRA_AUTH_SECRET;
+
 const openappa = parseOpenAppaConfig(
   process.env.ARCHESTRA_OPENAPPA_ENABLED,
   process.env.ARCHESTRA_OPENAPPA_YELL_ENABLED,
+  process.env.ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET,
+  process.env.ARCHESTRA_OPENAPPA_POSTGRES_MAX_CONNECTIONS,
+  authSessionSecret,
 );
 const llmProxyPlugins = parseLlmProxyPlugins(
   process.env.ARCHESTRA_LLM_PROXY_PLUGINS,
@@ -2347,6 +2415,15 @@ const config = {
      * regardless of this value.
      */
     enabled: process.env.ARCHESTRA_AGENT_RUNTIME_ENABLED === "true",
+    /** Ready spare workspaces per compatible runtime configuration. */
+    warmPoolSize: parseNonNegativeInt(
+      process.env.ARCHESTRA_AGENT_RUNTIME_WARM_POOL_SIZE,
+      0,
+    ),
+    warmPoolMaxPools: parsePositiveInt(
+      process.env.ARCHESTRA_AGENT_RUNTIME_WARM_POOL_MAX_POOLS,
+      4,
+    ),
     /**
      * Privileged pods have node-level impact. Agent administrators cannot
      * enable them unless the deployment operator explicitly opts in too.
@@ -2514,9 +2591,7 @@ const config = {
     // trimming it would change the key existing deployments already derive from
     // it and break decryption of already-stored data. (Same for the
     // encryption secrets below.)
-    secret:
-      process.env.ARCHESTRA_AUTH_SESSION_SECRET?.trim() ||
-      process.env.ARCHESTRA_AUTH_SECRET,
+    secret: authSessionSecret,
     trustedOrigins: getTrustedOrigins(),
     adminDefaultEmail:
       process.env[DEFAULT_ADMIN_EMAIL_ENV_VAR_NAME] || DEFAULT_ADMIN_EMAIL,

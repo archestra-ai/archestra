@@ -16,6 +16,7 @@ vi.mock("next/navigation");
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import appConfig from "@/lib/config/config";
 import { useConfig, useFeature } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useOrganization } from "@/lib/organization.query";
@@ -251,7 +252,7 @@ describe("ConnectCommandPanel", () => {
       expect(
         screen.getByRole("heading", { name: "Connect Claude Code" }),
       ).toBeVisible();
-      for (const label of ["Cursor", "Codex", "Copilot CLI"]) {
+      for (const label of ["Cursor", "Codex", "OpenCode", "Copilot CLI"]) {
         await user.click(
           screen.getByRole("button", {
             name: new RegExp(`${label} logo ${label}`),
@@ -321,9 +322,32 @@ describe("ConnectCommandPanel", () => {
     expect(
       await screen.findByRole("link", { name: "Download installer" }),
     ).toHaveAttribute("href", "https://proxy.example/desktop-installer");
+    expect(
+      screen.queryByRole("link", { name: "the LLM Proxy" }),
+    ).not.toBeInTheDocument();
+    const proxySummary = screen
+      .getByText("your Claude subscription")
+      .closest("li");
+    expect(proxySummary).toHaveTextContent(
+      "Passthrough to Anthropic through the LLM Proxy using your Claude subscription",
+    );
+    expect(
+      screen.queryByText("Good for reusing a subscription"),
+    ).not.toBeInTheDocument();
+    await userEvent.click(screen.getByTestId("connect-change-proxy"));
+    expect(
+      screen.getByRole("tab", { name: "Claude subscription" }),
+    ).toHaveAttribute("aria-selected", "true");
+    await userEvent.click(screen.getByRole("button", { name: "Done" }));
+    expect(
+      screen.queryByRole("tab", { name: "Claude subscription" }),
+    ).not.toBeInTheDocument();
     expect(screen.getByText(COMMAND)).not.toBeVisible();
     await userEvent.click(screen.getByText("Advanced: terminal setup"));
     expect(screen.getByText(COMMAND)).toBeVisible();
+    // The Desktop panel sits on a card, so the command must bring its own
+    // terminal surface; without one it inherited the card and was unreadable.
+    expect(screen.getByText(COMMAND).closest(".bg-terminal")).not.toBeNull();
     expect(createKeyMock).not.toHaveBeenCalled();
   });
 
@@ -359,6 +383,88 @@ describe("ConnectCommandPanel", () => {
         expect.objectContaining({ proxyAuth: "provider-key" }),
       ),
     );
+  });
+
+  it.each([
+    false,
+    true,
+  ])("keeps Desktop return guidance available with white-labeling=%s", async (whiteLabeling) => {
+    const branding = vi
+      .spyOn(appConfig.enterpriseFeatures, "fullWhiteLabeling", "get")
+      .mockReturnValue(whiteLabeling);
+    try {
+      renderPanel({ client: findClient("claude-desktop") });
+      await screen.findByText(COMMAND);
+      const docsLink = screen.queryByRole("link", {
+        name: /How to return to standard Claude Desktop/,
+      });
+      const inlineInstructions = screen.queryByText(
+        /choose Anthropic sign-in on Desktop/,
+      );
+      if (whiteLabeling) {
+        expect(docsLink).not.toBeInTheDocument();
+        expect(inlineInstructions).toBeVisible();
+        expect(
+          screen.getByRole("link", { name: /Claude's setup instructions/ }),
+        ).toHaveAttribute(
+          "href",
+          "https://claude.com/docs/third-party/claude-desktop/installation#single-machine-setup",
+        );
+      } else {
+        expect(docsLink).toBeVisible();
+        expect(inlineInstructions).not.toBeInTheDocument();
+      }
+    } finally {
+      branding.mockRestore();
+    }
+  });
+
+  it.each([
+    { clientId: "claude-desktop", proxy: true, gateway: true },
+    { clientId: "claude-desktop", proxy: false, gateway: true },
+    { clientId: "claude-desktop", proxy: true, gateway: false },
+    { clientId: "claude-desktop", proxy: false, gateway: false },
+    { clientId: "claude-code", proxy: true, gateway: true },
+  ])("shows only applicable Desktop guidance for $clientId (proxy=$proxy, gateway=$gateway)", async ({
+    clientId,
+    proxy,
+    gateway,
+  }) => {
+    renderPanel({
+      client: findClient(clientId),
+      llmProxyId: proxy ? "p1" : null,
+      mcpGatewayId: gateway ? "g1" : null,
+      mcpGateways: gateway
+        ? [{ id: "g1", name: "My Gateway", agentType: "mcp_gateway" }]
+        : [],
+    });
+    await screen.findByText(COMMAND);
+
+    const revertLink = screen.queryByRole("link", {
+      name: /How to return to standard Claude Desktop/,
+    });
+    if (clientId === "claude-desktop" && proxy) {
+      expect(revertLink).toBeVisible();
+      expect(revertLink).toHaveAttribute(
+        "href",
+        expect.stringContaining("platform-claude-desktop-example#revert"),
+      );
+    } else {
+      expect(revertLink).not.toBeInTheDocument();
+      expect(
+        screen.queryByText(/existing Claude conversations/),
+      ).not.toBeInTheDocument();
+    }
+
+    const gatewayStep = screen.queryByRole("heading", {
+      name: "Enable your gateway in Claude Desktop",
+    });
+    if (clientId === "claude-desktop" && gateway) {
+      expect(gatewayStep).toBeVisible();
+      expect(screen.getByText("+ → Connectors")).toBeVisible();
+    } else {
+      expect(gatewayStep).not.toBeInTheDocument();
+    }
   });
 
   it("keeps approval compact while customized choices reach the approved setup", async () => {
@@ -1314,7 +1420,7 @@ describe("ConnectCommandPanel", () => {
     ).not.toBeInTheDocument();
   });
 
-  describe("Copilot CLI model choice", () => {
+  describe("script client model choice", () => {
     it("surfaces the model in the review step and sends it with the setup", async () => {
       renderPanel({ client: findClient("copilot-cli") });
 
@@ -1343,6 +1449,29 @@ describe("ConnectCommandPanel", () => {
       await waitFor(() =>
         expect(createSetupMock).toHaveBeenLastCalledWith(
           expect.objectContaining({ model: "o4-mini" }),
+        ),
+      );
+    });
+
+    it("leaves OpenCode provider and model selection unchanged", async () => {
+      renderPanel({ client: findClient("opencode") });
+
+      expect(await screen.findByText(COMMAND)).toBeInTheDocument();
+      expect(
+        screen.queryByTestId("connect-change-model"),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.getByTestId("connect-change-proxy").closest("li"),
+      ).toHaveTextContent(
+        "Route supported OpenCode providers through the LLM Proxy using their existing local credentials",
+      );
+      await waitFor(() =>
+        expect(createSetupMock).toHaveBeenCalledWith(
+          expect.objectContaining({
+            clientId: "opencode",
+            proxyAuth: "provider-key",
+            model: undefined,
+          }),
         ),
       );
     });

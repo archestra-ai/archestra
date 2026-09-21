@@ -38,6 +38,7 @@ test.each([
             authMode: auth,
             provider: "anthropic",
             providerLabel: "Anthropic",
+            baseUrl: "https://proxy.example/v1",
             url: "https://proxy.example/v1/anthropic",
             proxyName: "default",
             virtualKey: auth === "virtual-key" ? "archestra-test-key" : null,
@@ -51,6 +52,8 @@ test.each([
       url: "https://proxy.example/v1/mcp/test",
     },
     skills: null,
+    runtimeHandoffInstructions:
+      "Offer remote work after consent.\nKeep user instructions.",
   };
   const rendered = renderSetupScript(context);
   const script =
@@ -112,6 +115,7 @@ with patch('sys.platform', target_os), patch.dict(os.environ, {'LOCALAPPDATA': s
         assert metadata['entries'][0] == original['entries'][0]
         profile_path = library / (metadata['appliedId'] + '.json')
         profile = json.loads(profile_path.read_text())
+        assert profile['organizationInstructions'] == 'Offer remote work after consent.\\nKeep user instructions.'
         if ${auth === "none" ? "False" : "True"}:
             assert profile['inferenceGatewayApiKey'] == token
             assert profile['modelDiscoveryEnabled'] is True
@@ -151,7 +155,21 @@ with patch('sys.platform', target_os), patch.dict(os.environ, {'LOCALAPPDATA': s
         assert replaced_profile['managedMcpServers'][0]['url'] == 'https://replacement.example/v1/mcp/test'
         assert 'proxy.example' not in json.dumps(replaced_profile)
         assert sum('setup-token' in args for args in calls) == ${auth === "provider-key" ? 1 : 0}
+        module['main'].__globals__['SETUP']['runtimeHandoffInstructions'] = 'x' * 3000
+        module['main']()
+        saved_profile = profile_path.read_bytes()
+        assert json.loads(saved_profile)['organizationInstructions'] == 'x' * 3000
+        module['main'].__globals__['SETUP']['runtimeHandoffInstructions'] = 'x' * 3001
+        try:
+            module['main']()
+            raise AssertionError('Expected oversized instructions to fail')
+        except RuntimeError as error:
+            assert '3,000' in str(error)
+        assert profile_path.read_bytes() == saved_profile
         # A managed connection must not retain resources deselected on a rerun.
+        module['main'].__globals__['SETUP']['runtimeHandoffInstructions'] = None
+        module['main']()
+        assert 'organizationInstructions' not in json.loads(profile_path.read_text())
         module['main'].__globals__['SETUP']['mcp'] = None
         module['main'].__globals__['SETUP']['skills'] = None
         module['main']()

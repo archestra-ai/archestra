@@ -1,15 +1,9 @@
-name: Trigger Website Deploy
+name: Publish Docs to archestra.ai
 
-# Rebuild staging with platform docs from the selected branch or commit.
-# Production docs are refreshed separately after stable release publication.
+# Refresh production docs from main independently of platform releases.
 
 on:
   workflow_call:
-    inputs:
-      docs_ref:
-        description: Platform docs ref to preview (defaults to the triggering commit)
-        type: string
-        default: ""
     secrets:
       ARCHESTRA_WEBSITE_DEPLOY_GITHUB_APP_ID:
         required: true
@@ -18,11 +12,6 @@ on:
         required: true
         description: Private key for the Archestra Website Deploy GitHub App
   workflow_dispatch:
-    inputs:
-      docs_ref:
-        description: Platform docs ref to preview (empty uses the selected workflow branch)
-        type: string
-        default: ""
 
 permissions: {}
 
@@ -32,7 +21,8 @@ concurrency:
 
 jobs:
   trigger-website-deploy:
-    name: Trigger Website Vercel Deploy
+    name: Refresh archestra.ai Docs
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -56,9 +46,9 @@ jobs:
       - name: Dispatch website deploy workflow
         env:
           GH_TOKEN: ${{ steps.generate-token.outputs.token }}
-          DOCS_REF: ${{ inputs.docs_ref || github.sha }}
+          DOCS_REF: ${{ github.sha }}
         run: |
-          gh workflow run deploy-to-vercel.yml \
+          gh workflow run deploy-docs.yml \
             --repo archestra-ai/website \
             --ref main \
             -f "docs_ref=$DOCS_REF"

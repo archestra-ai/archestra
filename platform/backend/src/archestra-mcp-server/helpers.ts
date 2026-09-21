@@ -63,6 +63,7 @@ type ArchestraToolDefinition<
   title: string;
   description: string;
   schema: TSchema;
+  publicSchema?: ZodType;
   outputSchema?: ZodType;
   handler: ArchestraToolHandler<TSchema>;
   invoke: ArchestraToolHandler;
@@ -312,6 +313,7 @@ export function defineArchestraTool<
   title: string;
   description: string;
   schema: TSchema;
+  publicSchema?: ZodType;
   outputSchema?: TOutputSchema;
   handler: ArchestraToolHandler<TSchema>;
 }): ArchestraToolDefinition<ShortName, TSchema> & {
@@ -366,7 +368,7 @@ export function defineArchestraTools<
       name: toolFullNames[definition.shortName as ShortName],
       title: definition.title,
       description: definition.description,
-      schema: definition.schema,
+      schema: definition.publicSchema ?? definition.schema,
       outputSchema: definition.outputSchema,
     }),
   );

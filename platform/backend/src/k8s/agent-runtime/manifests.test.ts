@@ -1,4 +1,7 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import config, { parseLabelSelector } from "@/config";
 import {
@@ -36,6 +39,48 @@ const SPEC: KubernetesAgentRunLaunchSpec = {
 };
 
 describe("buildAgentRuntimeSandbox", () => {
+  it.each([
+    true,
+    false,
+  ])("reports credential projection timeout without starting the agent (failure file writable: %s)", (writable) => {
+    const directory = mkdtempSync(path.join(tmpdir(), "runtime-credentials-"));
+    const prefix = path.join(directory, writable ? "turn" : "missing/turn");
+    try {
+      const script = buildAgentRuntimeTurnScript({
+        ...SPEC,
+        runtimeScope: SPEC.namespace,
+        renewableCredentials: {},
+        command: ["/bin/sh", "-c", "echo AGENT_STARTED"],
+      });
+      const result = spawnSync(
+        "/bin/sh",
+        ["-c", `grep() { return 1; }; sleep() { :; };\n${script}`],
+        {
+          encoding: "utf8",
+          env: {
+            PATH: "/usr/bin:/bin",
+            ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX: prefix,
+          },
+          timeout: 5_000,
+        },
+      );
+      expect(result.status, result.stderr).toBe(75);
+      expect(result.stdout).not.toContain("AGENT_STARTED");
+      expect(result.stderr).not.toContain("arch_secret");
+      if (writable) {
+        const failure = JSON.parse(readFileSync(`${prefix}.failure`, "utf8"));
+        expect(failure).toEqual({
+          version: 1,
+          code: "runtime.credential_projection_timeout",
+          message: expect.stringMatching(/credentials.*retry/i),
+        });
+        expect(JSON.stringify(failure)).not.toContain("arch_secret");
+      }
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
   it("does not inherit removed credentials or settings in a subsequent turn", () => {
     const script = buildAgentRuntimeTurnScript(
       {
@@ -50,7 +95,13 @@ describe("buildAgentRuntimeSandbox", () => {
           'printf "%s|%s|%s|%s|%s" "${OPENAI_API_KEY-unset}" "${REMOVED_SETTING-unset}" "$CLAUDE_CODE_OAUTH_TOKEN" "$CURRENT_SETTING" "$IMAGE_SETTING"',
         ],
       },
-      ["OPENAI_API_KEY", "REMOVED_SETTING", "CURRENT_SETTING"],
+      {
+        inheritedVariableNames: [
+          "OPENAI_API_KEY",
+          "REMOVED_SETTING",
+          "CURRENT_SETTING",
+        ],
+      },
     );
     expect(
       execFileSync("/bin/sh", ["-c", script], {

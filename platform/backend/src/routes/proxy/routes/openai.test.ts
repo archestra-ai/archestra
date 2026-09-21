@@ -34,6 +34,7 @@ import {
   ModelModel,
   OAuthAccessTokenModel,
   OAuthClientModel,
+  VirtualApiKeyModel,
 } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { createOpenAiTestClient } from "@/test/llm-provider-stubs";
@@ -1090,6 +1091,141 @@ describe("OpenAI Responses proxy", () => {
     expect(response.body).toContain("data: ");
     expect(response.body).toContain('"type":"response.output_text.delta"');
     expect(response.body).toContain("data: [DONE]");
+  });
+
+  test("selects the OpenCode OAuth bridge only with a passthrough key and account ID", async ({
+    makeAgent,
+    makeMember,
+    makeUser,
+  }) => {
+    const app = createOpenAiRouteTestApp();
+    await app.register(openAiProxyRoutes);
+    const agent = await makeAgent({ name: "OpenCode OAuth bridge" });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    const { value: passthroughToken, virtualKey } =
+      await VirtualApiKeyModel.create({
+        organizationId: agent.organizationId,
+        name: "opencode-oauth-bridge",
+        keyType: "passthrough",
+        scope: "personal",
+        authorId: owner.id,
+      });
+    let capturedOptions:
+      | Parameters<typeof openAiResponsesAdapterFactory.createClient>[1]
+      | undefined;
+    vi.mocked(openAiResponsesAdapterFactory.createClient).mockImplementation(
+      (_apiKey, options) => {
+        capturedOptions = options;
+        return createOpenAiResponsesTestClient() as never;
+      },
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/responses`,
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer access-token",
+        "x-archestra-virtual-key": passthroughToken,
+        "x-archestra-opencode-oauth-bridge": "true",
+        "chatgpt-account-id": "account_123",
+        "x-openai-internal-codex-residency": "us",
+        originator: "opencode",
+        "session-id": "session_123",
+        "user-agent": "opencode/test",
+      },
+      payload: { model: "gpt-5.6-sol", input: "Hello!" },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(capturedOptions?.openAiCodexPassthrough).toEqual({
+      accessToken: "access-token",
+      accountId: "account_123",
+      residency: "us",
+      originator: "opencode",
+      sessionId: "session_123",
+      userAgent: "opencode/test",
+    });
+    const interactions = await InteractionModel.getAllInteractionsForProfile(
+      agent.id,
+    );
+    expect(interactions.at(-1)).toMatchObject({
+      userId: owner.id,
+      passthroughVirtualKeyId: virtualKey.id,
+      authMethod: "passthrough_virtual_key",
+      billingMode: "subscription",
+    });
+  });
+
+  test("rejects a signaled bridge request without a ChatGPT account ID before upstream creation", async ({
+    makeAgent,
+    makeMember,
+    makeUser,
+  }) => {
+    const app = createOpenAiRouteTestApp();
+    await app.register(openAiProxyRoutes);
+    const agent = await makeAgent({ name: "Missing OpenCode account" });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    const { value: passthroughToken } = await VirtualApiKeyModel.create({
+      organizationId: agent.organizationId,
+      name: "missing-opencode-account",
+      keyType: "passthrough",
+      scope: "personal",
+      authorId: owner.id,
+    });
+    const createClientSpy = vi.mocked(
+      openAiResponsesAdapterFactory.createClient,
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/responses`,
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer access-token",
+        "x-archestra-virtual-key": passthroughToken,
+        "x-archestra-opencode-oauth-bridge": "true",
+      },
+      payload: { model: "gpt-5.6-sol", input: "Hello!" },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toMatch(/account ID/i);
+    expect(createClientSpy).not.toHaveBeenCalled();
+  });
+
+  test("does not select the bridge from its header alone", async ({
+    makeAgent,
+  }) => {
+    const app = createOpenAiRouteTestApp();
+    await app.register(openAiProxyRoutes);
+    const agent = await makeAgent({ name: "Unsigned OpenCode bridge" });
+    let capturedOptions:
+      | Parameters<typeof openAiResponsesAdapterFactory.createClient>[1]
+      | undefined;
+    vi.mocked(openAiResponsesAdapterFactory.createClient).mockImplementation(
+      (_apiKey, options) => {
+        capturedOptions = options;
+        return createOpenAiResponsesTestClient() as never;
+      },
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/responses`,
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer ordinary-api-key",
+        "x-archestra-opencode-oauth-bridge": "true",
+        "chatgpt-account-id": "account_123",
+      },
+      payload: { model: "gpt-4o", input: "Hello!" },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(capturedOptions?.openAiCodexPassthrough).toBeUndefined();
   });
 });
 

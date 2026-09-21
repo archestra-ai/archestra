@@ -139,8 +139,8 @@ function getMessageText(
 /**
  * Detects if a request is a "main" request or "subagent" request.
  *
- * Applies to the Claude agentic sources (Claude Code and Claude Desktop, both
- * built on the Claude Agent SDK); every other source is "main".
+ * Applies to Claude agentic sources and OpenCode sessions. Every other source
+ * is "main".
  *
  * Shared heuristics:
  * - Single short utility messages ("count", "quota") are subagents
@@ -168,6 +168,13 @@ function computeRequestType(
   // would fall through to "main" and mislabel every auxiliary chat call.
   if (source?.startsWith("chat:")) {
     return "subagent";
+  }
+
+  if (source === "opencode:main") return "main";
+  if (source?.startsWith("opencode:")) return "subagent";
+
+  if (sessionSource === "opencode_session") {
+    return computeOpenCodeRequestType(request);
   }
 
   // Only apply detection heuristics for Claude sessions (claude_metadata, plus
@@ -223,6 +230,44 @@ function computeRequestType(
   }
 
   return "main";
+}
+
+function computeOpenCodeRequestType(request: unknown): "main" | "subagent" {
+  const req = request as {
+    system?: string | Array<{ text?: string; type?: string }>;
+    systemInstruction?: { parts?: Array<{ text?: string; type?: string }> };
+    instructions?: string;
+    tools?: Array<{
+      name?: string;
+      function?: { name?: string };
+      functionDeclarations?: Array<{ name?: string }>;
+    }>;
+    messages?: Array<{
+      content: string | Array<{ text?: string; type?: string }>;
+      role: string;
+    }>;
+  };
+  const system = [
+    getMessageText(req.system),
+    getMessageText(req.systemInstruction?.parts),
+    req.instructions ?? "",
+    ...(req.messages ?? [])
+      .filter((message) => message.role === "system")
+      .map((message) => getMessageText(message.content)),
+  ].join("\n");
+  if (/title generator/i.test(system)) return "subagent";
+
+  const toolNames = (req.tools ?? []).flatMap((tool) => [
+    tool.function?.name ?? tool.name ?? "",
+    ...(tool.functionDeclarations ?? []).map(
+      (declaration) => declaration.name ?? "",
+    ),
+  ]);
+  const hasSpawn = toolNames.some(
+    (name) =>
+      name === "task" || name.endsWith(":task") || name.endsWith(".task"),
+  );
+  return hasSpawn ? "main" : "subagent";
 }
 
 /**
@@ -719,6 +764,36 @@ class InteractionModel {
           cost: schema.interactionsTable.cost,
           baselineCost: schema.interactionsTable.baselineCost,
           createdAt: schema.interactionsTable.createdAt,
+          source: schema.interactionsTable.source,
+          requestType: sql<"main" | "subagent">`
+            CASE
+              WHEN ${schema.interactionsTable.source} = 'opencode:main'
+              THEN 'main'
+              WHEN ${schema.interactionsTable.source} IN ('opencode:subagent', 'opencode:title', 'opencode:compaction')
+              THEN 'subagent'
+              WHEN ${schema.interactionsTable.sessionSource} = 'opencode_session'
+                AND LOWER(CONCAT_WS('\n',
+                  ${schema.interactionsTable.request}->>'system',
+                  ${schema.interactionsTable.request}->>'instructions',
+                  ${schema.interactionsTable.request}#>>'{systemInstruction,parts,0,text}'
+                )) LIKE '%title generator%'
+              THEN 'subagent'
+              WHEN ${schema.interactionsTable.sessionSource} = 'opencode_session'
+                AND ${schema.interactionsTable.request} ? 'tools'
+                AND NOT EXISTS (
+                  SELECT 1
+                  FROM jsonb_array_elements(COALESCE(${schema.interactionsTable.request}->'tools', '[]'::jsonb)) tool
+                  WHERE tool->>'name' = 'task'
+                    OR tool->'function'->>'name' = 'task'
+                    OR EXISTS (
+                      SELECT 1
+                      FROM jsonb_array_elements(COALESCE(tool->'functionDeclarations', '[]'::jsonb)) declaration
+                      WHERE declaration->>'name' = 'task'
+                    )
+                )
+              THEN 'subagent'
+              ELSE 'main'
+            END`,
         })
         .from(schema.interactionsTable)
         .leftJoin(
@@ -2128,6 +2203,13 @@ class InteractionModel {
 
       for (const interaction of windowRows) {
         const requestStr = JSON.stringify(interaction.request);
+        const isOpenCodeSideTurn =
+          interaction.sessionSource === "opencode_session" &&
+          computeRequestType(
+            interaction.request,
+            interaction.sessionSource,
+            interaction.source,
+          ) === "subagent";
 
         // Check for title generation request (Claude Code)
         if (
@@ -2145,6 +2227,7 @@ class InteractionModel {
         // Skip if this is not a "main" interaction
         if (
           !lastMainInteraction &&
+          !isOpenCodeSideTurn &&
           !requestStr.includes("prompt suggestion generator") &&
           !requestStr.includes("Please write a 5-10 word title")
         ) {
@@ -2296,7 +2379,7 @@ class InteractionModel {
       oldest > 0
         ? sql`
         UNION ALL
-        (SELECT id, session_id, thread_id, request, response, type, created_at,
+        (SELECT id, session_id, session_source, source, thread_id, request, response, type, created_at,
                 locked_chat_conversation_id
          FROM interactions
          WHERE session_id = keys.key
@@ -2307,7 +2390,7 @@ class InteractionModel {
       uuidKeys.length > 0
         ? sql`
       UNION ALL
-      SELECT id, session_id, thread_id, request, response, type, created_at,
+      SELECT id, session_id, session_source, source, thread_id, request, response, type, created_at,
              locked_chat_conversation_id
       FROM interactions
       WHERE id IN (${sql.join(
@@ -2321,6 +2404,8 @@ class InteractionModel {
     const interactionsResult = await db.execute<{
       id: string;
       session_id: string | null;
+      session_source: string | null;
+      source: InteractionSource | null;
       thread_id: string | null;
       request: unknown;
       response: unknown;
@@ -2340,11 +2425,11 @@ class InteractionModel {
       -- insertion order (the same tiebreak the write path already uses to
       -- resolve a delta parent). Final ordering is applied in JS, since the
       -- per-key UNION below has no single ordering to inherit.
-      SELECT t.id, t.session_id, t.thread_id, t.request, t.response, t.type,
+      SELECT t.id, t.session_id, t.session_source, t.source, t.thread_id, t.request, t.response, t.type,
              t.created_at, t.locked_chat_conversation_id
       FROM (SELECT DISTINCT k.key FROM unnest(ARRAY[${sessionKeyList}]::text[]) AS k(key)) keys
       CROSS JOIN LATERAL (
-        (SELECT id, session_id, thread_id, request, response, type, created_at,
+        (SELECT id, session_id, session_source, source, thread_id, request, response, type, created_at,
                 locked_chat_conversation_id
          FROM interactions
          WHERE session_id = keys.key
@@ -2372,6 +2457,8 @@ class InteractionModel {
       byId.set(row.id, {
         id: row.id,
         sessionId: row.session_id,
+        sessionSource: row.session_source,
+        source: row.source,
         threadId: row.thread_id,
         request: row.request,
         response: row.response,
@@ -2417,6 +2504,8 @@ export default InteractionModel;
 type SessionWindowRow = {
   id: string;
   sessionId: string | null;
+  sessionSource: string | null;
+  source: InteractionSource | null;
   threadId: string | null;
   request: unknown;
   response: unknown;

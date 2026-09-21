@@ -4,6 +4,12 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { ConversationHeader } from "./conversation-header";
 
+vi.mock("@/lib/schedule-trigger.query", () => ({
+  useScheduleTriggerRun: () => ({
+    data: { createdAt: "2026-01-15T09:30:00", runKind: "manual" },
+  }),
+}));
+
 type Conversation = archestraApiTypes.GetChatConversationResponses["200"];
 type Panel = Parameters<typeof ConversationHeader>[0]["panel"];
 
@@ -57,6 +63,42 @@ function renderHeader(panelOverrides: Partial<Panel> = {}) {
 }
 
 describe("ConversationHeader — top-bar tab strip", () => {
+  it("uses the run time and invocation kind instead of the repeated prompt title", () => {
+    renderHeader({ scheduledRun: { triggerId: "trigger-1", runId: "run-1" } });
+    expect(
+      screen.getByRole("heading", { name: /^Run · .+ · Manual$/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "My chat" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps only the chat title in a scheduled-run header", () => {
+    const title = "Daily summary";
+    render(
+      <ConversationHeader
+        conversationId="conv-1"
+        conversation={makeConversation({ title })}
+        scheduleTriggerId="trigger-1"
+        messageCount={2}
+        isTitleAnimating={false}
+        canManageShare={false}
+        isShared={false}
+        canCreateProject={false}
+        onShare={vi.fn()}
+        onExportMarkdown={vi.fn()}
+        onCreateProject={vi.fn()}
+        panel={makePanel()}
+      />,
+    );
+
+    expect(screen.getByRole("heading", { name: title })).toBeInTheDocument();
+    expect(screen.getAllByText(title)).toHaveLength(1);
+    expect(
+      screen.queryByTitle(`Scheduled task: ${title}`),
+    ).not.toBeInTheDocument();
+  });
+
   it("shows Files / Browser / Apps while the panel is collapsed", () => {
     renderHeader({ isOpen: false });
     expect(screen.getByRole("tab", { name: "Files" })).toBeInTheDocument();

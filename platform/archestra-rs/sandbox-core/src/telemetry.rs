@@ -69,7 +69,8 @@ mod imp {
     use opentelemetry_otlp::{LogExporter, SpanExporter, WithExportConfig, WithHttpConfig};
     use opentelemetry_sdk::Resource;
     use opentelemetry_sdk::propagation::TraceContextPropagator;
-    use tracing_subscriber::filter::LevelFilter;
+    use tracing::Level;
+    use tracing_subscriber::filter::{FilterExt, LevelFilter, filter_fn};
     use tracing_subscriber::prelude::*;
     use tracing_subscriber::{EnvFilter, Layer};
 
@@ -161,10 +162,23 @@ mod imp {
     }
 
     /// log verbosity for fmt/Loki output, from the standard `RUST_LOG`, defaulting
-    /// to `info`. kept separate from the span layer so it can be tuned without
-    /// disabling traces.
-    fn log_filter() -> EnvFilter {
-        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"))
+    /// to `info`, under a fixed ceiling for the Dagger SDK. kept separate from
+    /// the span layer so it can be tuned without disabling traces.
+    fn log_filter<S>() -> impl tracing_subscriber::layer::Filter<S> {
+        let env = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
+        // the Dagger SDK logs every GraphQL query verbatim at TRACE, and a
+        // `setSecret` query carries the secret plaintext. an `EnvFilter`
+        // directive could be outranked by a more specific `RUST_LOG` entry, so
+        // the ceiling is a separate predicate no operator setting can lift.
+        env.and(filter_fn(|meta| {
+            dagger_sdk_ceiling_allows(meta.target(), *meta.level())
+        }))
+    }
+
+    /// true unless the event comes from the Dagger SDK at a level below `info`.
+    fn dagger_sdk_ceiling_allows(target: &str, level: Level) -> bool {
+        let sdk = target == "dagger_sdk" || target.starts_with("dagger_sdk::");
+        !(sdk && level > Level::INFO)
     }
 
     pub(super) fn flush() {
@@ -215,6 +229,33 @@ mod imp {
 
     fn auth_header(value: String) -> HashMap<String, String> {
         HashMap::from([("Authorization".to_string(), value)])
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::dagger_sdk_ceiling_allows;
+        use tracing::Level;
+
+        #[test]
+        fn dagger_sdk_ceiling_blocks_only_verbose_sdk_events() {
+            // the query logger lives in a nested module: the ceiling covers it.
+            assert!(!dagger_sdk_ceiling_allows(
+                "dagger_sdk::querybuilder",
+                Level::TRACE
+            ));
+            assert!(!dagger_sdk_ceiling_allows("dagger_sdk", Level::DEBUG));
+            assert!(dagger_sdk_ceiling_allows(
+                "dagger_sdk::core::gql_client",
+                Level::WARN
+            ));
+            assert!(dagger_sdk_ceiling_allows("dagger_sdk", Level::INFO));
+            // our own modules and unrelated crates are untouched at any level.
+            assert!(dagger_sdk_ceiling_allows(
+                "sandbox_core::backends::dagger",
+                Level::TRACE
+            ));
+            assert!(dagger_sdk_ceiling_allows("dagger_sdk_ext", Level::TRACE));
+        }
     }
 }
 

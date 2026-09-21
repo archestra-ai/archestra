@@ -1,4 +1,5 @@
 import { ChatErrorCode, type ChatErrorResponse } from "@archestra/shared";
+import type { UIMessageChunk } from "ai";
 import { A2AProtocolTaskState } from "@/agents/a2a/a2a-protocol";
 import {
   type A2AExecuteResult,
@@ -8,6 +9,7 @@ import { hasAnyAgentTypeAdminPermission } from "@/auth";
 import logger from "@/logging";
 import {
   A2ATaskModel,
+  ActiveChatRunModel,
   AgentModel,
   AgentTeamModel,
   ScheduleTriggerModel,
@@ -16,6 +18,7 @@ import {
 } from "@/models";
 import { metrics } from "@/observability";
 import { ProviderError } from "@/routes/chat/errors";
+import { activeChatRunService } from "@/services/active-chat-run";
 import { resolveAgentRuntime } from "@/services/agent-runtime/pod-run";
 import { startDetachedAgentTask } from "@/services/agent-runtime/start-task";
 import {
@@ -66,15 +69,26 @@ export async function handleScheduleTriggerRunExecution(
   const triggerAgent = await AgentModel.findById(trigger.agentId);
   const agentName = triggerAgent?.name ?? "unknown";
 
-  let status: "success" | "failed" = "success";
+  let status: "success" | "failed" | "cancelled" = "success";
   let errorMessage: string | null = null;
   // The structured error for a failed run's chat error card (see catch below).
   let runChatError: ChatErrorResponse | null = null;
-  // Captured for post-completion transcript persistence: a project-scoped run's
-  // chat conversation is created up front and the executor result is persisted
-  // after execution completes.
+  // Project runs publish live events and persist the final transcript before
+  // closing replay, so reconnecting clients can safely load either source.
   let runConversation: Conversation | null = null;
   let executeResult: A2AExecuteResult | null = null;
+  const abortController = new AbortController();
+  let eventWriter: WritableStreamDefaultWriter<UIMessageChunk> | undefined;
+  let terminalReady: Promise<void> | undefined;
+  let stopPolling: (() => void) | undefined;
+  let activeRunId: string | undefined;
+  // A user Stop settles the run as cancelled, not failed. Other aborts (a lost
+  // replay writer, server shutdown) remain failures.
+  const wasStoppedByUser = async () => {
+    if (!activeRunId || !abortController.signal.aborted) return false;
+    const activeRun = await ActiveChatRunModel.findById(activeRunId);
+    return !!activeRun?.stopRequestedAt;
+  };
 
   try {
     const actor = await UserModel.getById(trigger.actorUserId);
@@ -172,8 +186,50 @@ export async function handleScheduleTriggerRunExecution(
       });
       conversationId = conversation.id;
       runConversation = conversation;
+      const activeRun = await activeChatRunService.createRun({
+        conversationId,
+        userId: conversation.userId,
+        organizationId: trigger.organizationId,
+      });
+      // A duplicate queue delivery must not execute or settle the winning run.
+      if (!activeRun) {
+        if (activeChatRunService.shuttingDown) {
+          throw new Error("Server is shutting down");
+        }
+        return;
+      }
+      activeRunId = activeRun.id;
+      const events = new TransformStream<UIMessageChunk, UIMessageChunk>();
+      eventWriter = events.writable.getWriter();
+      ({ terminalReady } = activeChatRunService.drainStreamToEvents({
+        runId: activeRun.id,
+        conversationId,
+        stream: events.readable,
+        abortController,
+        getTerminalStatus: async () => ({
+          status:
+            status === "failed"
+              ? "failed"
+              : status === "cancelled"
+                ? "cancelled"
+                : "completed",
+          error: errorMessage,
+        }),
+      }));
+      stopPolling = activeChatRunService.startStopPolling({
+        runId: activeRun.id,
+        conversationId,
+        abortController,
+      });
+      // A trailing user message lets the normal chat session attach to replay.
+      // Create the active run first, so the initial attach cannot return 204.
+      await persistRunUserMessage({
+        conversation,
+        userText: trigger.messageTemplate,
+      });
     }
 
+    const writer = eventWriter;
     executeResult = await executeA2AMessage({
       agentId: trigger.agentId,
       message: trigger.messageTemplate,
@@ -183,44 +239,51 @@ export async function handleScheduleTriggerRunExecution(
       conversationId,
       source: "schedule-trigger",
       scheduleTriggerRunId: run.id,
+      abortSignal: abortController.signal,
+      onUiMessageChunk: writer ? (chunk) => writer.write(chunk) : undefined,
     });
+    if (abortController.signal.aborted) {
+      throw new Error("Scheduled run was stopped before completion");
+    }
   } catch (error) {
     if (error instanceof ScheduledRuntimeAlreadyStartedError) return;
-    status = "failed";
-    errorMessage = formatScheduleTriggerExecutionError(
-      error instanceof Error ? error.message : String(error),
-    );
-    // Prefer the provider's structured error (proper code + retryability), so a
-    // failed run's chat shows the same rich error card as the interactive chat;
-    // fall back to a generic card carrying the formatted message.
-    runChatError =
-      error instanceof ProviderError
-        ? error.chatErrorResponse
-        : {
-            code: ChatErrorCode.Unknown,
-            message: errorMessage,
-            isRetryable: false,
-          };
-    logger.warn(
-      { runId: run.id, triggerId: run.triggerId, error: errorMessage },
-      "Scheduled trigger run failed",
-    );
+    if (await wasStoppedByUser()) {
+      status = "cancelled";
+    } else {
+      status = "failed";
+      errorMessage = formatScheduleTriggerExecutionError(
+        error instanceof Error ? error.message : String(error),
+      );
+      // Prefer the provider's structured error (proper code + retryability), so a
+      // failed run's chat shows the same rich error card as the interactive chat;
+      // fall back to a generic card carrying the formatted message.
+      runChatError =
+        error instanceof ProviderError
+          ? error.chatErrorResponse
+          : {
+              code: ChatErrorCode.Unknown,
+              message: errorMessage,
+              isRetryable: false,
+            };
+      logger.warn(
+        { runId: run.id, triggerId: run.triggerId, error: errorMessage },
+        "Scheduled trigger run failed",
+      );
+    }
   }
 
-  await ScheduleTriggerRunModel.markCompleted({
-    runId: run.id,
-    status,
-    error: errorMessage,
-  });
-
-  // For a project-scoped run that executed successfully, persist the chat
-  // transcript from the executor's own result (the user prompt + the complete
+  // For a project-scoped run that executed successfully (or that the user
+  // stopped, keeping whatever it produced), persist the chat transcript from the executor's own result (the user prompt + the complete
   // assistant turn). This is race-free — unlike reading the `interactions` rows,
   // which the proxy commits after the stream is flushed and so may not yet be
   // visible at completion. So the conversation isn't blank (or missing its final
   // answer) when opened from any surface (project chat list, sidebar, direct
   // link). Best-effort: a persist failure must not fail the already-completed run.
-  if (status === "success" && runConversation && executeResult) {
+  if (
+    (status === "success" || status === "cancelled") &&
+    runConversation &&
+    executeResult
+  ) {
     try {
       await persistRunConversationMessages({
         conversation: runConversation,
@@ -265,6 +328,34 @@ export async function handleScheduleTriggerRunExecution(
       );
     }
   }
+
+  // Close replay only after the transcript/error is durable. Browser disconnects
+  // cancel replay readers, not this writer or the scheduled execution.
+  if (eventWriter) {
+    try {
+      if (runChatError) {
+        await eventWriter.write({
+          type: "error",
+          errorText: JSON.stringify(runChatError),
+        });
+      }
+      await eventWriter.close();
+    } catch (error) {
+      logger.warn(
+        { runId: run.id, error },
+        "Scheduled run event stream closed",
+      );
+    } finally {
+      await terminalReady;
+      stopPolling?.();
+    }
+  }
+
+  await ScheduleTriggerRunModel.markCompleted({
+    runId: run.id,
+    status,
+    error: errorMessage,
+  });
 
   metrics.scheduleTrigger.reportScheduleTriggerRun(agentName, status);
 

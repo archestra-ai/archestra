@@ -2,7 +2,7 @@
 title: Tool Guardrails
 category: LLM Proxy
 order: 5
-lastUpdated: 2026-09-16
+lastUpdated: 2026-09-21
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -22,11 +22,34 @@ Set `ARCHESTRA_OPENAPPA_ENABLED=true` to enable the OpenAPPA sidebar entry in St
 
 The built-in APPA Guide skill helps agents inspect, explain, and edit this policy. It uses the same read, validate, and update tools as the editor. The skill is available only while APPA is enabled.
 
-APPA checks every call in a batch before releasing it. Allowed calls can run in parallel, and their results can arrive in any order. If any call is denied, none of the calls in that response run.
+APPA evaluates each tool call before releasing it. Allowed calls run in parallel, and their results can return in any order. When a call is denied, the proxy returns a remedy notice. Other allowed calls in the same response still run.
+
+Claude Code, Codex, and OpenCode can show this two-line mark at the end of a protected session's first reply and on compaction summaries:
+
+```
+▄█▄▄▄█▄  protected session XK7-Q2M9
+██▄█▄██
+```
+
+The mark proves which protected session authored the reply. The proxy strips the mark before forwarding requests to the provider and before logging. Most replies do not carry a mark. Signed tool-call IDs provide separate lineage evidence.
+
+A new session forks only when returned history contains a valid mark or signed tool-call ID. Structured outputs, tool data, and other non-text fields never carry the mark.
+
+An agent that calls a tool through `run_tool` is evaluated on the tool that runs. A rule for `send_email` applies to a `run_tool` dispatch with `tool_name = "send_email"` exactly as it applies to a direct call. The remedy notice for a denied dispatch names that tool, not `run_tool`.
 
 The default policy has no rules for specific tools. A catch-all annotator adds no restrictions or label changes. Explicit tool rules take precedence over this fallback.
 
+Tool rules name tools exactly, or cover every unnamed tool with `*`. Partial patterns such as `grain__*` match nothing.
+
 The assistant can read, validate, and update the same policy through its policy tools. Both editing paths enforce permissions and reject conflicting revisions. Invalid policies leave the saved revision unchanged.
+
+### Batteries
+
+A battery is a ready-made policy package for one provider, such as GitHub. Batteries bundled with OpenAPPA attach to a matching MCP server when you install it: a match on the server's URL or image is enabled at once, a match on its name alone is attached disabled for you to confirm. The Tools & Guardrails step of the setup wizard shows an "Add to APPA" checkbox for each matched battery, so you can change that choice while installing. The battery's rules then apply to that server's tools alongside your organization policy.
+
+A battery that consults the provider needs a credential. Bind each credential the battery names to an organization-level runtime credential in the Batteries panel of the OpenAPPA page; until then the battery stays inactive. The same panel turns an install on or off, removes it, and uploads packages. Binding needs permission to manage credentials, the same permission that sets an organization credential's value, as well as to manage the organization, because the helper receives the credential's value. Helper scripts run in the code execution sandbox, so the sandbox runtime must be enabled.
+
+You can upload your own battery package to replace a bundled one under the same name. Uploading a battery with helper scripts needs the credential permission too, since those scripts run with whatever credential gets bound to them. Removing a bound credential's organization value, or deleting the credential, deactivates the install until it is bound again.
 
 ## The Lethal Trifecta
 

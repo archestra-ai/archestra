@@ -67,12 +67,13 @@ export interface ArchestraContext {
   /** Optional cancellation signal from parent chat/tool execution */
   abortSignal?: AbortSignal;
   /**
-   * Bridge for asking the user a structured question mid-execution (the chat
-   * elicitation round-trip). Present only when a chat stream is driving the
-   * call; absent in headless executions, where a built-in tool must degrade to
-   * a typed `no_viewer` outcome rather than block.
+   * Bridge for asking the user a structured question mid-execution. Chat
+   * attaches the stream round-trip; the MCP gateway attaches native
+   * `elicitation/create` (or MRTR Input Required). Absent in headless
+   * executions, where a built-in tool must degrade to a typed `no_viewer`
+   * outcome rather than block.
    */
-  elicitation?: ChatMcpElicitationBridge;
+  elicitation?: Pick<ChatMcpElicitationBridge, "elicit">;
   /** Whether the current caller context is still trusted/safe */
   contextIsTrusted?: boolean;
   /**
@@ -97,10 +98,13 @@ export interface ArchestraContext {
    */
   taskBridge?: ChatTaskBridge;
   /**
-   * The id of the tool call currently executing. Set on the delegation path so
-   * the child's surfaced tool calls can be attributed to the delegation call
-   * (`agent__<slug>`) that spawned them, and on the `run_tool` path so a task
-   * card attaches to the call the user can actually see.
+   * The host-issued id of the tool call currently executing. Set on the
+   * delegation path so the child's surfaced tool calls can be attributed to
+   * the delegation call (`agent__<slug>`) that spawned them, and on the
+   * `run_tool` path so a task card attaches to the call the user can actually
+   * see. OpenAPPA uses it as a durable remedy-receipt key only when supplied
+   * by Chat's provider call or external MCP's bounded logical-call metadata.
+   * JSON-RPC request ids and ordinary MCP arguments are never valid values.
    */
   currentToolCallId?: string;
   /**

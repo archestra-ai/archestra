@@ -1,6 +1,8 @@
 import {
+  CLAUDE_CODE_HEADER_SESSION_SOURCE,
   CLAUDE_METADATA_SESSION_SOURCE,
   CODEX_CLIENT_ID,
+  OPENCODE_CLIENT_ID,
   SESSION_ID_HEADER,
 } from "@archestra/shared";
 import { describe, expect, test } from "vitest";
@@ -34,6 +36,29 @@ describe("extractSessionInfo", () => {
     expect(result).toEqual({
       sessionId: "af85aa87-3b22-4015-ba65-30012b27204c",
       sessionSource: "openwebui_chat",
+    });
+  });
+
+  test("prefers x-claude-code-session-id over metadata.user_id so a fork is a new log session", () => {
+    const result = extractSessionInfo({
+      headers: {
+        "x-claude-code-session-id": "forked-session-id",
+      },
+      body: {
+        metadata: {
+          user_id: JSON.stringify({
+            device_id: "abc",
+            account_uuid: "",
+            session_id: "parent-session-id",
+          }),
+        },
+      },
+      externalAgentId: undefined,
+    });
+
+    expect(result).toEqual({
+      sessionId: "forked-session-id",
+      sessionSource: CLAUDE_CODE_HEADER_SESSION_SOURCE,
     });
   });
 
@@ -295,19 +320,60 @@ describe("extractSessionInfo", () => {
   // handler passes in (explicit X-Archestra-Agent-Id header, or client-app
   // auto-discovery from client_metadata/originator/User-Agent — see
   // client-app.test.ts for the identification paths).
-  test("Codex attribution: client_metadata.session_id wins over the session-id header", () => {
+  test.each([
+    [{ "x-session-id": "ses_a", "x-session-affinity": "ses_a" }, "ses_a"],
+    // OpenCode's Responses requests carry only `session-id`.
+    [{ "session-id": "ses_b", originator: "opencode" }, "ses_b"],
+  ])("OpenCode attribution groups its requests by OpenCode's session id", (headers, expected) => {
+    expect(
+      extractSessionInfo({
+        headers,
+        body: undefined,
+        externalAgentId: OPENCODE_CLIENT_ID,
+      }),
+    ).toEqual({ sessionId: expected, sessionSource: "opencode_session" });
+  });
+
+  test("an x-session-id header without OpenCode attribution is not read as a session", () => {
+    expect(
+      extractSessionInfo({
+        headers: { "x-session-id": "ses_a" },
+        body: undefined,
+        externalAgentId: undefined,
+      }),
+    ).toEqual({ sessionId: null, sessionSource: null });
+  });
+
+  test("Codex attribution: durable client_metadata.thread_id wins over session and header ids", () => {
     const result = extractSessionInfo({
-      headers: { "session-id": "019f66bc-ffff-72d1-b927-4d96fad7dc3a" },
+      headers: { "session-id": "run-header" },
       body: {
         client_metadata: {
-          session_id: "019f66bc-440e-72d1-b927-4d96fad7dc3a",
-          thread_id: "019f66bc-aaaa-72d1-b927-4d96fad7dc3a",
+          session_id: "run-session",
+          thread_id: "durable-thread",
         },
       },
       externalAgentId: CODEX_CLIENT_ID,
     });
 
     expect(result).toEqual({
+      sessionId: "durable-thread",
+      sessionSource: "codex_session",
+    });
+  });
+
+  test("Codex attribution: client_metadata.session_id is used without a durable thread", () => {
+    expect(
+      extractSessionInfo({
+        headers: {},
+        body: {
+          client_metadata: {
+            session_id: "019f66bc-440e-72d1-b927-4d96fad7dc3a",
+          },
+        },
+        externalAgentId: CODEX_CLIENT_ID,
+      }),
+    ).toEqual({
       sessionId: "019f66bc-440e-72d1-b927-4d96fad7dc3a",
       sessionSource: "codex_session",
     });
@@ -336,6 +402,67 @@ describe("extractSessionInfo", () => {
     });
 
     expect(result).toEqual({ sessionId: null, sessionSource: null });
+  });
+
+  test("extracts OpenCode's x-opencode-session only for OpenCode attribution", () => {
+    expect(
+      extractSessionInfo({
+        headers: { "x-opencode-session": "ses_opencode" },
+        body: undefined,
+        externalAgentId: OPENCODE_CLIENT_ID,
+      }),
+    ).toEqual({
+      sessionId: "ses_opencode",
+      sessionSource: "opencode_session",
+    });
+
+    expect(
+      extractSessionInfo({
+        headers: { "x-opencode-session": "ses_opencode" },
+        body: { user: "fallback-user" },
+        externalAgentId: undefined,
+      }),
+    ).toEqual({
+      sessionId: "fallback-user",
+      sessionSource: "openai_user",
+    });
+  });
+
+  test("keeps explicit Archestra, meta, and Open WebUI sessions over OpenCode", () => {
+    const base = {
+      "x-opencode-session": "ses_opencode",
+      [sessionHeaderKey]: "archestra-session",
+      "x-archestra-meta": "agent/run/meta-session",
+      "x-openwebui-chat-id": "openwebui-session",
+    };
+    expect(
+      extractSessionInfo({
+        headers: base,
+        body: undefined,
+        externalAgentId: OPENCODE_CLIENT_ID,
+      }),
+    ).toEqual({ sessionId: "archestra-session", sessionSource: "header" });
+
+    const { [sessionHeaderKey]: _, ...withoutHeader } = base;
+    expect(
+      extractSessionInfo({
+        headers: withoutHeader,
+        body: undefined,
+        externalAgentId: OPENCODE_CLIENT_ID,
+      }),
+    ).toEqual({ sessionId: "meta-session", sessionSource: "meta_header" });
+
+    const { "x-archestra-meta": __, ...withoutMeta } = withoutHeader;
+    expect(
+      extractSessionInfo({
+        headers: withoutMeta,
+        body: undefined,
+        externalAgentId: OPENCODE_CLIENT_ID,
+      }),
+    ).toEqual({
+      sessionId: "openwebui-session",
+      sessionSource: "openwebui_chat",
+    });
   });
 
   test("Codex signals are ignored when the request is attributed to another client", () => {
@@ -369,14 +496,17 @@ describe("extractSessionInfo", () => {
     });
   });
 
-  test("Codex attribution with a non-UUID session-id header and no client_metadata yields no session", () => {
+  test("Codex attribution retains an opaque session-id header", () => {
     const result = extractSessionInfo({
       headers: { "session-id": "not-a-uuid" },
       body: undefined,
       externalAgentId: CODEX_CLIENT_ID,
     });
 
-    expect(result).toEqual({ sessionId: null, sessionSource: null });
+    expect(result).toEqual({
+      sessionId: "not-a-uuid",
+      sessionSource: "codex_session",
+    });
   });
 
   test("prompt_cache_key is never used as a session signal", () => {

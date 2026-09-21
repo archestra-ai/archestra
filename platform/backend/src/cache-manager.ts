@@ -28,6 +28,10 @@ export const CacheKey = {
   OAuthState: "oauth-state",
   /** MCP Gateway session state */
   McpSession: "mcp-session",
+  /** Legacy HTTP+SSE stream records for the MCP Gateway */
+  LegacySseSession: "legacy-sse-session",
+  /** Short-lived replies waiting for a legacy SSE stream on another replica */
+  LegacySseMessages: "legacy-sse-messages",
   /** IdP groups cache during login flow */
   IdpGroups: "idp-groups",
   /** Chat stream stop signal for cross-pod abort */
@@ -36,6 +40,10 @@ export const CacheKey = {
   ChatActiveStream: "chat-active-stream",
   /** Pending MCP elicitation responses from the chat UI */
   ChatMcpElicitation: "chat-mcp-elicitation",
+  /** Chat MCP elicitations still waiting for an answer (consume-once) */
+  ChatMcpElicitationPending: "chat-mcp-elicitation-pending",
+  /** Native OpenAPPA questions issued by this proxy and not answered yet */
+  OpenAppaNativeQuestion: "openappa-native-question",
   /** OpenAI credentials that cannot generate reasoning summaries (unverified org) */
   OpenaiReasoningSummaryUnsupported: "openai-reasoning-summary-unsupported",
   /** Channel discovery TTL per workspace */
@@ -173,7 +181,8 @@ class CacheManager {
       useUnloggedTable: true,
     });
 
-    this.keyv = new Keyv({ store });
+    // Let this wrapper decide which operations may fall back to a cache miss.
+    this.keyv = new Keyv({ store, throwOnErrors: true });
 
     this.keyv.on("error", (err) => {
       if (!this.isShuttingDown) {
@@ -188,12 +197,17 @@ class CacheManager {
    * Get a value from the cache.
    * Returns undefined if the key doesn't exist or has expired.
    *
-   * Note: Returns undefined on error rather than throwing. This is intentional:
+   * By default, returns undefined on error rather than throwing. This is intentional:
    * cache reads are non-critical and callers should handle cache misses gracefully.
    * A failed cache read should fall through to the underlying data source.
+   * Use throwOnError for state that has no underlying fallback.
    */
-  async get<T>(key: AllowedCacheKey): Promise<T | undefined> {
+  async get<T>(
+    key: AllowedCacheKey,
+    options?: { throwOnError?: boolean },
+  ): Promise<T | undefined> {
     if (!this.keyv) {
+      if (options?.throwOnError) throw new Error("CacheManager: Not started");
       logger.warn("CacheManager: Not started, returning undefined for get");
       return undefined;
     }
@@ -203,6 +217,7 @@ class CacheManager {
       return value as T | undefined;
     } catch (error) {
       logger.error({ error, key }, "CacheManager: Error getting cache entry");
+      if (options?.throwOnError) throw error;
       return undefined;
     }
   }
@@ -243,12 +258,18 @@ class CacheManager {
    * Delete a value from the cache.
    * Returns true if the operation succeeded.
    *
-   * Note: Returns false on error rather than throwing. Cache deletes are
-   * typically cleanup operations where failure is non-critical - the entry
-   * will expire naturally via TTL.
+   * By default, returns false on error because most cache deletes are
+   * best-effort cleanup. Pass `throwOnError` when a failed delete would leave
+   * security- or lifecycle-sensitive state claimable.
    */
-  async delete(key: AllowedCacheKey): Promise<boolean> {
+  async delete(
+    key: AllowedCacheKey,
+    options?: { throwOnError?: boolean },
+  ): Promise<boolean> {
     if (!this.keyv) {
+      if (options?.throwOnError) {
+        throw new Error("CacheManager: Not started");
+      }
       logger.warn("CacheManager: Not started, returning false for delete");
       return false;
     }
@@ -257,6 +278,7 @@ class CacheManager {
       return await this.keyv.delete(key);
     } catch (error) {
       logger.error({ error, key }, "CacheManager: Error deleting cache entry");
+      if (options?.throwOnError) throw error;
       return false;
     }
   }
@@ -272,8 +294,12 @@ class CacheManager {
    * and read happen in a single database operation, preventing race conditions
    * where two requests could both read the same token before either deletes it.
    */
-  async getAndDelete<T>(key: AllowedCacheKey): Promise<T | undefined> {
+  async getAndDelete<T>(
+    key: AllowedCacheKey,
+    options?: { throwOnError?: boolean },
+  ): Promise<T | undefined> {
     if (!this.keyv) {
+      if (options?.throwOnError) throw new Error("CacheManager: Not started");
       logger.warn(
         "CacheManager: Not started, returning undefined for getAndDelete",
       );
@@ -313,8 +339,69 @@ class CacheManager {
         { error, key },
         "CacheManager: Error in getAndDelete operation",
       );
+      if (options?.throwOnError) throw error;
       return undefined;
     }
+  }
+
+  /** Append atomically so concurrent writers cannot overwrite each other's items. */
+  async appendToList<T>(params: {
+    key: AllowedCacheKey;
+    value: T;
+    ttl: number;
+  }): Promise<void> {
+    if (!this.keyv) throw new Error("CacheManager: Not started");
+    const now = Date.now();
+    const payload = await this.keyv.serializeData({
+      value: [params.value],
+      expires: now + params.ttl,
+    });
+    await db.execute(sql`
+      INSERT INTO keyv_cache (key, value)
+      VALUES (${`keyv:${params.key}`}, ${payload})
+      ON CONFLICT (key) DO UPDATE SET value = jsonb_set(
+        EXCLUDED.value::jsonb, '{value}',
+        CASE WHEN (keyv_cache.value::jsonb->>'expires')::bigint > ${now}
+          THEN keyv_cache.value::jsonb->'value' ELSE '[]'::jsonb END
+        || (EXCLUDED.value::jsonb->'value')
+      )::text
+    `);
+  }
+
+  /** Consume a batch by exact keys, using the existing cache primary key index. */
+  async getAndDeleteMany<T>(
+    keys: AllowedCacheKey[],
+  ): Promise<Array<{ key: AllowedCacheKey; value: T }>> {
+    if (!this.keyv) throw new Error("CacheManager: Not started");
+    if (keys.length === 0) return [];
+    const prefixed = keys.map((key) => sql`${`keyv:${key}`}`);
+    const result = await db.execute<{ key: string; value: string }>(sql`
+      DELETE FROM keyv_cache WHERE key IN (${sql.join(prefixed, sql`, `)})
+      RETURNING key, value
+    `);
+    const entries: Array<{ key: AllowedCacheKey; value: T }> = [];
+    for (const row of result.rows) {
+      const data = await this.keyv.deserializeData<T>(row.value);
+      if (
+        data?.value !== undefined &&
+        (!data.expires || data.expires > Date.now())
+      ) {
+        entries.push({
+          key: row.key.slice("keyv:".length) as AllowedCacheKey,
+          value: data.value,
+        });
+      }
+    }
+    return entries;
+  }
+
+  /** Keyv expires entries on reads; sweep abandoned entries in this namespace too. */
+  async deleteExpiredByPrefix(prefix: CacheKeyPrefix): Promise<void> {
+    const pattern = `keyv:${prefix.replace(/[\\%_]/g, "\\$&")}-%`;
+    await db.execute(sql`
+      DELETE FROM keyv_cache WHERE key LIKE ${pattern}
+      AND (value::jsonb->>'expires')::bigint <= ${Date.now()}
+    `);
   }
 
   /**
@@ -331,9 +418,9 @@ class CacheManager {
     }
 
     try {
-      // Keyv namespaces keys with "keyv:" prefix
-      // Use LIKE with escaped prefix for pattern matching
-      const likePattern = `keyv:${prefix}%`;
+      // Keyv namespaces keys with "keyv:" prefix. Escape LIKE metacharacters
+      // in the caller's prefix before appending the wildcard.
+      const likePattern = `keyv:${prefix.replace(/[\\%_]/g, "\\$&")}%`;
       const result = await db.execute<{ count: string }>(
         sql`WITH deleted AS (
           DELETE FROM keyv_cache

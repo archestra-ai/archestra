@@ -1,4 +1,4 @@
-import { createHash, createHmac, timingSafeEqual } from "node:crypto";
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import { openappaActor } from "./actor";
 
@@ -51,10 +51,6 @@ export function withoutOfferJws(
   return Object.fromEntries(
     Object.entries(args).filter(([key]) => !OFFER_JWS_KEYS.has(key)),
   );
-}
-
-function sessionRoot(sessionId: string): string {
-  return `archestra:${createHash("sha256").update(sessionId).digest("hex")}`;
 }
 
 export function signOfferClaims(claims: OfferClaims, secret: string): OfferJws {

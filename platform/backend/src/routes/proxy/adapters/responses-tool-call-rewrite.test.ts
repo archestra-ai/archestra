@@ -99,4 +99,33 @@ describe("Responses tool-call rewrite", () => {
     });
     expect(frames.at(-1)?.item).not.toHaveProperty("namespace");
   });
+
+  test("rewrites a denied custom tool call to a notice without the denied namespace", () => {
+    const notice = {
+      id: "call_custom",
+      name: "archestra__get_remedy_plans",
+      arguments: "{}",
+    };
+    const output = rewriteResponsesOutput(
+      [
+        {
+          type: "custom_tool_call",
+          call_id: "call_custom",
+          name: "apply_patch",
+          input: "diff",
+          namespace: "mcp__my_gateway",
+        },
+      ],
+      [notice],
+    );
+
+    expect(output).toEqual([
+      expect.objectContaining({
+        type: "function_call",
+        call_id: "call_custom",
+        name: "archestra__get_remedy_plans",
+      }),
+    ]);
+    expect(output[0]).not.toHaveProperty("namespace");
+  });
 });

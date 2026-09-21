@@ -109,7 +109,12 @@ export function formatResponsesFunctionCallFrames(params: {
     const item = responsesFunctionCallItem(
       toolCall,
       itemId,
-      params.namespaceByCallId?.get(toolCall.id),
+      // An explicit namespace, including "", is the rewrite's own. Falling
+      // back to the denied call's namespace would re-emit a local native
+      // question as a namespaced MCP call.
+      toolCall.namespace !== undefined
+        ? undefined
+        : params.namespaceByCallId?.get(toolCall.id),
     );
     return [
       toSse({
@@ -171,7 +176,6 @@ export function rewriteResponsesOutput<TItem extends { type?: string }>(
             ? (responsesFunctionCallItem(
                 rewritten,
                 (item as { id?: string }).id,
-                namespaceOf(item).namespace,
               ) as unknown as TItem)
             : item.type === "custom_tool_call"
               ? ({

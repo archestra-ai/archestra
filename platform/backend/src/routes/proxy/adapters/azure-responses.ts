@@ -738,7 +738,8 @@ class AzureResponsesStreamAdapter
     const base = this.completedResponse ?? this.toProviderResponse();
     const upstreamOutput = Array.isArray(base.output) ? base.output : [];
     const firstOutputIndex = upstreamOutput.filter(
-      (item) => item.type !== "function_call",
+      (item) =>
+        item.type !== "function_call" && item.type !== "custom_tool_call",
     ).length;
     let sequence = Date.now();
     const frames = formatResponsesFunctionCallFrames({

@@ -1003,15 +1003,6 @@ export async function handleLLMProxy<
     oauthUserId ??
     regularVirtualKeyUserId;
 
-  // Internal Chat requests arrive over loopback without platform credentials.
-  // Requests that include organization credentials and name a Chat source
-  // are treated as client requests. Their sessions scope to the credential
-  // rather than a conversation.
-  const isInternalChat =
-    isAppaChatSource(source) &&
-    isLoopbackRequest(request) &&
-    !((authenticatedApp || virtualKeyId) && !authenticatedUserId);
-
   // Fall back to the personal standard virtual key's owner for user attribution.
   // Higher-precedence sources — the passthrough key, JWKS, OAuth, and the
   // X-Archestra-User-Id header — already set `userId` above, so this only fills
@@ -1310,10 +1301,6 @@ export async function handleLLMProxy<
     // `mcp__<label>__archestra__run_tool`) to platform canonical names
     // before guardrail evaluation. This ensures policy lookups evaluate
     // the actual tool instead of the client prefix or dispatch wrapper.
-    const commonMessages = canonicalizeCommonMessageToolNames(
-      requestAdapter.getMessages(),
-      toolIdentity.canonicalize,
-    );
     const effectiveConsiderContextUntrusted =
       resolvedAgent.considerContextUntrusted || inheritedContextUntrusted;
     const initialUntrustedReason = resolvedAgent.considerContextUntrusted

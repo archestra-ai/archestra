@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
   type ChatMcpElicitationRequest,
-  type ElicitationField,
   ElicitationFieldInput,
   type ElicitationResponse,
   getDefaultValues,
@@ -237,12 +236,6 @@ function RemedyReviewDialog({
       </pre>
     </StandardFormDialog>
   );
-}
-
-function titleize(value: string) {
-  return value
-    .replace(/[_-]+/g, " ")
-    .replace(/\b\w/g, (character) => character.toUpperCase());
 }
 
 function isHttpUrl(value: string | undefined) {

@@ -1406,14 +1406,6 @@ function asArray(value: unknown): unknown[] | undefined {
   return Array.isArray(value) ? value : undefined;
 }
 
-function parseJson(text: string): unknown {
-  try {
-    return JSON.parse(text);
-  } catch {
-    return undefined;
-  }
-}
-
 /** Non-cryptographic fingerprint digest for retry idempotency. */
 function digestOf(text: string): string {
   return fingerprint(text);

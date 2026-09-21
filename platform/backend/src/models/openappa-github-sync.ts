@@ -1,7 +1,18 @@
 import { randomUUID } from "node:crypto";
 import { and, desc, eq, isNotNull, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
-import type { AppaGithubSource } from "@/types/openappa-github-sync";
+import type {
+  AppaGithubSource,
+  HeldPullReason,
+} from "@/types/openappa-github-sync";
+
+/** The held pull emptied: a row carries either held bytes or none of them. */
+const NO_HOLD = {
+  heldContent: null,
+  heldContentHash: null,
+  heldSourceCommit: null,
+  heldReasons: [] as HeldPullReason[],
+};
 
 const table = schema.openappaGithubSyncTable;
 class OpenAppaGithubSyncModel {
@@ -12,6 +23,19 @@ class OpenAppaGithubSyncModel {
       .where(eq(table.organizationId, organizationId));
     return row ?? null;
   }
+  /** A row for an organization that has configured no source, so its flags can be set. */
+  static async ensureRow(organizationId: string) {
+    await db.insert(table).values({ organizationId }).onConflictDoNothing();
+  }
+  static async setDeclarationsPendingPublish(
+    organizationId: string,
+    value: boolean,
+  ) {
+    await db
+      .update(table)
+      .set({ declarationsPendingPublish: value })
+      .where(eq(table.organizationId, organizationId));
+  }
   static async save(organizationId: string, source: AppaGithubSource) {
     const values = {
       ...source,
@@ -19,6 +43,8 @@ class OpenAppaGithubSyncModel {
       sourceCommit: null,
       lastSyncedAt: null,
       lastSyncError: null,
+      // Held bytes belong to the source they came from.
+      ...NO_HOLD,
     };
     await db.transaction(async (tx) => {
       await tx.execute(
@@ -66,6 +92,8 @@ class OpenAppaGithubSyncModel {
                 content: outcome.content,
                 sourceCommit: outcome.sourceCommit,
                 lastSyncError: null,
+                // A pull that publishes supersedes whatever was held.
+                ...NO_HOLD,
               }),
           lastSyncedAt: new Date(),
         })
@@ -97,6 +125,53 @@ class OpenAppaGithubSyncModel {
     });
   }
 
+  /**
+   * Record a pull that was fetched but not published. Same optimistic rule as
+   * `finish`: a download racing a source edit or a disconnect records nothing.
+   */
+  static async hold(params: {
+    organizationId: string;
+    revision: string;
+    content: string;
+    contentHash: string;
+    sourceCommit: string;
+    reasons: HeldPullReason[];
+    error: string;
+  }): Promise<boolean> {
+    const { organizationId, revision, ...held } = params;
+    return db.transaction(async (tx) => {
+      await tx.execute(
+        sql`select pg_advisory_xact_lock(hashtextextended(${`guardrails-policy:${organizationId}`}, 0))`,
+      );
+      const [row] = await tx
+        .update(table)
+        .set({
+          heldContent: held.content,
+          heldContentHash: held.contentHash,
+          heldSourceCommit: held.sourceCommit,
+          heldReasons: held.reasons,
+          lastSyncError: held.error,
+          lastSyncedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(table.organizationId, organizationId),
+            eq(table.revision, revision),
+            isNotNull(table.interval),
+          ),
+        )
+        .returning({ organizationId: table.organizationId });
+      return row !== undefined;
+    });
+  }
+
+  static async clearHold(organizationId: string) {
+    await db
+      .update(table)
+      .set(NO_HOLD)
+      .where(eq(table.organizationId, organizationId));
+  }
+
   static async findDue() {
     return db
       .select()
@@ -123,8 +198,12 @@ class OpenAppaGithubSyncModel {
     if (id !== organizationId) return null;
     const row = await OpenAppaGithubSyncModel.find(organizationId);
     if (!row) return null;
-    const { content, ...metadata } = row;
-    return { ...metadata, hasPolicy: content !== null };
+    const { content, heldContent, ...metadata } = row;
+    return {
+      ...metadata,
+      hasPolicy: content !== null,
+      hasHeldPull: heldContent !== null,
+    };
   }
 }
 export default OpenAppaGithubSyncModel;

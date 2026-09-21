@@ -196,6 +196,7 @@ function renderDialog(
       onOpenChange={vi.fn()}
       keyType={keyType}
       parentableKeys={[]}
+      connectionBaseUrl="https://proxy.example.com"
       defaultExpirationSeconds={null}
       visibilityOptions={[
         {

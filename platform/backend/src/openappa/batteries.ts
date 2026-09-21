@@ -624,6 +624,9 @@ class OpenAppaBatteriesService {
     // Batteries may share a namespace; its alias then targets all their catalogs.
     const targetsByAlias = new Map<string, Set<string>>();
     const composed: ComposeBatteryInput[] = [];
+    // The value must already be in the environment the addon reads by the time
+    // it composes this plan; naming it and publishing it are the same step.
+    const tokenEnv = this.publishBridgeToken();
     for (const [name, { package: battery }] of [...batteries].sort(([a], [b]) =>
       a.localeCompare(b),
     )) {
@@ -645,9 +648,7 @@ class OpenAppaBatteriesService {
         helpers: owner
           ? {
               urlBase: `http://127.0.0.1:${config.api.port}${OPENAPPA_HELPERS_PREFIX}/${owner.id}`,
-              // The value must already be in the environment the addon reads;
-              // naming it and publishing it are the same step.
-              tokenEnv: this.publishBridgeToken(),
+              tokenEnv,
             }
           : undefined,
       });

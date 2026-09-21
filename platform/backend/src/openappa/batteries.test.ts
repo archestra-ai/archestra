@@ -159,7 +159,7 @@ describe("composing an organization's effective policy", () => {
       organizationId,
       userId,
       catalogId,
-      policy: HELPER_BATTERY_POLICY,
+      policy: batteryPolicy("acme.check"),
     });
     const [battery] =
       await openappaBatteriesService.listBatteries(organizationId);
@@ -194,7 +194,7 @@ describe("composing an organization's effective policy", () => {
       catalogId,
       // The root already declares the `noop` annotator, so composing this
       // battery under it names one external twice and the runtime refuses it.
-      policy: COLLIDING_BATTERY_POLICY,
+      policy: batteryPolicy("noop"),
     });
 
     const policy = await openappaBatteriesService.recompile(organizationId);
@@ -221,28 +221,22 @@ namespaces = ["acme"]
 helpers = ["check.py"]
 `;
 
-/** One helper command, no credential: the install is active on its own. */
-const HELPER_BATTERY_POLICY = `[policy]
+/**
+ * A battery governing one MCP tool whose single annotator is served by one
+ * helper command and needs no credential, so its install is active on its own.
+ */
+function batteryPolicy(externalName: string) {
+  return `[policy]
 version = 2
 
 [[policy.tool]]
 name = "mcp/acme/list"
 delta = {}
 
-[externals.annotators."acme.check"]
+[externals.annotators."${externalName}"]
 command = ["python3", "check.py"]
 `;
-
-const COLLIDING_BATTERY_POLICY = `[policy]
-version = 2
-
-[[policy.tool]]
-name = "mcp/acme/list"
-delta = {}
-
-[externals.annotators.noop]
-command = ["python3", "check.py"]
-`;
+}
 
 /** Upload the acme battery with `policy` and install it, enabled, on `catalogId`. */
 async function installUploadedBattery(params: {

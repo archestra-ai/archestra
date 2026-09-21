@@ -6,6 +6,7 @@ import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import ServiceAccountModel from "@/models/service-account";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
+import { runScopedResourcePermissionCutover } from "@/services/resource-permissions-cutover";
 import { afterEach, beforeEach, describe, expect, test, vi } from "@/test";
 import type { User } from "@/types";
 
@@ -322,6 +323,10 @@ describe("service account API authentication", () => {
       organizationId: organization.id,
       name: "Route token",
     });
+    // Which accounts a caller reaches is a grant now, and the conversion is
+    // what turns this role's `serviceAccount:read` into one. A deployment runs
+    // it at every start; a test has to say so.
+    await runScopedResourcePermissionCutover();
 
     const response = await app.inject({
       method: "GET",
@@ -359,6 +364,7 @@ describe("service account API authentication", () => {
       organizationId: organization.id,
       name: "Route token",
     });
+    await runScopedResourcePermissionCutover();
     const verifyTokenSpy = vi.spyOn(ServiceAccountModel, "verifyToken");
 
     const response = await app.inject({
@@ -373,6 +379,10 @@ describe("service account API authentication", () => {
     expect(verifyTokenSpy).toHaveBeenCalledOnce();
   });
 
+  // Listing accounts is no longer role-gated — it answers from grants and a
+  // caller with none simply sees nothing — so the route that still asks for
+  // `serviceAccount:read` is the one that proves the middleware refuses a
+  // service-account principal whose role withholds it.
   test("rejects protected routes when the service account role lacks permission", async ({
     makeCustomRole,
     makeOrganization,
@@ -395,7 +405,7 @@ describe("service account API authentication", () => {
 
     const response = await app.inject({
       method: "GET",
-      url: "/api/service-accounts",
+      url: "/api/service-accounts/labels/keys",
       headers: {
         authorization: serviceToken.token,
       },

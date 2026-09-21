@@ -27,6 +27,7 @@ import { LoadingWrapper } from "@/components/loading";
 import { OverviewSummary } from "@/components/overview-summary";
 import { PageBackLink } from "@/components/page-back-link";
 import { QueryLoadError } from "@/components/query-load-error";
+import { ResourceAccessSection } from "@/components/resource-access-section";
 import {
   AccountHealthBadge,
   KeyStatusBadge,
@@ -632,6 +633,17 @@ export default function ServiceAccountDetailPage({
               onLabelsChange={setLabels}
             />
           </SettingsBlock>
+
+          {/* SPDX-SnippetBegin */}
+          {/* SPDX-SnippetCopyrightText: 2026 Archestra Inc. */}
+          {/* SPDX-License-Identifier: LicenseRef-Archestra-Enterprise */}
+          {/* Who looks after this one account. The section saves itself, so it
+              sits outside the form above and its own save bar. */}
+          <ResourceAccessSection
+            resource="serviceAccount"
+            id={serviceAccountId}
+          />
+          {/* SPDX-SnippetEnd */}
 
           <SettingsSaveBar
             hasChanges={hasChanges}

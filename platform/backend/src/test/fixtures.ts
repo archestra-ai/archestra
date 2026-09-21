@@ -101,6 +101,7 @@ interface TestFixtures {
   makeToolPolicy: typeof makeToolPolicy;
   makeTrustedDataPolicy: typeof makeTrustedDataPolicy;
   makeCustomRole: typeof makeCustomRole;
+  makeServiceAccount: typeof makeServiceAccount;
   makeMember: typeof makeMember;
   makeMcpServer: typeof makeMcpServer;
   makeInternalMcpCatalog: typeof makeInternalMcpCatalog;
@@ -654,6 +655,32 @@ async function makeCustomRole(
     predefined: false,
     permission: JSON.parse(result.permission),
   };
+}
+
+/**
+ * Creates a service account. Inserted directly rather than through the model
+ * so a test can seed one for a deployment that has not converted yet, where
+ * the model would also write an access policy.
+ */
+async function makeServiceAccount(
+  organizationId: string,
+  overrides: Partial<{
+    name: string;
+    role: string;
+    disabled: boolean;
+    createdBy: string | null;
+  }> = {},
+) {
+  const [result] = await db
+    .insert(schema.serviceAccountsTable)
+    .values({
+      organizationId,
+      name: `test-service-account-${crypto.randomUUID().substring(0, 8)}`,
+      role: MEMBER_ROLE_NAME,
+      ...overrides,
+    })
+    .returning();
+  return result;
 }
 
 /**
@@ -1422,6 +1449,9 @@ export const test = baseTest.extend<TestFixtures>({
   },
   makeCustomRole: async ({}, use) => {
     await use(makeCustomRole);
+  },
+  makeServiceAccount: async ({}, use) => {
+    await use(makeServiceAccount);
   },
   makeMember: async ({}, use) => {
     await use(makeMember);

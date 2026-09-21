@@ -1,4 +1,5 @@
 import type { Permissions } from "@archestra/shared";
+import { requiredPagePermissionsMap } from "@archestra/shared/access-control";
 import { describe, expect, it } from "vitest";
 import {
   formatMissingPermissions,
@@ -141,6 +142,37 @@ describe("scoped page discovery", () => {
         userPermissions: {},
         required: { agent: ["read"] },
         capabilities,
+      }),
+    ).toBe(false);
+  });
+  it("opens the service accounts page for someone granted one account", () => {
+    // The settings page asks for `serviceAccount: ["read"]`, and a per-object
+    // grantee holds no service-account role action at all. The page map's
+    // resource key and the scoped resource name have to stay the same word for
+    // this to resolve; if one is ever renamed without the other, the grantee is
+    // told they have access and then shown a Forbidden page.
+    const account = [
+      {
+        organizationId: "org-1",
+        resource: "serviceAccount" as const,
+        scope: "11111111-1111-4111-8111-111111111111",
+        action: "read" as const,
+      },
+    ];
+    expect(
+      hasPagePermissions({
+        userPermissions: {},
+        required: requiredPagePermissionsMap["/settings/service-accounts"],
+        capabilities: account,
+      }),
+    ).toBe(true);
+    expect(hasPermissions({}, { serviceAccount: ["read"] })).toBe(false);
+    // A grant on one account is discovery, not authority over the rest.
+    expect(
+      hasPagePermissions({
+        userPermissions: {},
+        required: { serviceAccount: ["update"] },
+        capabilities: account,
       }),
     ).toBe(false);
   });

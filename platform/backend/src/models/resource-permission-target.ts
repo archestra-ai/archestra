@@ -7,6 +7,7 @@ import {
 } from "@archestra/shared";
 import { and, eq, inArray, isNull, or } from "drizzle-orm";
 import db, { schema } from "@/database";
+import CreatedByModel from "./created-by";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
 
 export default class ResourcePermissionTargetModel {
@@ -209,6 +210,38 @@ export default class ResourcePermissionTargetModel {
       ]);
       return { ...target, teams, users };
     }
+    if (params.resource === "serviceAccount") {
+      const table = schema.serviceAccountsTable;
+      const [target] = await db
+        .select({
+          id: table.id,
+          name: table.name,
+          createdBy: table.createdBy,
+          createdByServiceAccountId: table.createdByServiceAccountId,
+        })
+        .from(table)
+        .where(
+          and(
+            eq(table.id, params.id),
+            eq(table.organizationId, params.organizationId),
+          ),
+        );
+      if (!target) return null;
+      // The organization owns a service account, not whoever happened to make
+      // it: `created_by` is nullable by design and is set to null when that
+      // person is deleted. So the scope is `org` and nobody is named on it —
+      // the creator is reported only so the permissions editor can say who
+      // made it, exactly as `CreatedByModel` does elsewhere.
+      const { createdBy, createdByServiceAccountId, ...rest } = target;
+      return {
+        ...rest,
+        authorId:
+          CreatedByModel.id({ createdByServiceAccountId }, createdBy) ?? null,
+        scope: "org",
+        teams: [],
+        users: [],
+      };
+    }
     if (params.resource === "llmVirtualKey") {
       const table = schema.virtualApiKeysTable;
       const [target] = await db
@@ -316,6 +349,22 @@ export default class ResourcePermissionTargetModel {
         .where(eq(schema.kbFileTeamsTable.kbFileId, params.id));
       const { visibility, ...rest } = target;
       return { ...rest, scope: knowledgeScope(visibility), teams, users: [] };
+    }
+    if (params.resource === "environment") {
+      const table = schema.environmentsTable;
+      const [target] = await db
+        .select({ id: table.id, name: table.name })
+        .from(table)
+        .where(
+          and(
+            eq(table.id, params.id),
+            eq(table.organizationId, params.organizationId),
+          ),
+        );
+      if (!target) return null;
+      // An environment is a place, not a possession: it has no author and no
+      // audience of its own. Its whole access story is the grants below.
+      return { ...target, authorId: null, scope: "org", teams: [], users: [] };
     }
     if (params.resource === "mcpRegistry" && isBuiltInCatalogId(params.id))
       return null;

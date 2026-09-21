@@ -1,4 +1,11 @@
-import { parseLabelsParam, RouteId } from "@archestra/shared";
+import { randomUUID } from "node:crypto";
+import {
+  hasScopedPermission,
+  parseLabelsParam,
+  type ResourcePermissionAction,
+  ResourcePermissionGrantSchema,
+  RouteId,
+} from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { getPermissionsForUserContext } from "@/auth/utils";
@@ -58,9 +65,21 @@ const serviceAccountRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
+      const permissions = await getPermissionsForUserContext({
+        userId: request.user.id,
+        organizationId: request.organizationId,
+      });
       const serviceAccounts = await ServiceAccountModel.listByOrganizationId(
         request.organizationId,
         parseLabelsParam(request.query.labels),
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        {
+          userId: request.user.id,
+          legacyRead: !!permissions.serviceAccount?.includes("read"),
+        },
+        // SPDX-SnippetEnd
       );
       return reply.send(serviceAccounts);
     },
@@ -78,6 +97,12 @@ const serviceAccountRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
+      await requireServiceAccountAccess({
+        organizationId: request.organizationId,
+        userId: request.user.id,
+        id: request.params.id,
+        action: "read",
+      });
       const serviceAccount = await ServiceAccountModel.findById(
         request.params.id,
         request.organizationId,
@@ -97,7 +122,12 @@ const serviceAccountRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.CreateServiceAccount,
         description: "Create an organization service account",
         tags: ["Service Accounts"],
-        body: CreateServiceAccountBodySchema,
+        body: CreateServiceAccountBodySchema.extend({
+          initialGrants: z
+            .array(ResourcePermissionGrantSchema)
+            .max(200)
+            .optional(),
+        }),
         response: constructResponseSchema(ServiceAccountDetailResponseSchema),
       },
     },
@@ -107,12 +137,37 @@ const serviceAccountRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId: request.organizationId,
         userId: request.user.id,
       });
+      if (request.body.initialGrants?.length) {
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        await ResourcePermissions.validateInitialGrants({
+          organizationId: request.organizationId,
+          userId: request.user.id,
+          resource: "serviceAccount",
+          grants: request.body.initialGrants,
+          target: {
+            id: randomUUID(),
+            name: request.body.name,
+            authorId: request.user.id,
+            scope: "org",
+            teams: [],
+            users: [],
+          },
+        });
+        // SPDX-SnippetEnd
+      }
       const serviceAccount = await ServiceAccountModel.create({
         organizationId: request.organizationId,
         name: request.body.name,
         role: request.body.role,
         labels: request.body.labels,
         createdBy: request.user.id,
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        initialPermissionGrants: request.body.initialGrants,
+        // SPDX-SnippetEnd
       });
 
       return reply.send(serviceAccount);
@@ -132,6 +187,12 @@ const serviceAccountRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
+      await requireServiceAccountAccess({
+        organizationId: request.organizationId,
+        userId: request.user.id,
+        id: request.params.id,
+        action: "update",
+      });
       if (request.body.role) {
         await validateRoleOrThrow({
           role: request.body.role,
@@ -184,9 +245,24 @@ const serviceAccountRoutes: FastifyPluginAsyncZod = async (fastify) => {
           const wanted = new Set(ids);
           const accounts =
             await ServiceAccountModel.listByOrganizationId(organizationId);
+          // SPDX-SnippetBegin
+          // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+          // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+          // Checked per id rather than by filtering the query, so an account
+          // the caller may not change is reported in `failed` while the
+          // rest of the batch still applies.
+          const reachable = await filterReachable({
+            organizationId,
+            userId: request.user.id,
+            ids: accounts
+              .filter((account) => wanted.has(account.id))
+              .map((account) => account.id),
+            action: "update",
+          });
+          // SPDX-SnippetEnd
           return new Map(
             accounts
-              .filter((account) => wanted.has(account.id))
+              .filter((account) => reachable.has(account.id))
               .map((account) => [account.id, account]),
           );
         },
@@ -252,9 +328,24 @@ const serviceAccountRoutes: FastifyPluginAsyncZod = async (fastify) => {
           const wanted = new Set(ids);
           const accounts =
             await ServiceAccountModel.listByOrganizationId(organizationId);
+          // SPDX-SnippetBegin
+          // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+          // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+          // Checked per id rather than by filtering the query, so an account
+          // the caller may not delete is reported in `failed` while the
+          // rest of the batch still applies.
+          const reachable = await filterReachable({
+            organizationId,
+            userId: request.user.id,
+            ids: accounts
+              .filter((account) => wanted.has(account.id))
+              .map((account) => account.id),
+            action: "delete",
+          });
+          // SPDX-SnippetEnd
           return new Map(
             accounts
-              .filter((account) => wanted.has(account.id))
+              .filter((account) => reachable.has(account.id))
               .map((account) => [account.id, account]),
           );
         },
@@ -299,6 +390,12 @@ const serviceAccountRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
+      await requireServiceAccountAccess({
+        organizationId: request.organizationId,
+        userId: request.user.id,
+        id: request.params.id,
+        action: "delete",
+      });
       const success = await ServiceAccountModel.delete(
         request.params.id,
         request.organizationId,
@@ -326,6 +423,12 @@ const serviceAccountRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
+      await requireServiceAccountAccess({
+        organizationId: request.organizationId,
+        userId: request.user.id,
+        id: request.params.id,
+        action: "update",
+      });
       try {
         const token = await ServiceAccountModel.createToken({
           serviceAccountId: request.params.id,
@@ -365,6 +468,12 @@ const serviceAccountRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
+      await requireServiceAccountAccess({
+        organizationId: request.organizationId,
+        userId: request.user.id,
+        id: request.params.id,
+        action: "update",
+      });
       const success = await ServiceAccountModel.deleteToken({
         serviceAccountId: request.params.id,
         tokenId: request.params.tokenId,
@@ -391,6 +500,12 @@ const serviceAccountRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
+      await requireServiceAccountAccess({
+        organizationId: request.organizationId,
+        userId: request.user.id,
+        id: request.params.id,
+        action: "update",
+      });
       const token = await ServiceAccountModel.updateToken({
         serviceAccountId: request.params.id,
         tokenId: request.params.tokenId,
@@ -409,6 +524,87 @@ const serviceAccountRoutes: FastifyPluginAsyncZod = async (fastify) => {
 export default serviceAccountRoutes;
 
 // === Internal helpers
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+/**
+ * Who may reach one service account.
+ *
+ * Reaching an account used to be a question about the caller alone: hold
+ * `serviceAccount:read` and every account in the organization was yours to
+ * list, rename or delete. There was no way to say "this person looks after
+ * that one account", because an account was never something a grant could
+ * point at. It is now, so the question is asked of the account.
+ *
+ * A missing account and a forbidden one answer the same way on purpose: which
+ * of the two it is is itself something the caller is not entitled to know.
+ */
+async function requireServiceAccountAccess(params: {
+  organizationId: string;
+  userId: string;
+  id: string;
+  action: ResourcePermissionAction;
+}): Promise<void> {
+  if (!(await reaches(params)))
+    throw new ApiError(404, "Service account not found");
+}
+
+/** The subset of a bulk batch this caller may act on. */
+async function filterReachable(params: {
+  organizationId: string;
+  userId: string;
+  ids: string[];
+  action: ResourcePermissionAction;
+}): Promise<Set<string>> {
+  const verdicts = await Promise.all(
+    params.ids.map(async (id) => ({
+      id,
+      allowed: await reaches({ ...params, id }),
+    })),
+  );
+  return new Set(
+    verdicts.filter((verdict) => verdict.allowed).map((verdict) => verdict.id),
+  );
+}
+
+/**
+ * One account, one action, answered for a converted deployment and an
+ * unconverted one alike.
+ *
+ * `ResourcePermissions.allows` reads stored grants and nothing else, so on a
+ * deployment whose policies have not been written yet it answers "no" to
+ * everyone — administrators included. `getEffective` is the primitive that
+ * knows the difference: with a migrated policy it resolves grants, and without
+ * one it falls back to the role actions the grants were converted from. Only
+ * the second answers correctly in both states, so the gate is built on it.
+ */
+async function reaches(params: {
+  organizationId: string;
+  userId: string;
+  id: string;
+  action: ResourcePermissionAction;
+}): Promise<boolean> {
+  const context = {
+    organizationId: params.organizationId,
+    userId: params.userId,
+    resource: "serviceAccount" as const,
+    scope: params.id,
+  };
+  try {
+    const effective = await ResourcePermissions.getEffective(context);
+    return hasScopedPermission({
+      grants: effective.grants,
+      required: { ...context, action: params.action },
+    });
+  } catch (error) {
+    // A missing account answers the same way a refused one does: which of the
+    // two it is is itself something the caller is not entitled to know.
+    if (error instanceof ApiError && error.statusCode === 404) return false;
+    throw error;
+  }
+}
+// SPDX-SnippetEnd
 
 /**
  * A service-account token authenticates with the full permission set of the

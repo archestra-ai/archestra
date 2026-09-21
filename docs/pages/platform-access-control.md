@@ -52,12 +52,12 @@ Full access to core resources and settings, but cannot manage users, roles, or i
 | LLM Proxy | `read`, `update` |
 | LLM Provider API Keys | `read`, `create`, `update`, `delete` |
 | LLM Virtual Keys | `read`, `create`, `update`, `delete` |
-| LLM OAuth Clients | `read`, `create`, `update`, `delete`, `team-admin` |
+| LLM OAuth Clients | `read`, `create`, `update`, `delete` |
 | LLM Models | `read`, `update` |
 | LLM Limits | `read`, `create`, `update`, `delete` |
 | LLM Cost Analytics | `read` |
 | MCP Gateways | `read`, `create`, `update`, `delete`, `team-admin`, `deploy-to-restricted` |
-| MCP OAuth Clients | `read`, `create`, `update`, `delete`, `team-admin` |
+| MCP OAuth Clients | `read`, `create`, `update`, `delete` |
 | Tools & Policies | `read`, `create`, `update`, `delete` |
 | MCP Registry | `read`, `create`, `update`, `delete`, `team-admin`, `deploy-to-restricted` |
 | MCP Server Installations | `read`, `create`, `update`, `delete` |
@@ -233,8 +233,6 @@ The following table lists all available permissions that can be assigned to cust
 | `llmOauthClient:create` | Create LLM OAuth client registrations |
 | `llmOauthClient:update` | Modify LLM OAuth client registrations |
 | `llmOauthClient:delete` | Delete LLM OAuth client registrations |
-| `llmOauthClient:team-admin` | Manage team assignments for LLM OAuth client registrations |
-| `llmOauthClient:admin` | Manage all LLM OAuth client registrations, bypassing team restrictions |
 | `llmProviderApiKey:read` | View LLM provider API keys |
 | `llmProviderApiKey:create` | Add new LLM provider API keys |
 | `llmProviderApiKey:update` | Modify LLM provider API key configuration and visibility |
@@ -262,8 +260,6 @@ The following table lists all available permissions that can be assigned to cust
 | `mcpOauthClient:create` | Create MCP OAuth client registrations |
 | `mcpOauthClient:update` | Modify MCP OAuth client registrations |
 | `mcpOauthClient:delete` | Delete MCP OAuth client registrations |
-| `mcpOauthClient:team-admin` | Manage team assignments for MCP OAuth client registrations |
-| `mcpOauthClient:admin` | Manage all MCP OAuth client registrations, bypassing team restrictions |
 | `mcpRegistry:read` | Browse the MCP server registry |
 | `mcpRegistry:create` | Add servers to the MCP registry |
 | `mcpRegistry:update` | Modify MCP registry entries |

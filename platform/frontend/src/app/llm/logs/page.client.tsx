@@ -531,7 +531,7 @@ function SessionsTable() {
               {/* Keep validation below search without moving the table. */}
               {searchIsNotSessionId && (
                 <output className="absolute left-0 top-full z-20 mt-1 w-full rounded-md border bg-popover px-2 py-1 text-xs text-muted-foreground shadow-md">
-                  Enter a valid session UUID
+                  Enter a valid session ID
                 </output>
               )}
             </div>

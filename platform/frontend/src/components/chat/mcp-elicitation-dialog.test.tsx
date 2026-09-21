@@ -2,12 +2,17 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { McpElicitationDialog } from "./mcp-elicitation-dialog";
+import { isChoiceElicitationRequest } from "./mcp-elicitation-fields";
 
 global.ResizeObserver = class ResizeObserver {
   observe() {}
   unobserve() {}
   disconnect() {}
 } as typeof ResizeObserver;
+Element.prototype.scrollIntoView = vi.fn();
+Element.prototype.hasPointerCapture = vi.fn().mockReturnValue(false);
+Element.prototype.setPointerCapture = vi.fn();
+Element.prototype.releasePointerCapture = vi.fn();
 
 const request = {
   id: "00000000-0000-4000-8000-000000000001",
@@ -47,6 +52,54 @@ const request = {
 };
 
 describe("McpElicitationDialog", () => {
+  it("keeps typed enums out of the string-only inline choice card", () => {
+    expect(
+      isChoiceElicitationRequest({
+        ...request,
+        requestedSchema: {
+          type: "object",
+          properties: {
+            quantity: { type: "integer", enum: [1, 2] },
+          },
+          required: ["quantity"],
+        },
+      }),
+    ).toBe(false);
+  });
+
+  it("submits a selected numeric enum as its typed value", async () => {
+    const user = userEvent.setup();
+    const onRespond = vi.fn().mockResolvedValue(undefined);
+    const numericEnumRequest = {
+      ...request,
+      requestedSchema: {
+        type: "object",
+        properties: {
+          quantity: { type: "integer", enum: [1, 2] },
+        },
+        required: ["quantity"],
+      },
+    };
+
+    render(
+      <McpElicitationDialog
+        request={numericEnumRequest}
+        isSubmitting={false}
+        onRespond={onRespond}
+      />,
+    );
+
+    await user.click(screen.getByRole("combobox", { name: /quantity/i }));
+    await user.click(screen.getByRole("option", { name: "2" }));
+    await user.click(screen.getByRole("button", { name: /continue/i }));
+
+    expect(onRespond).toHaveBeenCalledWith({
+      id: request.id,
+      action: "accept",
+      content: { quantity: 2 },
+    });
+  });
+
   it("blocks accept when required fields are empty", async () => {
     const user = userEvent.setup();
     const onRespond = vi.fn();
@@ -64,6 +117,27 @@ describe("McpElicitationDialog", () => {
     expect(onRespond).not.toHaveBeenCalled();
     expect(screen.getByText("Recipient Name is required.")).toBeInTheDocument();
     expect(screen.getByText("Quantity is required.")).toBeInTheDocument();
+  });
+
+  it("keeps focus in a string field as it grows past the long-text threshold", async () => {
+    const user = userEvent.setup();
+    const onRespond = vi.fn();
+
+    render(
+      <McpElicitationDialog
+        request={request}
+        isSubmitting={false}
+        onRespond={onRespond}
+      />,
+    );
+
+    const recipient = screen.getByRole("textbox", {
+      name: /recipient name/i,
+    });
+    await user.click(recipient);
+    await user.type(recipient, "x".repeat(121));
+
+    expect(document.activeElement).toBe(recipient);
   });
 
   it("submits normalized content when required fields are provided", async () => {

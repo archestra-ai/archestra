@@ -54791,6 +54791,7 @@ export type GetInteractionSummariesResponses = {
             type: 'openai:chatCompletions' | 'openai:responses' | 'openai:embeddings' | 'gemini:generateContent' | 'gemini:embeddings' | 'anthropic:messages' | 'bedrock:converse' | 'bedrock:invoke' | 'bedrock:embeddings' | 'cohere:chat' | 'cohere:embeddings' | 'cerebras:chatCompletions' | 'mistral:chatCompletions' | 'perplexity:chatCompletions' | 'perplexity:responses' | 'groq:chatCompletions' | 'xai:chatCompletions' | 'openrouter:chatCompletions' | 'vllm:chatCompletions' | 'ollama:chatCompletions' | 'ollama-native:chat' | 'zhipuai:chatCompletions' | 'deepseek:chatCompletions' | 'minimax:chatCompletions' | 'kimi:chatCompletions' | 'azure:chatCompletions' | 'azure:responses' | 'github-copilot:chatCompletions' | 'github-copilot:responses' | 'microsoft-365-copilot:chatCompletions' | 'archestra:chatCompletions' | 'voyage:embeddings';
             externalAgentIdLabel: string | null;
             requestType: 'main' | 'subagent';
+            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
         }>;
         pagination: {
             currentPage: number;
@@ -54960,6 +54961,96 @@ export type GetInteractionSessionsResponses = {
 };
 
 export type GetInteractionSessionsResponse = GetInteractionSessionsResponses[keyof GetInteractionSessionsResponses];
+
+export type GetInteractionSessionLineageData = {
+    body?: never;
+    path: {
+        sessionId: string;
+    };
+    query?: never;
+    url: '/api/interactions/sessions/{sessionId}/lineage';
+};
+
+export type GetInteractionSessionLineageErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetInteractionSessionLineageError = GetInteractionSessionLineageErrors[keyof GetInteractionSessionLineageErrors];
+
+export type GetInteractionSessionLineageResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        forkedFrom: string | null;
+        forks: Array<string>;
+        /**
+         * True when the session has more forks than the bounded list returned.
+         */
+        forksTruncated: boolean;
+    };
+};
+
+export type GetInteractionSessionLineageResponse = GetInteractionSessionLineageResponses[keyof GetInteractionSessionLineageResponses];
 
 export type GetUniqueExternalAgentIdsData = {
     body?: never;

@@ -918,6 +918,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetInteractionSessions]: {
     log: ["read"],
   },
+  [RouteId.GetInteractionSessionLineage]: {
+    log: ["read"],
+  },
   [RouteId.GetOperators]: {
     toolPolicy: ["read"],
   },

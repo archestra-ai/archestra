@@ -8,12 +8,14 @@ import {
   OPENCODE_CLIENT_FILTER,
   OPENCODE_CLIENT_ID,
 } from "@archestra/shared";
+import db, { schema } from "@/database";
 import ConversationModel from "@/models/conversation";
 import ConversationChatErrorModel from "@/models/conversation-chat-error";
 import InteractionModel from "@/models/interaction";
 import InteractionDeltaManager from "@/models/interaction-delta-manager";
 import KnowledgeBaseConnectorModel from "@/models/knowledge-base-connector";
 import VirtualApiKeyModel from "@/models/virtual-api-key";
+import { openappaActor, scopedSessionId } from "@/openappa/actor";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -48,6 +50,117 @@ describe("interaction routes", () => {
 
   afterEach(async () => {
     await app.close();
+  });
+
+  test("returns scoped lineage and fails closed for ambiguous organization-wide lineage", async ({
+    makeCustomRole,
+    makeMember,
+    makeUser,
+  }) => {
+    const reader = await makeUser();
+    const other = await makeUser();
+    const readOnlyLogs = await makeCustomRole(organizationId, {
+      permission: { log: ["read"] },
+    });
+    await makeMember(reader.id, organizationId, {
+      role: readOnlyLogs.role,
+    });
+
+    const started = async ({
+      callerId,
+      sessionId,
+      forkedFrom,
+    }: {
+      callerId: string | null;
+      sessionId: string;
+      forkedFrom?: string;
+    }) => {
+      await db.insert(schema.openappaSessionsTable).values({
+        actor: openappaActor(sessionId),
+        root: openappaActor(sessionId),
+        organizationId,
+        callerId,
+        sessionId,
+        forkedFrom: forkedFrom ?? null,
+        startDecision: { decision: "ack" },
+      });
+    };
+    const otherCaller = `user:${other.id}`;
+    const otherParent = scopedSessionId(otherCaller, "shared-session");
+    const otherFork = scopedSessionId(otherCaller, "other-fork");
+    await started({ callerId: otherCaller, sessionId: otherParent });
+    await started({
+      callerId: otherCaller,
+      sessionId: otherFork,
+      forkedFrom: otherParent,
+    });
+
+    const adminParent = await app.inject({
+      method: "GET",
+      url: "/api/interactions/sessions/shared-session/lineage",
+    });
+    expect(adminParent.statusCode).toBe(200);
+    expect(adminParent.json()).toEqual({
+      forkedFrom: null,
+      forks: ["other-fork"],
+      forksTruncated: false,
+    });
+
+    const adminFork = await app.inject({
+      method: "GET",
+      url: "/api/interactions/sessions/other-fork/lineage",
+    });
+    expect(adminFork.json()).toEqual({
+      forkedFrom: "shared-session",
+      forks: [],
+      forksTruncated: false,
+    });
+
+    const readerCaller = `user:${reader.id}`;
+    const readerParent = scopedSessionId(readerCaller, "shared-session");
+    const readerFork = scopedSessionId(readerCaller, "reader-fork");
+    await started({ callerId: readerCaller, sessionId: readerParent });
+    await started({
+      callerId: readerCaller,
+      sessionId: readerFork,
+      forkedFrom: readerParent,
+    });
+
+    // Session summaries aggregate the client id, so an admin cannot identify
+    // which caller's same-named runtime session this page represents. Do not
+    // choose either caller's root or fork based on database row order.
+    const adminAmbiguous = await app.inject({
+      method: "GET",
+      url: "/api/interactions/sessions/shared-session/lineage",
+    });
+    expect(adminAmbiguous.statusCode).toBe(409);
+    expect(adminAmbiguous.json().error.message).toContain("ambiguous");
+    expect(adminAmbiguous.json().error.message).toContain("shared-session");
+    expect(adminAmbiguous.json()).not.toHaveProperty("forkedFrom");
+
+    currentUser = reader;
+
+    const own = await app.inject({
+      method: "GET",
+      url: "/api/interactions/sessions/shared-session/lineage",
+    });
+    expect(own.statusCode).toBe(200);
+    expect(own.json()).toEqual({
+      forkedFrom: null,
+      forks: ["reader-fork"],
+      forksTruncated: false,
+    });
+
+    currentUser = reader;
+    const unknown = await app.inject({
+      method: "GET",
+      url: "/api/interactions/sessions/unknown-session/lineage",
+    });
+    expect(unknown.json()).toEqual({
+      forkedFrom: null,
+      forks: [],
+      forksTruncated: false,
+    });
   });
 
   test("lists interactions without requiring chat errors", async ({

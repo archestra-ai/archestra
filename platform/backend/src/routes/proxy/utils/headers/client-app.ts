@@ -6,6 +6,7 @@ import {
   isCodexOriginator,
   isCodexUserAgent,
   isCursorUserAgent,
+  isOpenCodeUserAgent,
   OPENCODE_CLIENT_ID,
 } from "@archestra/shared";
 import { getHeaderValue } from "./meta-header";
@@ -81,28 +82,6 @@ export function detectCodexClientId(
 }
 
 /**
- * Auto-discovers OpenCode clients from request headers.
- * OpenCode identifies itself through the User-Agent header, originator header,
- * or x-opencode-session header.
- */
-export function detectOpenCodeClientId(
-  headers: Record<string, string | string[] | undefined>,
-): typeof OPENCODE_CLIENT_ID | undefined {
-  const userAgent = getHeaderValue(headers, "user-agent")?.toLowerCase();
-  const originator = getHeaderValue(headers, "originator")?.toLowerCase();
-  if (
-    userAgent === "opencode" ||
-    userAgent?.startsWith("opencode/") ||
-    userAgent?.startsWith("opencode ") ||
-    originator === "opencode" ||
-    getHeaderValue(headers, "x-opencode-session") !== undefined
-  ) {
-    return OPENCODE_CLIENT_ID;
-  }
-  return undefined;
-}
-
-/**
  * Cursor client auto-discovery — the Cursor counterpart to
  * {@link detectClaudeClientId}. Cursor's BYOK requests are built and sent by
  * Cursor's backend and carry exactly one client-identity signal: the
@@ -114,6 +93,23 @@ export function detectCursorClientId(
 ): typeof CURSOR_CLIENT_ID | undefined {
   if (isCursorUserAgent(getHeaderValue(headers, "user-agent"))) {
     return CURSOR_CLIENT_ID;
+  }
+  return undefined;
+}
+
+/**
+ * Auto-detects OpenCode clients.
+ * Matches `opencode/<version>` in User-Agent or `originator: opencode` on
+ * OpenAI Responses. Returns {@link OPENCODE_CLIENT_ID}.
+ */
+export function detectOpenCodeClientId(
+  headers: Record<string, string | string[] | undefined>,
+): typeof OPENCODE_CLIENT_ID | undefined {
+  if (
+    isOpenCodeUserAgent(getHeaderValue(headers, "user-agent")) ||
+    getHeaderValue(headers, "originator")?.trim().toLowerCase() === "opencode"
+  ) {
+    return OPENCODE_CLIENT_ID;
   }
   return undefined;
 }

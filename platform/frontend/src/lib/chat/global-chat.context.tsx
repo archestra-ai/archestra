@@ -31,10 +31,13 @@ import {
 } from "react";
 import { toast } from "sonner";
 import { filterOptimisticToolCalls } from "@/components/chat/chat-messages.utils";
+import { McpElicitationDialog } from "@/components/chat/mcp-elicitation-dialog";
 import {
   type ChatMcpElicitationRequest,
-  McpElicitationDialog,
-} from "@/components/chat/mcp-elicitation-dialog";
+  ChatMcpElicitationRequestSchema,
+  type ElicitationResponse,
+  isChoiceElicitationRequest,
+} from "@/components/chat/mcp-elicitation-fields";
 import { collectArchestraToolInvalidations } from "@/lib/chat/archestra-tool-invalidations";
 import {
   useClearChatErrors,
@@ -70,6 +73,7 @@ import { useAppName } from "@/lib/hooks/use-app-name";
 const SESSION_CLEANUP_TIMEOUT = 10 * 60 * 1000; // 10 min
 const MAX_AUTO_RETRIES = 2;
 const AUTO_RETRY_DELAY_MS = 1500;
+const MCP_ELICITATION_FAILURE_CLEAR_MS = 30_000;
 
 export type ContextCompactionState = {
   isCompacting: boolean;
@@ -142,7 +146,13 @@ interface ChatSession {
   addToolApprovalResponse: ReturnType<
     typeof useChat
   >["addToolApprovalResponse"];
-  pendingMcpElicitation: ChatMcpElicitationRequest | null;
+  /**
+   * Pending questions in this conversation, oldest first.
+   * Multiple-choice questions render together in one inline card with tabs.
+   * Other requests open the modal dialog form one at a time.
+   */
+  pendingMcpElicitations: ChatMcpElicitationRequest[];
+  resolveMcpElicitation: (response: ElicitationResponse) => Promise<boolean>;
   /**
    * Background MCP tasks for the running turn, keyed by task id.
    *
@@ -446,8 +456,42 @@ function ChatSessionHook({
 }) {
   const queryClient = useQueryClient();
   const appName = useAppName();
-  const [pendingMcpElicitation, setPendingMcpElicitation] =
-    useState<ChatMcpElicitationRequest | null>(null);
+  const [mcpElicitations, setMcpElicitations] = useState<
+    ChatMcpElicitationRequest[]
+  >([]);
+  // IDs the backend has resolved, answered, or expired.
+  // Replays re-stream questions from the turn start; this set prevents settled
+  // questions from returning to the card view.
+  const settledMcpElicitationIdsRef = useRef(new Set<string>());
+  const elicitationFailureClearTimersRef = useRef(
+    new Map<string, ReturnType<typeof setTimeout>>(),
+  );
+  const clearElicitationFailureTimer = useCallback((id: string) => {
+    const timer = elicitationFailureClearTimersRef.current.get(id);
+    if (timer) {
+      clearTimeout(timer);
+      elicitationFailureClearTimersRef.current.delete(id);
+    }
+  }, []);
+  useEffect(() => {
+    const timers = elicitationFailureClearTimersRef.current;
+    return () => {
+      for (const timer of timers.values()) clearTimeout(timer);
+      timers.clear();
+    };
+  }, []);
+  const settleMcpElicitation = useCallback(
+    (id: string) => {
+      clearElicitationFailureTimer(id);
+      settledMcpElicitationIdsRef.current.add(id);
+      setMcpElicitations((current) =>
+        current.some((request) => request.id === id)
+          ? current.filter((request) => request.id !== id)
+          : current,
+      );
+    },
+    [clearElicitationFailureTimer],
+  );
   const [mcpTasks, setMcpTasks] = useState<Record<string, McpTaskPartData>>({});
   const [optimisticToolCalls, setOptimisticToolCalls] = useState<
     Array<{
@@ -491,6 +535,8 @@ function ChatSessionHook({
   const [manualCompactionActive, setManualCompactionActive] = useState(false);
   const generateTitleMutation = useGenerateConversationTitle();
   const resolveMcpElicitationMutation = useResolveChatMcpElicitation();
+  const { mutateAsync: resolveMcpElicitationAsync } =
+    resolveMcpElicitationMutation;
   // Destructure the stable mutateAsync (not the whole mutation object, whose
   // identity changes every render) so regenerateUserMessage stays referentially
   // stable and doesn't retrigger the session-sync effect on every render.
@@ -692,7 +738,13 @@ function ChatSessionHook({
         preserveQueuedMessagesOnAbortRef.current = null;
       }
       setOptimisticToolCalls([]);
-      setPendingMcpElicitation(null);
+      // An errored stream keeps its questions: onError either clears them
+      // (terminal) or is about to retry/reattach into the same run, whose
+      // replay re-sends them — clearing here would unmount the card and lose
+      // the picks made so far.
+      if (!isError) {
+        setMcpElicitations([]);
+      }
       clearActiveContextCompaction();
       // The stream concluded — any auto-recovery (retry/reattach) is over.
       // NOT on stream errors: the SDK fires onFinish from a finally block
@@ -860,7 +912,7 @@ function ChatSessionHook({
           // a hard inline error panel; the toast is the only surfaced
           // feedback.
           clearErrorRef.current?.();
-          setPendingMcpElicitation(null);
+          setMcpElicitations([]);
           return;
         }
         // The 409 was provoked by our own auto-recovery: the stream
@@ -906,6 +958,8 @@ function ChatSessionHook({
             errorSeqRef.current === reattachErrorSeq
           ) {
             setIsRecovering(false);
+            // The run is over, so nothing is waiting on its questions.
+            setMcpElicitations([]);
             // This reattach ends the recovery without an onFinish/onError, so
             // drop any pending "clear the persisted error on success" intent —
             // otherwise it leaks into a later unrelated success.
@@ -953,7 +1007,7 @@ function ChatSessionHook({
       // Terminal: no recovery in flight — surface the error (and keep its
       // persisted card, so drop any pending "clear on successful retry" intent).
       recoveredPersistedErrorRef.current = false;
-      setPendingMcpElicitation(null);
+      setMcpElicitations([]);
       setIsRecovering(false);
     },
     onToolCall: ({ toolCall }) => {
@@ -1083,9 +1137,32 @@ function ChatSessionHook({
       }
 
       if (customData.type === "data-mcp-elicitation") {
-        const data = customData.data as ChatMcpElicitationRequest | undefined;
+        const parsed = ChatMcpElicitationRequestSchema.safeParse(
+          customData.data,
+        );
+        if (
+          parsed.success &&
+          parsed.data.conversationId === conversationId &&
+          !settledMcpElicitationIdsRef.current.has(parsed.data.id)
+        ) {
+          const data = parsed.data;
+          setMcpElicitations((current) =>
+            current.some((request) => request.id === data.id)
+              ? current
+              : [...current, data],
+          );
+        }
+      }
+
+      // The backend stopped waiting on a question (answered, timed out, or
+      // its run was stopped). Written right after the question in the run's
+      // event log, so a replay settles the question it just re-streamed.
+      if (customData.type === "data-mcp-elicitation-resolved") {
+        const data = customData.data as
+          | { id?: string; conversationId?: string }
+          | undefined;
         if (data?.id && data.conversationId === conversationId) {
-          setPendingMcpElicitation(data);
+          settleMcpElicitation(data.id);
         }
       }
 
@@ -1214,6 +1291,22 @@ function ChatSessionHook({
     );
   }, [stableMessages, optimisticToolCalls.length]);
 
+  // A question whose tool call has finished is not waiting on anyone, even if
+  // its resolved event never reached this client. Filtered at read time so a
+  // replay that rebuilds the turn cannot resurrect it either.
+  const pendingMcpElicitations = useMemo(
+    () =>
+      withoutFinishedToolCalls({
+        requests: mcpElicitations,
+        messages: stableMessages,
+      }),
+    [mcpElicitations, stableMessages],
+  );
+  // For resolveMcpElicitation, which runs after an await and must see the
+  // questions as they are when its answer comes back.
+  const pendingMcpElicitationsRef = useRef(pendingMcpElicitations);
+  pendingMcpElicitationsRef.current = pendingMcpElicitations;
+
   // ---- Queued-message auto-drain -------------------------------------------
   // Messages submitted while a turn was in-flight wait in a per-conversation
   // persisted queue (see chat-message-queue.ts). Whenever this session settles
@@ -1251,7 +1344,7 @@ function ChatSessionHook({
       queueDrainInFlightRef.current ||
       recoveringRef.current ||
       hasPendingApprovalRequest ||
-      pendingMcpElicitation ||
+      pendingMcpElicitations.length > 0 ||
       contextCompaction.isCompacting
     ) {
       return;
@@ -1282,7 +1375,7 @@ function ChatSessionHook({
     isStopping,
     resumeSettled,
     hasPendingApprovalRequest,
-    pendingMcpElicitation,
+    pendingMcpElicitations.length,
     contextCompaction.isCompacting,
     conversationId,
   ]);
@@ -1412,6 +1505,58 @@ function ChatSessionHook({
     },
     [stop],
   );
+  const resolveMcpElicitation = useCallback(
+    async (response: ElicitationResponse) => {
+      const outcome = await resolveMcpElicitationAsync({
+        id: response.id,
+        conversationId,
+        action: response.action,
+        content: response.content,
+      });
+      if (outcome === "failed") {
+        // Already reported; the question stays up for another try, but a
+        // bounded clear prevents a permanently failing submit from blocking
+        // the message queue forever.
+        if (!elicitationFailureClearTimersRef.current.has(response.id)) {
+          elicitationFailureClearTimersRef.current.set(
+            response.id,
+            setTimeout(() => {
+              elicitationFailureClearTimersRef.current.delete(response.id);
+              if (
+                pendingMcpElicitationsRef.current.some(
+                  (request) => request.id === response.id,
+                )
+              ) {
+                settleMcpElicitation(response.id);
+              }
+            }, MCP_ELICITATION_FAILURE_CLEAR_MS),
+          );
+        }
+        return false;
+      }
+      clearElicitationFailureTimer(response.id);
+      // A 409 means the backend is no longer waiting on this question.
+      // Only notify when no earlier event or completed tool call retired it.
+      const unexplained =
+        outcome === "stale" &&
+        pendingMcpElicitationsRef.current.some(
+          (request) => request.id === response.id,
+        );
+      settleMcpElicitation(response.id);
+      if (unexplained) {
+        toast.info("This question is no longer waiting for an answer.", {
+          id: "mcp-elicitation-stale",
+        });
+      }
+      return true;
+    },
+    [
+      clearElicitationFailureTimer,
+      conversationId,
+      resolveMcpElicitationAsync,
+      settleMcpElicitation,
+    ],
+  );
   sessionRef.current = {
     conversationId,
     messages: displayedMessages,
@@ -1425,7 +1570,8 @@ function ChatSessionHook({
     setMessages,
     addToolResult,
     addToolApprovalResponse,
-    pendingMcpElicitation,
+    pendingMcpElicitations,
+    resolveMcpElicitation,
     mcpTasks,
     // Computed, not stored: the page paints the SDK error before onError has
     // run (so no flag set inside onError can suppress the first frame), and
@@ -1477,7 +1623,8 @@ function ChatSessionHook({
     setMessages,
     addToolResult,
     addToolApprovalResponse,
-    pendingMcpElicitation,
+    pendingMcpElicitations,
+    resolveMcpElicitation,
     mcpTasks,
     isRecoveringState,
     optimisticToolCalls,
@@ -1495,20 +1642,59 @@ function ChatSessionHook({
 
   return (
     <McpElicitationDialog
-      request={pendingMcpElicitation}
+      request={
+        pendingMcpElicitations.find(
+          (request) => !isChoiceElicitationRequest(request),
+        ) ?? null
+      }
       isSubmitting={resolveMcpElicitationMutation.isPending}
-      onRespond={async ({ id, action, content }) => {
-        const result = await resolveMcpElicitationMutation.mutateAsync({
-          id,
-          conversationId,
-          action,
-          content,
-        });
-        if (result) {
-          setPendingMcpElicitation(null);
-        }
-      }}
+      onRespond={resolveMcpElicitation}
     />
+  );
+}
+
+/**
+ * Drop questions raised by a tool call that already reached a terminal state.
+ * Returns `requests` itself when nothing is dropped, so the list keeps its
+ * identity for effect dependencies.
+ */
+function withoutFinishedToolCalls({
+  requests,
+  messages,
+}: {
+  requests: ChatMcpElicitationRequest[];
+  messages: UIMessage[];
+}): ChatMcpElicitationRequest[] {
+  const toolCallIds = new Set(
+    requests.flatMap((request) =>
+      request.toolCallId ? [request.toolCallId] : [],
+    ),
+  );
+  if (toolCallIds.size === 0) {
+    return requests;
+  }
+  const finished = new Set<string>();
+  for (const message of messages) {
+    if (message.role !== "assistant") continue;
+    for (const part of message.parts) {
+      if (
+        "toolCallId" in part &&
+        typeof part.toolCallId === "string" &&
+        toolCallIds.has(part.toolCallId) &&
+        "state" in part &&
+        (part.state === "output-available" ||
+          part.state === "output-error" ||
+          part.state === "output-denied")
+      ) {
+        finished.add(part.toolCallId);
+      }
+    }
+  }
+  if (finished.size === 0) {
+    return requests;
+  }
+  return requests.filter(
+    (request) => !request.toolCallId || !finished.has(request.toolCallId),
   );
 }
 

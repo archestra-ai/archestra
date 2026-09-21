@@ -1,5 +1,6 @@
-import { createHash, createHmac, timingSafeEqual } from "node:crypto";
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
+import { openappaActor } from "./actor";
 
 const OFFER_CLAIMS_VERSION = 1;
 const DEFAULT_KEY_ID = "default";
@@ -21,6 +22,12 @@ const OfferClaimsSchema = z.object({
   offer_id: z.string().min(1).max(128),
   tool: z.string().min(1).max(512).nullable(),
   spelling: z.string().min(1).max(1024).nullable(),
+  /**
+   * The client's spelling of the dispatch tool (`run_tool`) the blocked call
+   * went through, so the remedy's retry goes back through it. Absent on
+   * direct calls and on offers signed before it existed.
+   */
+  dispatch: z.string().min(1).max(1024).optional(),
 });
 
 /** Flattened JWS JSON Serialization (RFC 7515 §7.2.2) with RFC 7797 unencoded payload. */
@@ -32,10 +39,6 @@ export const OfferJwsSchema = z.object({
 
 export type OfferJws = z.infer<typeof OfferJwsSchema>;
 type OfferClaims = z.infer<typeof OfferClaimsSchema>;
-
-function sessionRoot(sessionId: string): string {
-  return `archestra:${createHash("sha256").update(sessionId).digest("hex")}`;
-}
 
 export function signOfferClaims(claims: OfferClaims, secret: string): OfferJws {
   const encodedHeader = base64UrlEncode(
@@ -84,23 +87,31 @@ export function unsignedOfferClaims(params: {
   offerId: string;
   tool?: string;
   spelling?: string;
+  dispatch?: string;
 }): OfferClaims {
   return {
     v: OFFER_CLAIMS_VERSION,
     organization_id: params.organizationId,
-    root: sessionRoot(params.sessionId),
+    root: openappaActor(params.sessionId),
     session_id: params.sessionId,
     parent_id: params.parentId ?? null,
     caller_id: params.callerId ?? null,
     offer_id: params.offerId,
     tool: params.tool ?? null,
     spelling: params.spelling ?? null,
+    ...(params.dispatch !== undefined ? { dispatch: params.dispatch } : {}),
   };
 }
 
 export function offerIdFromJws(jws: OfferJws): string | undefined {
   const claims = OfferClaimsSchema.safeParse(parseJson(jws.payload));
   return claims.success ? claims.data.offer_id : undefined;
+}
+
+/** The caller-scoped session an offer's claims name. Unverified: routing only. */
+export function offerSessionFromJws(jws: OfferJws): string | undefined {
+  const claims = OfferClaimsSchema.safeParse(parseJson(jws.payload));
+  return claims.success ? claims.data.session_id : undefined;
 }
 
 function signHs256(

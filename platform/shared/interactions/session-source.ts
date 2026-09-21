@@ -6,6 +6,7 @@
  * {@link LEGACY_CLAUDE_CODE_SESSION_SOURCE} / {@link LEGACY_CLAUDE_DESKTOP_SESSION_SOURCE}.
  */
 export const CLAUDE_METADATA_SESSION_SOURCE = "claude_metadata";
+export const CLAUDE_CODE_HEADER_SESSION_SOURCE = "claude_code_header";
 
 /**
  * Pre-unification `session_source` values. No longer written (Anthropic's
@@ -18,6 +19,7 @@ export const LEGACY_CLAUDE_DESKTOP_SESSION_SOURCE = "claude_desktop";
 
 const CLAUDE_SESSION_SOURCES = new Set<string>([
   CLAUDE_METADATA_SESSION_SOURCE,
+  CLAUDE_CODE_HEADER_SESSION_SOURCE,
   LEGACY_CLAUDE_CODE_SESSION_SOURCE,
   LEGACY_CLAUDE_DESKTOP_SESSION_SOURCE,
 ]);

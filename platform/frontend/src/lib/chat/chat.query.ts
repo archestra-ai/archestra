@@ -807,6 +807,12 @@ export function useCancelChatMcpTask() {
   });
 }
 
+/**
+ * Answer a question the chat is waiting on. Resolves to `"answered"`,
+ * `"stale"` when the question is no longer waiting (409: answered already,
+ * timed out, or its run ended — nothing to report, the caller just drops it),
+ * or `"failed"` after reporting any other error.
+ */
 export function useResolveChatMcpElicitation() {
   type ResolveChatMcpElicitationBody = NonNullable<
     archestraApiTypes.ResolveChatMcpElicitationData["body"]
@@ -823,15 +829,20 @@ export function useResolveChatMcpElicitation() {
       conversationId: string;
       action: ResolveChatMcpElicitationBody["action"];
       content?: ResolveChatMcpElicitationBody["content"];
-    }) =>
-      callApi(
-        () =>
-          resolveChatMcpElicitation({
-            path: { id },
-            body: { conversationId, action, content },
-          }),
-        null,
-      ),
+    }): Promise<"answered" | "stale" | "failed"> => {
+      const { error, response } = await resolveChatMcpElicitation({
+        path: { id },
+        body: { conversationId, action, content },
+      });
+      if (!error) {
+        return "answered";
+      }
+      if (response?.status === 409) {
+        return "stale";
+      }
+      handleApiError(error);
+      return "failed";
+    },
   });
 }
 

@@ -206769,6 +206769,38 @@
                               "main",
                               "subagent"
                             ]
+                          },
+                          "source": {
+                            "nullable": true,
+                            "type": "string",
+                            "enum": [
+                              "api",
+                              "model_router",
+                              "opencode:main",
+                              "opencode:subagent",
+                              "opencode:title",
+                              "opencode:compaction",
+                              "chat",
+                              "chat:compaction",
+                              "a2a:compaction",
+                              "chat:title_generation",
+                              "chat:tool_call_repair",
+                              "a2a:tool_call_repair",
+                              "skill:description_generation",
+                              "guardrail:dual_llm",
+                              "chatops:slack",
+                              "chatops:ms-teams",
+                              "chatops:telegram",
+                              "email",
+                              "schedule-trigger",
+                              "knowledge:embedding",
+                              "knowledge:reranker",
+                              "knowledge:query-expansion",
+                              "knowledge:contextual-retrieval",
+                              "knowledge:ocr",
+                              "app:llm_complete",
+                              "app:recording_enhancement"
+                            ]
                           }
                         },
                         "required": [
@@ -207765,6 +207797,295 @@
         "x-required-permissions": {
           "kind": "static",
           "note": "`log:read` returns rows attributed to the caller. `log:admin` includes every row in the active organization.",
+          "permissions": [
+            "log:read"
+          ]
+        }
+      }
+    },
+    "/api/interactions/sessions/{sessionId}/lineage": {
+      "get": {
+        "operationId": "getInteractionSessionLineage",
+        "tags": [
+          "Interaction"
+        ],
+        "description": "Get a session's fork lineage: the session it forks and the sessions forked from it. A fork is a new client session that starts from another session's history and guardrail state. `log:read` covers the caller's own sessions. `log:admin` covers all organization sessions when the client session ID identifies one caller. If multiple callers share that session ID, lineage is ambiguous and the request fails.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:read`: View your own LLM proxy and MCP tool call logs in the active organization",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1024
+            },
+            "in": "path",
+            "name": "sessionId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "forkedFrom": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "forks": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "forksTruncated": {
+                      "type": "boolean",
+                      "description": "True when the session has more forks than the bounded list returned."
+                    }
+                  },
+                  "required": [
+                    "forkedFrom",
+                    "forks",
+                    "forksTruncated"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
           "permissions": [
             "log:read"
           ]

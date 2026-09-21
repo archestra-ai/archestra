@@ -745,6 +745,7 @@ describe("OAuth routes", () => {
 
   beforeEach(async () => {
     cacheManager.start();
+    usePgliteCacheWrites();
     app = createFastifyInstance();
     await app.register(oauthRoutes);
   });
@@ -1733,6 +1734,7 @@ describe("OAuth dynamic client registration client name", () => {
 
   beforeEach(() => {
     cacheManager.start();
+    usePgliteCacheWrites();
   });
 
   afterEach(() => {
@@ -1914,6 +1916,7 @@ describe("OAuth dynamic client registration scope fallback", () => {
 
   beforeEach(() => {
     cacheManager.start();
+    usePgliteCacheWrites();
   });
 
   afterEach(() => {
@@ -2186,3 +2189,26 @@ describe("OAuth dynamic client registration scope fallback", () => {
     expect(message).toContain("Registration is disabled for this tenant.");
   });
 });
+
+function usePgliteCacheWrites(): void {
+  vi.spyOn(cacheManager, "set").mockImplementation(async (key, value, ttl) => {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS keyv_cache (
+        key text PRIMARY KEY,
+        value text NOT NULL
+      )
+    `);
+    await db.execute(sql`
+      INSERT INTO keyv_cache (key, value)
+      VALUES (
+        ${`keyv:${key}`},
+        ${JSON.stringify({
+          value,
+          expires: Date.now() + (ttl ?? 60 * 60 * 1000),
+        })}
+      )
+      ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
+    `);
+    return value;
+  });
+}

@@ -3,6 +3,8 @@
 import {
   clientForExternalAgentIds,
   DynamicInteraction,
+  INTERACTION_SOURCE_DISPLAY,
+  type InteractionSource,
 } from "@archestra/shared";
 import {
   ArrowLeft,
@@ -18,7 +20,11 @@ import { useRouter } from "next/navigation";
 import { use } from "react";
 import { BilledCost } from "@/components/billed-cost";
 import { ClientSourceBadge } from "@/components/client-source-badge";
-import { type DetailFact, DetailFacts } from "@/components/detail-facts";
+import {
+  type DetailFact,
+  DetailFacts,
+  presentFacts,
+} from "@/components/detail-facts";
 import MessageThread from "@/components/message-thread";
 import { PageBackLink } from "@/components/page-back-link";
 import { PageLayout } from "@/components/page-layout";
@@ -45,6 +51,7 @@ import { TablePagination } from "@/components/ui/table-pagination";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { UnattributedUserBadge } from "@/components/unattributed-user-badge";
 import { VirtualKeyBadge } from "@/components/virtual-key-badge";
+import { useFeature } from "@/lib/config/config.query";
 import { typeRole } from "@/lib/design/type-scale";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
@@ -53,6 +60,7 @@ import {
   useInteraction,
   useInteractionSessions,
   useInteractionSummaries,
+  useSessionLineage,
 } from "@/lib/interactions/interaction.query";
 import { cn, formatDate } from "@/lib/utils";
 
@@ -65,6 +73,7 @@ export default function SessionDetailPage({
   const sessionId = decodeURIComponent(rawParams.sessionId);
   const router = useRouter();
   const appName = useAppName();
+  const openappaEnabled = useFeature("openappaEnabled") === true;
   const { pageIndex, pageSize, offset, setPagination } =
     useDataTableQueryParams();
 
@@ -91,6 +100,10 @@ export default function SessionDetailPage({
   const interactions = interactionsResponse?.data ?? [];
   const paginationMeta = interactionsResponse?.pagination;
   const sessionData = sessionResponse?.data?.[0];
+  const { data: lineage } = useSessionLineage({
+    sessionId,
+    enabled: openappaEnabled,
+  });
   const latestInteractionId = sessionData?.lastInteractionId ?? undefined;
   const { data: lastMainRequest } = useInteraction({
     interactionId: latestInteractionId,
@@ -209,10 +222,71 @@ export default function SessionDetailPage({
     );
   }
 
-  // The session's own numbers, as one wrapping row under the header. Labels
-  // drop the "Total" every one of them used to carry: the page is a single
-  // session, so there is nothing partial for a total to be distinguished from.
-  const facts: DetailFact[] = [
+  // The session numbers display as one wrapping row under the header.
+  // When OpenAPPA is enabled, this row also shows the trajectory identity
+  // that the proxy bound: session ID, session source, and each origin that
+  // wrote to it (such as chat, compaction, or title generation).
+  const sessionOrigins = sessionData?.sources?.length
+    ? sessionData.sources
+    : sessionData?.source
+      ? [sessionData.source]
+      : [];
+  const facts: DetailFact[] = presentFacts([
+    openappaEnabled && sessionData?.sessionId
+      ? {
+          label: "Session",
+          value: (
+            <span className="font-mono text-xs break-all">
+              {sessionData.sessionId}
+            </span>
+          ),
+        }
+      : null,
+    openappaEnabled && sessionData?.sessionSource
+      ? {
+          label: "Session source",
+          value: (
+            <span className="font-mono text-xs">
+              {sessionData.sessionSource}
+            </span>
+          ),
+        }
+      : null,
+    openappaEnabled && lineage?.forkedFrom
+      ? {
+          label: "Forked from",
+          value: <SessionLink sessionId={lineage.forkedFrom} />,
+        }
+      : null,
+    openappaEnabled && lineage && lineage.forks.length > 0
+      ? {
+          label: lineage.forks.length === 1 ? "Fork" : "Forks",
+          value: (
+            <div className="flex flex-col gap-0.5">
+              {lineage.forks.map((fork) => (
+                <SessionLink key={fork} sessionId={fork} />
+              ))}
+              {lineage.forksTruncated && (
+                <span className="text-xs text-muted-foreground">
+                  Additional forks not shown
+                </span>
+              )}
+            </div>
+          ),
+        }
+      : null,
+    openappaEnabled && sessionOrigins.length > 0
+      ? {
+          label: sessionOrigins.length === 1 ? "Origin" : "Origins",
+          value: (
+            <div className="flex flex-wrap gap-1">
+              {sessionOrigins.map((origin) => (
+                <SourceBadge key={origin} source={origin} />
+              ))}
+            </div>
+          ),
+        }
+      : null,
     {
       label: "Requests",
       value: (
@@ -297,7 +371,7 @@ export default function SessionDetailPage({
           },
         ]
       : []),
-  ];
+  ]);
 
   return (
     <PageLayout
@@ -395,11 +469,18 @@ export default function SessionDetailPage({
                   </TableRow>
                 ) : (
                   interactions.map((interaction) => {
-                    const typeLabel = sessionRequestAgentLabel({
+                    const source = interaction.source;
+                    const typeLabel = sessionInteractionAgentLabel({
+                      source,
                       requestType: interaction.requestType,
                       externalAgentIdLabel: interaction.externalAgentIdLabel,
                       externalAgentId: interaction.externalAgentId,
+                      profileName,
                     });
+                    const showBot =
+                      Boolean(interaction.externalAgentIdLabel) ||
+                      interaction.requestType === "subagent" ||
+                      isAuxiliaryInteractionSource(source);
 
                     return (
                       <TableRow
@@ -417,7 +498,7 @@ export default function SessionDetailPage({
                             variant="outline"
                             className="text-xs max-w-full inline-flex truncate"
                           >
-                            {typeLabel !== "Main" && (
+                            {showBot && (
                               <Bot className="h-3 w-3 mr-1 shrink-0" />
                             )}
                             <span className="truncate">{typeLabel}</span>
@@ -485,13 +566,59 @@ export default function SessionDetailPage({
   );
 }
 
-function sessionRequestAgentLabel(interaction: {
+/** A link to another session's page, by its id. */
+function SessionLink({ sessionId }: { sessionId: string }) {
+  return (
+    <Link
+      href={`/llm/logs/session/${encodeURIComponent(sessionId)}`}
+      className="font-mono text-xs break-all underline-offset-2 hover:underline"
+    >
+      {sessionId}
+    </Link>
+  );
+}
+
+function isAuxiliaryInteractionSource(
+  source: InteractionSource | null | undefined,
+): boolean {
+  return source != null && AUXILIARY_SOURCES.has(source);
+}
+
+function sessionInteractionAgentLabel(params: {
+  source?: InteractionSource | null;
   requestType?: "main" | "subagent";
   externalAgentIdLabel?: string | null;
   externalAgentId?: string | null;
+  profileName?: string | null;
 }): string {
-  if (interaction.requestType === "subagent") return "Sub-agent";
+  if (params.requestType === "subagent") return "Sub-agent";
+  if (isAuxiliaryInteractionSource(params.source) && params.source) {
+    return INTERACTION_SOURCE_DISPLAY[params.source].label;
+  }
   return (
-    interaction.externalAgentIdLabel || interaction.externalAgentId || "Main"
+    params.externalAgentIdLabel ||
+    params.externalAgentId ||
+    params.profileName ||
+    "Main"
   );
 }
+
+const AUXILIARY_SOURCES = new Set<InteractionSource>([
+  "opencode:subagent",
+  "opencode:title",
+  "opencode:compaction",
+  "chat:compaction",
+  "a2a:compaction",
+  "chat:title_generation",
+  "chat:tool_call_repair",
+  "a2a:tool_call_repair",
+  "skill:description_generation",
+  "guardrail:dual_llm",
+  "knowledge:embedding",
+  "knowledge:reranker",
+  "knowledge:query-expansion",
+  "knowledge:contextual-retrieval",
+  "knowledge:ocr",
+  "app:llm_complete",
+  "app:recording_enhancement",
+]);

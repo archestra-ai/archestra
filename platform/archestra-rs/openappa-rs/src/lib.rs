@@ -34,7 +34,7 @@ use std::{
     num::NonZeroUsize,
     panic::AssertUnwindSafe,
     sync::{Arc, OnceLock},
-    time::Duration,
+    time::{Duration, SystemTime},
 };
 use tokio::sync::{Mutex, OwnedMutexGuard, OwnedSemaphorePermit, Semaphore};
 
@@ -46,10 +46,11 @@ pub struct ReportingOptions {
 }
 
 /// Process-wide runtime slot. The mutex covers initialize, policy reload, and
-/// the start hook that opens a trajectory only. Dispatch otherwise runs
-/// concurrently: same-trajectory exclusion is the in-process root lock plus
-/// the ledger's advisory session lock, and every ledger write is a short
-/// self-committing transaction, so no outer transaction ever spans hook I/O.
+/// the start hook that opens a trajectory only. A root keeps its opening policy
+/// revision. A fork keeps its parent's revision even when this slot serves a
+/// newer policy for new roots. Dispatch otherwise runs concurrently.
+/// Same-trajectory exclusion uses an in-process root lock and an advisory session
+/// lock. Ledger writes use short self-committing transactions.
 static STATE: OnceLock<Mutex<Option<State>>> = OnceLock::new();
 
 #[derive(Clone)]
@@ -99,6 +100,9 @@ pub struct OfferOwner {
     pub arguments: Option<String>,
     pub tool: Option<String>,
     pub spelling: Option<String>,
+    /// Client spelling of the dispatch tool (`run_tool`) used for this call.
+    /// Retries use the same tool.
+    pub dispatch: Option<String>,
 }
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
@@ -150,6 +154,8 @@ struct OfferInput {
     tool: Option<String>,
     #[serde(default)]
     spelling: Option<String>,
+    #[serde(default)]
+    dispatch: Option<String>,
     /// Client tool call ID for binding durable remedy receipts.
     #[serde(default)]
     tool_call_id: Option<String>,
@@ -176,6 +182,11 @@ struct Input {
     session_id: String,
     #[serde(default)]
     parent_id: Option<String>,
+    /// The session this one forks. Set on a new session whose history traces
+    /// to an earlier session by the same caller. Its first event opens a root
+    /// initialized from that session's state. Mutually exclusive with `parent_id`.
+    #[serde(default)]
+    fork_of: Option<String>,
     event: HookEventKind,
     #[serde(default)]
     operation_id: Option<String>,
@@ -199,6 +210,8 @@ struct Input {
     owner_root: Option<String>,
     #[serde(default)]
     spelling: Option<String>,
+    #[serde(default)]
+    dispatch: Option<String>,
     #[serde(default)]
     presentation: Option<PresentationInput>,
 }
@@ -566,6 +579,7 @@ fn validate(input: &Input) -> napi::Result<()> {
     for (name, value) in [
         ("caller", &input.caller_id),
         ("parent", &input.parent_id),
+        ("fork", &input.fork_of),
         ("operation", &input.operation_id),
         ("tool call", &input.tool_call_id),
     ] {
@@ -582,10 +596,15 @@ fn validate(input: &Input) -> napi::Result<()> {
     {
         return Err(error("invalid control tool presentation"));
     }
-    if let Some(spelling) = &input.spelling
-        && (spelling.is_empty() || spelling.len() > 1024 || spelling.chars().any(char::is_control))
-    {
-        return Err(error("invalid tool spelling"));
+    for (name, value) in [
+        ("tool spelling", &input.spelling),
+        ("dispatch tool", &input.dispatch),
+    ] {
+        if let Some(value) = value
+            && (value.is_empty() || value.len() > 1024 || value.chars().any(char::is_control))
+        {
+            return Err(error(format!("invalid {name}")));
+        }
     }
     // Reject malformed host requests before writing an interrupted-operation
     // receipt. A typo is not evidence that an external consult may have run.
@@ -653,11 +672,11 @@ async fn run(input: Input, policy_content: Option<String>) -> napi::Result<Strin
 }
 
 /// Runs a start hook under the policy content its dispatch carried, on the
-/// runtime this dispatch already leased. A start opens a new root under
-/// whatever deployment serves at that moment, and the root keeps that policy
-/// for its whole life. A sibling dispatch carrying other content can reload
-/// after this dispatch's reload in `run`, so the start serves its own
-/// content again and opens under the same hold of the mutex.
+/// runtime this dispatch already leased. A new root keeps that opening policy
+/// for its whole life; a fork already has its parent's policy in its durable
+/// opening, so this reload cannot replace its revision. A sibling dispatch
+/// carrying other content can reload after this dispatch's reload in `run`, so
+/// a new root's start serves its own content again under the same mutex hold.
 ///
 /// The connection is leased before `dispatch` takes this mutex, so the hold
 /// covers only an in-memory recompile-and-reload plus the start's own ledger
@@ -742,6 +761,7 @@ pub async fn execute_remedy_by_offer(
         caller_id: input.caller_id.clone(),
         session_id: owner.session_id,
         parent_id: owner.parent_id,
+        fork_of: None,
         event: HookEventKind::Remedy,
         operation_id: None,
         tool_call_id: input.tool_call_id,
@@ -753,6 +773,7 @@ pub async fn execute_remedy_by_offer(
         outcome: None,
         owner_root: Some(owner.root),
         spelling: owner.spelling,
+        dispatch: owner.dispatch,
         presentation: Some(input.presentation),
     };
     validate(&input)?;
@@ -823,6 +844,85 @@ fn root_locks() -> &'static Mutex<HashMap<String, Arc<Mutex<()>>>> {
 }
 
 impl State {
+    /// Opens this session's root as a fork of `fork_of`.
+    /// Freezes the parent session's policy revision, labels, effects, and
+    /// denials into the new root. Returns the parent watermark bounding inherited results.
+    fn open_fork(
+        &self,
+        pg: &PostgresStore,
+        input: &Input,
+        fork_of: &str,
+        actor_id: &str,
+    ) -> napi::Result<Option<SystemTime>> {
+        if input.parent_id.is_some() {
+            return Err(error(
+                "an OpenAPPA session cannot both fork a session and be its child",
+            ));
+        }
+        let parent_actor = session_actor(fork_of);
+        let (lookup, organization_id, caller_id) = (
+            parent_actor.clone(),
+            input.organization_id.clone(),
+            input.caller_id.clone(),
+        );
+        let parent_root = pg
+            .with_client(move |client| {
+                Ok(client
+                    .query_opt(
+                        "SELECT root FROM openappa_sessions WHERE actor = $1 AND organization_id = $2 AND caller_id IS NOT DISTINCT FROM $3",
+                        &[&lookup, &organization_id, &caller_id],
+                    )?
+                    .map(|row| row.get::<_, String>(0)))
+            })
+            .map_err(error)?
+            .ok_or_else(|| error("the session this one forks has not started"))?;
+
+        let fork_root = actor_id.to_owned();
+        let already_opened = pg
+            .with_client(move |client| {
+                Ok(client
+                    .query_one(
+                        "SELECT EXISTS (SELECT 1 FROM openappa_events WHERE root = $1)",
+                        &[&fork_root],
+                    )?
+                    .get::<_, bool>(0))
+            })
+            .map_err(error)?;
+        if already_opened {
+            // A crash after `Runtime::open_root_fork` but before our session row left a
+            // durable opening without a reliable boundary. Re-open it to verify
+            // its immutable origin matches this request, but keep results closed.
+            self.runtime
+                .open_root_fork(
+                    &TrajectoryId(parent_root),
+                    &TrajectoryId(parent_actor),
+                    &TrajectoryId(actor_id.to_owned()),
+                )
+                .map_err(error)?;
+            return Ok(None);
+        }
+
+        // This dispatch already holds the child lock. It then takes the parent
+        // lock, while a parent never takes a child lock, so this order has no cycle.
+        let _parent_lock = SessionLock::acquire(pg, parent_root.clone())?;
+        self.runtime
+            .open_root_fork(
+                &TrajectoryId(parent_root),
+                &TrajectoryId(parent_actor),
+                &TrajectoryId(actor_id.to_owned()),
+            )
+            .map_err(error)?;
+        // A parent result claims `created_at` under this same parent lock. The
+        // database clock taken before releasing it is therefore an exact cutoff.
+        pg.with_client(|client| {
+            Ok(client
+                .query_one("SELECT clock_timestamp()", &[])?
+                .get::<_, SystemTime>(0))
+        })
+        .map(Some)
+        .map_err(error)
+    }
+
     /// Makes `content` the serving policy unless it already is. A refused
     /// candidate leaves the serving deployment in place. `Runtime::on` views
     /// share one `Shared` with the runtime reloaded here (see its own doc),
@@ -920,7 +1020,7 @@ impl State {
             .with_client(move |client| {
                 Ok(client
                     .query_opt(
-                        "SELECT root, parent_id, organization_id FROM openappa_sessions WHERE actor = $1",
+                        "SELECT root, parent_id, organization_id, forked_from FROM openappa_sessions WHERE actor = $1",
                         &[&lookup],
                     )?
                     .map(|row| {
@@ -928,18 +1028,32 @@ impl State {
                             row.get::<_, String>(0),
                             row.get::<_, Option<String>>(1),
                             row.get::<_, String>(2),
+                            row.get::<_, Option<String>>(3),
                         )
                     }))
             })
             .map_err(error)?;
-        if let Some((saved_root, saved_parent, saved_organization)) = &existing {
+        if let Some((saved_root, saved_parent, saved_organization, saved_fork)) = &existing {
             if *saved_root != root
                 || *saved_parent != input.parent_id
                 || *saved_organization != input.organization_id
             {
                 return Err(error("session identity changed"));
             }
+            // A fork retains its parent session. A session with its own root cannot move
+            // to a different history.
+            if input.fork_of.is_some() && *saved_fork != input.fork_of {
+                return Err(error(
+                    "OpenAPPA cannot continue another session's history in a session that governs its own trajectory",
+                ));
+            }
         } else {
+            let forked_at = input
+                .fork_of
+                .as_deref()
+                .map(|fork_of| self.open_fork(pg, &input, fork_of, &actor_id))
+                .transpose()?
+                .flatten();
             let start = if let Some(child) = &actor.child {
                 HookEvent::ChildStart {
                     root: actor.root.clone(),
@@ -960,8 +1074,8 @@ impl State {
             let start_decision = wire(&decision)?;
             let (id, root, input) = (actor_id.clone(), root.clone(), input.clone());
             pg.with_client(move |client| {
-                client.execute("INSERT INTO openappa_sessions (actor, root, organization_id, caller_id, session_id, parent_id, start_decision) VALUES ($1,$2,$3,$4,$5,$6,$7)",
-                    &[&id, &root, &input.organization_id, &input.caller_id, &input.session_id, &input.parent_id, &start_decision])?;
+                client.execute("INSERT INTO openappa_sessions (actor, root, organization_id, caller_id, session_id, parent_id, forked_from, forked_at, start_decision) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)",
+                    &[&id, &root, &input.organization_id, &input.caller_id, &input.session_id, &input.parent_id, &input.fork_of, &forked_at, &start_decision])?;
                 Ok(())
             }).map_err(error)?;
         }
@@ -1076,6 +1190,7 @@ impl State {
                 arguments: None,
                 tool: input.tool.clone(),
                 spelling: input.spelling.clone(),
+                dispatch: input.dispatch.clone(),
             };
             let response = render_remedy_outcome(outcome, Some(&owner))?;
             finish_operation(pg, &input, &operation, &response, ReceiptBinding::Caller)?;
@@ -1216,7 +1331,10 @@ impl State {
             operation_id: format!("call:{call_id}"),
         };
         let Some(released) = read_completed_operation(pg, &operation)? else {
-            let response = unknown_result_response();
+            // A fork replays the history of the session it forks: a result from before the
+            // fork comes back as that session processed it, never as an unknown call.
+            let response =
+                inherited_result(pg, input, &call_id)?.unwrap_or_else(unknown_result_response);
             let approved = decision_text(&response)?;
             pg.complete_processed_result(key, approved, response.clone())
                 .map_err(error)?;
@@ -1539,11 +1657,24 @@ fn unknown_control_reason(reason: &RemedyRefusal) -> Option<&'static str> {
 }
 
 fn render_released_call(status: &str, call: &ProposedCall, owner: Option<&OfferOwner>) -> String {
+    // A call made through the dispatch tool is retried through it: the client
+    // may hold no tool by the target's own name.
+    if let Some(dispatch) = owner.and_then(|owner| owner.dispatch.as_deref()) {
+        return format!(
+            "[appa] {status}. Call the {dispatch} tool again with exactly these arguments: {{\"tool_name\":{},\"tool_args\":{}}}",
+            Value::String(spelled_tool(&call.tool)),
+            call.arguments.get()
+        );
+    }
     let tool = owner
         .and_then(|owner| owner.spelling.clone())
         .unwrap_or_else(|| spelled_tool(&call.tool));
+    // A model that just ran a remedy moves straight on to the retry and never
+    // mentions it; the user must still learn which plan changed their session.
+    // The user may have accepted the plan through ask_user, so the text does
+    // not credit the model with the choice.
     format!(
-        "[appa] {status}. Call the {tool} tool again with exactly these arguments: {}",
+        "[appa] {status}. Tell the user in your reply which plan was accepted. Call the {tool} tool again with exactly these arguments: {}",
         call.arguments.get()
     )
 }
@@ -1620,6 +1751,50 @@ fn raw_object_value(arguments: Option<&RawValue>, name: &str) -> napi::Result<Va
     }
 }
 
+/// How many forks up the line a result is looked for. A fork of a fork of … deeper than this
+/// sees an older result as unknown, which withholds it: the safe side.
+const MAX_FORK_DEPTH: usize = 32;
+
+/// The decision the session this one forks from processed for `call_id`, looked up the fork
+/// line. A child accepts only results claimed before its parent-lock-protected watermark, so it
+/// replays the history it started with rather than later parent activity.
+fn inherited_result(
+    pg: &PostgresStore,
+    input: &Input,
+    call_id: &str,
+) -> napi::Result<Option<Value>> {
+    let (organization_id, mut session, call_id) = (
+        input.organization_id.clone(),
+        input.session_id.clone(),
+        call_id.to_owned(),
+    );
+    pg.with_client(move |client| {
+        for _ in 0..MAX_FORK_DEPTH {
+            let Some((parent, forked_at)) = client
+                .query_opt(
+                    "SELECT forked_from, forked_at FROM openappa_sessions WHERE actor = $1 AND organization_id = $2",
+                    &[&session_actor(&session), &organization_id],
+                )?
+                .and_then(|row| {
+                    row.get::<_, Option<String>>(0)
+                        .zip(row.get::<_, Option<SystemTime>>(1))
+                })
+            else {
+                return Ok(None);
+            };
+            if let Some(row) = client.query_opt(
+                "SELECT decision FROM openappa_processed_results WHERE session_id = $1 AND tool_call_id = $2 AND organization_id = $3 AND status = 'complete' AND created_at < $4",
+                &[&parent, &call_id, &organization_id, &forked_at],
+            )? {
+                return Ok(row.get::<_, Option<Value>>(0));
+            }
+            session = parent;
+        }
+        Ok(None)
+    })
+    .map_err(error)
+}
+
 fn decision_text(response: &Value) -> napi::Result<String> {
     response
         .get("approved_output")
@@ -1652,12 +1827,21 @@ fn authoritative_unexecuted_response(decision: Value) -> napi::Result<Value> {
         .unwrap_or("OpenAPPA blocked this tool call");
     with_approved_output(
         &decision,
-        format!(
-            "{feedback}\n\nThe tool was not executed. Use an offered remedy if appropriate before retrying; otherwise explain the ruling."
-        ),
+        format!("{feedback}\n\n{UNEXECUTED_CALL_HINT}"),
         OutputSource::Runtime,
     )
 }
+
+/// Appended to every ruling a model reads in place of a blocked call's result,
+/// in Chat and in every proxied client alike, so it is the one place to state
+/// what to do after a block. The ruling counts readers rather than naming
+/// them, and a model left to fill the gap invents who they are. Clients spell
+/// tool names differently, so tools are named generically, ask_user by the
+/// short name every spelling keeps. Which question tool to use follows
+/// ask_user's own description: the client's own first. A plan is carried out
+/// by the call the ruling shows for it, which is not always the remedy tool (a
+/// redispatch plan names another tool to run first).
+const UNEXECUTED_CALL_HINT: &str = "The tool was not executed. If the ruling offers a plan, choose one yourself and make the call it shows now, exactly as shown. If only the user can make this choice, ask them with a question tool (the client's own if it has one, otherwise ask_user), never as a plain-text question. In questions and replies, describe the block and any plan only in the ruling's own words, and never guess who the readers are or how access would change. If no plan is offered, explain the ruling.";
 
 fn unknown_result_response() -> Value {
     let approved_output =
@@ -1803,6 +1987,7 @@ fn routing_owner(
         arguments: None,
         tool: input.tool.clone(),
         spelling: input.spelling.clone(),
+        dispatch: input.dispatch.clone(),
     }))
 }
 
@@ -1933,8 +2118,12 @@ mod root_lock_tests {
 
 #[cfg(test)]
 mod typed_tests {
-    use super::{OfferId, RemedyPresentation, owner_can_be_spent_by, presentation_offer_ids};
+    use super::{
+        OfferId, OfferOwner, RemedyOutcome, RemedyPresentation, authoritative_unexecuted_response,
+        owner_can_be_spent_by, presentation_offer_ids, render_released_call, render_remedy_outcome,
+    };
     use appa_runtime_api::OfferedRemedy;
+    use serde_json::Value;
 
     #[test]
     fn session_actor_preserves_existing_sha256_identifiers() {
@@ -2014,6 +2203,145 @@ mod typed_tests {
         ));
         assert!(!owner_can_be_spent_by(Some("virtual-key:credential"), None));
         assert!(matches!(credential, super::Principal::VirtualKey(_)));
+    }
+
+    #[test]
+    fn released_call_uses_saved_spelling_and_reports_the_accepted_plan() {
+        let owner = OfferOwner {
+            organization_id: "organization".to_owned(),
+            caller_id: Some("user:owner".to_owned()),
+            session_id: "session".to_owned(),
+            parent_id: None,
+            root: "root".to_owned(),
+            arguments: Some(r#"{ "value": 1 }"#.to_owned()),
+            tool: Some("canonical_tool".to_owned()),
+            spelling: Some("client_tool".to_owned()),
+            dispatch: None,
+        };
+        let call = appa_runtime_api::ProposedCall {
+            tool: "canonical_tool".to_owned(),
+            arguments: serde_json::value::to_raw_value(&serde_json::json!({ "value": 1 })).unwrap(),
+        };
+
+        // The user may have accepted the plan through ask_user, so the model
+        // reports the plan without claiming the choice.
+        let released = render_released_call("Authorized", &call, Some(&owner));
+        assert!(released.contains("client_tool"));
+        assert!(released.contains("Tell the user in your reply which plan was accepted."));
+        assert!(!released.contains("you accepted"));
+    }
+
+    #[test]
+    fn a_blocked_result_repeats_the_ruling_and_steers_the_model() {
+        let ruling = "[appa] Blocked: this call cannot run yet.\n\nWhy:\n  - allowed readers would narrow: public -> 1 reader";
+        let response = authoritative_unexecuted_response(serde_json::json!({
+            "decision": "deny_call",
+            "feedback": ruling,
+        }))
+        .unwrap();
+
+        assert_eq!(response["decision"], "deny_call");
+        assert_eq!(response["output_source"], "runtime");
+        let text = response["approved_output"].as_str().unwrap();
+        // The ruling stays verbatim and first: it is the only account of the
+        // block the model has.
+        assert!(text.starts_with(&format!("{ruling}\n\nThe tool was not executed.")));
+        // A plan is carried out by the call the ruling shows, which for a
+        // redispatch plan is another tool rather than the remedy tool.
+        assert!(text.contains("choose one yourself and make the call it shows now"));
+        assert!(!text.contains("remedy tool"));
+        // The same order of question tools as ask_user's own description.
+        assert!(text.contains("the client's own if it has one, otherwise ask_user"));
+        assert!(text.contains("never as a plain-text question"));
+        assert!(text.contains("only in the ruling's own words"));
+        assert!(text.contains("never guess who the readers are"));
+    }
+
+    #[test]
+    fn authorized_remedy_uses_released_arguments_and_saved_spelling() {
+        let owner = OfferOwner {
+            organization_id: "organization".to_owned(),
+            caller_id: Some("user:owner".to_owned()),
+            session_id: "session".to_owned(),
+            parent_id: None,
+            root: "root".to_owned(),
+            arguments: Some(r#"{ "value": 1 }"#.to_owned()),
+            tool: Some("canonical_tool".to_owned()),
+            spelling: Some("client_tool".to_owned()),
+            dispatch: None,
+        };
+        let call = appa_runtime_api::ProposedCall {
+            tool: "canonical_tool".to_owned(),
+            arguments: serde_json::value::to_raw_value(&serde_json::json!({ "value": 2 })).unwrap(),
+        };
+
+        let result =
+            render_remedy_outcome(RemedyOutcome::Authorized { call }, Some(&owner)).unwrap();
+        let text = result["result"]["content"][0]["text"].as_str().unwrap();
+        let (prefix, arguments) = text.split_once("exactly these arguments: ").unwrap();
+        assert_eq!(
+            prefix,
+            "[appa] Authorized. Tell the user in your reply which plan was accepted. Call the client_tool tool again with "
+        );
+        assert_eq!(
+            serde_json::from_str::<Value>(arguments).unwrap(),
+            serde_json::json!({ "value": 2 })
+        );
+        assert_eq!(result["output_source"], "runtime");
+        assert_eq!(result["approved_output"], text);
+        assert_eq!(result["result"]["isError"], false);
+    }
+
+    #[test]
+    fn invalid_client_tool_names_identify_the_rejected_field() {
+        for (field, reason) in [
+            ("spelling", "invalid tool spelling"),
+            ("dispatch", "invalid dispatch tool"),
+        ] {
+            for value in [String::new(), "tool\nname".to_owned(), "x".repeat(1025)] {
+                let mut json = serde_json::json!({
+                    "organization_id": "organization",
+                    "session_id": "session",
+                    "event": "session_start",
+                });
+                json[field] = Value::String(value);
+                let input = serde_json::from_value(json).unwrap();
+                assert_eq!(super::validate(&input).unwrap_err().reason, reason);
+            }
+        }
+    }
+
+    #[test]
+    fn a_dispatched_call_is_retried_through_the_dispatch_tool() {
+        let owner = OfferOwner {
+            organization_id: "organization".to_owned(),
+            caller_id: Some("user:owner".to_owned()),
+            session_id: "session".to_owned(),
+            parent_id: None,
+            root: "root".to_owned(),
+            arguments: None,
+            tool: Some("archestra__whoami".to_owned()),
+            spelling: Some("archestra__whoami".to_owned()),
+            dispatch: Some("my_gateway_archestra__run_tool".to_owned()),
+        };
+        let call = appa_runtime_api::ProposedCall {
+            tool: "mcp/archestra/whoami".to_owned(),
+            arguments: serde_json::value::to_raw_value(&serde_json::json!({ "verbose": true }))
+                .unwrap(),
+        };
+
+        let hint = render_released_call("Authorized", &call, Some(&owner));
+        let (prefix, arguments) = hint
+            .split_once("exactly these arguments: ")
+            .expect("hint names the arguments");
+        assert_eq!(
+            prefix,
+            "[appa] Authorized. Call the my_gateway_archestra__run_tool tool again with "
+        );
+        assert_eq!(
+            serde_json::from_str::<Value>(arguments).unwrap(),
+            serde_json::json!({ "tool_name": "archestra__whoami", "tool_args": { "verbose": true } })
+        );
     }
 
     #[test]

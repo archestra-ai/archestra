@@ -190,11 +190,12 @@ const ENTITY_TYPE_ITEMS: Array<{
   },
 ];
 
-function formatCurrencyWhole(value: number) {
+function formatCurrency(value: number, fractionDigits = 0) {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
-    maximumFractionDigits: 0,
+    minimumFractionDigits: fractionDigits,
+    maximumFractionDigits: fractionDigits,
   }).format(value);
 }
 
@@ -654,7 +655,7 @@ export default function LimitsPage() {
                 }
               />
               <p className="mt-1 truncate text-left text-xs text-muted-foreground">
-                {`${formatCurrencyWhole(usage.actualUsage)} / ${formatCurrencyWhole(usage.actualLimit)} (${usage.percentage.toFixed(1)}%)`}
+                {`${formatCurrency(usage.actualUsage, 2)} / ${formatCurrency(usage.actualLimit)} (${usage.percentage.toFixed(1)}%)`}
               </p>
             </div>
           );

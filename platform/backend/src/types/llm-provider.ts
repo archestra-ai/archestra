@@ -266,7 +266,13 @@ export interface LLMResponseAdapter<TResponse> {
    * provider, so no response shape is ever rewritten speculatively.
    */
   withRewrittenToolCalls?(
-    toolCalls: Array<{ id: string; name: string; arguments: string }>,
+    toolCalls: Array<{
+      id: string;
+      name: string;
+      arguments: string;
+      /** Written to the client in place of `id` (OpenAPPA's trajectory stamp). */
+      wireId?: string;
+    }>,
   ): TResponse;
 
   /**
@@ -281,7 +287,15 @@ export interface LLMResponseAdapter<TResponse> {
    * brought in.
    */
   withHeldHostedToolCalls?(
-    notices: Array<{ id: string; name: string; arguments: string }>,
+    notices: Array<{
+      id: string;
+      name: string;
+      arguments: string;
+      /** The namespace the client declared the notice tool in (Codex). */
+      namespace?: string;
+      /** Written to the client in place of `id` (OpenAPPA's trajectory stamp). */
+      wireId?: string;
+    }>,
   ): TResponse;
 
   /** Get finish reasons array for OTEL tracing (e.g., ["stop"], ["tool_calls"]) */
@@ -314,6 +328,8 @@ export interface StreamAccumulatorState {
     id: string;
     name: string;
     arguments: string;
+    /** Written to the client in place of `id` (OpenAPPA's trajectory stamp). */
+    wireId?: string;
   }>;
   /** Raw tool call events stored for replay after policy approval */
   rawToolCallEvents: unknown[];
@@ -395,6 +411,12 @@ export interface LLMStreamAdapter<TChunk, TResponse> {
    * is indistinguishable from model output and fuses into the answer.
    */
   formatTextDeltaSSE(text: string): string | Uint8Array;
+
+  /**
+   * Configures an optional, synchronous footer for a completed text-only turn.
+   * Adapters without a protocol-specific terminal seam leave this unset.
+   */
+  setTextSuffix?(getSuffix: (completedText: string) => string): void;
 
   /** Get raw tool call events as SSE strings (for replay after policy approval) */
   getRawToolCallEvents(): (string | Uint8Array)[];

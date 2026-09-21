@@ -13,3 +13,11 @@ export function readHeader(
   // These client-identification signals are single-valued, not authority headers.
   return Array.isArray(value) ? value[0] : value;
 }
+
+/** Normalize the model-provided question header for a client's tab UI. */
+export function questionHeader(header: unknown, maxLength: number): string {
+  const trimmed = typeof header === "string" ? header.trim() : "";
+  return trimmed.length > 0
+    ? trimmed.slice(0, maxLength).trimEnd()
+    : "Question";
+}

@@ -175,7 +175,7 @@ export function AppShell({ children }: AppShellProps) {
   // centres, in the space of a few hundred milliseconds. Boot progress is
   // reported in the sidebar toggle instead (see NavAwareSidebarCircleToggle).
   //
-  // ConnectivityProvider wraps the shell so /health polling and
+  // ConnectivityProvider wraps the shell so /ready polling and
   // useConnectivity() are available on every page rendered here (a page like
   // /chat calls useConnectivity() unconditionally). The auth/preview/runtime
   // branches above are intentionally outside it (no poll).

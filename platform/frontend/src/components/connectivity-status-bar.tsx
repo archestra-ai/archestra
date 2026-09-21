@@ -5,31 +5,7 @@ import { AlertTriangle, RefreshCw, WifiOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import type { ConnectivityState } from "@/lib/config/connectivity";
-
-function messageFor(
-  kind: Exclude<ConnectivityState["kind"], "online">,
-  appName: string,
-): { title: string; detail: string } {
-  switch (kind) {
-    case "browser-offline":
-      return {
-        title: "You're offline.",
-        detail: "Reconnect to the internet, then retry.",
-      };
-    case "backend-unreachable":
-      return {
-        title: `Can't reach the ${appName} server.`,
-        detail:
-          "Check your connection. If it persists, ask an administrator to check the service.",
-      };
-    case "database-unavailable":
-      return {
-        title: "Database unavailable.",
-        detail:
-          "Ask an administrator to check the database service, connection settings, and capacity.",
-      };
-  }
-}
+import { getConnectivityMessage } from "@/lib/config/connectivity-messages";
 
 /**
  * Persistent banner for the authenticated shell, shown while the browser is
@@ -49,7 +25,7 @@ export function ConnectivityStatusBar({
   if (state.kind === "online") {
     return null;
   }
-  const { title, detail } = messageFor(state.kind, appName);
+  const { title, detail } = getConnectivityMessage(state.kind, appName);
 
   return (
     <InlineNotice data-testid={E2eTestId.ConnectivityStatusBar}>

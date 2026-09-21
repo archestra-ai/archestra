@@ -1,7 +1,7 @@
 "use client";
 
 import type { ColumnDef } from "@tanstack/react-table";
-import { Bot, Plus, Power, PowerOff, Trash2 } from "lucide-react";
+import { Bot, ListFilter, Plus, Power, PowerOff, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -408,11 +408,28 @@ export default function ServiceAccountsSettingsPage() {
                     })
                   }
                   placeholder="Filter by status"
+                  // Each option renders as the reading it selects, so the
+                  // filter and the Status column teach one vocabulary rather
+                  // than two. `label` stays the bare word, which is what the
+                  // list is searched and announced by.
                   items={[
-                    { value: ALL, label: "All statuses" },
+                    {
+                      value: ALL,
+                      label: "All statuses",
+                      content: (
+                        <span className="inline-flex items-center gap-1.5 text-sm">
+                          <ListFilter
+                            aria-hidden
+                            className="size-3.5 shrink-0 text-muted-foreground"
+                          />
+                          All statuses
+                        </span>
+                      ),
+                    },
                     ...STATUS_FILTERS.map((health) => ({
                       value: health,
                       label: ACCOUNT_HEALTH_LABELS[health],
+                      content: <AccountHealthBadge health={health} />,
                     })),
                   ]}
                 />

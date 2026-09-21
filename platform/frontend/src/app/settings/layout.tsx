@@ -139,6 +139,16 @@ export type SettingsPageHeader = {
   description?: React.ReactNode;
   backLink?: React.ReactNode;
   status?: React.ReactNode;
+  /**
+   * Secondary tabs under the header, for a record with more facets than one
+   * screen should carry at once. The same bar the agent, MCP gateway and MCP
+   * server detail pages use, reached from here because a settings page does
+   * not render its own {@link PageLayout} - this layout does.
+   *
+   * Only a record page has any use for it. The section list on the left is
+   * how you move between settings pages; these move within one.
+   */
+  tabs?: React.ComponentProps<typeof PageLayout>["tabs"];
 };
 
 type SettingsLayoutContextType = {
@@ -202,6 +212,11 @@ export default function SettingsLayout({
         description={pageHeader ? pageHeader.description : config.description}
         backLink={pageHeader?.backLink}
         status={pageHeader?.status}
+        tabs={pageHeader?.tabs}
+        // Every tab stays on the row rather than collapsing into an overflow
+        // popover: a record page here carries a handful of facets, not the
+        // sixteen the section list holds.
+        mobileVisibleCount={pageHeader?.tabs?.length}
         actionButton={actionButton}
       >
         {/* The section list sits beside the content rather than as a tab row

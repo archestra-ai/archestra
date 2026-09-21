@@ -1,6 +1,14 @@
 "use client";
 
-import { Badge } from "@/components/ui/badge";
+import {
+  CircleCheck,
+  CircleDashed,
+  CircleSlash,
+  CircleX,
+  Clock,
+  type LucideIcon,
+  TriangleAlert,
+} from "lucide-react";
 import {
   ACCOUNT_HEALTH_LABELS,
   type AccountHealth,
@@ -19,25 +27,35 @@ import { cn } from "@/lib/utils";
  * page of green badges says nothing while making the two that matter harder to
  * find. "Disabled" and "No keys" are deliberate or unfinished, not faults, so
  * they stay neutral too.
+ *
+ * A glyph beside the word, rather than a filled pill around it. Every state
+ * had the same chip silhouette, so a column of them read as decoration and the
+ * eye had to fall back on colour alone to find the row that needed attention.
+ * The glyph differs per state, which gives the reading a second channel that
+ * survives both a greyscale print and the colour vision most affected by an
+ * amber/red pairing. Dropping the fill also stops a dense table looking like a
+ * column of buttons.
  */
 
-const HEALTH_CLASSES: Record<AccountHealth, string> = {
-  active: "",
-  expiring: "text-amber-700 dark:text-amber-400 bg-amber-100 dark:bg-amber-950",
-  "no-usable-keys": "text-red-700 dark:text-red-400 bg-red-100 dark:bg-red-950",
-  "no-keys": "",
-  disabled: "",
+type StatusTone = "neutral" | "warning" | "danger";
+
+const TONE_CLASSES: Record<StatusTone, string> = {
+  neutral: "text-muted-foreground",
+  warning: "text-amber-700 dark:text-amber-400",
+  danger: "text-red-700 dark:text-red-400",
 };
 
-const HEALTH_VARIANTS: Record<
+const HEALTH_PRESENTATION: Record<
   AccountHealth,
-  "secondary" | "outline" | "ghost"
+  { icon: LucideIcon; tone: StatusTone }
 > = {
-  active: "secondary",
-  expiring: "ghost",
-  "no-usable-keys": "ghost",
-  "no-keys": "outline",
-  disabled: "outline",
+  active: { icon: CircleCheck, tone: "neutral" },
+  expiring: { icon: Clock, tone: "warning" },
+  // The only reading that means "someone believes this works and it does not".
+  "no-usable-keys": { icon: TriangleAlert, tone: "danger" },
+  // Unfinished rather than broken, so a hollow outline rather than an alarm.
+  "no-keys": { icon: CircleDashed, tone: "neutral" },
+  disabled: { icon: CircleSlash, tone: "neutral" },
 };
 
 export function AccountHealthBadge({
@@ -47,28 +65,22 @@ export function AccountHealthBadge({
   health: AccountHealth;
   className?: string;
 }) {
+  const { icon, tone } = HEALTH_PRESENTATION[health];
   return (
-    <Badge
-      variant={HEALTH_VARIANTS[health]}
-      className={cn(HEALTH_CLASSES[health], className)}
-    >
+    <StatusReading icon={icon} tone={tone} className={className}>
       {ACCOUNT_HEALTH_LABELS[health]}
-    </Badge>
+    </StatusReading>
   );
 }
 
-const KEY_CLASSES: Record<KeyStatus, string> = {
-  active: "",
-  expiring: "text-amber-700 dark:text-amber-400 bg-amber-100 dark:bg-amber-950",
-  expired: "text-red-700 dark:text-red-400 bg-red-100 dark:bg-red-950",
-  disabled: "",
-};
-
-const KEY_VARIANTS: Record<KeyStatus, "secondary" | "outline" | "ghost"> = {
-  active: "secondary",
-  expiring: "ghost",
-  expired: "ghost",
-  disabled: "outline",
+const KEY_PRESENTATION: Record<
+  KeyStatus,
+  { icon: LucideIcon; tone: StatusTone }
+> = {
+  active: { icon: CircleCheck, tone: "neutral" },
+  expiring: { icon: Clock, tone: "warning" },
+  expired: { icon: CircleX, tone: "danger" },
+  disabled: { icon: CircleSlash, tone: "neutral" },
 };
 
 export function KeyStatusBadge({
@@ -78,12 +90,37 @@ export function KeyStatusBadge({
   status: KeyStatus;
   className?: string;
 }) {
+  const { icon, tone } = KEY_PRESENTATION[status];
   return (
-    <Badge
-      variant={KEY_VARIANTS[status]}
-      className={cn(KEY_CLASSES[status], className)}
-    >
+    <StatusReading icon={icon} tone={tone} className={className}>
       {KEY_STATUS_LABELS[status]}
-    </Badge>
+    </StatusReading>
+  );
+}
+
+// === Internal helpers
+
+function StatusReading({
+  icon: Icon,
+  tone,
+  className,
+  children,
+}: {
+  icon: LucideIcon;
+  tone: StatusTone;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1.5 whitespace-nowrap text-sm",
+        TONE_CLASSES[tone],
+        className,
+      )}
+    >
+      <Icon aria-hidden className="size-3.5 shrink-0" />
+      {children}
+    </span>
   );
 }

@@ -13,10 +13,10 @@ crate-type = ["cdylib"]
 # brings its own adapter; hosted composition; bundled batteries) on top of
 # v0.24.0. Re-pin to a release once it lands. The embedded reporting helper
 # currently requires upstream's daemon feature.
-appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "af7ffe0586788fc5469efc1e64eb3e6dfa5305a3" }
-appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "af7ffe0586788fc5469efc1e64eb3e6dfa5305a3" }
-appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "af7ffe0586788fc5469efc1e64eb3e6dfa5305a3", features = ["postgres"] }
-appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "af7ffe0586788fc5469efc1e64eb3e6dfa5305a3" }
+appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "2610a32887056109c09d2e764fc69fcb9e14aacb" }
+appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "2610a32887056109c09d2e764fc69fcb9e14aacb" }
+appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "2610a32887056109c09d2e764fc69fcb9e14aacb", features = ["postgres"] }
+appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "2610a32887056109c09d2e764fc69fcb9e14aacb" }
 napi = { version = "3", features = ["tokio_rt"] }
 napi-derive = "3"
 serde = { version = "1", features = ["derive"] }

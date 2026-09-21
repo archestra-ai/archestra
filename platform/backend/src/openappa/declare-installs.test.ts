@@ -74,6 +74,38 @@ describe("declaring the legacy battery installs", () => {
     ]);
   });
 
+  test("replaces an entry the text already spells for the same battery", async ({
+    makeOrganization,
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const organizationId = (await makeOrganization()).id;
+    const catalog = await makeInternalMcpCatalog({ organizationId });
+    await makeTool({ catalogId: catalog.id, name: "github_prod__list" });
+    const contentHash = await storePackage({ organizationId, name: "github" });
+    await legacyInstall({
+      organizationId,
+      batteryName: "github",
+      catalogId: catalog.id,
+    });
+    // A hand-written revision already declares the bundled spelling; the step
+    // serves the upload the install ran under, and a battery is included once.
+    const bundled = `include = ["batteries/github/appa.toml"]\n\n[policy]\nversion = 2\n`;
+    await GuardrailsPolicyModel.saveDeclarationMigration({
+      organizationId,
+      content: bundled,
+      contentHash: createHash("sha256").update(bundled).digest("hex"),
+      expectedRevision: 0,
+    });
+
+    await declareExistingInstalls();
+
+    const declared = await declarationsOf(organizationId);
+    expect(declared.include.map((entry) => entry.entry)).toEqual([
+      uploadedEntry({ name: "github", contentHash }),
+    ]);
+  });
+
   test("leaves a variable two owners bind to different keys unbound", async ({
     makeOrganization,
     makeInternalMcpCatalog,

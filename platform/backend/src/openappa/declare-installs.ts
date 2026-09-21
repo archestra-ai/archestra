@@ -10,6 +10,7 @@ import OpenAppaBatteryPackageModel from "@/models/openappa-battery-package";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import { INITIAL_POLICY } from "@/services/guardrails-policy";
 import type { BatteryInstall } from "@/types/openappa-batteries";
+import { mapWithConcurrency } from "@/utils/concurrency";
 import { catalogToolPrefixes } from "./batteries";
 import {
   bundledEntry,
@@ -51,22 +52,35 @@ export async function declareExistingInstalls(): Promise<DeclareInstallsSummary>
     unchanged: [],
     failed: [],
   };
-  for (const organizationId of await OpenAppaBatteryInstallModel.listOrganizationIds()) {
-    try {
-      summary[await declareOrganization(organizationId)].push(organizationId);
-    } catch (error) {
-      logger.error(
-        { organizationId, err: error },
-        "Declaring an organization's OpenAPPA battery installs failed; its rows are still the only record of them",
-      );
-      summary.failed.push(organizationId);
+  // Organizations do not wait on each other: each one is its own read-edit-save
+  // under its own advisory lock, and startup holds everything else up.
+  const organizationIds =
+    await OpenAppaBatteryInstallModel.listOrganizationIds();
+  const outcomes = await mapWithConcurrency(
+    organizationIds,
+    DECLARE_CONCURRENCY,
+    declareOrganization,
+  );
+  outcomes.forEach((outcome, index) => {
+    const organizationId = organizationIds[index] as string;
+    if (outcome.status === "fulfilled") {
+      summary[outcome.value].push(organizationId);
+      return;
     }
-  }
+    logger.error(
+      { organizationId, err: outcome.reason },
+      "Declaring an organization's OpenAPPA battery installs failed; its rows are still the only record of them",
+    );
+    summary.failed.push(organizationId);
+  });
   return summary;
 }
 
 /** One read-edit-save, plus the two retries a lost revision race is allowed. */
 const SAVE_ATTEMPTS = 3;
+
+/** Organizations declared at once; the same bound a recompile fan-out uses. */
+const DECLARE_CONCURRENCY = 4;
 
 /** The variables a `[credentials]` table admits; the editor refuses the rest. */
 const CREDENTIAL_VARIABLE = /^APPA_PROVIDER_[A-Z0-9_]+$/;
@@ -185,6 +199,11 @@ async function planFor(params: {
       continue;
     }
     batteries.push(name);
+    // A battery is included once: text that already spells this battery under
+    // another entry has that entry replaced, never doubled.
+    const included = resolution.entries.find((entry) => entry.name === name);
+    if (included && included.entry !== resolved.entry)
+      includes.push({ kind: "removeInclude", entry: included.entry });
     includes.push({ kind: "addInclude", entry: resolved.entry });
     owners.push(batteryRows[0]);
     for (const row of batteryRows.slice(1))

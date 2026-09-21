@@ -534,6 +534,7 @@ const registry = defineArchestraTools([
       "Use this only when the work has NO runtime session yet, including unfinished local work. For an existing runtime task or follow-up, use steer_run with its saved session_id as task_id; never start another run. " +
       "For repository handoffs, first load the Agent Runtime Handoff skill using load_skill. Include the repository URL, exact base commit, local changes, and return-patch baseline; local paths are not accessible remotely. " +
       "Include context, goals, decisions and remaining work in message. Optional attachments are staged before execution (repository patches or documents). " +
+      "For files sent after startup through transfer_workspace_file, instruct the Agent to prepare and stop before task work. Transfer the files, then continue with steer_run. " +
       "Keep session_id and run_url so any connected client can pick up the same session. Poll get_run for progress.",
     schema: z.object({
       agent_id: z.string().describe("The agent to do the work."),
@@ -567,7 +568,7 @@ const registry = defineArchestraTools([
       "Use this when picking up work from another client. Keep session_id and run_url. " +
       "Read requests for the task context before interpreting a follow-up. " +
       "A run in state 'working' can be steered immediately; do not wait for completion to send instructions. " +
-      "Use read_workspace_file for deliverables and steer_run for follow-ups in the SAME session.",
+      "Use transfer_workspace_file to copy deliverables through a local shell, or read_workspace_file to read contents up to 4 MiB. Use steer_run for follow-ups in the SAME session.",
     schema: z.object({
       task_id: z.string().uuid().describe("From start_run or list_runs."),
     }),

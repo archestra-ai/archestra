@@ -1,6 +1,8 @@
 # Skill Sandbox Runtime
 
-DB-backed, Dagger-materialized execution sandbox for Agent Skills.
+Dagger-materialized execution sandbox for Agent Skills. Replay state is
+DB-backed by default; Slack executions keep their replay state in application
+memory for the current execution only.
 
 > Gated behind the sandbox feature flag (`config.skillsSandbox`, enabled when a
 > Dagger runner host (`ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST`) is
@@ -9,7 +11,7 @@ DB-backed, Dagger-materialized execution sandbox for Agent Skills.
 ## What this directory contains
 
 - `skill-sandbox-runtime-service.ts` — singleton service that owns the Dagger
-  client. Materializes a sandbox from its DB replay log, replays it, executes a
+  client. Materializes a sandbox from its replay recipe, replays it, executes a
   new command, and exports files as artifacts (status FSM, per-sandbox queue,
   lifecycle hooks).
 - `runtime-image.ts` — container path layout: skill root (`/skills/<skill-name>`),
@@ -169,3 +171,13 @@ caller (revocation gate) and fail closed otherwise.
 (never through model context) and requires the attachment to belong to both the
 caller's organization and the **current conversation** — an attachment from
 another conversation is rejected to block cross-conversation exfiltration.
+
+## Temporary Slack executions
+
+Slack roots open an explicitly scoped in-memory sandbox recipe. Delegated agents inherit that execution scope. The normal sandbox tools keep their path validation, resource limits, skill version pins, revocation checks, and environment routing. Other callers retain the existing durable behavior.
+
+Slack input bytes, replay commands, and exported artifacts are not written to sandbox tables or persistent file storage. Uploads travel to Dagger inline without using the shared host upload spool. `download_file` returns a temporary `threadFile` reference and no persistent `fileId`; `overwrite` and persistent file-writing tools are unavailable in this scope. New executions fetch inputs again or regenerate outputs.
+
+The root releases the recipe and file references in `finally`. An active one-hour expiry provides backup cleanup. Late calls and queued operations cannot reopen the scope, retain exported bytes, or start a new Slack upload after release. An upload already in progress may finish. Admission limits bound concurrent executions, recipes, replay entries, and retained bytes; hitting a limit fails without falling back to durable storage.
+
+This lifetime covers application memory, not secure erasure of engine storage. Dagger still caches materialized filesystem layers under its own eviction policy. Slack retains delivered files according to workspace policy. Structured inline attachment bodies are redacted from `chatops:slack` interaction rows. Slack approval history keeps refetch notices instead of inline files. Ordinary text, command output, auxiliary calls with another source, and existing records retain their usual logging behavior.

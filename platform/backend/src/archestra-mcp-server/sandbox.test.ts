@@ -186,6 +186,126 @@ describe("sandbox tools (runtime enabled)", () => {
   }
 
   describe("run_command", () => {
+    test("volatile default, fresh, and explicit targets stay within the execution", async () => {
+      const isolationKey = executionSandboxRegistry.openEphemeralExecution();
+      const otherKey = executionSandboxRegistry.openEphemeralExecution();
+      const ctx = { ...context, isolationKey };
+      vi.spyOn(sandboxRuntimeService, "isEnabled", "get").mockReturnValue(true);
+      const nativeRun = vi
+        .spyOn(sandboxRuntimeService, "runCommand")
+        .mockResolvedValue({
+          stdout: "ok",
+          stderr: "",
+          exitCode: 0,
+          durationMs: 1,
+          timedOut: false,
+          truncated: false,
+        });
+      try {
+        const run = (
+          target?: { fresh: boolean } | { id: string },
+          runContext = ctx,
+        ) =>
+          executeArchestraTool(
+            TOOL_RUN_COMMAND_FULL_NAME,
+            { command: "echo ok", target },
+            runContext,
+          );
+        const first = await run();
+        expect(first.isError).toBe(false);
+        const firstId = structuredOf<{ sandboxId: string }>(first).sandboxId;
+        const fresh = await run({ fresh: true });
+        expect(fresh.isError).toBe(false);
+        const freshId = structuredOf<{ sandboxId: string }>(fresh).sandboxId;
+        expect(freshId).not.toBe(firstId);
+        expect(structuredOf<{ sandboxId: string }>(await run()).sandboxId).toBe(
+          firstId,
+        );
+        expect((await run({ id: freshId })).isError).toBe(false);
+        expect(await SkillSandboxModel.findById(firstId)).toBeNull();
+        expect(await SkillSandboxModel.findById(freshId)).toBeNull();
+        expect(
+          await SkillSandboxReplayEventModel.listBySandbox(firstId),
+        ).toEqual([]);
+        const durable = await SkillSandboxModel.create({
+          organizationId,
+          userId,
+          conversationId: null,
+          defaultCwd: "/home/sandbox",
+        });
+        const countBeforeDenials = nativeRun.mock.calls.length;
+        expect(
+          (await run({ id: freshId }, { ...ctx, isolationKey: otherKey }))
+            .isError,
+        ).toBe(true);
+        expect((await run({ id: durable.id })).isError).toBe(true);
+        executionSandboxRegistry.release(isolationKey);
+        expect((await run()).isError).toBe(true);
+        expect(nativeRun).toHaveBeenCalledTimes(countBeforeDenials);
+      } finally {
+        executionSandboxRegistry.release(isolationKey);
+        executionSandboxRegistry.release(otherKey);
+      }
+    });
+
+    test("volatile executions cannot save, edit, or copy persistent files", async () => {
+      const isolationKey = executionSandboxRegistry.openEphemeralExecution();
+      const file = await fileStore.put({
+        organizationId,
+        userId,
+        projectId: null,
+        conversationId: null,
+        filename: "existing.txt",
+        mimeType: "text/plain",
+        sizeBytes: 8,
+        data: Buffer.from("original"),
+      });
+      try {
+        const calls = [
+          {
+            tool: TOOL_SAVE_FILE_FULL_NAME,
+            args: {
+              filename: "existing.txt",
+              content: "replaced",
+              overwrite: true,
+            },
+          },
+          {
+            tool: TOOL_EDIT_FILE_FULL_NAME,
+            args: {
+              filename: "existing.txt",
+              old_string: "original",
+              new_string: "replaced",
+            },
+          },
+          {
+            tool: "archestra__copy_file",
+            args: {
+              from: { type: "chat_file", filename: "existing.txt" },
+              to: { scope: "app" },
+            },
+          },
+        ];
+        for (const { tool, args } of calls) {
+          const result = await executeArchestraTool(tool, args, {
+            ...context,
+            isolationKey,
+          });
+          expect(result.isError).toBe(true);
+          expect(textOf(result)).toContain(
+            "Persistent file changes are unavailable",
+          );
+        }
+        expect(
+          (
+            await fileStore.get({ organizationId, userId, ref: file.id })
+          )?.data.toString(),
+        ).toBe("original");
+      } finally {
+        executionSandboxRegistry.release(isolationKey);
+      }
+    });
+
     test("lazily creates the conversation default sandbox and delegates to it", async () => {
       const ctx = await makeConversationCtx();
       const runSpy = vi
@@ -1011,8 +1131,8 @@ describe("sandbox tools (runtime enabled)", () => {
     }) => {
       config.daggerRuntime.enabled = true;
       const ctx = {
-        ...(await makeConversationCtx()),
-        isolationKey: randomUUID(),
+        ...context,
+        isolationKey: executionSandboxRegistry.openEphemeralExecution(),
         chatOpsBindingId: randomUUID(),
         chatOpsThreadId: "1780000000.000001",
         chatOpsMessageId: "1780000000.000002",
@@ -1044,7 +1164,12 @@ describe("sandbox tools (runtime enabled)", () => {
           await SkillSandboxFileModel.findUploadDataById(
             uploaded.structuredContent?.uploadId as string,
           ),
-        ).toEqual(data);
+        ).toBeNull();
+        const sandboxId = uploaded.structuredContent?.sandboxId as string;
+        expect(await SkillSandboxModel.findById(sandboxId)).toBeNull();
+        expect(
+          await SkillSandboxReplayEventModel.listBySandbox(sandboxId),
+        ).toEqual([]);
 
         vi.spyOn(sandboxRuntimeService, "readArtifact").mockResolvedValue({
           dataBase64: data.toString("base64"),
@@ -1076,13 +1201,36 @@ describe("sandbox tools (runtime enabled)", () => {
             fileId: metadata.fileId,
           })?.data,
         ).toEqual(data);
-        const persisted = await fileStore.get({
-          ref: exported.structuredContent?.fileId as string,
-          organizationId,
-          userId,
-        });
-        expect(persisted?.data).toEqual(data);
+        expect(exported.structuredContent).not.toHaveProperty("fileId");
+        expect(textOf(exported)).toContain("this execution only");
+        expect(
+          await FileModel.findOrphanByName({
+            organizationId,
+            userId,
+            filename,
+          }),
+        ).toBeNull();
+        executionSandboxRegistry.release(ctx.isolationKey);
+        expect(
+          threadFileStore.resolve({
+            scope: threadScope,
+            fileId: metadata.fileId,
+          }),
+        ).toBeNull();
+        expect(() =>
+          threadFileStore.retain({ scope: threadScope, data, filename }),
+        ).toThrow();
+        const expired = await executeArchestraTool(
+          TOOL_UPLOAD_FILE_FULL_NAME,
+          {
+            path: filename,
+            source: { type: "text", text: "late bytes" },
+          },
+          ctx,
+        );
+        expect(expired.isError).toBe(true);
       } finally {
+        executionSandboxRegistry.release(ctx.isolationKey);
         threadFileStore.release(ctx.isolationKey);
       }
     });
@@ -1241,6 +1389,8 @@ describe("sandbox tools (runtime enabled)", () => {
       });
       const first = await skillSandboxRuntimeService.exportArtifact(params);
       expect(first.overwritten).toBe(false);
+      if (!first.artifactId)
+        throw new Error("Durable export returned no file id");
 
       readSpy.mockResolvedValue({
         dataBase64: Buffer.from("version-two").toString("base64"),

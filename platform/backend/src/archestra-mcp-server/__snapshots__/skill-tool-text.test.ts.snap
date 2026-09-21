@@ -206,11 +206,11 @@ exports[`skill and sandbox tool text > archestra__delete_file 1`] = `
 
 exports[`skill and sandbox tool text > archestra__download_file 1`] = `
 {
-  "description": "Copy a file that already exists at a path in the conversation's sandbox into the conversation's persistent files. Use this for anything on the sandbox's disk — a file run_command wrote (text or binary) or a staged attachment under /home/sandbox/attachments/ — its bytes are not returned to you, so you never read them back or re-type them. Pass \`overwrite: true\` to replace an existing same-named persistent file in place. In a Slack execution, also returns a private file reference for post_thread_file.",
+  "description": "Copy a file that already exists at a path in the conversation's sandbox into the conversation's persistent files. Use this for anything on the sandbox's disk — a file run_command wrote (text or binary) or a staged attachment under /home/sandbox/attachments/ — its bytes are not returned to you, so you never read them back or re-type them. Pass \`overwrite: true\` to replace an existing same-named persistent file in place. In Slack, retains the file only for the current execution and returns a private threadFile reference for post_thread_file instead of saving it.",
   "inputSchema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
-    "description": "Copy a file that already exists at a path in the sandbox into the conversation's persistent files. Use this for anything on the sandbox's disk — a file run_command wrote (text or binary) or a staged attachment — its bytes are not returned to you, so you never read them back.",
+    "description": "Copy a file that already exists at a path in the sandbox into the conversation's persistent files. Use this for anything on the sandbox's disk — a file run_command wrote (text or binary) or a staged attachment — its bytes are not returned to you, so you never read them back. In Slack, captures a temporary threadFile reference for this execution instead of saving a persistent file.",
     "properties": {
       "mimeType": {
         "description": "Optional MIME type recorded with the file. Sniffed from the bytes when omitted.",
@@ -219,7 +219,7 @@ exports[`skill and sandbox tool text > archestra__download_file 1`] = `
       },
       "overwrite": {
         "default": false,
-        "description": "Replace an existing same-named persistent file in place, keeping its id. Default false errors if the name is already taken.",
+        "description": "Replace an existing same-named persistent file in place, keeping its id. Default false errors if the name is already taken. Unavailable for temporary Slack exports.",
         "type": "boolean",
       },
       "path": {
@@ -655,7 +655,7 @@ exports[`skill and sandbox tool text > archestra__update_skill 1`] = `
 
 exports[`skill and sandbox tool text > archestra__upload_file 1`] = `
 {
-  "description": "Place a file into the conversation's sandbox at a path, from a chat attachment, a current Slack thread file, inline base64, inline text, or one of your persistent files. The file then persists in the sandbox for later commands. Files the user attached to the conversation are already staged under /home/sandbox/attachments/ — use this tool to write inline content, place a file at a specific path, or target a non-default sandbox.",
+  "description": "Place a file into the conversation's sandbox at a path, from a chat attachment, a current Slack thread file, inline base64, inline text, or one of your persistent files. The file is available for later commands; in Slack it lasts only for the current execution. Files the user attached to the conversation are already staged under /home/sandbox/attachments/ — use this tool to write inline content, place a file at a specific path, or target a non-default sandbox.",
   "inputSchema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,

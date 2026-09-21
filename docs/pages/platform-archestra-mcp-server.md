@@ -2741,7 +2741,7 @@ Required RBAC permission: `sandbox:execute`
 |-----------|------|----------|-------------|
 | `path` | `string` | Yes | Path to the file inside the container — absolute, or relative to the sandbox's working directory. |
 | `mimeType` | `string` | No | Optional MIME type recorded with the file. Sniffed from the bytes when omitted. |
-| `overwrite` | `boolean` | No | Replace an existing same-named persistent file in place, keeping its id. Default false errors if the name is already taken. |
+| `overwrite` | `boolean` | No | Replace an existing same-named persistent file in place, keeping its id. Default false errors if the name is already taken. Unavailable for temporary Slack exports. |
 | `target` | `object` | No | Which sandbox to use. Omit (or leave empty) for the conversation's default sandbox (created on first use). Pass `{ "fresh": true }` for a new isolated sandbox, or `{ "id": "<uuid>" }` to target a specific one. |
 | `target.fresh` | `boolean` | No | Set true for a brand-new isolated sandbox; its id is returned. |
 | `target.id` | `string` | No | An existing sandbox id (UUID) returned by an earlier call. |
@@ -2750,7 +2750,7 @@ Required RBAC permission: `sandbox:execute`
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `fileId` | `string` | Yes |  |
+| `fileId` | `string` | No |  |
 | `sandboxId` | `string` | Yes |  |
 | `path` | `string` | Yes |  |
 | `mimeType` | `string` | Yes |  |

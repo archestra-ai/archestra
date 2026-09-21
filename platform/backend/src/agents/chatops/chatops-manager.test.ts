@@ -24,6 +24,7 @@ vi.mock("./channel-activation", async (importOriginal) => {
 import { ChatErrorCode, ChatErrorMessages } from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import { A2AManager } from "@/agents/a2a/a2a-manager";
+import { A2AProtocolRole } from "@/agents/a2a/a2a-protocol";
 import * as a2aExecutor from "@/agents/a2a-executor";
 import db, { schema } from "@/database";
 import {
@@ -1876,6 +1877,96 @@ describe("ChatOpsManager security validation", () => {
     } finally {
       sendMessageSpy.mockRestore();
     }
+  });
+
+  test("Slack approval resumes retain the original file-delivery destination and triggering message", async ({
+    makeUser,
+    makeOrganization,
+    makeInternalAgent,
+  }) => {
+    const user = await makeUser({ email: "approver@example.com" });
+    const org = await makeOrganization();
+    const agent = await makeInternalAgent({ organizationId: org.id });
+    const binding = await ChatOpsChannelBindingModel.create({
+      organizationId: org.id,
+      provider: "slack",
+      channelId: "test-channel-id",
+      workspaceId: "test-workspace-id",
+      agentId: agent.id,
+    });
+    const originalMessage = createMockMessage({
+      messageId: "1790010000.000001",
+      threadId: "1790000000.000001",
+      senderEmail: user.email,
+    });
+    const executor = mockA2AExecutor().mockResolvedValueOnce({
+      text: "",
+      messageId: crypto.randomUUID(),
+      finishReason: "tool-calls",
+      responseUiMessage: {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-review",
+            state: "approval-requested",
+            toolCallId: "review-call",
+            input: {},
+            approval: { id: "approval-review" },
+          },
+        ],
+      },
+    });
+    // Persist the actual approval task so the resume traverses the A2A manager
+    // and its task history, stopping only at the agent execution boundary.
+    const initial = await new A2AManager({ stateless: true }).sendMessage({
+      actor: { id: user.id, kind: "user", organizationId: org.id },
+      agentId: agent.id,
+      request: {
+        message: {
+          messageId: crypto.randomUUID(),
+          role: A2AProtocolRole.User,
+          parts: [{ text: "Review and generate a report" }],
+        },
+      },
+      systemParams: {
+        source: "chatops:slack",
+        chatOpsMessageId: originalMessage.messageId,
+        completionTarget: {
+          type: "chatops",
+          bindingId: binding.id,
+          threadId: originalMessage.threadId as string,
+        },
+      },
+    });
+    if (!initial.task) throw new Error("Expected a persisted approval task");
+    const provider: ChatOpsProvider = {
+      ...createMockProvider({ getUserEmail: async () => user.email }),
+      providerId: "slack",
+      displayName: "Slack",
+    };
+    await new ChatOpsManager().handleInteractiveApprovalDecision(provider, {
+      taskId: initial.task.id,
+      approvalId: "approval-review",
+      approved: true,
+      toolName: "review",
+      messageTs: "1790010010.000001",
+      channelId: originalMessage.channelId,
+      workspaceId: originalMessage.workspaceId,
+      userId: originalMessage.senderId,
+      userName: "Approver",
+      responseUrl: "",
+      originalMessage,
+    });
+    expect(executor).toHaveBeenCalledTimes(2);
+    expect(executor.mock.lastCall?.[0]).toMatchObject({
+      source: "chatops:slack",
+      userId: user.id,
+      organizationId: org.id,
+      chatOpsBindingId: binding.id,
+      chatOpsThreadId: originalMessage.threadId,
+      chatOpsMessageId: originalMessage.messageId,
+    });
   });
 
   test("Teams approver mixed-case email is accepted", async ({

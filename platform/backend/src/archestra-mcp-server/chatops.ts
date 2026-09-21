@@ -15,6 +15,8 @@ import {
   ToolModel,
 } from "@/models";
 import { evaluateRemoteServerUrlAgainstNetworkPolicy } from "@/services/environments/remote-server-network-policy";
+import { ephemeralSandboxStore } from "@/skills-sandbox/ephemeral-sandbox-store";
+import { executionSandboxRegistry } from "@/skills-sandbox/execution-sandbox-registry";
 import { archestraMcpBranding } from "./branding";
 import {
   defineArchestraTool,
@@ -194,7 +196,13 @@ const registry = defineArchestraTools([
             text: blocked.text,
           });
         }
-        context.abortSignal?.throwIfAborted();
+        const assertDeliveryActive = () => {
+          context.abortSignal?.throwIfAborted();
+          if (executionSandboxRegistry.isEphemeralExecution(isolationKey)) {
+            ephemeralSandboxStore.assertExecutionActive(isolationKey);
+          }
+        };
+        assertDeliveryActive();
         const deliveryId = createHash("sha256")
           .update(
             JSON.stringify([
@@ -256,6 +264,7 @@ const registry = defineArchestraTools([
               organizationId,
               channelId: binding.channelId,
             },
+            assertDeliveryActive,
           });
         } catch {
           logger.warn(audit, "[ChatOps] Slack file upload outcome uncertain");

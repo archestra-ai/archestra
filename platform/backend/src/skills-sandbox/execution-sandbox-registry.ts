@@ -1,21 +1,26 @@
+import { randomUUID } from "node:crypto";
 import logger from "@/logging";
 import { SkillSandboxModel } from "@/models";
 import type { SkillSandbox } from "@/types";
+import { ephemeralSandboxStore } from "./ephemeral-sandbox-store";
+
+const EPHEMERAL_EXECUTION_PREFIX = "slack-ephemeral:";
 
 /**
  * Per-execution sandboxes for headless runs (direct A2A, ChatOps, schedule
  * triggers, incoming email), where there is no persisted conversation to scope
  * the default sandbox to.
  *
- * Rows are created with `conversationId: null` and `isDefault: false`: the
+ * Slack roots explicitly open a volatile scope. Its namespace survives release
+ * so a late call cannot mistake a closed scope for a durable execution.
+ * Other headless runs create rows with `conversationId: null` and `isDefault: false`: the
  * partial unique index on `(org, user, conversation_id) WHERE is_default`
  * treats NULLs as distinct, so a default-flagged null-conversation row would
  * have no uniqueness protection. Instead, single-creation is guaranteed by
  * caching the creation promise in-process, keyed by the execution's isolation
  * key — an A2A execution runs within one process, so concurrent first calls
  * from the same execution always share one entry. An execution that resumes in
- * another process (e.g. an approval continuation) gets a fresh sandbox;
- * sandboxes are ephemeral by design.
+ * another process (e.g. an approval continuation) gets a fresh sandbox.
  *
  * Entries are released by the root headless execution when it finishes (see
  * `executeA2AMessage`); delegated sub-agents share the parent's isolation key
@@ -24,6 +29,38 @@ import type { SkillSandbox } from "@/types";
 class ExecutionSandboxRegistry {
   private entries = new Map<string, ExecutionSandboxEntry>();
   private keysByIsolationKey = new Map<string, Set<string>>();
+
+  openEphemeralExecution(onRelease?: (isolationKey: string) => void): string {
+    const isolationKey = `${EPHEMERAL_EXECUTION_PREFIX}${randomUUID()}`;
+    ephemeralSandboxStore.openExecution(isolationKey, () => {
+      this.dropEntries(isolationKey);
+      onRelease?.(isolationKey);
+    });
+    return isolationKey;
+  }
+
+  isEphemeralExecution(isolationKey: string | null | undefined): boolean {
+    return isolationKey?.startsWith(EPHEMERAL_EXECUTION_PREFIX) ?? false;
+  }
+
+  async createFresh(params: {
+    organizationId: string;
+    userId: string;
+    isolationKey: string;
+    defaultCwd: string;
+  }): Promise<SkillSandbox> {
+    const sandbox = this.isEphemeralExecution(params.isolationKey)
+      ? ephemeralSandboxStore.create(params)
+      : await SkillSandboxModel.create({
+          organizationId: params.organizationId,
+          userId: params.userId,
+          conversationId: null,
+          defaultCwd: params.defaultCwd,
+          isDefault: false,
+        });
+    this.registerOwned({ ...params, sandboxId: sandbox.id });
+    return sandbox;
+  }
 
   /**
    * The execution's default sandbox, created on first call. Concurrent calls
@@ -38,14 +75,11 @@ class ExecutionSandboxRegistry {
   }): Promise<SkillSandbox> {
     const entry = this.ensureEntry(params);
     if (!entry.defaultSandbox) {
-      entry.defaultSandbox = SkillSandboxModel.create({
-        organizationId: params.organizationId,
-        userId: params.userId,
-        conversationId: null,
-        defaultCwd: params.defaultCwd,
-        isDefault: false,
-      }).then(
+      entry.defaultSandbox = this.createFresh(params).then(
         (sandbox) => {
+          if (this.isEphemeralExecution(params.isolationKey)) {
+            ephemeralSandboxStore.assertExecutionActive(params.isolationKey);
+          }
           entry.ownedSandboxIds.add(sandbox.id);
           logger.info(
             {
@@ -72,6 +106,9 @@ class ExecutionSandboxRegistry {
     userId: string;
     isolationKey: string;
   }): Promise<SkillSandbox | null> {
+    if (this.isEphemeralExecution(params.isolationKey)) {
+      ephemeralSandboxStore.assertExecutionActive(params.isolationKey);
+    }
     const entry = this.entries.get(entryKey(params));
     if (!entry?.defaultSandbox) return null;
     return await entry.defaultSandbox;
@@ -101,6 +138,12 @@ class ExecutionSandboxRegistry {
     isolationKey: string;
     sandboxId: string;
   }): boolean {
+    if (
+      this.isEphemeralExecution(params.isolationKey) &&
+      !ephemeralSandboxStore.findById(params.sandboxId)
+    ) {
+      return false;
+    }
     return (
       this.entries
         .get(entryKey(params))
@@ -110,11 +153,15 @@ class ExecutionSandboxRegistry {
 
   /**
    * Drop all state for an execution. Called when the root execution ends.
-   * Sandbox tool calls still in flight past an abort can repopulate the key
-   * with fresh entries that are never released again; sandboxes are ephemeral
-   * by design and aborts are rare, so no tombstone is kept.
+   * Volatile scopes close before their indexes are dropped, rejecting late
+   * sandbox calls instead of admitting new state after an abort.
    */
   release(isolationKey: string): void {
+    ephemeralSandboxStore.release(isolationKey);
+    this.dropEntries(isolationKey);
+  }
+
+  private dropEntries(isolationKey: string): void {
     const keys = this.keysByIsolationKey.get(isolationKey);
     if (!keys) return;
     for (const key of keys) {
@@ -128,6 +175,9 @@ class ExecutionSandboxRegistry {
     userId: string;
     isolationKey: string;
   }): ExecutionSandboxEntry {
+    if (this.isEphemeralExecution(params.isolationKey)) {
+      ephemeralSandboxStore.assertExecutionActive(params.isolationKey);
+    }
     const key = entryKey(params);
     let entry = this.entries.get(key);
     if (!entry) {

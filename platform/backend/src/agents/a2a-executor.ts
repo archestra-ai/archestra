@@ -250,7 +250,7 @@ export async function executeA2AMessage(
   // `params.conversationId` may ever be persisted as a conversation id.
   const isDirectExecutionOutsideConversation =
     !params.conversationId && !params.isolationKey;
-  const isolationKey =
+  let isolationKey =
     params.conversationId ?? params.isolationKey ?? crypto.randomUUID();
 
   // Build delegation chain: append current agentId to parent chain
@@ -328,6 +328,22 @@ export async function executeA2AMessage(
   }
 
   try {
+    if (source === "chatops:slack") {
+      if (params.conversationId) {
+        throw new Error(
+          "Slack executions cannot use a persistent conversation sandbox",
+        );
+      }
+      if (isDirectExecutionOutsideConversation) {
+        isolationKey = executionSandboxRegistry.openEphemeralExecution((key) =>
+          threadFileStore.release(key),
+        );
+      } else if (!executionSandboxRegistry.isEphemeralExecution(isolationKey)) {
+        throw new Error(
+          "Slack executions require an active temporary execution scope",
+        );
+      }
+    }
     // One tracker per run, shared between the breaker (records each call) and the
     // stop condition below (terminates the run once repeats hit the ceiling).
     const repeatTracker = new ToolCallRepeatTracker();
@@ -896,6 +912,10 @@ export async function executeA2AMessage(
         : undefined,
     };
   } finally {
+    if (isDirectExecutionOutsideConversation) {
+      executionSandboxRegistry.release(isolationKey);
+      threadFileStore.release(isolationKey);
+    }
     // Clean up browser tab BEFORE decrementing the tracker.
     // This ensures screenshots remain paused while the subagent's tab is
     // being closed, preventing the preview from capturing the wrong tab.
@@ -909,13 +929,6 @@ export async function executeA2AMessage(
 
     if (!isDirectExecutionOutsideConversation) {
       subagentRunTracker.decrement(isolationKey);
-    }
-
-    // The root headless execution owns its generated isolation scope; drop the
-    // per-run sandbox state once the run (and its delegations) finished.
-    if (isDirectExecutionOutsideConversation) {
-      executionSandboxRegistry.release(isolationKey);
-      threadFileStore.release(isolationKey);
     }
   }
 }

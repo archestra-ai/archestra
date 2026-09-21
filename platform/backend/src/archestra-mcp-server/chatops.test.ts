@@ -22,13 +22,13 @@ import { evaluatePolicies } from "@/guardrails/tool-invocation";
 import {
   ChatOpsChannelBindingModel,
   ChatOpsConfigModel,
+  FileModel,
   OrganizationModel,
   SkillSandboxFileModel,
   ToolModel,
 } from "@/models";
 import { sandboxRuntimeService } from "@/sandbox-runtime/sandbox-runtime-service";
 import { executionSandboxRegistry } from "@/skills-sandbox/execution-sandbox-registry";
-import { fileStore } from "@/skills-sandbox/file-store";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { useMswServer as createMswServer } from "@/test/msw";
 import { type ArchestraContext, executeArchestraTool } from ".";
@@ -76,7 +76,9 @@ beforeEach(
     scope = {
       organizationId: organization.id,
       userId: user.id,
-      isolationKey: randomUUID(),
+      isolationKey: executionSandboxRegistry.openEphemeralExecution((key) =>
+        threadFileStore.release(key),
+      ),
       chatOpsBindingId: binding.id,
       chatOpsThreadId: "1780000000.000001",
     };
@@ -208,6 +210,26 @@ describe("post_thread_file", () => {
     expect(await executionSandboxRegistry.findDefault(scope)).toBeNull();
     expect(JSON.stringify(result)).not.toContain(png.toString("base64"));
     expect(JSON.stringify(result)).not.toContain("xoxb-");
+  });
+
+  test("does not start an upload if its execution closes during destination validation", async () => {
+    const image = retain();
+    const upload =
+      chatOpsManager.uploadFileToBindingThread.bind(chatOpsManager);
+    vi.spyOn(
+      chatOpsManager,
+      "uploadFileToBindingThread",
+    ).mockImplementationOnce((params) => {
+      // Run the real destination lookup, closing the scope while it awaits DB.
+      const pending = upload(params);
+      executionSandboxRegistry.release(scope.isolationKey);
+      return pending;
+    });
+
+    expect((await send(image)).isError).toBe(true);
+    expect(uploadRequests).toHaveLength(0);
+    expect(uploads).toHaveLength(0);
+    expect(finalizations).toHaveLength(0);
   });
 
   test("replays a receipt and suppresses concurrent sends, including run_tool", async () => {
@@ -507,7 +529,7 @@ describe("post_thread_file", () => {
     expect(uploaded.isError, JSON.stringify(uploaded)).toBe(false);
     const uploadId = uploaded.structuredContent?.uploadId as string;
     const staged = await SkillSandboxFileModel.findUploadDataById(uploadId);
-    expect(staged).toEqual(data);
+    expect(staged).toBeNull();
     vi.spyOn(sandboxRuntimeService, "readArtifact").mockResolvedValue({
       dataBase64: data.toString("base64"),
       sizeBytes: data.length,
@@ -540,7 +562,7 @@ describe("post_thread_file", () => {
     expect(JSON.stringify(modelResult)).not.toContain(data.toString("base64"));
     const indirectArguments = {
       tool_name: TOOL_DOWNLOAD_FILE_FULL_NAME,
-      tool_args: { path: `/home/sandbox/${filename}`, overwrite: true },
+      tool_args: { path: `/home/sandbox/${filename}` },
     };
     const indirectDownload = await executeArchestraTool(
       TOOL_RUN_TOOL_FULL_NAME,
@@ -570,12 +592,14 @@ describe("post_thread_file", () => {
     expect(JSON.stringify(indirectModelResult)).not.toContain(
       data.toString("base64"),
     );
-    const stored = await fileStore.get({
-      ref: downloaded.structuredContent?.fileId as string,
+    expect(downloaded.structuredContent?.fileId).toBeUndefined();
+    expect(indirectDownload.structuredContent?.fileId).toBeUndefined();
+    const stored = await FileModel.findOrphanByName({
+      filename,
       organizationId: scope.organizationId,
       userId: scope.userId,
     });
-    expect(stored?.data).toEqual(data);
+    expect(stored).toBeNull();
     expect((await send(metadata)).isError).toBe(false);
     expect(uploads).toEqual([data]);
   });

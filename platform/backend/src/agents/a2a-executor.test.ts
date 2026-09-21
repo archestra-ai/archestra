@@ -4,6 +4,7 @@ import { describe, vi } from "vitest";
 import { threadFileStore } from "@/agents/chatops/thread-file-store";
 import { MIN_IMAGE_ATTACHMENT_SIZE } from "@/agents/incoming-email/constants";
 import { REPEAT_CALL_TERMINATION_CEILING } from "@/clients/tool-call-repeat-tracker";
+import { SkillSandboxModel } from "@/models";
 import ModelModel from "@/models/model";
 import { executionSandboxRegistry } from "@/skills-sandbox/execution-sandbox-registry";
 import { expect, test } from "@/test";
@@ -997,6 +998,9 @@ describe("executeA2AMessage isolation scope", () => {
         chatOpsBindingId: "binding",
         chatOpsThreadId: "thread",
       };
+      expect(
+        executionSandboxRegistry.isEphemeralExecution(scope.isolationKey),
+      ).toBe(true);
       for (const [index, fileId] of retainedIds.entries()) {
         const resolved = threadFileStore.resolve({ scope, fileId });
         expect(resolved?.data).toEqual(attachments[index].originalFile?.data);
@@ -1029,9 +1033,65 @@ describe("executeA2AMessage isolation scope", () => {
       expect(threadFileStore.resolve({ scope, fileId })).toBeNull();
     }
     expect(sandboxCreation).not.toHaveBeenCalled();
+    await expect(
+      executionSandboxRegistry.getOrCreateDefault({
+        organizationId: org.id,
+        userId: "user-1",
+        isolationKey: scope.isolationKey,
+        defaultCwd: "/home/sandbox",
+      }),
+    ).rejects.toThrow("ended");
     expect(mockGetChatMcpTools.mock.calls[0][0].chatOpsMessageId).toBe(
       "trigger-ts",
     );
+  });
+
+  test("opens volatile Slack storage without attachments and closes it on provider failure", async ({
+    makeOrganization,
+    makeUser,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const agent = await makeAgent({
+      organizationId: org.id,
+      agentType: "agent",
+    });
+    primeExecutionMocks();
+    let sandboxId: string | undefined;
+    mockGetChatMcpTools.mockImplementation(async ({ isolationKey }) => {
+      const sandbox = await executionSandboxRegistry.getOrCreateDefault({
+        organizationId: org.id,
+        userId: user.id,
+        isolationKey,
+        defaultCwd: "/home/sandbox",
+      });
+      sandboxId = sandbox.id;
+      return {};
+    });
+    mockStreamText.mockImplementation(() => {
+      throw new Error("provider failed");
+    });
+    await expect(
+      executeA2AMessage({
+        agentId: agent.id,
+        organizationId: org.id,
+        userId: user.id,
+        source: "chatops:slack",
+        message: "Generate a report",
+        chatOpsBindingId: "binding",
+        chatOpsThreadId: "thread",
+      }),
+    ).rejects.toThrow();
+    expect(sandboxId).toBeDefined();
+    expect(await SkillSandboxModel.findById(sandboxId as string)).toBeNull();
+    await expect(
+      executionSandboxRegistry.findDefault({
+        organizationId: org.id,
+        userId: user.id,
+        isolationKey: toolWiring().isolationKey as string,
+      }),
+    ).rejects.toThrow("ended");
   });
 
   test("chat-delegated executions scope isolation by the real conversation id", async ({
@@ -1058,28 +1118,44 @@ describe("executeA2AMessage isolation scope", () => {
     expect(wiring.isolationKey).toBe("conv-1");
   });
 
-  test("headless delegation inherits the parent's isolation key", async ({
+  test("A2A delegation inherits volatile Slack storage without releasing its parent", async ({
     makeOrganization,
+    makeUser,
     makeAgent,
   }) => {
     const org = await makeOrganization();
+    const user = await makeUser();
     const agent = await makeAgent({
       organizationId: org.id,
       agentType: "agent",
       systemPrompt: "Handle the task.",
     });
     primeExecutionMocks();
+    const isolationKey = executionSandboxRegistry.openEphemeralExecution();
+    const scope = {
+      organizationId: org.id,
+      userId: user.id,
+      isolationKey,
+      defaultCwd: "/home/sandbox",
+    };
+    const sandbox = await executionSandboxRegistry.getOrCreateDefault(scope);
     await executeA2AMessage({
       agentId: agent.id,
       message: "Handle this",
       organizationId: org.id,
-      userId: "user-1",
-      isolationKey: "parent-execution-key",
+      userId: user.id,
+      source: "api",
+      isolationKey,
     });
 
     const wiring = toolWiring();
     expect(wiring.conversationId).toBeUndefined();
-    expect(wiring.isolationKey).toBe("parent-execution-key");
+    expect(wiring.isolationKey).toBe(isolationKey);
+    expect((await executionSandboxRegistry.getOrCreateDefault(scope)).id).toBe(
+      sandbox.id,
+    );
+    expect(await SkillSandboxModel.findById(sandbox.id)).toBeNull();
+    executionSandboxRegistry.release(isolationKey);
   });
 });
 

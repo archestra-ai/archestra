@@ -37,10 +37,12 @@ export async function assertMountedSkillsReadable(params: {
   userId: string;
   organizationId: string;
   agentId?: string;
+  /** Volatile sandboxes supply their in-memory mount pins. */
+  skillIds?: string[];
 }): Promise<MountReadabilityResult> {
-  const skillIds = await SkillSandboxModel.listMountedSkillIds(
-    params.sandboxId,
-  );
+  const skillIds =
+    params.skillIds ??
+    (await SkillSandboxModel.listMountedSkillIds(params.sandboxId));
   if (skillIds.length === 0) return { ok: true };
 
   const checker = await getSkillPermissionChecker({

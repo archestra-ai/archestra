@@ -63,6 +63,7 @@ import {
 } from "@/types";
 import { trackBackgroundWork } from "@/utils/background-work";
 import { repairLoneSurrogateText } from "@/utils/lone-surrogates";
+import { redactFilePayloads } from "@/utils/redact-file-payloads";
 import { isUuid, uuidv7 } from "@/utils/uuid";
 import AgentModel from "./agent";
 import AgentTeamModel from "./agent-team";
@@ -468,13 +469,25 @@ class InteractionModel {
         ? await AgentModel.findEnvironmentId(data.profileId)
         : (data.environmentId ?? null));
 
+    // Slack files are execution-scoped. Redact only the audit copy so provider
+    // requests and responses keep their original inline bytes in memory.
+    const auditData =
+      data.source === "chatops:slack"
+        ? {
+            ...data,
+            request: redactFilePayloads(data.request),
+            processedRequest: redactFilePayloads(data.processedRequest),
+            response: redactFilePayloads(data.response),
+          }
+        : data;
+
     // Sanitize JSONB fields to strip null bytes (\u0000) that PostgreSQL rejects
     const sanitized = {
-      ...data,
+      ...auditData,
       environmentId,
-      request: stripUnstorableChars(data.request),
-      processedRequest: stripUnstorableChars(data.processedRequest),
-      response: stripUnstorableChars(data.response),
+      request: stripUnstorableChars(auditData.request),
+      processedRequest: stripUnstorableChars(auditData.processedRequest),
+      response: stripUnstorableChars(auditData.response),
     };
 
     // Delta-encode Claude Code / Claude Desktop requests so we don't re-store the

@@ -221,6 +221,8 @@ export class ChatOpsManager {
     data: Buffer;
     comment?: string;
     expectedSlackDestination?: { organizationId: string; channelId: string };
+    /** Recheck the caller's lifetime after asynchronous destination validation. */
+    assertDeliveryActive?: () => void;
   }): Promise<undefined | { fileId: string }> {
     const binding = await ChatOpsChannelBindingModel.findById(params.bindingId);
     if (!binding) {
@@ -261,6 +263,7 @@ export class ChatOpsManager {
         `The ${binding.provider} provider does not support file uploads`,
       );
     }
+    params.assertDeliveryActive?.();
     const receipt = await provider.uploadFileToThread({
       channelId: binding.channelId,
       threadId: params.threadId,
@@ -2643,6 +2646,15 @@ export class ChatOpsManager {
             originalMessage.threadId,
           ),
           source: CHATOPS_PROVIDER_SOURCES[provider.providerId],
+          chatOpsMessageId: originalMessage.messageId,
+          completionTarget: {
+            type: "chatops",
+            bindingId: binding.id,
+            threadId:
+              originalMessage.threadId ??
+              originalMessage.channelId ??
+              originalMessage.messageId,
+          },
           // Resuming after an approval is still a ChatOps run; without this it
           // would fall back to the A2A route category like the initial send did.
           routeCategory: RouteCategory.CHATOPS,

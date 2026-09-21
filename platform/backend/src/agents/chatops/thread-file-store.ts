@@ -1,5 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { LRUCacheManager } from "@/cache-manager";
+import { ephemeralSandboxStore } from "@/skills-sandbox/ephemeral-sandbox-store";
+import { executionSandboxRegistry } from "@/skills-sandbox/execution-sandbox-registry";
 import { resolveArtifactMime } from "@/skills-sandbox/mime-sniff";
 import { CHATOPS_ATTACHMENT_LIMITS } from "./constants";
 
@@ -38,6 +40,11 @@ class ThreadFileStore {
     data: Buffer;
     filename: string;
   }): ThreadFileMetadata {
+    if (
+      executionSandboxRegistry.isEphemeralExecution(params.scope.isolationKey)
+    ) {
+      ephemeralSandboxStore.assertExecutionActive(params.scope.isolationKey);
+    }
     const prefix = executionPrefix(params.scope.isolationKey);
     let retainedBytes = 0;
     for (const key of this.files.keys()) {
@@ -75,6 +82,15 @@ class ThreadFileStore {
     scope: ThreadFileScope;
     fileId: string;
   }): (ThreadFileMetadata & { data: Buffer }) | null {
+    if (
+      executionSandboxRegistry.isEphemeralExecution(params.scope.isolationKey)
+    ) {
+      try {
+        ephemeralSandboxStore.assertExecutionActive(params.scope.isolationKey);
+      } catch {
+        return null;
+      }
+    }
     const file = this.files.get(
       `${executionPrefix(params.scope.isolationKey)}${params.fileId}`,
     );

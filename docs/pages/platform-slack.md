@@ -141,7 +141,9 @@ Agents can return original attachments or generated files in the current channel
 
 For example, attach a product photo and ask the agent to crop it for a draft. Generated documents and spreadsheets use the same upload flow. Creating or editing files requires a code sandbox. Returning an unchanged attachment does not.
 
-Original file references are temporary and valid only during the current agent execution. Later messages can load the attachment again from thread history. Uploads remain subject to tool policies and the agent's network restrictions. Policies requiring approval block file delivery in this version.
+References to original attachments and generated files last only for the current agent execution. Later messages fetch attachments again from Slack or regenerate outputs. Slack sandbox uploads and exports bypass persistent file storage. Persistent file-writing tools are unavailable in Slack executions. Uploads remain subject to tool policies and the agent's network restrictions. Policies requiring approval block file delivery in this version.
+
+Temporary application buffers are released when execution ends, with a one-hour expiry as a fallback. An upload already in progress may finish after that point. Dagger runtime copies follow its cache eviction policy and may outlive the execution. Slack keeps delivered files under its own retention policy. Structured inline file bodies are omitted from Slack interaction logs. Text extracted from files and ordinary tool output still follow the configured log retention.
 
 Delivery supports channel threads, including private channels the bot can access. Direct-message delivery and sending to other channels are not supported. This does not provide a public media URL for services such as Buffer.
 

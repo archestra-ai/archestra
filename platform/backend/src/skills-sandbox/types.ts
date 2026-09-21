@@ -93,7 +93,8 @@ export interface ExportArtifactParams {
 }
 
 export interface ExportedArtifact {
-  artifactId: string;
+  /** Absent when bytes were captured only for the current temporary execution. */
+  artifactId?: string;
   /** Captured export bytes for internal consumers; never serialize into a tool result. */
   data: Buffer;
   filename: string;

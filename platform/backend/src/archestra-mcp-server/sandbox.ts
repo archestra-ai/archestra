@@ -30,6 +30,7 @@ import {
   SkillSandboxModel,
 } from "@/models";
 import { loadConversationAttachmentSource } from "@/services/conversation-attachment-source";
+import { ephemeralSandboxStore } from "@/skills-sandbox/ephemeral-sandbox-store";
 import { executionSandboxRegistry } from "@/skills-sandbox/execution-sandbox-registry";
 import { UnsafePathError } from "@/skills-sandbox/file-path";
 import { FileBytesMissingError } from "@/skills-sandbox/file-storage";
@@ -213,7 +214,7 @@ const DownloadFileSchema = z
       .default(false)
       .describe(
         "Replace an existing same-named persistent file in place, keeping its id. " +
-          "Default false errors if the name is already taken.",
+          "Default false errors if the name is already taken. Unavailable for temporary Slack exports.",
       ),
     target: SandboxTargetSchema,
   })
@@ -221,11 +222,11 @@ const DownloadFileSchema = z
     "Copy a file that already exists at a path in the sandbox into the conversation's persistent " +
       "files. Use this for anything on the sandbox's disk — a file run_command wrote (text or " +
       "binary) or a staged attachment — its bytes are not returned to you, so you never read " +
-      "them back.",
+      "them back. In Slack, captures a temporary threadFile reference for this execution instead of saving a persistent file.",
   );
 
 const DownloadFileOutputSchema = z.object({
-  fileId: z.string(),
+  fileId: z.string().optional(),
   sandboxId: z.string(),
   path: z.string(),
   mimeType: z.string(),
@@ -861,8 +862,8 @@ const registry = defineArchestraTools([
       "run_command wrote (text or binary) or a staged attachment under " +
       `${SKILL_SANDBOX_ATTACHMENTS_DIR}/ — its bytes are not returned to you, so you never read ` +
       "them back or re-type them. Pass `overwrite: true` to replace an existing same-named " +
-      "persistent file in place. In a Slack execution, also returns a private file reference " +
-      "for post_thread_file.",
+      "persistent file in place. In Slack, retains the file only for the current execution " +
+      "and returns a private threadFile reference for post_thread_file instead of saving it.",
     schema: DownloadFileSchema,
     outputSchema: DownloadFileOutputSchema,
     async handler({ args, context }) {
@@ -876,13 +877,29 @@ const registry = defineArchestraTools([
       });
       if ("error" in resolved) return errorResult(resolved.error);
 
-      let scope: ProjectFileScope | null;
+      const ephemeral = executionSandboxRegistry.isEphemeralExecution(
+        context.isolationKey,
+      );
+      const fileScope = currentThreadFileScope(context);
+      if (ephemeral && !fileScope) {
+        return errorResult(
+          "Temporary file exports require the current Slack thread context.",
+        );
+      }
+      if (ephemeral && args.overwrite) {
+        return errorResult(
+          "Slack exports are temporary snapshots. Omit overwrite to capture a new file reference.",
+        );
+      }
+      let scope: ProjectFileScope | null = null;
       try {
-        scope = await resolveProjectFileScope({
-          conversationId: context.conversationId,
-          userId: guard.userCtx.userId,
-          organizationId: guard.userCtx.organizationId,
-        });
+        scope = ephemeral
+          ? null
+          : await resolveProjectFileScope({
+              conversationId: context.conversationId,
+              userId: guard.userCtx.userId,
+              organizationId: guard.userCtx.organizationId,
+            });
       } catch (error) {
         return handleRuntimeError(error, resolved.sandboxId, "download_file");
       }
@@ -899,7 +916,6 @@ const registry = defineArchestraTools([
         });
 
         let threadFile: z.infer<typeof DownloadFileOutputSchema>["threadFile"];
-        const fileScope = currentThreadFileScope(context);
         if (fileScope) {
           try {
             threadFile = threadFileStore.retain({
@@ -908,6 +924,11 @@ const registry = defineArchestraTools([
               filename: result.filename,
             });
           } catch {
+            if (ephemeral) {
+              return errorResult(
+                "The temporary file could not be retained. Export it again during an active Slack execution.",
+              );
+            }
             result.stagingNotices.push(
               "The file was saved, but a file reference for Slack could not be retained. Export it again before posting it.",
             );
@@ -923,11 +944,10 @@ const registry = defineArchestraTools([
           "[Sandbox] file downloaded",
         );
 
-        // Bytes flow sandbox -> DB -> Files panel via the artifacts route; the
-        // model only ever sees a short reference here, never the blob or a link.
+        // Only metadata crosses the tool boundary; the captured Buffer stays internal.
         return structuredSuccessResult(
           {
-            fileId: result.artifactId,
+            ...(result.artifactId ? { fileId: result.artifactId } : {}),
             sandboxId: result.sandboxId,
             path: result.path,
             mimeType: result.mimeType,
@@ -938,7 +958,9 @@ const registry = defineArchestraTools([
             overwritten: result.overwritten,
           },
           withStagingNotices(
-            `${result.overwritten ? "Replaced" : "Saved"} ${result.path} (${result.sizeBytes} bytes) to the conversation's persistent files.` +
+            (ephemeral
+              ? `Captured ${result.path} (${result.sizeBytes} bytes) for this execution only. Fetch or regenerate it in a later execution.`
+              : `${result.overwritten ? "Replaced" : "Saved"} ${result.path} (${result.sizeBytes} bytes) to the conversation's persistent files.`) +
               (threadFile
                 ? `\nSlack file reference: ${JSON.stringify(threadFile)}. Use post_thread_file with file_id and sha256 to send it to the current thread.`
                 : ""),
@@ -956,7 +978,7 @@ const registry = defineArchestraTools([
     description:
       "Place a file into the conversation's sandbox at a path, from a chat " +
       "attachment, a current Slack thread file, inline base64, inline text, or one of your persistent " +
-      "files. The file then persists in the sandbox for later commands. " +
+      "files. The file is available for later commands; in Slack it lasts only for the current execution. " +
       `Files the user attached to the conversation are already staged under ${SKILL_SANDBOX_ATTACHMENTS_DIR}/ — use this tool ` +
       "to write inline content, place a file at a specific path, or target a " +
       "non-default sandbox.",
@@ -1400,6 +1422,11 @@ const registry = defineArchestraTools([
     async handler({ args, context }) {
       const guard = ensureUsable(context);
       if ("error" in guard) return errorResult(guard.error);
+      if (executionSandboxRegistry.isEphemeralExecution(context.isolationKey)) {
+        return errorResult(
+          "Persistent file changes are unavailable during Slack executions. Use upload_file, run_command, and download_file for temporary files, then post_thread_file to send them.",
+        );
+      }
 
       const filename = args.filename.trim();
       if (
@@ -1541,6 +1568,11 @@ const registry = defineArchestraTools([
     async handler({ args, context }) {
       const guard = ensureUsable(context);
       if ("error" in guard) return errorResult(guard.error);
+      if (executionSandboxRegistry.isEphemeralExecution(context.isolationKey)) {
+        return errorResult(
+          "Persistent file changes are unavailable during Slack executions. Use upload_file, run_command, and download_file for temporary files, then post_thread_file to send them.",
+        );
+      }
 
       let scope: ProjectFileScope | null;
       try {
@@ -1757,6 +1789,11 @@ const registry = defineArchestraTools([
     async handler({ args, context }) {
       const guard = ensureUsable(context);
       if ("error" in guard) return errorResult(guard.error);
+      if (executionSandboxRegistry.isEphemeralExecution(context.isolationKey)) {
+        return errorResult(
+          "Persistent file changes are unavailable during Slack executions. Use upload_file, run_command, and download_file for temporary files, then post_thread_file to send them.",
+        );
+      }
       if (!context.conversationId) {
         return errorResult(
           "copy_file exchanges files between a chat and its open app; this run has no chat conversation.",
@@ -2076,6 +2113,52 @@ async function resolveTarget(params: {
   const { target, userCtx, context } = params;
   const conversationId = context.conversationId ?? null;
   const isolationKey = context.isolationKey ?? null;
+
+  if (
+    isolationKey &&
+    executionSandboxRegistry.isEphemeralExecution(isolationKey)
+  ) {
+    const normalized = normalizeTarget(target);
+    if ("error" in normalized) return { error: normalized.error };
+    try {
+      ephemeralSandboxStore.assertExecutionActive(isolationKey);
+      if (context.conversationId || context.appId) {
+        return {
+          error:
+            "A temporary Slack sandbox cannot use a conversation or app's persistent storage.",
+        };
+      }
+      const scope = {
+        ...userCtx,
+        isolationKey,
+        defaultCwd: SKILL_SANDBOX_HOME,
+      };
+      const intent = normalized.intent;
+      if (intent && "id" in intent) {
+        const state = ephemeralSandboxStore.findById(intent.id);
+        if (
+          !state ||
+          state.sandbox.organizationId !== userCtx.organizationId ||
+          state.sandbox.userId !== userCtx.userId ||
+          !executionSandboxRegistry.isOwned({ ...scope, sandboxId: intent.id })
+        ) {
+          return {
+            error:
+              "This sandbox is not available in the current execution. Omit target to start a temporary sandbox.",
+          };
+        }
+        return { sandboxId: asSandboxId(intent.id) };
+      }
+      const sandbox =
+        intent && "fresh" in intent
+          ? await executionSandboxRegistry.createFresh(scope)
+          : await executionSandboxRegistry.getOrCreateDefault(scope);
+      return { sandboxId: asSandboxId(sandbox.id) };
+    } catch (error) {
+      if (error instanceof SkillSandboxError) return { error: error.message };
+      throw error;
+    }
+  }
 
   if (context.appId) {
     const normalizedAppTarget = normalizeTarget(target);

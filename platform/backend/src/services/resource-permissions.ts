@@ -14,6 +14,7 @@ import {
   type ScopedResource,
   TEAM_RESOURCE_SCOPE,
 } from "@archestra/shared";
+import { roleActionResourceFor } from "@archestra/shared/access-control";
 import {
   getPermissionsForUserContext,
   SERVICE_ACCOUNT_USER_ID_PREFIX,
@@ -102,7 +103,9 @@ export class ResourcePermissions {
     // those actions is therefore confined to authority the creator receives
     // in the same transaction; it grants no authority on existing objects.
     const permissions = await getPermissionsForUserContext(params);
-    if (!permissions[params.resource]?.includes("create")) {
+    if (
+      !permissions[roleActionResourceFor(params.resource)]?.includes("create")
+    ) {
       throw new ApiError(
         403,
         "You do not have permission to create this resource",
@@ -285,7 +288,9 @@ export class ResourcePermissions {
     query: string;
   }) {
     const permissions = await getPermissionsForUserContext(params);
-    if (!permissions[params.resource]?.includes("create"))
+    if (
+      !permissions[roleActionResourceFor(params.resource)]?.includes("create")
+    )
       throw new ApiError(
         403,
         "You do not have permission to create this resource",

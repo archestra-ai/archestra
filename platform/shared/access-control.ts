@@ -425,10 +425,38 @@ export const platformAdminPermissions: Record<Resource, Action[]> = {
 export function predefinedRolesWithReadAccess(
   resource: ScopedResource,
 ): PredefinedRoleName[] {
+  const gate = roleActionResourceFor(resource);
   return PredefinedRoleNameSchema.options.filter((role) =>
-    predefinedPermissionsMap[role][resource]?.includes("read"),
+    predefinedPermissionsMap[role][gate]?.includes("read"),
   );
 }
+
+/**
+ * The role action that used to gate a scoped resource.
+ *
+ * Mostly the names agree. Knowledge is the exception: bases, connectors and
+ * files are three kinds of object with three audiences, so they are three
+ * grant namespaces — a base id and a file id must not decide each other — but
+ * one role action, `knowledgeSource`, governed reading all three.
+ *
+ * @public — read by the conversion and by ResourcePermissionPolicyModel
+ */
+export function roleActionResourceFor(
+  resource: ScopedResource | Resource,
+): Resource {
+  return (
+    SCOPED_RESOURCE_ROLE_ACTIONS[resource as ScopedResource] ??
+    (resource as Resource)
+  );
+}
+
+const SCOPED_RESOURCE_ROLE_ACTIONS: Partial<Record<ScopedResource, Resource>> =
+  {
+    knowledgeBase: "knowledgeSource",
+    knowledgeConnector: "knowledgeSource",
+    knowledgeFile: "knowledgeSource",
+    mcpGateway: "mcpGateway",
+  };
 
 export const predefinedPermissionsMap: Record<PredefinedRoleName, Permissions> =
   {

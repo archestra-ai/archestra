@@ -5,6 +5,7 @@ import type {
   ScopedPermission,
   ScopedResource,
 } from "@archestra/shared";
+import { roleActionResourceFor } from "@archestra/shared/access-control";
 
 /**
  * Translate the pre-scope authorization contract without treating an elevated
@@ -26,7 +27,8 @@ export function resolveLegacyResourcePermissions(params: {
     enabled?: boolean;
   } | null;
 }): ScopedPermission[] {
-  const actions = params.permissions[params.resource] ?? [];
+  const actions =
+    params.permissions[roleActionResourceFor(params.resource)] ?? [];
   const catalog = params.resource === "mcpRegistry";
   const isAdmin = catalog
     ? (params.permissions.mcpServerInstallation ?? []).includes("admin")

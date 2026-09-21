@@ -95,6 +95,43 @@ WITH candidates AS (
     CASE WHEN EXISTS (SELECT 1 FROM model_team mt WHERE mt.model_id = m.id) THEN 'team' ELSE 'org' END,
     NULL::text, m.id
   FROM models m CROSS JOIN organization o
+  UNION ALL
+  -- A project with no share row is personal. A share naming individuals is
+  -- still personal in shape: the owner keeps it and the named people are
+  -- added below, exactly as a personally-owned agent shared by name is.
+  SELECT p.organization_id, 'project', p.id::text,
+    CASE ps.visibility WHEN 'organization' THEN 'org' WHEN 'team' THEN 'team' ELSE 'personal' END,
+    p.user_id, p.id
+  FROM projects p LEFT JOIN project_shares ps ON ps.project_id = p.id
+  WHERE p.deleted_at IS NULL
+  UNION ALL
+  SELECT pl.organization_id, 'plugin', pl.id::text, pl.scope, pl.author_id, pl.id
+  FROM plugins pl WHERE pl.deleted_at IS NULL
+  UNION ALL
+  SELECT v.organization_id, 'llmVirtualKey', v.id::text, v.scope, v.author_id, v.id
+  FROM virtual_api_keys v
+  UNION ALL
+  SELECT k.organization_id, 'llmProviderApiKey', k.id::text, k.scope, k.user_id, k.id
+  FROM chat_api_keys k
+  UNION ALL
+  -- Knowledge objects carry no author column, so a private one converts to an
+  -- object only an administrator reaches. The documents inside keep their own
+  -- ACLs: an auto-sync connector resolves access from external groups per
+  -- document, which no static grant can express.
+  SELECT kb.organization_id, 'knowledgeBase', kb.id::text,
+    CASE kb.visibility WHEN 'org-wide' THEN 'org' WHEN 'team-scoped' THEN 'team' ELSE 'personal' END,
+    NULL::text, kb.id
+  FROM knowledge_bases kb WHERE kb.deleted_at IS NULL
+  UNION ALL
+  SELECT c.organization_id, 'knowledgeConnector', c.id::text,
+    CASE c.visibility WHEN 'team-scoped' THEN 'team' ELSE 'org' END,
+    NULL::text, c.id
+  FROM knowledge_base_connectors c WHERE c.deleted_at IS NULL
+  UNION ALL
+  SELECT f.organization_id, 'knowledgeFile', f.id::text,
+    CASE f.visibility WHEN 'org-wide' THEN 'org' WHEN 'team-scoped' THEN 'team' ELSE 'personal' END,
+    f.uploaded_by, f.id
+  FROM kb_files f
 ), targets AS (
   SELECT c.* FROM candidates c
   WHERE NOT EXISTS (
@@ -116,7 +153,9 @@ WITH candidates AS (
     UNION
     SELECT roles.id FROM organization_role roles
     WHERE roles.organization_id = t.organization_id
-      AND COALESCE(roles.permission::jsonb -> t.resource, '[]'::jsonb) ? 'read'
+      AND COALESCE(roles.permission::jsonb -> (CASE
+        WHEN t.resource IN ('knowledgeBase', 'knowledgeConnector', 'knowledgeFile')
+        THEN 'knowledgeSource' ELSE t.resource END), '[]'::jsonb) ? 'read'
   ) reader ON true
   WHERE t.visibility = 'org'
   UNION ALL
@@ -178,6 +217,61 @@ WITH candidates AS (
   FROM targets t JOIN model_user mu ON mu.model_id = t.source_id
   JOIN member m ON m.user_id = mu.user_id AND m.organization_id = t.organization_id
   WHERE t.resource = 'llmModel'
+  UNION ALL
+  -- A project's audience hangs off its share row rather than the project, so
+  -- both junctions join back through project_shares.
+  SELECT t.organization_id, t.resource, t.scope, 'team', pst.team_id, ARRAY['read', 'use']::text[]
+  FROM targets t
+  JOIN project_shares ps ON ps.project_id = t.source_id
+  JOIN project_share_team pst ON pst.share_id = ps.id
+  JOIN team tm ON tm.id = pst.team_id AND tm.organization_id = t.organization_id
+  WHERE t.resource = 'project'
+  UNION ALL
+  SELECT t.organization_id, t.resource, t.scope, 'user', psu.user_id, ARRAY['read', 'use']::text[]
+  FROM targets t
+  JOIN project_shares ps ON ps.project_id = t.source_id
+  JOIN project_share_user psu ON psu.share_id = ps.id
+  JOIN member m ON m.user_id = psu.user_id AND m.organization_id = t.organization_id
+  WHERE t.resource = 'project'
+  UNION ALL
+  SELECT t.organization_id, t.resource, t.scope, 'team', pt.team_id, ARRAY['read', 'use']::text[]
+  FROM targets t JOIN plugin_team pt ON pt.plugin_id = t.source_id
+  JOIN team tm ON tm.id = pt.team_id AND tm.organization_id = t.organization_id
+  WHERE t.resource = 'plugin'
+  UNION ALL
+  SELECT t.organization_id, t.resource, t.scope, 'user', pu.user_id, ARRAY['read', 'use']::text[]
+  FROM targets t JOIN plugin_user pu ON pu.plugin_id = t.source_id
+  JOIN member m ON m.user_id = pu.user_id AND m.organization_id = t.organization_id
+  WHERE t.resource = 'plugin'
+  UNION ALL
+  SELECT t.organization_id, t.resource, t.scope, 'team', vt.team_id, ARRAY['read', 'use']::text[]
+  FROM targets t JOIN virtual_api_key_team vt ON vt.virtual_api_key_id = t.source_id
+  JOIN team tm ON tm.id = vt.team_id AND tm.organization_id = t.organization_id
+  WHERE t.resource = 'llmVirtualKey'
+  UNION ALL
+  -- A provider key carries its own recipient columns rather than a junction.
+  SELECT t.organization_id, t.resource, t.scope, 'team', k.team_id, ARRAY['read', 'use']::text[]
+  FROM targets t JOIN chat_api_keys k ON k.id = t.source_id
+  JOIN team tm ON tm.id = k.team_id AND tm.organization_id = t.organization_id
+  WHERE t.resource = 'llmProviderApiKey' AND k.team_id IS NOT NULL
+  UNION ALL
+  -- Knowledge keeps its teams as a jsonb array on the row itself.
+  SELECT t.organization_id, t.resource, t.scope, 'team', member_team.value, ARRAY['read', 'use']::text[]
+  FROM targets t JOIN knowledge_bases kb ON kb.id = t.source_id
+  CROSS JOIN LATERAL jsonb_array_elements_text(COALESCE(kb.team_ids, '[]'::jsonb)) AS member_team(value)
+  JOIN team tm ON tm.id = member_team.value AND tm.organization_id = t.organization_id
+  WHERE t.resource = 'knowledgeBase'
+  UNION ALL
+  SELECT t.organization_id, t.resource, t.scope, 'team', member_team.value, ARRAY['read', 'use']::text[]
+  FROM targets t JOIN knowledge_base_connectors kc ON kc.id = t.source_id
+  CROSS JOIN LATERAL jsonb_array_elements_text(COALESCE(kc.team_ids, '[]'::jsonb)) AS member_team(value)
+  JOIN team tm ON tm.id = member_team.value AND tm.organization_id = t.organization_id
+  WHERE t.resource = 'knowledgeConnector'
+  UNION ALL
+  SELECT t.organization_id, t.resource, t.scope, 'team', ft.team_id, ARRAY['read', 'use']::text[]
+  FROM targets t JOIN kb_file_team ft ON ft.kb_file_id = t.source_id
+  JOIN team tm ON tm.id = ft.team_id AND tm.organization_id = t.organization_id
+  WHERE t.resource = 'knowledgeFile'
 ), existing AS (
   SELECT p.organization_id, p.resource, p.scope,
     g->'subject'->>'type' AS subject_type, g->'subject'->>'id' AS subject_id,
@@ -341,6 +435,89 @@ FROM merged WHERE p.organization_id = merged.organization_id
   AND p.resource = 'llmModel' AND p.scope = '*' AND p.grants IS DISTINCT FROM merged.grants;
 `),
   // ---------------------------------------------------------------------
+  // convertAdminActionsToResourceGrants
+  // ---------------------------------------------------------------------
+  sql.raw(`
+-- An \`X:admin\` role action said "this role reaches every X, whoever owns
+-- it". That is a grant at \`*\` scope, so it becomes one here before the
+-- action is retired below.
+--
+-- Doing it this way fixes what the action could never do: a role permission
+-- snapshot is frozen when the role is created, so a custom role made before
+-- an action existed could never gain it. A grant is a row, and can be given
+-- to any role at any time.
+--
+-- Two names do not survive the move. \`knowledgeSource:admin\` governed three
+-- kinds of object, which are three grant namespaces, so it fans out to all
+-- three. \`mcpServerInstallation:admin\` was authority over registry entries,
+-- which already convert as \`mcpRegistry\`, so it folds into that.
+WITH holders AS (
+  SELECT o.id AS organization_id, source.role_action, grantee.id AS role_id
+  FROM organization o
+  CROSS JOIN (VALUES
+    ('project'), ('plugin'), ('llmVirtualKey'), ('llmProviderApiKey'),
+    ('knowledgeSource'), ('scheduledTask'), ('log'), ('auditLog'),
+    ('mcpServerInstallation')
+  ) AS source(role_action)
+  JOIN LATERAL (
+    -- The built-in roles keep their permissions in code, not in this table,
+    -- so they are named rather than queried. Only \`admin\` held the two log
+    -- actions; \`platform_admin\` held the rest alongside it.
+    SELECT unnest(CASE WHEN source.role_action IN ('log', 'auditLog')
+      THEN ARRAY['admin'] ELSE ARRAY['admin', 'platform_admin'] END) AS id
+    UNION
+    SELECT roles.id FROM organization_role roles
+    WHERE roles.organization_id = o.id
+      AND COALESCE(roles.permission::jsonb -> source.role_action, '[]'::jsonb) ? 'admin'
+  ) grantee ON true
+), targeted AS (
+  SELECT h.organization_id, mapped.resource, h.role_id,
+    -- Reading rows someone else created is all the two log actions ever did.
+    CASE WHEN mapped.resource IN ('log', 'auditLog')
+      THEN ARRAY['read']
+      ELSE ARRAY['read', 'use', 'update', 'delete', 'manage-permissions'] END AS actions
+  FROM holders h
+  CROSS JOIN LATERAL (
+    SELECT unnest(CASE h.role_action
+      WHEN 'knowledgeSource' THEN ARRAY['knowledgeBase', 'knowledgeConnector', 'knowledgeFile']
+      WHEN 'mcpServerInstallation' THEN ARRAY['mcpRegistry']
+      ELSE ARRAY[h.role_action] END) AS resource
+  ) mapped
+), merged AS (
+  SELECT t.organization_id, t.resource,
+    jsonb_agg(jsonb_build_object(
+      'subject', jsonb_build_object('type', 'role', 'id', t.role_id),
+      'actions', to_jsonb(t.actions)
+    ) ORDER BY t.role_id) AS grants
+  FROM targeted t GROUP BY t.organization_id, t.resource
+)
+INSERT INTO resource_permission_policies
+  (organization_id, resource, scope, grants, revision, legacy_sharing_migrated, updated_at)
+SELECT m.organization_id, m.resource, '*', m.grants, 1, true, now()
+FROM merged m
+ON CONFLICT (organization_id, resource, scope) DO UPDATE SET
+  -- Merge: a grant written by hand on this policy is not discarded, and a
+  -- role already listed keeps the union of both action sets.
+  grants = (
+    SELECT COALESCE(jsonb_agg(jsonb_build_object(
+      'subject', entry.subject, 'actions', entry.actions) ORDER BY entry.subject->>'id'), '[]'::jsonb)
+    FROM (
+      SELECT g->'subject' AS subject,
+        jsonb_agg(DISTINCT action ORDER BY action) AS actions
+      FROM (
+        SELECT jsonb_array_elements(resource_permission_policies.grants) AS g
+        UNION ALL
+        SELECT jsonb_array_elements(EXCLUDED.grants)
+      ) all_grants
+      CROSS JOIN LATERAL jsonb_array_elements_text(g->'actions') AS action
+      GROUP BY g->'subject'
+    ) entry
+  ),
+  revision = resource_permission_policies.revision + 1,
+  legacy_sharing_migrated = true,
+  updated_at = now();
+`),
+  // ---------------------------------------------------------------------
   // retireConvertedRoleActions
   // ---------------------------------------------------------------------
   sql.raw(`
@@ -349,7 +526,12 @@ FROM merged WHERE p.organization_id = merged.organization_id
 WITH converted AS (
   SELECT r.id, COALESCE((
     SELECT jsonb_object_agg(resource, CASE
-      WHEN resource IN ('agent', 'mcpGateway', 'mcpRegistry', 'skill', 'app') THEN
+      WHEN resource IN (
+        'agent', 'mcpGateway', 'mcpRegistry', 'skill', 'app',
+        'project', 'plugin', 'llmVirtualKey', 'llmProviderApiKey',
+        'knowledgeSource', 'scheduledTask', 'log', 'auditLog',
+        'mcpServerInstallation'
+      ) THEN
         COALESCE((SELECT jsonb_agg(action ORDER BY ordinal)
           FROM jsonb_array_elements(actions) WITH ORDINALITY AS items(action, ordinal)
           WHERE action NOT IN ('"admin"'::jsonb, '"team-admin"'::jsonb)), '[]'::jsonb)

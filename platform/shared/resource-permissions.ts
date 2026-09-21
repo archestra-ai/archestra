@@ -8,6 +8,35 @@ export const ScopedResourceSchema = z.enum([
   "skill",
   "app",
   "llmModel",
+  // Objects with their own audience, the same shape as the six above.
+  "project",
+  "plugin",
+  "knowledgeBase",
+  "knowledgeConnector",
+  "knowledgeFile",
+  "llmVirtualKey",
+  "llmProviderApiKey",
+  // Authority over a whole class of thing, with no object to sit on. These
+  // replace the `admin` role actions that let someone read rows they did not
+  // create. They are granted at `*` and nowhere else, so they appear on the
+  // organization Permissions screen and never on an object's own tab.
+  "scheduledTask",
+  "log",
+  "auditLog",
+]);
+
+/**
+ * Resources whose only legal scope is `*`.
+ *
+ * An action like `log:admin` was never about one object; it lifted a list from
+ * "rows you created" to "every row". Converting it to a grant keeps that
+ * meaning and makes it something a custom role can receive, which a role
+ * action never could — role permission snapshots are frozen at creation.
+ */
+export const ORGANIZATION_WIDE_RESOURCES = new Set<ScopedResource>([
+  "scheduledTask",
+  "log",
+  "auditLog",
 ]);
 
 export const ResourcePermissionActionSchema = z.enum([

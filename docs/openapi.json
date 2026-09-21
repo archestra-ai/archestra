@@ -425611,7 +425611,17 @@
                 "mcpRegistry",
                 "skill",
                 "app",
-                "llmModel"
+                "llmModel",
+                "project",
+                "plugin",
+                "knowledgeBase",
+                "knowledgeConnector",
+                "knowledgeFile",
+                "llmVirtualKey",
+                "llmProviderApiKey",
+                "scheduledTask",
+                "log",
+                "auditLog"
               ]
             },
             "in": "path",
@@ -426015,7 +426025,17 @@
                           "mcpRegistry",
                           "skill",
                           "app",
-                          "llmModel"
+                          "llmModel",
+                          "project",
+                          "plugin",
+                          "knowledgeBase",
+                          "knowledgeConnector",
+                          "knowledgeFile",
+                          "llmVirtualKey",
+                          "llmProviderApiKey",
+                          "scheduledTask",
+                          "log",
+                          "auditLog"
                         ]
                       },
                       "scope": {
@@ -426324,7 +426344,17 @@
                 "mcpRegistry",
                 "skill",
                 "app",
-                "llmModel"
+                "llmModel",
+                "project",
+                "plugin",
+                "knowledgeBase",
+                "knowledgeConnector",
+                "knowledgeFile",
+                "llmVirtualKey",
+                "llmProviderApiKey",
+                "scheduledTask",
+                "log",
+                "auditLog"
               ]
             },
             "in": "path",
@@ -426743,7 +426773,17 @@
                 "mcpRegistry",
                 "skill",
                 "app",
-                "llmModel"
+                "llmModel",
+                "project",
+                "plugin",
+                "knowledgeBase",
+                "knowledgeConnector",
+                "knowledgeFile",
+                "llmVirtualKey",
+                "llmProviderApiKey",
+                "scheduledTask",
+                "log",
+                "auditLog"
               ]
             },
             "in": "path",
@@ -426793,7 +426833,17 @@
                         "mcpRegistry",
                         "skill",
                         "app",
-                        "llmModel"
+                        "llmModel",
+                        "project",
+                        "plugin",
+                        "knowledgeBase",
+                        "knowledgeConnector",
+                        "knowledgeFile",
+                        "llmVirtualKey",
+                        "llmProviderApiKey",
+                        "scheduledTask",
+                        "log",
+                        "auditLog"
                       ]
                     },
                     "scope": {
@@ -427694,7 +427744,17 @@
                 "mcpRegistry",
                 "skill",
                 "app",
-                "llmModel"
+                "llmModel",
+                "project",
+                "plugin",
+                "knowledgeBase",
+                "knowledgeConnector",
+                "knowledgeFile",
+                "llmVirtualKey",
+                "llmProviderApiKey",
+                "scheduledTask",
+                "log",
+                "auditLog"
               ]
             },
             "in": "path",
@@ -427744,7 +427804,17 @@
                         "mcpRegistry",
                         "skill",
                         "app",
-                        "llmModel"
+                        "llmModel",
+                        "project",
+                        "plugin",
+                        "knowledgeBase",
+                        "knowledgeConnector",
+                        "knowledgeFile",
+                        "llmVirtualKey",
+                        "llmProviderApiKey",
+                        "scheduledTask",
+                        "log",
+                        "auditLog"
                       ]
                     },
                     "scope": {

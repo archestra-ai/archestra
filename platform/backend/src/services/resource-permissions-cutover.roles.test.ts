@@ -71,7 +71,12 @@ describe("scoped RBAC final cutover", () => {
         mcpRegistry: ["admin", "create"],
         skill: ["read", "team-admin"],
         app: ["admin", "delete"],
+        // Converted alongside the six: its admin action became a grant.
         knowledgeSource: ["admin", "read", "team-admin"],
+        project: ["admin", "read"],
+        log: ["read", "admin"],
+        // Never carried an admin action, so it must come through untouched.
+        toolPolicy: ["read", "create", "update"],
       },
     });
     await runMigration();
@@ -87,7 +92,10 @@ describe("scoped RBAC final cutover", () => {
       mcpRegistry: ["create"],
       skill: ["read"],
       app: ["delete"],
-      knowledgeSource: ["admin", "read", "team-admin"],
+      knowledgeSource: ["read"],
+      project: ["read"],
+      log: ["read"],
+      toolPolicy: ["read", "create", "update"],
     });
     await runMigration();
     const [replayed] = await db

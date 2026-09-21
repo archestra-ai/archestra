@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import {
   isBuiltInCatalogId,
+  ORGANIZATION_WIDE_RESOURCES,
   type ResourcePermissionAction,
   type ScopedResource,
 } from "@archestra/shared";
@@ -130,6 +131,192 @@ export default class ResourcePermissionTargetModel {
         users,
       };
     }
+    // Resources whose authority is organization-wide have no object to name,
+    // so there is nothing to resolve. Their grants live at `*` alone.
+    if (ORGANIZATION_WIDE_RESOURCES.has(params.resource)) return null;
+    if (params.resource === "project") {
+      const table = schema.projectsTable;
+      const [target] = await db
+        .select({ id: table.id, name: table.name, authorId: table.userId })
+        .from(table)
+        .where(
+          and(
+            eq(table.id, params.id),
+            eq(table.organizationId, params.organizationId),
+            isNull(table.deletedAt),
+          ),
+        );
+      if (!target) return null;
+      // A project's audience hangs off its share row, not the project.
+      const [share] = await db
+        .select({
+          id: schema.projectSharesTable.id,
+          visibility: schema.projectSharesTable.visibility,
+        })
+        .from(schema.projectSharesTable)
+        .where(eq(schema.projectSharesTable.projectId, params.id));
+      const [teams, users] = share
+        ? await Promise.all([
+            db
+              .select({ id: schema.projectShareTeamsTable.teamId })
+              .from(schema.projectShareTeamsTable)
+              .where(eq(schema.projectShareTeamsTable.shareId, share.id)),
+            db
+              .select({ id: schema.projectShareUsersTable.userId })
+              .from(schema.projectShareUsersTable)
+              .where(eq(schema.projectShareUsersTable.shareId, share.id)),
+          ])
+        : [[], []];
+      return {
+        ...target,
+        scope:
+          share?.visibility === "organization"
+            ? "org"
+            : share?.visibility === "team"
+              ? "team"
+              : "personal",
+        teams,
+        users,
+      };
+    }
+    if (params.resource === "plugin") {
+      const table = schema.pluginsTable;
+      const [target] = await db
+        .select({
+          id: table.id,
+          name: table.displayName,
+          authorId: table.authorId,
+          scope: table.scope,
+        })
+        .from(table)
+        .where(
+          and(
+            eq(table.id, params.id),
+            eq(table.organizationId, params.organizationId),
+            isNull(table.deletedAt),
+          ),
+        );
+      if (!target) return null;
+      const [teams, users] = await Promise.all([
+        db
+          .select({ id: schema.pluginTeamsTable.teamId })
+          .from(schema.pluginTeamsTable)
+          .where(eq(schema.pluginTeamsTable.pluginId, params.id)),
+        db
+          .select({ id: schema.pluginUsersTable.userId })
+          .from(schema.pluginUsersTable)
+          .where(eq(schema.pluginUsersTable.pluginId, params.id)),
+      ]);
+      return { ...target, teams, users };
+    }
+    if (params.resource === "llmVirtualKey") {
+      const table = schema.virtualApiKeysTable;
+      const [target] = await db
+        .select({
+          id: table.id,
+          name: table.name,
+          authorId: table.authorId,
+          scope: table.scope,
+        })
+        .from(table)
+        .where(
+          and(
+            eq(table.id, params.id),
+            eq(table.organizationId, params.organizationId),
+          ),
+        );
+      if (!target) return null;
+      const teams = await db
+        .select({ id: schema.virtualApiKeyTeamsTable.teamId })
+        .from(schema.virtualApiKeyTeamsTable)
+        .where(eq(schema.virtualApiKeyTeamsTable.virtualApiKeyId, params.id));
+      return { ...target, teams, users: [] };
+    }
+    if (params.resource === "llmProviderApiKey") {
+      const table = schema.llmProviderApiKeysTable;
+      const [target] = await db
+        .select({
+          id: table.id,
+          name: table.name,
+          authorId: table.userId,
+          scope: table.scope,
+          teamId: table.teamId,
+        })
+        .from(table)
+        .where(
+          and(
+            eq(table.id, params.id),
+            eq(table.organizationId, params.organizationId),
+          ),
+        );
+      if (!target) return null;
+      // A provider key names its recipients in its own columns.
+      const { teamId, ...rest } = target;
+      return {
+        ...rest,
+        teams: teamId ? [{ id: teamId }] : [],
+        users: [],
+      };
+    }
+    if (
+      params.resource === "knowledgeBase" ||
+      params.resource === "knowledgeConnector"
+    ) {
+      const table =
+        params.resource === "knowledgeBase"
+          ? schema.knowledgeBasesTable
+          : schema.knowledgeBaseConnectorsTable;
+      const [target] = await db
+        .select({
+          id: table.id,
+          name: table.name,
+          visibility: table.visibility,
+          teamIds: table.teamIds,
+        })
+        .from(table)
+        .where(
+          and(
+            eq(table.id, params.id),
+            eq(table.organizationId, params.organizationId),
+            isNull(table.deletedAt),
+          ),
+        );
+      if (!target) return null;
+      // Knowledge keeps its teams as an array on the row, and carries no
+      // author column at all, so a private object belongs to no one.
+      return {
+        id: target.id,
+        name: target.name,
+        authorId: null,
+        scope: knowledgeScope(target.visibility),
+        teams: (target.teamIds ?? []).map((id: string) => ({ id })),
+        users: [],
+      };
+    }
+    if (params.resource === "knowledgeFile") {
+      const table = schema.kbFilesTable;
+      const [target] = await db
+        .select({
+          id: table.id,
+          name: table.filename,
+          authorId: table.uploadedBy,
+          visibility: table.visibility,
+        })
+        .from(table)
+        .where(
+          and(
+            eq(table.id, params.id),
+            eq(table.organizationId, params.organizationId),
+          ),
+        );
+      if (!target) return null;
+      const teams = await db
+        .select({ id: schema.kbFileTeamsTable.teamId })
+        .from(schema.kbFileTeamsTable)
+        .where(eq(schema.kbFileTeamsTable.kbFileId, params.id));
+      const { visibility, ...rest } = target;
+      return { ...rest, scope: knowledgeScope(visibility), teams, users: [] };
+    }
     if (params.resource === "mcpRegistry" && isBuiltInCatalogId(params.id))
       return null;
     const catalog = schema.internalMcpCatalogTable;
@@ -195,6 +382,15 @@ export default class ResourcePermissionTargetModel {
       .where(eq(schema.mcpCatalogUsersTable.catalogId, catalogId));
     return { ...target, ...app, teams, users };
   }
+}
+
+/** The three knowledge visibilities, in the vocabulary the grants use. */
+function knowledgeScope(
+  visibility: string | null,
+): "personal" | "team" | "org" {
+  if (visibility === "team-scoped") return "team";
+  if (visibility === "private") return "personal";
+  return "org";
 }
 
 type Target = {

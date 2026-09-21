@@ -4,6 +4,7 @@ import type {
   ResourcePermissionAction,
   ScopedResource,
 } from "@archestra/shared";
+import { roleActionResourceFor } from "@archestra/shared/access-control";
 import { getPermissionsForUserContext, userHasPermission } from "@/auth/utils";
 import logger from "@/logging";
 import ResourcePermissionTargetModel from "@/models/resource-permission-target";
@@ -313,7 +314,10 @@ export async function checkToolPermission(
       : await userHasPermission(
           context.userId,
           context.organizationId,
-          perm.resource,
+          // A scoped resource whose name is not a role action maps onto the
+          // one that used to gate it, so knowledge tools keep asking for
+          // `knowledgeSource`.
+          roleActionResourceFor(perm.resource),
           perm.action,
         );
 
@@ -436,7 +440,9 @@ export async function filterToolNamesByPermission(
           key,
           perm.action === "manage-permissions" || perm.action === "use"
             ? false
-            : (permissions[perm.resource]?.includes(perm.action) ?? false),
+            : (permissions[roleActionResourceFor(perm.resource)]?.includes(
+                perm.action,
+              ) ?? false),
         );
       }
     }

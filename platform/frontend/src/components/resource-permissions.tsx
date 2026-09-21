@@ -358,6 +358,16 @@ const scopedResourceNouns: Record<ScopedResource, string> = {
   llmModel: "model",
   mcpGateway: "MCP gateway",
   mcpRegistry: "MCP registry entry",
+  project: "project",
+  plugin: "plugin",
+  knowledgeBase: "knowledge base",
+  knowledgeConnector: "connector",
+  knowledgeFile: "file",
+  llmVirtualKey: "virtual key",
+  llmProviderApiKey: "provider key",
+  scheduledTask: "scheduled task",
+  log: "log",
+  auditLog: "audit log entry",
 };
 /** @public - shared with initial-resource-permissions.tsx */
 export const subjectLabels: Record<PermissionSubject["type"], string> = {

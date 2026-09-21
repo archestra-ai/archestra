@@ -5,6 +5,7 @@ import type * as k8s from "@kubernetes/client-node";
 import { PatchStrategy, setHeaderOptions } from "@kubernetes/client-node";
 import type WebSocket from "ws";
 import config from "@/config";
+import workspaceFilesProgram from "@/k8s/agent-runtime/workspace-files.py";
 import { getK8sCapabilities } from "@/k8s/capabilities";
 import { clusterDnsResolver } from "@/k8s/cluster-dns";
 import { resolveRuntimeOwnerReferences } from "@/k8s/mcp-server-runtime/runtime-owner";
@@ -245,10 +246,9 @@ class AgentRuntimeManager {
     request: AgentWorkspaceFileRequest;
   }) {
     const request = AgentWorkspaceFileRequestSchema.parse(params.request);
-    const result = await this.execInPod({
+    const result = await this.execWorkspaceFilesHelper({
       session: params.session,
-      podName: await this.requireRunningPodName(params.session),
-      command: WORKSPACE_FILES_COMMAND,
+      args: [],
       stdin: NodeReadable.from([JSON.stringify(request)]),
     });
     const response = JSON.parse(result);
@@ -260,6 +260,26 @@ class AgentRuntimeManager {
     return AgentWorkspaceFileResultSchema.parse(response);
   }
 
+  /** Send the workspace-files program to the Pod and run one of its commands. */
+  private async execWorkspaceFilesHelper(params: {
+    session: AgentRunRecord;
+    args: string[];
+    stdin?: Readable;
+    timeoutMs?: number;
+  }): Promise<string> {
+    try {
+      return await this.execInPod({
+        session: params.session,
+        podName: await this.requireRunningPodName(params.session),
+        command: [...WORKSPACE_FILES_COMMAND, ...params.args],
+        stdin: params.stdin,
+        timeoutMs: params.timeoutMs,
+      });
+    } catch (error) {
+      throw describeWorkspaceHelperFailure(error) ?? error;
+    }
+  }
+
   /** Run one transfer control operation and return its parsed reply. */
   async runWorkspaceTransferCommand(params: {
     session: AgentRunRecord;
@@ -267,10 +287,9 @@ class AgentRuntimeManager {
     stdin?: Readable;
     timeoutMs: number;
   }): Promise<unknown> {
-    const result = await this.execInPod({
+    const result = await this.execWorkspaceFilesHelper({
       session: params.session,
-      podName: await this.requireRunningPodName(params.session),
-      command: [...WORKSPACE_FILES_COMMAND, ...params.args],
+      args: params.args,
       stdin: params.stdin,
       timeoutMs: params.timeoutMs,
     });
@@ -1838,8 +1857,31 @@ function shellDisplayArgument(value: string): string {
 }
 
 /** The in-Pod helper owns path validation for both the bounded JSON path and
- * streaming transfers, so every caller reaches the workspace the same way. */
-const WORKSPACE_FILES_COMMAND = [
-  "python3",
-  "/usr/local/bin/archestra-workspace-files",
-];
+ * streaming transfers, so every caller reaches the workspace the same way.
+ *
+ * The program is sent with every call rather than run from a path inside the
+ * image. An image ships whatever helper it was built with, so calling an
+ * installed copy breaks whenever the two drift — a workspace served by an
+ * image older than the transfer protocol answered with a JSON parse error
+ * from an empty stdin read. Sending the source keeps the helper and the code
+ * that speaks to it on the same version, and lets a custom image that never
+ * bundled it serve workspace files too. `python3 -c` leaves argv, stdin and
+ * stdout free, which the transfer commands stream through.
+ */
+const WORKSPACE_FILES_COMMAND = ["python3", "-c", workspaceFilesProgram];
+
+/**
+ * A runtime image without `python3`. The bootstrap only requires a shell and
+ * tmux, so this is a legitimate image that simply cannot serve workspace
+ * files; say so instead of surfacing the exec failure.
+ */
+function describeWorkspaceHelperFailure(error: unknown): ApiError | null {
+  const text = error instanceof Error ? error.message : String(error);
+  if (!/python3.*(not found|no such file)|exec.*python3/i.test(text)) {
+    return null;
+  }
+  return new ApiError(
+    400,
+    "This Agent's image has no python3, which Archestra needs to read, write and transfer workspace files. Add python3 to the image, or use a maintained one.",
+  );
+}

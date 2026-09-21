@@ -106,7 +106,7 @@ test("workspace transfers preserve bytes, require overwrite, and reject path esc
         [
           path.resolve(
             import.meta.dirname,
-            "../../../../agent_images/bin/archestra-workspace-files",
+            "../../k8s/agent-runtime/workspace-files.py",
           ),
         ],
         {

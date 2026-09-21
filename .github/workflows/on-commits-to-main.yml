@@ -131,6 +131,58 @@ jobs:
             --atomic \
             --timeout 15m
 
+  deploy-to-demo:
+    name: Deploy demo instance
+    runs-on: ubuntu-latest
+    needs: [deploy-dev-platform-images]
+    concurrency:
+      group: on-commits-to-main-demo-${{ github.ref }}
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Authenticate to Google Cloud
+        uses: ./.github/actions/google-auth
+        with:
+          service_account: ${{ secrets.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
+          workload_identity_provider: ${{ secrets.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
+
+      - name: Install gke-gcloud-auth-plugin
+        run: gcloud components install gke-gcloud-auth-plugin
+
+      - name: Configure kubectl
+        run: |
+          gcloud container clusters get-credentials archestra-staging \
+            --zone us-central1-a \
+            --project friendly-path-465518-r6
+
+      - name: Deploy demo
+        env:
+          PLATFORM_IMAGE_TAG: ${{ github.sha }}
+          DEMO_ADMIN_EMAIL: ${{ secrets.ARCHESTRA_DEMO_AUTH_ADMIN_EMAIL }}
+          DEMO_ADMIN_PASSWORD: ${{ secrets.ARCHESTRA_DEMO_AUTH_ADMIN_PASSWORD }}
+        run: |
+          helm upgrade archestra-demo \
+            ./platform/helm/archestra \
+            --install \
+            --namespace archestra-demo \
+            --set "archestra.image=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/platform:${PLATFORM_IMAGE_TAG}" \
+            --set-string "archestra.env.ARCHESTRA_AUTH_ADMIN_EMAIL=${DEMO_ADMIN_EMAIL}" \
+            --set-string "archestra.env.ARCHESTRA_AUTH_ADMIN_PASSWORD=${DEMO_ADMIN_PASSWORD}" \
+            --values .github/values-demo.yaml \
+            --atomic \
+            --timeout 15m
+
   # Keeps the backend-unit-test shards' cargo cache warm for FRESH PR
   # branches: Actions caches are only shared downward from the default
   # branch, and the shards themselves never run on main. The NAPI crate

@@ -4,6 +4,7 @@ import { Readable as NodeReadable } from "node:stream";
 import type * as k8s from "@kubernetes/client-node";
 import { PatchStrategy, setHeaderOptions } from "@kubernetes/client-node";
 import type WebSocket from "ws";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import config from "@/config";
 import workspaceFilesProgram from "@/k8s/agent-runtime/workspace-files.py";
 import { getK8sCapabilities } from "@/k8s/capabilities";
@@ -1882,6 +1883,6 @@ function describeWorkspaceHelperFailure(error: unknown): ApiError | null {
   }
   return new ApiError(
     400,
-    "This Agent's image has no python3, which Archestra needs to read, write and transfer workspace files. Add python3 to the image, or use a maintained one.",
+    `This Agent's image has no python3, which ${archestraMcpBranding.appName} needs to read, write and transfer workspace files. Add python3 to the image, or use a maintained one.`,
   );
 }

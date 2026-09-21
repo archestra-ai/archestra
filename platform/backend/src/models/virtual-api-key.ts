@@ -2,6 +2,7 @@ import { randomBytes, timingSafeEqual } from "node:crypto";
 import {
   ARCHESTRA_TOKEN_PREFIX,
   type PaginationQuery,
+  type ResourcePermissionGrant,
   type SupportedProvider,
 } from "@archestra/shared";
 import {
@@ -30,6 +31,7 @@ import type {
 import { escapeLikePattern } from "@/utils/sql-search";
 import CreatedByModel from "./created-by";
 import { VirtualApiKeyLabelModel } from "./entity-labels";
+import ResourcePermissionPolicyModel from "./resource-permission-policy";
 
 /** Length of random part (32 bytes = 64 hex chars = 256 bits of entropy) */
 const TOKEN_RANDOM_LENGTH = 32;
@@ -87,6 +89,8 @@ class VirtualApiKeyModel {
     authorId?: string | null;
     teamIds?: string[];
     providerApiKeys?: ProviderApiKeyInput[];
+    /** Explicit starting audience; omitted derives one from the scope. */
+    initialPermissionGrants?: ResourcePermissionGrant[];
   }): Promise<{
     virtualKey: SelectVirtualApiKey;
     value: string;
@@ -143,6 +147,21 @@ class VirtualApiKeyModel {
           }),
         )
         .returning();
+
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await ResourcePermissionPolicyModel.createInitial({
+        tx,
+        organizationId: createdVirtualKey.organizationId,
+        resource: "llmVirtualKey",
+        scope: createdVirtualKey.id,
+        grants: params.initialPermissionGrants,
+        authorId: createdVirtualKey.authorId,
+        visibility: scope,
+        teams: teamIds.map((id) => ({ id })),
+      });
+      // SPDX-SnippetEnd
 
       await syncVirtualApiKeyTeams({
         tx,

@@ -1,9 +1,11 @@
+import { randomUUID } from "node:crypto";
 import {
   MAX_PROJECT_UPLOAD_BYTES,
   PROJECT_DESCRIPTION_MAX_LENGTH,
   PROJECT_INSTRUCTIONS_MAX_LENGTH,
   PROJECT_NAME_MAX_LENGTH,
   parseLabelsParam,
+  ResourcePermissionGrantSchema,
   RouteId,
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
@@ -12,6 +14,7 @@ import { userHasPermission } from "@/auth";
 import { ProjectLabelModel, ProjectModel } from "@/models";
 import { projectService } from "@/services/project";
 import { transferResourceOwnership } from "@/services/resource-ownership";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   constructResponseSchema,
   GetAgentRunResponseSchema,
@@ -105,11 +108,36 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
           icon: z.string().max(1_000_000).nullable().optional(),
           defaultAgentId: z.string().uuid().nullable().optional(),
           labels: z.array(LabelWithDetailsSchema).default([]),
+          initialGrants: z
+            .array(ResourcePermissionGrantSchema)
+            .max(200)
+            .optional(),
         }),
         response: constructResponseSchema(ProjectListItemSchema),
       },
     },
     async ({ body, organizationId, user }) => {
+      if (body.initialGrants?.length) {
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        await ResourcePermissions.validateInitialGrants({
+          organizationId,
+          userId: user.id,
+          resource: "project",
+          grants: body.initialGrants,
+          target: {
+            id: randomUUID(),
+            name: body.name,
+            authorId: user.id,
+            // A project starts unshared, so its own audience is its owner.
+            scope: "personal",
+            teams: [],
+            users: [],
+          },
+        });
+        // SPDX-SnippetEnd
+      }
       const project = await projectService.create({
         organizationId,
         userId: user.id,
@@ -118,6 +146,14 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
         icon: body.icon ?? null,
         defaultAgentId: body.defaultAgentId ?? null,
         labels: body.labels,
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        initialPermissionGrants: ResourcePermissions.grantsForCreation({
+          grants: body.initialGrants,
+          visibility: "personal",
+        }),
+        // SPDX-SnippetEnd
       });
       const labels = await ProjectLabelModel.getLabelsFor(project.id);
       return {

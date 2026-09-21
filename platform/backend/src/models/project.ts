@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { urlSlugify } from "@archestra/shared";
+import { type ResourcePermissionGrant, urlSlugify } from "@archestra/shared";
 import {
   and,
   desc,
@@ -11,7 +11,7 @@ import {
   sql,
 } from "drizzle-orm";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
-import db, { schema, type Transaction } from "@/database";
+import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import { notDeletedConversation } from "@/database/schemas/conversation";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import {
@@ -22,6 +22,7 @@ import {
 import type { ConversationOrigin, InsertProject, Project } from "@/types";
 import { ProjectLabelModel } from "./entity-labels";
 import ProjectShareModel from "./project-share";
+import ResourcePermissionPolicyModel from "./resource-permission-policy";
 
 /**
  * CRUD for `projects`. Share/visibility queries live in
@@ -63,18 +64,40 @@ class ProjectModel {
     return rows.length === 1;
   }
 
-  static async create(project: InsertProject): Promise<Project> {
+  static async create(
+    project: InsertProject,
+    /** Explicit starting audience; a project is otherwise its owner's alone. */
+    options?: { initialPermissionGrants?: ResourcePermissionGrant[] },
+  ): Promise<Project> {
     const slug = await ProjectModel.generateUniqueSlug({
       name: project.name,
       organizationId: project.organizationId,
     });
     try {
-      const [row] = await db
-        .insert(schema.projectsTable)
-        .values({ ...project, slug })
-        .returning();
-      if (!row) throw new Error("failed to insert project");
-      return row;
+      // The access policy is written with the row it governs, so a failure
+      // cannot leave a project nobody can reach.
+      return await withDbTransaction(async (tx) => {
+        const [row] = await tx
+          .insert(schema.projectsTable)
+          .values({ ...project, slug })
+          .returning();
+        if (!row) throw new Error("failed to insert project");
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        await ResourcePermissionPolicyModel.createInitial({
+          tx,
+          organizationId: row.organizationId,
+          resource: "project",
+          scope: row.id,
+          grants: options?.initialPermissionGrants,
+          authorId: row.userId,
+          // A new project carries no share row, so its audience is its owner.
+          visibility: "personal",
+        });
+        // SPDX-SnippetEnd
+        return row;
+      });
     } catch (error) {
       if (isUniqueViolation(error)) {
         throw new ProjectNameExistsError(project.name);
@@ -149,6 +172,18 @@ class ProjectModel {
         }
         throw error;
       }
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await ResourcePermissionPolicyModel.createInitial({
+        tx,
+        organizationId: project.organizationId,
+        resource: "project",
+        scope: project.id,
+        authorId: project.userId,
+        visibility: "personal",
+      });
+      // SPDX-SnippetEnd
 
       await tx
         .update(schema.conversationsTable)

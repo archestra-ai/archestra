@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { IncomingHttpHeaders } from "node:http";
 import {
   builtInProviderLabel,
@@ -10,6 +11,7 @@ import {
   parseLabelsParam,
   perUserCredentialLabel,
   providerDisplayNames,
+  ResourcePermissionGrantSchema,
   RouteId,
   type SupportedProvider,
   SupportedProvidersSchema,
@@ -50,6 +52,7 @@ import {
 } from "@/secrets-manager";
 import { assertModelProviderAllowed } from "@/services/integration-overrides";
 import { modelSyncService } from "@/services/model-sync";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import { withLatestRotatedRefreshToken } from "@/services/subscription-credential-rotation";
 import {
   ApiError,
@@ -459,6 +462,10 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 "Key/value labels. Omit to leave existing labels untouched; " +
                   "pass [] to clear them.",
               ),
+            initialGrants: z
+              .array(ResourcePermissionGrantSchema)
+              .max(200)
+              .optional(),
           })
           .refine(
             (data) => {
@@ -521,6 +528,28 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             "You need the llmProviderApiKey:create permission to create team- or organization-scoped keys.",
           );
         }
+      }
+
+      if (body.initialGrants?.length) {
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        await ResourcePermissions.validateInitialGrants({
+          organizationId,
+          userId: user.id,
+          resource: "llmProviderApiKey",
+          grants: body.initialGrants,
+          target: {
+            id: randomUUID(),
+            name: body.name,
+            authorId: body.scope === "personal" ? user.id : null,
+            scope: body.scope,
+            teams:
+              body.scope === "team" && body.teamId ? [{ id: body.teamId }] : [],
+            users: [],
+          },
+        });
+        // SPDX-SnippetEnd
       }
 
       let secret: SelectSecret | null = null;
@@ -693,20 +722,32 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ReturnType<typeof LlmProviderApiKeyModel.create>
       >;
       try {
-        createdApiKey = await LlmProviderApiKeyModel.create({
-          organizationId,
-          createdBy: user.id,
-          name: body.name,
-          provider: body.provider,
-          secretId: secret?.id ?? null,
-          baseUrl: body.baseUrl ?? null,
-          inferenceBaseUrl: body.inferenceBaseUrl ?? null,
-          extraHeaders: body.extraHeaders ?? null,
-          scope: body.scope,
-          userId: body.scope === "personal" ? user.id : null,
-          teamId: body.scope === "team" ? body.teamId : null,
-          isPrimary: body.isPrimary ?? false,
-        });
+        createdApiKey = await LlmProviderApiKeyModel.create(
+          {
+            organizationId,
+            createdBy: user.id,
+            name: body.name,
+            provider: body.provider,
+            secretId: secret?.id ?? null,
+            baseUrl: body.baseUrl ?? null,
+            inferenceBaseUrl: body.inferenceBaseUrl ?? null,
+            extraHeaders: body.extraHeaders ?? null,
+            scope: body.scope,
+            userId: body.scope === "personal" ? user.id : null,
+            teamId: body.scope === "team" ? body.teamId : null,
+            isPrimary: body.isPrimary ?? false,
+          },
+          // SPDX-SnippetBegin
+          // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+          // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+          {
+            initialPermissionGrants: ResourcePermissions.grantsForCreation({
+              grants: body.initialGrants,
+              visibility: body.scope,
+            }),
+          },
+          // SPDX-SnippetEnd
+        );
       } catch (error) {
         if (isUniqueConstraintError(error)) {
           throw new ApiError(

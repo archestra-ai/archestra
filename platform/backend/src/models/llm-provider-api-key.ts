@@ -4,6 +4,7 @@ import {
   isVaultReference,
   parseVaultReference,
   providerRequiresPerUserCredential,
+  type ResourcePermissionGrant,
   SUBSCRIPTION_CREDENTIALS,
   type SubscriptionCredentialKind,
   type SupportedProvider,
@@ -31,6 +32,7 @@ import { escapeLikePattern } from "@/utils/sql-search";
 import ConversationModel from "./conversation";
 import CreatedByModel from "./created-by";
 import { LlmProviderApiKeyLabelModel } from "./entity-labels";
+import ResourcePermissionPolicyModel from "./resource-permission-policy";
 
 class LlmProviderApiKeyModel {
   /**
@@ -43,6 +45,8 @@ class LlmProviderApiKeyModel {
    */
   static async create(
     data: InsertLlmProviderApiKey,
+    /** Explicit starting audience; omitted derives one from the scope. */
+    options?: { initialPermissionGrants?: ResourcePermissionGrant[] },
   ): Promise<LlmProviderApiKey> {
     return await db.transaction(async (tx) => {
       if (data.isPrimary) {
@@ -65,6 +69,21 @@ class LlmProviderApiKeyModel {
           }),
         )
         .returning();
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await ResourcePermissionPolicyModel.createInitial({
+        tx,
+        organizationId: apiKey.organizationId,
+        resource: "llmProviderApiKey",
+        scope: apiKey.id,
+        grants: options?.initialPermissionGrants,
+        // A provider key names its owner in `user_id`, not `created_by`.
+        authorId: apiKey.userId,
+        visibility: apiKey.scope,
+        teams: apiKey.teamId ? [{ id: apiKey.teamId }] : undefined,
+      });
+      // SPDX-SnippetEnd
 
       return apiKey;
     });

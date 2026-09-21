@@ -2,6 +2,7 @@ import {
   MAX_PROJECT_UPLOAD_BYTES,
   MAX_PROJECT_UPLOAD_MB,
   PROJECT_INSTRUCTIONS_FILENAME,
+  type ResourcePermissionGrant,
 } from "@archestra/shared";
 import { sql } from "drizzle-orm";
 import { isGlobalAdmin, userHasPermission } from "@/auth";
@@ -71,6 +72,8 @@ class ProjectService {
     icon?: string | null;
     defaultAgentId?: string | null;
     labels?: LabelWithDetails[];
+    /** Explicit starting audience; validated by the caller before it lands. */
+    initialPermissionGrants?: ResourcePermissionGrant[];
   }): Promise<Project> {
     if (isServiceAccountUserId(params.userId)) {
       throw new ApiError(400, "Projects require a personal user account.");
@@ -90,14 +93,17 @@ class ProjectService {
       });
     }
     try {
-      const project = await ProjectModel.create({
-        organizationId: params.organizationId,
-        userId: params.userId,
-        name,
-        description: params.description,
-        icon: params.icon ?? null,
-        defaultAgentId: params.defaultAgentId ?? null,
-      });
+      const project = await ProjectModel.create(
+        {
+          organizationId: params.organizationId,
+          userId: params.userId,
+          name,
+          description: params.description,
+          icon: params.icon ?? null,
+          defaultAgentId: params.defaultAgentId ?? null,
+        },
+        { initialPermissionGrants: params.initialPermissionGrants },
+      );
       if (params.labels?.length) {
         await ProjectLabelModel.syncLabels(project.id, params.labels);
       }

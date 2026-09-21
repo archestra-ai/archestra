@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { urlSlugify } from "@archestra/shared";
+import { type ResourcePermissionGrant, urlSlugify } from "@archestra/shared";
 import {
   and,
   asc,
@@ -31,6 +31,7 @@ import CreatedByModel, { lookupCreator } from "./created-by";
 import { PluginLabelModel } from "./entity-labels";
 import PluginTeamModel from "./plugin-team";
 import PluginUserModel from "./plugin-user";
+import ResourcePermissionPolicyModel from "./resource-permission-policy";
 
 class PluginModel {
   static async transferOwnership(params: {
@@ -350,6 +351,8 @@ class PluginModel {
     organizationId: string;
     userId: string;
     input: CreatePlugin;
+    /** Explicit starting audience; omitted derives one from the scope. */
+    initialPermissionGrants?: ResourcePermissionGrant[];
     /** Optional stable source identity for platform-owned imports. */
     pluginSlug?: string;
     sourceId?: string;
@@ -418,6 +421,21 @@ class PluginModel {
         .onConflictDoNothing()
         .returning();
       if (!plugin) return null;
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await ResourcePermissionPolicyModel.createInitial({
+        tx,
+        organizationId: plugin.organizationId,
+        resource: "plugin",
+        scope: plugin.id,
+        grants: params.initialPermissionGrants,
+        authorId: plugin.authorId,
+        visibility: plugin.scope,
+        teams: params.input.teamIds?.map((id) => ({ id })),
+        users: params.input.userIds,
+      });
+      // SPDX-SnippetEnd
 
       const files = await insertFiles(tx, plugin.id, params.input.files);
       await PluginTeamModel.syncPluginTeams(

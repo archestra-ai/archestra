@@ -1,4 +1,6 @@
+import { randomUUID } from "node:crypto";
 import {
+  ResourcePermissionGrantSchema,
   ResourceVisibilityScopeSchema,
   TOOL_CREATE_PLUGIN_SHORT_NAME,
   TOOL_DELETE_PLUGIN_SHORT_NAME,
@@ -12,6 +14,7 @@ import { userHasPermission } from "@/auth";
 import config from "@/config";
 import { PluginModel, PluginTeamModel } from "@/models";
 import { validatePluginVisibility } from "@/services/plugin-visibility";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   ApiError,
   ClientTypeSchema,
@@ -69,6 +72,7 @@ const pluginFilesField = z
 
 const CreatePluginToolSchema = z
   .object({
+    initialGrants: z.array(ResourcePermissionGrantSchema).max(200).optional(),
     displayName: z
       .string()
       .trim()
@@ -368,6 +372,27 @@ const registry = defineArchestraTools([
       });
       if (visibilityError) return errorResult(visibilityError);
 
+      if (args.initialGrants?.length) {
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        await ResourcePermissions.validateInitialGrants({
+          organizationId: ctx.organizationId,
+          userId: ctx.userId,
+          resource: "plugin",
+          grants: args.initialGrants,
+          target: {
+            id: randomUUID(),
+            name: args.displayName,
+            authorId: ctx.userId,
+            scope: args.scope,
+            teams: (args.teamIds ?? []).map((id) => ({ id })),
+            users: (args.userIds ?? []).map((id) => ({ id })),
+          },
+        });
+        // SPDX-SnippetEnd
+      }
+
       const plugin = await PluginModel.create({
         organizationId: ctx.organizationId,
         userId: ctx.userId,
@@ -381,6 +406,14 @@ const registry = defineArchestraTools([
           userIds: args.userIds,
           files: args.files,
         },
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        initialPermissionGrants: ResourcePermissions.grantsForCreation({
+          grants: args.initialGrants,
+          visibility: args.scope,
+        }),
+        // SPDX-SnippetEnd
       });
       if (!plugin) {
         return errorResult(

@@ -6,6 +6,7 @@ import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
 import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
 import ModelModel from "@/models/model";
 import OrganizationModel from "@/models/organization";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -77,6 +78,7 @@ import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials"
 import { isVertexAiEnabled } from "@/clients/gemini-client";
 import { testProviderApiKey } from "@/routes/chat/model-fetchers/registry";
 import { encodeOpenAiCodexCredential } from "@/services/openai-codex-credentials";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import { encodeXaiSubscriptionCredential } from "@/services/xai-subscription-credentials";
 import { validateProviderAllowed } from "./llm-provider-api-keys";
 
@@ -2141,3 +2143,94 @@ describe("validation errors name the provider the way the organization does", ()
     expect(response.json().error.message).toContain("OpenAI");
   });
 });
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+describe("scoped provider key grants", () => {
+  let app: FastifyInstanceWithZod;
+  let organizationId: string;
+  let user: User;
+
+  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
+    vi.clearAllMocks();
+    organizationId = (await makeOrganization()).id;
+    user = await makeUser();
+    await makeMember(user.id, organizationId, { role: "admin" });
+    setupAdminApp();
+    app = await createApp(organizationId, user);
+  });
+
+  afterEach(async () => {
+    await app.close();
+  });
+
+  test("shares a provider key with a named user at creation", async ({
+    makeMember,
+    makeUser,
+  }) => {
+    const recipient = await makeUser();
+    await makeMember(recipient.id, organizationId);
+    const outsider = await makeUser();
+    await makeMember(outsider.id, organizationId);
+
+    const grants = [
+      {
+        subject: { type: "user" as const, id: recipient.id },
+        actions: ["read" as const, "use" as const],
+      },
+    ];
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "Shared at creation",
+        provider: "openai",
+        apiKey: "sk-test",
+        scope: "personal",
+        initialGrants: grants,
+      },
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    const id = response.json().id;
+
+    expect(
+      (
+        await ResourcePermissionPolicyModel.find({
+          organizationId,
+          resource: "llmProviderApiKey",
+          scope: id,
+        })
+      )?.grants,
+    ).toEqual([
+      ...grants,
+      {
+        subject: { type: "user", id: user.id },
+        actions: ["read", "use", "update", "delete", "manage-permissions"],
+      },
+    ]);
+
+    const scoped = {
+      organizationId,
+      resource: "llmProviderApiKey" as const,
+      scope: id,
+    };
+    expect(
+      (
+        await ResourcePermissions.getEffective({
+          ...scoped,
+          userId: recipient.id,
+        })
+      ).grants.map((grant) => grant.action),
+    ).toEqual(["read", "use"]);
+    expect(
+      (
+        await ResourcePermissions.getEffective({
+          ...scoped,
+          userId: outsider.id,
+        })
+      ).grants,
+    ).toEqual([]);
+  });
+});
+// SPDX-SnippetEnd

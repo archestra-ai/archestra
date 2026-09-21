@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import {
   PLUGIN_MARKETPLACE_IMPORT_LIMIT,
   parseLabelsParam,
@@ -29,6 +30,7 @@ import {
 } from "@/plugins/github-marketplace-import";
 import { validatePluginVisibility } from "@/services/plugin-visibility";
 import { transferResourceOwnership } from "@/services/resource-ownership";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   resolveGithubAppInstallationToken,
   resolveGithubPatToken,
@@ -702,16 +704,47 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async ({ organizationId, user, body }, reply) => {
       await requirePluginAdmin({ organizationId, userId: user.id });
+      const scope = body.scope ?? "personal";
+      const teamIds = body.teamIds ?? [];
+      const userIds = body.userIds ?? [];
       await validatePluginVisibility({
         organizationId,
-        scope: body.scope ?? "personal",
-        teamIds: body.teamIds ?? [],
-        userIds: body.userIds ?? [],
+        scope,
+        teamIds,
+        userIds,
       });
+      if (body.initialGrants?.length) {
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        await ResourcePermissions.validateInitialGrants({
+          organizationId,
+          userId: user.id,
+          resource: "plugin",
+          grants: body.initialGrants,
+          target: {
+            id: randomUUID(),
+            name: body.displayName,
+            authorId: user.id,
+            scope,
+            teams: teamIds.map((id) => ({ id })),
+            users: userIds.map((id) => ({ id })),
+          },
+        });
+        // SPDX-SnippetEnd
+      }
       const plugin = await PluginModel.create({
         organizationId,
         userId: user.id,
         input: body,
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        initialPermissionGrants: ResourcePermissions.grantsForCreation({
+          grants: body.initialGrants,
+          visibility: scope,
+        }),
+        // SPDX-SnippetEnd
       });
       if (!plugin) {
         throw new ApiError(409, "A plugin with this plugin identity exists");

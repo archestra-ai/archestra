@@ -1,5 +1,6 @@
 import {
   CreatedByNullableSchema,
+  ResourcePermissionGrantSchema,
   ResourceVisibilityScopeSchema,
 } from "@archestra/shared";
 import { createSelectSchema } from "drizzle-zod";
@@ -83,6 +84,7 @@ export const CreatePluginSchema = z
     userIds: z.array(z.string().min(1)).max(100).optional(),
     files: z.array(PluginFileInputSchema).min(1).max(PLUGIN_MAX_FILES),
     labels: z.array(LabelWithDetailsSchema).optional(),
+    initialGrants: z.array(ResourcePermissionGrantSchema).max(200).optional(),
   })
   .superRefine(validateFileSet);
 

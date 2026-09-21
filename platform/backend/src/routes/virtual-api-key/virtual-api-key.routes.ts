@@ -1,9 +1,11 @@
+import { randomUUID } from "node:crypto";
 import {
   createPaginatedResponseSchema,
   credentialRequiresPerUserScope,
   PaginationQuerySchema,
   parseLabelsParam,
   perUserCredentialLabel,
+  ResourcePermissionGrantSchema,
   RouteId,
   type SupportedProvider,
   SupportedProvidersSchema,
@@ -21,6 +23,7 @@ import {
 } from "@/models";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { readVirtualKeyValue } from "@/services/connection-setup";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   ApiError,
   constructResponseSchema,
@@ -107,6 +110,7 @@ const CreateVirtualApiKeyBodySchema = VirtualApiKeyBodyObjectSchema.extend({
    * belong to the organization.
    */
   ownerId: z.string().optional(),
+  initialGrants: z.array(ResourcePermissionGrantSchema).max(200).optional(),
 }).superRefine(refineVirtualApiKeyBody);
 
 const virtualApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -426,6 +430,14 @@ async function createVirtualApiKey(params: {
   // Passthrough keys are always personal and carry no provider keys; they only
   // authenticate the acting user.
   if (body.keyType === "passthrough") {
+    await validateVirtualKeyInitialGrants({
+      body,
+      organizationId,
+      userId: user.id,
+      ownerId,
+      scope: "personal",
+      teamIds: [],
+    });
     const created = await VirtualApiKeyModel.create({
       organizationId,
       name: body.name,
@@ -433,6 +445,14 @@ async function createVirtualApiKey(params: {
       expiresAt: body.expiresAt ?? null,
       scope: "personal",
       authorId: ownerId,
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      initialPermissionGrants: ResourcePermissions.grantsForCreation({
+        grants: body.initialGrants,
+        visibility: "personal",
+      }),
+      // SPDX-SnippetEnd
     });
 
     return {
@@ -461,6 +481,15 @@ async function createVirtualApiKey(params: {
     userId: user.id,
   });
 
+  await validateVirtualKeyInitialGrants({
+    body,
+    organizationId,
+    userId: user.id,
+    ownerId,
+    scope: body.scope,
+    teamIds: body.teams,
+  });
+
   const { virtualKey, value, teams, authorName, providerApiKeys } =
     await VirtualApiKeyModel.create({
       organizationId,
@@ -471,6 +500,14 @@ async function createVirtualApiKey(params: {
       authorId: ownerId,
       teamIds: body.teams,
       providerApiKeys: body.providerApiKeys,
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      initialPermissionGrants: ResourcePermissions.grantsForCreation({
+        grants: body.initialGrants,
+        visibility: body.scope,
+      }),
+      // SPDX-SnippetEnd
     });
 
   return {
@@ -484,6 +521,36 @@ async function createVirtualApiKey(params: {
     providerApiKeys,
     labels: await syncAndReadLabels(virtualKey.id, body.labels),
   };
+}
+
+/** The key is the creator's to share, but it is owned by `ownerId`. */
+async function validateVirtualKeyInitialGrants(params: {
+  body: z.infer<typeof CreateVirtualApiKeyBodySchema>;
+  organizationId: string;
+  userId: string;
+  ownerId: string;
+  scope: ResourceVisibilityScope;
+  teamIds: string[];
+}): Promise<void> {
+  if (!params.body.initialGrants?.length) return;
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  await ResourcePermissions.validateInitialGrants({
+    organizationId: params.organizationId,
+    userId: params.userId,
+    resource: "llmVirtualKey",
+    grants: params.body.initialGrants,
+    target: {
+      id: randomUUID(),
+      name: params.body.name,
+      authorId: params.ownerId,
+      scope: params.scope,
+      teams: params.teamIds.map((id) => ({ id })),
+      users: [],
+    },
+  });
+  // SPDX-SnippetEnd
 }
 
 async function updateVirtualApiKey(params: {

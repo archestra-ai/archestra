@@ -1,8 +1,10 @@
+import { randomUUID } from "node:crypto";
 import {
   calculatePaginationMeta,
   createPaginatedResponseSchema,
   PaginationQuerySchema,
   parseLabelsParam,
+  ResourcePermissionGrantSchema,
   RouteId,
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
@@ -27,11 +29,13 @@ import {
   TeamModel,
 } from "@/models";
 import type { KbFileViewer } from "@/models/kb-file";
+import { knowledgeScope } from "@/models/resource-permission-target";
 import {
   findAccessibleKnowledgeBase,
   findAccessibleKnowledgeBasesForFiles,
 } from "@/services/knowledge-base-access";
 import { upsertKnowledgeFile } from "@/services/knowledge-file-ingestion";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import { readRowBytes } from "@/skills-sandbox/file-storage";
 import {
   ApiError,
@@ -175,6 +179,10 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
           content: z.string().min(1),
           directoryId: z.string().uuid().nullable().default(null),
           labels: z.array(LabelWithDetailsSchema).default([]),
+          initialGrants: z
+            .array(ResourcePermissionGrantSchema)
+            .max(200)
+            .optional(),
         }),
         response: constructResponseSchema(KbFileSchema),
       },
@@ -217,6 +225,28 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
       await assertTeamsInOrg({ teamIds: body.teamIds, organizationId });
 
+      const scope = knowledgeScope(body.visibility);
+      if (body.initialGrants?.length) {
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        await ResourcePermissions.validateInitialGrants({
+          organizationId,
+          userId: user.id,
+          resource: "knowledgeFile",
+          grants: body.initialGrants,
+          target: {
+            id: randomUUID(),
+            name: body.filename,
+            authorId: user.id,
+            scope,
+            teams: body.teamIds.map((id) => ({ id })),
+            users: [],
+          },
+        });
+        // SPDX-SnippetEnd
+      }
+
       let file: Awaited<ReturnType<typeof KbFileModel.create>>;
       try {
         file = await KbFileModel.create({
@@ -230,6 +260,14 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
           visibility: body.visibility,
           teamIds: body.teamIds,
           uploadedBy: user.id,
+          // SPDX-SnippetBegin
+          // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+          // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+          initialPermissionGrants: ResourcePermissions.grantsForCreation({
+            grants: body.initialGrants,
+            visibility: scope,
+          }),
+          // SPDX-SnippetEnd
         });
       } catch (error) {
         // A repeated filename in one place is an ordinary mistake with an

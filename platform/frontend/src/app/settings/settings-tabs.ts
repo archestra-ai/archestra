@@ -22,7 +22,6 @@ import {
   UsersRound,
 } from "lucide-react";
 import { usePermissionMap } from "@/lib/auth/auth.query";
-import { useFeature } from "@/lib/config/config.query";
 import { useSecretsType } from "@/lib/secrets.query";
 
 export function useSettingsTabs() {

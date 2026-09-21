@@ -1,9 +1,11 @@
 import { hasArchestraTokenPrefix } from "@archestra/shared";
 import { vi } from "vitest";
 import { LlmProviderApiKeyModel } from "@/models";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { encodeOpenAiCodexCredential } from "@/services/openai-codex-credentials";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
@@ -788,3 +790,108 @@ describe("POST /api/llm-virtual-keys", () => {
     expect(body.authorId).toBe(owner.id);
   });
 });
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+describe("scoped virtual key grants", () => {
+  let app: FastifyInstanceWithZod;
+  let organizationId: string;
+  let user: User;
+
+  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
+    organizationId = (await makeOrganization()).id;
+    user = await makeUser();
+    await makeMember(user.id, organizationId, { role: "admin" });
+    mockUserHasPermission.mockReset();
+    mockUserHasPermission.mockResolvedValue(true);
+
+    app = createFastifyInstance();
+    app.addHook("onRequest", async (request) => {
+      Object.assign(request, { organizationId, user });
+    });
+    const { default: virtualApiKeysRoutes } = await import(
+      "./virtual-api-key.routes"
+    );
+    await app.register(virtualApiKeysRoutes);
+  });
+
+  afterEach(async () => {
+    await app.close();
+  });
+
+  test("shares a virtual key with a named user at creation", async ({
+    makeLlmProviderApiKey,
+    makeMember,
+    makeSecret,
+    makeUser,
+  }) => {
+    const secret = await makeSecret({ secret: { apiKey: "sk-real" } });
+    const parentKey = await makeLlmProviderApiKey(organizationId, secret.id);
+    const recipient = await makeUser();
+    await makeMember(recipient.id, organizationId);
+    const outsider = await makeUser();
+    await makeMember(outsider.id, organizationId);
+
+    const grants = [
+      {
+        subject: { type: "user" as const, id: recipient.id },
+        actions: ["read" as const, "use" as const],
+      },
+    ];
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/llm-virtual-keys",
+      payload: {
+        name: "Shared at creation",
+        providerApiKeys: [
+          { provider: parentKey.provider, providerApiKeyId: parentKey.id },
+        ],
+        scope: "personal",
+        teams: [],
+        initialGrants: grants,
+      },
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    const id = response.json().id;
+
+    expect(
+      (
+        await ResourcePermissionPolicyModel.find({
+          organizationId,
+          resource: "llmVirtualKey",
+          scope: id,
+        })
+      )?.grants,
+    ).toEqual([
+      ...grants,
+      {
+        subject: { type: "user", id: user.id },
+        actions: ["read", "use", "update", "delete", "manage-permissions"],
+      },
+    ]);
+
+    const scoped = {
+      organizationId,
+      resource: "llmVirtualKey" as const,
+      scope: id,
+    };
+    expect(
+      (
+        await ResourcePermissions.getEffective({
+          ...scoped,
+          userId: recipient.id,
+        })
+      ).grants.map((grant) => grant.action),
+    ).toEqual(["read", "use"]);
+    expect(
+      (
+        await ResourcePermissions.getEffective({
+          ...scoped,
+          userId: outsider.id,
+        })
+      ).grants,
+    ).toEqual([]);
+  });
+});
+// SPDX-SnippetEnd

@@ -1,3 +1,4 @@
+import type { ResourcePermissionGrant } from "@archestra/shared";
 import {
   and,
   count,
@@ -12,6 +13,8 @@ import {
 import db, { schema } from "@/database";
 import type { KnowledgeFileVisibility } from "@/types/knowledge-file";
 import CreatedByModel from "./created-by";
+import ResourcePermissionPolicyModel from "./resource-permission-policy";
+import { knowledgeScope } from "./resource-permission-target";
 
 /**
  * Who a caller is, for repository-listing purposes.
@@ -118,6 +121,8 @@ class KbFileModel {
     visibility: KnowledgeFileVisibility;
     teamIds: string[];
     uploadedBy: string;
+    /** Explicit starting audience; omitted derives one from the visibility. */
+    initialPermissionGrants?: ResourcePermissionGrant[];
   }) {
     return db.transaction(async (tx) => {
       const [file] = await tx
@@ -141,6 +146,20 @@ class KbFileModel {
           }),
         )
         .returning();
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await ResourcePermissionPolicyModel.createInitial({
+        tx,
+        organizationId: file.organizationId,
+        resource: "knowledgeFile",
+        scope: file.id,
+        grants: params.initialPermissionGrants,
+        authorId: file.uploadedBy,
+        visibility: knowledgeScope(file.visibility),
+        teams: params.teamIds.map((id) => ({ id })),
+      });
+      // SPDX-SnippetEnd
 
       if (params.visibility === "team-scoped" && params.teamIds.length > 0) {
         await tx

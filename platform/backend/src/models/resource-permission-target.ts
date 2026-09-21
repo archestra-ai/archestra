@@ -384,8 +384,15 @@ export default class ResourcePermissionTargetModel {
   }
 }
 
-/** The three knowledge visibilities, in the vocabulary the grants use. */
-function knowledgeScope(
+/**
+ * The knowledge visibilities, in the vocabulary the grants use.
+ *
+ * Knowledge bases, connectors and files each spell their audience differently
+ * (`private`, `org-wide`, `team-scoped`, `auto-sync-permissions`), and every
+ * create path has to reach the same answer this resolver and the conversion
+ * SQL reach, so the mapping lives here once.
+ */
+export function knowledgeScope(
   visibility: string | null,
 ): "personal" | "team" | "org" {
   if (visibility === "team-scoped") return "team";

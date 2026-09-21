@@ -1,4 +1,5 @@
 // This file contains Enterprise regions licensed under LICENSE_ENTERPRISE.
+import { randomUUID } from "node:crypto";
 import {
   CreatedByNullableSchema,
   calculatePaginationMeta,
@@ -8,17 +9,20 @@ import {
   PaginationQuerySchema,
   PERMISSION_SYNC_FOLLOW_DOCUMENTS_SCHEDULE,
   parseLabelsParam,
+  ResourcePermissionGrantSchema,
   RouteId,
   TextSearchLanguageSchema,
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { RuntimeCredentialDefinitionModel } from "@/models";
+import { knowledgeScope } from "@/models/resource-permission-target";
 import {
   canAccessKnowledgeBase,
   findAccessibleKnowledgeBase,
   validateKnowledgeBaseAccess,
 } from "@/services/knowledge-base-access";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import { KnowledgeBaseVisibilitySchema } from "@/types/knowledge-base";
 
 // 0 = follow the documents sync schedule (no interval-scheduled passes);
@@ -480,6 +484,10 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           labels: z.array(LabelWithDetailsSchema).optional(),
           visibility: KnowledgeBaseVisibilitySchema.optional(),
           teamIds: z.array(z.string()).optional(),
+          initialGrants: z
+            .array(ResourcePermissionGrantSchema)
+            .max(200)
+            .optional(),
         }),
         response: constructResponseSchema(KnowledgeBaseResponseSchema),
       },
@@ -492,16 +500,49 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         visibility,
         teamIds,
       });
-      const kg = await KnowledgeBaseModel.create({
-        visibility,
-        teamIds: visibility === "team-scoped" ? [...new Set(teamIds)] : [],
-        organizationId,
-        createdBy: user.id,
-        name: body.name,
-        ...(body.description !== undefined && {
-          description: body.description,
-        }),
-      });
+      const scope = knowledgeScope(visibility);
+      if (body.initialGrants?.length) {
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        await ResourcePermissions.validateInitialGrants({
+          organizationId,
+          userId: user.id,
+          resource: "knowledgeBase",
+          grants: body.initialGrants,
+          target: {
+            id: randomUUID(),
+            name: body.name,
+            authorId: null,
+            scope,
+            teams: teamIds.map((id) => ({ id })),
+            users: [],
+          },
+        });
+        // SPDX-SnippetEnd
+      }
+      const kg = await KnowledgeBaseModel.create(
+        {
+          visibility,
+          teamIds: visibility === "team-scoped" ? [...new Set(teamIds)] : [],
+          organizationId,
+          createdBy: user.id,
+          name: body.name,
+          ...(body.description !== undefined && {
+            description: body.description,
+          }),
+        },
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        {
+          initialPermissionGrants: ResourcePermissions.grantsForCreation({
+            grants: body.initialGrants,
+            visibility: scope,
+          }),
+        },
+        // SPDX-SnippetEnd
+      );
 
       if (body.labels?.length) {
         await KnowledgeBaseLabelModel.syncLabels(kg.id, body.labels);
@@ -1064,6 +1105,10 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
               "Key/value labels. Omit to leave existing labels untouched; pass [] " +
                 "to clear them.",
             ),
+          initialGrants: z
+            .array(ResourcePermissionGrantSchema)
+            .max(200)
+            .optional(),
         }),
         response: constructResponseSchema(KnowledgeBaseConnectorResponseSchema),
       },
@@ -1071,6 +1116,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async ({ body, organizationId, user }, reply) => {
       const teamIds = body.teamIds ?? [];
       const visibility = body.visibility ?? "org-wide";
+      const scope = knowledgeScope(visibility);
 
       const environmentId = await resolveNewConnectorEnvironmentId({
         userId: user.id,
@@ -1129,6 +1175,27 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
       if (hiddenTypeViolation) {
         throw new ApiError(403, hiddenTypeViolation);
+      }
+
+      if (body.initialGrants?.length) {
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        await ResourcePermissions.validateInitialGrants({
+          organizationId,
+          userId: user.id,
+          resource: "knowledgeConnector",
+          grants: body.initialGrants,
+          target: {
+            id: randomUUID(),
+            name: body.name,
+            authorId: null,
+            scope,
+            teams: teamIds.map((id) => ({ id })),
+            users: [],
+          },
+        });
+        // SPDX-SnippetEnd
       }
 
       // Validate connector config
@@ -1219,22 +1286,34 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       // Create the connector
-      const connector = await KnowledgeBaseConnectorModel.create({
-        organizationId,
-        createdBy: user.id,
-        name: body.name,
-        description: body.description ?? null,
-        visibility: body.visibility,
-        teamIds: body.teamIds,
-        connectorType: body.connectorType,
-        config: body.config,
-        secretId,
-        environmentId,
-        schedule: body.schedule,
-        ftsLanguage: body.ftsLanguage,
-        permissionSyncIntervalSeconds: body.permissionSyncIntervalSeconds,
-        enabled: body.enabled,
-      });
+      const connector = await KnowledgeBaseConnectorModel.create(
+        {
+          organizationId,
+          createdBy: user.id,
+          name: body.name,
+          description: body.description ?? null,
+          visibility: body.visibility,
+          teamIds: body.teamIds,
+          connectorType: body.connectorType,
+          config: body.config,
+          secretId,
+          environmentId,
+          schedule: body.schedule,
+          ftsLanguage: body.ftsLanguage,
+          permissionSyncIntervalSeconds: body.permissionSyncIntervalSeconds,
+          enabled: body.enabled,
+        },
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        {
+          initialPermissionGrants: ResourcePermissions.grantsForCreation({
+            grants: body.initialGrants,
+            visibility: scope,
+          }),
+        },
+        // SPDX-SnippetEnd
+      );
 
       if (body.labels?.length) {
         await KnowledgeBaseConnectorLabelModel.syncLabels(

@@ -1,4 +1,5 @@
 // This file contains Enterprise regions licensed under LICENSE_ENTERPRISE.
+import type { ResourcePermissionGrant } from "@archestra/shared";
 import {
   and,
   count,
@@ -25,6 +26,8 @@ import type {
 } from "@/types/knowledge-connector";
 import { escapeLikePattern } from "@/utils/sql-search";
 import CreatedByModel from "./created-by";
+import ResourcePermissionPolicyModel from "./resource-permission-policy";
+import { knowledgeScope } from "./resource-permission-target";
 
 class KnowledgeBaseConnectorModel {
   static async findByOrganization(params: {
@@ -372,18 +375,41 @@ class KnowledgeBaseConnectorModel {
 
   static async create(
     data: InsertKnowledgeBaseConnector,
+    /** Explicit starting audience; omitted derives one from the visibility. */
+    options?: { initialPermissionGrants?: ResourcePermissionGrant[] },
   ): Promise<KnowledgeBaseConnector> {
-    const [result] = await db
-      .insert(schema.knowledgeBaseConnectorsTable)
-      .values(
-        await CreatedByModel.forInsert({
-          data: data,
-          userIdField: "createdBy",
-        }),
-      )
-      .returning();
+    // The access policy is written with the row it governs, so a failure
+    // cannot leave a connector nobody can reach.
+    return await withDbTransaction(async (tx) => {
+      const [result] = await tx
+        .insert(schema.knowledgeBaseConnectorsTable)
+        .values(
+          await CreatedByModel.forInsert({
+            data: data,
+            userIdField: "createdBy",
+            transaction: tx,
+          }),
+        )
+        .returning();
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await ResourcePermissionPolicyModel.createInitial({
+        tx,
+        organizationId: result.organizationId,
+        resource: "knowledgeConnector",
+        scope: result.id,
+        grants: options?.initialPermissionGrants,
+        // Knowledge carries no author column. An auto-sync connector resolves
+        // access per document upstream, so it reads as organization-wide here.
+        authorId: null,
+        visibility: knowledgeScope(result.visibility),
+        teams: (result.teamIds ?? []).map((id: string) => ({ id })),
+      });
+      // SPDX-SnippetEnd
 
-    return result;
+      return result;
+    });
   }
 
   /**

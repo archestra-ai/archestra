@@ -1,3 +1,4 @@
+import type { ResourcePermissionGrant } from "@archestra/shared";
 import {
   and,
   count,
@@ -21,6 +22,8 @@ import type {
 } from "@/types";
 import CreatedByModel from "./created-by";
 import KnowledgeBaseConnectorModel from "./knowledge-base-connector";
+import ResourcePermissionPolicyModel from "./resource-permission-policy";
+import { knowledgeScope } from "./resource-permission-target";
 
 /**
  * Filters shared by the list and its count, so a page can never show N rows
@@ -228,18 +231,43 @@ class KnowledgeBaseModel {
       );
   }
 
-  static async create(data: InsertKnowledgeBase): Promise<KnowledgeBase> {
-    const [result] = await db
-      .insert(schema.knowledgeBasesTable)
-      .values(
-        await CreatedByModel.forInsert({
-          data: data,
-          userIdField: "createdBy",
-        }),
-      )
-      .returning();
+  static async create(
+    data: InsertKnowledgeBase,
+    /** Explicit starting audience; omitted derives one from the visibility. */
+    options?: { initialPermissionGrants?: ResourcePermissionGrant[] },
+  ): Promise<KnowledgeBase> {
+    // The access policy is written with the row it governs, so a failure
+    // cannot leave a knowledge base nobody can reach.
+    return await withDbTransaction(async (tx) => {
+      const [result] = await tx
+        .insert(schema.knowledgeBasesTable)
+        .values(
+          await CreatedByModel.forInsert({
+            data: data,
+            userIdField: "createdBy",
+            transaction: tx,
+          }),
+        )
+        .returning();
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await ResourcePermissionPolicyModel.createInitial({
+        tx,
+        organizationId: result.organizationId,
+        resource: "knowledgeBase",
+        scope: result.id,
+        grants: options?.initialPermissionGrants,
+        // Knowledge carries no author column, so a private base belongs to
+        // no one and is reached by administrators alone.
+        authorId: null,
+        visibility: knowledgeScope(result.visibility),
+        teams: (result.teamIds ?? []).map((id: string) => ({ id })),
+      });
+      // SPDX-SnippetEnd
 
-    return result;
+      return result;
+    });
   }
 
   /**

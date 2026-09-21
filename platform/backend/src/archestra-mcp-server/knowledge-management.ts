@@ -1,5 +1,7 @@
+import { randomUUID } from "node:crypto";
 import {
   QUOTE_CITATION_INSTRUCTION,
+  ResourcePermissionGrantSchema,
   TOOL_ASSIGN_KNOWLEDGE_BASE_TO_AGENT_SHORT_NAME,
   TOOL_ASSIGN_KNOWLEDGE_CONNECTOR_TO_AGENT_SHORT_NAME,
   TOOL_ASSIGN_KNOWLEDGE_CONNECTOR_TO_KNOWLEDGE_BASE_SHORT_NAME,
@@ -53,12 +55,14 @@ import {
   KnowledgeBaseModel,
   UserModel,
 } from "@/models";
+import { knowledgeScope } from "@/models/resource-permission-target";
 import * as metrics from "@/observability/metrics";
 import { hiddenKnowledgeConnectorViolation } from "@/services/integration-overrides";
 import {
   canAccessKnowledgeBase,
   validateKnowledgeBaseAccess,
 } from "@/services/knowledge-base-access";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   type AclEntry,
   ConnectorTypeSchema,
@@ -97,6 +101,7 @@ const AUTO_SYNC_REQUIRES_PERMISSION_ERROR =
 
 const KnowledgeBaseCreateToolArgsSchema = z
   .object({
+    initialGrants: z.array(ResourcePermissionGrantSchema).max(200).optional(),
     visibility: KnowledgeBaseVisibilitySchema.optional(),
     teamIds: z.array(z.string()).optional(),
     name: InsertKnowledgeBaseSchema.shape.name.describe(
@@ -129,6 +134,7 @@ const DynamicObjectSchema = z
 
 const ConnectorCreateToolArgsSchema = z
   .object({
+    initialGrants: z.array(ResourcePermissionGrantSchema).max(200).optional(),
     name: InsertKnowledgeBaseConnectorSchema.shape.name.describe(
       "Name of the knowledge connector.",
     ),
@@ -843,6 +849,27 @@ async function handleCreateKnowledgeBase(params: {
       visibility: args.visibility ?? "org-wide",
       teamIds: args.teamIds ?? [],
     });
+    const scope = knowledgeScope(args.visibility ?? "org-wide");
+    if (args.initialGrants?.length && context.userId) {
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await ResourcePermissions.validateInitialGrants({
+        organizationId: context.organizationId,
+        userId: context.userId,
+        resource: "knowledgeBase",
+        grants: args.initialGrants,
+        target: {
+          id: randomUUID(),
+          name: args.name,
+          authorId: null,
+          scope,
+          teams: (args.teamIds ?? []).map((id) => ({ id })),
+          users: [],
+        },
+      });
+      // SPDX-SnippetEnd
+    }
     const kb = await KnowledgeBaseModel.create(
       InsertKnowledgeBaseSchema.parse({
         organizationId: context.organizationId,
@@ -855,6 +882,16 @@ async function handleCreateKnowledgeBase(params: {
             : [],
         description: args.description ?? null,
       }),
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      {
+        initialPermissionGrants: ResourcePermissions.grantsForCreation({
+          grants: args.initialGrants,
+          visibility: scope,
+        }),
+      },
+      // SPDX-SnippetEnd
     );
     return structuredSuccessResult(
       { knowledgeBase: kb },
@@ -1085,6 +1122,27 @@ async function handleCreateKnowledgeConnector(params: {
       context.agent.id,
     );
 
+    const scope = knowledgeScope(args.visibility ?? "org-wide");
+    if (args.initialGrants?.length && context.userId) {
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await ResourcePermissions.validateInitialGrants({
+        organizationId: context.organizationId,
+        userId: context.userId,
+        resource: "knowledgeConnector",
+        grants: args.initialGrants,
+        target: {
+          id: randomUUID(),
+          name: args.name,
+          authorId: null,
+          scope,
+          teams: (args.team_ids ?? []).map((id) => ({ id })),
+          users: [],
+        },
+      });
+      // SPDX-SnippetEnd
+    }
     const connector = await KnowledgeBaseConnectorModel.create(
       InsertKnowledgeBaseConnectorSchema.parse({
         organizationId: context.organizationId,
@@ -1096,6 +1154,16 @@ async function handleCreateKnowledgeConnector(params: {
         teamIds: args.team_ids,
         environmentId: agentEnvironmentId,
       }),
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      {
+        initialPermissionGrants: ResourcePermissions.grantsForCreation({
+          grants: args.initialGrants,
+          visibility: scope,
+        }),
+      },
+      // SPDX-SnippetEnd
     );
     // Same lifecycle rule as the REST create route: a Perforce connector that
     // syncs permissions gets its shim now, not on its first pass.

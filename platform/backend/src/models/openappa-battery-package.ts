@@ -11,11 +11,14 @@ const table = schema.openappaBatteryPackagesTable;
 class OpenAppaBatteryPackageModel {
   /** Every package of the organization without its files, newest version of a name first. */
   static async list(organizationId: string): Promise<BatteryPackageSummary[]> {
-    return db
-      .select(summary)
-      .from(table)
-      .where(eq(table.organizationId, organizationId))
-      .orderBy(asc(table.name), desc(table.createdAt));
+    return (
+      db
+        .select(summary)
+        .from(table)
+        .where(eq(table.organizationId, organizationId))
+        // Two versions can share a timestamp, so the id decides the order.
+        .orderBy(asc(table.name), desc(table.createdAt), desc(table.id))
+    );
   }
 
   /** The stored versions of one battery name, newest first. */
@@ -32,7 +35,24 @@ class OpenAppaBatteryPackageModel {
           eq(table.name, params.name),
         ),
       )
-      .orderBy(desc(table.createdAt));
+      .orderBy(desc(table.createdAt), desc(table.id));
+  }
+
+  /** Whether the organization stores these bytes, without reading them. */
+  static async existsByHash(params: {
+    organizationId: string;
+    contentHash: string;
+  }): Promise<boolean> {
+    const [row] = await db
+      .select({ id: table.id })
+      .from(table)
+      .where(
+        and(
+          eq(table.organizationId, params.organizationId),
+          eq(table.contentHash, params.contentHash),
+        ),
+      );
+    return row !== undefined;
   }
 
   /** The row an include entry spells; the bytes under a hash never change. */

@@ -4,17 +4,15 @@
 import {
   type PermissionSubject,
   type ResourcePermissionAction,
-  resourceLabels,
   resourcePermissionPresets,
   type ScopedResource,
   TEAM_RESOURCE_SCOPE,
 } from "@archestra/shared";
 import { Trash2 } from "lucide-react";
-import { useEffect, useId, useState } from "react";
+import { useEffect, useState } from "react";
 import { useFieldArray, useForm } from "react-hook-form";
 import { QueryLoadError } from "@/components/query-load-error";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   Select,
@@ -88,8 +86,6 @@ function PermissionsEditor({
     name: "grants",
   });
   const [search, setSearch] = useState("");
-  const [showInherited, setShowInherited] = useState(true);
-  const inheritedId = useId();
   const canManage = policy.effectiveActions.includes("manage-permissions");
   const recipients = usePermissionRecipients({
     resource: policy.resource,
@@ -116,44 +112,71 @@ function PermissionsEditor({
       },
     );
   });
+  // Direct grants are editable here; everything below them is explanation of
+  // access that exists anyway. One list, ordered by who can change what, reads
+  // as a single answer to "who has access" instead of three parallel boxes.
+  const indirect = [
+    ...policy.inheritedGrants.map((grant) => ({
+      key: `inherited:${grant.sourceScope}:${subjectKey(grant.subject)}`,
+      name: grant.name,
+      type: grant.subject.type,
+      actions: grant.actions,
+      via:
+        grant.sourceScope === TEAM_RESOURCE_SCOPE
+          ? "every object their teams reach"
+          : `every ${scopedResourceNouns[policy.resource]}`,
+    })),
+    ...policy.legacyAccess.map((grant) => ({
+      key: `legacy:${subjectKey(grant.subject)}`,
+      name: grant.name,
+      type: grant.subject.type,
+      actions: grant.actions,
+      via: "existing roles and visibility",
+    })),
+  ];
   const Container = embedded ? "div" : "form";
   return (
     <Container
       onSubmit={embedded ? undefined : submit}
-      className="space-y-6 max-w-4xl"
+      className="max-w-3xl space-y-4"
     >
-      <div>
-        <h2 className="text-lg font-semibold">Who has access</h2>
-        <p className="text-sm text-muted-foreground mt-1">
-          {policy.scope === "*"
-            ? `Applies to all current and future ${resourceLabels[policy.resource].toLowerCase()} resources in this organization.`
-            : policy.scope === TEAM_RESOURCE_SCOPE
-              ? "Applies when the resource has a direct grant to one of the recipient’s teams. Access follows current team membership. Service accounts have no team membership."
-              : `Permissions for ${policy.name}.`}{" "}
-          Access from multiple grants is combined.
-        </p>
-      </div>
+      <p className="text-sm text-muted-foreground">
+        {policy.scope === "*"
+          ? `Applies to every ${scopedResourceNouns[policy.resource]} in this organization, including ones created later.`
+          : policy.scope === TEAM_RESOURCE_SCOPE
+            ? "Applies to objects granted to a recipient's teams, and follows team membership as it changes. Service accounts have no teams."
+            : "Access from every grant below is combined."}
+      </p>
       {changedElsewhere && (
-        <div role="alert" className="rounded-md border p-3 text-sm">
-          Permissions changed while you were editing. Reload the latest
-          permissions before saving.{" "}
-          <Button type="button" variant="link" onClick={reset}>
-            Discard draft and reload
+        <div
+          role="alert"
+          className="flex flex-wrap items-center gap-x-2 rounded-md border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-sm"
+        >
+          <span>Someone else changed these permissions while you edited.</span>
+          <Button
+            type="button"
+            variant="link"
+            className="h-auto p-0"
+            aria-label="Discard draft and reload"
+            onClick={reset}
+          >
+            <span>Reload</span>
           </Button>
         </div>
       )}
-      <div className="divide-y rounded-md border">
-        {fields.length === 0 && (
-          <p className="p-4 text-sm text-muted-foreground">
-            No direct grants. Inherited access can still apply.
+
+      <div className="divide-y border-y">
+        {fields.length === 0 && indirect.length === 0 && (
+          <p className="py-3 text-sm text-muted-foreground">
+            Nobody has access yet.
           </p>
         )}
         {fields.map((grant, index) => (
-          <div key={grant.id} className="flex flex-wrap items-center gap-3 p-4">
-            <div className="min-w-40 flex-1">
-              <p className="text-sm font-medium break-words">{grant.name}</p>
+          <div key={grant.id} className="flex items-center gap-3 py-2">
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm">{grant.name}</p>
               <p className="text-xs text-muted-foreground">
-                {subjectLabels[grant.subject.type]} · Direct
+                {subjectLabels[grant.subject.type]}
               </p>
             </div>
             <Select
@@ -169,7 +192,8 @@ function PermissionsEditor({
               }}
             >
               <SelectTrigger
-                className="w-40"
+                size="sm"
+                className="w-36"
                 aria-label={`Permission for ${grant.name}`}
               >
                 <SelectValue />
@@ -190,7 +214,7 @@ function PermissionsEditor({
                 )}
                 {presetFor(grant.actions) === "custom" && (
                   <SelectItem value="custom" disabled>
-                    Custom permissions
+                    {actionSummary(grant.actions)}
                   </SelectItem>
                 )}
               </SelectContent>
@@ -199,25 +223,39 @@ function PermissionsEditor({
               type="button"
               size="icon"
               variant="ghost"
+              className="size-8 shrink-0 text-muted-foreground"
               disabled={!canManage || mutation.isPending}
               aria-label={`Remove direct access for ${grant.name}`}
               onClick={() => remove(index)}
             >
               <Trash2 className="size-4" />
             </Button>
-            <p className="w-full text-xs text-muted-foreground">
-              {grant.actions.map((action) => actionLabels[action]).join(", ")}
-            </p>
+          </div>
+        ))}
+        {indirect.map((grant) => (
+          <div
+            key={grant.key}
+            className="flex items-center gap-3 py-2 text-muted-foreground"
+          >
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm">{grant.name}</p>
+              <p className="text-xs">
+                {`${subjectLabels[grant.type]} · via ${grant.via}`}
+              </p>
+            </div>
+            <p className="shrink-0 text-xs">{actionSummary(grant.actions)}</p>
+            <span className="size-8 shrink-0" />
           </div>
         ))}
       </div>
+
       {canManage && (
-        <div className="space-y-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <SearchableSelect
-            className="w-full max-w-md"
+            className="w-full max-w-xs"
             value=""
             ariaLabel="Add permission recipient"
-            placeholder="Add a user, team, service account, or role"
+            placeholder="Grant access to…"
             searchPlaceholder="Search recipients…"
             onSearchQueryChange={setSearch}
             items={(recipients.data ?? [])
@@ -244,120 +282,43 @@ function PermissionsEditor({
               mutation.isPending || !policy.effectiveActions.includes("read")
             }
           />
-          {recipients.isError && (
-            <p role="alert" className="text-sm text-destructive">
-              Could not load recipients.{" "}
+          {dirty && (
+            <div className="flex items-center gap-2">
               <Button
                 type="button"
-                variant="link"
-                onClick={() => void recipients.refetch()}
+                size="sm"
+                variant="ghost"
+                aria-label="Discard changes"
+                disabled={mutation.isPending}
+                onClick={reset}
               >
-                Retry
+                <span>Discard</span>
               </Button>
-            </p>
+              <Button
+                type={embedded ? "button" : "submit"}
+                size="sm"
+                aria-label="Save permissions"
+                onClick={embedded ? () => void submit() : undefined}
+                disabled={mutation.isPending || changedElsewhere}
+              >
+                <span>{mutation.isPending ? "Saving…" : "Save"}</span>
+              </Button>
+            </div>
           )}
         </div>
       )}
-      <div className="space-y-3">
-        <label
-          htmlFor={inheritedId}
-          className="flex items-center gap-2 text-sm"
-        >
-          <Checkbox
-            id={inheritedId}
-            checked={showInherited}
-            onCheckedChange={(checked) => setShowInherited(checked === true)}
-          />
-          Show inherited grants
-        </label>
-        {showInherited && (
-          <div className="space-y-3">
-            {policy.inheritedGrants.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                No grants inherited for this resource type.
-              </p>
-            ) : (
-              policy.inheritedGrants.map((grant) => (
-                <div
-                  key={`${grant.sourceScope}:${subjectKey(grant.subject)}`}
-                  className="flex flex-wrap gap-3 rounded-md border p-4"
-                >
-                  <div className="min-w-40 flex-1">
-                    <p className="text-sm font-medium">{grant.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {subjectLabels[grant.subject.type]} ·{" "}
-                      {grant.sourceScope === TEAM_RESOURCE_SCOPE
-                        ? "Resources shared with the recipient’s teams"
-                        : "All resources of this type"}
-                    </p>
-                  </div>
-                  <p className="text-sm">
-                    {grant.actions
-                      .map((action) => actionLabels[action])
-                      .join(", ")}
-                  </p>
-                </div>
-              ))
-            )}
-            {policy.legacyAccess.length > 0 && (
-              <div className="space-y-3">
-                <h3 className="text-sm font-medium">
-                  Existing roles and visibility
-                </h3>
-                <p className="text-xs text-muted-foreground">
-                  These recipients also have access through organization roles
-                  and the resource's existing visibility settings. Removing a
-                  direct grant above does not remove this access.
-                </p>
-                <div className="divide-y rounded-md border">
-                  {policy.legacyAccess.map((grant) => (
-                    <div
-                      key={subjectKey(grant.subject)}
-                      className="flex flex-wrap gap-3 p-4"
-                    >
-                      <div className="min-w-40 flex-1">
-                        <p className="text-sm font-medium">{grant.name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {subjectLabels[grant.subject.type]} · Existing access
-                        </p>
-                      </div>
-                      <p className="text-sm">
-                        {grant.actions
-                          .map((action) => actionLabels[action])
-                          .join(", ")}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-            <p className="text-xs text-muted-foreground">
-              Inherited grants must be changed at their source. Removing a
-              direct grant does not remove access from another grant.
-            </p>
-          </div>
-        )}
-      </div>
-      {canManage && (
-        <div className="flex items-center justify-end gap-2 border-t pt-4">
+      {recipients.isError && (
+        <p role="alert" className="text-sm text-destructive">
+          <span>Could not load recipients. </span>
           <Button
             type="button"
-            variant="outline"
-            disabled={mutation.isPending || !form.formState.isDirty}
-            onClick={reset}
+            variant="link"
+            className="h-auto p-0"
+            onClick={() => void recipients.refetch()}
           >
-            Discard changes
+            <span>Retry</span>
           </Button>
-          <Button
-            type={embedded ? "button" : "submit"}
-            onClick={embedded ? () => void submit() : undefined}
-            disabled={
-              mutation.isPending || !form.formState.isDirty || changedElsewhere
-            }
-          >
-            {mutation.isPending ? "Saving…" : "Save permissions"}
-          </Button>
-        </div>
+        </p>
       )}
     </Container>
   );
@@ -375,7 +336,29 @@ function presetFor(actions: ResourcePermissionAction[]) {
     )?.[0] ?? "custom"
   );
 }
-const subjectLabels = {
+/**
+ * The preset label when the actions are one, otherwise the actions themselves.
+ * A row states its access once: the picker carries it for a direct grant, this
+ * carries it for a grant that is only being explained.
+ */
+function actionSummary(actions: ResourcePermissionAction[]) {
+  const preset = presetFor(actions);
+  if (preset !== "custom")
+    return resourcePermissionPresets[
+      preset as keyof typeof resourcePermissionPresets
+    ].label;
+  return actions.map((action) => actionLabels[action]).join(", ");
+}
+/** Singular, for sentences. `resourceLabels` is plural and reads as "every agents". */
+const scopedResourceNouns: Record<ScopedResource, string> = {
+  agent: "agent",
+  skill: "skill",
+  app: "app",
+  llmModel: "model",
+  mcpGateway: "MCP gateway",
+  mcpRegistry: "MCP registry entry",
+};
+const subjectLabels: Record<PermissionSubject["type"], string> = {
   user: "User",
   team: "Team",
   serviceAccount: "Service account",

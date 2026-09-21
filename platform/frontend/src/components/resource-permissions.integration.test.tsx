@@ -97,17 +97,23 @@ it("explains separate wildcard and team-relative inheritance for the same recipi
     },
   ];
   renderEditor();
+  // The same role reaches this object two ways. Both are shown, and each says
+  // which one it is, because they are revoked in different places.
   expect(
-    await screen.findByText(/All resources of this type/),
+    await screen.findByText(/via every MCP registry entry/),
   ).toBeInTheDocument();
   expect(
-    screen.getByText(/Resources shared with the recipient’s teams/),
+    screen.getByText(/via every object their teams reach/),
   ).toBeInTheDocument();
   expect(screen.getAllByText("Editor")).toHaveLength(2);
-  await userEvent
-    .setup()
-    .click(screen.getByRole("checkbox", { name: "Show inherited grants" }));
-  expect(screen.queryByText("Editor")).not.toBeInTheDocument();
+  // Neither is editable here: an inherited grant has no picker and no remove
+  // button, which is what "change it at its source" means in the markup.
+  expect(
+    screen.queryByRole("combobox", { name: "Permission for Editor" }),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: /Remove direct access for Editor/ }),
+  ).not.toBeInTheDocument();
 });
 
 it("revokes a service account's direct grant without removing inherited team access", async () => {
@@ -128,11 +134,13 @@ it("revokes a service account's direct grant without removing inherited team acc
   );
   await user.click(screen.getByRole("button", { name: "Save permissions" }));
   await waitFor(() => expect(submitted).toEqual({ revision: 1, grants: [] }));
+  // The team grant is inherited, so revoking the direct one leaves it standing.
   expect(screen.getByText("Engineering")).toBeInTheDocument();
+  // Saving clears the draft, and with nothing left to save the control goes.
   await waitFor(() =>
     expect(
-      screen.getByRole("button", { name: "Save permissions" }),
-    ).toBeDisabled(),
+      screen.queryByRole("button", { name: "Save permissions" }),
+    ).not.toBeInTheDocument(),
   );
 });
 

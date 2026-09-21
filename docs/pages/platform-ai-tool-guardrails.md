@@ -2,7 +2,7 @@
 title: Tool Guardrails
 category: LLM Proxy
 order: 5
-lastUpdated: 2026-09-19
+lastUpdated: 2026-09-21
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -23,6 +23,17 @@ Set `ARCHESTRA_OPENAPPA_ENABLED=true` to enable the OpenAPPA sidebar entry in St
 The built-in APPA Guide skill helps agents inspect, explain, and edit this policy. It uses the same read, validate, and update tools as the editor. The skill is available only while APPA is enabled.
 
 APPA evaluates each tool call before releasing it. Allowed calls run in parallel, and their results can return in any order. When a call is denied, the proxy returns a remedy notice. Other allowed calls in the same response still run.
+
+Claude Code, Codex, and OpenCode may show this two-line mark at the end of a protected session's first reply and on compaction summaries:
+
+```
+▄█▄▄▄█▄  protected session XK7-Q2M9
+██▄█▄██
+```
+
+The mark proves which protected session wrote the reply. The proxy removes it before the provider and before logging. Most replies carry nothing. Signed tool-call IDs supply separate lineage evidence.
+
+A new session forks only when returned history contains a valid mark or signed tool-call ID. Structured outputs, tool data, and other non-text fields do not carry the mark.
 
 An agent that calls a tool through `run_tool` is evaluated on the tool that runs. A rule for `send_email` applies to a `run_tool` dispatch with `tool_name = "send_email"` exactly as it applies to a direct call. The remedy notice for a denied dispatch names that tool, not `run_tool`.
 

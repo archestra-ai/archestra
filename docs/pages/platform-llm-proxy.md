@@ -3,7 +3,7 @@ title: Overview
 category: LLM Proxy
 order: 1
 description: Secure proxy for LLM provider interactions
-lastUpdated: 2026-09-03
+lastUpdated: 2026-09-21
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -92,9 +92,20 @@ The router accepts OpenAI Responses and Chat Completions requests, resolves prov
 
 Archestra supports the following custom headers on LLM Proxy requests. All headers are optional.
 
+With OpenAPPA enabled, Claude Code, Codex, and OpenCode receive signed tool-call IDs from the proxy. The proxy detects session identity from the Claude Code session header, Codex thread metadata, and OpenCode session headers. It restores original provider IDs before it forwards later requests. Archestra Chat and Mistral models keep original provider IDs.
+
+The proxy may show this two-line mark at the end of a protected session's first reply and on compaction summaries:
+
+```
+▄█▄▄▄█▄  protected session XK7-Q2M9
+██▄█▄██
+```
+
+The mark proves which protected session wrote the reply. The proxy removes it before the provider and before logging. Most replies carry nothing. Signed tool-call IDs provide separate lineage evidence. Structured outputs, tool data, and other non-text fields do not carry the mark. If a new session lacks a valid mark or tool-call ID, the proxy cannot reconstruct source lineage. This behavior requires `ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET`.
+
 | Header                     | Description                                                                                                                                                                                                                                          | Example Value                          |
 | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
-| `X-Archestra-Agent-Id`     | Identifier for the calling agent or application. Stored with each interaction and included in [trace attributes](/docs/platform-observability#distributed-tracing) as `archestra.external_agent_id`. Client-provided when set; if absent, Archestra auto-discovers known clients — Claude (recorded as `anthropic_claude`), Codex (recorded as `openai_codex`), and Cursor (recorded as `cursor`). Use it to tell apart the applications sharing the LLM Proxy.                       | `my-chatbot-prod`                      |
+| `X-Archestra-Agent-Id`     | Identifier for the calling agent or application. Stored with each interaction and included in [trace attributes](/docs/platform-observability#distributed-tracing) as `archestra.external_agent_id`. Client-provided when set; if absent, Archestra auto-discovers known clients — Claude (recorded as `anthropic_claude`), Codex (recorded as `openai_codex`), Cursor (recorded as `cursor`), and OpenCode (recorded as `opencode`). Use it to tell apart the applications sharing the LLM Proxy.                       | `my-chatbot-prod`                      |
 | `X-Archestra-User-Id`      | Associates the request with a specific Archestra user. Automatically included when using the built-in Archestra Chat.                                                                                                                                | `123e4567-e89b-12d3-a456-426614174000` |
 | `X-Archestra-Virtual-Key`  | Authenticates the acting Archestra user with a [passthrough virtual key](/docs/platform-llm-proxy-authentication#passthrough-virtual-keys) when the provider credential in `Authorization` is passed straight through. Unlike `X-Archestra-User-Id`, it is authenticated. | `arch_abc123def456...`                 |
 | `X-Archestra-Session-Id`   | Groups related LLM requests into a session - included in [trace attributes](/docs/platform-observability#distributed-tracing) as `gen_ai.conversation.id`.                                                                                           | `session-abc-123`                      |

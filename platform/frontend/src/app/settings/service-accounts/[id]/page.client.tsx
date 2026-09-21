@@ -395,21 +395,22 @@ export default function ServiceAccountDetailPage({
         // than when it started.
         accessorKey: "disabled",
         header: "Status",
-        size: 168,
+        size: 112,
         cell: ({ row }) => (
-          // One line, not two. Stacked, the reason made every row twice as
-          // tall to carry four words, which is what made a four-key table
-          // read as a wall.
-          <div className="flex items-baseline gap-2">
+          // The badge alone, with the date it is derived from on hover. Six
+          // columns do not fit the settings shell's content width, and
+          // spelling the date out inline was the 16px that pushed Actions off
+          // the edge. The badge is the part you scan; the date is the part
+          // you check once, on the one row that is amber.
+          <span title={expiryTitle(row.original)}>
             <KeyStatusBadge status={getKeyStatus(row.original)} />
-            <ExpiryNote token={row.original} />
-          </div>
+          </span>
         ),
       },
       {
         accessorKey: "lastUsedAt",
         header: "Last used",
-        size: 100,
+        size: 104,
         cell: ({ row }) =>
           row.original.lastUsedAt ? (
             formatRelativeTimeFromNow(row.original.lastUsedAt)
@@ -422,7 +423,7 @@ export default function ServiceAccountDetailPage({
             {
               id: "actions",
               header: "Actions",
-              size: 76,
+              size: 84,
               cell: ({ row }) => (
                 // In a menu rather than as a row of icon buttons. Inline, the
                 // revoke button put a destructive red glyph on every row, so
@@ -683,9 +684,12 @@ export default function ServiceAccountDetailPage({
                   filteredEmptyMessage="No API keys match your filters"
                   onClearFilters={clearFilters}
                   hidePaginationWhenSinglePage
-                  // These sizes sum to 690 with the 56px select column, so the
-                  // table fits the settings shell instead of hiding Actions
-                  // behind a horizontal scroll.
+                  // `DataTable` sets the table's `min-width` to the sum of
+                  // these sizes, and the settings shell gives the content
+                  // column about 686px once the section list takes its 220px.
+                  // These sum to 588 plus the select column, which leaves the
+                  // flexible Name column real room at a laptop width instead
+                  // of pushing Actions off the right edge.
                   fixedWidthColumnIds={[
                     "tokenStart",
                     "disabled",
@@ -850,33 +854,23 @@ export default function ServiceAccountDetailPage({
 // === Internal helpers
 
 /**
- * The date beside a key's status badge: when it lapses, or when it did. Says
- * nothing at all for an open-ended key, because "Never expires" on every row
- * is noise that makes the rows that do expire harder to spot.
+ * What a key's status badge means, as hover text: when it lapses, or when it
+ * did. Undefined for an open-ended key, so the badge carries no tooltip at all
+ * rather than one saying "Never expires" on every row.
  *
- * It states only the date. The badge beside it already names the state, and
- * saying it twice ("Expiring" next to "Expires in 14 days") in two colours was
- * most of what made this column loud. Colour stays on the badge alone, which
- * is where the rest of the app rations it.
+ * It reads as a sentence because it is the only place the date appears. The
+ * badge used to be followed by the same fact spelled out inline, which said
+ * the state twice and cost the column the width that Actions needed.
  */
-function ExpiryNote({ token }: { token: ServiceAccountToken }) {
-  if (!token.expiresAt) return null;
+function expiryTitle(token: ServiceAccountToken): string | undefined {
+  if (!token.expiresAt) return undefined;
 
-  const status = getKeyStatus(token);
-  if (status === "expired") {
-    return (
-      <span className="truncate text-xs text-muted-foreground">
-        {formatRelativeTimeFromNow(token.expiresAt)}
-      </span>
-    );
+  if (getKeyStatus(token) === "expired") {
+    return `Expired ${formatRelativeTimeFromNow(token.expiresAt)}`;
   }
 
   const days = daysUntil(token.expiresAt);
-  return (
-    <span className="truncate text-xs text-muted-foreground">
-      in {days} {days === 1 ? "day" : "days"}
-    </span>
-  );
+  return `Expires in ${days} ${days === 1 ? "day" : "days"}`;
 }
 
 function apiBaseUrl(): string {

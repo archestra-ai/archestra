@@ -8,7 +8,7 @@ import {
   OUTPUT_MODALITY_OPTIONS,
   SUPPORTED_EMBEDDING_DIMENSIONS,
 } from "@archestra/shared";
-import { AlertCircle, Boxes, Globe, RotateCcw, Users } from "lucide-react";
+import { AlertCircle, Boxes, RotateCcw } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -16,6 +16,7 @@ import { useForm } from "react-hook-form";
 import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
 import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
 import { PROVIDER_CONFIG } from "@/components/llm-provider-api-key-form";
+import { ResourceAccessSection } from "@/components/resource-access-section";
 import { TabbedDialogShell } from "@/components/tabbed-dialog-shell";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -39,15 +40,6 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  UserShareField,
-  useUserShareOption,
-} from "@/components/user-share-field";
-import {
-  TeamVisibilityPicker,
-  type VisibilityOption,
-  VisibilitySelector,
-} from "@/components/visibility-selector";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { type ModelWithApiKeys, useUpdateModel } from "@/lib/llm-models.query";
@@ -73,6 +65,7 @@ import {
  */
 type ModelDialogSection =
   | "availability"
+  | "permissions"
   | "pricing"
   | "limits"
   | "modalities"
@@ -86,9 +79,6 @@ type ModelDialogSection =
  */
 const SECTION_BY_FIELD: Record<string, ModelDialogSection> = {
   ignored: "availability",
-  teamIds: "availability",
-  userIds: "availability",
-  accessScope: "availability",
   customPricePerMillionInput: "pricing",
   customPricePerMillionOutput: "pricing",
   customPricePerMillionCacheRead: "pricing",
@@ -143,23 +133,6 @@ type EditModelEmbeddingDimensionsValue =
 
 // "user" shares the model with named individuals — the finer-grained peer of a
 // team restriction. Stored as grants beside the team list, not as a scope.
-type ModelAccessScope = "everyone" | "team" | "user";
-
-const modelAccessScopeOptions: VisibilityOption<ModelAccessScope>[] = [
-  {
-    value: "everyone",
-    label: "Everyone",
-    description: "All members of the organization can see and use this model.",
-    icon: Globe,
-  },
-  {
-    value: "team",
-    label: "Specific teams",
-    description:
-      "Only members of the selected teams can see and use this model.",
-    icon: Users,
-  },
-];
 
 interface EditModelFormValues {
   customPricePerMillionInput: string;
@@ -169,9 +142,6 @@ interface EditModelFormValues {
   customContextLength: string;
   customOutputLength: string;
   ignored: boolean;
-  accessScope: ModelAccessScope;
-  teamIds: string[];
-  userIds: string[];
   embeddingDimensions: EditModelEmbeddingDimensionsValue;
   inputModalities: string[];
   outputModalities: string[];
@@ -212,27 +182,7 @@ export function EditModelDialog({
     availableApiKeys: apiKeys,
   });
   const fallbackPricing = getFallbackPricing(model);
-  const teamScopeUnavailable = !canReadTeams || assignableTeams.length === 0;
-  const userShareOption = useUserShareOption<ModelAccessScope>("user");
-  const accessScopeOptions: VisibilityOption<ModelAccessScope>[] = [
-    ...modelAccessScopeOptions.map((option) =>
-      option.value === "team" && teamScopeUnavailable
-        ? {
-            ...option,
-            disabled: true,
-            disabledLabel: !canReadTeams
-              ? "Requires permission"
-              : "No teams available",
-            disabledReason: !canReadTeams
-              ? "Team selection requires permission to view teams."
-              : "There are no teams to share with yet. Create one from Settings → Teams.",
-          }
-        : option,
-    ),
-    // Shown even with nobody to share with, disabled and explained, so the
-    // capability is discoverable rather than silently absent.
-    { ...userShareOption, label: "Specific people" },
-  ];
+  const _teamScopeUnavailable = !canReadTeams || assignableTeams.length === 0;
   // The model's provider supports prompt caching when the backend resolved a
   // cache price for it (synced, custom, or multiplier-derived).
   const supportsCachePricing = model.cachePriceSource !== null;
@@ -248,7 +198,6 @@ export function EditModelDialog({
     defaultValues: getDefaults(model),
   });
   const selectedEmbeddingDimensions = form.watch("embeddingDimensions");
-  const accessScope = form.watch("accessScope");
   // The `num_ctx` ceiling follows the window currently entered in this dialog,
   // not the saved one: the update route validates the post-patch pair, so
   // raising the window and `num_ctx` in one save has to pass here too.
@@ -331,8 +280,6 @@ export function EditModelDialog({
       labels: finalLabels,
       // Both lists always go, so switching between Teams and Users revokes
       // what the previous choice left behind instead of stranding it.
-      teamIds: values.accessScope === "team" ? values.teamIds : [],
-      userIds: values.accessScope === "user" ? values.userIds : [],
       embeddingDimensions,
       // Sent only when actually changed: a row synced without modality
       // metadata stores null, and a price-only save must not coerce that null
@@ -384,6 +331,7 @@ export function EditModelDialog({
   const navItems = useMemo(
     () => [
       { id: "availability" as const, label: "Availability" },
+      { id: "permissions" as const, label: "Permissions" },
       { id: "pricing" as const, label: "Pricing" },
       { id: "limits" as const, label: "Limits" },
       { id: "modalities" as const, label: "Modalities" },
@@ -467,7 +415,7 @@ export function EditModelDialog({
           <div className="space-y-1">
             <span className="text-sm font-medium">Availability</span>
             <p className="text-sm text-muted-foreground">
-              Control who can see and use this model.
+              Whether this model is offered anywhere {appName} lists models.
             </p>
           </div>
 
@@ -497,62 +445,6 @@ export function EditModelDialog({
             )}
           />
 
-          <FormField
-            control={form.control}
-            name="teamIds"
-            rules={{
-              validate: (teamIds) =>
-                form.getValues("accessScope") === "team" && teamIds.length === 0
-                  ? "Select at least one team"
-                  : true,
-            }}
-            render={({ field }) => (
-              <FormItem>
-                <VisibilitySelector
-                  label="Who can use this model"
-                  value={accessScope}
-                  options={accessScopeOptions}
-                  onValueChange={(scope) => {
-                    form.setValue("accessScope", scope);
-                    // Re-run the teamIds rule so a stale "select at least
-                    // one team" error clears when switching back.
-                    void form.trigger("teamIds");
-                  }}
-                >
-                  {accessScope === "user" && (
-                    <UserShareField
-                      value={form.watch("userIds")}
-                      onValueChange={(ids) => {
-                        form.setValue("userIds", ids);
-                        void form.trigger("userIds");
-                      }}
-                      label="People"
-                    />
-                  )}
-
-                  {accessScope === "team" && (
-                    <FormControl>
-                      <TeamVisibilityPicker
-                        disabled={!canReadTeams || assignableTeams.length === 0}
-                        teams={assignableTeams}
-                        value={field.value}
-                        onChange={field.onChange}
-                        required
-                        unavailableMessage={
-                          !canReadTeams
-                            ? "Teams unavailable"
-                            : assignableTeams.length === 0
-                              ? "No teams available"
-                              : undefined
-                        }
-                      />
-                    </FormControl>
-                  )}
-                </VisibilitySelector>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
           <AdvancedLabelsSection
             ref={labelsRef}
             labels={labels}
@@ -561,6 +453,9 @@ export function EditModelDialog({
         </div>
       </DialogSection>
 
+      <DialogSection id="permissions" activeSection={activeSection}>
+        <ResourceAccessSection resource="llmModel" id={model.id} />
+      </DialogSection>
       <DialogSection id="pricing" activeSection={activeSection}>
         {/* Pricing */}
         <div className="space-y-2">
@@ -1109,10 +1004,6 @@ function getDefaults(model: ModelWithApiKeys): EditModelFormValues {
     customContextLength: model.customContextLength?.toString() ?? "",
     customOutputLength: model.customOutputLength?.toString() ?? "",
     ignored: model.ignored,
-    accessScope:
-      model.teams.length > 0 ? ("team" as const) : ("everyone" as const),
-    teamIds: model.teams.map((team) => team.id),
-    userIds: model.users?.map((user) => user.id) ?? [],
     embeddingDimensions: model.embeddingDimensions
       ? getEmbeddingDimensionsString(model.embeddingDimensions)
       : "",

@@ -444,7 +444,9 @@ function McpGateways({
     {
       id: "name",
       accessorKey: "name",
-      size: 240,
+      // A gateway name sits above a wrapped description, so this column earns
+      // the width the count columns were holding without using.
+      size: 400,
       header: ({ column }) => (
         <Button
           variant="ghost"
@@ -503,7 +505,7 @@ function McpGateways({
     {
       id: "toolsCount",
       accessorKey: "toolsCount",
-      size: 110,
+      size: 90,
       header: ({ column }) => (
         <Button
           variant="ghost"
@@ -528,7 +530,7 @@ function McpGateways({
     {
       id: "subagentsCount",
       accessorKey: "subagentsCount",
-      size: 120,
+      size: 100,
       header: ({ column }) => (
         <Button
           variant="ghost"
@@ -553,7 +555,7 @@ function McpGateways({
     {
       id: "lastUsedAt",
       accessorKey: "lastUsedAt",
-      size: 110,
+      size: 100,
       header: ({ column }) => (
         <Button
           variant="ghost"

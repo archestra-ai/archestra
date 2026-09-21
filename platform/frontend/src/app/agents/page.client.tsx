@@ -134,6 +134,7 @@ import {
   useOrganization,
 } from "@/lib/organization.query";
 import { useMyTeams } from "@/lib/teams/team.query";
+import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { resolveCatalogEnvironmentLabel } from "../mcp/registry/_parts/catalog-environment-label";
 import { AgentActions } from "./agent-actions";
 
@@ -896,35 +897,56 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
       },
     },
     {
-      id: "team",
-      header: "Accessible to",
+      id: "tools",
+      header: "Tools",
       enableSorting: false,
-      size: 160,
-      // Internal agents answer to a grant policy, shown on their Permissions
-      // tab; only external A2A agents still carry a visibility scope here.
+      size: 90,
+      // The same counts the card shows. Access used to sit here, as the word
+      // "Permissions" linking to the tab that owns it, which is a link and
+      // not a value: every internal row read the same and sorted on nothing.
       cell: ({ row }) =>
         row.original.type === "external" ? (
-          <RowClickShield>
-            <ResourceVisibilityBadge
-              scope={row.original.value.scope}
-              teams={row.original.value.teams}
-              users={row.original.value.users}
-              authorId={row.original.value.authorId}
-              authorName={row.original.value.authorName}
-              currentUserId={currentUserId}
-              showSelfAsMe
-            />
-          </RowClickShield>
+          <span className="text-sm text-muted-foreground">-</span>
         ) : (
-          <RowClickShield>
-            <Link
-              href={`${agentDetailHref("agent", row.original.value.id)}?section=permissions`}
-              className="text-sm text-muted-foreground underline-offset-4 hover:underline"
-            >
-              Permissions
-            </Link>
-          </RowClickShield>
+          <span className="text-sm text-muted-foreground">
+            {row.original.value.accessAllTools
+              ? "All"
+              : row.original.value.tools.filter(
+                  (tool) => !tool.delegateToAgentId,
+                ).length}
+          </span>
         ),
+    },
+    {
+      id: "subagents",
+      header: "Subagents",
+      enableSorting: false,
+      size: 100,
+      cell: ({ row }) =>
+        row.original.type === "external" ? (
+          <span className="text-sm text-muted-foreground">-</span>
+        ) : (
+          <span className="text-sm text-muted-foreground">
+            {row.original.value.accessAllSubagents
+              ? "All"
+              : row.original.value.tools.filter(
+                  (tool) => tool.delegateToAgentId,
+                ).length}
+          </span>
+        ),
+    },
+    {
+      id: "lastUsedAt",
+      header: "Last used",
+      enableSorting: false,
+      size: 100,
+      cell: ({ row }) => (
+        <span className="text-sm text-muted-foreground">
+          {formatRelativeTimeFromNow(row.original.value.lastUsedAt ?? null, {
+            neverLabel: "Never",
+          })}
+        </span>
+      ),
     },
     {
       id: "provider",

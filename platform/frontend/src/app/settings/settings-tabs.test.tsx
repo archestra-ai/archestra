@@ -31,12 +31,9 @@ vi.mock("@/lib/secrets.query", () => ({
   })),
 }));
 
-let mockResourcePermissionsEnabled = true;
 vi.mock("@/lib/config/config.query", () => ({
   useFeature: vi.fn((feature: string) => {
     if (feature === "agentRuntime") return mockAgentRuntimeEnabled;
-    if (feature === "resourcePermissions")
-      return mockResourcePermissionsEnabled;
     return false;
   }),
 }));
@@ -341,20 +338,6 @@ describe("useSettingsTabs", () => {
         "Secrets",
       ]);
     });
-  });
-
-  it("drops the Permissions tab when the deployment still answers from visibility", async () => {
-    mockResourcePermissionsEnabled = false;
-    mockPermissions = { ac: ["read"] };
-
-    const { result } = renderHook(() => useSettingsTabs(), {
-      wrapper: createWrapper(),
-    });
-
-    await waitFor(() => {
-      expect(getTabLabels(result.current)).toEqual(["Roles"]);
-    });
-    mockResourcePermissionsEnabled = true;
   });
 });
 

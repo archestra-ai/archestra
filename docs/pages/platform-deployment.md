@@ -1035,15 +1035,6 @@ Configure deployment defaults below; individual Agents can override supported ru
 
 On GKE, custom Sandbox controllers can produce a “not backed by a controller” scale-down warning. Active runs must finish before their nodes can be removed safely. Archestra releases pods when idle runs are suspended. Setting `safe-to-evict: "true"` permits interruptions; persisted files do not preserve running processes.
 
-### Resource Permissions
-
-- **`ARCHESTRA_RBAC_RESOURCE_PERMISSIONS_ENABLED`** - Access to one agent, MCP gateway, MCP registry entry, skill, app or model is a grant on that object. The gate is independent of `ARCHESTRA_BETA`, because the master switch must never change who can reach an existing resource.
-  - Default: `false`
-  - Values: `true`, `false`
-  - While the value is `false`, authorization answers from the retired visibility fields, the permissions screens stay hidden, and grant writes are refused.
-  - Setting the value to `true` converts each resource at the next start, reading the visibility fields as they stand that day. A resource that has already been converted is left alone, so a grant edited or revoked in the permissions editor survives later restarts.
-  - Setting the value back to `false` returns authorization to the visibility fields, which are never destroyed. Sharing changed under the old model while the value is `false` does not reach a resource that was already converted, so use this for recovery rather than routine operation.
-
 - **`ARCHESTRA_AGENT_RUNTIME_ENABLED`** - Enables Agent Runtime. A run can carry the credentials of the person who started it, so this gate is independent of `ARCHESTRA_BETA` and never turns on by implication.
   - Default: `false`
   - Values: `true`, `false`

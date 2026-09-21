@@ -28,9 +28,6 @@ import { useSecretsType } from "@/lib/secrets.query";
 export function useSettingsTabs() {
   const permissionMap = usePermissionMap(requiredPagePermissionsMap);
   const { data: secretsType } = useSecretsType();
-  // The tab follows the model it edits, so a deployment that still answers
-  // from the retired visibility columns never offers a screen for grants.
-  const resourcePermissionsEnabled = useFeature("resourcePermissions") === true;
   return [
     ...(permissionMap?.["/settings/appearance"]
       ? [{ label: "Appearance", href: "/settings/appearance", Icon: Palette }]
@@ -101,7 +98,7 @@ export function useSettingsTabs() {
     ...(permissionMap?.["/settings/roles"]
       ? [{ label: "Roles", href: "/settings/roles", Icon: UserCog }]
       : []),
-    ...(permissionMap?.["/settings/permissions"] && resourcePermissionsEnabled
+    ...(permissionMap?.["/settings/permissions"]
       ? [
           {
             label: "Permissions",

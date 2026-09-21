@@ -41175,7 +41175,6 @@ export type GetConfigResponses = {
             mcpIdleHibernationBetaEnabled: boolean;
             mcpServerAlertingEnabled: boolean;
             sandbox: boolean;
-            resourcePermissions: boolean;
             agentRuntime: boolean;
             agentRuntimeBaseImage: string;
             agentRuntimeBackend: {

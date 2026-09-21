@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import { userHasPermission } from "@/auth/utils";
-import config from "@/config";
 import AgentTeamModel from "@/models/agent-team";
 import AgentUserModel from "@/models/agent-user";
 import AppAccessModel from "@/models/app-access";
 import McpCatalogTeamModel from "@/models/mcp-catalog-team";
 import SkillTeamModel from "@/models/skill-team";
 import SkillUserModel from "@/models/skill-user";
-import { afterEach, describe, expect, test } from "@/test";
+import { describe, expect, test } from "@/test";
 import { runScopedResourcePermissionCutover } from "./resource-permissions-cutover";
 
 /**
@@ -27,10 +26,6 @@ import { runScopedResourcePermissionCutover } from "./resource-permissions-cutov
  * entirely. The last one is the case a grant to "everyone" would have broken.
  */
 describe("upgrade access preservation", () => {
-  afterEach(() => {
-    config.resourcePermissions.enabled = true;
-  });
-
   test("every principal keeps exactly the access it had", async ({
     makeOrganization,
     makeUser,
@@ -42,8 +37,11 @@ describe("upgrade access preservation", () => {
     makeApp,
     makeInternalMcpCatalog,
   }) => {
-    // Seed the world as it stands before the upgrade.
-    config.resourcePermissions.enabled = false;
+    // Seed the world as it stands before the upgrade. Nothing has converted
+    // this deployment yet, so `createInitial` writes no policy and every
+    // check below answers from the visibility columns, exactly as it does on
+    // a deployment that has not taken the upgrade.
+    let converted = false;
     const org = await makeOrganization({ legacyPermissions: true });
 
     const creator = await makeUser();
@@ -183,7 +181,7 @@ describe("upgrade access preservation", () => {
         ) =>
           allowed &&
           (gate === "none" ||
-            config.resourcePermissions.enabled ||
+            converted ||
             (await userHasPermission(principal.id, org.id, resource, "read")));
         for (const [what, agent] of Object.entries(agents)) {
           for (const action of ["read", "use"] as const) {
@@ -268,8 +266,8 @@ describe("upgrade access preservation", () => {
     expect(before["skill:personal:teammate"]).toBe(false);
     expect(before["catalog:personal:loner"]).toBe(false);
 
-    config.resourcePermissions.enabled = true;
     await runScopedResourcePermissionCutover();
+    converted = true;
 
     const after = await snapshot();
     const changed = Object.keys(before).filter((k) => before[k] !== after[k]);

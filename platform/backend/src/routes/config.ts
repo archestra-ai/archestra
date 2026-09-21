@@ -97,8 +97,6 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
                * runtime is configured — the UI must not offer to start a
                * runtime nothing can schedule.
                */
-              /** Access to one object is a grant, not a visibility column. */
-              resourcePermissions: z.boolean(),
               agentRuntime: z.boolean(),
               agentRuntimeBaseImage: z.string(),
               /** Operator-owned defaults and health for the runtime backend. */
@@ -250,9 +248,6 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           mcpServerAlertingEnabled: config.mcpServer.alertingEnabled,
           // SPDX-SnippetEnd
           sandbox: skillSandboxRuntimeService.isEnabled,
-          // The same predicate the routes gate on, so the UI can never offer
-          // a feature whose endpoints answer 404.
-          resourcePermissions: config.resourcePermissions.enabled,
           agentRuntime: isAnyAgentRuntimeBackendDriverEnabled(),
           agentRuntimeBaseImage: config.agentRuntime.defaultImage,
           agentRuntimeBackend: config.agentRuntime.enabled

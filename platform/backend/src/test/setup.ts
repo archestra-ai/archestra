@@ -43,10 +43,6 @@ process.env.ARCHESTRA_FILE_STORAGE_FILESYSTEM_ROOT = "";
 // gemini client into the ADC construction path and makes default-LLM
 // resolution prefer gemini over anthropic, breaking e.g. the gemini
 // createClient baseUrl test and the chat prompt-cache-breakpoint tests.
-// Scoped resource permissions are the model under test almost everywhere, so
-// the suites run with the switch on. The few tests that prove the fallback
-// turn it off for themselves.
-process.env.ARCHESTRA_RBAC_RESOURCE_PERMISSIONS_ENABLED = "true";
 process.env.ARCHESTRA_GEMINI_VERTEX_AI_ENABLED = "false";
 process.env.ARCHESTRA_GEMINI_VERTEX_AI_PROJECT = "";
 process.env.ARCHESTRA_GEMINI_VERTEX_AI_LOCATION = "";

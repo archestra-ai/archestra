@@ -92,16 +92,6 @@ export class ResourcePermissions {
       Awaited<ReturnType<typeof ResourcePermissionTargetModel.find>>
     >;
   }): Promise<void> {
-    // Refused rather than dropped. `createInitial` writes nothing while the
-    // model is off, so storing these would either lose them silently at the
-    // next start or, worse, mark the object converted and leave the sharing it
-    // still carries in its visibility fields unread when the switch goes on.
-    if (params.grants.length && !config.resourcePermissions.enabled) {
-      throw new ApiError(
-        400,
-        "Resource permissions are not enabled on this deployment. Share this resource through its visibility settings instead.",
-      );
-    }
     if (params.grants.length && !enterpriseTier.isCoreActive()) {
       throw new ApiError(
         403,

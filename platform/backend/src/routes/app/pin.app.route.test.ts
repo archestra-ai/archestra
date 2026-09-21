@@ -203,34 +203,24 @@ describe("PUT/DELETE /api/apps pin routes", () => {
   // the auth middleware 403s it for everyone (deny-by-default). A missing
   // registration is invisible from this file's bare fastify instance (routes
   // are registered without the auth plugin), so assert on the map directly,
-  // like the knowledge-base route tests do. Owned-app pins are gated by one of
-  // two regimes, so both are pinned here:
+  // like the knowledge-base route tests do.
   //
-  //  - grants on (the primary map): no coarse permission, because a scoped
-  //    grant can reach an app without the role-level app:read and demanding it
-  //    would lock that viewer out of pinning what they can see. PinApp resolves
-  //    the app through loadViewableApp (a per-app grant check) and UnpinApp
-  //    only removes the caller's own pin row.
-  //  - grants off (the legacy map): the deployment still answers from the
-  //    retired visibility fields, which never asked for the action — the route
-  //    did — so app:read stays the gate.
+  // Owned-app pins carry no coarse permission, because a scoped grant can
+  // reach an app without the role-level app:read and demanding it would lock
+  // that viewer out of pinning what they can see. PinApp resolves the app
+  // through loadViewableApp (a per-app grant check) and UnpinApp only removes
+  // the caller's own pin row.
   //
-  // External-app pins ride on the MCP server's role-level visibility under
-  // either regime, so they keep app:read in the primary map and need no legacy
-  // entry.
+  // External-app pins ride on the MCP server's role-level visibility instead,
+  // so they keep app:read.
   test("pin routes are registered in the endpoint permissions map for members", async () => {
-    const { legacyEndpointPermissionsMap, requiredEndpointPermissionsMap } =
-      await import("@archestra/shared/access-control");
+    const { requiredEndpointPermissionsMap } = await import(
+      "@archestra/shared/access-control"
+    );
     const { RouteId } = await import("@archestra/shared");
 
     expect(requiredEndpointPermissionsMap[RouteId.PinApp]).toEqual({});
     expect(requiredEndpointPermissionsMap[RouteId.UnpinApp]).toEqual({});
-    expect(legacyEndpointPermissionsMap[RouteId.PinApp]).toEqual({
-      app: ["read"],
-    });
-    expect(legacyEndpointPermissionsMap[RouteId.UnpinApp]).toEqual({
-      app: ["read"],
-    });
     expect(requiredEndpointPermissionsMap[RouteId.PinExternalApp]).toEqual({
       app: ["read"],
     });

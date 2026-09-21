@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 
 import { vi } from "vitest";
-import config from "@/config";
 import db from "@/database";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import AgentModel from "@/models/agent";
@@ -40,9 +39,6 @@ describe("agent object grants", () => {
     },
   );
   afterEach(async () => {
-    // One test below turns the model off; restore it here rather than leave
-    // the rest of the file running against a switch it never set.
-    config.resourcePermissions.enabled = true;
     await app.close();
   });
 
@@ -454,56 +450,6 @@ describe("agent object grants", () => {
     expect(after?.grants).toEqual(revoked?.grants);
     expect(after?.grants.some((grant) => grant.subject.type === "team")).toBe(
       false,
-    );
-  });
-
-  // While the switch is off `createInitial` writes no policy, so storing these
-  // is not an option and dropping them is the worst one: the loss would only
-  // surface when someone turned the switch on and found the sharing gone. The
-  // off state refuses grant writes everywhere else, and creation is no
-  // different.
-  test("initial grants are refused, not dropped, while the switch is off", async ({
-    makeMember,
-    makeUser,
-  }) => {
-    await MemberModel.updateRole(user.id, organizationId, "member");
-    const recipient = await makeUser();
-    await makeMember(recipient.id, organizationId);
-    const payload = {
-      name: "Shared while the switch is off",
-      agentType: "agent",
-      scope: "personal",
-      initialGrants: [
-        {
-          subject: { type: "user", id: recipient.id },
-          actions: ["read"],
-        },
-      ],
-    };
-    // The control: this exact request is accepted while the model is on, so
-    // the refusal below is the switch and not something else in the payload.
-    const accepted = await app.inject({
-      method: "POST",
-      url: "/api/agents",
-      payload: { ...payload, name: "Shared while the switch is on" },
-    });
-    expect(accepted.statusCode, accepted.body).toBe(200);
-
-    const before = await AgentModel.findAll();
-    config.resourcePermissions.enabled = false;
-
-    const rejected = await app.inject({
-      method: "POST",
-      url: "/api/agents",
-      payload,
-    });
-    expect(rejected.statusCode, rejected.body).toBe(400);
-    expect(rejected.json().error.message).toContain(
-      "Resource permissions are not enabled",
-    );
-    const after = await AgentModel.findAll();
-    expect(after.map((item) => item.id).sort()).toEqual(
-      before.map((item) => item.id).sort(),
     );
   });
 

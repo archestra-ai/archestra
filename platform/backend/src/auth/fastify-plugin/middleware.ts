@@ -1,7 +1,6 @@
 import { RouteId, SupportedProviders } from "@archestra/shared";
 import {
   buildForbiddenErrorMessage,
-  legacyEndpointPermissionsMap,
   requiredEndpointPermissionsMap,
 } from "@archestra/shared/access-control";
 import * as Sentry from "@sentry/node";
@@ -417,18 +416,9 @@ export class Authnz {
 
     logger.trace({ routeId }, "[Authnz] Checking authorization for route");
 
-    // SPDX-SnippetBegin
-    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-    // A route whose requirement moved onto the object keeps asking for the
-    // resource-wide action until the deployment reads grants, because the
-    // visibility fields it still answers from never asked for it either.
     const requiredPermissions = routeId
-      ? ((!config.resourcePermissions.enabled
-          ? legacyEndpointPermissionsMap[routeId]
-          : undefined) ?? requiredEndpointPermissionsMap[routeId])
+      ? requiredEndpointPermissionsMap[routeId]
       : undefined;
-    // SPDX-SnippetEnd
 
     logger.trace(
       {

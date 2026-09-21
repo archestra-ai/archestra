@@ -31,7 +31,6 @@ export async function runScopedResourcePermissionCutover(
   /** Join a caller's transaction, so a test can roll the whole thing back. */
   transaction?: Transaction,
 ): Promise<void> {
-  if (!config.resourcePermissions.enabled) return;
   const started = Date.now();
   const run = async (tx: Transaction) => {
     for (const statement of [

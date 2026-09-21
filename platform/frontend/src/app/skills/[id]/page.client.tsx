@@ -205,12 +205,7 @@ function SkillDetailView({
     version: skill.latestVersion,
   });
   const labelsRef = useRef<ProfileLabelsRef>(null);
-  const permissionsEnabled = useFeature("resourcePermissions") === true;
-  // The tab disappears with the model it edits; its content stays reachable
-  // only through a section the tabs no longer offer.
-  const visibleSections = SKILL_DETAIL_SECTIONS.filter(
-    (entry) => entry !== "permissions" || permissionsEnabled,
-  );
+  const visibleSections = SKILL_DETAIL_SECTIONS;
   const [permissionsDirty, setPermissionsDirty] = useState(false);
   const isDirty = isSkillDraftDirty(draft, base.draft) || permissionsDirty;
   const ownership = useResourceOwnershipTransfer({

@@ -3,7 +3,7 @@ title: "Access Control"
 category: Administration
 description: "Role-based access control (RBAC) system for managing user permissions in Archestra"
 order: 1
-lastUpdated: 2026-09-20
+lastUpdated: 2026-09-21
 ---
 <!--
 GENERATED FILE — edit codegen-access-control-docs.ts, not this page.
@@ -406,17 +406,9 @@ A recipient receives the union of its applicable grants: direct user or service-
 
 The Permissions editor shows direct grants and inherited grants with their source scopes. Removing a direct grant does not remove access supplied by another grant. Change an inherited grant at its source. List views omit personal, team, and organization visibility categories. Built-in origin and labels remain separate filters.
 
-### Enabling Resource Permissions
-
-`ARCHESTRA_RBAC_RESOURCE_PERMISSIONS_ENABLED` decides whether grants are authoritative. Set it to `true` to enable the model. See [Deployment](/docs/platform-deployment) for the variable itself.
-
-While the value is `false`, the deployment keeps its existing behavior. The conversion described below does not run, and the permissions screens stay hidden.
-
-Setting the value to `true` converts the deployment at the next start. Each resource is converted once. A resource that has already been converted keeps its grants, so a change you make in the permissions editor is not replaced at the next start.
-
 ### Conversion Of Existing Sharing
 
-The conversion turns existing sharing into resource grants. Personal ownership becomes an explicit full-access grant. Team use shares become read and use grants. Team write shares additionally grant update. Every team member receives those actions, regardless of their membership role.
+The conversion runs at the first start after the upgrade. It turns existing sharing into resource grants. Each resource is converted once, so a change you make in the permissions editor is not replaced at the next start. Personal ownership becomes an explicit full-access grant. Team use shares become read and use grants. Team write shares additionally grant update. Every team member receives those actions, regardless of their membership role.
 
 Organization-wide sharing becomes a grant to each role that holds that resource's read permission. Access after the conversion is therefore the same as access before it. A member whose role withholds the read permission did not see the resource, and does not see it afterwards. To reach everyone, add the **Everyone in the organization** recipient yourself.
 

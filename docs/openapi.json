@@ -149886,9 +149886,6 @@
                         "sandbox": {
                           "type": "boolean"
                         },
-                        "resourcePermissions": {
-                          "type": "boolean"
-                        },
                         "agentRuntime": {
                           "type": "boolean"
                         },
@@ -150133,7 +150130,6 @@
                         "mcpIdleHibernationBetaEnabled",
                         "mcpServerAlertingEnabled",
                         "sandbox",
-                        "resourcePermissions",
                         "agentRuntime",
                         "agentRuntimeBaseImage",
                         "agentRuntimeBackend",

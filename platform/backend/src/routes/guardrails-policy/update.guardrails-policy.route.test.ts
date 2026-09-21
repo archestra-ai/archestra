@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { vi } from "vitest";
 import {
   executeArchestraTool,
@@ -9,6 +10,7 @@ import config from "@/config";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import AuditLogModel from "@/models/audit-log";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
+import { openappaBatteriesService } from "@/openappa/batteries";
 import { createFastifyInstance, type FastifyInstanceWithZod } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import routes from "./guardrails-policy.routes";
@@ -132,9 +134,7 @@ describe("guardrails policy authoring", () => {
       "[policy]\nversion = 999",
       `${content}[externals.annotators.x]\ncommand = ["sh"]`,
       `include = ["/secret"]\n${content}`,
-      // The host derives server_aliases from its catalogs and keeps its
-      // helper-bridge bearer to itself.
-      `${content}[server_aliases]\ngithub = ["github"]\n`,
+      // The host keeps its helper-bridge bearer to itself.
       `${content}[externals.authorities.review]\nurl = "http://127.0.0.1:9000/api/openappa/helpers/x/y"\ntoken_env = "APPA_ARCHESTRA_BRIDGE_TOKEN"\n`,
     ]) {
       const validation = await app.inject({
@@ -191,6 +191,113 @@ describe("guardrails policy authoring", () => {
         context,
       ),
     ).rejects.toThrow("This policy changed");
+  });
+
+  test("granting a battery a credential needs credential update, removing it does not", async ({
+    makeUser,
+    makeCustomRole,
+    makeMember,
+    makeSession,
+  }) => {
+    const author = await makeUser();
+    const role = await makeCustomRole(orgId, {
+      permission: { toolPolicy: ["read", "update"] },
+    });
+    await makeMember(author.id, orgId, { role: role.role });
+    const session = await makeSession(author.id, {
+      activeOrganizationId: orgId,
+    });
+    vi.mocked(betterAuth.api.getSession).mockResolvedValue({
+      response: { user: author, session },
+      headers: new Headers(),
+    } as never);
+    const context = {
+      organizationId: orgId,
+      userId: author.id,
+      agent: { id: "test-agent", name: "Test assistant" },
+    };
+    const declared = `include = ["batteries/github/appa.toml"]\n\n${content}`;
+    const granted = `${declared}\n[credentials]\nAPPA_PROVIDER_GITHUB_TOKEN = "github-token"\n`;
+    // Including a battery that reads no bound variable grants nothing.
+    const included = await app.inject({
+      method: "PUT",
+      url: "/api/guardrails-policy",
+      payload: { content: declared, expectedRevision: 0 },
+    });
+    expect(included.statusCode, included.body).toBe(200);
+    const refused = await app.inject({
+      method: "PUT",
+      url: "/api/guardrails-policy",
+      payload: { content: granted, expectedRevision: 1 },
+    });
+    expect(refused.statusCode).toBe(403);
+    // The agent path is the same authorization, not a way around it.
+    await expect(
+      executeArchestraTool(
+        "archestra__update_guardrails_policy",
+        { content: granted, expectedRevision: 1 },
+        context,
+      ),
+    ).rejects.toMatchObject({ statusCode: 403 });
+    expect((await GuardrailsPolicyModel.findLatest(orgId))?.revision).toBe(1);
+
+    const binder = await makeUser();
+    await makeMember(binder.id, orgId, { role: "admin" });
+    const binderSession = await makeSession(binder.id, {
+      activeOrganizationId: orgId,
+    });
+    vi.mocked(betterAuth.api.getSession).mockResolvedValue({
+      response: { user: binder, session: binderSession },
+      headers: new Headers(),
+    } as never);
+    const bound = await app.inject({
+      method: "PUT",
+      url: "/api/guardrails-policy",
+      payload: { content: granted, expectedRevision: 1 },
+    });
+    expect(bound.statusCode, bound.body).toBe(200);
+
+    // Giving a grant up is policy authoring like any other.
+    vi.mocked(betterAuth.api.getSession).mockResolvedValue({
+      response: { user: author, session },
+      headers: new Headers(),
+    } as never);
+    const removed = await app.inject({
+      method: "PUT",
+      url: "/api/guardrails-policy",
+      payload: { content: declared, expectedRevision: 2 },
+    });
+    expect(removed.statusCode, removed.body).toBe(200);
+  });
+
+  test("an entry spelling bytes nobody stored is refused when it is added and unavailable when it stays", async () => {
+    const unknown = `include = ["batteries/acme@sha256-${"a".repeat(64)}/appa.toml"]\n\n${content}`;
+    const added = await app.inject({
+      method: "PUT",
+      url: "/api/guardrails-policy",
+      payload: { content: unknown, expectedRevision: 0 },
+    });
+    expect(added.statusCode).toBe(400);
+    // The same entry in text that is already the latest revision is the
+    // author's problem to fix, not a reason to refuse every later edit.
+    await GuardrailsPolicyModel.save({
+      organizationId: orgId,
+      updatedBy: userId,
+      content: unknown,
+      contentHash: createHash("sha256").update(unknown).digest("hex"),
+      expectedRevision: 0,
+    });
+    const kept = await app.inject({
+      method: "PUT",
+      url: "/api/guardrails-policy",
+      payload: { content: `${unknown}# a later edit\n`, expectedRevision: 1 },
+    });
+    expect(kept.statusCode, kept.body).toBe(200);
+    expect(
+      await openappaBatteriesService.policyDeclarations(orgId),
+    ).toMatchObject({
+      batteries: [{ name: "acme", status: "unavailable" }],
+    });
   });
 
   test("disabled feature hides API and agent tools", async () => {

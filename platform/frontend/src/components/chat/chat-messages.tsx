@@ -338,9 +338,39 @@ export function ChatMessages({
   const contextCompaction = session?.contextCompaction;
   const pendingMcpElicitations = session?.pendingMcpElicitations ?? [];
   const hasPendingMcpElicitation = pendingMcpElicitations.length > 0;
-  const pendingChoiceElicitations = pendingMcpElicitations.filter(
-    isChoiceElicitationRequest,
-  );
+  const toolCallOrderInMessages = useMemo(() => {
+    const order = new Map<string, number>();
+    let index = 0;
+    for (const message of messages) {
+      for (const part of message.parts ?? []) {
+        if (
+          typeof part === "object" &&
+          part !== null &&
+          "toolCallId" in part &&
+          typeof part.toolCallId === "string" &&
+          !order.has(part.toolCallId)
+        ) {
+          order.set(part.toolCallId, index++);
+        }
+      }
+    }
+    return order;
+  }, [messages]);
+  const pendingChoiceElicitations = useMemo(() => {
+    const filtered = pendingMcpElicitations.filter(isChoiceElicitationRequest);
+    return filtered.sort((a, b) => {
+      const aIndex = a.toolCallId
+        ? toolCallOrderInMessages.get(a.toolCallId)
+        : undefined;
+      const bIndex = b.toolCallId
+        ? toolCallOrderInMessages.get(b.toolCallId)
+        : undefined;
+      if (aIndex !== undefined && bIndex !== undefined) {
+        return aIndex - bIndex;
+      }
+      return 0;
+    });
+  }, [pendingMcpElicitations, toolCallOrderInMessages]);
   const askUserGroupsByMessage = useMemo(
     () =>
       new Map(
@@ -836,6 +866,12 @@ export function ChatMessages({
                             (member) => member.toolCallId,
                           ),
                         );
+                        const memberOrder = new Map(
+                          askUserGroup.members.map((member, index) => [
+                            member.toolCallId,
+                            index,
+                          ]),
+                        );
                         return (
                           <ErrorBoundary key={askUserGroup.key}>
                             <McpElicitationCard
@@ -844,11 +880,27 @@ export function ChatMessages({
                               terminalIncomplete={
                                 status === "ready" || status === "error"
                               }
-                              requests={pendingChoiceElicitations.filter(
-                                (request) =>
-                                  !!request.toolCallId &&
-                                  toolCallIds.has(request.toolCallId),
-                              )}
+                              requests={pendingChoiceElicitations
+                                .filter(
+                                  (request) =>
+                                    !!request.toolCallId &&
+                                    toolCallIds.has(request.toolCallId),
+                                )
+                                .sort((a, b) => {
+                                  const aIndex = a.toolCallId
+                                    ? memberOrder.get(a.toolCallId)
+                                    : undefined;
+                                  const bIndex = b.toolCallId
+                                    ? memberOrder.get(b.toolCallId)
+                                    : undefined;
+                                  if (
+                                    aIndex !== undefined &&
+                                    bIndex !== undefined
+                                  ) {
+                                    return aIndex - bIndex;
+                                  }
+                                  return 0;
+                                })}
                               onRespond={
                                 session?.resolveMcpElicitation ??
                                 (async () => false)

@@ -7,7 +7,13 @@ import {
   Loader2,
   XIcon,
 } from "lucide-react";
-import { type KeyboardEvent, useEffect, useRef, useState } from "react";
+import {
+  type KeyboardEvent,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { AskUserGroupMember } from "./ask-user-outcome";
@@ -79,6 +85,8 @@ export function McpElicitationCard({
   const lastInputRef = useRef<"pointer" | "keyboard">("pointer");
   // Tracks if focus was inside the card, even if a focused control unmounts.
   const focusWithinRef = useRef(false);
+  // Tracks whether the user has explicitly selected or navigated between tabs.
+  const userSelectedTabRef = useRef(false);
   // Index of the tab displayed in the previous render.
   const shownIndexRef = useRef(0);
 
@@ -146,15 +154,41 @@ export function McpElicitationCard({
           : member,
       )
     : (members ?? []);
+  const memberOrder = useMemo(() => {
+    if (!members || members.length === 0) {
+      return null;
+    }
+    return new Map(members.map((member, index) => [member.toolCallId, index]));
+  }, [members]);
+
   const shouldHoldSubmissionSnapshot =
     !!groupId && (isSubmitting || (isAwaitingResults && !allMembersSettled));
-  const knownRequests = shouldHoldSubmissionSnapshot
+  const rawKnownRequests = shouldHoldSubmissionSnapshot
     ? (submissionSnapshotRef.current ?? Object.values(knownRequestsById))
     : groupId
       ? Object.values(knownRequestsById).filter(
           (request) => !settledToolCallIds.has(request.toolCallId ?? ""),
         )
       : requests;
+  const knownRequests = useMemo(() => {
+    if (!memberOrder) {
+      return rawKnownRequests;
+    }
+    return [...rawKnownRequests].sort((a, b) => {
+      const aIndex = a.toolCallId ? memberOrder.get(a.toolCallId) : undefined;
+      const bIndex = b.toolCallId ? memberOrder.get(b.toolCallId) : undefined;
+      if (aIndex !== undefined && bIndex !== undefined) {
+        return aIndex - bIndex;
+      }
+      if (aIndex !== undefined) {
+        return -1;
+      }
+      if (bIndex !== undefined) {
+        return 1;
+      }
+      return 0;
+    });
+  }, [rawKnownRequests, memberOrder]);
   const questions = knownRequests.map((request, index): CardQuestion => {
     const fields = getElicitationFields(request.requestedSchema);
     const values = valuesById[request.id] ?? getDefaultValues(fields);
@@ -169,11 +203,14 @@ export function McpElicitationCard({
   });
   questionIdsRef.current = questions.map((question) => question.request.id);
 
+  const hasUserAnswers = Object.keys(valuesById).length > 0;
+  const userHasNavigated = userSelectedTabRef.current || hasUserAnswers;
   const foundIndex = questions.findIndex(
     (question) => question.request.id === activeId,
   );
-  const activeIndex =
-    foundIndex === -1
+  const activeIndex = !userHasNavigated
+    ? 0
+    : foundIndex === -1
       ? Math.max(0, Math.min(shownIndexRef.current, questions.length - 1))
       : foundIndex;
   shownIndexRef.current = activeIndex;
@@ -246,6 +283,7 @@ export function McpElicitationCard({
   const showQuestion = (id: string, options?: { focusPanel?: boolean }) => {
     cancelAutoAdvance();
     focusPanelOnChangeRef.current = options?.focusPanel ?? false;
+    userSelectedTabRef.current = true;
     setActiveId(id);
   };
 
@@ -266,7 +304,7 @@ export function McpElicitationCard({
         return;
       }
       focusPanelOnChangeRef.current = true;
-      // Only advance if the user is still looking at the tab they answered.
+      userSelectedTabRef.current = true;
       setActiveId((current) =>
         (current ?? ids[0]) === fromId ? ids[index + 1] : current,
       );

@@ -648,6 +648,56 @@ describe("McpElicitationCard", () => {
     );
   });
 
+  it("orders tabs by members even when requests arrive in reverse order", async () => {
+    const user = userEvent.setup();
+    const first = singleChoice({
+      id: "q-1",
+      toolCallId: "call-1",
+      header: "Visibility",
+      message: "Who should see this?",
+      options: ["Only me", "Team"],
+    });
+    const second = singleChoice({
+      id: "q-2",
+      toolCallId: "call-2",
+      header: "Deploy",
+      message: "Where should we deploy?",
+      options: ["Staging", "Production"],
+    });
+
+    render(
+      <McpElicitationCard
+        groupId="assistant-1-ask-user-1"
+        members={[
+          groupMember("call-1", "Who should see this?", { status: "waiting" }),
+          groupMember("call-2", "Where should we deploy?", {
+            status: "waiting",
+          }),
+        ]}
+        requests={[second, first]}
+        onRespond={vi.fn().mockResolvedValue(true)}
+      />,
+    );
+
+    expect(screen.getByTestId("mcp-elicitation-tab-0")).toHaveTextContent(
+      "Visibility",
+    );
+    expect(screen.getByTestId("mcp-elicitation-tab-1")).toHaveTextContent(
+      "Deploy",
+    );
+    expect(screen.getByRole("radio", { name: "Only me" })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("radio", { name: "Staging" }),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("radio", { name: "Only me" }));
+    await waitFor(() => {
+      expect(
+        screen.getByRole("radio", { name: "Staging" }),
+      ).toBeInTheDocument();
+    });
+  });
+
   it("holds submitted tabs until every streamed result arrives", async () => {
     const user = userEvent.setup();
     const first = singleChoice({

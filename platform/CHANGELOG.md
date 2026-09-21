@@ -1,5 +1,58 @@
 # Changelog
 
+## [1.4.0-rc.17](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-rc.16...platform-v1.4.0-rc.17) (2026-09-21)
+
+
+### Features
+
+* **agent-runtime:** accept client-supplied credentials by default, with a toggle ([#8088](https://github.com/archestra-ai/archestra/issues/8088)) ([a41a236](https://github.com/archestra-ai/archestra/commit/a41a2362eef59bebea100b374ee3f800059d4d8c))
+* **agent-runtime:** one status rule for sidebar glyph and run header ([#8050](https://github.com/archestra-ai/archestra/issues/8050)) ([4a0e205](https://github.com/archestra-ai/archestra/commit/4a0e20543b7ace9182fd8a4709bf06ae900e392e))
+* **chat:** add choice forms and native client elicitation ([#8025](https://github.com/archestra-ai/archestra/issues/8025)) ([0aa97a6](https://github.com/archestra-ai/archestra/commit/0aa97a6607ef6636178c86b07f051b1a95a3c6b6))
+* **chat:** preview a hovered suggestion's full prompt in the composer ([#8053](https://github.com/archestra-ai/archestra/issues/8053)) ([e677739](https://github.com/archestra-ai/archestra/commit/e6777396c9d41438cea5e08988f434183742a926))
+* **llm-proxy:** show the proxy endpoint above the revealed virtual key ([#8089](https://github.com/archestra-ai/archestra/issues/8089)) ([48fdf49](https://github.com/archestra-ai/archestra/commit/48fdf49b8714a8f7f17311d454f003283631ee18))
+* **openappa:** move the Archestra adapter into the addon ([#8082](https://github.com/archestra-ai/archestra/issues/8082)) ([d0a1fcb](https://github.com/archestra-ai/archestra/commit/d0a1fcbc0e6e5b8a1d076e743a3357351cf6b296))
+* **openappa:** preserve policy state across client forks and compaction ([#8026](https://github.com/archestra-ai/archestra/issues/8026)) ([3708b56](https://github.com/archestra-ai/archestra/commit/3708b56682e24601da6ca198ff89d4a44ab1f887))
+* **projects:** surface schedule controls and paused state ([#8092](https://github.com/archestra-ai/archestra/issues/8092)) ([2793d92](https://github.com/archestra-ai/archestra/commit/2793d92c6c54a28e0b97dba2e028419a3c0689e9))
+* **schedules:** add structured trigger picker ([#8093](https://github.com/archestra-ai/archestra/issues/8093)) ([35d3fd2](https://github.com/archestra-ai/archestra/commit/35d3fd27fe9fc77271d4749248ba36f289d45f8d))
+* show port forwarding command for configured Agent Runtime ports ([#8100](https://github.com/archestra-ai/archestra/issues/8100)) ([c3090cc](https://github.com/archestra-ai/archestra/commit/c3090cc297009a17e7d52fa2c8abc71bad1f1a5c))
+* **ui:** split the service account detail page into tabs ([#8090](https://github.com/archestra-ai/archestra/issues/8090)) ([fe6bd6c](https://github.com/archestra-ai/archestra/commit/fe6bd6c48c4c8c5e3bb74ab7ca2114dbf1e6b71f))
+
+
+### Bug Fixes
+
+* **agent-runtime:** record Claude subscription token usage through LLM proxy ([#8104](https://github.com/archestra-ai/archestra/issues/8104)) ([efd2e10](https://github.com/archestra-ai/archestra/commit/efd2e108a58f3078ce80decdcc55f33923983e14))
+* **agent-runtime:** send the workspace-files helper with each call ([#8087](https://github.com/archestra-ai/archestra/issues/8087)) ([8d752d5](https://github.com/archestra-ai/archestra/commit/8d752d5c5d60f4aee6d1670a0ba0eb973dfd45c4))
+* **chat:** contain long suggested prompt previews ([#8099](https://github.com/archestra-ai/archestra/issues/8099)) ([3e6239b](https://github.com/archestra-ai/archestra/commit/3e6239b2311a6848bdfb2178fd8e3fce6d837f9a))
+* **connection:** close OpenCode installer lock race from review ([#8078](https://github.com/archestra-ai/archestra/issues/8078)) ([9580ed7](https://github.com/archestra-ai/archestra/commit/9580ed779b5d123ea639f796f2241c101a8770e7))
+* **mcp:** sanitize advertised tool schemas for Gemini clients ([#8085](https://github.com/archestra-ai/archestra/issues/8085)) ([1c9c9a6](https://github.com/archestra-ai/archestra/commit/1c9c9a6ad973934ce2ea0d5db6ac99fa232566de))
+* mention Cloud runtime in the first reply ([#8102](https://github.com/archestra-ai/archestra/issues/8102)) ([cbb1272](https://github.com/archestra-ai/archestra/commit/cbb12726f9092f2abd240ea0cb7f8e3ad1ac2f81))
+* **openappa:** harden batteries v0 after the post-merge audit ([#8086](https://github.com/archestra-ai/archestra/issues/8086)) ([acc58b3](https://github.com/archestra-ai/archestra/commit/acc58b369eccb4828efae2cd3038bb983d5cc679))
+* **projects:** render sidebar instructions as markdown and keep schedules visible ([#8081](https://github.com/archestra-ai/archestra/issues/8081)) ([12ce0a9](https://github.com/archestra-ai/archestra/commit/12ce0a9151d0fcf05ab6d6359194e8a75581360c))
+* protect HEAD routes and improve service diagnostics ([#8103](https://github.com/archestra-ai/archestra/issues/8103)) ([9b40c93](https://github.com/archestra-ai/archestra/commit/9b40c93044bd47bd9fe612b7519e3e36f43b59fa))
+* show full actual usage currency value with fraction digits ([#8005](https://github.com/archestra-ai/archestra/issues/8005)) ([cadadd8](https://github.com/archestra-ai/archestra/commit/cadadd8f6a954763ed3cef64466f1a9f3a5a1cdf))
+* **skills:** require the file-transfer tool before a handoff that carries files ([#8083](https://github.com/archestra-ai/archestra/issues/8083)) ([0e0eeac](https://github.com/archestra-ai/archestra/commit/0e0eeacff40e89ba7e80073e8f2a3424c1d094cb))
+* **ui:** give the GitHub credential fields the labels the rest of the app has ([#8091](https://github.com/archestra-ai/archestra/issues/8091)) ([aea3c59](https://github.com/archestra-ai/archestra/commit/aea3c594ad32635929e2a8a0777c85311e6e26e2))
+
+
+### Documentation
+
+* simplify runtime handoff and transfer instructions ([#8084](https://github.com/archestra-ai/archestra/issues/8084)) ([3e3a730](https://github.com/archestra-ai/archestra/commit/3e3a730e72a44df2bfc0dc911f31f877df6454f3))
+
+
+### Dependencies
+
+* bump vitest from 4.1.0 to 4.1.11 in /platform ([#7745](https://github.com/archestra-ai/archestra/issues/7745)) ([8a3dbcf](https://github.com/archestra-ai/archestra/commit/8a3dbcfdeff5390a620a74e72675cc2687e2e88c))
+
+
+### Code Refactoring
+
+* **ui:** one inline notice component instead of forty hand-rolled ones ([#8095](https://github.com/archestra-ai/archestra/issues/8095)) ([ae2b220](https://github.com/archestra-ai/archestra/commit/ae2b220df222395a589b008bac4b3208fdc90603))
+
+
+### Miscellaneous Chores
+
+* share staging and demo feature configuration ([#8097](https://github.com/archestra-ai/archestra/issues/8097)) ([61e9c6a](https://github.com/archestra-ai/archestra/commit/61e9c6a07c6f03861ed4a73cebbd6d95acbf4c55))
+
 ## [1.4.0-rc.16](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-rc.15...platform-v1.4.0-rc.16) (2026-09-20)
 
 

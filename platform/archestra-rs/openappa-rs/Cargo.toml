@@ -24,6 +24,9 @@ serde_json = { version = "1", features = ["raw_value"] }
 sha2 = "0.11"
 tempfile = "3"
 toml = "1.1"
+# The runtime's own editor speaks this document type; reading a root's declarations
+# with their spans needs the same version the runtime holds.
+toml_edit = "0.25"
 tokio = { version = "1", features = ["sync", "time"] }
 futures-util = "0.3"
 

@@ -745,6 +745,9 @@ describe("OAuth routes", () => {
 
   beforeEach(async () => {
     cacheManager.start();
+    // OAuth state writes use the external Keyv PostgreSQL store. Callback
+    // tests seed their state directly in this file's PGlite database instead.
+    vi.spyOn(cacheManager, "set").mockResolvedValue(undefined);
     app = createFastifyInstance();
     await app.register(oauthRoutes);
   });
@@ -1733,6 +1736,7 @@ describe("OAuth dynamic client registration client name", () => {
 
   beforeEach(() => {
     cacheManager.start();
+    vi.spyOn(cacheManager, "set").mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -1914,6 +1918,7 @@ describe("OAuth dynamic client registration scope fallback", () => {
 
   beforeEach(() => {
     cacheManager.start();
+    vi.spyOn(cacheManager, "set").mockResolvedValue(undefined);
   });
 
   afterEach(() => {

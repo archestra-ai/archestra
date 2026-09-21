@@ -464,6 +464,15 @@ class AzureResponsesStreamAdapter
   readonly provider = "azure" as const;
   readonly state = createStreamAccumulatorState();
   private completedResponse: AzureResponsesResponse | null = null;
+  private getTextSuffix: ((completedText: string) => string) | null = null;
+  private textSuffix = "";
+  private pendingTextTerminalEvents: AzureResponsesStreamChunk[] = [];
+  private lastTextDelta: {
+    itemId: string;
+    outputIndex: number;
+    contentIndex: number;
+  } | null = null;
+  private textByPart = new Map<string, string>();
   // Set to the refusal text when the streamed response was replaced by a policy
   // refusal, so toProviderResponse persists the refusal — not the captured
   // upstream completion or the blocked tool calls.
@@ -472,6 +481,10 @@ class AzureResponsesStreamAdapter
     string,
     { id: string; name: string; arguments: string }
   >();
+
+  setTextSuffix(getSuffix: (completedText: string) => string): void {
+    this.getTextSuffix = getSuffix;
+  }
 
   processChunk(chunk: AzureResponsesStreamChunk): ChunkProcessingResult {
     if (this.state.timing.firstChunkTime === null) {
@@ -487,12 +500,32 @@ class AzureResponsesStreamAdapter
     }
 
     if (chunk.type === "response.output_text.delta") {
+      const pending = this.drainPendingTextTerminalEvents();
       this.state.text += chunk.delta;
+      const partKey = this.textPartKey({
+        itemId: chunk.item_id,
+        outputIndex: chunk.output_index,
+        contentIndex: chunk.content_index,
+      });
+      this.textByPart.set(
+        partKey,
+        `${this.textByPart.get(partKey) ?? ""}${chunk.delta}`,
+      );
+      this.lastTextDelta = {
+        itemId: chunk.item_id,
+        outputIndex: chunk.output_index,
+        contentIndex: chunk.content_index,
+      };
       return {
-        sseData: toSse(chunk),
+        sseData: `${pending}${toSse(chunk)}`,
         isToolCallChunk: false,
         isFinal: false,
       };
+    }
+
+    if (this.getTextSuffix && this.isLastTextTerminalEvent(chunk)) {
+      this.pendingTextTerminalEvents.push(chunk);
+      return { sseData: null, isToolCallChunk: false, isFinal: false };
     }
 
     if (isResponsesToolCallChunk(chunk)) {
@@ -510,9 +543,23 @@ class AzureResponsesStreamAdapter
         chunk.response as unknown as AzureResponsesResponse;
       this.state.stopReason =
         this.state.toolCalls.length > 0 ? "tool_calls" : "stop";
+      this.textSuffix = this.resolveTextSuffix();
+      if (this.textSuffix) {
+        return { sseData: null, isToolCallChunk: false, isFinal: true };
+      }
+      const pending = this.drainPendingTextTerminalEvents();
+
+      if (this.state.toolCalls.length > 0) {
+        this.state.rawToolCallEvents.push(chunk);
+        return {
+          sseData: pending || null,
+          isToolCallChunk: true,
+          isFinal: true,
+        };
+      }
 
       return {
-        sseData: toSse(chunk),
+        sseData: `${pending}${toSse(chunk)}`,
         isToolCallChunk: false,
         isFinal: true,
       };
@@ -524,14 +571,14 @@ class AzureResponsesStreamAdapter
     ) {
       this.state.stopReason = "length";
       return {
-        sseData: toSse(chunk),
+        sseData: `${this.drainPendingTextTerminalEvents()}${toSse(chunk)}`,
         isToolCallChunk: false,
         isFinal: true,
       };
     }
 
     return {
-      sseData: toSse(chunk),
+      sseData: `${this.drainPendingTextTerminalEvents()}${toSse(chunk)}`,
       isToolCallChunk: false,
       isFinal: false,
     };
@@ -698,7 +745,30 @@ class AzureResponsesStreamAdapter
   }
 
   formatEndSSE(): string {
-    return "data: [DONE]\n\n";
+    if (!this.textSuffix || !this.lastTextDelta) {
+      return "data: [DONE]\n\n";
+    }
+    const textDelta = toSse({
+      type: "response.output_text.delta",
+      item_id: this.lastTextDelta.itemId,
+      output_index: this.lastTextDelta.outputIndex,
+      content_index: this.lastTextDelta.contentIndex,
+      sequence_number: Date.now(),
+      delta: this.textSuffix,
+      logprobs: [],
+    });
+    const terminalEvents = this.pendingTextTerminalEvents
+      .map((event) => toSse(this.appendSuffixToTerminalEvent(event)))
+      .join("");
+    this.pendingTextTerminalEvents = [];
+    const response = this.appendSuffixToCompletedResponse(
+      this.completedResponse ?? this.toProviderResponse(),
+    );
+    return `${textDelta}${terminalEvents}${toSse({
+      type: "response.completed",
+      sequence_number: Date.now() + 1,
+      response,
+    })}data: [DONE]\n\n`;
   }
 
   toProviderResponse(): AzureResponsesResponse {
@@ -761,6 +831,126 @@ class AzureResponsesStreamAdapter
       output: outputItems,
       usage: this.state.usage ? toResponsesUsage(this.state.usage) : undefined,
     } as unknown as AzureResponsesResponse;
+  }
+
+  private resolveTextSuffix(): string {
+    if (
+      !this.getTextSuffix ||
+      this.replacedText !== null ||
+      this.state.toolCalls.length > 0 ||
+      !this.lastTextDelta
+    ) {
+      return "";
+    }
+    const text = this.textByPart.get(this.textPartKey(this.lastTextDelta));
+    return text ? this.getTextSuffix(text) : "";
+  }
+
+  private textPartKey(params: {
+    itemId: string;
+    outputIndex: number;
+    contentIndex: number;
+  }): string {
+    return `${params.itemId}\u0000${params.outputIndex}\u0000${params.contentIndex}`;
+  }
+
+  private isLastTextTerminalEvent(chunk: AzureResponsesStreamChunk): boolean {
+    const lastTextDelta = this.lastTextDelta;
+    if (!lastTextDelta) return false;
+    if (chunk.type === "response.output_text.done") {
+      return (
+        chunk.item_id === lastTextDelta.itemId &&
+        chunk.output_index === lastTextDelta.outputIndex &&
+        chunk.content_index === lastTextDelta.contentIndex
+      );
+    }
+    if (chunk.type === "response.content_part.done") {
+      return (
+        chunk.item_id === lastTextDelta.itemId &&
+        chunk.output_index === lastTextDelta.outputIndex &&
+        chunk.content_index === lastTextDelta.contentIndex &&
+        chunk.part.type === "output_text"
+      );
+    }
+    return (
+      chunk.type === "response.output_item.done" &&
+      chunk.output_index === lastTextDelta.outputIndex &&
+      chunk.item.type === "message" &&
+      chunk.item.id === lastTextDelta.itemId &&
+      chunk.item.content[lastTextDelta.contentIndex]?.type === "output_text"
+    );
+  }
+
+  private drainPendingTextTerminalEvents(): string {
+    const events = this.pendingTextTerminalEvents.map((event) => toSse(event));
+    this.pendingTextTerminalEvents = [];
+    return events.join("");
+  }
+
+  private appendSuffixToTerminalEvent(
+    event: AzureResponsesStreamChunk,
+  ): AzureResponsesStreamChunk {
+    if (event.type === "response.output_text.done") {
+      return { ...event, text: `${event.text}${this.textSuffix}` };
+    }
+    if (event.type === "response.content_part.done") {
+      return {
+        ...event,
+        part: {
+          ...(event.part as { type: string; text: string }),
+          text: `${(event.part as { text: string }).text}${this.textSuffix}`,
+        },
+      } as AzureResponsesStreamChunk;
+    }
+    if (event.type === "response.output_item.done") {
+      const contentIndex = this.lastTextDelta?.contentIndex;
+      const item = event.item as {
+        content: Array<{ type: string; text?: string }>;
+      };
+      return {
+        ...event,
+        item: {
+          ...item,
+          content: item.content.map((part, index) =>
+            index === contentIndex &&
+            part.type === "output_text" &&
+            part.text !== undefined
+              ? { ...part, text: `${part.text}${this.textSuffix}` }
+              : part,
+          ),
+        },
+      } as AzureResponsesStreamChunk;
+    }
+    return event;
+  }
+
+  private appendSuffixToCompletedResponse(
+    response: AzureResponsesResponse,
+  ): AzureResponsesResponse {
+    const itemId = this.lastTextDelta?.itemId;
+    const contentIndex = this.lastTextDelta?.contentIndex;
+    return {
+      ...response,
+      output: response.output.map((item) => {
+        if (item.type !== "message" || (itemId && item.id !== itemId)) {
+          return item;
+        }
+        const message = item as {
+          content: Array<{ type: string; text?: string }>;
+        };
+        return {
+          ...item,
+          content: message.content.map((part, index) =>
+            item.id === itemId &&
+            index === contentIndex &&
+            part.type === "output_text" &&
+            part.text !== undefined
+              ? { ...part, text: `${part.text}${this.textSuffix}` }
+              : part,
+          ),
+        };
+      }),
+    } as AzureResponsesResponse;
   }
 
   private captureToolCallChunk(chunk: AzureResponsesStreamChunk): void {

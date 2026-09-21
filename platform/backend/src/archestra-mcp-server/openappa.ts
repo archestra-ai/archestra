@@ -213,6 +213,7 @@ const registry = defineArchestraTools([
         ...(claims.caller_id ? { ownerCallerId: claims.caller_id } : {}),
         ...(claims.tool ? { tool: claims.tool } : {}),
         ...(claims.spelling ? { spelling: claims.spelling } : {}),
+        ...(claims.dispatch ? { dispatch: claims.dispatch } : {}),
         toolCallId: execution?.call_id ?? context.currentToolCallId,
         controlToolName: execution?.tool_name,
         originalArguments:

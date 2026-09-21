@@ -949,7 +949,12 @@ export class OpenAIResponseAdapter
   }
 
   withRewrittenToolCalls(
-    toolCalls: Array<{ id: string; name: string; arguments: string }>,
+    toolCalls: Array<{
+      id: string;
+      name: string;
+      arguments: string;
+      wireId?: string;
+    }>,
   ): OpenAiResponse {
     const choice = this.response.choices[0];
     return {
@@ -960,7 +965,7 @@ export class OpenAIResponseAdapter
           message: {
             ...choice.message,
             tool_calls: toolCalls.map((toolCall) => ({
-              id: toolCall.id,
+              id: toolCall.wireId ?? toolCall.id,
               type: "function" as const,
               function: {
                 name: toolCall.name,
@@ -1041,6 +1046,8 @@ export class OpenAIStreamAdapter
   private reasoningText = "";
 
   private replacedText: string | null = null;
+  private getTextSuffix: ((completedText: string) => string) | null = null;
+  private textSuffix = "";
   private get responseReplacedWithText(): boolean {
     return this.replacedText !== null;
   }
@@ -1060,6 +1067,10 @@ export class OpenAIStreamAdapter
         firstChunkTime: null,
       },
     };
+  }
+
+  setTextSuffix(getSuffix: (completedText: string) => string): void {
+    this.getTextSuffix = getSuffix;
   }
 
   processChunk(chunk: OpenAiStreamChunk): ChunkProcessingResult {
@@ -1182,6 +1193,12 @@ export class OpenAIStreamAdapter
     // when stream_options.include_usage is true (which we always set in executeStream)
     if (choice.finish_reason) {
       this.state.stopReason = choice.finish_reason;
+      this.textSuffix = this.resolveTextSuffix();
+      if (this.textSuffix && sseData) {
+        const choices = [...(chunk.choices ?? [])];
+        choices[0] = { ...choice, finish_reason: null };
+        sseData = `data: ${JSON.stringify({ ...chunk, choices })}\n\n`;
+      }
     }
 
     // Only mark as final after we've received usage data (which comes in a separate chunk
@@ -1265,7 +1282,7 @@ export class OpenAIStreamAdapter
           delta: {
             tool_calls: toolCalls.map((toolCall, index) => ({
               index,
-              id: toolCall.id,
+              id: toolCall.wireId ?? toolCall.id,
               type: "function" as const,
               function: {
                 name: toolCall.name,
@@ -1305,7 +1322,10 @@ export class OpenAIStreamAdapter
     if (usage) {
       finalChunk.usage = usage;
     }
-    return `data: ${JSON.stringify(finalChunk)}\n\ndata: [DONE]\n\n`;
+    const suffix = this.textSuffix
+      ? this.formatTextDeltaSSE(this.textSuffix)
+      : "";
+    return `${suffix}data: ${JSON.stringify(finalChunk)}\n\ndata: [DONE]\n\n`;
   }
 
   toProviderResponse(): OpenAiResponse {
@@ -1352,6 +1372,19 @@ export class OpenAIStreamAdapter
         total_tokens: 0,
       },
     };
+  }
+
+  private resolveTextSuffix(): string {
+    if (
+      !this.getTextSuffix ||
+      this.responseReplacedWithText ||
+      this.state.toolCalls.length > 0 ||
+      this.state.stopReason !== "stop" ||
+      !this.state.text
+    ) {
+      return "";
+    }
+    return this.getTextSuffix(this.state.text);
   }
 }
 

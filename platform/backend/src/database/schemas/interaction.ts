@@ -140,7 +140,8 @@ const interactionsTable = pgTable(
     /**
      * Provenance of the session ID (NOT the client app — that is
      * external_agent_id). Values: 'claude_metadata', 'header', 'meta_header',
-     * 'openwebui_chat', 'opencode_session', 'codex_session', 'openai_user', null. Legacy rows may
+     * 'openwebui_chat', 'codex_session', 'opencode_session',
+     * 'claude_code_header', 'appa_header', 'openai_user', null. Legacy rows may
      * carry 'claude_code' / 'claude_desktop'.
      */
     sessionSource: varchar("session_source"),

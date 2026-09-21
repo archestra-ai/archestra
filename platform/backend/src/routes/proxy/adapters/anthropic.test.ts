@@ -685,6 +685,43 @@ describe("anthropicAdapterFactory.executeStream", () => {
     expect((toolUse as { input: unknown }).input).toEqual({});
   });
 
+  test("reports a tool called with no input as an empty object", () => {
+    // Anthropic streams no partial_json for a tool whose input is `{}`.
+    const adapter = anthropicAdapterFactory.createStreamAdapter();
+    for (const chunk of [
+      {
+        type: "message_start",
+        message: {
+          id: "msg_empty",
+          type: "message",
+          role: "assistant",
+          model: "claude-3-5-sonnet-20241022",
+          content: [],
+          stop_reason: null,
+          stop_sequence: null,
+          usage: { input_tokens: 1, output_tokens: 1 },
+        },
+      },
+      {
+        type: "content_block_start",
+        index: 0,
+        content_block: {
+          type: "tool_use",
+          id: "toolu_empty",
+          name: "get_time",
+          input: {},
+        },
+      },
+      { type: "content_block_stop", index: 0 },
+    ]) {
+      adapter.processChunk(chunk as never);
+    }
+
+    expect(adapter.state.toolCalls).toEqual([
+      expect.objectContaining({ id: "toolu_empty", arguments: "{}" }),
+    ]);
+  });
+
   test("parses tool input from well-formed incremental deltas", async () => {
     const body =
       sseEvent("message_start", {

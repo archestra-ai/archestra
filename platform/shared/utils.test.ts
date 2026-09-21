@@ -3,6 +3,7 @@ import {
   collapseWhitespace,
   exceedsCharLimit,
   formatSecretStorageType,
+  isUuid,
   parseFullToolName,
   slugify,
   stripWrappingQuotes,
@@ -77,6 +78,15 @@ describe("parseFullToolName", () => {
       serverName: null,
       toolName: "send_email",
     });
+  });
+});
+
+describe("isUuid", () => {
+  test("accepts canonical UUIDs and rejects partial values", () => {
+    expect(isUuid("0f8fad5b-d9cb-469f-a165-70867728950e")).toBe(true);
+    expect(isUuid("0F8FAD5B-D9CB-469F-A165-70867728950E")).toBe(true);
+    expect(isUuid("0f8fad5b-d9cb-469f-a165")).toBe(false);
+    expect(isUuid(" 0f8fad5b-d9cb-469f-a165-70867728950e ")).toBe(false);
   });
 });
 

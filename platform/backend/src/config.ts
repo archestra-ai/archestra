@@ -2045,7 +2045,7 @@ export function parseOpenAppaConfig(
   }
   if (isEnabled && secret.length === 0) {
     logger.warn(
-      "OpenAPPA is enabled without ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET: denials that carry remedy offers will fail closed (503) until the secret is set on every replica",
+      "OpenAPPA is enabled without ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET: denials that carry remedy offers will fail closed (503), and a stable shared signing secret is required for authenticated context receipts and external-client tool-call stamps until every replica uses the same secret",
     );
   }
   return {

@@ -411,8 +411,9 @@ the label lives on the session, not the turn.
 3. *"Load the appa-guide skill."* — now blocked, with a ruling whose reason is
    *"the readers are not the public audience"*, offering the `redactor` input
    sanitizer. The sanitizer finds nothing to redact in `{"name":"appa-guide"}`,
-   so the offer returns a `[appa] Released unchanged.` result. The result
-   names the arguments to call the tool with, and the call is released.
+    so the offer returns an `[appa] Authorized.` result with the same arguments.
+    Verify those arguments and the successful retry. The runtime uses the same
+    authorization result for unchanged and rewritten inputs.
 
 Turn 1 succeeding and turn 3 blocking is the proof. Turn 3 blocking alone is
 not: it would look identical if the tool had never been callable.

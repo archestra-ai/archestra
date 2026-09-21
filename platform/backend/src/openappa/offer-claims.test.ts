@@ -28,6 +28,45 @@ describe("offer claims", () => {
     expect(verifyOfferClaims(signed, secret)).toEqual(claims);
   });
 
+  test("carries the dispatch tool a blocked call went through", () => {
+    const dispatched = unsignedOfferClaims({
+      organizationId: "org",
+      sessionId: "session",
+      offerId: "offer",
+      tool: "archestra__whoami",
+      dispatch: "my_gateway_archestra__run_tool",
+    });
+    expect(
+      verifyOfferClaims(signOfferClaims(dispatched, secret), secret),
+    ).toMatchObject({ dispatch: "my_gateway_archestra__run_tool" });
+
+    // A direct call signs no dispatch member, so its payload is the one
+    // offers signed before the member existed, and those still verify.
+    const direct = signOfferClaims(
+      unsignedOfferClaims({
+        organizationId: "org",
+        sessionId: "session",
+        offerId: "offer",
+      }),
+      secret,
+    );
+    expect(JSON.parse(direct.payload)).not.toHaveProperty("dispatch");
+    expect(verifyOfferClaims(direct, secret)).not.toBeNull();
+  });
+
+  test("an empty dispatch claim cannot become a valid direct-call offer", () => {
+    const signed = signOfferClaims(
+      unsignedOfferClaims({
+        organizationId: "org",
+        sessionId: "session",
+        offerId: "offer",
+        dispatch: "",
+      }),
+      secret,
+    );
+    expect(verifyOfferClaims(signed, secret)).toBeNull();
+  });
+
   test("rejects swapped payload, header, or secret", () => {
     const signed = signOfferClaims(
       unsignedOfferClaims({

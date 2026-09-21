@@ -29,7 +29,7 @@ COPY agent_images/bin /usr/local/bin
 # The backend sends this program to the workspace inline, so the image needs no
 # copy to serve file transfers. One is installed anyway: it keeps the image's
 # own test honest and gives anyone debugging inside a pod the same tool.
-COPY backend/src/k8s/agent-runtime/workspace-files.py /usr/local/bin/archestra-workspace-files
+COPY backend/src/static/workspace-files.py /usr/local/bin/archestra-workspace-files
 RUN chmod 0755 /usr/local/bin/archestra-*
 
 ENV HOME=/home/node

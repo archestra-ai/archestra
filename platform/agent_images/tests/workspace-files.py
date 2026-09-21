@@ -28,8 +28,7 @@ def locate_helper():
         Path(__file__).resolve().parent.parent.parent
         / "backend"
         / "src"
-        / "k8s"
-        / "agent-runtime"
+        / "static"
         / "workspace-files.py",
         Path("/usr/local/bin/archestra-workspace-files"),
     ]

@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import type { Readable, Writable } from "node:stream";
 import { Readable as NodeReadable } from "node:stream";
@@ -6,7 +7,6 @@ import { PatchStrategy, setHeaderOptions } from "@kubernetes/client-node";
 import type WebSocket from "ws";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import config from "@/config";
-import workspaceFilesProgram from "@/k8s/agent-runtime/workspace-files.py";
 import { getK8sCapabilities } from "@/k8s/capabilities";
 import { clusterDnsResolver } from "@/k8s/cluster-dns";
 import { resolveRuntimeOwnerReferences } from "@/k8s/mcp-server-runtime/runtime-owner";
@@ -272,7 +272,7 @@ class AgentRuntimeManager {
       return await this.execInPod({
         session: params.session,
         podName: await this.requireRunningPodName(params.session),
-        command: [...WORKSPACE_FILES_COMMAND, ...params.args],
+        command: [...workspaceFilesCommand(), ...params.args],
         stdin: params.stdin,
         timeoutMs: params.timeoutMs,
       });
@@ -316,7 +316,7 @@ class AgentRuntimeManager {
       podName: await this.requireRunningPodName(params.session),
       container: AGENT_RUNTIME_CONTAINER_NAME,
       command: [
-        ...WORKSPACE_FILES_COMMAND,
+        ...workspaceFilesCommand(),
         "read-range",
         params.transferId,
         String(params.offset),
@@ -1869,7 +1869,17 @@ function shellDisplayArgument(value: string): string {
  * bundled it serve workspace files too. `python3 -c` leaves argv, stdin and
  * stdout free, which the transfer commands stream through.
  */
-const WORKSPACE_FILES_COMMAND = ["python3", "-c", workspaceFilesProgram];
+function workspaceFilesCommand(): string[] {
+  workspaceFilesProgram ??= readFileSync(
+    // Same static dir the sandbox proxy is served from, so it resolves in src
+    // under tsx/vitest and in dist in a production build.
+    path.join(path.dirname(config.mcpSandbox.filePath), "workspace-files.py"),
+    "utf-8",
+  );
+  return ["python3", "-c", workspaceFilesProgram];
+}
+
+let workspaceFilesProgram: string | undefined;
 
 /**
  * A runtime image without `python3`. The bootstrap only requires a shell and

@@ -1449,9 +1449,8 @@ const startWebServer = async () => {
     // SPDX-SnippetBegin
     // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
     // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-    // Convert visibility fields into grants where the model is switched on.
-    // Idempotent, so it re-reads the visibility fields every start and picks
-    // up anything changed while the switch was off.
+    // Convert legacy visibility and role authority into grants. Each policy
+    // converts once so later permission edits survive a restart.
     await runScopedResourcePermissionCutover();
     // SPDX-SnippetEnd
 

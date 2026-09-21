@@ -32,6 +32,11 @@ const resourcePermissionPoliciesTable = pgTable(
     legacySharingMigrated: boolean("legacy_sharing_migrated")
       .notNull()
       .default(false),
+    // Only legacy organization-wide visibility makes a role grant on an
+    // object's own policy available to role-less organization credentials.
+    legacyOrganizationAudience: boolean("legacy_organization_audience")
+      .notNull()
+      .default(false),
     revision: integer("revision").notNull().default(1),
     updatedAt: timestamp("updated_at", { mode: "date" }).notNull().defaultNow(),
   },

@@ -212,16 +212,31 @@ describe("service account object grants", () => {
     makeCustomRole,
     makeServiceAccount,
   }) => {
-    // The same claim from the other direction. The conversion turns this
-    // role's `serviceAccount:read` into a grant on `*`, so it reaches every
-    // account — until that grant is removed, at which point the role action it
-    // was converted from is worth nothing on its own.
+    // A role created after the organization is initialized needs an explicit
+    // organization-wide grant. Removing it takes away access even while the
+    // role still carries its old service-account read action.
     const role = await makeCustomRole(organizationId, {
       permission: { serviceAccount: ["read"] },
     });
     await MemberModel.updateRole(caretaker.id, organizationId, role.role);
     const account = await makeServiceAccount(organizationId);
     await runScopedResourcePermissionCutover();
+    const key = {
+      organizationId,
+      resource: "serviceAccount" as const,
+      scope: "*",
+    };
+    const initial = await ResourcePermissionPolicyModel.find(key);
+    await ResourcePermissionPolicyModel.replace({
+      ...key,
+      revision: initial?.revision ?? 0,
+      grants: [
+        {
+          subject: { type: "role", id: role.id },
+          actions: ["read"],
+        },
+      ],
+    });
 
     expect(
       (await app.inject({ url: `/api/service-accounts/${account.id}` }))

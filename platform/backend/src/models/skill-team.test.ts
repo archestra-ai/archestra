@@ -1,6 +1,7 @@
 import { SkillModel, SkillTeamModel } from "@/models";
 import { describe, expect, test } from "@/test";
 import type { ResourceVisibilityScope } from "@/types/visibility";
+import ResourcePermissionPolicyModel from "./resource-permission-policy";
 
 async function seedSkill(params: {
   organizationId: string;
@@ -28,6 +29,40 @@ async function seedSkill(params: {
 }
 
 describe("SkillTeamModel.getUserAccessibleSkillIds", () => {
+  test("an organization credential cannot read a private skill shared with a role", async ({
+    makeOrganization,
+    makeUser,
+    makeCustomRole,
+  }) => {
+    const org = await makeOrganization();
+    const author = await makeUser();
+    const role = await makeCustomRole(org.id, { permission: {} });
+    const skill = await seedSkill({
+      organizationId: org.id,
+      name: "role-shared-private-skill",
+      scope: "personal",
+      authorId: author.id,
+    });
+    const key = {
+      organizationId: org.id,
+      resource: "skill" as const,
+      scope: skill.id,
+    };
+    const policy = await ResourcePermissionPolicyModel.find(key);
+    await ResourcePermissionPolicyModel.replace({
+      ...key,
+      revision: policy?.revision ?? 0,
+      grants: [
+        { subject: { type: "role", id: role.id }, actions: ["read", "use"] },
+      ],
+    });
+
+    expect(
+      await SkillTeamModel.getUserAccessibleSkillIds({
+        organizationId: org.id,
+      }),
+    ).not.toContain(skill.id);
+  });
   test("returns org skills, own personal skills, and team skills", async ({
     makeOrganization,
     makeUser,

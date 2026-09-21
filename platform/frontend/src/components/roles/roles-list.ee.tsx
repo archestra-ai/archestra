@@ -541,7 +541,7 @@ export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
         open={createDialogOpen}
         onOpenChange={setCreateDialogOpen}
         title="Create Custom Role"
-        description="Choose the permissions this role adds to users, teams, and service accounts."
+        description="Roles set allowed actions for users, teams, and service accounts. Resource permissions determine which objects those actions reach."
         size="large"
         className="h-auto max-h-[90vh]"
       >
@@ -609,7 +609,7 @@ export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
           }
         }}
         title="Edit Role"
-        description="Changes apply to everyone assigned this role, including through a team."
+        description="Changes to allowed actions apply to everyone assigned this role, including through a team. Resource permissions determine which objects those actions reach."
         size="large"
         className="h-auto max-h-[90vh]"
       >

@@ -7,24 +7,10 @@ import logger from "@/logging";
  * Convert the retired visibility fields into grants, and retire the role
  * actions the grants replace.
  *
- * This is deliberately NOT a deploy-time migration. A migration runs on every
- * deployment, including the ones that are not reading grants yet, and its last
- * step removes `admin` and `team-admin` from roles — the very actions the
- * retired code paths still authorize with. Stripping them under a deployment
- * that still answers from visibility fields would take admin authority away
- * with nothing to replace it, and would make the switch a one-way door.
- *
- * So the conversion runs at startup, only where the model is switched on, and
- * it is idempotent: every statement merges rather than replaces, and each one
- * writes only where the result differs from what is already stored. Running it
- * again after someone changed a visibility field picks that change up, which
- * is what makes turning the switch on later safe. Deleting the switch once the
- * model has shipped leaves an unconditional call, so an existing deployment
- * converts itself on its next start with nothing to operate.
- *
- * A grant added by hand survives, because the audience is merged into the
- * stored grants. A revocation made in the editor does not: the visibility
- * field it contradicts is still there, and a re-run reads it again.
+ * This runs at startup after schema migrations so existing resources and role
+ * authority convert together in one transaction. Each policy imports legacy
+ * authority only once, merges any existing grants, and then becomes the source
+ * of truth. Later permission edits, including revocations, survive restarts.
  */
 export async function runScopedResourcePermissionCutover(
   /** Join a caller's transaction, so a test can roll the whole thing back. */
@@ -286,15 +272,18 @@ WITH candidates AS (
   FROM expanded GROUP BY organization_id, resource, scope, subject_type, subject_id
 ), policies AS (
   SELECT t.organization_id, t.resource, t.scope,
+    t.visibility = 'org' AS legacy_organization_audience,
     COALESCE(jsonb_agg(jsonb_build_object('subject', jsonb_build_object('type', s.subject_type, 'id', s.subject_id), 'actions', s.actions)
       ORDER BY s.subject_type, s.subject_id) FILTER (WHERE s.subject_id IS NOT NULL), '[]'::jsonb) AS grants
   FROM targets t LEFT JOIN subjects s USING (organization_id, resource, scope)
-  GROUP BY t.organization_id, t.resource, t.scope
+  GROUP BY t.organization_id, t.resource, t.scope, t.visibility
 )
-INSERT INTO resource_permission_policies (organization_id, resource, scope, grants, legacy_sharing_migrated)
-SELECT organization_id, resource, scope, grants, true FROM policies
+INSERT INTO resource_permission_policies (organization_id, resource, scope, grants, legacy_sharing_migrated, legacy_organization_audience)
+SELECT organization_id, resource, scope, grants, true, legacy_organization_audience FROM policies
 ON CONFLICT (organization_id, resource, scope) DO UPDATE
-SET grants = EXCLUDED.grants, legacy_sharing_migrated = true, revision = resource_permission_policies.revision + 1, updated_at = now()
+SET grants = EXCLUDED.grants, legacy_sharing_migrated = true,
+  legacy_organization_audience = EXCLUDED.legacy_organization_audience,
+  revision = resource_permission_policies.revision + 1, updated_at = now()
 WHERE NOT resource_permission_policies.legacy_sharing_migrated OR resource_permission_policies.grants IS DISTINCT FROM EXCLUDED.grants;
 `),
   // ---------------------------------------------------------------------
@@ -311,6 +300,22 @@ WITH resources(resource) AS (
     unnest(ARRAY['read', 'use', 'update', 'delete', 'manage-permissions']) AS action
   FROM organization o CROSS JOIN resources r
   CROSS JOIN (VALUES ('admin'), ('platform_admin')) builtin(id)
+  WHERE NOT EXISTS (
+    SELECT 1 FROM resource_permission_policies p
+    WHERE p.organization_id = o.id AND p.resource = r.resource
+      AND p.scope = '*' AND p.legacy_sharing_migrated
+  )
+  UNION ALL
+  -- Editor's model-catalog authority also belongs in the first conversion.
+  -- Re-adding it on every restart would undo an explicit wildcard revocation.
+  SELECT o.id, 'llmModel', 'editor', action
+  FROM organization o
+  CROSS JOIN unnest(ARRAY['read', 'use', 'update', 'manage-permissions']) action
+  WHERE NOT EXISTS (
+    SELECT 1 FROM resource_permission_policies p
+    WHERE p.organization_id = o.id AND p.resource = 'llmModel'
+      AND p.scope = '*' AND p.legacy_sharing_migrated
+  )
   UNION ALL
   SELECT roles.organization_id, r.resource, roles.id,
     expanded.action
@@ -331,6 +336,11 @@ WITH resources(resource) AS (
     WHEN r.resource = 'llmModel' THEN COALESCE(roles.permission::jsonb->'llmModel', '[]'::jsonb) ? 'update'
     ELSE COALESCE(roles.permission::jsonb->r.resource, '[]'::jsonb) ? 'admin'
   END
+  AND NOT EXISTS (
+    SELECT 1 FROM resource_permission_policies p
+    WHERE p.organization_id = roles.organization_id AND p.resource = r.resource
+      AND p.scope = '*' AND p.legacy_sharing_migrated
+  )
 ), entries AS (
   SELECT organization_id, resource, 'role' AS subject_type, subject_id, action FROM role_actions
   UNION ALL
@@ -366,6 +376,11 @@ WITH resources(resource) AS (
   SELECT o.id AS organization_id, r.resource, 'editor' AS subject_id,
     unnest(ARRAY['read', 'use', 'update', 'delete', 'manage-permissions']) AS action
   FROM organization o CROSS JOIN resources r
+  WHERE NOT EXISTS (
+    SELECT 1 FROM resource_permission_policies p
+    WHERE p.organization_id = o.id AND p.resource = r.resource
+      AND p.scope = 'teams:*' AND p.legacy_sharing_migrated
+  )
   UNION ALL
   SELECT roles.organization_id, r.resource, roles.id, expanded.action
   FROM organization_role roles CROSS JOIN resources r
@@ -379,6 +394,11 @@ WITH resources(resource) AS (
   ) expanded
   WHERE COALESCE(roles.permission::jsonb->r.resource, '[]'::jsonb) ? 'team-admin'
     AND NOT COALESCE(roles.permission::jsonb->r.resource, '[]'::jsonb) ? 'admin'
+    AND NOT EXISTS (
+      SELECT 1 FROM resource_permission_policies p
+      WHERE p.organization_id = roles.organization_id AND p.resource = r.resource
+        AND p.scope = 'teams:*' AND p.legacy_sharing_migrated
+    )
 ), entries AS (
   SELECT organization_id, resource, 'role' AS subject_type, subject_id, action FROM role_actions
   UNION ALL
@@ -435,6 +455,11 @@ WITH role_actions AS (
     unnest(ARRAY['read', 'use', 'update', 'delete', 'manage-permissions']) AS action
   FROM organization o
   CROSS JOIN (VALUES ('admin'), ('platform_admin')) builtin(id)
+  WHERE NOT EXISTS (
+    SELECT 1 FROM resource_permission_policies p
+    WHERE p.organization_id = o.id AND p.resource = 'serviceAccount'
+      AND p.scope = '*' AND p.legacy_sharing_migrated
+  )
   UNION ALL
   SELECT roles.organization_id, roles.id, expanded.action
   FROM organization_role roles
@@ -447,6 +472,11 @@ WITH role_actions AS (
     UNION
     SELECT 'manage-permissions' WHERE COALESCE(roles.permission::jsonb->'serviceAccount', '[]'::jsonb) ? 'update'
   ) expanded
+  WHERE NOT EXISTS (
+    SELECT 1 FROM resource_permission_policies p
+    WHERE p.organization_id = roles.organization_id AND p.resource = 'serviceAccount'
+      AND p.scope = '*' AND p.legacy_sharing_migrated
+  )
 ), entries AS (
   -- Merged rather than replaced, so a grant written by hand in the editor
   -- survives a re-run, and compared against what is stored rather than written
@@ -479,34 +509,6 @@ WHERE NOT resource_permission_policies.legacy_sharing_migrated OR resource_permi
 
 /** @public — read by resource-permissions-cutover.roles.test.ts */
 export const ROLE_RETIREMENT_STATEMENTS = [
-  // ---------------------------------------------------------------------
-  // mergeEditorModelAuthority
-  // ---------------------------------------------------------------------
-  sql.raw(`
--- Preserve the built-in Editor's existing model-catalog authority. This is
--- distinct from role composition: unrelated action/scope pairs stay separate.
-WITH policies AS (
-  SELECT organization_id, grants,
-    jsonb_build_object('subject', jsonb_build_object('type', 'role', 'id', 'editor'),
-      'actions', (SELECT jsonb_agg(DISTINCT action ORDER BY action)
-        FROM (SELECT jsonb_array_elements_text('["manage-permissions", "read", "update", "use"]'::jsonb) AS action
-          UNION ALL
-          SELECT jsonb_array_elements_text(g->'actions') FROM jsonb_array_elements(grants) g
-          WHERE g->'subject'->>'type' = 'role' AND g->'subject'->>'id' = 'editor') actions)) AS editor_grant
-  FROM resource_permission_policies WHERE resource = 'llmModel' AND scope = '*'
-), merged AS (
-  SELECT organization_id,
-    (SELECT jsonb_agg(g ORDER BY g->'subject'->>'type', g->'subject'->>'id')
-     FROM (SELECT value AS g FROM jsonb_array_elements(grants)
-           WHERE NOT (value->'subject'->>'type' = 'role' AND value->'subject'->>'id' = 'editor')
-           UNION ALL SELECT editor_grant) entries) AS grants
-  FROM policies
-)
-UPDATE resource_permission_policies p SET grants = merged.grants,
-  revision = p.revision + 1, updated_at = now()
-FROM merged WHERE p.organization_id = merged.organization_id
-  AND p.resource = 'llmModel' AND p.scope = '*' AND p.grants IS DISTINCT FROM merged.grants;
-`),
   // ---------------------------------------------------------------------
   // convertAdminActionsToResourceGrants
   // ---------------------------------------------------------------------
@@ -556,6 +558,17 @@ WITH holders AS (
       WHEN 'mcpServerInstallation' THEN ARRAY['mcpRegistry']
       ELSE ARRAY[h.role_action] END) AS resource
   ) mapped
+  WHERE NOT EXISTS (
+    SELECT 1 FROM resource_permission_policies p
+    WHERE p.organization_id = h.organization_id AND p.resource = mapped.resource
+      AND p.scope = '*' AND p.legacy_sharing_migrated
+  ) OR EXISTS (
+    -- A custom role's old admin flag still needs converting on this first
+    -- pass even if an earlier stage already created the wildcard policy.
+    SELECT 1 FROM organization_role roles
+    WHERE roles.organization_id = h.organization_id AND roles.id = h.role_id
+      AND COALESCE(roles.permission::jsonb->h.role_action, '[]'::jsonb) ? 'admin'
+  )
 ), entries AS (
   -- Merge: a grant written by hand on this policy is not discarded, and a
   -- role already listed keeps the union of both action sets. The merge
@@ -639,6 +652,21 @@ WITH holders AS (
           ? 'deploy-to-restricted'
       )
   ) grantee ON true
+  WHERE NOT EXISTS (
+    SELECT 1 FROM resource_permission_policies p
+    WHERE p.organization_id = o.id AND p.resource = 'environment'
+      AND p.scope = '*' AND p.legacy_sharing_migrated
+  ) OR EXISTS (
+    SELECT 1 FROM organization_role roles
+    WHERE roles.organization_id = o.id AND roles.id = grantee.id
+      AND EXISTS (
+        SELECT 1 FROM unnest(ARRAY[
+          'agent', 'skill', 'app', 'mcpGateway', 'mcpRegistry', 'knowledgeSource'
+        ]) AS deployable(resource)
+        WHERE COALESCE(roles.permission::jsonb->deployable.resource, '[]'::jsonb)
+          ? 'deploy-to-restricted'
+      )
+  )
 ), entries AS (
   -- Merge rather than replace, and compare before writing: this runs at every
   -- start, and an unconditional write would raise the revision the permissions
@@ -681,8 +709,9 @@ WHERE NOT resource_permission_policies.legacy_sharing_migrated
   // retireConvertedRoleActions
   // ---------------------------------------------------------------------
   sql.raw(`
--- 0485 already captured these flags as complete scoped grants. Retire the
--- obsolete role actions without changing unrelated permissions or role IDs.
+-- Earlier statements in this transaction captured these flags as scoped
+-- grants. Retire the obsolete actions without changing unrelated permissions
+-- or role IDs.
 WITH converted AS (
   SELECT r.id, COALESCE((
     SELECT jsonb_object_agg(resource, CASE

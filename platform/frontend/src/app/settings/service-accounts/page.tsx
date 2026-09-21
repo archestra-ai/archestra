@@ -587,7 +587,8 @@ export default function ServiceAccountsSettingsPage() {
                 className="w-full"
               />
               <FieldDescription>
-                The roles this service account will use for API requests.
+                Roles set allowed actions for API requests. Resource permissions
+                determine which objects this account can reach.
               </FieldDescription>
             </div>
             <AdvancedLabelsSection

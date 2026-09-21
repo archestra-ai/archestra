@@ -7,6 +7,7 @@ CREATE TABLE "resource_permission_policies" (
 	"scope" text NOT NULL,
 	"grants" jsonb DEFAULT '[]'::jsonb NOT NULL,
 	"legacy_sharing_migrated" boolean DEFAULT false NOT NULL,
+	"legacy_organization_audience" boolean DEFAULT false NOT NULL,
 	"revision" integer DEFAULT 1 NOT NULL,
 	"updated_at" timestamp DEFAULT now() NOT NULL,
 	CONSTRAINT "resource_permission_policies_organization_id_resource_scope_pk" PRIMARY KEY("organization_id","resource","scope")

@@ -23,17 +23,21 @@ export default class ResourcePermissionPolicyModel {
    * gateway token.
    *
    * Two subjects say so. An explicit grant to everyone is one. A grant to a
-   * role on the object's OWN policy is the other: the upgrade writes
-   * organization-wide visibility that way, because a role without the
-   * resource's read action never saw the object. The same subject at `*` scope
-   * is one role's authority over every object of the type, which a role-less
-   * principal does not inherit.
+   * role on the object's OWN policy is the other when the policy has the
+   * legacy organization-audience marker. The upgrade writes organization-wide
+   * visibility through role grants because a role without the resource's read
+   * action never saw the object. A new role grant cannot publish an object to
+   * role-less credentials.
    *
    * The SQL form of this rule lives in {@link organizationAccessCondition};
    * change both together.
    */
   static isOrganizationWide(params: {
-    policy: { scope: string; grants: ResourcePermissionGrant[] };
+    policy: {
+      scope: string;
+      grants: ResourcePermissionGrant[];
+      legacyOrganizationAudience: boolean;
+    };
     scope: string;
     action: ResourcePermissionAction;
   }): boolean {
@@ -42,6 +46,7 @@ export default class ResourcePermissionPolicyModel {
         grant.actions.includes(params.action) &&
         ((grant.subject.type === "organization" && grant.subject.id === "*") ||
           (grant.subject.type === "role" &&
+            params.policy.legacyOrganizationAudience &&
             params.policy.scope === params.scope)),
     );
   }
@@ -193,10 +198,9 @@ export default class ResourcePermissionPolicyModel {
    *
    * Two subjects answer for "the organization at large". An explicit grant to
    * everyone is one. A grant to a role on the object's OWN policy is the
-   * other: the upgrade writes organization-wide visibility that way, because a
-   * role without the resource's read action never saw the object. The same
-   * subject at `*` scope is one role's authority over every object of the
-   * type, which a role-less principal does not inherit.
+   * other when that policy carries the legacy organization-audience marker.
+   * Explicit role grants on new resources do not publish them to role-less
+   * credentials.
    */
   static organizationAccessCondition(params: {
     organizationId: string | SQLWrapper;
@@ -217,6 +221,7 @@ export default class ResourcePermissionPolicyModel {
             (organization_grant->'subject'->>'type' = 'organization'
               AND organization_grant->'subject'->>'id' = '*')
             OR (organization_grant->'subject'->>'type' = 'role'
+              AND organization_access_policy.legacy_organization_audience
               AND organization_access_policy.scope = (${params.scopeColumn})::text)
           )
           AND (organization_grant->'actions') ? ${params.action}
@@ -402,6 +407,8 @@ export default class ResourcePermissionPolicyModel {
       scope: params.scope,
       grants,
       legacySharingMigrated: true,
+      legacyOrganizationAudience:
+        params.grants === undefined && params.visibility === "org",
     });
   }
 

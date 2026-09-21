@@ -2,10 +2,7 @@
 -- The conversion from visibility fields to grants moved to the startup
 -- routine in `services/resource-permissions-cutover.ts`.
 --
--- A deployment that is not reading grants yet must not have its roles
--- rewritten, and a conversion that runs once at deploy time goes stale the
--- moment somebody changes a visibility field afterwards. The startup routine
--- runs only where the model is switched on, and it is idempotent, so turning
--- the switch on later converts from the state of the day rather than the state
--- of the deployment.
+-- The backend converts each policy once after schema migration, so sharing
+-- and role authority move together in one transaction. Later permission edits
+-- remain authoritative across restarts.
 SELECT 1;

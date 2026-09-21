@@ -1,13 +1,136 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 
 import { ResourcePermissions } from "@/services/resource-permissions";
+import { runScopedResourcePermissionCutover } from "@/services/resource-permissions-cutover";
 import { describe, expect, test } from "@/test";
 import AgentModel from "./agent";
+import AgentTeamModel from "./agent-team";
 import InternalMcpCatalogModel from "./internal-mcp-catalog";
 import OrganizationModel from "./organization";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
 
 describe("resource permission policy persistence", () => {
+  test("a private agent shared with a role stays unavailable to organization credentials", async ({
+    makeOrganization,
+    makeUser,
+    makeAgent,
+    makeCustomRole,
+  }) => {
+    const organization = await makeOrganization();
+    const author = await makeUser();
+    const role = await makeCustomRole(organization.id, { permission: {} });
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      authorId: author.id,
+      agentType: "agent",
+      scope: "personal",
+    });
+    const key = {
+      organizationId: organization.id,
+      resource: "agent" as const,
+      scope: agent.id,
+    };
+    const policy = await ResourcePermissionPolicyModel.find(key);
+    await ResourcePermissionPolicyModel.replace({
+      ...key,
+      revision: policy?.revision ?? 0,
+      grants: [
+        { subject: { type: "role", id: role.id }, actions: ["read", "use"] },
+      ],
+    });
+
+    expect(
+      await AgentTeamModel.credentialHasAgentAccess({
+        organizationId: organization.id,
+        agentId: agent.id,
+        teamId: null,
+      }),
+    ).toBe(false);
+
+    const rolePolicy = await ResourcePermissionPolicyModel.find(key);
+    await ResourcePermissionPolicyModel.replace({
+      ...key,
+      revision: rolePolicy?.revision ?? 0,
+      grants: [
+        { subject: { type: "organization", id: "*" }, actions: ["use"] },
+      ],
+    });
+    expect(
+      await AgentTeamModel.credentialHasAgentAccess({
+        organizationId: organization.id,
+        agentId: agent.id,
+        teamId: null,
+      }),
+    ).toBe(true);
+  });
+  test("a migrated organization-visible agent remains usable by organization credentials", async ({
+    makeOrganization,
+    makeUser,
+    makeAgent,
+  }) => {
+    const organization = await makeOrganization({ legacyPermissions: true });
+    const author = await makeUser();
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      authorId: author.id,
+      agentType: "agent",
+      scope: "org",
+    });
+    await runScopedResourcePermissionCutover();
+
+    expect(
+      await AgentTeamModel.credentialHasAgentAccess({
+        organizationId: organization.id,
+        agentId: agent.id,
+        teamId: null,
+      }),
+    ).toBe(true);
+  });
+  test("an explicitly granted role does not publish a newly created org-scope agent", async ({
+    makeOrganization,
+    makeUser,
+    makeCustomRole,
+  }) => {
+    const organization = await makeOrganization();
+    const author = await makeUser();
+    const role = await makeCustomRole(organization.id, { permission: {} });
+    const agent = await AgentModel.create(
+      {
+        name: "Creator-only org-scope agent",
+        organizationId: organization.id,
+        agentType: "agent",
+        scope: "org",
+        teams: [],
+        users: [],
+        labels: [],
+        knowledgeBaseIds: [],
+        connectorIds: [],
+      },
+      author.id,
+      { initialPermissionGrants: [] },
+    );
+    const key = {
+      organizationId: organization.id,
+      resource: "agent" as const,
+      scope: agent.id,
+    };
+    const policy = await ResourcePermissionPolicyModel.find(key);
+    await ResourcePermissionPolicyModel.replace({
+      ...key,
+      revision: policy?.revision ?? 0,
+      grants: [
+        { subject: { type: "role", id: role.id }, actions: ["read", "use"] },
+      ],
+    });
+
+    expect(
+      await AgentTeamModel.credentialHasAgentAccess({
+        organizationId: organization.id,
+        agentId: agent.id,
+        teamId: null,
+      }),
+    ).toBe(false);
+  });
   test("new organizations initialize scoped role grants without restoring later revocations", async ({
     makeUser,
     makeMember,

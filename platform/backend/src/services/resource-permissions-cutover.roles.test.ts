@@ -14,7 +14,7 @@ async function runMigration() {
 }
 
 describe("scoped RBAC final cutover", () => {
-  test("merges Editor model authority without removing other grants, and replays without revision churn", async ({
+  test("an Editor model grant edit survives a restart without revision churn", async ({
     makeOrganization,
     makeUser,
   }) => {
@@ -26,7 +26,7 @@ describe("scoped RBAC final cutover", () => {
       scope: "*",
     };
     const original = await ResourcePermissionPolicyModel.find(key);
-    await ResourcePermissionPolicyModel.replace({
+    const edited = await ResourcePermissionPolicyModel.replace({
       ...key,
       revision: original?.revision ?? 0,
       grants: [
@@ -45,13 +45,7 @@ describe("scoped RBAC final cutover", () => {
     const unrelated = await ResourcePermissionPolicyModel.find(unrelatedKey);
     await runMigration();
     const result = await ResourcePermissionPolicyModel.find(key);
-    expect(result?.grants).toEqual([
-      {
-        subject: { type: "role", id: "editor" },
-        actions: ["delete", "manage-permissions", "read", "update", "use"],
-      },
-      { subject: { type: "user", id: user.id }, actions: ["use"] },
-    ]);
+    expect(result).toEqual(edited);
     expect(await ResourcePermissionPolicyModel.find(unrelatedKey)).toEqual(
       unrelated,
     );
@@ -105,22 +99,20 @@ describe("scoped RBAC final cutover", () => {
     expect(replayed).toEqual(row);
   });
 
-  test("rolls back the Editor grant change when a later statement fails", async ({
+  test("rolls back role grants and retirement when a later statement fails", async ({
     makeOrganization,
+    makeCustomRole,
   }) => {
-    const org = await makeOrganization();
+    const org = await makeOrganization({ legacyPermissions: true });
+    const role = await makeCustomRole(org.id, {
+      permission: { project: ["read", "admin"] },
+    });
     const key = {
       organizationId: org.id,
-      resource: "llmModel" as const,
+      resource: "project" as const,
       scope: "*",
     };
     const initial = await ResourcePermissionPolicyModel.find(key);
-    await ResourcePermissionPolicyModel.replace({
-      ...key,
-      revision: initial?.revision ?? 0,
-      grants: [],
-    });
-    const before = await ResourcePermissionPolicyModel.find(key);
     await expect(
       db.transaction(async (tx) => {
         // The whole conversion runs in one transaction, so a later failure
@@ -130,14 +122,23 @@ describe("scoped RBAC final cutover", () => {
         throw new Error("simulated later cutover failure");
       }),
     ).rejects.toThrow("simulated later cutover failure");
-    expect(await ResourcePermissionPolicyModel.find(key)).toEqual(before);
+    expect(await ResourcePermissionPolicyModel.find(key)).toEqual(initial);
+    const [rolledBackRole] = await db
+      .select({ permission: schema.organizationRolesTable.permission })
+      .from(schema.organizationRolesTable)
+      .where(eq(schema.organizationRolesTable.id, role.id));
+    expect(JSON.parse(rolledBackRole.permission).project).toContain("admin");
     await runMigration();
-    expect((await ResourcePermissionPolicyModel.find(key))?.grants).toEqual([
-      {
-        subject: { type: "role", id: "editor" },
-        actions: ["manage-permissions", "read", "update", "use"],
-      },
-    ]);
+    expect(
+      (await ResourcePermissionPolicyModel.find(key))?.grants.some(
+        (grant) => grant.subject.id === role.id,
+      ),
+    ).toBe(true);
+    const [retiredRole] = await db
+      .select({ permission: schema.organizationRolesTable.permission })
+      .from(schema.organizationRolesTable)
+      .where(eq(schema.organizationRolesTable.id, role.id));
+    expect(JSON.parse(retiredRole.permission).project).toEqual(["read"]);
   });
 
   /**

@@ -1,5 +1,5 @@
 {
-  "id": "2516bdb2-ba9b-4b44-85de-298b31e171be",
+  "id": "bfa3bead-2cf8-4cb5-adf2-b30f12d0835e",
   "prevId": "070a44ed-fb7d-4eb1-9bbf-ed1a05951f03",
   "version": "7",
   "dialect": "postgresql",
@@ -19856,6 +19856,13 @@
         },
         "legacy_sharing_migrated": {
           "name": "legacy_sharing_migrated",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "legacy_organization_audience": {
+          "name": "legacy_organization_audience",
           "type": "boolean",
           "primaryKey": false,
           "notNull": true,

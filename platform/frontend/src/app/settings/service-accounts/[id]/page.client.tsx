@@ -4,6 +4,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import {
   AlertTriangle,
   KeyRound,
+  ListFilter,
   Loader2,
   Plus,
   Power,
@@ -632,11 +633,29 @@ export default function ServiceAccountDetailPage({
                         })
                       }
                       placeholder="Filter by status"
+                      // Each option renders as the reading it selects, so the
+                      // filter teaches the same vocabulary the Status column
+                      // uses instead of a second, plainer one. `label` stays
+                      // the bare word, which is what the option list is
+                      // searched and announced by.
                       items={[
-                        { value: ALL, label: "All statuses" },
+                        {
+                          value: ALL,
+                          label: "All statuses",
+                          content: (
+                            <span className="inline-flex items-center gap-1.5 text-sm">
+                              <ListFilter
+                                aria-hidden
+                                className="size-3.5 shrink-0 text-muted-foreground"
+                              />
+                              All statuses
+                            </span>
+                          ),
+                        },
                         ...KEY_STATUS_FILTERS.map((status) => ({
                           value: status,
                           label: KEY_STATUS_LABELS[status],
+                          content: <KeyStatusBadge status={status} />,
                         })),
                       ]}
                     />

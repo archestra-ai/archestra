@@ -449,6 +449,36 @@ describe("LimitsPage", () => {
     expect(modelsBadge).toHaveTextContent("All models");
   });
 
+  it("shows usage with cents so sub-dollar spend is not rounded away", () => {
+    mockUseLimits.mockReturnValue({
+      data: [
+        {
+          id: "limit-1",
+          entityType: "organization",
+          entityId: "org-1",
+          limitType: "token_cost",
+          limitValue: 1,
+          model: null,
+          mcpServerName: null,
+          toolName: null,
+          lastCleanup: null,
+          createdAt: "2026-01-01",
+          updatedAt: "2026-01-01",
+          modelUsage: [
+            { model: "gpt-4o", tokensIn: 0, tokensOut: 0, cost: 0.45 },
+          ],
+        },
+      ],
+      isPending: false,
+    });
+
+    render(<LimitsPage />);
+
+    expect(screen.getByTestId("data-table-row-limit-1")).toHaveTextContent(
+      "$0.45 / $1 (45.0%)",
+    );
+  });
+
   it("shows the next reset date for rolling monthly limits", () => {
     mockUseLimits.mockReturnValue({
       data: [

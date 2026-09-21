@@ -7,64 +7,67 @@ export const RUNTIME_HANDOFF_SKILL: BuiltInSkill = {
   description: `Hand work over to ${DEFAULT_APP_NAME}, spin it up there, or bring it back and resume locally. Move repository work, documents, and other ongoing tasks between a local client and Agent Runtime; preserve the same runtime session for every remote follow-up.`,
   content: `# Agent Runtime Handoff
 
-Use the connected tools to move work between clients and a retained runtime session. The local client's conversation does not automatically transfer: send a concise handoff with the goal, decisions, completed work, remaining steps, constraints, and acceptance criteria.
+Use this flow for "hand this over to ${DEFAULT_APP_NAME}" or "spin this up in ${DEFAULT_APP_NAME}". Reuse this work's existing runtime session. "Bring it back", "resume locally", and "continue here" mean retrieve the work and continue in this client.
 
-Treat "hand this work over to ${DEFAULT_APP_NAME}" and "spin this up in ${DEFAULT_APP_NAME}" as runtime handoff requests. First check whether this work already has a runtime session; these phrases do not authorize duplicate sessions. "Bring it back", "resume locally", and "continue here" mean transfer the work back to this client and continue locally.
+## Prepare
 
-## Discover once
+Discover the needed tool schemas with archestra__search_tools and call them through archestra__run_tool when available:
 
-Use archestra__search_tools to discover tool names and schemas, then archestra__run_tool to call them, when available. Check the tools needed for this handoff:
+- list_agents, start_run: choose an Agent and start new work.
+- list_runs, get_run, steer_run, cancel_run: find, inspect, continue, or stop existing work.
+- transfer_workspace_file: copy files through a local shell without putting their bytes in the conversation.
+- read_workspace_file, write_workspace_file: read or write contents through the conversation, up to 4 MiB per file.
+- transfer_credential: supply an approved personal credential.
 
-- Choose an Agent and start work: list_agents, start_run.
-- Find, inspect, continue, or stop a session: list_runs, get_run, steer_run, cancel_run.
-- Copy files through a local shell: transfer_workspace_file.
-- Read or write file contents through the conversation: read_workspace_file, write_workspace_file. Each has a 4 MiB limit.
-- Supply a missing personal credential, with approval: transfer_credential.
+Choose an accessible Agent with executionMode set to runtime. Keep the user's chosen Agent. Ask only if the choice is unclear.
 
-If a needed tool is missing, name it and ask an admin to add it to the connected gateway. Do not change permissions yourself. Link to <origin>/mcp/gateways, using the origin from this client's configured MCP gateway URL. If that URL is unavailable, ask for the deployment URL. Never guess the host.
+Before starting, check that the tools for the chosen transfer method below are available. If a required tool is missing, name it and ask an admin to add it to the connected gateway. Link to <origin>/mcp/gateways using the configured gateway's origin. Ask for the deployment URL if unknown. Do not change permissions or silently switch transfer methods. Publishing files or pushing a branch requires explicit user approval.
 
-When the handoff has to carry a file — a patch, a bundle, a snapshot, a document — confirm transfer_workspace_file is available before start_run. If it is missing, stop and ask for it to be added, then start the handoff. Do not work around its absence: pushing a branch, publishing the work elsewhere, or spending the file's bytes as base64 through the conversation are the user's decisions to make, not substitutes you choose, and publishing anything needs the user's explicit authorization. Offer those alternatives only after naming the missing tool.
+For repository work, read references/repository-handoff.md. Prepare a short handoff with the goal, decisions, completed work, remaining steps, constraints, and acceptance criteria. Include setup requirements and services already running locally. Conversations, processes, dependencies, and databases do not transfer automatically.
 
-Use list_agents to identify an accessible Agent with executionMode set to runtime. Foreground agents do not retain a runtime workspace or support steering. Reuse the user's chosen Agent. Ask only when the choice or scope cannot be determined.
+## Transfer files
 
-## Hand off
+Choose the method based on this client's capabilities:
 
-1. If this work already has a runtime session, call get_run with its saved session ID (as task_id). Recover a lost ID with list_runs on the known Agent. Do not choose among ambiguous matches without the user.
-2. For NEW runtime work, call start_run once. Put the handoff in message. A path on the laptop is not a file the runtime can read, so send files one of two ways: attachments (name, contentType, contentBase64), which are staged before the first turn but pass through the conversation as base64; or transfer_workspace_file after the run starts, which moves the bytes directly. Reserve attachments for small inputs the first turn cannot begin without, and transfer everything else.
-3. For EXISTING runtime work, use steer_run immediately, including while the run is working. Do not wait for completion to send a correction. It continues the same workspace and saved conversation, including after a previous turn finishes. Transfer any needed files before the follow-up, using the file tools below.
-4. Save the returned session_id and run_url in the conversation's handoff note. The task ID can change between turns; the session ID stays stable. Poll get_run until startup is confirmed or it reports a failure. An accepted request alone does not prove the work started.
+- With a local shell, use transfer_workspace_file for files of any supported size, including small files and binaries. Supply an absolute local path and a workspace-relative path. For uploads, compute the size and SHA-256 first. Execute the returned command and check its result. For downloads, check the returned checksum. Repeat an interrupted download's command while its ticket remains valid.
+- Without a shell, use read_workspace_file and write_workspace_file for files up to 4 MiB. Binary content uses base64. Ask for an approved destination if the file exceeds the limit.
+- For small inputs required in the first turn, start_run attachments can stage files before execution. Supply name, contentType, and contentBase64. These bytes pass through the conversation.
 
-A runtime workspace may already run the project's development environment, started by the image's own bootstrap before your first turn. Record in the handoff message which services the local session had running and how they were started, then ask the runtime to report what is already serving before it starts anything. Starting a second stack on top of a running one wastes the workspace, and no particular tool is guaranteed to exist in an image.
+Use read_workspace_file when you need to inspect contents rather than copy a file. Local paths alone do not make files available remotely. Keep secrets, private keys, .env files, and authentication stores out of ordinary file transfers and handoff notes. Use the credential flow below for missing secrets.
 
-Tell the receiving agent to inspect the actual runtime and bootstrap state, not infer its capabilities from a repository Dockerfile alone. Reuse existing setup; recreate only missing, task-required setup using repository guidance and allowed runtime capabilities. Verify service readiness with real checks, such as a health request or task-relevant connection, and report setup differences and blockers. Use existing approved access. If a credential is missing, follow the credential instructions below.
+## Supply a missing credential
 
-Check retained_until against the user's intended pickup time. For overnight work, do not promise next-morning pickup if the workspace expires first. Explain the deadline and obtain an appropriate retention setting or an authorized durable delivery destination before the user leaves.
+Prefer the Agent's configured credentials. If one is missing, explain the exposure and obtain approval before calling transfer_credential:
 
-A retry must never create another session. After an ambiguous timeout, inspect the known session or list recent runs before repeating a start. If a workspace expired or saved session state is missing, report that blocker and preserve existing work. Do not silently call start_run.
+- The Agent must enable allowAgentSuppliedCredentialValues.
+- The secret enters the model context and client transcript, even though the platform's tool-call log redacts it.
+- The credential is personal, but applies to all of this user's runs on that Agent from the next turn onward.
 
-## Pick up in any client
+Transfer only the required credential before start_run or steer_run. Do not copy an entire authentication store. Use Settings instead if the exposure is unacceptable or the credential is organization-wide.
 
-Read get_run with the saved session ID. Read requests for the original goal and current turn before interpreting a short follow-up; terminal output alone may show only setup commands. Report what completed, what remains, and any failed checks. Retrieve deliverables with the file tools below. Never treat truncated output as a complete deliverable.
+## Start or continue
 
-To reach a service running inside the workspace, give the user its run_url: the run's connection details there carry the ready-made commands for attaching a terminal and forwarding ports. Never hand-write cluster commands from memory. Ask the runtime which ports it actually has listening rather than assuming a probe succeeded, because tools such as ss and netstat may be absent and their failure reads as an empty result. Workspace services commonly bind loopback only, which forwards normally.
+1. Look for this work's saved session_id. Call get_run with it as task_id. If the ID is lost, use list_runs on the known Agent. Ask the user to resolve ambiguous matches.
+2. If no session exists, call start_run once with the handoff. If files will arrive after startup, instruct the Agent to inspect the workspace, report readiness, and end its turn without starting task work. Poll get_run until the workspace is ready, transfer the files, then call steer_run with their paths and the task instructions.
+3. For an existing session, use steer_run with the same session_id, even while work is active. Send corrections immediately. For a follow-up that needs files, transfer them first. Coordinate a stopping point before replacing files the Agent could be using.
+4. Save session_id and run_url in the handoff note. Use the stable session ID for later calls, not a turn's changing task ID. Check get_run to confirm startup or report failure.
 
-If work will continue locally, coordinate a stopping point with the runtime and verify it stopped writing before applying its files. cancel_run preserves the workspace, but its response alone does not prove the process stopped writing. Download results before retention expires. Never delete a workspace as part of handoff.
+Tell the Agent to inspect the actual runtime and reuse its existing bootstrap and services. Start only missing, task-required services. Check readiness with health requests or task-relevant connections. Report setup differences and blockers rather than assuming tools exist from a repository Dockerfile.
 
-## Transfer files and credentials
+After an ambiguous timeout, inspect the saved session or recent runs before retrying. Never create a duplicate session. If the workspace expired or session state is missing, report the blocker instead of silently starting over.
 
-Use transfer_workspace_file to copy files, including small files and binaries. Supply a workspace-relative path and an absolute local path. For uploads, first compute the local file's size and SHA-256. Run the returned shell command to move the bytes without putting them in the conversation. Repeat that command to resume an interrupted download while its ticket is valid. Check the downloaded file against the returned checksum.
+Check retained_until against the planned pickup time. If retention is too short, obtain an appropriate setting or an approved durable destination before promising later pickup. Ask the Agent to leave a continuation note with changes, checks, deliverable paths, and remaining work.
 
-Use read_workspace_file when the conversation needs a file's contents. Without a shell, use read_workspace_file and write_workspace_file for files up to 4 MiB. Use base64 for binary content. For larger files, ask for an approved destination instead.
+## Retrieve or resume locally
 
-Prefer the Agent's configured credentials. If a task needs a missing credential, use transfer_credential only with the user's approval. The Agent must enable allowAgentSuppliedCredentialValues. Explain that the secret enters the model context and client transcript, despite redaction in the platform's tool-call log. Use Settings if that exposure is unacceptable or the credential is organization-wide. A transferred credential applies to all of this user's runs on that Agent, starting with the next turn. Transfer it before start_run or steer_run. Never put secrets in handoff notes or file attachments.
+1. Recover the handoff note and call get_run. Read requests for the original goal and current turn, not just terminal output. Report completed work, remaining work, and failed checks.
+2. If work will continue locally, coordinate a stopping point and confirm the runtime stopped writing. cancel_run preserves the workspace, but its response alone does not prove writing stopped.
+3. Retrieve the continuation note and deliverables through the file-transfer flow before retention expires. Do not treat truncated output as a complete file. Never delete the workspace as part of handoff.
+4. Restore the goal, decisions, and remaining work in this conversation. For repositories, apply the reference's return procedure. Run relevant checks and continue the next unfinished step locally, not through the remote Agent.
 
-## Resume locally
+For service access, share run_url and its connection instructions. Ask the Agent which ports are actually listening. Do not invent cluster commands or treat a missing diagnostic tool as proof that no service runs.
 
-Recover the saved handoff note, inspect the existing runtime session, and retrieve its continuation note and deliverables. For repository work, follow the reference below to apply the incremental changes safely. Restore the original goal, decisions, remaining steps, and verification results into this local conversation. Run the relevant checks and continue the next unfinished step locally. Returning a run link or downloading a patch alone is not a completed local handoff. Do not steer the runtime to do the next step when the user asked to continue here.
-
-For people using a desktop chat client, handle tool calls and file transfer yourself. Give a short progress summary, the run link, and the finished document or result. Do not require a terminal, repository, or knowledge of IDs. A client without file-saving tools can present the retrieved text; do not claim a file was saved locally.
-
-For repository work, read references/repository-handoff.md. Ask the runtime to finish with a handoff note describing changes, verification, deliverable paths, and remaining decisions. Continue later with steer_run and the same session ID.
+Handle tool calls and transfers for desktop-chat users without requiring a terminal or knowledge of IDs. If this client cannot save files, present retrieved text and state that limitation. A run link alone does not complete a local handoff.
 `,
   files: [
     {
@@ -72,21 +75,34 @@ For repository work, read references/repository-handoff.md. Ask the runtime to f
       kind: "reference",
       content: `# Repository handoff
 
-Capture the repository URL, branch, exact base commit, working directory, and relevant project instructions. Inspect staged, unstaged, and untracked changes. Never transfer credentials, private keys, .env files, or authentication stores.
+Use the main skill's file and credential flows. This reference covers Git state and applying returned changes.
 
-Include a concise environment summary: setup and dependency commands, relevant versions when known, services currently running and how they were started, and local database or seed requirements. Processes, installed dependencies, and database contents do not automatically transfer. Describe requirements without dumping databases or including secrets; a context summary is sufficient.
+## Capture the local state
 
-Persist a local handoff note so a fresh local conversation can recover it. Resolve its directory with \`git rev-parse --git-path agent-runtime-handoffs\` (a worktree's .git may be a file). Store a note named for the stable session ID there, containing the run link, workspace path, branch, base commit, transferred snapshot, selected untracked files, goal, decisions, environment summary, remaining steps, and required checks. Keep it outside the tracked source tree and omit secrets. On a local pickup request without a link, look here; ask only if multiple notes plausibly match the requested work.
+Record the repository URL, branch, exact base commit, working directory, and relevant project instructions. Inspect staged, unstaged, and untracked changes. Select only task-relevant files and exclude secrets from patches, bundles, and snapshots, including their history.
 
-For committed work reachable by the runtime, include the repository URL and exact commit. Prefer fetching that commit with limited history instead of cloning the entire history. Never substitute the default branch when the requested commit is unavailable. For local-only work, send a binary-capable patch plus explicitly selected untracked files with transfer_workspace_file, falling back to start_run attachments only for inputs the first turn cannot begin without. A patch alone does not include untracked files or local-only commits, and local-only commits are local-only work: a runtime that can reach the repository still cannot fetch a commit that was never published. For a repository the runtime cannot fetch, transfer an explicitly selected Git bundle or source snapshot as well. Explain missing inputs before starting. Do not push merely to make handoff easier unless the user authorized it; transferring the work is the default, and a push is a publication decision the user makes.
+Record dependency and setup commands, relevant versions, running services, and database or seed requirements. Describe requirements without copying databases or secrets.
 
-Tell the runtime to check out the exact base, check patch applicability, and apply only supplied changes. Before making new edits, preserve a comparison snapshot of the transferred working tree, including selected untracked files. This is the return-patch baseline; it already contains the local edits. Include the remaining task, checks to run, and limits on commits, pushes, and publication. Never send credentials in the handoff message; use the Agent's configured connections. When the task needs a credential the Agent does not have, transfer_credential stores one personally for you on an Agent that accepts client-supplied values; it reaches the workspace on the next turn, so transfer before steering.
+Save a handoff note under \`git rev-parse --git-path agent-runtime-handoffs\`, named for the stable session ID. This works when a worktree's .git is a file. Include the session ID, run URL, workspace path, branch, base commit, transferred snapshot, selected files, goal, decisions, setup, and remaining checks. Keep it outside tracked source. On pickup without a link, look here first. Ask if multiple notes match.
 
-Before returning work locally, ask for the base commit, handed-off snapshot, changed files, test results, unresolved conflicts, and a short continuation note. When local uncommitted work was transferred, request an incremental, binary-capable patch against the handed-off snapshot, including newly created files. A patch against the original commit would repeat local edits and may not apply. Keep any full patch separately and label its baseline. Fetch a published branch only when publication was authorized. Otherwise, retrieve the patch and selected new files with transfer_workspace_file. Without a shell, use read_workspace_file within its 4 MiB limit or ask for an approved artifact destination.
+## Transfer a complete starting point
 
-Inspect the local working tree again before applying results. Preserve edits made since handoff. Verify the base and check patch applicability before applying; surface conflicts instead of resetting, overwriting, or force-pushing. Run the relevant checks locally, then summarize what is ready and what still needs work.
+- If the runtime can fetch the exact commit, give its URL and commit. Prefer limited history. Never substitute the default branch.
+- For uncommitted changes, send a binary-capable patch against that commit plus selected untracked files. Include staged and unstaged changes.
+- If commits exist only locally, either include their changes in a patch against a reachable base or send a selected Git bundle/source snapshot containing the missing state. A diff against local HEAD alone omits those commits.
+- If the repository itself is unreachable, send a selected bundle or source snapshot. Explain any missing inputs before starting.
 
-Update the local handoff note with retrieved files, checks, and remaining steps. Continue coding locally when the user asked to resume. Keep the remote session handle for any later handoff back to the same retained runtime; never create a replacement silently if that session expired.
+Do not push just to make a commit reachable unless the user authorizes publication.
+
+After all inputs arrive, tell the runtime to reconstruct the supplied base and check patch applicability before applying changes. Before task edits, preserve a comparison snapshot of the complete transferred tree, including selected untracked files. Use this snapshot as the return-patch baseline. Include the task, required checks, and limits on commits and publication.
+
+## Apply returned work
+
+Ask for an incremental, binary-capable patch against the transferred snapshot, including new files, plus a continuation note. The note must identify the base and snapshot, changed files, test results, unresolved conflicts, and remaining work. A patch against the original base can repeat local edits. Label any full patch separately with its baseline.
+
+Inspect the local tree again before applying the return patch. Preserve edits made since handoff. Check the baseline and patch applicability. Report conflicts instead of resetting or overwriting local work. Fetch a published branch only when publication was authorized.
+
+Run the relevant local checks, update the handoff note, and continue locally. Keep the session handle for a later transfer back to the same runtime.
 `,
     },
   ],

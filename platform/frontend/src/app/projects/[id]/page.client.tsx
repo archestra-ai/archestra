@@ -29,6 +29,7 @@ import {
 import { ProjectSchedulesSection } from "@/app/projects/[id]/project-schedules-section";
 import { runHref } from "@/app/projects/[id]/schedules/[triggerId]/run-row.utils";
 import { AgentIcon } from "@/components/agent-icon";
+import { Response } from "@/components/ai-elements/response";
 import type { FileListItem } from "@/components/chat/file-list-section";
 import { FilePreview } from "@/components/chat/file-preview";
 import { NewChatComposer } from "@/components/chat/new-chat-composer";
@@ -634,7 +635,7 @@ function ProjectFilesSidebar({
   const { data: files } = useProjectFiles(projectId);
   const { data: instructions } = useProjectInstructions(projectId);
   const uploadInput = useRef<HTMLInputElement>(null);
-  const instructionsPreview = useRef<HTMLSpanElement>(null);
+  const instructionsPreview = useRef<HTMLDivElement>(null);
   const [instructionsTruncated, setInstructionsTruncated] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
@@ -650,6 +651,11 @@ function ProjectFilesSidebar({
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(preview);
+    // The clamped box keeps its size while the markdown inside grows, so
+    // watch the rendered content too.
+    if (preview.firstElementChild) {
+      observer.observe(preview.firstElementChild);
+    }
     return () => observer.disconnect();
   }, [instructions?.content]);
 
@@ -734,8 +740,11 @@ function ProjectFilesSidebar({
         uploading={uploadProjectFiles.isPending}
         className="flex-1 min-h-0 flex flex-col gap-0"
       >
-        <div className="flex-1 min-h-0 overflow-y-auto divide-y">
-          <section className="p-4 space-y-3">
+        {/* Instructions keep their natural (clamped) height, schedules are
+            capped, and the file list takes the rest with its own scroller — so
+            a long file list never pushes schedules off-screen. */}
+        <div className="flex flex-1 min-h-0 flex-col overflow-y-auto divide-y">
+          <section className="shrink-0 p-4 space-y-3">
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-medium">Instructions</h2>
               <Button
@@ -753,25 +762,45 @@ function ProjectFilesSidebar({
                 )}
               </Button>
             </div>
-            <Button
-              variant="ghost"
-              className="h-auto w-full flex-col items-start gap-1 whitespace-normal p-2 text-left font-normal text-muted-foreground"
-              onClick={() => openFile(INSTRUCTIONS_SELECTION)}
-            >
-              <span
+            <div className="relative rounded-md">
+              <div
                 ref={instructionsPreview}
-                className="line-clamp-3 w-full whitespace-pre-wrap break-words"
+                className="max-h-32 overflow-hidden break-words p-2 text-sm text-muted-foreground"
               >
-                {instructions?.content?.trim() ||
-                  "Add guidance for every chat in this project."}
-              </span>
+                {instructions?.content?.trim() ? (
+                  <Response className="[&_h1]:my-2 [&_h1]:text-base [&_h2]:my-2 [&_h2]:text-sm [&_h3]:my-1 [&_h3]:text-sm">
+                    {instructions.content}
+                  </Response>
+                ) : (
+                  <p>Add guidance for every chat in this project.</p>
+                )}
+              </div>
               {instructionsTruncated && (
-                <span className="text-xs text-foreground">Show more</span>
+                <div className="pointer-events-none absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-background" />
               )}
-            </Button>
+              {/* Rendered markdown can hold links and code-copy buttons, which
+                  can't nest inside a button — so the whole preview is covered
+                  by one transparent button that opens the full view. */}
+              <button
+                type="button"
+                aria-label="Open instructions"
+                className="absolute inset-0 rounded-md transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                onClick={() => openFile(INSTRUCTIONS_SELECTION)}
+              />
+            </div>
+            {instructionsTruncated && (
+              <Button
+                variant="link"
+                size="sm"
+                className="h-auto px-2 py-0 text-xs text-foreground"
+                onClick={() => openFile(INSTRUCTIONS_SELECTION)}
+              >
+                Show more
+              </Button>
+            )}
           </section>
-          <section className="px-4 pt-3 pb-1">
-            <div className="flex items-center justify-between">
+          <section className="flex min-h-0 flex-col px-4 pt-3 pb-1">
+            <div className="flex shrink-0 items-center justify-between">
               <h2 className="text-sm font-medium">Files</h2>
               <Button
                 variant="ghost"
@@ -795,11 +824,11 @@ function ProjectFilesSidebar({
               />
             </div>
             {items.length === 0 ? (
-              <p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+              <p className="mb-3 rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
                 Add files for your agent to use in this project.
               </p>
             ) : (
-              <div className="-mx-3 -mt-1">
+              <div className="-mx-3 -mt-1 flex min-h-0 flex-1 flex-col">
                 <SelectableFileList<FileListItem>
                   sections={[{ items }]}
                   canManage
@@ -819,7 +848,7 @@ function ProjectFilesSidebar({
               </div>
             )}
           </section>
-          <div className="p-4">
+          <div className="max-h-[40%] shrink-0 overflow-y-auto p-4">
             <ProjectSchedulesSection
               projectId={projectId}
               canCreate={canCreateSchedules}

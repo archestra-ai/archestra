@@ -69,6 +69,7 @@ const uiTestMatch = [
   "**/chat-message-queue.spec.ts",
   "**/chat-permissions.spec.ts",
   "**/chat-refresh.spec.ts",
+  "**/chat-suggested-prompts.spec.ts",
   "**/chat.spec.ts",
   "**/context-window.spec.ts",
   "**/connection.spec.ts",

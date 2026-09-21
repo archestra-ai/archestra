@@ -240,7 +240,8 @@ describe("createFastifyInstance", () => {
       expect(response.statusCode).toBe(503);
       expect(response.json()).toEqual({
         error: {
-          message: "Database temporarily unavailable, please retry",
+          message:
+            "Cannot reach the database. Retry shortly; if it continues, ask an administrator to check the database service and connection settings.",
           type: "api_service_unavailable_error",
         },
       });

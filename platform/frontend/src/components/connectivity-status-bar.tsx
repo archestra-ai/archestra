@@ -9,14 +9,25 @@ import type { ConnectivityState } from "@/lib/config/connectivity";
 function messageFor(
   kind: Exclude<ConnectivityState["kind"], "online">,
   appName: string,
-): string {
+): { title: string; detail: string } {
   switch (kind) {
     case "browser-offline":
-      return "You're offline. Some features won't work until you reconnect.";
+      return {
+        title: "You're offline.",
+        detail: "Reconnect to the internet, then retry.",
+      };
     case "backend-unreachable":
-      return `Can't reach the ${appName} server.`;
+      return {
+        title: `Can't reach the ${appName} server.`,
+        detail:
+          "Check your connection. If it persists, ask an administrator to check the service.",
+      };
     case "database-unavailable":
-      return "Database connection unavailable.";
+      return {
+        title: "Database unavailable.",
+        detail:
+          "Ask an administrator to check the database service, connection settings, and capacity.",
+      };
   }
 }
 
@@ -38,16 +49,13 @@ export function ConnectivityStatusBar({
   if (state.kind === "online") {
     return null;
   }
+  const { title, detail } = messageFor(state.kind, appName);
 
   return (
     <InlineNotice data-testid={E2eTestId.ConnectivityStatusBar}>
       {state.kind === "database-unavailable" ? <AlertTriangle /> : <WifiOff />}
-      <span className="font-medium">{messageFor(state.kind, appName)}</span>
-      {state.kind === "database-unavailable" && (
-        <InlineNoticeText>
-          Check the database service and connection settings, then retry.
-        </InlineNoticeText>
-      )}
+      <span className="font-medium">{title}</span>
+      <InlineNoticeText>{detail}</InlineNoticeText>
       <Button
         size="sm"
         variant="outline"

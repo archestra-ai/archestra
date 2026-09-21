@@ -66,11 +66,9 @@ describe("ConnectivityStatusBar", () => {
       />,
     );
 
+    expect(screen.getByRole("alert")).toHaveTextContent("Database unavailable");
     expect(screen.getByRole("alert")).toHaveTextContent(
-      "Database connection unavailable",
-    );
-    expect(screen.getByRole("alert")).toHaveTextContent(
-      "Check the database service and connection settings",
+      "check the database service, connection settings, and capacity",
     );
   });
 

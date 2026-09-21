@@ -3,6 +3,7 @@
 import { DocsPage, MESSAGING_CHANNEL_LABELS } from "@archestra/shared";
 import { AlertTriangle, RefreshCw, Trash2 } from "lucide-react";
 import { useState } from "react";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { PermissionButton } from "@/components/ui/permission-button";
 import {
   useDeleteIncomingEmailSubscription,
@@ -112,13 +113,13 @@ export default function EmailPage() {
               </div>
 
               {!status.isActive && (
-                <div className="flex items-start gap-3 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2">
-                  <AlertTriangle className="h-4 w-4 shrink-0 text-amber-500 mt-0.5" />
-                  <span className="text-xs text-muted-foreground">
+                <InlineNotice>
+                  <AlertTriangle />
+                  <InlineNoticeText>
                     This subscription has expired. Reconfigure it or renew it to
                     resume email delivery.
-                  </span>
-                </div>
+                  </InlineNoticeText>
+                </InlineNotice>
               )}
 
               <div className="flex flex-wrap items-center gap-2">

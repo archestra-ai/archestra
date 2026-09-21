@@ -1,7 +1,7 @@
 "use client";
 
 import { AlertCircle, Key, Loader2 } from "lucide-react";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import {
   Select,
   SelectContent,
@@ -111,24 +111,24 @@ export default function InlineVaultSecretSelector({
   // Error loading secrets
   if (secretsError) {
     return (
-      <Alert variant="destructive" className="py-2">
-        <AlertCircle className="h-4 w-4" />
-        <AlertDescription className="text-xs">
+      <InlineNotice variant="error">
+        <AlertCircle />
+        <InlineNoticeText>
           Failed to load secrets: {secretsError.message}
-        </AlertDescription>
-      </Alert>
+        </InlineNoticeText>
+      </InlineNotice>
     );
   }
 
   // No secrets found
   if (!secrets || secrets.length === 0) {
     return (
-      <Alert variant="default" className="py-2">
-        <AlertCircle className="h-4 w-4" />
-        <AlertDescription className="text-xs">
+      <InlineNotice variant="neutral">
+        <AlertCircle />
+        <InlineNoticeText>
           No secrets found in the team's Vault folder
-        </AlertDescription>
-      </Alert>
+        </InlineNoticeText>
+      </InlineNotice>
     );
   }
 
@@ -167,19 +167,15 @@ export default function InlineVaultSecretSelector({
               <Loader2 className="h-4 w-4 animate-spin" />
             </div>
           ) : keysError ? (
-            <Alert variant="destructive" className="py-2 flex-1">
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription className="text-xs">
-                {keysError.message}
-              </AlertDescription>
-            </Alert>
+            <InlineNotice variant="error" className="flex-1">
+              <AlertCircle />
+              <InlineNoticeText>{keysError.message}</InlineNoticeText>
+            </InlineNotice>
           ) : availableKeys.length === 0 ? (
-            <Alert variant="default" className="py-2 flex-1">
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription className="text-xs">
-                No keys found
-              </AlertDescription>
-            </Alert>
+            <InlineNotice variant="neutral" className="flex-1">
+              <AlertCircle />
+              <InlineNoticeText>No keys found</InlineNoticeText>
+            </InlineNotice>
           ) : (
             <Select
               value={selectedSecretKey || "none"}

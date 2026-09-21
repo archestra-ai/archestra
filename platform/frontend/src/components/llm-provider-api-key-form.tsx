@@ -37,6 +37,7 @@ import { DetailFacts } from "@/components/detail-facts";
 import { SCOPE_META, scopeLabel } from "@/components/scope-vocabulary";
 import { SubscriptionSignIn } from "@/components/subscription-sign-in";
 import { FieldDescription } from "@/components/ui/field-description";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import {
   type VisibilityOption,
   VisibilitySelector,
@@ -1276,15 +1277,15 @@ export function LlmProviderApiKeyForm({
                     </p>
                   </div>
                 ) : (
-                  <div className="rounded-md border border-amber-500/50 bg-amber-500/10 p-3 text-sm">
-                    <p className="font-semibold text-amber-700 dark:text-amber-400">
+                  <InlineNotice className="flex-col items-start gap-y-2">
+                    <span className="font-medium">
                       Not enabled on this server
-                    </p>
-                    <p className="mt-2 text-foreground">
+                    </span>
+                    <InlineNoticeText>
                       An admin must enable IAM auth on the backend before this
                       option can be used:
-                    </p>
-                    <ol className="mt-2 list-decimal space-y-1 pl-5 text-foreground">
+                    </InlineNoticeText>
+                    <ol className="list-decimal space-y-1 pl-5">
                       <li>
                         Set the env var{" "}
                         <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">
@@ -1302,7 +1303,7 @@ export function LlmProviderApiKeyForm({
                       </li>
                       <li>Restart the backend to pick up the change.</li>
                     </ol>
-                  </div>
+                  </InlineNotice>
                 )}
               </div>
             )}
@@ -1363,15 +1364,12 @@ export function LlmProviderApiKeyForm({
                     </>
                   )}
                   {subscriptionUnavailableWithByos ? (
-                    <div
-                      role="alert"
-                      className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm"
-                    >
-                      <p className="font-medium">
+                    <InlineNotice>
+                      <span className="font-medium">
                         Subscription sign-in is unavailable with Bring Your Own
                         Secrets
-                      </p>
-                      <p className="mt-1 text-xs text-muted-foreground">
+                      </span>
+                      <InlineNoticeText>
                         {appName} has read-only access to your external Vault,
                         so it cannot save or rotate OAuth credentials there.
                         {requiresExactSubscriptionCredential
@@ -1379,8 +1377,8 @@ export function LlmProviderApiKeyForm({
                           : subscriptionHasApiKeyAlternative
                             ? " Store a provider API key in Vault instead, or ask an administrator to use managed secret storage."
                             : " This provider has no API-key alternative, so an administrator must use managed secret storage to enable subscription sign-in."}
-                      </p>
-                    </div>
+                      </InlineNoticeText>
+                    </InlineNotice>
                   ) : (
                     <>
                       {perUserCredentialConnected && (

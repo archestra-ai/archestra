@@ -1,9 +1,9 @@
 import type { ResourceVisibilityScope } from "@archestra/shared";
 import { AlertTriangle } from "lucide-react";
 import {
-  CompactWarning,
-  CompactWarningText,
-} from "@/components/ui/compact-warning";
+  InlineNotice,
+  InlineNoticeText,
+} from "@/components/ui/inline-notice";
 
 /**
  * One warning for every Apps visibility editor. App administrators may assign
@@ -33,15 +33,15 @@ export function AppTeamAccessWarning({
   if (!outsideSelectedTeams) return null;
 
   return (
-    <CompactWarning>
+    <InlineNotice>
       <AlertTriangle />
       <span className="font-medium">
         You are not a member of the selected teams.
       </span>
-      <CompactWarningText>
+      <InlineNoticeText>
         You can still manage settings as an app administrator, but you will not
         be able to modify {subject} through chat.
-      </CompactWarningText>
-    </CompactWarning>
+      </InlineNoticeText>
+    </InlineNotice>
   );
 }

@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { UseFormReturn } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import { DialogFooter, DialogStickyFooter } from "@/components/ui/dialog";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
   CATALOG_NAME_CONFLICT_CODE,
@@ -171,16 +172,14 @@ export function EditCatalogContent({
     <>
       {showApproveBanner && (
         <div className="px-6 pt-6 pb-2">
-          <div className="space-y-2 rounded-md border border-amber-500/40 bg-amber-500/5 p-3">
-            <div className="flex items-center gap-2 text-sm font-medium text-amber-600 dark:text-amber-500">
-              <ShieldAlert className="h-4 w-4" />
-              This image needs approval
-            </div>
-            <p className="text-xs text-muted-foreground">
+          <InlineNotice className="gap-y-2">
+            <ShieldAlert />
+            <span className="font-medium">This image needs approval</span>
+            <InlineNoticeText className="w-full">
               <span className="font-mono">{item.localConfig?.dockerImage}</span>{" "}
               is not in the trusted image registries for this environment.
               Review the configuration below, then approve to allow installs.
-            </p>
+            </InlineNoticeText>
             <Button
               size="sm"
               onClick={() =>
@@ -193,7 +192,7 @@ export function EditCatalogContent({
               <Check className="h-4 w-4" />
               {approveImage.isPending ? "Approving..." : "Approve"}
             </Button>
-          </div>
+          </InlineNotice>
         </div>
       )}
       <McpCatalogForm

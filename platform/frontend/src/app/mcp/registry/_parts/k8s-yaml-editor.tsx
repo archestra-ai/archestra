@@ -3,8 +3,8 @@
 import { AlertCircle, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Editor } from "@/components/editor";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import {
   useResetDeploymentYaml,
   useValidateDeploymentYaml,
@@ -102,33 +102,30 @@ export function K8sYamlEditor({
     <div className="flex min-h-0 flex-1 flex-col gap-3">
       {/* Validation Errors */}
       {validationErrors.length > 0 && (
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>
+        <InlineNotice variant="error">
+          <AlertCircle />
+          <InlineNoticeText>
             <ul className="list-disc list-inside space-y-1">
               {validationErrors.map((error) => (
                 <li key={error}>{error}</li>
               ))}
             </ul>
-          </AlertDescription>
-        </Alert>
+          </InlineNoticeText>
+        </InlineNotice>
       )}
 
       {/* Validation Warnings */}
       {validationWarnings.length > 0 && (
-        <Alert
-          variant="default"
-          className="border-yellow-500/50 bg-yellow-50 dark:bg-yellow-950/20"
-        >
-          <AlertCircle className="h-4 w-4 text-yellow-600" />
-          <AlertDescription className="text-yellow-800 dark:text-yellow-200">
+        <InlineNotice variant="warning">
+          <AlertCircle />
+          <InlineNoticeText>
             <ul className="list-disc list-inside space-y-1">
               {validationWarnings.map((warning) => (
                 <li key={warning}>{warning}</li>
               ))}
             </ul>
-          </AlertDescription>
-        </Alert>
+          </InlineNoticeText>
+        </InlineNotice>
       )}
 
       {/* Editor Header with Reset Button */}

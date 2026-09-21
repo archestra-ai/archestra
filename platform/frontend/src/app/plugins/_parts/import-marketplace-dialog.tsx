@@ -31,7 +31,6 @@ import {
 import { GithubPatFields } from "@/components/github-pat-fields";
 import { SearchInput } from "@/components/search-input";
 import { StandardDialog } from "@/components/standard-dialog";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -49,6 +48,7 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { FieldDescription } from "@/components/ui/field-description";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -678,19 +678,19 @@ export function ImportMarketplaceDialog({
                   />
                   {selectionLimitReached &&
                     totalImportable > PLUGIN_MARKETPLACE_IMPORT_LIMIT && (
-                      <Alert>
+                      <InlineNotice>
                         <AlertTriangle />
-                        <AlertTitle>
+                        <span className="font-medium">
                           {PLUGIN_MARKETPLACE_IMPORT_LIMIT}-plugin import limit
-                        </AlertTitle>
-                        <AlertDescription>
+                        </span>
+                        <InlineNoticeText>
                           For this beta, import up to{" "}
                           {PLUGIN_MARKETPLACE_IMPORT_LIMIT} plugins at a time.
                           Finish this import, reopen the marketplace, and select
                           the next batch. Imported plugins will be marked and
                           excluded from the next batch.
-                        </AlertDescription>
-                      </Alert>
+                        </InlineNoticeText>
+                      </InlineNotice>
                     )}
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-2">
@@ -894,19 +894,22 @@ export function ImportMarketplaceDialog({
             </CollapsibleContent>
           </Collapsible>
           {discoverError && (
-            <Alert variant="destructive">
+            <InlineNotice variant="error">
               <AlertTriangle />
-              <AlertTitle>Couldn’t reach that repository</AlertTitle>
-              <AlertDescription>
-                <p>{discoverError}</p>
+              <span className="font-medium">
+                Couldn’t reach that repository
+              </span>
+              <InlineNoticeText>
+                {discoverError}
                 {!hasGithubAuth && (
-                  <p>
+                  <span>
+                    {" "}
                     If the repository is private, add GitHub authentication
                     above and try again.
-                  </p>
+                  </span>
                 )}
-              </AlertDescription>
-            </Alert>
+              </InlineNoticeText>
+            </InlineNotice>
           )}
         </div>
       )}

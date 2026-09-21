@@ -3,7 +3,7 @@
 import { E2eTestId } from "@archestra/shared";
 import { AlertTriangle, Globe, Lock, Users } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -365,16 +365,14 @@ export function SelectMcpServerCredentialTypeAndTeams({
 
   if (!canInstall) {
     return (
-      <Alert>
-        <AlertTriangle className="!text-amber-500 h-4 w-4" />
-        <AlertDescription>
-          <span className="font-semibold">Already installed</span>
-          <p className="mt-1">
-            This MCP server is already installed everywhere you have permission
-            to install it.
-          </p>
-        </AlertDescription>
-      </Alert>
+      <InlineNotice>
+        <AlertTriangle />
+        <span className="font-medium">Already installed</span>
+        <InlineNoticeText>
+          This MCP server is already installed everywhere you have permission to
+          install it.
+        </InlineNoticeText>
+      </InlineNotice>
     );
   }
 

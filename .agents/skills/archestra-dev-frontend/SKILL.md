@@ -56,6 +56,36 @@ pnpm knip   # flags unused exports; part of frontend check:ci
 - Keep frontend files flat where practical and avoid barrel files.
 - Only export what is needed externally.
 
+## Notices, warnings, and announcements
+
+Render every notice, warning, error, or announcement through one of two shared
+components. Do not hand-roll a notice. Do not restyle one with your own
+colour, border, radius, or padding classes.
+
+- `InlineNotice` (`components/ui/inline-notice.tsx`) is the default choice.
+  Use it for a notice about the surface it sits on. Examples: a form that
+  cannot reach a repository, a read-only panel, a validation failure. The
+  variants are `warning` (the default), `error`, `info`, and `neutral`.
+  Compose it in this order: the icon, a `<span className="font-medium">`
+  title, an `<InlineNoticeText>` explanation, then an optional action with
+  `className="ml-auto"`.
+- `Alert` (`components/ui/alert.tsx`) is a page-level banner. It is the
+  content of its own row. Its body can hold several sentences, lists, or
+  links. Its padding is too large inside a form or a dialog. Use
+  `InlineNotice` there.
+
+Extend `InlineNotice` when a new case does not fit. Add a variant, or let the
+variant own the new colour. Do not add utility classes at the call site. Do
+not write another bespoke notice div.
+
+The app once carried about forty hand-rolled copies of these two components.
+Those copies used four amber palettes and three paddings. This rule prevents
+that.
+
+The variant owns every colour, including the colour of the explanation. Never
+give a child its own amber, red, or blue class. The two values drift apart
+when a palette moves.
+
 ## Text nodes and machine translation
 
 Chrome page-translate re-parents bare text nodes into `<font>` wrappers. React still holds the original nodes, so deleting one — or inserting an element before it — throws `NotFoundError` and crashes the page (facebook/react#11538, no upstream fix). Never let React add, remove, or replace a **bare** text node: wrap conditional text in an element so only elements move.

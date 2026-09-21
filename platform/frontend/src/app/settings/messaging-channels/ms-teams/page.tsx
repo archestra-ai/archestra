@@ -5,6 +5,7 @@ import { Globe, Info, Waypoints } from "lucide-react";
 import { useState } from "react";
 import { MsTeamsSetupDialog } from "@/components/ms-teams-setup-dialog";
 import { NgrokSetupDialog } from "@/components/ngrok-setup-dialog";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { useChatOpsStatus } from "@/lib/chatops/chatops.query";
 import config from "@/lib/config/config";
 import { useConfig, usePublicBaseUrl } from "@/lib/config/config.query";
@@ -90,24 +91,21 @@ export default function MsTeamsPage() {
             </div>
           </SetupStep>
         ) : (
-          <div className="flex items-start gap-3 rounded-lg border border-blue-500/30 bg-blue-500/5 px-4 py-3">
-            <Info className="h-5 w-5 text-blue-500 shrink-0 mt-0.5" />
-            <div className="flex flex-col gap-1">
-              <span className="font-medium text-sm">
-                {configuredAppName}'s webhook must be reachable from the
-                Internet
-              </span>
-              <span className="text-muted-foreground text-xs">
-                The webhook endpoint{" "}
-                <code className="bg-muted px-1 py-0.5 rounded text-xs">
-                  POST {`${publicBaseUrl}/api/webhooks/chatops/ms-teams`}
-                </code>{" "}
-                must be publicly accessible so {channelLabel} can deliver
-                messages to
-                {configuredAppName}
-              </span>
-            </div>
-          </div>
+          <InlineNotice variant="info">
+            <Info />
+            <span className="font-medium">
+              {configuredAppName}'s webhook must be reachable from the Internet
+            </span>
+            <InlineNoticeText>
+              The webhook endpoint{" "}
+              <code className="bg-muted px-1 py-0.5 rounded text-xs">
+                POST {`${publicBaseUrl}/api/webhooks/chatops/ms-teams`}
+              </code>{" "}
+              must be publicly accessible so {channelLabel} can deliver messages
+              to
+              {configuredAppName}
+            </InlineNoticeText>
+          </InlineNotice>
         )}
         <SetupStep
           title={`Setup ${channelLabel}`}

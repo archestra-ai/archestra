@@ -1,9 +1,13 @@
 // Gemini's tool/function schema validation only permits `enum` on string-typed
-// fields. JSON schemas produced upstream (e.g. `@ai-sdk/google` rewrites a zod
-// `const: true` into `enum: [true]`) can carry boolean/number enums, which Gemini
-// rejects with 400 INVALID_ARGUMENT. This sanitizer walks a tool parameter schema
-// and removes non-string enums while preserving the value type, folding the dropped
-// literal(s) into the field description so the model keeps the hint.
+// fields. JSON schemas produced upstream (zod `z.literal(1)` / `z.literal(true)`,
+// `@ai-sdk/google` rewriting `const: true` into `enum: [true]`) can carry
+// boolean/number `const` or `enum` values. Clients that convert `const` into
+// `enum` (and Gemini itself) then reject the whole tools payload with 400
+// INVALID_ARGUMENT. This sanitizer walks a tool parameter schema, folds `const`
+// into `enum`, and removes non-string enums while preserving the value type,
+// putting the dropped literal(s) into the field description so the model keeps
+// the hint. MCP `tools/list` uses the same pass so Gemini clients listing
+// gateway tools never see a hostile schema.
 //
 // Gemini/Vertex also rejects schema nodes that carry no `type` at all ("schema
 // didn't specify the schema type field"). MCP servers routinely emit such nodes —
@@ -55,6 +59,7 @@ export function sanitizeGeminiToolSchema(schema: unknown): unknown {
   }
 
   const result: SchemaObject = { ...(schema as SchemaObject) };
+  normalizeConst(result);
   normalizeEnum(result);
   normalizeExclusiveBounds(result);
   recurseSubschemas(result);
@@ -100,6 +105,19 @@ function ensureNodeType(node: SchemaObject): void {
     return;
   }
   node.type = "object";
+}
+
+// Zod and JSON Schema encode a single allowed value as `const`. Gemini has no
+// `const` keyword; some clients (Kilo) rewrite it to `enum: [value]`, which
+// then fails the string-enum rule for numbers and booleans. Treat `const` as a
+// one-value enum so normalizeEnum can keep string literals and drop the rest.
+function normalizeConst(node: SchemaObject): void {
+  if (!Object.hasOwn(node, "const")) return;
+  const value = node.const;
+  delete node.const;
+  if (!Array.isArray(node.enum)) {
+    node.enum = [value];
+  }
 }
 
 function normalizeEnum(node: SchemaObject): void {

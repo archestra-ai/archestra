@@ -155,24 +155,28 @@ mod tests {
 
     #[test]
     fn a_spelling_outside_the_grammar_is_refused() {
-        for raw in [
-            "",
-            "github__",
-            "with space",
-            "github/get",
-            "a__b__",
-            "mcp:github/x",
-        ] {
+        for raw in ["", "with space", "github/get", "mcp:github/x"] {
             let outcome = derived(raw);
-            match raw {
-                // An empty tool segment falls through to the host family, where the whole
-                // spelling is one segment the grammar admits.
-                "github__" | "a__b__" => assert!(outcome.is_ok(), "{raw:?}"),
-                _ => assert!(
-                    matches!(outcome, Err(ParseRefusal::Malformed { .. })),
-                    "{raw:?} must be refused, got {outcome:?}"
-                ),
-            }
+            assert!(
+                matches!(outcome, Err(ParseRefusal::Malformed { .. })),
+                "{raw:?} must be refused, got {outcome:?}"
+            );
+        }
+    }
+
+    /// An empty tool segment falls through to the host family, where the whole
+    /// spelling is one segment the grammar admits.
+    #[test]
+    fn an_empty_tool_segment_is_a_host_tool() {
+        for (raw, expected) in [
+            ("github__", "host/archestra/github__"),
+            ("a__b__", "host/archestra/a__b__"),
+        ] {
+            assert_eq!(
+                derived(raw).expect(raw).canonical.as_str(),
+                expected,
+                "{raw}"
+            );
         }
     }
 

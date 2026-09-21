@@ -10,6 +10,7 @@ import {
 import { useEffect, useState } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useFeature } from "@/lib/config/config.query";
@@ -260,20 +261,20 @@ export function TeamManagementVaultFolderSection({
           </div>
 
           {connectivityResult && (
-            <Alert
-              variant={connectivityResult.connected ? "default" : "destructive"}
+            <InlineNotice
+              variant={connectivityResult.connected ? "neutral" : "error"}
             >
               {connectivityResult.connected ? (
-                <CheckCircle2 className="h-4 w-4" />
+                <CheckCircle2 />
               ) : (
-                <AlertCircle className="h-4 w-4" />
+                <AlertCircle />
               )}
-              <AlertTitle>
+              <span className="font-medium">
                 {connectivityResult.connected
                   ? "Connection Successful"
                   : "Connection Failed"}
-              </AlertTitle>
-              <AlertDescription>
+              </span>
+              <InlineNoticeText>
                 {connectivityResult.connected ? (
                   <span>
                     Found {connectivityResult.secretCount} secret
@@ -287,8 +288,8 @@ export function TeamManagementVaultFolderSection({
                     {connectivityResult.error || "Unable to connect to Vault"}
                   </span>
                 )}
-              </AlertDescription>
-            </Alert>
+              </InlineNoticeText>
+            </InlineNotice>
           )}
 
           <Alert>

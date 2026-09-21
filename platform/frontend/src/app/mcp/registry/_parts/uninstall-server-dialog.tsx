@@ -10,6 +10,7 @@ import {
   DialogStickyFooter,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { useDeleteMcpServer } from "@/lib/mcp/mcp-server.query";
 import { agentOwnerLabel } from "./mcp-server-agent-usage";
 
@@ -127,12 +128,12 @@ export function UninstallServerDialog({
               </ul>
             )}
             {!isCancelingInstallation && assignedAgents.length > 0 && (
-              <div className="rounded-md border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-sm">
-                <p className="font-medium text-amber-600 dark:text-amber-500">
+              <InlineNotice>
+                <span className="font-medium">
                   Used by {assignedAgents.length}{" "}
                   {assignedAgents.length === 1 ? "agent" : "agents"}
-                </p>
-                <p className="mt-1 text-xs text-muted-foreground">
+                </span>
+                <InlineNoticeText>
                   {/*
                     Personal agents share a name across members, so an
                     unqualified list reads as a repeated "My Assistant" — name
@@ -146,8 +147,8 @@ export function UninstallServerDialog({
                     .join(", ")}{" "}
                   {assignedAgents.length === 1 ? "has" : "have"} tools assigned
                   from this server and may lose access to them.
-                </p>
-              </div>
+                </InlineNoticeText>
+              </InlineNotice>
             )}
           </div>
           <DialogStickyFooter className="mt-0 border-t-0 shadow-none">

@@ -5,9 +5,9 @@ import type { ReactNode } from "react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { FormDialog } from "@/components/form-dialog";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { DialogBody, DialogStickyFooter } from "@/components/ui/dialog";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { copyToClipboard } from "@/lib/clipboard";
@@ -157,13 +157,13 @@ export function PlatformTokenManagerDialog({
         </div>
 
         {confirmRotate && (
-          <Alert variant="destructive">
-            <AlertDescription>
+          <InlineNotice variant="error">
+            <InlineNoticeText>
               Rotating this token will invalidate the current value. Any
               applications using this token will need to be updated. Click
               Rotate again to confirm.
-            </AlertDescription>
-          </Alert>
+            </InlineNoticeText>
+          </InlineNotice>
         )}
       </DialogBody>
 

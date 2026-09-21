@@ -18,10 +18,10 @@ import ReactMarkdown from "react-markdown";
 import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
 import { StandardFormDialog } from "@/components/standard-dialog";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { FieldDescription } from "@/components/ui/field-description";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SecretInput, SecretTextarea } from "@/components/ui/secret-input";
@@ -578,14 +578,14 @@ export function LocalServerInstallDialog({
       }
     >
       {isReauth && (
-        <Alert className="bg-background/60">
-          <KeyRound className="h-4 w-4" />
-          <AlertDescription>
+        <InlineNotice variant="neutral">
+          <KeyRound />
+          <InlineNoticeText>
             Replace credentials for this existing connection only. Tool
             assignments and policies stay unchanged. Use Manage credentials to
             add or remove connections.
-          </AlertDescription>
-        </Alert>
+          </InlineNoticeText>
+        </InlineNotice>
       )}
 
       {!isReauth && personalOnly && !hasPromptedConfiguration && (

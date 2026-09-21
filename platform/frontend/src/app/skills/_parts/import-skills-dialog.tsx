@@ -21,7 +21,6 @@ import {
 import { GithubPatFields } from "@/components/github-pat-fields";
 import { SearchInput } from "@/components/search-input";
 import { StandardDialog } from "@/components/standard-dialog";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -38,6 +37,7 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { FieldDescription } from "@/components/ui/field-description";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -823,19 +823,22 @@ export function ImportSkillsDialog({
             </CollapsibleContent>
           </Collapsible>
           {discoverError && (
-            <Alert variant="destructive">
+            <InlineNotice variant="error">
               <AlertTriangle />
-              <AlertTitle>Couldn’t reach that repository</AlertTitle>
-              <AlertDescription>
-                <p>{discoverError}</p>
+              <span className="font-medium">
+                Couldn’t reach that repository
+              </span>
+              <InlineNoticeText>
+                {discoverError}
                 {!hasGithubAuth && (
-                  <p>
+                  <span>
+                    {" "}
                     If the repository is private, add GitHub authentication
                     above and try again.
-                  </p>
+                  </span>
                 )}
-              </AlertDescription>
-            </Alert>
+              </InlineNoticeText>
+            </InlineNotice>
           )}
         </div>
       )}

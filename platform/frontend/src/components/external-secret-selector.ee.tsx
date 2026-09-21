@@ -2,8 +2,8 @@
 
 import { E2eTestId } from "@archestra/shared";
 import { AlertCircle, Key, Loader2 } from "lucide-react";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { FieldDescription } from "@/components/ui/field-description";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -159,12 +159,12 @@ export default function ExternalSecretSelector({
 
       {/* Vault folder error */}
       {selectedTeamId && vaultFolderError && (
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>
+        <InlineNotice variant="error">
+          <AlertCircle />
+          <InlineNoticeText>
             Failed to load Vault folder: {vaultFolderError.message}
-          </AlertDescription>
-        </Alert>
+          </InlineNoticeText>
+        </InlineNotice>
       )}
 
       {/* Vault folder status */}
@@ -172,13 +172,13 @@ export default function ExternalSecretSelector({
         !isLoadingVaultFolder &&
         !vaultFolderError &&
         !vaultFolder?.vaultPath && (
-          <Alert variant="default">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>
+          <InlineNotice variant="neutral">
+            <AlertCircle />
+            <InlineNoticeText>
               This team doesn't have a Vault folder configured. A team admin can
               configure it in team settings.
-            </AlertDescription>
-          </Alert>
+            </InlineNoticeText>
+          </InlineNotice>
         )}
 
       {/* Secret selector */}
@@ -186,12 +186,12 @@ export default function ExternalSecretSelector({
         <div className="space-y-2">
           <Label htmlFor="vault-secret">Secret</Label>
           {secretsError ? (
-            <Alert variant="destructive">
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>
+            <InlineNotice variant="error">
+              <AlertCircle />
+              <InlineNoticeText>
                 Failed to list secrets: {secretsError.message}
-              </AlertDescription>
-            </Alert>
+              </InlineNoticeText>
+            </InlineNotice>
           ) : isLoadingSecrets ? (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -223,12 +223,12 @@ export default function ExternalSecretSelector({
               </SelectContent>
             </Select>
           ) : Array.isArray(secrets) ? (
-            <Alert variant="default">
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>
+            <InlineNotice variant="neutral">
+              <AlertCircle />
+              <InlineNoticeText>
                 No secrets found in the configured Vault folder.
-              </AlertDescription>
-            </Alert>
+              </InlineNoticeText>
+            </InlineNotice>
           ) : null}
         </div>
       )}
@@ -238,13 +238,13 @@ export default function ExternalSecretSelector({
         <div className="space-y-2">
           <Label htmlFor="vault-key">Secret Key</Label>
           {keysError ? (
-            <Alert variant="destructive">
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>
+            <InlineNotice variant="error">
+              <AlertCircle />
+              <InlineNoticeText>
                 Failed to load secret keys:{" "}
                 {keysError.message || "Unknown error"}
-              </AlertDescription>
-            </Alert>
+              </InlineNoticeText>
+            </InlineNotice>
           ) : isLoadingKeys ? (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -285,10 +285,10 @@ export default function ExternalSecretSelector({
               </div>
             </>
           ) : (
-            <Alert variant="default">
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>No keys found in this secret.</AlertDescription>
-            </Alert>
+            <InlineNotice variant="neutral">
+              <AlertCircle />
+              <InlineNoticeText>No keys found in this secret.</InlineNoticeText>
+            </InlineNotice>
           )}
         </div>
       )}

@@ -2,6 +2,7 @@
 
 import { KeyRound, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import type { ConnectableAuthState } from "@/lib/chat/mcp-error-ui";
 
 /**
@@ -27,9 +28,9 @@ export function McpAppAuthBanner({
   const url = expired ? authState.reauthUrl : authState.actionUrl;
 
   return (
-    <div className="mb-2 flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm">
-      <KeyRound className="mt-0.5 size-4 flex-none text-amber-600" />
-      <span className="min-w-0 flex-1 break-words text-foreground">
+    <InlineNotice className="mb-2 items-start">
+      <KeyRound className="mt-0.5" />
+      <InlineNoticeText className="flex-1 break-words">
         Tool &ldquo;{toolName}&rdquo; requires{" "}
         {expired ? "re-authentication" : "authentication"} &mdash; open{" "}
         <a
@@ -40,16 +41,16 @@ export function McpAppAuthBanner({
         >
           {url}
         </a>
-      </span>
+      </InlineNoticeText>
       <Button
         variant="ghost"
         size="icon"
-        className="size-6 flex-none text-muted-foreground"
+        className="ml-auto size-6 flex-none text-muted-foreground"
         onClick={onDismiss}
         aria-label="Dismiss"
       >
         <X className="size-3.5" />
       </Button>
-    </div>
+    </InlineNotice>
   );
 }

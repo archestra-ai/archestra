@@ -9,10 +9,7 @@ import { KeyRound } from "lucide-react";
 import { useState } from "react";
 import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
 import { Button } from "@/components/ui/button";
-import {
-  CompactWarning,
-  CompactWarningText,
-} from "@/components/ui/compact-warning";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import type { LlmProviderApiKey } from "@/lib/llm-provider-api-keys.query";
 
 import { cn } from "@/lib/utils";
@@ -57,12 +54,12 @@ export function SubscriptionReconnectNotice({
           </Button>
         </div>
       ) : (
-        <CompactWarning className={className}>
+        <InlineNotice className={className}>
           <KeyRound />
           <span className="font-medium">
             {credential.name} needs reconnecting
           </span>
-          <CompactWarningText>Sign in again to continue.</CompactWarningText>
+          <InlineNoticeText>Sign in again to continue.</InlineNoticeText>
           <Button
             type="button"
             variant="outline"
@@ -72,7 +69,7 @@ export function SubscriptionReconnectNotice({
           >
             Reconnect
           </Button>
-        </CompactWarning>
+        </InlineNotice>
       )}
       {open && (
         <CreateLlmProviderApiKeyDialog

@@ -59,11 +59,8 @@ describe("PluginSkillPage", () => {
       "href",
       "/plugins/plugin-1",
     );
-    const sourceNotice = screen.getByText(
-      (_, element) =>
-        element?.tagName === "P" &&
-        element.textContent?.includes("This skill comes from") === true,
-    );
+    const sourceNotice = screen.getByRole("alert");
+    expect(sourceNotice).toHaveTextContent(/This skill comes from/);
     expect(sourceNotice).toHaveTextContent(/plugin still owns these files/);
     expect(screen.getByTestId("content")).toHaveAttribute(
       "data-read-only",

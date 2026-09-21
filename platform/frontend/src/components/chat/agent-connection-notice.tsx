@@ -2,6 +2,7 @@
 
 import { KeyRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { useAgentCredentialReadiness } from "@/lib/agent.query";
 import {
   indexReadinessByAgent,
@@ -32,9 +33,9 @@ export function AgentConnectionNotice({ agentId }: { agentId: string }) {
   const servers = listServerNames(gate.serverNames);
 
   return (
-    <div className="flex items-center gap-2.5 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-1.5 text-xs">
-      <KeyRound className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-500" />
-      <p className="min-w-0 flex-1 truncate text-muted-foreground">
+    <InlineNotice>
+      <KeyRound />
+      <InlineNoticeText className="flex-1 truncate">
         {gate.kind === "block" ? (
           <span>
             This agent needs your connection to {servers} before it can run.
@@ -45,13 +46,13 @@ export function AgentConnectionNotice({ agentId }: { agentId: string }) {
             use {missing.length === 1 ? "it" : "them"} will not run.
           </span>
         )}
-      </p>
+      </InlineNoticeText>
       {/* Connecting is per server; with several outstanding this opens the
           first and the notice re-offers whatever is still missing. */}
       <Button
         size="sm"
         variant="outline"
-        className="h-6 shrink-0 px-2 text-[11px]"
+        className="ml-auto h-6 shrink-0 px-2 text-[11px]"
         onClick={() => {
           const next = missing[0];
           if (next) orchestrator.triggerInstallByCatalogId(next.catalogId);
@@ -62,6 +63,6 @@ export function AgentConnectionNotice({ agentId }: { agentId: string }) {
         </span>
       </Button>
       <McpInstallDialogs orchestrator={orchestrator} />
-    </div>
+    </InlineNotice>
   );
 }

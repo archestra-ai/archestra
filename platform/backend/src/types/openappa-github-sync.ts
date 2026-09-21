@@ -64,6 +64,15 @@ export const AppaGithubSyncStatusSchema = z.object({
   source: AppaGithubSyncSchema.nullable(),
   hasPolicy: z.boolean(),
 });
+/** What accepting a held pull published, and what it changed to publish it. */
+export const AcceptedHeldPullSchema = z.object({
+  contentHash: z.string(),
+  sourceCommit: z.string(),
+  reasons: z.array(HeldPullReasonSchema),
+  droppedBatteries: z.array(z.string()),
+  changedVariables: z.array(z.string()),
+  status: AppaGithubSyncStatusSchema,
+});
 export const AppaGithubSyncActionSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("sync") }).strict(),
   z.object({ action: z.literal("disconnect") }).strict(),

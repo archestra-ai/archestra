@@ -208,7 +208,7 @@ Headless sessions cannot show forms. Models receive guidance to list options in 
 
 Codex declines forms when its approval policy is `never`. Set the policy to `on-request` to answer forms.
 
-Codex also gates its native question tool on some releases. If Codex reports `request_user_input is unavailable in Default mode`, run `codex features enable default_mode_request_user_input` and restart Codex.
+Codex shows the MCP form for `ask_user`. Some Codex releases also advertise a `request_user_input` tool they cannot run in Default mode. Enable that tool with `codex features enable default_mode_request_user_input` if you want Codex's own question UI.
 
 The model decides whether to use a form. Some client models ask permission questions in plain text.
 

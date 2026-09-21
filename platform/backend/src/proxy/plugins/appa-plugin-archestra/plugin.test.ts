@@ -315,6 +315,82 @@ describe("asking through the client's own question tool", () => {
       await plugin.onCleanup(context);
     }
   });
+
+  test("leaves Codex ask_user on the gateway when request_user_input is declared", async () => {
+    // Codex still lists request_user_input while Default mode cannot execute it.
+    // Rewriting ask_user to that tool leaves the client with no form.
+    const plugin = new AppaPluginArchestra([new AppaCodexAdapter()]);
+    const context = requestContext({
+      sessionId: "codex-question-session",
+      canonicalizeToolName: (name) =>
+        name.startsWith("mcp__my_gateway__")
+          ? name.slice("mcp__my_gateway__".length)
+          : name,
+    });
+    const trusted = context.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as Record<string, unknown>;
+    trusted.request = {
+      ...(trusted.request as Record<string, unknown>),
+      tools: {
+        controlToolName: "archestra__execute_remedy_plan",
+        noticeToolName: "archestra__get_remedy_plans",
+      },
+      spellings: new Map([
+        ["request_user_input", "request_user_input"],
+        ["archestra__ask_user", "archestra__ask_user"],
+      ]),
+      namespaces: new Map([["archestra__ask_user", "mcp__my_gateway"]]),
+    };
+    context.headers = { originator: "codex_cli_rs" };
+    const toolCalls = [
+      {
+        id: "call_ask",
+        name: "archestra__ask_user",
+        arguments: JSON.stringify({
+          question: "Which color do you prefer?",
+          options: [{ label: "Red" }, { label: "Blue" }],
+        }),
+      },
+    ];
+
+    const evaluateToolCalls = vi
+      .spyOn(appaService, "evaluateToolCalls")
+      .mockImplementation(async (_session, calls, options) =>
+        calls.map((call) =>
+          options.isUserQuestion?.(call.name)
+            ? ({ kind: "allow" } as const)
+            : {
+                kind: "deny" as const,
+                feedback: `tool ${call.name} is not declared in this policy`,
+              },
+        ),
+      );
+
+    try {
+      await plugin.onSessionInit(context);
+      const prepared = await plugin.onPrepareToolCalls({
+        ...context,
+        toolCalls,
+      });
+      const released =
+        prepared?.decision === "allow" ? prepared.toolCalls : toolCalls;
+      expect(released).toEqual(toolCalls);
+
+      const outcome = await plugin.onToolCalls({
+        ...context,
+        toolCalls,
+      });
+      expect(outcome?.decision).not.toBe("hold");
+      expect(evaluateToolCalls).toHaveBeenCalled();
+      const [, , options] = evaluateToolCalls.mock.calls[0];
+      expect(options.isUserQuestion?.("archestra__ask_user")).toBe(true);
+      expect(options.isUserQuestion?.("exec_command")).toBe(false);
+    } finally {
+      evaluateToolCalls.mockRestore();
+      await plugin.onCleanup(context);
+    }
+  });
 });
 
 describe("rendering runtime text for this client", () => {

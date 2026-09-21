@@ -716,10 +716,29 @@ const QUESTION_CONTINUATION_GUIDANCE = [
 const NATIVE_QUESTION_ID_PATTERN =
   /^(toolu|call|aq)_aq1_([A-Za-z0-9_-]{16})_([A-Za-z0-9_-]{22})$/;
 
+function isGatewayAskUser(binding: AppaPluginBinding, name: string): boolean {
+  const namespace = binding.request.namespaces.get(name);
+  if (namespace) {
+    const namespaced = `${namespace}__${name}`;
+    const canonical = binding.canonicalizeToolName(namespaced);
+    return (
+      canonical !== namespaced &&
+      archestraMcpBranding.getToolShortName(canonical) ===
+        TOOL_ASK_USER_SHORT_NAME
+    );
+  }
+  return (
+    archestraMcpBranding.getToolShortName(
+      binding.canonicalizeToolName(name),
+    ) === TOOL_ASK_USER_SHORT_NAME
+  );
+}
+
 function isUserQuestionCall(binding: AppaPluginBinding, name: string): boolean {
   return (
     binding.request.platformToolNames?.has(name) === true ||
-    nativeQuestionName(binding, name) !== undefined
+    nativeQuestionName(binding, name) !== undefined ||
+    isGatewayAskUser(binding, name)
   );
 }
 
@@ -732,6 +751,7 @@ function isUserQuestionResult(params: {
     params.binding.request.platformToolNames?.has(params.answer.name) === true
   )
     return true;
+  if (isGatewayAskUser(params.binding, params.answer.name)) return true;
   const name = nativeQuestionName(params.binding, params.answer.name);
   return (
     name !== undefined &&

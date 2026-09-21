@@ -1,27 +1,13 @@
-import type { AppaClientAdapter, AskUserArguments } from "../types";
-import { questionHeader, readHeader } from "../utils";
+import type { AppaClientAdapter } from "../types";
+import { readHeader } from "../utils";
 
 /** Identifies Codex Responses requests and normalizes local tool names. */
 export class AppaCodexAdapter implements AppaClientAdapter {
   readonly id = "codex" as const;
+  // Codex advertises request_user_input even when Default mode cannot run it.
+  // Keep ask_user on the gateway so Codex shows an MCP elicitation form.
   readonly nativeQuestion = {
     toolName: "request_user_input",
-    fromAskUser: (args: AskUserArguments) => ({
-      questions: [
-        {
-          id: "archestra_question",
-          header: questionHeader(args.header, 12),
-          question: args.question,
-          // Codex request_user_input accepts one selection per question; its
-          // result still serializes that selection as an answers array.
-          // Do not invent an unsupported allowMultiple input field.
-          options: args.options.map((option) => ({
-            label: option.label,
-            description: option.description ?? option.label,
-          })),
-        },
-      ],
-    }),
   };
 
   matches(context: Parameters<AppaClientAdapter["matches"]>[0]): boolean {

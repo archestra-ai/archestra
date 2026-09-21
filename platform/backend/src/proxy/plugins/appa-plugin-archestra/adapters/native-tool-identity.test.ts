@@ -80,19 +80,9 @@ describe("native local tool identities", () => {
     });
   });
 
-  test("converts ask_user to Codex's native question schema", () => {
-    expect(new AppaCodexAdapter().nativeQuestion.fromAskUser(askUser)).toEqual({
-      questions: [
-        {
-          id: "archestra_question",
-          header: "Visibility s",
-          question: askUser.question,
-          options: [
-            { label: "Team", description: "Only team members" },
-            { label: "Private", description: "Private" },
-          ],
-        },
-      ],
+  test("does not rewrite ask_user through Codex's gated question tool", () => {
+    expect(new AppaCodexAdapter().nativeQuestion).toEqual({
+      toolName: "request_user_input",
     });
   });
 });

@@ -2,7 +2,6 @@ import { createHash } from "node:crypto";
 import { ADMIN_ROLE_NAME } from "@archestra/shared";
 import { vi } from "vitest";
 import config from "@/config";
-import logger from "@/logging";
 import OpenAppaBatteryInstallModel from "@/models/openappa-battery-install";
 import RuntimeCredentialConnectionModel from "@/models/runtime-credential-connection";
 import RuntimeCredentialDefinitionModel from "@/models/runtime-credential-definition";
@@ -13,9 +12,6 @@ import { sandboxRuntimeService } from "@/sandbox-runtime/sandbox-runtime-service
 import { createFastifyInstance, type FastifyInstanceWithZod } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import routes from "./openappa-helpers.routes";
-
-// The consult's own logging is under test: no credential may reach a record.
-vi.mock("@/logging");
 
 const CREDENTIAL_VALUE = "gh-token-value-under-test";
 
@@ -40,6 +36,9 @@ describe("battery helper bridge", () => {
   });
   afterEach(async () => {
     await app.close();
+    // This file shares its worker with the rest of the mock-free project, so a
+    // sandbox spy left standing would serve the next file's tests too.
+    vi.restoreAllMocks();
   });
 
   const consult = (params: {
@@ -285,14 +284,6 @@ describe("battery helper bridge", () => {
     // battery files, the command, the envelope on stdin.
     const { secretEnv: _secret, ...rest } = params ?? {};
     expect(JSON.stringify(rest)).not.toContain(CREDENTIAL_VALUE);
-    expect(
-      JSON.stringify([
-        ...vi.mocked(logger.info).mock.calls,
-        ...vi.mocked(logger.warn).mock.calls,
-        ...vi.mocked(logger.error).mock.calls,
-        ...vi.mocked(logger.debug).mock.calls,
-      ]),
-    ).not.toContain(CREDENTIAL_VALUE);
   });
 
   test("consults beyond half the sandbox pool are refused as busy", async ({

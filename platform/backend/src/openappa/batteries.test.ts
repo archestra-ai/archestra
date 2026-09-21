@@ -109,6 +109,9 @@ describe("bundled batteries", () => {
     const organizationId = (await makeOrganization()).id;
     const root = await guardrailsPolicyService.get(organizationId);
     const native = await import("@archestra/openappa-rs");
+    // Composing is a direct addon call here, so it owes the addon the same
+    // thing the service owes it: the bearer, in the environment, first.
+    const tokenEnv = openappaBatteriesService.publishBridgeToken();
     const bundled = await native.listBundledOpenappaBatteries();
     const names = bundled.map((battery) => battery.name);
     expect(names).toContain("github");
@@ -129,7 +132,7 @@ describe("bundled batteries", () => {
               battery.externals.length > 0
                 ? {
                     urlBase: `http://127.0.0.1:${config.api.port}${OPENAPPA_HELPERS_PREFIX}/install`,
-                    tokenEnv: "APPA_ARCHESTRA_BRIDGE_TOKEN",
+                    tokenEnv,
                   }
                 : undefined,
           },

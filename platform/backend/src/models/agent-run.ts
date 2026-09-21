@@ -70,6 +70,25 @@ class AgentRunModel {
     return run ?? null;
   }
 
+  static async usesEphemeralFiles(
+    params: { runId: string } | { virtualApiKeyId: string },
+  ): Promise<boolean> {
+    const [run] = await db
+      .select({ id: schema.agentRunsTable.id })
+      .from(schema.agentRunsTable)
+      .where(
+        and(
+          "runId" in params
+            ? eq(schema.agentRunsTable.id, params.runId)
+            : eq(schema.agentRunsTable.virtualApiKeyId, params.virtualApiKeyId),
+          sql`${schema.agentRunsTable.completionTarget}->>'type' = 'chatops'`,
+          sql`${schema.agentRunsTable.completionTarget}->>'ephemeralFiles' = 'true'`,
+        ),
+      )
+      .limit(1);
+    return run !== undefined;
+  }
+
   /** Resolve an owned session URL (or any of its task aliases) to its current turn. */
   static async findCurrentSessionForActor(params: {
     taskId: string;

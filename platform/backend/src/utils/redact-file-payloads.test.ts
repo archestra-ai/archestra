@@ -2,6 +2,50 @@ import { describe, expect, test } from "vitest";
 import { redactFilePayloads } from "./redact-file-payloads";
 
 describe("redactFilePayloads", () => {
+  test("omits named legacy upload arguments across provider tool-call shapes, preserving unrelated arguments", () => {
+    const argumentsObject = {
+      filename: "report.pdf",
+      content_base64: "private-file-body",
+    };
+    const name = "mcp__gateway__archestra__post_run_file";
+    const input = [
+      {
+        type: "function",
+        function: { name, arguments: JSON.stringify(argumentsObject) },
+      },
+      {
+        type: "function_call",
+        name,
+        arguments: JSON.stringify(argumentsObject),
+      },
+      { type: "tool_use", name, input: argumentsObject },
+      { functionCall: { name, args: argumentsObject } },
+      { toolUse: { name, input: argumentsObject } },
+      {
+        type: "function",
+        function: {
+          name: "archestra__run_tool",
+          arguments: JSON.stringify({
+            tool_name: name,
+            tool_args: argumentsObject,
+          }),
+        },
+      },
+    ];
+
+    const result = JSON.stringify(redactFilePayloads(input));
+    expect(result).not.toContain(argumentsObject.content_base64);
+    expect(result).toContain("report.pdf");
+    expect(JSON.stringify(input)).toContain(argumentsObject.content_base64);
+    const unrelated = { name: "other_tool", arguments: argumentsObject };
+    expect(redactFilePayloads(unrelated)).toEqual(unrelated);
+    const unrelatedWrapped = {
+      name: "archestra__run_tool",
+      arguments: { tool_name: "other_tool", tool_args: argumentsObject },
+    };
+    expect(redactFilePayloads(unrelatedWrapped)).toEqual(unrelatedWrapped);
+  });
+
   test("preserves arbitrary text, data and bytes fields instead of guessing file contents", () => {
     const input = {
       text: "data:image/png;base64,still ordinary message text",

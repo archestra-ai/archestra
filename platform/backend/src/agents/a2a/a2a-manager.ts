@@ -658,6 +658,10 @@ export class A2AManager {
                 organizationId: actor.organizationId,
                 projectId: systemParams?.projectId,
                 completionTarget: systemParams?.completionTarget,
+                attachments:
+                  systemParams?.source === "chatops:slack"
+                    ? currentTurnAttachments
+                    : undefined,
                 task: executedTurnText,
                 modelId: agent.modelId,
                 llmApiKeyId: agent.llmApiKeyId,

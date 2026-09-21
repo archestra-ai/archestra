@@ -39,7 +39,8 @@ def open_parent(root, path):
     parts = path.split("/")
     if not path or any(part in ("", ".", "..") for part in parts) or "\0" in path:
         raise ValueError("Use a non-empty workspace-relative path without traversal")
-    directory = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    directory = (os.dup(root) if isinstance(root, int) else
+                 os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW))
     try:
         for part in parts[:-1]:
             child = os.open(
@@ -116,6 +117,151 @@ def operate(request):
 
 
 # === Streaming transfer operations ===================================
+
+
+def thread_directory(task_id, create=False):
+    """Open one task below the server-selected volatile mount, never a symlink."""
+    if str(uuid.UUID(task_id)) != task_id:
+        raise ValueError("Malformed task id")
+    root = os.open(workspace_root(), os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        if create:
+            try:
+                os.mkdir(task_id, 0o700, dir_fd=root)
+            except FileExistsError:
+                pass
+        return os.open(task_id, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                       dir_fd=root)
+    finally:
+        os.close(root)
+
+
+def thread_init(task_id):
+    directory = thread_directory(task_id, create=True)
+    try:
+        for name in ("inputs", "outputs"):
+            try:
+                os.mkdir(name, 0o700, dir_fd=directory)
+            except FileExistsError:
+                pass
+            child = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                            dir_fd=directory)
+            os.close(child)
+        return {"initialized": True}
+    finally:
+        os.close(directory)
+
+
+def thread_ready(task_id, publish=False):
+    directory = thread_directory(task_id)
+    try:
+        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL if publish else os.O_RDONLY
+        try:
+            fd = os.open(".ready", flags | os.O_NOFOLLOW | os.O_NONBLOCK,
+                         0o600, dir_fd=directory)
+        except FileExistsError:
+            fd = os.open(".ready", os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK,
+                         dir_fd=directory)
+        try:
+            if not stat.S_ISREG(os.fstat(fd).st_mode):
+                raise ValueError("Temporary files are unavailable")
+        finally:
+            os.close(fd)
+        return {"ready": True}
+    finally:
+        os.close(directory)
+
+
+def thread_write(task_id, filename, limit):
+    if "/" in filename or "\\" in filename:
+        raise ValueError("Use a plain input filename")
+    directory = thread_directory(task_id)
+    try:
+        parent, name = open_parent(directory, "inputs/" + filename)
+    finally:
+        os.close(directory)
+    temporary = ".archestra-upload-" + uuid.uuid4().hex
+    try:
+        fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                     0o600, dir_fd=parent)
+        with os.fdopen(fd, "wb") as destination:
+            remaining = limit + 1
+            while remaining:
+                block = sys.stdin.buffer.read(min(BLOCK_BYTES, remaining))
+                if not block:
+                    break
+                remaining -= len(block)
+                if remaining == 0:
+                    raise ValueError("File exceeds the transfer limit")
+                destination.write(block)
+        os.rename(temporary, name, src_dir_fd=parent, dst_dir_fd=parent)
+        return {"written": True}
+    finally:
+        try:
+            os.unlink(temporary, dir_fd=parent)
+        except FileNotFoundError:
+            pass
+        os.close(parent)
+
+
+def thread_read(task_id, path, limit):
+    thread_ready(task_id)
+    directory = thread_directory(task_id)
+    try:
+        parent, name = open_parent(directory, path)
+    finally:
+        os.close(directory)
+    try:
+        fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK,
+                     dir_fd=parent)
+        with os.fdopen(fd, "rb") as source:
+            info = os.fstat(fd)
+            if not stat.S_ISREG(info.st_mode) or info.st_size > limit:
+                raise ValueError("Only regular files within the transfer limit can be sent")
+            data = source.read(limit + 1)
+            if not data or len(data) > limit:
+                raise ValueError("File is empty or exceeds the transfer limit")
+        sys.stdout.buffer.write(data)
+        sys.stdout.buffer.flush()
+    finally:
+        os.close(parent)
+
+
+def thread_cleanup(task_id):
+    try:
+        directory = thread_directory(task_id)
+        try:
+            remove_contents(directory)
+        finally:
+            os.close(directory)
+        root = os.open(workspace_root(), os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        try:
+            os.rmdir(task_id, dir_fd=root)
+        finally:
+            os.close(root)
+    except FileNotFoundError:
+        # A previous cleanup or Pod eviction may already have removed this task.
+        pass
+    return {"removed": True}
+
+
+def remove_contents(directory):
+    for name in os.listdir(directory):
+        try:
+            info = os.stat(name, dir_fd=directory, follow_symlinks=False)
+            if stat.S_ISDIR(info.st_mode):
+                child = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                                dir_fd=directory)
+                try:
+                    remove_contents(child)
+                finally:
+                    os.close(child)
+                os.rmdir(name, dir_fd=directory)
+            else:
+                os.unlink(name, dir_fd=directory)
+        except FileNotFoundError:
+            # Concurrent cleanup can finish one entry while this walk continues.
+            continue
 
 
 def open_staging(root):
@@ -324,6 +470,16 @@ def discard(entry_id):
 def dispatch(argv):
     """Route a streaming command. Staging ids are opaque and never traversed."""
     command = argv[0]
+    if command == "thread-init":
+        return thread_init(argv[1])
+    if command == "thread-ready":
+        return thread_ready(argv[1], publish=True)
+    if command == "thread-status":
+        return thread_ready(argv[1])
+    if command == "thread-write":
+        return thread_write(argv[1], argv[2], transfer_limit(argv[3]))
+    if command == "thread-cleanup":
+        return thread_cleanup(argv[1])
     if command == "stat":
         return stat_path(argv[1])
     if command == "snapshot":
@@ -344,8 +500,21 @@ def require_id(value):
     return value
 
 
+def transfer_limit(value):
+    limit = int(value)
+    if limit < 1 or limit > 25 * 1024 * 1024:
+        raise ValueError("Invalid transfer limit")
+    return limit
+
+
 if __name__ == "__main__":
-    if len(sys.argv) > 1 and sys.argv[1] == "read-range":
+    if len(sys.argv) > 1 and sys.argv[1] == "thread-read":
+        try:
+            thread_read(sys.argv[2], sys.argv[3], transfer_limit(sys.argv[4]))
+        except (OSError, ValueError, TypeError, IndexError) as error:
+            print(str(error), file=sys.stderr)
+            sys.exit(1)
+    elif len(sys.argv) > 1 and sys.argv[1] == "read-range":
         # Raw bytes own stdout, so failures report through the exit status.
         try:
             read_range(

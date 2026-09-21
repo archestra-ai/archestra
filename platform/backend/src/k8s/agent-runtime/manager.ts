@@ -33,20 +33,18 @@ import McpDeploymentLeaseModel, {
 } from "@/models/mcp-deployment-lease";
 import { reportAgentRuntimeSteer } from "@/observability/metrics/agent-runtime";
 import type { AgentRunLaunchSpec } from "@/services/agent-runtime/backends";
+import type { RuntimeInputFile } from "@/services/agent-runtime/backends/types";
 import { agentRuntimeFailureReason } from "@/services/agent-runtime/failure-reason";
 import {
   AGENT_RUNTIME_ATTACH_SCRIPT,
   AGENT_RUNTIME_ATTACHMENTS_MANIFEST,
   AGENT_RUNTIME_CREDENTIALS_SECRET_KEY,
   AGENT_RUNTIME_INPUTS_READY_FILE,
+  AGENT_RUNTIME_THREAD_FILES_DIR,
 } from "@/services/agent-runtime/runtime-contract";
 import { resolveCredential } from "@/services/credentials";
 import { resolveEffectiveNetworkPolicy } from "@/services/environments/network-policy";
-import type {
-  AgentRunInput,
-  AgentRunRecord,
-  AgentRuntimeSteerMode,
-} from "@/types";
+import type { AgentRunRecord, AgentRuntimeSteerMode } from "@/types";
 import { ApiError } from "@/types";
 import {
   type AgentWorkspaceFileRequest,
@@ -195,11 +193,15 @@ class AgentRuntimeManager {
       }),
     );
 
+    // Warm workspaces can predate the temporary volume and publish their turn
+    // before transient inputs reach the Pod. These launches need fresh compute.
+    const launchSession = await AgentRunModel.findByTaskId(spec.taskId);
     if (
-      await agentWarmPoolManager.claim({
+      !usesThreadFiles(launchSession) &&
+      (await agentWarmPoolManager.claim({
         api: clients.customObjectsApi,
         spec: withOwner,
-      })
+      }))
     ) {
       const deadline =
         Date.now() + config.agentRuntime.podStartTimeoutSeconds * 1000;
@@ -326,17 +328,136 @@ class AgentRuntimeManager {
     });
   }
 
+  async readThreadFile(params: {
+    session: AgentRunRecord;
+    path: string;
+    maxBytes: number;
+  }): Promise<Buffer> {
+    if (!usesThreadFiles(params.session))
+      throw new ApiError(409, "This run has no temporary thread files");
+    const podName = await this.requireThreadFilesPod(params.session);
+    const { stdout, completed } = streamAgentRuntimeCommand({
+      exec: this.requireClients().exec,
+      namespace: params.session.runtimeScope,
+      podName,
+      container: AGENT_RUNTIME_CONTAINER_NAME,
+      command: [
+        ...workspaceFilesCommand(AGENT_RUNTIME_THREAD_FILES_DIR),
+        "thread-read",
+        params.session.taskId,
+        params.path,
+        String(params.maxBytes),
+      ],
+      timeoutMs: 60_000,
+    });
+    try {
+      const [data] = await Promise.all([
+        (async () => {
+          const chunks: Buffer[] = [];
+          let size = 0;
+          for await (const chunk of stdout) {
+            const bytes = Buffer.from(chunk);
+            size += bytes.length;
+            if (size > params.maxBytes)
+              throw new ApiError(400, "The file exceeds the upload limit");
+            chunks.push(bytes);
+          }
+          return Buffer.concat(chunks, size);
+        })(),
+        completed,
+      ]);
+      return data;
+    } catch (error) {
+      stdout.destroy();
+      await completed.catch(() => {});
+      throw describeWorkspaceHelperFailure(error) ?? error;
+    }
+  }
+
+  async assertThreadFilesAvailable(session: AgentRunRecord): Promise<void> {
+    await this.threadFileCommand(session, ["thread-status", session.taskId]);
+  }
+
+  async cleanupThreadFiles(session: AgentRunRecord): Promise<void> {
+    const pod = await this.findPod(session);
+    // Inputs are staged only after Running. Unstarted, deleted, and terminal
+    // compute leave volume removal to Kubernetes; never resume it for cleanup.
+    if (
+      !pod ||
+      !hasThreadFilesVolume(pod) ||
+      pod.status?.phase === "Pending" ||
+      pod.status?.phase === "Succeeded" ||
+      pod.status?.phase === "Failed"
+    )
+      return;
+    if (pod.status?.phase !== "Running" || !pod.metadata?.name)
+      throw new ApiError(
+        409,
+        "Temporary file cleanup is waiting for the runtime",
+      );
+    await this.threadFileCommand(
+      session,
+      ["thread-cleanup", session.taskId],
+      undefined,
+      pod.metadata.name,
+    ).catch((error) => {
+      if (!isK8sNotFoundError(error)) throw error;
+    });
+  }
+
+  private async requireThreadFilesPod(
+    session: AgentRunRecord,
+  ): Promise<string> {
+    const podName = await this.requireRunningPodName(session);
+    const pod = await this.requireClients().coreApi.readNamespacedPod({
+      name: podName,
+      namespace: session.runtimeScope,
+    });
+    if (!hasThreadFilesVolume(pod)) {
+      throw new ApiError(
+        409,
+        "This runtime has no temporary file volume; start a new run",
+      );
+    }
+    return podName;
+  }
+
+  private async threadFileCommand(
+    session: AgentRunRecord,
+    args: string[],
+    stdin?: Readable,
+    podName?: string,
+  ): Promise<void> {
+    if (!usesThreadFiles(session))
+      throw new ApiError(409, "This run has no temporary thread files");
+    const result = await this.execInPod({
+      session,
+      podName: podName ?? (await this.requireThreadFilesPod(session)),
+      command: [
+        ...workspaceFilesCommand(AGENT_RUNTIME_THREAD_FILES_DIR),
+        ...args,
+      ],
+      stdin,
+      timeoutMs: 60_000,
+    });
+    if (JSON.parse(result).ok !== true)
+      throw new ApiError(
+        409,
+        "Temporary files are unavailable; fetch them again from Slack",
+      );
+  }
+
   /**
-   * Copy durable inputs into the shared runtime volume, then atomically release
-   * the bootstrap. The ready marker makes retries and reconciler adoption
-   * idempotent: a control-plane restart cannot launch the Agent against a
-   * half-written file set.
+   * Stage inputs before releasing the bootstrap. Temporary inputs get their
+   * own readiness marker on the volatile volume, so a retained PVC marker
+   * cannot make a replacement Pod mistake lost inputs for a staged file set.
    */
   async stageInputs(params: {
     session: AgentRunRecord;
-    inputs: AgentRunInput[];
+    inputs: RuntimeInputFile[];
   }): Promise<void> {
-    if (params.inputs.length === 0) return;
+    const ephemeral = usesThreadFiles(params.session);
+    if (params.inputs.length === 0 && !ephemeral) return;
     const pod = await this.waitForRunningPod({
       session: params.session,
       timeoutMessage:
@@ -346,16 +467,45 @@ class AgentRuntimeManager {
       throw new Error("This session ended before its input files were staged");
     }
     const readyFile = `/var/run/archestra/turns/${params.session.taskId}.inputs-ready`;
-    const alreadyReady = await this.execInPod({
-      session: params.session,
-      podName: pod,
-      command: ["/bin/sh", "-c", 'test -f "$1"', "check-inputs", readyFile],
-    })
+    const alreadyReady = await (ephemeral
+      ? this.assertThreadFilesAvailable(params.session)
+      : this.execInPod({
+          session: params.session,
+          podName: pod,
+          command: ["/bin/sh", "-c", 'test -f "$1"', "check-inputs", readyFile],
+        })
+    )
       .then(() => true)
       .catch(() => false);
     if (alreadyReady) return;
 
+    if (ephemeral) {
+      await this.threadFileCommand(params.session, [
+        "thread-init",
+        params.session.taskId,
+      ]);
+    }
+
     for (const input of params.inputs) {
+      if (ephemeral) {
+        const filename = path.posix.basename(input.runtimePath);
+        if (
+          input.runtimePath !==
+          `${AGENT_RUNTIME_THREAD_FILES_DIR}/${params.session.taskId}/inputs/${filename}`
+        )
+          throw new ApiError(400, "Invalid temporary input path");
+        await this.threadFileCommand(
+          params.session,
+          [
+            "thread-write",
+            params.session.taskId,
+            filename,
+            String(25 * 1024 * 1024),
+          ],
+          NodeReadable.from([input.fileData]),
+        );
+        continue;
+      }
       await this.execInPod({
         session: params.session,
         podName: pod,
@@ -382,6 +532,12 @@ class AgentRuntimeManager {
       ),
       "utf8",
     );
+    if (ephemeral) {
+      await this.threadFileCommand(params.session, [
+        "thread-ready",
+        params.session.taskId,
+      ]);
+    }
     await this.execInPod({
       session: params.session,
       podName: pod,
@@ -402,6 +558,7 @@ class AgentRuntimeManager {
     session: AgentRunRecord;
     spec: AgentRunLaunchSpec;
     initial?: boolean;
+    inputs?: RuntimeInputFile[];
   }): Promise<void> {
     const clients = this.requireClients();
     const sandbox = await readWorkspaceSandbox({
@@ -485,10 +642,15 @@ class AgentRuntimeManager {
       .catch((error) => {
         if (!isK8sConflictError(error)) throw error;
       });
-    await this.recoverRun(params.session);
+    await this.recoverRun(params.session, params.inputs);
   }
 
-  async recoverRun(session: AgentRunRecord): Promise<void> {
+  async recoverRun(
+    session: AgentRunRecord,
+    inputs?: RuntimeInputFile[],
+  ): Promise<void> {
+    if (usesThreadFiles(session) && inputs === undefined)
+      await this.assertThreadFilesAvailable(session);
     const clients = this.requireClients();
     const pending = await clients.coreApi
       .readNamespacedSecret({
@@ -561,12 +723,15 @@ class AgentRuntimeManager {
         );
       return;
     }
-    // Inputs are database-backed so another process can finish this handoff.
-    // Publish the executable request only after this turn's files are durable.
-    await this.stageInputs({
-      session,
-      inputs: await AgentRunInputModel.findByTaskId(session.taskId),
-    });
+    // Durable inputs can be recovered from SQL. Temporary inputs must either
+    // arrive with this launch or have survived on the original live Pod.
+    if (!usesThreadFiles(session) || inputs !== undefined) {
+      await this.stageInputs({
+        session,
+        inputs:
+          inputs ?? (await AgentRunInputModel.findByTaskId(session.taskId)),
+      });
+    }
     await this.execInPod({
       session,
       podName,
@@ -1869,14 +2034,42 @@ function shellDisplayArgument(value: string): string {
  * bundled it serve workspace files too. `python3 -c` leaves argv, stdin and
  * stdout free, which the transfer commands stream through.
  */
-function workspaceFilesCommand(): string[] {
+function workspaceFilesCommand(root?: string): string[] {
   workspaceFilesProgram ??= readFileSync(
     // Same static dir the sandbox proxy is served from, so it resolves in src
     // under tsx/vitest and in dist in a production build.
     path.join(path.dirname(config.mcpSandbox.filePath), "workspace-files.py"),
     "utf-8",
   );
-  return ["python3", "-c", workspaceFilesProgram];
+  return [
+    ...(root ? ["env", `ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ROOT=${root}`] : []),
+    "python3",
+    "-c",
+    workspaceFilesProgram,
+  ];
+}
+
+function usesThreadFiles(session: AgentRunRecord | null): boolean {
+  return (
+    session?.completionTarget?.type === "chatops" &&
+    session.completionTarget.ephemeralFiles === true
+  );
+}
+
+function hasThreadFilesVolume(pod: k8s.V1Pod): boolean {
+  const mount = pod.spec?.containers
+    .find(({ name }) => name === AGENT_RUNTIME_CONTAINER_NAME)
+    ?.volumeMounts?.find(
+      ({ mountPath }) => mountPath === AGENT_RUNTIME_THREAD_FILES_DIR,
+    );
+  return Boolean(
+    mount &&
+      !mount.subPath &&
+      !mount.subPathExpr &&
+      pod.spec?.volumes?.some(
+        ({ name, emptyDir }) => name === mount.name && emptyDir,
+      ),
+  );
 }
 
 let workspaceFilesProgram: string | undefined;

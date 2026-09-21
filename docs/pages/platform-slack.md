@@ -139,7 +139,9 @@ Attach files when you message the bot. The agent reads supported files directly.
 
 Agents can return attachments and generated files in the same Slack channel thread. Files upload directly to Slack without a public file host.
 
-Make **Post Thread File** available through the [agent's tools](/docs/platform-agents#tool-access-modes). Creating or editing files requires a code sandbox. Returning an unchanged attachment works without one.
+Regular agents use **Post Thread File** from the [agent's tools](/docs/platform-agents#tool-access-modes). Creating or editing files requires a code sandbox. Returning an unchanged attachment works without one.
+
+Tasks delegated to [Agent Runtime](/docs/platform-agent-runtime) use **Post Run File** instead. They process files in their own temporary directory.
 
 The agent can reuse temporary files only during the current run. Later requests must fetch the original attachment again or regenerate the output.
 

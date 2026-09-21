@@ -1,6 +1,7 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import {
   TOOL_DOWNLOAD_FILE_FULL_NAME,
+  TOOL_POST_RUN_FILE_FULL_NAME,
   TOOL_POST_THREAD_FILE_FULL_NAME,
   TOOL_RUN_TOOL_FULL_NAME,
   TOOL_UPLOAD_FILE_FULL_NAME,
@@ -19,7 +20,12 @@ import {
 } from "@/clients/chat-tool-builder";
 import config from "@/config";
 import { evaluatePolicies } from "@/guardrails/tool-invocation";
+import { agentRuntimeManager } from "@/k8s/agent-runtime";
 import {
+  A2AContextModel,
+  A2ATaskModel,
+  AgentRunModel,
+  AgentWorkspaceModel,
   ChatOpsChannelBindingModel,
   ChatOpsConfigModel,
   FileModel,
@@ -597,5 +603,185 @@ describe("post_thread_file", () => {
     expect(stored).toBeNull();
     expect((await send(metadata)).isError).toBe(false);
     expect(uploads).toEqual([data]);
+  });
+});
+
+describe("temporary runtime files", () => {
+  async function runtimeTask() {
+    const owner = await A2AContextModel.create({
+      actorKind: "user",
+      actorId: scope.userId,
+    });
+    const task = await A2ATaskModel.create({
+      contextId: owner.id,
+      agentId: context.agent.id,
+      state: "TASK_STATE_WORKING",
+    });
+    const session = await AgentRunModel.create({
+      organizationId: scope.organizationId,
+      taskId: task.id,
+      agentId: context.agent.id,
+      actorKind: "user",
+      actorId: scope.userId,
+      actorUserId: scope.userId,
+      workloadName: `test-${task.id}`,
+      backend: "kubernetes",
+      runtimeScope: "test",
+      completionTarget: {
+        type: "chatops",
+        bindingId: scope.chatOpsBindingId,
+        threadId: scope.chatOpsThreadId,
+        ephemeralFiles: true,
+      },
+    });
+    await AgentWorkspaceModel.create({
+      id: task.id,
+      organizationId: scope.organizationId,
+      agentId: context.agent.id,
+      actorKind: "user",
+      actorId: scope.userId,
+      backend: "kubernetes",
+      runtimeScope: "test",
+      workloadName: session.workloadName,
+      state: "active",
+      activeTaskId: task.id,
+      lastTaskId: task.id,
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+    // The filesystem transport is a process boundary; its path/mount/bounds
+    // checks are exercised separately against the actual helper and exec stream.
+    vi.spyOn(agentRuntimeManager, "isEnabled", "get").mockReturnValue(true);
+    const available = vi
+      .spyOn(agentRuntimeManager, "assertThreadFilesAvailable")
+      .mockResolvedValue();
+    const capture = vi
+      .spyOn(agentRuntimeManager, "readThreadFile")
+      .mockResolvedValue(Buffer.from(png));
+    const args = {
+      task_id: task.id,
+      path: "inputs/source.png",
+      sha256: createHash("sha256").update(png).digest("hex"),
+    };
+    return { task, session, args, available, capture };
+  }
+
+  test("sends captured runtime bytes privately and deduplicates retries", async () => {
+    const { args } = await runtimeTask();
+    const first = await executeArchestraTool(
+      TOOL_POST_RUN_FILE_FULL_NAME,
+      args,
+      context,
+    );
+    const second = await executeArchestraTool(
+      TOOL_POST_RUN_FILE_FULL_NAME,
+      args,
+      context,
+    );
+    expect(first.isError).toBe(false);
+    expect(first.structuredContent).toMatchObject({
+      sha256: args.sha256,
+      already_sent: false,
+      thread_ts: scope.chatOpsThreadId,
+    });
+    expect(second.structuredContent).toMatchObject({ already_sent: true });
+    expect(uploads).toEqual([png]);
+    expect(JSON.stringify(first)).not.toContain(png.toString("base64"));
+  });
+
+  test("rejects changed bytes and inline-body attempts without uploading", async () => {
+    const { args } = await runtimeTask();
+    for (const invalid of [
+      { ...args, sha256: "0".repeat(64) },
+      {
+        task_id: args.task_id,
+        filename: "source.png",
+        content_base64: png.toString("base64"),
+      },
+      { ...args, content_base64: png.toString("base64") },
+    ]) {
+      expect(
+        (
+          await executeArchestraTool(
+            TOOL_POST_RUN_FILE_FULL_NAME,
+            invalid,
+            context,
+          )
+        ).isError,
+      ).toBe(true);
+    }
+    expect(uploads).toEqual([]);
+  });
+
+  test("another owner or agent cannot read a runtime file", async ({
+    makeUser,
+    makeMember,
+    makeAgent,
+    seedAndAssignArchestraTools,
+  }) => {
+    const { args, capture } = await runtimeTask();
+    const other = await makeUser();
+    await makeMember(other.id, scope.organizationId, { role: "admin" });
+    const agent = await makeAgent({
+      organizationId: scope.organizationId,
+      authorId: scope.userId,
+      agentType: "agent",
+      scope: "org",
+    });
+    await seedAndAssignArchestraTools(agent.id);
+    for (const caller of [
+      { ...context, userId: other.id },
+      {
+        ...context,
+        agent: { id: agent.id, name: agent.name },
+        agentId: agent.id,
+      },
+    ]) {
+      expect(
+        (await executeArchestraTool(TOOL_POST_RUN_FILE_FULL_NAME, args, caller))
+          .isError,
+      ).toBe(true);
+    }
+    expect(capture).not.toHaveBeenCalled();
+    expect(uploads).toEqual([]);
+  });
+
+  test("compute loss and a task ending during capture prevent delivery", async () => {
+    const { args, session, capture, available } = await runtimeTask();
+    available.mockRejectedValueOnce(new Error("temporary volume missing"));
+    expect(
+      (await executeArchestraTool(TOOL_POST_RUN_FILE_FULL_NAME, args, context))
+        .isError,
+    ).toBe(true);
+    expect(capture).not.toHaveBeenCalled();
+    capture.mockImplementationOnce(async () => {
+      await AgentWorkspaceModel.release({
+        workloadName: session.workloadName,
+        taskId: session.taskId,
+      });
+      return Buffer.from(png);
+    });
+    expect(
+      (await executeArchestraTool(TOOL_POST_RUN_FILE_FULL_NAME, args, context))
+        .isError,
+    ).toBe(true);
+    expect(uploads).toEqual([]);
+  });
+
+  test("runtime uploads enforce the same resolved file policies", async ({
+    makeToolPolicy,
+  }) => {
+    const { args } = await runtimeTask();
+    const [runtimeToolId] = await ToolModel.findBuiltInToolIdsByNames([
+      TOOL_POST_RUN_FILE_FULL_NAME,
+    ]);
+    await makeToolPolicy(runtimeToolId, {
+      conditions: [{ key: "mime_type", operator: "equal", value: "image/png" }],
+      action: "block_always",
+    });
+    expect(
+      (await executeArchestraTool(TOOL_POST_RUN_FILE_FULL_NAME, args, context))
+        .isError,
+    ).toBe(true);
+    expect(uploads).toEqual([]);
   });
 });

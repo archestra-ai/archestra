@@ -12,6 +12,7 @@ import {
   AGENT_RUNTIME_INPUTS_READY_FILE,
   AGENT_RUNTIME_SHELL_INIT_SCRIPT,
   AGENT_RUNTIME_STEER_FIFO,
+  AGENT_RUNTIME_THREAD_FILES_DIR,
 } from "@/services/agent-runtime/runtime-contract";
 import type { AgentRuntimeResources } from "@/types";
 import { buildRuntimeFailureEnvelopeScript } from "./failure-envelope";
@@ -102,6 +103,9 @@ export function buildAgentRuntimeTurnScript(
         throw new Error("Invalid runtime environment variable name");
       return `export ${name}=${shellQuote(value)}`;
     }),
+    ...(spec.env.ARCHESTRA_AGENT_RUNTIME_THREAD_FILES === "1"
+      ? [waitForThreadFiles(spec.taskId)]
+      : []),
     ...(spec.renewableCredentials
       ? [waitForCredentialProjection(spec.taskId)]
       : []),
@@ -164,7 +168,10 @@ function buildAgentRuntimeBootstrapScript(): string {
     `mkdir -p ${AGENT_RUNTIME_DIR}`,
     buildAgentRuntimeTerminalIntegrationScript(),
     `mkdir -p ${AGENT_RUNTIME_ATTACHMENTS_DIR}`,
-    'if [ "$ARCHESTRA_AGENT_RUNTIME_INPUT_FILE_COUNT" -gt 0 ]; then',
+    // Temporary files belong to each turn, not the workspace's initial task.
+    // Their gate travels in the entrypoint so a resumed supervisor can start.
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: POSIX shell parameter expansion.
+    'if [ "$ARCHESTRA_AGENT_RUNTIME_INPUT_FILE_COUNT" -gt 0 ] && [ "${ARCHESTRA_AGENT_RUNTIME_THREAD_FILES:-0}" != 1 ]; then',
     `  echo "[agent-runtime] staging $ARCHESTRA_AGENT_RUNTIME_INPUT_FILE_COUNT input file(s)"`,
     `  attempts=0; while [ ! -f ${AGENT_RUNTIME_INPUTS_READY_FILE} ]; do`,
     "    attempts=$((attempts + 1))",
@@ -328,9 +335,15 @@ export function buildAgentRuntimeSandbox(
                 }).map(([name, value]) => ({ name, value })),
                 {
                   name: "ARCHESTRA_AGENT_RUNTIME_ENTRYPOINT",
-                  value: spec.renewableCredentials
-                    ? `${waitForCredentialProjection(spec.taskId)}\n${resolveEntrypoint(spec.command)}`
-                    : resolveEntrypoint(spec.command),
+                  value: [
+                    ...(spec.env.ARCHESTRA_AGENT_RUNTIME_THREAD_FILES === "1"
+                      ? [waitForThreadFiles(spec.taskId)]
+                      : []),
+                    ...(spec.renewableCredentials
+                      ? [waitForCredentialProjection(spec.taskId)]
+                      : []),
+                    resolveEntrypoint(spec.command),
+                  ].join("\n"),
                 },
                 {
                   name: "ARCHESTRA_AGENT_RUNTIME_INPUT_FILE_COUNT",
@@ -352,6 +365,10 @@ export function buildAgentRuntimeSandbox(
                 : {}),
               resources: buildResourceRequirements(spec.resources),
               volumeMounts: [
+                {
+                  name: "thread-files",
+                  mountPath: AGENT_RUNTIME_THREAD_FILES_DIR,
+                },
                 {
                   name: "renewable-credentials",
                   mountPath: AGENT_RUNTIME_CREDENTIALS_DIR,
@@ -382,6 +399,7 @@ export function buildAgentRuntimeSandbox(
             },
           ],
           volumes: [
+            { name: "thread-files", emptyDir: { sizeLimit: "128Mi" } },
             {
               name: "renewable-credentials",
               secret: {
@@ -571,6 +589,25 @@ function buildResourceRequirements(
     ...(Object.keys(requests).length > 0 ? { requests } : {}),
     ...(Object.keys(limits).length > 0 ? { limits } : {}),
   };
+}
+
+/** A retained request may outlive its Pod; only its own staged files release it. */
+function waitForThreadFiles(taskId: string): string {
+  return [
+    `attempts=0; while [ ! -f ${shellQuote(`${AGENT_RUNTIME_THREAD_FILES_DIR}/${taskId}/.ready`)} ]; do`,
+    "  attempts=$((attempts + 1))",
+    '  if [ "$attempts" -gt 300 ]; then',
+    buildRuntimeFailureEnvelopeScript({
+      prefixVariable: "ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX",
+      code: "runtime.inputs_unavailable",
+      message:
+        "Temporary input files are unavailable. Fetch them again from Slack and retry the run.",
+    }),
+    '    echo "agent-runtime: timed out while staging run inputs" >&2; exit 74',
+    "  fi",
+    "  sleep 1",
+    "done",
+  ].join("\n");
 }
 
 /** A continuation must not launch against the previous turn's projected Secret. */

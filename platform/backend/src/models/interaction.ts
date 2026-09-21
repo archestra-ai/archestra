@@ -66,6 +66,7 @@ import { repairLoneSurrogateText } from "@/utils/lone-surrogates";
 import { redactFilePayloads } from "@/utils/redact-file-payloads";
 import { isUuid, uuidv7 } from "@/utils/uuid";
 import AgentModel from "./agent";
+import AgentRunModel from "./agent-run";
 import AgentTeamModel from "./agent-team";
 import ConversationChatErrorModel from "./conversation-chat-error";
 import InteractionDeltaManager from "./interaction-delta-manager";
@@ -469,17 +470,24 @@ class InteractionModel {
         ? await AgentModel.findEnvironmentId(data.profileId)
         : (data.environmentId ?? null));
 
-    // Slack files are execution-scoped. Redact only the audit copy so provider
-    // requests and responses keep their original inline bytes in memory.
-    const auditData =
-      data.source === "chatops:slack"
-        ? {
-            ...data,
-            request: redactFilePayloads(data.request),
-            processedRequest: redactFilePayloads(data.processedRequest),
-            response: redactFilePayloads(data.response),
-          }
-        : data;
+    // Runtime source/run headers are caller-controlled; use the authenticated
+    // virtual key's stored run association to recognize ephemeral Slack files.
+    const ephemeralFiles =
+      data.source === "chatops:slack" ||
+      (data.virtualKeyId
+        ? await AgentRunModel.usesEphemeralFiles({
+            virtualApiKeyId: data.virtualKeyId,
+          })
+        : false);
+    // Redact the audit copy without changing live provider traffic.
+    const auditData = ephemeralFiles
+      ? {
+          ...data,
+          request: redactFilePayloads(data.request),
+          processedRequest: redactFilePayloads(data.processedRequest),
+          response: redactFilePayloads(data.response),
+        }
+      : data;
 
     // Sanitize JSONB fields to strip null bytes (\u0000) that PostgreSQL rejects
     const sanitized = {

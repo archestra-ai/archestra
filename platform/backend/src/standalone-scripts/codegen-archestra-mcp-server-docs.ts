@@ -41,6 +41,13 @@ const groupOrder = new Map<ArchestraToolGroupId, number>(
  * with no entry has no requirement beyond its RBAC permission.
  */
 const toolAccessNotes: Partial<Record<ArchestraToolShortName, string>> = {
+  post_run_file: `For temporary Slack runs, supply \`task_id\`, \`path\`, and \`sha256\`. Paths are relative to the run's temporary files directory. The caller must own the active run and use its agent. The destination is its bound Slack channel thread.
+
+The same [delivery controls and limits](#post_thread_file) apply. Duplicate suppression uses the run and file hash. Inline \`content_base64\` uploads are rejected for these runs.
+
+Files live under \`/tmp/archestra-thread-files/<task-id>/\` on the runtime's temporary disk. The runtime attempts cleanup when the task ends; deleting its compute removes the temporary volume. Missing files must be fetched again. File bytes are not saved as database attachments. Metadata and ordinary text logs remain.
+
+The runtime's regular workspace remains persistent. Files deliberately copied there follow its retention policy. Legacy runs continue to accept \`filename\` and \`content_base64\`.`,
   post_thread_file: `Requires a file reference from the current Slack channel run. Direct messages and other destination channels are unsupported. Generated files use the \`threadFile\` reference from \`download_file\`.
 
 ##### Setup And Limits

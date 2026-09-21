@@ -15,6 +15,7 @@ import sys
 import tempfile
 import time
 import unittest
+import uuid
 
 def locate_helper():
     """Find the helper in a checkout or in the built image.
@@ -79,6 +80,92 @@ class WorkspaceFilesTest(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         return result.stdout
+
+    def read_thread(self, task_id, path, limit=20 * BLOCK):
+        return subprocess.run(
+            [sys.executable, str(HELPER), "thread-read", task_id, path, str(limit)],
+            capture_output=True,
+            env={**os.environ, "ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ROOT": str(self.root)},
+            timeout=5,
+        )
+
+    def new_thread(self):
+        task_id = str(uuid.uuid4())
+        self.run_helper("thread-init", task_id)
+        return task_id
+
+    def test_thread_files_stage_capture_and_cleanup_without_transfer_copies(self):
+        task_id = self.new_thread()
+        data = b"PK\x03\x04\x00\xff\x80binary"
+        self.run_helper("thread-write", task_id, "original.zip", str(len(data)), stdin=data)
+        self.run_helper("thread-ready", task_id)
+        result = self.read_thread(task_id, "inputs/original.zip")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout, data)
+        (self.root / task_id / "outputs" / "result.bin").write_bytes(data[::-1])
+        self.assertEqual(self.read_thread(task_id, "outputs/result.bin").stdout, data[::-1])
+        self.assertEqual(sorted(os.listdir(self.root / task_id)), [".ready", "inputs", "outputs"])
+        self.run_helper("thread-cleanup", task_id)
+        self.assertEqual(list(self.root.iterdir()), [])
+        self.assertNotEqual(self.read_thread(task_id, "inputs/original.zip").returncode, 0)
+
+    def test_thread_staging_refuses_a_symlinked_input_directory(self):
+        task_id = self.new_thread()
+        outside = self.root / "outside"
+        outside.mkdir()
+        inputs = self.root / task_id / "inputs"
+        inputs.rmdir()
+        inputs.symlink_to(outside, target_is_directory=True)
+        result = self.run_helper("thread-write", task_id, "leak.bin", "100", stdin=b"private", expect_ok=False)
+        self.assertFalse(result["ok"])
+        self.assertEqual(list(outside.iterdir()), [])
+
+    def test_thread_capture_rejects_traversal_symlinks_fifo_and_unready_inputs(self):
+        task_id = self.new_thread()
+        root = self.root / task_id
+        (root / "inputs" / "data.bin").write_bytes(b"private")
+        self.assertNotEqual(self.read_thread(task_id, "inputs/data.bin").returncode, 0)
+        self.run_helper("thread-ready", task_id)
+        (root / "outputs" / "linked.bin").symlink_to(root / "inputs" / "data.bin")
+        (root / "linked-dir").symlink_to(root / "inputs", target_is_directory=True)
+        os.mkfifo(root / "outputs" / "pipe")
+        for path in ("../outside", "/etc/passwd", "outputs/linked.bin", "linked-dir/data.bin", "outputs/pipe"):
+            with self.subTest(path=path):
+                result = self.read_thread(task_id, path)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(result.stdout, b"")
+
+    def test_thread_limits_do_not_publish_partial_files_or_emit_oversize_bytes(self):
+        task_id = self.new_thread()
+        self.run_helper("thread-write", task_id, "input.bin", "3", stdin=b"abc")
+        failed = self.run_helper("thread-write", task_id, "input.bin", "3", stdin=b"abcd", expect_ok=False)
+        self.assertFalse(failed["ok"])
+        self.assertEqual((self.root / task_id / "inputs" / "input.bin").read_bytes(), b"abc")
+        self.assertEqual(os.listdir(self.root / task_id / "inputs"), ["input.bin"])
+        self.run_helper("thread-ready", task_id)
+        self.assertEqual(self.read_thread(task_id, "inputs/input.bin", 3).stdout, b"abc")
+        oversized = self.read_thread(task_id, "inputs/input.bin", 2)
+        self.assertNotEqual(oversized.returncode, 0)
+        self.assertEqual(oversized.stdout, b"")
+
+    def test_thread_cleanup_does_not_follow_links_outside_task(self):
+        task_id = self.new_thread()
+        other = self.new_thread()
+        (self.root / other / "inputs" / "keep").write_bytes(b"keep")
+        (self.root / task_id / "outputs" / "escape").symlink_to(self.root / other, target_is_directory=True)
+        # Recover an earlier cleanup interrupted after removing one directory.
+        (self.root / task_id / "inputs").rmdir()
+        self.run_helper("thread-cleanup", task_id)
+        self.run_helper("thread-cleanup", task_id)
+        self.assertEqual((self.root / other / "inputs" / "keep").read_bytes(), b"keep")
+
+    def test_thread_status_does_not_recreate_lost_inputs(self):
+        task_id = self.new_thread()
+        self.run_helper("thread-ready", task_id)
+        self.run_helper("thread-cleanup", task_id)
+        status = self.run_helper("thread-status", task_id, expect_ok=False)
+        self.assertFalse(status["ok"])
+        self.assertFalse((self.root / task_id).exists())
 
     # --- the existing bounded path must not regress --------------------
 

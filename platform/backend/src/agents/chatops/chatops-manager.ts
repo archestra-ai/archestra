@@ -222,7 +222,7 @@ export class ChatOpsManager {
     comment?: string;
     expectedSlackDestination?: { organizationId: string; channelId: string };
     /** Recheck the caller's lifetime after asynchronous destination validation. */
-    assertDeliveryActive?: () => void;
+    assertDeliveryActive?: () => void | Promise<void>;
   }): Promise<undefined | { fileId: string }> {
     const binding = await ChatOpsChannelBindingModel.findById(params.bindingId);
     if (!binding) {
@@ -263,7 +263,7 @@ export class ChatOpsManager {
         `The ${binding.provider} provider does not support file uploads`,
       );
     }
-    params.assertDeliveryActive?.();
+    await params.assertDeliveryActive?.();
     const receipt = await provider.uploadFileToThread({
       channelId: binding.channelId,
       threadId: params.threadId,

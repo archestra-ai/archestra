@@ -1,12 +1,17 @@
 import { z } from "zod";
 
+export const AgentWorkspaceRelativePathSchema = relativePath();
+
 export const AgentWorkspaceFileRequestSchema = z.discriminatedUnion(
   "operation",
   [
-    z.object({ operation: z.literal("read"), path: relativePath() }),
+    z.object({
+      operation: z.literal("read"),
+      path: AgentWorkspaceRelativePathSchema,
+    }),
     z.object({
       operation: z.literal("write"),
-      path: relativePath(),
+      path: AgentWorkspaceRelativePathSchema,
       content_base64: z
         .string()
         .max(5_592_408)

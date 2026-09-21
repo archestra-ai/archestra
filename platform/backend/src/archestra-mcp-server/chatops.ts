@@ -25,6 +25,7 @@ import {
   structuredSuccessResult,
   structuredToolErrorResult,
 } from "./helpers";
+import type { ArchestraContext } from "./types";
 
 const ReceiptSchema = z.object({
   slack_file_id: z.string(),
@@ -74,19 +75,6 @@ const registry = defineArchestraTools([
         );
       }
       try {
-        const binding =
-          await ChatOpsChannelBindingModel.findById(chatOpsBindingId);
-        if (
-          !binding ||
-          binding.organizationId !== organizationId ||
-          binding.provider !== "slack" ||
-          binding.isDm ||
-          !/^\d+\.\d+$/.test(chatOpsThreadId)
-        ) {
-          return errorResult(
-            "The current Slack channel thread is unavailable.",
-          );
-        }
         const file = threadFileStore.resolve({
           scope: {
             organizationId,
@@ -107,202 +95,26 @@ const registry = defineArchestraTools([
             "The file does not match the supplied content hash. Use its current fileId and sha256.",
           );
         }
-        if (
-          !file.sizeBytes ||
-          file.sizeBytes > CHATOPS_ATTACHMENT_LIMITS.MAX_THREAD_FILE_SIZE
-        ) {
-          return errorResult(
-            "The file must be nonempty and no larger than 20 MiB.",
-          );
-        }
-        if (
-          !file.filename ||
-          file.filename.length > 255 ||
-          /[/\\]/.test(file.filename) ||
-          [...file.filename].some((character) => character.charCodeAt(0) < 32)
-        ) {
-          return errorResult(
-            "Use a plain filename without path separators or control characters.",
-          );
-        }
-        const agent = await AgentModel.findById(context.agent.id);
-        if (!agent || agent.organizationId !== organizationId) {
-          return errorResult("Agent not found.");
-        }
-        if (
-          agent.environmentId &&
-          !(await EnvironmentModel.findByIdForOrganization(
-            agent.environmentId,
-            organizationId,
-          ))
-        ) {
-          return errorResult("The agent's environment is unavailable.");
-        }
-        for (const serverUrl of [
-          "https://slack.com",
-          "https://files.slack.com",
-        ]) {
-          const verdict = await evaluateRemoteServerUrlAgainstNetworkPolicy({
-            serverType: "remote",
-            serverUrl,
-            environmentId: agent.environmentId,
-            organizationId,
-          });
-          if (!verdict.allowed) {
-            return errorResult(
-              "The agent's environment does not allow Slack file uploads. It must permit slack.com and files.slack.com.",
-            );
-          }
-        }
-        const toolName = archestraMcpBranding.getToolName(
-          TOOL_POST_THREAD_FILE_SHORT_NAME,
-        );
-        const toolIds = await ToolModel.findBuiltInToolIdsByNames([toolName]);
-        const toolId = toolIds.length === 1 ? toolIds[0] : undefined;
-        if (!toolId) return errorResult("The Slack file tool is unavailable.");
-        // Resolve policy inputs from the captured bytes and trusted destination,
-        // never from model-supplied channel names or a mutable artifact id.
-        const policyBlock = await evaluateSingleMcpToolInvocationPolicy({
-          agentId: agent.id,
-          toolName,
-          toolInput: {
-            ...args,
-            provider: "slack",
-            channel_id: binding.channelId,
-            thread_ts: chatOpsThreadId,
-            mime_type: file.mimeType,
-            filename: file.filename,
-            size_bytes: file.sizeBytes,
-            sha256: file.sha256,
-          },
-          organizationId,
-          contextIsTrusted: context.contextIsTrusted ?? false,
-          sensitiveContextOrigin: context.sensitiveContextOrigin,
-          externalAgentId: context.delegationChain,
-          enabledToolNames: new Set([toolName]),
-          resolvedToolId: toolId,
-          // General chat approvals do not authorize this captured file and
-          // destination. Until that binding exists, approval-required is closed.
-          enforceApprovalRequired: true,
-        });
-        if (policyBlock) {
-          const blocked = await buildPolicyBlockedToolResult({
-            policyBlock,
-            userId,
-            organizationId,
-          });
-          return structuredToolErrorResult({
-            error: blocked.error,
-            text: blocked.text,
-          });
-        }
-        const assertDeliveryActive = () => {
-          context.abortSignal?.throwIfAborted();
-          if (executionSandboxRegistry.isEphemeralExecution(isolationKey)) {
-            ephemeralSandboxStore.assertExecutionActive(isolationKey);
-          }
-        };
-        assertDeliveryActive();
-        const deliveryId = createHash("sha256")
-          .update(
-            JSON.stringify([
-              organizationId,
-              chatOpsBindingId,
-              binding.channelId,
-              chatOpsThreadId,
-              chatOpsMessageId,
-              file.sha256,
-            ]),
-          )
-          .digest("hex");
-        const receiptKey =
-          `${CacheKey.SlackFileDeliveryReceipt}-${deliveryId}` as const;
-        // Claim in the durable ChatOps ledger for its seven-day retention window.
-        // While a claim exists, a missing cached receipt must not cause a resend.
-        const claimed = await ChatOpsProcessedMessageModel.tryMarkAsProcessed(
-          `thread-file:${deliveryId}`,
-        );
-        if (!claimed) {
-          const receipt = ReceiptSchema.safeParse(
-            await cacheManager.get(receiptKey),
-          );
-          if (receipt.success) {
-            return structuredSuccessResult(
-              { ...receipt.data, already_sent: true },
-              "This file was already posted to the current Slack thread.",
-            );
-          }
-          return errorResult(
-            "An upload of this file was already attempted for this message, but its outcome is unknown. Check the Slack thread before requesting another upload; this call will not resend it.",
-          );
-        }
-        const audit = {
+        return await sendCapturedThreadFile({
+          context,
           organizationId,
           userId,
-          agentId: agent.id,
-          bindingId: binding.id,
-          channelId: binding.channelId,
-          threadId: chatOpsThreadId,
-          messageId: chatOpsMessageId,
+          chatOpsBindingId,
+          chatOpsThreadId,
+          chatOpsMessageId,
+          file,
           fileId: args.file_id,
-          sha256: file.sha256,
-          deliveryId,
-        };
-        logger.info(audit, "[ChatOps] Slack file upload claimed");
-        let uploaded: undefined | { fileId: string };
-        try {
-          const { chatOpsManager } = await import(
-            "@/agents/chatops/chatops-manager"
-          );
-          uploaded = await chatOpsManager.uploadFileToBindingThread({
-            bindingId: binding.id,
-            threadId: chatOpsThreadId,
-            filename: file.filename,
-            data: file.data,
-            comment: args.comment,
-            expectedSlackDestination: {
-              organizationId,
-              channelId: binding.channelId,
-            },
-            assertDeliveryActive,
-          });
-        } catch {
-          logger.warn(audit, "[ChatOps] Slack file upload outcome uncertain");
-          return errorResult(
-            "Slack did not confirm the upload. Check the thread and the bot's files:write permission. The file will not be automatically resent for this message because the upload may have succeeded.",
-          );
-        }
-        if (!uploaded?.fileId) {
-          logger.warn(
-            audit,
-            "[ChatOps] Slack file upload returned no file receipt",
-          );
-          return errorResult(
-            "Slack did not return a file receipt. Check the thread; this file will not be automatically resent for this message.",
-          );
-        }
-        const receipt = {
-          slack_file_id: uploaded.fileId,
-          channel_id: binding.channelId,
-          thread_ts: chatOpsThreadId,
-          sha256: file.sha256,
-        };
-        logger.info(
-          { ...audit, slackFileId: uploaded.fileId },
-          "[ChatOps] Slack file uploaded",
-        );
-        await cacheManager
-          .set(receiptKey, receipt, 7 * TimeInMs.Day)
-          .catch(() => {
-            logger.warn(
-              { deliveryId },
-              "[ChatOps] Slack file receipt could not be cached",
-            );
-          });
-        return structuredSuccessResult(
-          { ...receipt, already_sent: false },
-          `Posted ${file.filename} to the current Slack thread.`,
-        );
+          args,
+          toolName: archestraMcpBranding.getToolName(
+            TOOL_POST_THREAD_FILE_SHORT_NAME,
+          ),
+          assertDeliveryActive: () => {
+            context.abortSignal?.throwIfAborted();
+            if (executionSandboxRegistry.isEphemeralExecution(isolationKey)) {
+              ephemeralSandboxStore.assertExecutionActive(isolationKey);
+            }
+          },
+        });
       } catch {
         return errorResult(
           "The Slack file could not be delivered. Its source, permissions, or delivery state could not be verified.",
@@ -314,3 +126,221 @@ const registry = defineArchestraTools([
 
 export const toolEntries = registry.toolEntries;
 export const tools = registry.tools;
+
+/** Both foreground references and runtime paths deliver one captured byte snapshot. */
+export async function sendCapturedThreadFile(params: {
+  context: ArchestraContext;
+  organizationId: string;
+  userId: string;
+  chatOpsBindingId: string;
+  chatOpsThreadId: string;
+  chatOpsMessageId: string;
+  file: {
+    data: Buffer;
+    filename: string;
+    mimeType: string;
+    sizeBytes: number;
+    sha256: string;
+  };
+  fileId: string;
+  args: { sha256: string; comment?: string };
+  toolName: string;
+  assertDeliveryActive: () => void | Promise<void>;
+}) {
+  const {
+    context,
+    organizationId,
+    userId,
+    chatOpsBindingId,
+    chatOpsThreadId,
+    chatOpsMessageId,
+    file,
+    fileId,
+    args,
+    toolName,
+    assertDeliveryActive,
+  } = params;
+  const binding = await ChatOpsChannelBindingModel.findById(chatOpsBindingId);
+  if (
+    !binding ||
+    binding.organizationId !== organizationId ||
+    binding.provider !== "slack" ||
+    binding.isDm ||
+    !/^\d+\.\d+$/.test(chatOpsThreadId)
+  ) {
+    return errorResult("The current Slack channel thread is unavailable.");
+  }
+  if (
+    !file.sizeBytes ||
+    file.sizeBytes > CHATOPS_ATTACHMENT_LIMITS.MAX_THREAD_FILE_SIZE
+  ) {
+    return errorResult("The file must be nonempty and no larger than 20 MiB.");
+  }
+  if (
+    !file.filename ||
+    file.filename.length > 255 ||
+    /[/\\]/.test(file.filename) ||
+    [...file.filename].some((character) => character.charCodeAt(0) < 32)
+  ) {
+    return errorResult(
+      "Use a plain filename without path separators or control characters.",
+    );
+  }
+  const agent = await AgentModel.findById(context.agent.id);
+  if (!agent || agent.organizationId !== organizationId) {
+    return errorResult("Agent not found.");
+  }
+  if (
+    agent.environmentId &&
+    !(await EnvironmentModel.findByIdForOrganization(
+      agent.environmentId,
+      organizationId,
+    ))
+  ) {
+    return errorResult("The agent's environment is unavailable.");
+  }
+  for (const serverUrl of ["https://slack.com", "https://files.slack.com"]) {
+    const verdict = await evaluateRemoteServerUrlAgainstNetworkPolicy({
+      serverType: "remote",
+      serverUrl,
+      environmentId: agent.environmentId,
+      organizationId,
+    });
+    if (!verdict.allowed) {
+      return errorResult(
+        "The agent's environment does not allow Slack file uploads. It must permit slack.com and files.slack.com.",
+      );
+    }
+  }
+  const toolIds = await ToolModel.findBuiltInToolIdsByNames([toolName]);
+  const toolId = toolIds.length === 1 ? toolIds[0] : undefined;
+  if (!toolId) return errorResult("The Slack file tool is unavailable.");
+  // Resolve policy inputs from the captured bytes and trusted destination,
+  // never from model-supplied channel names or a mutable artifact id.
+  const policyBlock = await evaluateSingleMcpToolInvocationPolicy({
+    agentId: agent.id,
+    toolName,
+    toolInput: {
+      ...args,
+      provider: "slack",
+      channel_id: binding.channelId,
+      thread_ts: chatOpsThreadId,
+      mime_type: file.mimeType,
+      filename: file.filename,
+      size_bytes: file.sizeBytes,
+      sha256: file.sha256,
+    },
+    organizationId,
+    contextIsTrusted: context.contextIsTrusted ?? false,
+    sensitiveContextOrigin: context.sensitiveContextOrigin,
+    externalAgentId: context.delegationChain,
+    enabledToolNames: new Set([toolName]),
+    resolvedToolId: toolId,
+    // General chat approvals do not authorize this captured file and
+    // destination. Until that binding exists, approval-required is closed.
+    enforceApprovalRequired: true,
+  });
+  if (policyBlock) {
+    const blocked = await buildPolicyBlockedToolResult({
+      policyBlock,
+      userId,
+      organizationId,
+    });
+    return structuredToolErrorResult({
+      error: blocked.error,
+      text: blocked.text,
+    });
+  }
+  await assertDeliveryActive();
+  const deliveryId = createHash("sha256")
+    .update(
+      JSON.stringify([
+        organizationId,
+        chatOpsBindingId,
+        binding.channelId,
+        chatOpsThreadId,
+        chatOpsMessageId,
+        file.sha256,
+      ]),
+    )
+    .digest("hex");
+  const receiptKey =
+    `${CacheKey.SlackFileDeliveryReceipt}-${deliveryId}` as const;
+  // Claim in the durable ChatOps ledger for its seven-day retention window.
+  // While a claim exists, a missing cached receipt must not cause a resend.
+  const claimed = await ChatOpsProcessedMessageModel.tryMarkAsProcessed(
+    `thread-file:${deliveryId}`,
+  );
+  if (!claimed) {
+    const receipt = ReceiptSchema.safeParse(await cacheManager.get(receiptKey));
+    if (receipt.success) {
+      return structuredSuccessResult(
+        { ...receipt.data, already_sent: true },
+        "This file was already posted to the current Slack thread.",
+      );
+    }
+    return errorResult(
+      "An upload of this file was already attempted for this message, but its outcome is unknown. Check the Slack thread before requesting another upload; this call will not resend it.",
+    );
+  }
+  const audit = {
+    organizationId,
+    userId,
+    agentId: agent.id,
+    bindingId: binding.id,
+    channelId: binding.channelId,
+    threadId: chatOpsThreadId,
+    messageId: chatOpsMessageId,
+    fileId: fileId,
+    sha256: file.sha256,
+    deliveryId,
+  };
+  logger.info(audit, "[ChatOps] Slack file upload claimed");
+  let uploaded: undefined | { fileId: string };
+  try {
+    const { chatOpsManager } = await import("@/agents/chatops/chatops-manager");
+    uploaded = await chatOpsManager.uploadFileToBindingThread({
+      bindingId: binding.id,
+      threadId: chatOpsThreadId,
+      filename: file.filename,
+      data: file.data,
+      comment: args.comment,
+      expectedSlackDestination: {
+        organizationId,
+        channelId: binding.channelId,
+      },
+      assertDeliveryActive,
+    });
+  } catch {
+    logger.warn(audit, "[ChatOps] Slack file upload outcome uncertain");
+    return errorResult(
+      "Slack did not confirm the upload. Check the thread and the bot's files:write permission. The file will not be automatically resent for this message because the upload may have succeeded.",
+    );
+  }
+  if (!uploaded?.fileId) {
+    logger.warn(audit, "[ChatOps] Slack file upload returned no file receipt");
+    return errorResult(
+      "Slack did not return a file receipt. Check the thread; this file will not be automatically resent for this message.",
+    );
+  }
+  const receipt = {
+    slack_file_id: uploaded.fileId,
+    channel_id: binding.channelId,
+    thread_ts: chatOpsThreadId,
+    sha256: file.sha256,
+  };
+  logger.info(
+    { ...audit, slackFileId: uploaded.fileId },
+    "[ChatOps] Slack file uploaded",
+  );
+  await cacheManager.set(receiptKey, receipt, 7 * TimeInMs.Day).catch(() => {
+    logger.warn(
+      { deliveryId },
+      "[ChatOps] Slack file receipt could not be cached",
+    );
+  });
+  return structuredSuccessResult(
+    { ...receipt, already_sent: false },
+    `Posted ${file.filename} to the current Slack thread.`,
+  );
+}

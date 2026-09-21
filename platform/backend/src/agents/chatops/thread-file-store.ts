@@ -99,6 +99,15 @@ class ThreadFileStore {
     return { ...metadata, data: Buffer.from(data) };
   }
 
+  resolveAll(scope: ThreadFileScope) {
+    return [...this.files.keys()].flatMap((key) => {
+      const stored = this.files.get(key);
+      if (!stored || !sameScope(stored.scope, scope)) return [];
+      const file = this.resolve({ scope, fileId: stored.fileId });
+      return file ? [file] : [];
+    });
+  }
+
   release(isolationKey: string): void {
     this.files.deleteByPrefix(executionPrefix(isolationKey));
   }

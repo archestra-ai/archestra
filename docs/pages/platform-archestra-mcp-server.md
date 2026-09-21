@@ -2448,8 +2448,10 @@ Required RBAC permission: `plugin:admin`
 | `list_agent_runs` | List recent runs across one or more accessible Agents for a read-only operations dashboard. | `agent:read` |
 | `steer_run` | Interject one message into a live run's container session — a course correction without stopping the work. | `agent:read` |
 | `cancel_run` | Stop an active run. | `agent:read` |
-| `post_run_file` | Upload a file into the messaging-channel thread a run reports to — a demo recording, for example — so it renders natively there (Slack plays video uploads inline). | `agent:read` |
+| `post_run_file` | Upload a file to the messaging thread a run reports to. | `agent:read` † |
 | `transfer_credential` | Give an Agent Runtime Agent a credential this client already holds, so a handed-over task can use the CLI authentication the local session was using. | `credential:create` |
+
+† This tool enforces an additional access requirement beyond its RBAC permission — see its details below.
 
 #### delete_workspace
 
@@ -2677,13 +2679,23 @@ Required RBAC permission: `agent:read`
 
 Required RBAC permission: `agent:read`
 
+Additional access requirement: For temporary Slack runs, supply `task_id`, `path`, and `sha256`. Paths are relative to the run's temporary files directory. The caller must own the active run and use its agent. The destination is its bound Slack channel thread.
+
+The same [delivery controls and limits](#post_thread_file) apply. Duplicate suppression uses the run and file hash. Inline `content_base64` uploads are rejected for these runs.
+
+Files live under `/tmp/archestra-thread-files/<task-id>/` on the runtime's temporary disk. The runtime attempts cleanup when the task ends; deleting its compute removes the temporary volume. Missing files must be fetched again. File bytes are not saved as database attachments. Metadata and ordinary text logs remain.
+
+The runtime's regular workspace remains persistent. Files deliberately copied there follow its retention policy. Legacy runs continue to accept `filename` and `content_base64`.
+
 ##### Input
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `task_id` | `string` | Yes |  |
-| `filename` | `string` | Yes |  |
-| `content_base64` | `string` | Yes |  |
+| `path` | `string` | No | Temporary runtime-relative path; requires sha256 and excludes filename/content_base64. |
+| `sha256` | `string` | No |  |
+| `filename` | `string` | No | Legacy uploads only; requires content_base64 and excludes path/sha256. |
+| `content_base64` | `string` | No |  |
 | `comment` | `string` | No |  |
 
 

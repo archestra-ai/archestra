@@ -1,5 +1,6 @@
 import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
+import { A2AContextModel, A2ATaskModel, AgentRunModel } from "@/models";
 import { expect, test } from "@/test";
 import type { InsertInteraction } from "@/types";
 import InteractionModel from "./interaction";
@@ -28,6 +29,42 @@ const cases: Array<Pick<InsertInteraction, "type" | "request" | "response">> = [
             {
               type: "input_audio",
               input_audio: { format: "wav", data: FILE_BODY },
+            },
+          ],
+        },
+        {
+          role: "assistant",
+          tool_calls: [
+            {
+              id: "start-direct",
+              type: "function",
+              function: {
+                name: "archestra__start_run",
+                arguments: JSON.stringify({
+                  agent_id: "test-agent",
+                  message: TEXT,
+                  attachments: [
+                    { filename: "report.pdf", contentBase64: FILE_BODY },
+                  ],
+                }),
+              },
+            },
+            {
+              id: "start-wrapped",
+              type: "function",
+              function: {
+                name: "archestra__run_tool",
+                arguments: JSON.stringify({
+                  tool_name: "archestra__start_run",
+                  tool_args: {
+                    agent_id: "test-agent",
+                    message: TEXT,
+                    attachments: [
+                      { filename: "report.pdf", contentBase64: FILE_BODY },
+                    ],
+                  },
+                }),
+              },
             },
           ],
         },
@@ -127,6 +164,18 @@ const cases: Array<Pick<InsertInteraction, "type" | "request" | "response">> = [
             parts: [
               { text: "Generated image" },
               { inlineData: { mimeType: "image/png", data: FILE_BODY } },
+              {
+                functionCall: {
+                  name: "archestra__run_tool",
+                  args: {
+                    tool_name: "archestra__post_run_file",
+                    tool_args: {
+                      filename: "report.pdf",
+                      content_base64: FILE_BODY,
+                    },
+                  },
+                },
+              },
             ],
           },
         },
@@ -226,4 +275,82 @@ test("other interaction sources retain their file payloads", async ({
   expect(stored.request).toEqual(payload.request);
   expect(stored.processedRequest).toEqual(payload.request);
   expect(stored.response).toEqual(payload.response);
+});
+
+test("runtime files are omitted by the authenticated virtual key association, never a run header", async ({
+  makeOrganization,
+  makeUser,
+  makeAgent,
+  makeVirtualApiKey,
+}) => {
+  const organization = await makeOrganization();
+  const user = await makeUser();
+  const agent = await makeAgent({ organizationId: organization.id });
+  const key = await makeVirtualApiKey(organization.id);
+  const unrelatedKey = await makeVirtualApiKey(organization.id);
+  const context = await A2AContextModel.create({
+    actorKind: "user",
+    actorId: user.id,
+  });
+  const task = await A2ATaskModel.create({
+    contextId: context.id,
+    agentId: agent.id,
+    state: "TASK_STATE_WORKING",
+  });
+  const run = await AgentRunModel.create({
+    organizationId: organization.id,
+    taskId: task.id,
+    agentId: agent.id,
+    actorKind: "user",
+    actorId: user.id,
+    actorUserId: user.id,
+    workloadName: `ephemeral-files-${task.id}`,
+    backend: "kubernetes",
+    runtimeScope: "test",
+    virtualApiKeyId: key.id,
+    completionTarget: {
+      type: "chatops",
+      bindingId: crypto.randomUUID(),
+      threadId: "123.456",
+      ephemeralFiles: true,
+    },
+  });
+  // Final provider writes may settle after the task has finished.
+  await AgentRunModel.close({ id: run.id });
+  const payload = cases.find(
+    (entry) => entry.type === "gemini:generateContent",
+  );
+  if (!payload) throw new Error("Missing Gemini fixture");
+  const before = structuredClone(payload);
+
+  for (const virtualKeyId of [key.id, unrelatedKey.id, undefined]) {
+    const created = await InteractionModel.create({
+      ...payload,
+      profileId: agent.id,
+      source: "opencode:main",
+      virtualKeyId,
+      runId: task.id,
+      processedRequest: payload.request,
+    });
+    const [stored] = await db
+      .select()
+      .from(schema.interactionsTable)
+      .where(eq(schema.interactionsTable.id, created.id));
+
+    for (const value of [
+      stored.request,
+      stored.processedRequest,
+      stored.response,
+    ]) {
+      if (virtualKeyId === key.id) {
+        expect(JSON.stringify(value)).not.toContain(FILE_BODY);
+        expect(JSON.stringify(value)).toContain(
+          "Ephemeral file payload omitted",
+        );
+      } else {
+        expect(JSON.stringify(value)).toContain(FILE_BODY);
+      }
+    }
+  }
+  expect(payload).toEqual(before);
 });

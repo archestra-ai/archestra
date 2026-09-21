@@ -1,7 +1,7 @@
 /**
  * Remove structured inline file bodies from an audit copy of provider traffic.
  * Text and remote file references remain auditable. This is not a content/DLP
- * filter: extracted text, tool arguments, and command output are still logged.
+ * filter: extracted text, ordinary tool arguments, and command output remain.
  */
 export function redactFilePayloads<T>(value: T): T {
   if (Array.isArray(value)) {
@@ -15,6 +15,14 @@ export function redactFilePayloads<T>(value: T): T {
       redactFilePayloads(child),
     ]),
   );
+
+  if (typeof result.name === "string") {
+    for (const field of ["arguments", "input", "args"]) {
+      if (field in result) {
+        result[field] = redactFileToolArguments(result.name, result[field]);
+      }
+    }
+  }
 
   // OpenAI Chat Completions and Responses (including compatible providers).
   if (result.type === "image_url" && isRecord(result.image_url)) {
@@ -78,6 +86,48 @@ export function redactFilePayloads<T>(value: T): T {
   }
 
   return result as T;
+}
+
+/** File bytes in run-tool arguments must not become audit attachments. */
+export function redactFileToolArguments<T>(toolName: string, value: T): T {
+  const isFileUpload = /(?:^|__)post_run_file$/.test(toolName);
+  const isStartRun = /(?:^|__)start_run$/.test(toolName);
+  const isRunTool = /(?:^|__)run_tool$/.test(toolName);
+  if (!isFileUpload && !isStartRun && !isRunTool) return value;
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      const redacted = redactFileToolArguments(toolName, parsed);
+      return redacted === parsed ? value : (JSON.stringify(redacted) as T);
+    } catch {
+      return value;
+    }
+  }
+  if (!isRecord(value)) return value;
+  if (isFileUpload) {
+    return value.content_base64 == null
+      ? value
+      : ({ ...value, content_base64: OMITTED_FILE_PAYLOAD } as T);
+  }
+  if (isStartRun) {
+    const originalAttachments = value.attachments;
+    if (!Array.isArray(originalAttachments)) return value;
+    const attachments = originalAttachments.map((attachment) =>
+      isRecord(attachment) && attachment.contentBase64 != null
+        ? { ...attachment, contentBase64: OMITTED_FILE_PAYLOAD }
+        : attachment,
+    );
+    return attachments.some(
+      (attachment, index) => attachment !== originalAttachments[index],
+    )
+      ? ({ ...value, attachments } as T)
+      : value;
+  }
+  if (typeof value.tool_name !== "string") return value;
+  const redacted = redactFileToolArguments(value.tool_name, value.tool_args);
+  return redacted === value.tool_args
+    ? value
+    : ({ ...value, tool_args: redacted } as T);
 }
 
 const OMITTED_FILE_PAYLOAD = "[Ephemeral file payload omitted]";

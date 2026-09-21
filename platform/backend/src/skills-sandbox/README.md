@@ -181,3 +181,10 @@ Slack input bytes, replay commands, and exported artifacts are not written to sa
 The root releases the recipe and file references in `finally`. An active one-hour expiry provides backup cleanup. Late calls and queued operations cannot reopen the scope, retain exported bytes, or start a new Slack upload after release. An upload already in progress may finish. Admission limits bound concurrent executions, recipes, replay entries, and retained bytes; hitting a limit fails without falling back to durable storage.
 
 This lifetime covers application memory, not secure erasure of engine storage. Dagger still caches materialized filesystem layers under its own eviction policy. Slack retains delivered files according to workspace policy. Structured inline attachment bodies are redacted from `chatops:slack` interaction rows. Slack approval history keeps refetch notices instead of inline files. Ordinary text, command output, auxiliary calls with another source, and existing records retain their usual logging behavior.
+
+
+### Agent Runtime Slack files
+
+Tasks delegated from Slack to Agent Runtime use the existing detached A2A lifecycle. Their inputs travel as bounded in-memory launch data, bypassing `agent_run_inputs`. Original attachments and generated deliverables use `/tmp/archestra-thread-files/<task-id>/` on a size-limited Kubernetes `emptyDir`. `post_run_file` accepts a relative path and SHA-256, captures at most 20 MiB through the existing runtime exec boundary, and shares Slack delivery checks with `post_thread_file`.
+
+Task completion removes the temporary directory best-effort. Pod deletion removes the volume. Recovery checks volatile readiness and never reloads missing Slack bytes from PostgreSQL. The retained workspace and its PVC are unchanged; an agent that deliberately copies a file there or prints its contents can retain those copies. Structured file payloads are redacted from runtime audit copies using the run's virtual key association. Ordinary text and terminal output retain their existing logging behavior.

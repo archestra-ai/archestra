@@ -87,9 +87,12 @@ A battery is an OpenAPPA policy package for one provider: a policy file that
 names tools by their canonical namespace (`mcp/github/get_file_contents`), optional
 helper scripts the policy consults over the externals protocol, and the
 `APPA_PROVIDER_*` credential each helper reads. The addon exposes the batteries
-bundled with the pinned OpenAPPA commit that declare the `archestra` host, and
-validates uploaded packages with the same marketplace checks. An organization can
-upload its own package under a bundled name to replace it.
+bundled with the pinned OpenAPPA commit that govern MCP tools, the only tools
+Archestra serves, and validates uploaded packages with the same marketplace
+checks. An organization can upload its own package under a bundled name to
+replace it. The Archestra adapter, which maps a spelled tool name onto its
+canonical identity and back, lives in the addon (`openappa-rs/src/adapter.rs`);
+OpenAPPA knows only that a host embeds it.
 
 The runtime opens the composed *effective policy* rather than the root policy
 alone. A battery install binds a battery to one MCP catalog entry. The composer

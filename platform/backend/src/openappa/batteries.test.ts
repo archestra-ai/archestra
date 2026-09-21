@@ -2,6 +2,8 @@ import config from "@/config";
 import OpenAppaBatteryInstallModel from "@/models/openappa-battery-install";
 import OpenAppaEffectivePolicyModel from "@/models/openappa-effective-policy";
 import ToolModel from "@/models/tool";
+import { OPENAPPA_HELPERS_PREFIX } from "@/routes/route-paths";
+import { guardrailsPolicyService } from "@/services/guardrails-policy";
 import { beforeEach, describe, expect, test } from "@/test";
 import { openappaBatteriesService } from "./batteries";
 
@@ -91,5 +93,47 @@ describe("battery attachment after a tool sync", () => {
     await openappaBatteriesService.onCatalogToolsChanged(catalog.id);
     expect(await OpenAppaBatteryInstallModel.list(organizationId)).toEqual([]);
     expect(await OpenAppaEffectivePolicyModel.find(organizationId)).toBeNull();
+  });
+});
+
+describe("bundled batteries", () => {
+  beforeEach(() => {
+    config.openappa.enabled = true;
+  });
+
+  test("every bundled battery composes into the initial policy", async ({
+    makeOrganization,
+  }) => {
+    const organizationId = (await makeOrganization()).id;
+    const root = await guardrailsPolicyService.get(organizationId);
+    const native = await import("@archestra/openappa-rs");
+    const bundled = await native.listBundledOpenappaBatteries();
+    const names = bundled.map((battery) => battery.name);
+    expect(names).toContain("github");
+    // A battery for another host's own tools has nothing to say here.
+    expect(names).not.toContain("claude-code");
+    for (const battery of bundled) {
+      const composed = await native.composeOpenappaPolicy({
+        root: root.content,
+        serverAliases: battery.namespaces.map((alias) => ({
+          alias,
+          targets: [`${alias.replaceAll("-", "_")}_prod`],
+        })),
+        batteries: [
+          {
+            name: battery.name,
+            policy: battery.policy,
+            helpers:
+              battery.externals.length > 0
+                ? {
+                    urlBase: `http://127.0.0.1:${config.api.port}${OPENAPPA_HELPERS_PREFIX}/install`,
+                    tokenEnv: "APPA_ARCHESTRA_BRIDGE_TOKEN",
+                  }
+                : undefined,
+          },
+        ],
+      });
+      expect(composed.errors, battery.name).toEqual([]);
+    }
   });
 });

@@ -72,8 +72,8 @@ export declare function initializeOpenappa(databaseUrl: string, postgresMaxConne
 export declare function inspectOpenappaBattery(files: Array<BatteryFileInput>): Promise<BatteryPackage>
 
 /**
- * The batteries bundled with the pinned OpenAPPA checkout that declare the
- * Archestra host.
+ * The batteries bundled with the pinned OpenAPPA checkout that govern MCP tools,
+ * which is what Archestra serves.
  */
 export declare function listBundledOpenappaBatteries(): Promise<Array<BatteryPackage>>
 

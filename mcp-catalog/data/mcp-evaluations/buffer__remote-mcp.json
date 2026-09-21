@@ -1,0 +1,161 @@
+{
+  "name": "buffer__remote-mcp",
+  "display_name": "Buffer",
+  "description": "Buffer's official remote MCP server for social media scheduling. Lists connected channels, reads, creates, edits and deletes scheduled posts and drafts, captures ideas, manages post templates, reads aggregated post analytics, and exposes raw GraphQL query and mutation tools. OAuth 2.0 with dynamic client registration; a Buffer API key also works as a bearer token. Available on every Buffer plan, including Free.",
+  "author": {
+    "name": "Buffer",
+    "url": "https://buffer.com/"
+  },
+  "homepage": "https://buffer.com/mcp",
+  "documentation": "https://developers.buffer.com/guides/integrations/mcp.html",
+  "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NyA2NyIgZmlsbC1ydWxlPSJldmVub2RkIiBjbGlwLXJ1bGU9ImV2ZW5vZGQiPjxwYXRoIGZpbGw9IiMxMzIwNjIiIGQ9Ik0xOC4wMDksNDMuMjI1bDE1LjE3OCw3LjgxN2wxNS4zNzgsLTcuODE3bDcuMTY0LDMuNjM5bC0yMi41NDIsMTEuNDY5bC0yMi4yNSwtMTEuNDY5bDcuMDcyLC0zLjYzOVoiLz48cGF0aCBmaWxsPSIjMTMyMDYyIiBkPSJNMTguMDE3LDI5LjY4OGwxNS4xNyw3LjgxMmwxNS4zNywtNy44MTJsNy4xNzIsMy42NDVsLTIyLjU0MiwxMS40NTlsLTIyLjI1LC0xMS40NTlsNy4wOCwtMy42NDVaIi8+PHBhdGggZmlsbD0iIzEzMjA2MiIgZD0iTTMzLjE4Nyw4LjMzM2wtMjIuMjUsMTEuNDU5bDIyLjI1LDExLjQ1OGwyMi41NDIsLTExLjQ1OGwtMjIuNTQyLC0xMS40NTlaIi8+PC9zdmc+Cg==",
+  "oauth_config": {
+    "name": "Buffer MCP",
+    "server_url": "https://mcp.buffer.com/mcp",
+    "client_id": "",
+    "redirect_uris": ["http://localhost:8080/oauth/callback"],
+    "scopes": [
+      "posts:read",
+      "posts:write",
+      "ideas:read",
+      "ideas:write",
+      "account:read",
+      "account:write",
+      "insights:read",
+      "engagements:read",
+      "engagements:write"
+    ],
+    "description": "Buffer MCP Server (dynamic registration)",
+    "default_scopes": [
+      "posts:read",
+      "posts:write",
+      "ideas:read",
+      "ideas:write",
+      "account:read",
+      "account:write",
+      "insights:read",
+      "engagements:read",
+      "engagements:write"
+    ],
+    "supports_resource_metadata": true
+  },
+  "tools": [
+    {
+      "name": "get_account",
+      "description": "Return the signed-in account and its organizations: email, name, timezone, current time, and each organization's ID, name, plan limits and member count."
+    },
+    {
+      "name": "list_channels",
+      "description": "List the social accounts connected to an organization with each channel's ID, name, display name, service, type, avatar and connection status."
+    },
+    {
+      "name": "get_channel",
+      "description": "Return one channel's posting schedule, posting goals, queue status, timezone, link-shortening settings and service-specific data."
+    },
+    {
+      "name": "list_posts",
+      "description": "List an organization's posts with ID, status, text, scheduled and sent times, channel, tags, assets, source and any publishing error."
+    },
+    {
+      "name": "get_post",
+      "description": "Read one post in full: status, content, author, channel, tags, notes, assets and allowed actions."
+    },
+    {
+      "name": "create_post",
+      "description": "Schedule or publish a post on one channel (Instagram, Facebook, X, LinkedIn, Pinterest, YouTube, Google Business Profile, Mastodon, TikTok, Threads, Bluesky or Start Page)."
+    },
+    {
+      "name": "edit_post",
+      "description": "Update an existing post; the whole record is validated."
+    },
+    {
+      "name": "delete_post",
+      "description": "Permanently delete a post."
+    },
+    {
+      "name": "get_aggregated_post_metrics",
+      "description": "Sum analytics across many posts over a date range, returning totals and averages."
+    },
+    {
+      "name": "list_ideas",
+      "description": "List the ideas saved in an organization for future posts."
+    },
+    {
+      "name": "list_idea_groups",
+      "description": "List the columns on the ideas board with ID, name and lock status."
+    },
+    {
+      "name": "create_idea",
+      "description": "Save a new idea without scheduling or publishing it."
+    },
+    {
+      "name": "list_post_templates",
+      "description": "List an organization's reusable post templates."
+    },
+    {
+      "name": "get_post_template",
+      "description": "Read one template's body, title, description, emoji, visibility and timestamps."
+    },
+    {
+      "name": "create_post_template",
+      "description": "Create a post template with private or internal visibility."
+    },
+    {
+      "name": "update_post_template",
+      "description": "Update only the specified fields of a post template."
+    },
+    {
+      "name": "delete_post_template",
+      "description": "Permanently delete a post template."
+    },
+    {
+      "name": "introspect_schema",
+      "description": "Return the complete GraphQL schema of the Buffer API."
+    },
+    {
+      "name": "execute_query",
+      "description": "Run a read-only GraphQL query against the Buffer API."
+    },
+    {
+      "name": "execute_mutation",
+      "description": "Run a GraphQL mutation against the Buffer API."
+    }
+  ],
+  "prompts": [],
+  "keywords": [
+    "buffer",
+    "social media",
+    "scheduling",
+    "posts",
+    "publishing",
+    "analytics",
+    "ideas",
+    "templates",
+    "instagram",
+    "linkedin",
+    "x",
+    "threads",
+    "bluesky",
+    "mastodon",
+    "tiktok",
+    "oauth"
+  ],
+  "user_config": {},
+  "readme": null,
+  "category": "Social Media",
+  "archestra_config": {
+    "client_config_permutations": null,
+    "oauth": {
+      "provider": null,
+      "required": true
+    },
+    "works_in_archestra": true
+  },
+  "server": {
+    "type": "remote",
+    "url": "https://mcp.buffer.com/mcp",
+    "docs_url": "https://developers.buffer.com/guides/integrations/mcp.html"
+  },
+  "github_info": null,
+  "programming_language": null
+}

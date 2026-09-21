@@ -143,13 +143,13 @@ const CAPABILITY_SESSION_SIGNATURE_LENGTH = 43;
 function capabilitySessionKey(): Buffer | null {
   const secret = config.auth.secret;
   if (!secret) return null;
-  return createHmac("sha256", secret)
+  return createHmac("sha256", secret) // codeql[js/insufficient-password-hash] HMAC derives a domain-separated key for capability session signing, not password hashing.
     .update(CAPABILITY_SESSION_DOMAIN)
     .digest();
 }
 
 function signCapabilitySession(key: Buffer, encoded: string): string {
-  return createHmac("sha256", key).update(encoded).digest("base64url");
+  return createHmac("sha256", key).update(encoded).digest("base64url"); // codeql[js/insufficient-password-hash] HMAC signs a capability session payload, not a password.
 }
 
 function capabilitySize(capabilities: unknown): number {
